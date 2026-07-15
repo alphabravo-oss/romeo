@@ -2132,8 +2132,10 @@ describe("Romeo API thin slice", () => {
 
     // /api/v1/health is exempt from rate limiting (see exemptPaths in
     // http/rate-limit.ts), so it would never reach the valkey store and would
-    // not exercise this path. Use a non-exempt route instead so the
-    // preAuthRateLimit middleware actually calls into the valkey store.
+    // not exercise this path. Use a non-exempt route instead. With DEV_SEEDED_LOGIN
+    // at its default (true), preAuthRule returns undefined and preAuthRateLimit
+    // never reaches the store. But requestContext assigns a seeded subject, so
+    // principalRateLimit then sees a defined subject and calls into the valkey store.
     const response = await api.request("/api/v1/admin/edge-security/posture");
 
     expect(response.status).toBe(503);
