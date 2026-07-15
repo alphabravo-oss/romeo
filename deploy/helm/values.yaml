@@ -1,0 +1,514 @@
+global:
+  production: true
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: romeo/app
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+rbac:
+  create: true
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: romeo.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+replicaCount: 2
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+evidenceMount:
+  enabled: false
+  name: romeo-evidence
+  mountPath: /var/run/romeo/evidence
+  configMapName: ""
+  secretName: ""
+
+terminationGracePeriodSeconds: 30
+
+probes:
+  startup:
+    enabled: true
+    failureThreshold: 30
+    periodSeconds: 5
+  readiness:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 20
+    failureThreshold: 3
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+postgres:
+  mode: external
+  databaseUrlSecret:
+    name: ""
+    key: DATABASE_URL
+  cloudnativepg:
+    clusterName: ""
+    databaseUrlSecret:
+      name: ""
+      key: DATABASE_URL
+
+valkey:
+  urlSecret:
+    name: ""
+    key: VALKEY_URL
+
+secrets:
+  existingSecret: ""
+  create: false
+  annotations: {}
+
+secretEnv:
+  DATABASE_URL: ""
+  VALKEY_URL: ""
+  SESSION_SECRET: ""
+  SESSION_SECRET_PREVIOUS: ""
+  LOCAL_AUTH_SECRET_ENCRYPTION_KEY: ""
+  LOCAL_AUTH_SECRET_ENCRYPTION_KEY_PREVIOUS: ""
+  MANAGED_SECRET_ENCRYPTION_KEY: ""
+  MANAGED_SECRET_ENCRYPTION_KEY_PREVIOUS: ""
+  WEBHOOK_SIGNING_KEY: ""
+  S3_ACCESS_KEY_ID: ""
+  S3_SECRET_ACCESS_KEY: ""
+  ROMEO_API_KEY: ""
+  VAULT_TOKEN: ""
+  AWS_ACCESS_KEY_ID: ""
+  AWS_SECRET_ACCESS_KEY: ""
+  AWS_SESSION_TOKEN: ""
+  GCP_ACCESS_TOKEN: ""
+  AZURE_ACCESS_TOKEN: ""
+  NOTIFICATION_RESEND_API_KEY: ""
+  NOTIFICATION_SMTP_PASSWORD: ""
+  NOTIFICATION_SMTP_USER: ""
+  VOICE_OPENAI_API_KEY: ""
+  BILLING_STRIPE_WEBHOOK_SECRET: ""
+  BILLING_GENERIC_WEBHOOK_SECRET: ""
+  DATA_CONNECTOR_GITHUB_TOKEN: ""
+  DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: ""
+  DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: ""
+  TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY: ""
+  QDRANT_API_KEY_REF: ""
+
+env:
+  APP_ORIGIN: https://romeo.example.com
+  REPOSITORY_DRIVER: postgres
+  OPENWEBUI_COMPATIBILITY_ENABLED: "false"
+  TENANCY_MODE: single
+  GA_CHECKLIST_PATH: ""
+  GA_TARGET_PREFLIGHT_PATH: ""
+  GA_TARGET_PLAN_PATH: ""
+  GA_TARGET_EXECUTION_PATH: ""
+  GA_EVIDENCE_BUNDLE_PATH: ""
+  RELEASE_PUBLISH_PLAN_PATH: ""
+  RELEASE_AIRGAP_VERIFICATION_PATH: ""
+  RELEASE_READBACK_PLAN_PATH: ""
+  RELEASE_READBACK_VALIDATION_PATH: ""
+  SUPPORT_BUNDLE_PATH: ""
+  CI_BRANCH_PROTECTION_PLAN_PATH: ""
+  CI_HOSTED_RUN_VERIFICATION_PATH: ""
+  CI_BRANCH_PROTECTION_VERIFICATION_PATH: ""
+  EDGE_ENFORCEMENT_EVIDENCE_PATH: ""
+  POSTGRES_QUERY_PLAN_EVIDENCE_PATH: ""
+  POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH: ""
+  POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH: ""
+  POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH: ""
+  PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH: ""
+  QDRANT_LIVE_EVIDENCE_PATH: ""
+  DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH: ""
+  DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH: ""
+  DATA_CONNECTOR_LIVE_EVIDENCE_PATH: ""
+  DATA_CONNECTOR_WORKER_ENABLED: "false"
+  DATA_CONNECTOR_NETWORK_POLICY_ENABLED: "false"
+  TOOL_DISPATCH_WORKER_ENABLED: "false"
+  TOOL_DISPATCH_NETWORK_POLICY_ENABLED: "false"
+  BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH: ""
+  BROWSER_AUTOMATION_WORKER_ENABLED: "false"
+  BROWSER_AUTOMATION_RUNNER_URL: ""
+  BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED: "false"
+  BROWSER_AUTOMATION_MAX_JOBS: "5"
+  BROWSER_AUTOMATION_LEASE_SECONDS: "300"
+  BROWSER_AUTOMATION_TIMEOUT_MS: "30000"
+  BROWSER_AUTOMATION_MAX_BYTES: "20000"
+  POSTGRES_POOL_MAX: "10"
+  REQUEST_BODY_MAX_BYTES: "50000000"
+  FILE_INLINE_MAX_BYTES: "25000000"
+  FILE_DIRECT_UPLOAD_MAX_BYTES: "100000000"
+  FILE_RESUMABLE_UPLOAD_MAX_BYTES: "500000000"
+  MESSAGE_ATTACHMENT_MAX_BYTES: "5000000"
+  HTTP_RATE_LIMIT_DRIVER: memory
+  HTTP_RATE_LIMIT_KEY_PREFIX: romeo:http-rate-limit:v1
+  HTTP_RATE_LIMIT_WINDOW_SECONDS: "60"
+  HTTP_RATE_LIMIT_AUTH_MAX: "60"
+  HTTP_RATE_LIMIT_PUBLIC_MAX: "600"
+  HTTP_RATE_LIMIT_AUTHENTICATED_MAX: "6000"
+  HTTP_RATE_LIMIT_WEBHOOK_MAX: "1200"
+  MODEL_PROVIDER_STREAM_TIMEOUT_MS: "60000"
+  MODEL_PROVIDER_RETRY_ATTEMPTS: "1"
+  MODEL_PROVIDER_RETRY_BACKOFF_MS: "250"
+  MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD: "5"
+  MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS: "60000"
+  MODEL_PROVIDER_DISABLED_IDS: ""
+  MODEL_PROVIDER_FALLBACK_MODEL_ID: ""
+  QUOTA_COORDINATION_DRIVER: disabled
+  QUOTA_COORDINATION_KEY_PREFIX: romeo:quota:v1
+  QUOTA_COORDINATION_TIMEOUT_MS: "2000"
+  EDGE_TLS_TERMINATION: ingress
+  EDGE_TRUSTED_PROXY_MODE: trusted_proxy
+  EDGE_WAF_MODE: monitor
+  EDGE_ALLOWED_ORIGINS: https://romeo.example.com
+  EDGE_HSTS_ENABLED: "true"
+  EDGE_HSTS_MAX_AGE_SECONDS: "31536000"
+  EDGE_HSTS_INCLUDE_SUBDOMAINS: "true"
+  EDGE_HSTS_PRELOAD: "false"
+  OBJECT_STORE_DRIVER: s3
+  DATA_CONNECTOR_EXECUTION_DRIVER: disabled
+  DATA_CONNECTOR_EGRESS_POLICY: require_allowlist
+  DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: ""
+  DATA_CONNECTOR_FETCH_MAX_BYTES: "2000000"
+  DATA_CONNECTOR_FETCH_TIMEOUT_MS: "10000"
+  DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS: "1"
+  DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS: "250"
+  DELEGATED_OAUTH_GITHUB_CLIENT_ID: ""
+  DELEGATED_OAUTH_GITHUB_SCOPES: "repo,read:user,user:email"
+  TOOL_OPERATION_EXECUTION_DRIVER: disabled
+  TOOL_OPERATION_FETCH_TIMEOUT_MS: "10000"
+  TOOL_OPERATION_FETCH_MAX_BYTES: "1000000"
+  TOOL_DISPATCH_PAYLOAD_STORE_DRIVER: disabled
+  TOOL_DISPATCH_PAYLOAD_STORE_PREFIX: tool-dispatch-payloads/v1
+  KNOWLEDGE_EXTRACTION_DRIVER: disabled
+  KNOWLEDGE_EXTRACTION_MAX_BYTES: "20000000"
+  KNOWLEDGE_EXTRACTION_TIMEOUT_MS: "15000"
+  EXTERNAL_VECTOR_STORE_DRIVER: disabled
+  QDRANT_URL: ""
+  QDRANT_COLLECTION: romeo_knowledge_chunks
+  QDRANT_TIMEOUT_MS: "10000"
+  VECTOR_NAMESPACE_POLICY: none
+  VECTOR_PARTITIONING_POLICY: none
+  VECTOR_ISOLATION_MODE: shared_row_scope
+  PDFTOTEXT_PATH: pdftotext
+  SECRET_RESOLVER_DRIVER: disabled
+  VAULT_ADDR: ""
+  VAULT_NAMESPACE: ""
+  VAULT_KV_MOUNT: secret
+  VAULT_TIMEOUT_MS: "5000"
+  AWS_REGION: ""
+  AWS_SECRET_MANAGER_TIMEOUT_MS: "5000"
+  GCP_SECRET_MANAGER_PROJECT: ""
+  GCP_SECRET_MANAGER_TIMEOUT_MS: "5000"
+  AZURE_KEY_VAULT_URL: ""
+  AZURE_KEY_VAULT_TIMEOUT_MS: "5000"
+  NOTIFICATION_DELIVERY_DRIVER: disabled
+  NOTIFICATION_EMAIL_DELIVERY_DRIVER: resend
+  NOTIFICATION_EMAIL_FROM: ""
+  NOTIFICATION_FCM_BASE_URL: https://fcm.googleapis.com
+  NOTIFICATION_FCM_PROJECT_ID: ""
+  NOTIFICATION_FCM_SERVICE_ACCOUNT_REF: ""
+  NOTIFICATION_FCM_TIMEOUT_MS: "10000"
+  NOTIFICATION_FCM_TOKEN_URL: https://oauth2.googleapis.com/token
+  NOTIFICATION_PAGERDUTY_EVENTS_URL: https://events.pagerduty.com/v2/enqueue
+  NOTIFICATION_PAGERDUTY_TIMEOUT_MS: "10000"
+  NOTIFICATION_RESEND_BASE_URL: https://api.resend.com
+  NOTIFICATION_RESEND_TIMEOUT_MS: "10000"
+  NOTIFICATION_SLACK_TIMEOUT_MS: "10000"
+  NOTIFICATION_SMTP_HOST: ""
+  NOTIFICATION_SMTP_PORT: "587"
+  NOTIFICATION_SMTP_SECURE: "false"
+  NOTIFICATION_SMTP_TIMEOUT_MS: "10000"
+  NOTIFICATION_TEAMS_TIMEOUT_MS: "10000"
+  VOICE_PROVIDER_DRIVER: disabled
+  VOICE_OPENAI_BASE_URL: https://api.openai.com/v1
+  VOICE_OPENAI_MODEL: tts-1
+  VOICE_OPENAI_TRANSCRIPTION_MODEL: whisper-1
+  VOICE_OPENAI_VOICES: alloy,echo,fable,onyx,nova,shimmer
+  VOICE_OPENAI_TIMEOUT_MS: "30000"
+  S3_ENDPOINT: ""
+  S3_BUCKET: romeo
+  S3_REGION: us-east-1
+  BILLING_STRIPE_WEBHOOK_TOLERANCE_SECONDS: "300"
+  BILLING_GENERIC_WEBHOOK_TOLERANCE_SECONDS: "300"
+  BILLING_WEBHOOK_ORG_ID: org_default
+  OIDC_ISSUER_URL: ""
+  OIDC_CLIENT_ID: ""
+  OIDC_GROUP_CLAIM: groups
+  OIDC_ADMIN_GROUPS: ""
+  OIDC_GROUP_MAP: ""
+  OIDC_WORKSPACE_GROUP_MAP: ""
+  OIDC_WORKSPACE_GROUP_PREFIX: ""
+  SCIM_ENABLED: "false"
+  DEV_SEEDED_LOGIN: "false"
+
+migration:
+  enabled: true
+  useHelmHook: true
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  activeDeadlineSeconds: 600
+  annotations: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+workers:
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    automountServiceAccountToken: false
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  apiKeySecret:
+    name: ""
+    key: ROMEO_API_KEY
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+  dataConnectorSync:
+    enabled: false
+    schedule: "*/5 * * * *"
+    maxConnectors: 10
+    workspaceId: ""
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  workflowResume:
+    enabled: false
+    schedule: "*/2 * * * *"
+    maxWorkflows: 10
+    maxRuns: 10
+    workspaceId: ""
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  webhookRetry:
+    enabled: false
+    schedule: "*/5 * * * *"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  notificationRetry:
+    enabled: false
+    schedule: "*/5 * * * *"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  retentionEnforce:
+    enabled: false
+    schedule: "17 2 * * *"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  billingEntitlementReconcile:
+    enabled: false
+    schedule: "*/10 * * * *"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  billingLifecycleEnforce:
+    enabled: false
+    schedule: "*/15 * * * *"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  toolDispatch:
+    enabled: false
+    schedule: "*/1 * * * *"
+    maxJobs: 10
+    leaseSeconds: 300
+    timeoutMs: 10000
+    maxBytes: 1000000
+    allowPrivateNetwork: false
+    secretResolverDriver: disabled
+    payloadSecret:
+      name: ""
+      key: payloads.json
+    networkPolicy:
+      enabled: false
+      egress: []
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  browserAutomation:
+    enabled: false
+    schedule: "*/1 * * * *"
+    runnerUrl: ""
+    maxJobs: 5
+    leaseSeconds: 300
+    timeoutMs: 30000
+    maxBytes: 20000
+    networkPolicy:
+      enabled: false
+      egress: []
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  knowledgeExtraction:
+    enabled: false
+    schedule: "*/10 * * * *"
+    knowledgeBaseId: ""
+    maxSources: 10
+    tmpSizeLimit: 1Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  voiceCatalogSync:
+    enabled: false
+    schedule: "0 */12 * * *"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+backup:
+  enabled: false
+  schedule: "17 3 * * *"
+  retentionDays: 30
+  uploadTimeoutMs: 30000
+  uploadUrlSecret:
+    name: ""
+    key: POSTGRES_BACKUP_UPLOAD_URL
+  manifestUploadUrlSecret:
+    name: ""
+    key: POSTGRES_BACKUP_MANIFEST_UPLOAD_URL
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+networkPolicy:
+  enabled: false
+  ingressFrom: []
+  egress: []
+
+serviceMonitor:
+  enabled: false
+
+otel:
+  endpoint: ""

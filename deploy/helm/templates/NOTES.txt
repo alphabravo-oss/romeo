@@ -1,0 +1,10 @@
+Romeo has been rendered with Postgres mode: {{ .Values.postgres.mode }}.
+
+Required before production traffic:
+- Provide DATABASE_URL through `postgres.databaseUrlSecret` or `postgres.cloudnativepg.databaseUrlSecret`.
+- Provide SESSION_SECRET, LOCAL_AUTH_SECRET_ENCRYPTION_KEY, MANAGED_SECRET_ENCRYPTION_KEY when using romeo-secret refs, and WEBHOOK_SIGNING_KEY through `secrets.existingSecret` or `secrets.create`. Use the matching `*_PREVIOUS` keys only during staged rotation/rewrap windows.
+- Run the migration job before application readiness cutover.
+- Run `pnpm validate:postgres` against the same DATABASE_URL after migration.
+
+Internal service URL:
+  http://{{ include "romeo.fullname" . }}:{{ .Values.service.port }}

@@ -1,0 +1,547 @@
+name: romeo
+
+x-app-build: &app-build
+  context: ../..
+  dockerfile: deploy/compose/Dockerfile
+
+x-cli-environment: &cli-environment
+  ROMEO_BASE_URL: http://app:3000
+  ROMEO_API_KEY: ${ROMEO_API_KEY:-}
+
+x-loop-worker: &loop-worker
+  build: *app-build
+  depends_on:
+    app:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  app:
+    build: *app-build
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+      REPOSITORY_DRIVER: postgres
+      DATABASE_URL: ${DATABASE_URL:-postgres://romeo:romeo@postgres:5432/romeo}
+      OPENWEBUI_COMPATIBILITY_ENABLED: ${OPENWEBUI_COMPATIBILITY_ENABLED:-false}
+      TENANCY_MODE: ${TENANCY_MODE:-single}
+      GA_CHECKLIST_PATH: ${GA_CHECKLIST_PATH:-}
+      GA_TARGET_PREFLIGHT_PATH: ${GA_TARGET_PREFLIGHT_PATH:-}
+      GA_TARGET_PLAN_PATH: ${GA_TARGET_PLAN_PATH:-}
+      GA_TARGET_EXECUTION_PATH: ${GA_TARGET_EXECUTION_PATH:-}
+      GA_EVIDENCE_BUNDLE_PATH: ${GA_EVIDENCE_BUNDLE_PATH:-}
+      RELEASE_PUBLISH_PLAN_PATH: ${RELEASE_PUBLISH_PLAN_PATH:-}
+      RELEASE_AIRGAP_VERIFICATION_PATH: ${RELEASE_AIRGAP_VERIFICATION_PATH:-}
+      RELEASE_READBACK_PLAN_PATH: ${RELEASE_READBACK_PLAN_PATH:-}
+      RELEASE_READBACK_VALIDATION_PATH: ${RELEASE_READBACK_VALIDATION_PATH:-}
+      SUPPORT_BUNDLE_PATH: ${SUPPORT_BUNDLE_PATH:-}
+      CI_BRANCH_PROTECTION_PLAN_PATH: ${CI_BRANCH_PROTECTION_PLAN_PATH:-}
+      CI_HOSTED_RUN_VERIFICATION_PATH: ${CI_HOSTED_RUN_VERIFICATION_PATH:-}
+      CI_BRANCH_PROTECTION_VERIFICATION_PATH: ${CI_BRANCH_PROTECTION_VERIFICATION_PATH:-}
+      EDGE_ENFORCEMENT_EVIDENCE_PATH: ${EDGE_ENFORCEMENT_EVIDENCE_PATH:-}
+      POSTGRES_QUERY_PLAN_EVIDENCE_PATH: ${POSTGRES_QUERY_PLAN_EVIDENCE_PATH:-}
+      POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH: ${POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH:-}
+      POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH: ${POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH:-}
+      POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH: ${POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH:-}
+      PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH: ${PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH:-}
+      QDRANT_LIVE_EVIDENCE_PATH: ${QDRANT_LIVE_EVIDENCE_PATH:-}
+      DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH: ${DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH:-}
+      DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH: ${DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH:-}
+      DATA_CONNECTOR_LIVE_EVIDENCE_PATH: ${DATA_CONNECTOR_LIVE_EVIDENCE_PATH:-}
+      DATA_CONNECTOR_WORKER_ENABLED: ${DATA_CONNECTOR_WORKER_ENABLED:-false}
+      DATA_CONNECTOR_NETWORK_POLICY_ENABLED: ${DATA_CONNECTOR_NETWORK_POLICY_ENABLED:-false}
+      TOOL_DISPATCH_WORKER_ENABLED: ${TOOL_DISPATCH_WORKER_ENABLED:-false}
+      TOOL_DISPATCH_NETWORK_POLICY_ENABLED: ${TOOL_DISPATCH_NETWORK_POLICY_ENABLED:-false}
+      BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH: ${BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH:-}
+      BROWSER_AUTOMATION_WORKER_ENABLED: ${BROWSER_AUTOMATION_WORKER_ENABLED:-false}
+      BROWSER_AUTOMATION_RUNNER_URL: ${BROWSER_AUTOMATION_RUNNER_URL:-}
+      BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED: ${BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED:-false}
+      BROWSER_AUTOMATION_MAX_JOBS: ${BROWSER_AUTOMATION_MAX_JOBS:-5}
+      BROWSER_AUTOMATION_LEASE_SECONDS: ${BROWSER_AUTOMATION_LEASE_SECONDS:-300}
+      BROWSER_AUTOMATION_TIMEOUT_MS: ${BROWSER_AUTOMATION_TIMEOUT_MS:-30000}
+      BROWSER_AUTOMATION_MAX_BYTES: ${BROWSER_AUTOMATION_MAX_BYTES:-20000}
+      POSTGRES_POOL_MAX: ${POSTGRES_POOL_MAX:-10}
+      REQUEST_BODY_MAX_BYTES: ${REQUEST_BODY_MAX_BYTES:-50000000}
+      FILE_INLINE_MAX_BYTES: ${FILE_INLINE_MAX_BYTES:-25000000}
+      FILE_DIRECT_UPLOAD_MAX_BYTES: ${FILE_DIRECT_UPLOAD_MAX_BYTES:-100000000}
+      FILE_RESUMABLE_UPLOAD_MAX_BYTES: ${FILE_RESUMABLE_UPLOAD_MAX_BYTES:-500000000}
+      MESSAGE_ATTACHMENT_MAX_BYTES: ${MESSAGE_ATTACHMENT_MAX_BYTES:-5000000}
+      HTTP_RATE_LIMIT_DRIVER: ${HTTP_RATE_LIMIT_DRIVER:-memory}
+      HTTP_RATE_LIMIT_KEY_PREFIX: ${HTTP_RATE_LIMIT_KEY_PREFIX:-romeo:http-rate-limit:v1}
+      HTTP_RATE_LIMIT_WINDOW_SECONDS: ${HTTP_RATE_LIMIT_WINDOW_SECONDS:-60}
+      HTTP_RATE_LIMIT_AUTH_MAX: ${HTTP_RATE_LIMIT_AUTH_MAX:-60}
+      HTTP_RATE_LIMIT_PUBLIC_MAX: ${HTTP_RATE_LIMIT_PUBLIC_MAX:-600}
+      HTTP_RATE_LIMIT_AUTHENTICATED_MAX: ${HTTP_RATE_LIMIT_AUTHENTICATED_MAX:-6000}
+      HTTP_RATE_LIMIT_WEBHOOK_MAX: ${HTTP_RATE_LIMIT_WEBHOOK_MAX:-1200}
+      MODEL_PROVIDER_STREAM_TIMEOUT_MS: ${MODEL_PROVIDER_STREAM_TIMEOUT_MS:-60000}
+      MODEL_PROVIDER_RETRY_ATTEMPTS: ${MODEL_PROVIDER_RETRY_ATTEMPTS:-1}
+      MODEL_PROVIDER_RETRY_BACKOFF_MS: ${MODEL_PROVIDER_RETRY_BACKOFF_MS:-250}
+      MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD: ${MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD:-5}
+      MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS: ${MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS:-60000}
+      MODEL_PROVIDER_DISABLED_IDS: ${MODEL_PROVIDER_DISABLED_IDS:-}
+      MODEL_PROVIDER_FALLBACK_MODEL_ID: ${MODEL_PROVIDER_FALLBACK_MODEL_ID:-}
+      VALKEY_URL: redis://valkey:6379
+      QUOTA_COORDINATION_DRIVER: ${QUOTA_COORDINATION_DRIVER:-disabled}
+      QUOTA_COORDINATION_KEY_PREFIX: ${QUOTA_COORDINATION_KEY_PREFIX:-romeo:quota:v1}
+      QUOTA_COORDINATION_TIMEOUT_MS: ${QUOTA_COORDINATION_TIMEOUT_MS:-2000}
+      EDGE_TLS_TERMINATION: ${EDGE_TLS_TERMINATION:-app}
+      EDGE_TRUSTED_PROXY_MODE: ${EDGE_TRUSTED_PROXY_MODE:-direct}
+      EDGE_WAF_MODE: ${EDGE_WAF_MODE:-disabled}
+      EDGE_ALLOWED_ORIGINS: ${EDGE_ALLOWED_ORIGINS:-http://localhost:3000}
+      EDGE_HSTS_ENABLED: ${EDGE_HSTS_ENABLED:-false}
+      EDGE_HSTS_MAX_AGE_SECONDS: ${EDGE_HSTS_MAX_AGE_SECONDS:-0}
+      EDGE_HSTS_INCLUDE_SUBDOMAINS: ${EDGE_HSTS_INCLUDE_SUBDOMAINS:-true}
+      EDGE_HSTS_PRELOAD: ${EDGE_HSTS_PRELOAD:-false}
+      OBJECT_STORE_DRIVER: s3
+      DATA_CONNECTOR_EXECUTION_DRIVER: disabled
+      DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: ""
+      DATA_CONNECTOR_FETCH_MAX_BYTES: 2000000
+      DATA_CONNECTOR_FETCH_TIMEOUT_MS: 10000
+      DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS: 1
+      DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS: 250
+      DELEGATED_OAUTH_GITHUB_CLIENT_ID: ${DELEGATED_OAUTH_GITHUB_CLIENT_ID:-}
+      DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: ${DELEGATED_OAUTH_GITHUB_CLIENT_SECRET:-}
+      DELEGATED_OAUTH_GITHUB_SCOPES: ${DELEGATED_OAUTH_GITHUB_SCOPES:-repo,read:user,user:email}
+      DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: ${DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY:-}
+      TOOL_OPERATION_EXECUTION_DRIVER: ${TOOL_OPERATION_EXECUTION_DRIVER:-disabled}
+      TOOL_OPERATION_FETCH_TIMEOUT_MS: ${TOOL_OPERATION_FETCH_TIMEOUT_MS:-10000}
+      TOOL_OPERATION_FETCH_MAX_BYTES: ${TOOL_OPERATION_FETCH_MAX_BYTES:-1000000}
+      TOOL_DISPATCH_PAYLOAD_STORE_DRIVER: ${TOOL_DISPATCH_PAYLOAD_STORE_DRIVER:-disabled}
+      TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY: ${TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY:-}
+      TOOL_DISPATCH_PAYLOAD_STORE_PREFIX: ${TOOL_DISPATCH_PAYLOAD_STORE_PREFIX:-tool-dispatch-payloads/v1}
+      KNOWLEDGE_EXTRACTION_DRIVER: disabled
+      KNOWLEDGE_EXTRACTION_MAX_BYTES: 20000000
+      KNOWLEDGE_EXTRACTION_TIMEOUT_MS: 15000
+      EXTERNAL_VECTOR_STORE_DRIVER: ${EXTERNAL_VECTOR_STORE_DRIVER:-disabled}
+      QDRANT_URL: ${QDRANT_URL:-}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-romeo_knowledge_chunks}
+      QDRANT_API_KEY_REF: ${QDRANT_API_KEY_REF:-}
+      QDRANT_TIMEOUT_MS: ${QDRANT_TIMEOUT_MS:-10000}
+      VECTOR_NAMESPACE_POLICY: ${VECTOR_NAMESPACE_POLICY:-none}
+      VECTOR_PARTITIONING_POLICY: ${VECTOR_PARTITIONING_POLICY:-none}
+      VECTOR_ISOLATION_MODE: ${VECTOR_ISOLATION_MODE:-shared_row_scope}
+      PDFTOTEXT_PATH: pdftotext
+      SECRET_RESOLVER_DRIVER: disabled
+      VAULT_ADDR: ""
+      VAULT_TOKEN: ""
+      VAULT_NAMESPACE: ""
+      VAULT_KV_MOUNT: secret
+      VAULT_TIMEOUT_MS: 5000
+      NOTIFICATION_DELIVERY_DRIVER: ${NOTIFICATION_DELIVERY_DRIVER:-disabled}
+      NOTIFICATION_EMAIL_DELIVERY_DRIVER: ${NOTIFICATION_EMAIL_DELIVERY_DRIVER:-resend}
+      NOTIFICATION_EMAIL_FROM: ${NOTIFICATION_EMAIL_FROM:-}
+      NOTIFICATION_FCM_BASE_URL: ${NOTIFICATION_FCM_BASE_URL:-https://fcm.googleapis.com}
+      NOTIFICATION_FCM_PROJECT_ID: ${NOTIFICATION_FCM_PROJECT_ID:-}
+      NOTIFICATION_FCM_SERVICE_ACCOUNT_REF: ${NOTIFICATION_FCM_SERVICE_ACCOUNT_REF:-}
+      NOTIFICATION_FCM_TIMEOUT_MS: ${NOTIFICATION_FCM_TIMEOUT_MS:-10000}
+      NOTIFICATION_FCM_TOKEN_URL: ${NOTIFICATION_FCM_TOKEN_URL:-https://oauth2.googleapis.com/token}
+      NOTIFICATION_PAGERDUTY_EVENTS_URL: ${NOTIFICATION_PAGERDUTY_EVENTS_URL:-https://events.pagerduty.com/v2/enqueue}
+      NOTIFICATION_PAGERDUTY_TIMEOUT_MS: ${NOTIFICATION_PAGERDUTY_TIMEOUT_MS:-10000}
+      NOTIFICATION_RESEND_API_KEY: ${NOTIFICATION_RESEND_API_KEY:-}
+      NOTIFICATION_RESEND_BASE_URL: ${NOTIFICATION_RESEND_BASE_URL:-https://api.resend.com}
+      NOTIFICATION_RESEND_TIMEOUT_MS: ${NOTIFICATION_RESEND_TIMEOUT_MS:-10000}
+      NOTIFICATION_SLACK_TIMEOUT_MS: ${NOTIFICATION_SLACK_TIMEOUT_MS:-10000}
+      NOTIFICATION_SMTP_HOST: ${NOTIFICATION_SMTP_HOST:-}
+      NOTIFICATION_SMTP_PASSWORD: ${NOTIFICATION_SMTP_PASSWORD:-}
+      NOTIFICATION_SMTP_PORT: ${NOTIFICATION_SMTP_PORT:-587}
+      NOTIFICATION_SMTP_SECURE: ${NOTIFICATION_SMTP_SECURE:-false}
+      NOTIFICATION_SMTP_TIMEOUT_MS: ${NOTIFICATION_SMTP_TIMEOUT_MS:-10000}
+      NOTIFICATION_SMTP_USER: ${NOTIFICATION_SMTP_USER:-}
+      NOTIFICATION_TEAMS_TIMEOUT_MS: ${NOTIFICATION_TEAMS_TIMEOUT_MS:-10000}
+      VOICE_PROVIDER_DRIVER: disabled
+      S3_ENDPOINT: http://rustfs:9000
+      S3_BUCKET: ${S3_BUCKET:-romeo}
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-romeo}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-romeo-local-secret}
+      WEBHOOK_SIGNING_KEY: ${WEBHOOK_SIGNING_KEY:-dev-webhook-signing-key-change-me}
+      SESSION_SECRET: ${SESSION_SECRET:-replace-with-32-random-bytes}
+      SESSION_SECRET_PREVIOUS: ${SESSION_SECRET_PREVIOUS:-}
+      LOCAL_AUTH_SECRET_ENCRYPTION_KEY: ${LOCAL_AUTH_SECRET_ENCRYPTION_KEY:-replace-with-32-random-bytes-local-auth}
+      LOCAL_AUTH_SECRET_ENCRYPTION_KEY_PREVIOUS: ${LOCAL_AUTH_SECRET_ENCRYPTION_KEY_PREVIOUS:-}
+      MANAGED_SECRET_ENCRYPTION_KEY: ${MANAGED_SECRET_ENCRYPTION_KEY:-replace-with-32-random-bytes-managed-secrets}
+      MANAGED_SECRET_ENCRYPTION_KEY_PREVIOUS: ${MANAGED_SECRET_ENCRYPTION_KEY_PREVIOUS:-}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_GROUP_CLAIM: groups
+      OIDC_ADMIN_GROUPS: ${OIDC_ADMIN_GROUPS:-}
+      OIDC_GROUP_MAP: ${OIDC_GROUP_MAP:-}
+      OIDC_WORKSPACE_GROUP_MAP: ${OIDC_WORKSPACE_GROUP_MAP:-}
+      OIDC_WORKSPACE_GROUP_PREFIX: ${OIDC_WORKSPACE_GROUP_PREFIX:-}
+      SCIM_ENABLED: ${SCIM_ENABLED:-false}
+      DEV_SEEDED_LOGIN: ${DEV_SEEDED_LOGIN:-true}
+      PORT: 3000
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      object-store-init:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://127.0.0.1:3000/api/v1/health'').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  migrate:
+    build: *app-build
+    command: ["pnpm", "migrate:postgres"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://romeo:romeo@postgres:5432/romeo}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  object-store-init:
+    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-romeo}
+      S3_BUCKET: ${S3_BUCKET:-romeo}
+      S3_ENDPOINT: http://rustfs:9000
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-romeo-local-secret}
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - 'until mc alias set romeo "$${S3_ENDPOINT}" "$${S3_ACCESS_KEY_ID}" "$${S3_SECRET_ACCESS_KEY}"; do sleep 2; done; mc mb --ignore-existing "romeo/$${S3_BUCKET}"'
+    depends_on:
+      rustfs:
+        condition: service_started
+    restart: "no"
+
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_DB: romeo
+      POSTGRES_USER: romeo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-romeo}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U romeo -d romeo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  valkey:
+    image: valkey/valkey:9
+    command: ["valkey-server", "--save", "60", "1", "--appendonly", "yes"]
+    ports:
+      - "${VALKEY_PORT:-6379}:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-romeo}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-romeo-local-secret}
+    ports:
+      - "${RUSTFS_PORT:-9000}:9000"
+    volumes:
+      - rustfs-data:/data
+
+  data-connector-sync-worker:
+    <<: *loop-worker
+    profiles: ["workers"]
+    environment:
+      <<: *cli-environment
+      DATA_CONNECTOR_SYNC_INTERVAL_MS: ${DATA_CONNECTOR_SYNC_INTERVAL_MS:-60000}
+      DATA_CONNECTOR_SYNC_MAX_CONNECTORS: ${DATA_CONNECTOR_SYNC_MAX_CONNECTORS:-10}
+      DATA_CONNECTOR_SYNC_WORKSPACE_ID: ${DATA_CONNECTOR_SYNC_WORKSPACE_ID:-}
+    command:
+      [
+        "/bin/sh",
+        "-lc",
+        'args="--interval-ms $${DATA_CONNECTOR_SYNC_INTERVAL_MS} --max-connectors $${DATA_CONNECTOR_SYNC_MAX_CONNECTORS}"; if [ -n "$${DATA_CONNECTOR_SYNC_WORKSPACE_ID}" ]; then args="$$args --workspace $${DATA_CONNECTOR_SYNC_WORKSPACE_ID}"; fi; pnpm --filter @romeo/cli start -- workers data-connector-sync $$args',
+      ]
+
+  workflow-resume-worker:
+    <<: *loop-worker
+    profiles: ["workers"]
+    environment:
+      <<: *cli-environment
+      WORKFLOW_RESUME_INTERVAL_MS: ${WORKFLOW_RESUME_INTERVAL_MS:-60000}
+      WORKFLOW_RESUME_MAX_RUNS: ${WORKFLOW_RESUME_MAX_RUNS:-10}
+      WORKFLOW_RESUME_MAX_WORKFLOWS: ${WORKFLOW_RESUME_MAX_WORKFLOWS:-10}
+      WORKFLOW_RESUME_WORKSPACE_ID: ${WORKFLOW_RESUME_WORKSPACE_ID:-}
+    command:
+      [
+        "/bin/sh",
+        "-lc",
+        'args="--interval-ms $${WORKFLOW_RESUME_INTERVAL_MS} --max-runs $${WORKFLOW_RESUME_MAX_RUNS} --max-workflows $${WORKFLOW_RESUME_MAX_WORKFLOWS}"; if [ -n "$${WORKFLOW_RESUME_WORKSPACE_ID}" ]; then args="$$args --workspace $${WORKFLOW_RESUME_WORKSPACE_ID}"; fi; pnpm --filter @romeo/cli start -- workers workflow-resume $$args',
+      ]
+
+  webhook-retry-worker:
+    <<: *loop-worker
+    profiles: ["workers"]
+    environment:
+      <<: *cli-environment
+      WEBHOOK_RETRY_INTERVAL_MS: ${WEBHOOK_RETRY_INTERVAL_MS:-60000}
+    command:
+      [
+        "pnpm",
+        "--filter",
+        "@romeo/cli",
+        "start",
+        "--",
+        "workers",
+        "webhook-retry",
+        "--interval-ms",
+        "${WEBHOOK_RETRY_INTERVAL_MS:-60000}",
+      ]
+
+  notification-retry-worker:
+    <<: *loop-worker
+    profiles: ["workers"]
+    environment:
+      <<: *cli-environment
+      NOTIFICATION_RETRY_INTERVAL_MS: ${NOTIFICATION_RETRY_INTERVAL_MS:-60000}
+    command:
+      [
+        "pnpm",
+        "--filter",
+        "@romeo/cli",
+        "start",
+        "--",
+        "workers",
+        "notification-retry",
+        "--interval-ms",
+        "${NOTIFICATION_RETRY_INTERVAL_MS:-60000}",
+      ]
+
+  retention-enforce-worker:
+    <<: *loop-worker
+    profiles: ["workers"]
+    environment:
+      <<: *cli-environment
+      RETENTION_ENFORCE_INTERVAL_MS: ${RETENTION_ENFORCE_INTERVAL_MS:-86400000}
+    command:
+      [
+        "pnpm",
+        "--filter",
+        "@romeo/cli",
+        "start",
+        "--",
+        "workers",
+        "retention-enforce",
+        "--interval-ms",
+        "${RETENTION_ENFORCE_INTERVAL_MS:-86400000}",
+      ]
+
+  billing-entitlement-reconcile-worker:
+    <<: *loop-worker
+    profiles: ["workers"]
+    environment:
+      <<: *cli-environment
+      BILLING_ENTITLEMENT_RECONCILE_INTERVAL_MS: ${BILLING_ENTITLEMENT_RECONCILE_INTERVAL_MS:-300000}
+    command:
+      [
+        "pnpm",
+        "--filter",
+        "@romeo/cli",
+        "start",
+        "--",
+        "workers",
+        "billing-entitlement-reconcile",
+        "--interval-ms",
+        "${BILLING_ENTITLEMENT_RECONCILE_INTERVAL_MS:-300000}",
+      ]
+
+  billing-lifecycle-enforce-worker:
+    <<: *loop-worker
+    profiles: ["workers"]
+    environment:
+      <<: *cli-environment
+      BILLING_LIFECYCLE_ENFORCE_INTERVAL_MS: ${BILLING_LIFECYCLE_ENFORCE_INTERVAL_MS:-900000}
+    command:
+      [
+        "pnpm",
+        "--filter",
+        "@romeo/cli",
+        "start",
+        "--",
+        "workers",
+        "billing-lifecycle-enforce",
+        "--interval-ms",
+        "${BILLING_LIFECYCLE_ENFORCE_INTERVAL_MS:-900000}",
+      ]
+
+  tool-dispatch-worker:
+    <<: *loop-worker
+    profiles: ["tool-dispatch"]
+    environment:
+      <<: *cli-environment
+      TOOL_DISPATCH_ALLOW_PRIVATE_NETWORK: ${TOOL_DISPATCH_ALLOW_PRIVATE_NETWORK:-false}
+      TOOL_DISPATCH_INTERVAL_MS: ${TOOL_DISPATCH_INTERVAL_MS:-10000}
+      TOOL_DISPATCH_LEASE_SECONDS: ${TOOL_DISPATCH_LEASE_SECONDS:-300}
+      TOOL_DISPATCH_MAX_BYTES: ${TOOL_DISPATCH_MAX_BYTES:-1000000}
+      TOOL_DISPATCH_MAX_JOBS: ${TOOL_DISPATCH_MAX_JOBS:-10}
+      TOOL_DISPATCH_PAYLOAD_FILE: ${TOOL_DISPATCH_PAYLOAD_FILE:-}
+      TOOL_DISPATCH_SECRET_RESOLVER_DRIVER: ${TOOL_DISPATCH_SECRET_RESOLVER_DRIVER:-disabled}
+      TOOL_DISPATCH_TIMEOUT_MS: ${TOOL_DISPATCH_TIMEOUT_MS:-10000}
+      VAULT_ADDR: ${VAULT_ADDR:-}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
+      VAULT_NAMESPACE: ${VAULT_NAMESPACE:-}
+      VAULT_KV_MOUNT: ${VAULT_KV_MOUNT:-secret}
+      VAULT_TIMEOUT_MS: ${VAULT_TIMEOUT_MS:-5000}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_SECRET_MANAGER_TIMEOUT_MS: ${AWS_SECRET_MANAGER_TIMEOUT_MS:-5000}
+      GCP_SECRET_MANAGER_PROJECT: ${GCP_SECRET_MANAGER_PROJECT:-}
+      GCP_ACCESS_TOKEN: ${GCP_ACCESS_TOKEN:-}
+      GCP_SECRET_MANAGER_TIMEOUT_MS: ${GCP_SECRET_MANAGER_TIMEOUT_MS:-5000}
+      AZURE_KEY_VAULT_URL: ${AZURE_KEY_VAULT_URL:-}
+      AZURE_ACCESS_TOKEN: ${AZURE_ACCESS_TOKEN:-}
+      AZURE_KEY_VAULT_TIMEOUT_MS: ${AZURE_KEY_VAULT_TIMEOUT_MS:-5000}
+    command:
+      [
+        "/bin/sh",
+        "-lc",
+        'args="--interval-ms $${TOOL_DISPATCH_INTERVAL_MS} --max-jobs $${TOOL_DISPATCH_MAX_JOBS} --lease-seconds $${TOOL_DISPATCH_LEASE_SECONDS} --timeout-ms $${TOOL_DISPATCH_TIMEOUT_MS} --max-bytes $${TOOL_DISPATCH_MAX_BYTES} --secret-resolver $${TOOL_DISPATCH_SECRET_RESOLVER_DRIVER}"; if [ -n "$${TOOL_DISPATCH_PAYLOAD_FILE}" ]; then args="$$args --payload-file $${TOOL_DISPATCH_PAYLOAD_FILE}"; fi; if [ "$${TOOL_DISPATCH_ALLOW_PRIVATE_NETWORK}" = "true" ]; then args="$$args --allow-private-network"; fi; pnpm --filter @romeo/cli start -- workers tool-dispatch $$args',
+      ]
+    volumes:
+      - ${TOOL_DISPATCH_PAYLOAD_DIR:-./tool-dispatch-payloads}:/tool-dispatch-payloads:ro
+
+  browser-automation-worker:
+    <<: *loop-worker
+    profiles: ["browser-automation"]
+    environment:
+      <<: *cli-environment
+      BROWSER_AUTOMATION_INTERVAL_MS: ${BROWSER_AUTOMATION_INTERVAL_MS:-10000}
+      BROWSER_AUTOMATION_LEASE_SECONDS: ${BROWSER_AUTOMATION_LEASE_SECONDS:-300}
+      BROWSER_AUTOMATION_MAX_BYTES: ${BROWSER_AUTOMATION_MAX_BYTES:-20000}
+      BROWSER_AUTOMATION_MAX_JOBS: ${BROWSER_AUTOMATION_MAX_JOBS:-5}
+      BROWSER_AUTOMATION_RUNNER_URL: ${BROWSER_AUTOMATION_RUNNER_URL:-}
+      BROWSER_AUTOMATION_TIMEOUT_MS: ${BROWSER_AUTOMATION_TIMEOUT_MS:-30000}
+    command:
+      [
+        "/bin/sh",
+        "-lc",
+        'if [ -z "$${BROWSER_AUTOMATION_RUNNER_URL}" ]; then echo ''BROWSER_AUTOMATION_RUNNER_URL is required for the browser-automation profile.'' >&2; exit 2; fi; pnpm --filter @romeo/cli start -- workers browser-automation --runner-url "$${BROWSER_AUTOMATION_RUNNER_URL}" --interval-ms "$${BROWSER_AUTOMATION_INTERVAL_MS}" --max-jobs "$${BROWSER_AUTOMATION_MAX_JOBS}" --lease-seconds "$${BROWSER_AUTOMATION_LEASE_SECONDS}" --timeout-ms "$${BROWSER_AUTOMATION_TIMEOUT_MS}" --max-bytes "$${BROWSER_AUTOMATION_MAX_BYTES}"',
+      ]
+
+  operational-monitoring-exporter:
+    build: *app-build
+    profiles: ["monitoring"]
+    environment:
+      <<: *cli-environment
+    command: ["pnpm", "monitoring:export", "--", "--listen", "0.0.0.0:9464"]
+    ports:
+      - "${MONITORING_EXPORTER_PORT:-9464}:9464"
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  knowledge-extraction-worker:
+    <<: *loop-worker
+    profiles: ["knowledge"]
+    environment:
+      <<: *cli-environment
+      KNOWLEDGE_EXTRACTION_WORKER_INTERVAL_MS: ${KNOWLEDGE_EXTRACTION_WORKER_INTERVAL_MS:-60000}
+      KNOWLEDGE_EXTRACTION_WORKER_KB_ID: ${KNOWLEDGE_EXTRACTION_WORKER_KB_ID:-}
+      KNOWLEDGE_EXTRACTION_WORKER_MAX_SOURCES: ${KNOWLEDGE_EXTRACTION_WORKER_MAX_SOURCES:-10}
+    command:
+      [
+        "/bin/sh",
+        "-lc",
+        'if [ -z "$${KNOWLEDGE_EXTRACTION_WORKER_KB_ID}" ]; then echo ''KNOWLEDGE_EXTRACTION_WORKER_KB_ID is required for the knowledge profile.'' >&2; exit 2; fi; pnpm --filter @romeo/cli start -- workers knowledge-extraction --kb "$${KNOWLEDGE_EXTRACTION_WORKER_KB_ID}" --interval-ms "$${KNOWLEDGE_EXTRACTION_WORKER_INTERVAL_MS}" --max-sources "$${KNOWLEDGE_EXTRACTION_WORKER_MAX_SOURCES}"',
+      ]
+
+  voice-catalog-sync-worker:
+    <<: *loop-worker
+    profiles: ["voice"]
+    environment:
+      <<: *cli-environment
+      VOICE_CATALOG_SYNC_INTERVAL_MS: ${VOICE_CATALOG_SYNC_INTERVAL_MS:-86400000}
+    command:
+      [
+        "pnpm",
+        "--filter",
+        "@romeo/cli",
+        "start",
+        "--",
+        "workers",
+        "voice-catalog-sync",
+        "--interval-ms",
+        "${VOICE_CATALOG_SYNC_INTERVAL_MS:-86400000}",
+      ]
+
+  postgres-backup:
+    build: *app-build
+    profiles: ["backup"]
+    command:
+      [
+        "pnpm",
+        "backup:postgres",
+        "--",
+        "--output",
+        "/backups/romeo-postgres.dump",
+        "--manifest-output",
+        "/backups/romeo-postgres.dump.manifest.json",
+        "--retention-days",
+        "${POSTGRES_BACKUP_RETENTION_DAYS:-30}",
+        "--upload-timeout-ms",
+        "${POSTGRES_BACKUP_UPLOAD_TIMEOUT_MS:-30000}",
+      ]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://romeo:romeo@postgres:5432/romeo}
+      POSTGRES_BACKUP_MANIFEST_UPLOAD_URL: ${POSTGRES_BACKUP_MANIFEST_UPLOAD_URL:-}
+      POSTGRES_BACKUP_UPLOAD_URL: ${POSTGRES_BACKUP_UPLOAD_URL:-}
+      POSTGRES_BACKUP_UPLOAD_TIMEOUT_MS: ${POSTGRES_BACKUP_UPLOAD_TIMEOUT_MS:-30000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    volumes:
+      - compose-backups:/backups
+
+  object-store-backup:
+    build: *app-build
+    profiles: ["backup"]
+    command:
+      [
+        "pnpm",
+        "backup:object-store",
+        "--",
+        "--output-dir",
+        "/backups/object-store",
+        "--manifest-output",
+        "/backups/object-store/manifest.json",
+      ]
+    environment:
+      S3_ENDPOINT: http://rustfs:9000
+      S3_BUCKET: ${S3_BUCKET:-romeo}
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-romeo}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-romeo-local-secret}
+    depends_on:
+      object-store-init:
+        condition: service_completed_successfully
+    restart: "no"
+    volumes:
+      - compose-backups:/backups
+
+volumes:
+  compose-backups:
+  postgres-data:
+  rustfs-data:
+  valkey-data:

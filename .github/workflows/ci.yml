@@ -1,0 +1,450 @@
+name: Romeo CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: romeo-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+  PNPM_VERSION: "11.7.0"
+  CI: "true"
+
+jobs:
+  quality:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Set up pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting on changed files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          base="${BASE_SHA:-HEAD~1}"
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git rev-list --max-parents=0 HEAD)"
+          fi
+          git diff -z --name-only --diff-filter=ACMR "${base}" "${HEAD_SHA}" > /tmp/romeo-prettier-files
+          if [ ! -s /tmp/romeo-prettier-files ]; then
+            echo "No changed files to format-check."
+            exit 0
+          fi
+          xargs -0 pnpm exec prettier --check --ignore-unknown < /tmp/romeo-prettier-files
+
+      - name: Check OpenAPI and Python SDK drift
+        run: pnpm check:sdk-drift
+
+      - name: Check OpenAPI route coverage
+        run: pnpm check:openapi-route-coverage -- --output dist/ci/openapi-route-coverage.json
+
+      - name: Check opt-in bridge OpenAPI route coverage
+        run: OPENWEBUI_COMPATIBILITY_ENABLED=true pnpm check:openapi-route-coverage -- --output dist/ci/openapi-route-coverage-openwebui.json
+
+      - name: Typecheck
+        run: pnpm check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Review greenfield baseline
+        run: pnpm review:baseline -- --strict --output dist/ci/greenfield-baseline-review.json
+
+      - name: Review repository conformance coverage
+        run: pnpm review:repository-conformance -- --strict --output dist/ci/repository-conformance.json
+
+      - name: Generate scale fixtures
+        run: pnpm fixtures:scale -- --tier local --output dist/ci/scale-fixtures.json --report-output dist/ci/scale-fixture-report.json
+
+      - name: Dry-run scale load smoke
+        run: pnpm smoke:scale:load -- --dry-run --fixture-file dist/ci/scale-fixtures.json --output dist/ci/scale-load-smoke.json
+
+      - name: Background job lag smoke
+        run: pnpm smoke:jobs:lag -- --output dist/ci/job-lag-smoke.json
+
+      - name: Provider resilience smoke
+        run: pnpm smoke:providers:resilience -- --output dist/ci/provider-resilience-smoke.json
+
+      - name: Browser automation contract smoke
+        run: pnpm smoke:browser-automation:contract -- --output dist/ci/browser-automation-contract-smoke.json
+
+      - name: Target quality evidence contract smoke
+        run: pnpm smoke:quality:contract -- --output dist/ci/target-quality-evidence-contract-smoke.json
+
+      - name: Analytics authorization contract smoke
+        run: pnpm smoke:analytics:authz-contract -- --output dist/ci/analytics-authz-contract-smoke.json
+
+      - name: Auth provider acceptance contract smoke
+        run: pnpm smoke:auth-providers:acceptance-contract -- --output dist/ci/auth-provider-acceptance-contract-smoke.json
+
+      - name: Directory sync contract smoke
+        run: pnpm smoke:directory-sync:contract -- --output dist/ci/directory-sync-contract-smoke.json
+
+      - name: SCIM lifecycle contract smoke
+        run: pnpm smoke:scim:lifecycle-contract -- --output dist/ci/scim-lifecycle-contract-smoke.json
+
+      - name: Data connector acceptance contract smoke
+        run: pnpm smoke:data-connectors:acceptance-contract -- --output dist/ci/data-connector-acceptance-contract-smoke.json
+
+      - name: Tool dispatch acceptance contract smoke
+        run: pnpm smoke:tool-dispatch:acceptance-contract -- --output dist/ci/tool-dispatch-acceptance-contract-smoke.json
+
+      - name: Model tool orchestration contract smoke
+        run: pnpm smoke:model-tools:orchestration-contract -- --output dist/ci/model-tool-orchestration-contract-smoke.json
+
+      - name: RAG vector enterprise contract smoke
+        run: pnpm smoke:rag-vector:enterprise-contract -- --output dist/ci/rag-vector-enterprise-contract-smoke.json
+
+      - name: Voice provider acceptance contract smoke
+        run: pnpm smoke:voice:provider-acceptance-contract -- --output dist/ci/voice-provider-acceptance-contract-smoke.json
+
+      - name: Notification adapter acceptance contract smoke
+        run: pnpm smoke:notifications:adapter-acceptance-contract -- --output dist/ci/notification-adapter-acceptance-contract-smoke.json
+
+      - name: Native client API contract smoke
+        run: pnpm smoke:native-client:api-contract -- --output dist/ci/native-client-api-contract-smoke.json
+
+      - name: Validate operational monitoring contract
+        run: pnpm validate:operational-monitoring -- --output dist/ci/operational-monitoring-validation.json
+
+      - name: Alert firing contract smoke
+        run: pnpm smoke:alerts:contract -- --output dist/ci/live-alert-firing-contract-smoke.json
+
+      - name: Edge enforcement contract smoke
+        run: pnpm smoke:edge:contract -- --output dist/ci/live-edge-enforcement-contract-smoke.json
+
+      - name: Postgres backup upload failure smoke
+        run: pnpm smoke:postgres:backup-upload-failure -- --output dist/ci/postgres-backup-upload-failure-smoke.json
+
+      - name: Support bundle redaction smoke
+        run: pnpm smoke:support-bundle-redaction -- --output dist/ci/support-bundle-redaction.json
+
+      - name: Data rights retention contract smoke
+        run: pnpm smoke:data-rights-retention-contract -- --output dist/ci/data-rights-retention-contract-smoke.json
+
+      - name: Compose env contract smoke
+        run: pnpm smoke:compose:env-contract -- --output dist/ci/compose-env-contract-smoke.json
+
+      - name: Helm env schema contract smoke
+        run: pnpm smoke:helm:env-schema-contract -- --output dist/ci/helm-env-schema-contract-smoke.json
+
+      - name: Generate branch protection plan
+        run: pnpm ci:branch-protection-plan -- --output dist/ci/branch-protection-plan.json
+
+      - name: Tenant isolation negative suite
+        run: pnpm smoke:tenant-isolation-negative -- --output dist/ci/tenant-isolation-negative-suite.json
+
+      - name: GA evidence contract smoke
+        run: pnpm smoke:ga:evidence-contract -- --output dist/ci/ga-evidence-contract-smoke.json
+
+      - name: GA target plan contract smoke
+        run: pnpm smoke:ga:target-plan-contract -- --output dist/ci/ga-target-evidence-plan-contract.json
+
+      - name: GA target env template contract smoke
+        run: pnpm smoke:ga:target-env-template-contract -- --output dist/ci/ga-target-env-template-contract-smoke.json --env-output dist/ci/ga-target.env.example
+
+      - name: GA target execution contract smoke
+        run: pnpm smoke:ga:target-execution-contract -- --output dist/ci/ga-target-execution-contract-smoke.json
+
+      - name: Kubernetes NetworkPolicy smoke plan
+        run: pnpm smoke:kubernetes:networkpolicy -- --dry-run --output dist/ci/kubernetes-networkpolicy-plan.json
+
+      - name: Generate GA checklist draft
+        run: pnpm ga:checklist -- --output dist/ci/ga-checklist.json
+
+      - name: Generate GA target preflight
+        run: pnpm ga:target-preflight -- --checklist dist/ci/ga-checklist.json --output dist/ci/ga-target-preflight.json
+
+      - name: Generate GA target evidence plan
+        run: pnpm ga:target-plan -- --preflight dist/ci/ga-target-preflight.json --output dist/ci/ga-target-evidence-plan.json
+
+      - name: Generate GA target env template
+        run: pnpm ga:target-env-template -- --plan dist/ci/ga-target-evidence-plan.json --output dist/ci/ga-target-env-template.json --env-output dist/ci/ga-target.env.example
+
+      - name: Upload quality evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-evidence
+          path: dist/ci/**
+          if-no-files-found: ignore
+
+  postgres:
+    name: Postgres Conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_DB: romeo
+          POSTGRES_USER: romeo
+          POSTGRES_PASSWORD: romeo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U romeo -d romeo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://romeo:romeo@localhost:5432/romeo
+      ROMEO_POSTGRES_CONFORMANCE_DATABASE_URL: postgres://romeo:romeo@localhost:5432/romeo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Set up pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply greenfield migration
+        run: pnpm migrate:postgres
+
+      - name: Validate Postgres schema
+        run: pnpm validate:postgres -- --output dist/ci/postgres-schema-validation.json
+
+      - name: Review Postgres query plans
+        run: pnpm review:postgres-query-plans -- --output dist/ci/postgres-query-plan-review.json
+
+      - name: Review pgvector physical isolation
+        run: pnpm review:pgvector-isolation -- --output dist/ci/pgvector-isolation-review.json
+
+      - name: Run live Postgres repository conformance
+        run: pnpm test:postgres-conformance
+
+      - name: Upload Postgres evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-evidence
+          path: dist/ci/**
+          if-no-files-found: ignore
+
+  kubernetes-render:
+    name: Helm And Kubernetes Render
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Set up pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Render and validate Helm chart variants
+        run: pnpm smoke:kubernetes:render -- --output dist/ci/kubernetes-render-smoke.json
+
+      - name: Upload Kubernetes evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubernetes-render-evidence
+          path: dist/ci/**
+          if-no-files-found: ignore
+
+  release-evidence:
+    name: Release Evidence Dry Run
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Set up pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pack release artifacts
+        run: pnpm release:pack -- --skip-verify
+
+      - name: Generate SBOM
+        run: pnpm sbom:generate -- --output dist/release/sbom.cdx.json
+
+      - name: Generate release channel
+        run: pnpm release:channel -- --manifest dist/release/release-manifest.json --sbom dist/release/sbom.cdx.json --output dist/release/release-channel.json
+
+      - name: Generate container scan plan
+        run: pnpm containers:scan-plan -- --scanner trivy --output dist/release/container-scan-plan.json
+
+      - name: Generate offline security evidence
+        run: pnpm release:security -- --manifest dist/release/release-manifest.json --sbom dist/release/sbom.cdx.json --skip-audit --output dist/release/security-evidence.json
+
+      - name: Generate release provenance evidence
+        run: pnpm release:provenance -- --manifest dist/release/release-manifest.json --channel-file dist/release/release-channel.json --security-evidence dist/release/security-evidence.json --sbom dist/release/sbom.cdx.json --commit-sha "$GITHUB_SHA" --source-repo "$GITHUB_REPOSITORY" --source-ref "$GITHUB_REF" --builder-id "$GITHUB_WORKFLOW" --ci-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --output dist/release/release-provenance.json
+
+      - name: Generate dry-run release approval evidence
+        run: pnpm release:approval -- --manifest dist/release/release-manifest.json --provenance-file dist/release/release-provenance.json --approval-system github_environment --approval-ref "ci-dry-run-${GITHUB_RUN_ID}" --approver-id ci-dry-run-approver-a --approver-id ci-dry-run-approver-b --approved-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --output dist/release/release-approval.json
+
+      - name: Validate release channel upgrade metadata
+        run: pnpm release:upgrade-check -- --channel-file dist/release/release-channel.json --output dist/release/upgrade-validation.json
+
+      - name: Generate publish plan
+        run: pnpm release:publish-plan -- --manifest dist/release/release-manifest.json --channel-file dist/release/release-channel.json --security-evidence dist/release/security-evidence.json --require-security-evidence --provenance-file dist/release/release-provenance.json --require-provenance --approval-file dist/release/release-approval.json --require-approval --output dist/release/publish-plan.json
+
+      - name: Generate release GA checklist draft
+        run: pnpm ga:checklist -- --output dist/release/ga-checklist.json
+
+      - name: Generate GA evidence bundle
+        run: pnpm ga:bundle -- --checklist dist/release/ga-checklist.json --output dist/release/ga-evidence-bundle.json
+
+      - name: Verify air-gapped release bundle
+        run: pnpm release:airgap-check -- --bundle-dir dist/release --publish-plan publish-plan.json --require-publish-plan --approval-file release-approval.json --require-approval --ga-bundle ga-evidence-bundle.json --require-ga-bundle --output dist/release/airgap-bundle-verification.json
+
+      - name: Plan credentialed release readback collection
+        run: pnpm release:readback-collect -- --manifest dist/release/release-manifest.json --channel-file dist/release/release-channel.json --security-evidence dist/release/security-evidence.json --sbom dist/release/sbom.cdx.json --dry-run --output dist/release/release-readback-plan.json
+
+      - name: Validate planned release readback
+        run: pnpm release:readback-check -- --manifest dist/release/release-manifest.json --channel-file dist/release/release-channel.json --security-evidence dist/release/security-evidence.json --sbom dist/release/sbom.cdx.json --planned-readback --output dist/release/readback-validation.json
+
+      - name: Smoke release registry readback
+        run: pnpm smoke:release:readback -- --manifest dist/release/release-manifest.json --channel-file dist/release/release-channel.json --security-evidence dist/release/security-evidence.json --sbom dist/release/sbom.cdx.json --output dist/release/release-readback-smoke.json
+
+      - name: Upload release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence
+          path: dist/release/**
+          if-no-files-found: error
+
+  compose-smoke:
+    name: Compose Smoke (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs:
+      - quality
+      - postgres
+      - kubernetes-render
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - name: app-workflow
+            command: pnpm smoke:compose -- --output dist/ci/compose-smoke.json
+          - name: auth
+            command: pnpm smoke:compose:auth -- --output dist/ci/compose-auth-smoke.json
+          - name: external-postgres
+            command: pnpm smoke:compose:external-postgres -- --output dist/ci/compose-external-postgres-smoke.json
+          - name: workers
+            command: pnpm smoke:compose:workers -- --output dist/ci/compose-workers-smoke.json
+          - name: backup-restore
+            command: pnpm smoke:compose:backup-restore -- --output dist/ci/compose-backup-restore-smoke.json
+          - name: billing-scheduler
+            command: pnpm smoke:compose:billing-scheduler -- --output dist/ci/compose-billing-scheduler-smoke.json
+          - name: secret-rotation
+            command: pnpm smoke:compose:secret-rotation -- --output dist/ci/compose-secret-rotation-smoke.json
+          - name: scale
+            command: pnpm smoke:compose:scale -- --output dist/ci/compose-scale-smoke.json
+          - name: distributed-controls
+            command: pnpm smoke:compose:distributed-controls -- --output dist/ci/compose-distributed-controls-smoke.json
+          - name: object-store-outage
+            command: pnpm smoke:compose:object-store-outage -- --output dist/ci/compose-object-store-outage-smoke.json
+          - name: tiered-rag
+            command: pnpm smoke:compose:tiered-rag -- --output dist/ci/compose-tiered-rag-smoke.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Set up pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${PNPM_VERSION} --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Show Docker versions
+        run: |
+          docker version
+          docker compose version
+
+      - name: Run Compose smoke
+        run: ${{ matrix.command }}
+
+      - name: Upload Compose smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-smoke-evidence-${{ matrix.name }}
+          path: dist/ci/**
+          if-no-files-found: ignore

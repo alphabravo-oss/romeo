@@ -1,0 +1,32 @@
+node_modules
+.turbo
+.vinxi
+.output
+.tanstack
+dist
+coverage
+.env
+.env.local
+*.log
+*.tsbuildinfo
+
+# Build + runtime output
+.output/
+tmp/
+release/
+*.tsbuildinfo
+
+# Python artifacts (sdks/python ships a real client; its bytecode must not be tracked)
+__pycache__/
+*.py[cod]
+
+# Local env + secrets (keep .env.example tracked)
+.env
+.env.*
+!.env.example
+
+# OS noise
+.DS_Store
+
+# Superpowers scratch (ledger is local recovery state)
+.superpowers/

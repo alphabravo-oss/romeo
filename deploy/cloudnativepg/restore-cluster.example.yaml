@@ -1,0 +1,61 @@
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: romeo-pg-restore-backups
+spec:
+  retentionPolicy: "30d"
+  configuration:
+    destinationPath: s3://romeo-postgres-backups/romeo-pg-restore
+    endpointURL: https://s3.example.com
+    s3Credentials:
+      accessKeyId:
+        name: romeo-pg-restore-backup-s3
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: romeo-pg-restore-backup-s3
+        key: ACCESS_SECRET_KEY
+      region:
+        name: romeo-pg-restore-backup-s3
+        key: AWS_REGION
+    wal:
+      compression: gzip
+      encryption: AES256
+      maxParallel: 4
+    data:
+      compression: gzip
+      encryption: AES256
+      jobs: 2
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: romeo-pg-restore
+spec:
+  instances: 3
+  imageName: registry.example.com/romeo/postgresql-pgvector:18
+  storage:
+    size: 100Gi
+  walStorage:
+    size: 20Gi
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  bootstrap:
+    recovery:
+      source: romeo-pg-source
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: romeo-pg-restore-backups
+  externalClusters:
+    - name: romeo-pg-source
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: romeo-pg-backups
+          serverName: romeo-pg

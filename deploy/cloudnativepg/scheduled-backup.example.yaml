@@ -1,0 +1,12 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: romeo-pg-daily
+spec:
+  schedule: "0 17 3 * * *"
+  backupOwnerReference: cluster
+  cluster:
+    name: romeo-pg
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
