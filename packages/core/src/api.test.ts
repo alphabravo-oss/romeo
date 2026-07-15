@@ -1920,7 +1920,11 @@ describe("Romeo API thin slice", () => {
         FILE_DIRECT_UPLOAD_MAX_BYTES: "250000000",
         FILE_RESUMABLE_UPLOAD_MAX_BYTES: "750000000",
         MESSAGE_ATTACHMENT_MAX_BYTES: "3000000",
-        HTTP_RATE_LIMIT_DRIVER: "valkey",
+        // These tests assert security headers and edge enforcement codes, not
+        // rate limiting. The valkey driver made them depend on a live server on
+        // localhost:6379 and 503 in CI. The fail-closed valkey path has its own
+        // test below ("fails closed when the valkey rate limiter is unavailable").
+        HTTP_RATE_LIMIT_DRIVER: "memory",
         HTTP_RATE_LIMIT_WINDOW_SECONDS: "120",
         HTTP_RATE_LIMIT_AUTH_MAX: "25",
         HTTP_RATE_LIMIT_PUBLIC_MAX: "250",
@@ -1941,7 +1945,11 @@ describe("Romeo API thin slice", () => {
     expect(response.headers.get("strict-transport-security")).toContain(
       "max-age=31536000",
     );
-    expect(body.data.status).toBe("ready");
+    // With HTTP_RATE_LIMIT_DRIVER=memory (see comment above), the rate-limit
+    // posture check reports "warn" (not distributed), which flips the overall
+    // status from "ready" to "attention_required". That is correct, driver-
+    // accurate behaviour, not a regression in what this test covers (headers).
+    expect(body.data.status).toBe("attention_required");
     expect(body.data.tls.termination).toBe("ingress");
     expect(body.data.proxy.forwardedHeadersTrusted).toBe(true);
     expect(body.data.ingress.allowedOriginRuleCount).toBe(2);
@@ -1956,8 +1964,8 @@ describe("Romeo API thin slice", () => {
     expect(body.data.limits.rateLimit).toEqual({
       authenticatedMax: 5000,
       authMax: 25,
-      distributed: true,
-      driver: "valkey",
+      distributed: false,
+      driver: "memory",
       publicMax: 250,
       webhookMax: 750,
       windowSeconds: 120,
@@ -2090,7 +2098,12 @@ describe("Romeo API thin slice", () => {
           EDGE_WAF_MODE: "block",
           EDGE_ALLOWED_ORIGINS: "https://romeo.example.com",
           EDGE_HSTS_ENABLED: "true",
-          HTTP_RATE_LIMIT_DRIVER: "valkey",
+          // These tests assert edge enforcement failure codes, not rate
+          // limiting. The valkey driver made them depend on a live server on
+          // localhost:6379 and 503 in CI. The fail-closed valkey path has its
+          // own test below ("fails closed when the valkey rate limiter is
+          // unavailable").
+          HTTP_RATE_LIMIT_DRIVER: "memory",
           EDGE_ENFORCEMENT_EVIDENCE_PATH: evidencePath,
         }),
       });
@@ -2105,6 +2118,27 @@ describe("Romeo API thin slice", () => {
         testCase.failureCode,
       );
     }
+  });
+
+  it("fails closed with 503 when the valkey rate limiter is unavailable", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      env: readEnv({
+        HTTP_RATE_LIMIT_DRIVER: "valkey",
+        // Port 1 is reserved and never listening: guarantees connection refusal
+        // without depending on whether a real valkey happens to run locally.
+        VALKEY_URL: "redis://127.0.0.1:1",
+      }),
+    });
+
+    // /api/v1/health is exempt from rate limiting (see exemptPaths in
+    // http/rate-limit.ts), so it would never reach the valkey store and would
+    // not exercise this path. Use a non-exempt route instead so the
+    // preAuthRateLimit middleware actually calls into the valkey store.
+    const response = await api.request("/api/v1/admin/edge-security/posture");
+
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe("rate_limit_unavailable");
   });
 
   it("reports browser automation posture without leaking runner or evidence details", async () => {
