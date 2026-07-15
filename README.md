@@ -38,6 +38,35 @@ pnpm install
 pnpm dev
 ```
 
+### If `pnpm` fails with "Failed to switch pnpm to v11.7.0 ... ENOENT"
+
+This repository pins `pnpm@11.7.0` via the `packageManager` field. The
+standalone pnpm installer (`~/Library/pnpm/pnpm` on macOS) manages its own
+versions and **cannot install pnpm 11.x** — it fetches the platform package but
+never creates the `bin/` directory the shim then looks for, so it fails with
+`ENOENT` on every invocation.
+
+Corepack handles the pinned version correctly. Activate it once:
+
+```bash
+corepack enable
+corepack prepare pnpm@11.7.0 --activate
+```
+
+Then make sure your Node `bin` directory precedes the standalone pnpm on
+`PATH`, so corepack's shim wins:
+
+```bash
+# check which one is first — it should be the Node/corepack one
+which -a pnpm
+```
+
+If `~/Library/pnpm/pnpm` still comes first, either remove the standalone
+install or move your Node bin ahead of it in your shell profile.
+
+Without that, every command in this README still works when prefixed with
+`npx --yes pnpm@11.7.0` — for example `npx --yes pnpm@11.7.0 verify`.
+
 The dev server prints its local URL when it starts. The Milestone 1 API uses an in-memory repository by default so the app can run before external services are configured.
 
 ## Verification
