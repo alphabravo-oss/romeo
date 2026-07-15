@@ -505,10 +505,22 @@ html.dark .rm-sidebar-action:hover:not(:disabled) {
 }
 
 .rm-sidebar-item {
-  display: block;
-  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
   font-size: 14px;
-  line-height: 32px;
+}
+
+.rm-sidebar-item-label {
+  flex: 1;
+  min-width: 0; /* lets truncate actually truncate inside a flex child */
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
 /* Active chat: Open WebUI bg-gray-100 dark:bg-gray-900, no border */

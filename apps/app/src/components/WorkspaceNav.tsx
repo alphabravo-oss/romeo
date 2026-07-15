@@ -13,6 +13,9 @@ import { useEffect, useRef, useState } from "react";
 import { logout } from "../api/client";
 import type { Chat } from "../api/types";
 import type { Workspace } from "../api/workspace-types";
+import { useConfirm } from "./ConfirmDialog";
+import { FormDialog } from "./FormDialog";
+import { OverflowMenu } from "./OverflowMenu";
 
 const SIDEBAR_MIN = 220;
 const SIDEBAR_MAX = 480;
@@ -22,7 +25,9 @@ export function WorkspaceNav({
   activeChatId,
   chats,
   isAdmin,
+  onDeleteChat,
   onNewChat,
+  onRenameChat,
   onSelectChat,
   onSelectWorkspace,
   userLabel,
@@ -33,7 +38,9 @@ export function WorkspaceNav({
   activeChatId: string | undefined;
   chats: Chat[];
   isAdmin: boolean;
+  onDeleteChat: (chatId: string) => void;
   onNewChat: () => void;
+  onRenameChat: (chatId: string, title: string) => void;
   onSelectChat: (chatId: string) => void;
   onSelectWorkspace: (workspaceId: string) => void;
   userLabel: string;
@@ -42,7 +49,10 @@ export function WorkspaceNav({
   workspaces: Workspace[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [renamingChat, setRenamingChat] = useState<Chat | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const footerRef = useRef<HTMLDivElement>(null);
+  const { ask, dialog: confirmDialog } = useConfirm();
 
   // Restore persisted sidebar width (Open WebUI parity: resizable + saved).
   useEffect(() => {
@@ -86,6 +96,22 @@ export function WorkspaceNav({
     document.body.style.userSelect = "none";
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+  }
+
+  function openRenameDialog(chat: Chat) {
+    setRenamingChat(chat);
+    setRenameValue(chat.title);
+  }
+
+  async function confirmDeleteChat(chat: Chat) {
+    const confirmed = await ask({
+      title: "Delete chat",
+      body: `Delete "${chat.title}"? You can restore it from archived chats.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    onDeleteChat(chat.id);
   }
 
   return (
@@ -135,14 +161,32 @@ export function WorkspaceNav({
             <div className="rm-sidebar-empty">No chats yet</div>
           ) : (
             chats.map((chat) => (
-              <button
+              <div
                 className={`rm-sidebar-item ${chat.id === activeChatId ? "active" : ""}`}
                 key={chat.id}
-                onClick={() => onSelectChat(chat.id)}
-                type="button"
               >
-                <span className="truncate">{chat.title}</span>
-              </button>
+                <button
+                  className="rm-sidebar-item-label truncate"
+                  onClick={() => onSelectChat(chat.id)}
+                  type="button"
+                >
+                  {chat.title}
+                </button>
+                <OverflowMenu
+                  items={[
+                    {
+                      label: "Rename",
+                      onClick: () => openRenameDialog(chat),
+                    },
+                    {
+                      label: "Delete",
+                      onClick: () => void confirmDeleteChat(chat),
+                      tone: "danger",
+                    },
+                  ]}
+                  label={`Chat actions for ${chat.title}`}
+                />
+              </div>
             ))
           )}
         </div>
@@ -221,6 +265,39 @@ export function WorkspaceNav({
         onMouseDown={startResize}
         type="button"
       />
+
+      <FormDialog
+        onClose={() => setRenamingChat(null)}
+        open={renamingChat !== null}
+        title="Rename chat"
+      >
+        <form
+          className="grid gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (renamingChat === null) return;
+            const trimmed = renameValue.trim();
+            if (trimmed.length === 0) return;
+            onRenameChat(renamingChat.id, trimmed);
+            setRenamingChat(null);
+          }}
+        >
+          <label className="grid gap-1 text-sm" htmlFor="rename-chat-title">
+            <span className="text-muted">Title</span>
+            <input
+              autoFocus
+              className="rm-input"
+              id="rename-chat-title"
+              onChange={(event) => setRenameValue(event.currentTarget.value)}
+              value={renameValue}
+            />
+          </label>
+          <button className="rm-button primary" type="submit">
+            Rename
+          </button>
+        </form>
+      </FormDialog>
+      {confirmDialog}
     </aside>
   );
 }

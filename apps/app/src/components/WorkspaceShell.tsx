@@ -45,7 +45,9 @@ export function WorkspaceShell() {
         activeChatId={workspace.activeChatId}
         chats={workspace.chats}
         isAdmin={workspace.subject?.isAdmin === true}
+        onDeleteChat={(chatId) => void workspace.deleteChat(chatId)}
         onNewChat={workspace.handleNewChat}
+        onRenameChat={(chatId, title) => void workspace.renameChat(chatId, title)}
         onSelectChat={(chatId) => void workspace.handleSelectChat(chatId)}
         onSelectWorkspace={setWorkspaceId}
         userLabel={workspace.subject?.id ?? "Account"}

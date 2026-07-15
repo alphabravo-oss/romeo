@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import {
+  archiveChat,
   cancelRun,
   cloneAgent,
   createChat,
@@ -13,6 +14,7 @@ import {
   syncProviderModels,
   streamRunEvents,
   transcribeVoice,
+  updateChat,
   updateModelPricing,
 } from "../api/client";
 import type { Message, SpeechArtifact } from "../api/types";
@@ -330,6 +332,39 @@ export function useWorkspaceController() {
     ]);
   }
 
+  async function renameChat(chatId: string, title: string): Promise<void> {
+    const trimmed = title.trim();
+    if (trimmed.length === 0) return;
+    setError(undefined);
+    try {
+      await updateChat(chatId, { title: trimmed });
+      if (workspace !== undefined)
+        await queryClient.invalidateQueries({
+          queryKey: ["chats", workspace.id],
+        });
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to rename chat.",
+      );
+    }
+  }
+
+  async function deleteChat(chatId: string): Promise<void> {
+    setError(undefined);
+    try {
+      // Archive, not hard-delete: it is what the API exposes, it is
+      // reversible, and it respects the retention/legal-hold rules already
+      // in the domain. handleChatArchived resets the active chat (if this
+      // was it) and refreshes every query the chat list depends on.
+      await archiveChat(chatId);
+      await handleChatArchived(chatId);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to delete chat.",
+      );
+    }
+  }
+
   async function handleWorkspaceArchived(workspaceId: string) {
     setActiveChatId(undefined);
     setActiveAgentId(undefined);
@@ -485,6 +520,7 @@ export function useWorkspaceController() {
     activeChatId,
     agents,
     chats,
+    deleteChat,
     draft,
     error,
     handleCancel,
@@ -520,6 +556,7 @@ export function useWorkspaceController() {
     pendingToolApproval: toolExecution.pendingApproval,
     providers,
     providerOperationalSummary,
+    renameChat,
     setActiveAgentId,
     setDraft,
     speechArtifacts,
