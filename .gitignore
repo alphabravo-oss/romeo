@@ -27,3 +27,6 @@ __pycache__/
 
 # OS noise
 .DS_Store
+
+# Superpowers scratch (ledger is local recovery state)
+.superpowers/
