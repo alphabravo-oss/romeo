@@ -14,6 +14,7 @@ import type { VoiceProvider } from "@romeo/voices";
 import { describe, expect, it } from "vitest";
 
 import { createRomeoApi } from "./api";
+import { fixtureFuture, fixturePast } from "./test-support/fixture-clock";
 import type {
   AuditLog,
   KnowledgeSource,
@@ -3103,8 +3104,8 @@ describe("durable transaction boundaries", () => {
       hashedToken: "hashed-session-disable-rollback",
       scopes: ["me:read"],
       isAdmin: false,
-      expiresAt: "2026-07-08T12:00:00.000Z",
-      createdAt: "2026-07-07T12:00:00.000Z",
+      expiresAt: fixtureFuture(),
+      createdAt: fixturePast(),
     });
 
     await expect(
@@ -4569,8 +4570,8 @@ async function seedLocalSession(
     hashedToken: `hash_${sessionId}`,
     scopes: ["me:read"],
     isAdmin: false,
-    expiresAt: "2026-07-08T12:00:00.000Z",
-    createdAt: "2026-07-07T12:00:00.000Z",
+    expiresAt: fixtureFuture(),
+    createdAt: fixturePast(),
   });
 }
 
