@@ -13,6 +13,7 @@ import { generate } from "otplib";
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { createSeedData } from "./repositories/seed-data";
+import { enableDefaultAgentTool } from "./test-support/agent-tools";
 import { LocalMfaSecretVault } from "./services/local-mfa-secret-vault";
 import { ManagedSecretService } from "./services/managed-secret-service";
 import { EnvironmentSecretResolver } from "./services/secret-resolver";
@@ -6718,6 +6719,14 @@ describe("Romeo API thin slice", () => {
 
   it("exports and imports an agent draft JSON document", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    // Enable the bindings this test round-trips through export/import, rather
+    // than depending on the seed's default enabled state.
+    await enableDefaultAgentTool(api, "tool_calculator", {
+      approvalRequired: false,
+    });
+    await enableDefaultAgentTool(api, "tool_datetime", {
+      approvalRequired: true,
+    });
     const updateResponse = await api.request("/api/v1/agents/agent_default", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -6988,12 +6997,15 @@ describe("Romeo API thin slice", () => {
         body: JSON.stringify({ enabled: false }),
       },
     );
+    // Set the tool state this test publishes, rather than inheriting whatever
+    // the seed ships. Both flags are the inverse of the seeded v1 snapshot, so
+    // the rollback below has to restore both of them.
     const updateToolBindingResponse = await api.request(
       "/api/v1/agents/agent_default/tools/tool_datetime",
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ enabled: false, approvalRequired: false }),
+        body: JSON.stringify({ enabled: true, approvalRequired: false }),
       },
     );
 
@@ -7073,7 +7085,7 @@ describe("Romeo API thin slice", () => {
         (binding: { toolId: string }) => binding.toolId === "tool_datetime",
       ),
     ).toMatchObject({
-      enabled: false,
+      enabled: true,
       approvalRequired: false,
     });
     expect(versions.data).toHaveLength(2);
@@ -7113,15 +7125,27 @@ describe("Romeo API thin slice", () => {
     ).toMatchObject({
       enabled: true,
     });
+    // Rollback must restore exactly what the target version recorded, so the
+    // expectation is read from v1 itself rather than hardcoding the seed's
+    // default. Both flags were published as the inverse above, so this only
+    // passes if rollback actually rewrote them.
+    const seededToolBinding = versions.data
+      .find(
+        (version: { id: string }) => version.id === "agent_version_default_v1",
+      )
+      .toolBindings.find(
+        (binding: { toolId: string }) => binding.toolId === "tool_datetime",
+      );
     expect(
       rolledBackTools.data.find(
         (tool: { id: string }) => tool.id === "tool_datetime",
       ),
     ).toMatchObject({
       bound: true,
-      enabled: true,
-      approvalRequired: true,
+      enabled: seededToolBinding.enabled,
+      approvalRequired: seededToolBinding.approvalRequired,
     });
+    expect(seededToolBinding.approvalRequired).toBe(true);
     expect(run.data.agentVersionId).toBe("agent_version_default_v1");
     expect(
       audit.data.some(
@@ -9908,6 +9932,12 @@ describe("Romeo API thin slice", () => {
 
   it("lists and executes governed built-in tools", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    await enableDefaultAgentTool(api, "tool_calculator", {
+      approvalRequired: false,
+    });
+    await enableDefaultAgentTool(api, "tool_datetime", {
+      approvalRequired: true,
+    });
     const toolsResponse = await api.request("/api/v1/tools");
     const tools = await toolsResponse.json();
     const agentToolsResponse = await api.request(
@@ -9947,18 +9977,27 @@ describe("Romeo API thin slice", () => {
         (tool: { id: string }) => tool.id === "tool_datetime",
       ).approvalRequired,
     ).toBe(true);
+    // Selected by action rather than index: the binding PATCHes above also
+    // audit, and same-millisecond entries tie on the createdAt sort.
+    const executeAudit = audit.data.find(
+      (log: { action: string }) => log.action === "tool.execute",
+    );
     expect(executeResponse.status).toBe(200);
     expect(result.data.result).toBe(14);
-    expect(audit.data[0].action).toBe("tool.execute");
-    expect(audit.data[0].outcome).toBe("success");
-    expect(audit.data[0].metadata.inputKeys).toEqual(["expression"]);
-    expect(audit.data[0].metadata.agentId).toBe("agent_default");
-    expect(JSON.stringify(audit.data[0].metadata)).not.toContain("2 + 3 * 4");
+    expect(executeAudit.action).toBe("tool.execute");
+    expect(executeAudit.outcome).toBe("success");
+    expect(executeAudit.metadata.inputKeys).toEqual(["expression"]);
+    expect(executeAudit.metadata.agentId).toBe("agent_default");
+    expect(JSON.stringify(executeAudit.metadata)).not.toContain("2 + 3 * 4");
     expect(usage.data[0].metric).toBe("tool.call.success");
   });
 
   it("blocks unbound tools and requires approval before execution", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    // Only agent_default gets the binding; the clone below must stay unbound.
+    await enableDefaultAgentTool(api, "tool_datetime", {
+      approvalRequired: true,
+    });
     const cloneResponse = await api.request(
       "/api/v1/agents/agent_default/clone",
       {
@@ -10144,6 +10183,9 @@ describe("Romeo API thin slice", () => {
 
   it("cancels pending tool approvals with metadata-only audit state", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    await enableDefaultAgentTool(api, "tool_datetime", {
+      approvalRequired: true,
+    });
     const approvalResponse = await api.request(
       "/api/v1/tools/tool_datetime/execute",
       {
@@ -10208,6 +10250,9 @@ describe("Romeo API thin slice", () => {
 
   it("rejects pending tool approvals with metadata-only audit state", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    await enableDefaultAgentTool(api, "tool_datetime", {
+      approvalRequired: true,
+    });
     const approvalResponse = await api.request(
       "/api/v1/tools/tool_datetime/execute",
       {
@@ -10285,6 +10330,9 @@ describe("Romeo API thin slice", () => {
 
   it("updates agent tool bindings through the management API", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    await enableDefaultAgentTool(api, "tool_datetime", {
+      approvalRequired: true,
+    });
     const updateResponse = await api.request(
       "/api/v1/agents/agent_default/tools/tool_datetime",
       {
@@ -12974,6 +13022,11 @@ describe("Romeo API thin slice", () => {
 
   it("returns stable errors for rejected tool input", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    // Bound, so the request reaches input validation instead of stopping at
+    // the binding check.
+    await enableDefaultAgentTool(api, "tool_calculator", {
+      approvalRequired: false,
+    });
     const response = await api.request(
       "/api/v1/tools/tool_calculator/execute",
       {
@@ -12989,10 +13042,15 @@ describe("Romeo API thin slice", () => {
     const auditResponse = await api.request("/api/v1/audit-logs");
     const audit = await auditResponse.json();
 
+    // Selected by action rather than index: the binding PATCH above also
+    // audits, and same-millisecond entries tie on the createdAt sort.
+    const executeAudit = audit.data.find(
+      (log: { action: string }) => log.action === "tool.execute",
+    );
     expect(response.status).toBe(400);
     expect(body.error.code).toBe("tool_execution_error");
-    expect(audit.data[0].outcome).toBe("failure");
-    expect(audit.data[0].metadata.errorCode).toBe("tool_execution_error");
+    expect(executeAudit.outcome).toBe("failure");
+    expect(executeAudit.metadata.errorCode).toBe("tool_execution_error");
   });
 
   it("renames, archives, lists, restores chats, and blocks runs while archived", async () => {
@@ -14122,6 +14180,9 @@ describe("Romeo API thin slice", () => {
         ROMEO_PROVIDER_API_KEY: "provider-api-key",
       }),
     });
+    await enableDefaultAgentTool(api, "tool_calculator", {
+      approvalRequired: false,
+    });
     const chatResponse = await api.request("/api/v1/chats", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -15002,6 +15063,9 @@ describe("Romeo API thin slice", () => {
         ROMEO_PROVIDER_API_KEY: "provider-api-key",
       }),
     });
+    await enableDefaultAgentTool(api, "tool_datetime", {
+      approvalRequired: true,
+    });
     const chatResponse = await api.request("/api/v1/chats", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -15144,6 +15208,9 @@ describe("Romeo API thin slice", () => {
         ROMEO_PROVIDER_API_KEY: "provider-api-key",
       }),
     });
+    await enableDefaultAgentTool(api, "tool_datetime", {
+      approvalRequired: true,
+    });
     const chatResponse = await api.request("/api/v1/chats", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -15262,6 +15329,9 @@ describe("Romeo API thin slice", () => {
       secretResolver: new EnvironmentSecretResolver({
         ROMEO_PROVIDER_API_KEY: "provider-api-key",
       }),
+    });
+    await enableDefaultAgentTool(api, "tool_datetime", {
+      approvalRequired: true,
     });
     const chatResponse = await api.request("/api/v1/chats", {
       method: "POST",
