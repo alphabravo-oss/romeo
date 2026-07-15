@@ -10,6 +10,7 @@ import type { FormEvent, KeyboardEvent } from "react";
 
 import type { Message, SpeechArtifact } from "../api/types";
 import { Markdown } from "../lib/markdown";
+import { useStickToBottom } from "../lib/use-stick-to-bottom";
 import type { PendingImageAttachment } from "./useWorkspaceController";
 import { VoiceInputButton } from "./VoiceInputButton";
 
@@ -65,6 +66,10 @@ export function ChatPanel({
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
   }
+
+  // Re-runs on every token: messages is a new array each delta, so the effect
+  // fires throughout the stream, not just on message boundaries.
+  const conversationRef = useStickToBottom(messages);
 
   const composer = (
     <form className="rm-composer-wrap" onSubmit={onSubmit}>
@@ -203,7 +208,7 @@ export function ChatPanel({
 
   return (
     <section className="rm-chat-panel">
-      <div className="rm-conversation">
+      <div className="rm-conversation" ref={conversationRef}>
         <div className="rm-message-list">
           {messages.map((message) => {
             const speechArtifact = speechArtifacts[message.id];
