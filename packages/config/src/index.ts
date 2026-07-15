@@ -17,37 +17,15 @@ export const envSchema = z
     GA_TARGET_PLAN_PATH: z.string().default(""),
     GA_TARGET_EXECUTION_PATH: z.string().default(""),
     GA_EVIDENCE_BUNDLE_PATH: z.string().default(""),
-    RELEASE_PROVENANCE_EVIDENCE_PATH: z.string().default(""),
-    RELEASE_APPROVAL_EVIDENCE_PATH: z.string().default(""),
     RELEASE_PUBLISH_PLAN_PATH: z.string().default(""),
     RELEASE_AIRGAP_VERIFICATION_PATH: z.string().default(""),
     RELEASE_READBACK_PLAN_PATH: z.string().default(""),
-    RELEASE_READBACK_EVIDENCE_PATH: z.string().default(""),
     RELEASE_READBACK_VALIDATION_PATH: z.string().default(""),
     SUPPORT_BUNDLE_PATH: z.string().default(""),
-    SUPPORT_BUNDLE_REDACTION_EVIDENCE_PATH: z.string().default(""),
     CI_BRANCH_PROTECTION_PLAN_PATH: z.string().default(""),
     CI_HOSTED_RUN_VERIFICATION_PATH: z.string().default(""),
     CI_BRANCH_PROTECTION_VERIFICATION_PATH: z.string().default(""),
-    IDENTITY_LIVE_EVIDENCE_PATH: z.string().default(""),
-    ANALYTICS_AUTHZ_EVIDENCE_PATH: z.string().default(""),
-    AUDIT_INTEGRITY_EVIDENCE_PATH: z.string().default(""),
-    TARGET_QUALITY_EVIDENCE_PATH: z.string().default(""),
-    ALERT_FIRING_EVIDENCE_PATH: z.string().default(""),
-    PROVIDER_OUTAGE_EVIDENCE_PATH: z.string().default(""),
-    MIGRATION_DRILL_EVIDENCE_PATH: z.string().default(""),
-    NETWORK_PARTITION_EVIDENCE_PATH: z.string().default(""),
-    SECRET_ROTATION_DRILL_EVIDENCE_PATH: z.string().default(""),
     EDGE_ENFORCEMENT_EVIDENCE_PATH: z.string().default(""),
-    KUBERNETES_LIVE_SMOKE_EVIDENCE_PATH: z.string().default(""),
-    KUBERNETES_WORKERS_EVIDENCE_PATH: z.string().default(""),
-    KUBERNETES_NETWORKPOLICY_EVIDENCE_PATH: z.string().default(""),
-    KUBERNETES_CLOUDNATIVEPG_DR_EVIDENCE_PATH: z.string().default(""),
-    KUBERNETES_EXTERNAL_POSTGRES_DR_EVIDENCE_PATH: z.string().default(""),
-    KUBERNETES_TIERED_RAG_EVIDENCE_PATH: z.string().default(""),
-    KUBERNETES_LOAD_SOAK_EVIDENCE_PATH: z.string().default(""),
-    KUBERNETES_KEDA_EVIDENCE_PATH: z.string().default(""),
-    KUBERNETES_LOG_REDACTION_EVIDENCE_PATH: z.string().default(""),
     POSTGRES_QUERY_PLAN_EVIDENCE_PATH: z.string().default(""),
     POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH: z.string().default(""),
     POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH: z.string().default(""),
@@ -56,8 +34,6 @@ export const envSchema = z
     QDRANT_LIVE_EVIDENCE_PATH: z.string().default(""),
     DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH: z.string().default(""),
     DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH: z.string().default(""),
-    TENANT_PURGE_EVIDENCE_PATH: z.string().default(""),
-    BILLING_OPERATIONS_EVIDENCE_PATH: z.string().default(""),
     DATA_CONNECTOR_LIVE_EVIDENCE_PATH: z.string().default(""),
     DATA_CONNECTOR_WORKER_ENABLED: z
       .enum(["true", "false"])
@@ -67,7 +43,6 @@ export const envSchema = z
       .enum(["true", "false"])
       .default("false")
       .transform((value) => value === "true"),
-    TOOL_DISPATCH_LIVE_EVIDENCE_PATH: z.string().default(""),
     TOOL_DISPATCH_WORKER_ENABLED: z
       .enum(["true", "false"])
       .default("false")
@@ -460,7 +435,6 @@ export const envSchema = z
       .int()
       .positive()
       .default(10_000),
-    NOTIFICATION_ADAPTER_LIVE_EVIDENCE_PATH: z.string().default(""),
     VOICE_PROVIDER_DRIVER: z
       .enum(["disabled", "dev", "openai-compatible"])
       .default("disabled"),
@@ -475,7 +449,6 @@ export const envSchema = z
       .string()
       .default("alloy,echo,fable,onyx,nova,shimmer"),
     VOICE_OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
-    VOICE_PROVIDER_LIVE_EVIDENCE_PATH: z.string().default(""),
     S3_ENDPOINT: z.string().default("http://localhost:9000"),
     S3_BUCKET: z.string().default("romeo"),
     S3_REGION: z.string().default("us-east-1"),

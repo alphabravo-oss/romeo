@@ -70,16 +70,12 @@ describe("Romeo config", () => {
       NOTIFICATION_SMTP_TIMEOUT_MS: "5500",
       NOTIFICATION_SMTP_USER: "smtp-user",
       NOTIFICATION_TEAMS_TIMEOUT_MS: "7500",
-      NOTIFICATION_ADAPTER_LIVE_EVIDENCE_PATH:
-        "/etc/romeo/notification-adapter-live-evidence.json",
       VOICE_PROVIDER_DRIVER: "openai-compatible",
       VOICE_OPENAI_BASE_URL: "https://voice.example.com/v1",
       VOICE_OPENAI_API_KEY: "voice-key",
       VOICE_OPENAI_MODEL: "tts-model",
       VOICE_OPENAI_VOICES: "alloy=Alloy,echo=Echo",
       VOICE_OPENAI_TIMEOUT_MS: "12000",
-      VOICE_PROVIDER_LIVE_EVIDENCE_PATH:
-        "/etc/romeo/voice-provider-live-evidence.json",
       BILLING_STRIPE_WEBHOOK_SECRET: "whsec_test_secret",
       BILLING_STRIPE_WEBHOOK_TOLERANCE_SECONDS: "600",
       BILLING_GENERIC_WEBHOOK_SECRET: "generic_billing_secret",
@@ -95,49 +91,18 @@ describe("Romeo config", () => {
       GA_TARGET_PLAN_PATH: "/etc/romeo/ga-target-plan.json",
       GA_TARGET_EXECUTION_PATH: "/etc/romeo/ga-target-execution.json",
       GA_EVIDENCE_BUNDLE_PATH: "/etc/romeo/ga-evidence-bundle.json",
-      RELEASE_PROVENANCE_EVIDENCE_PATH: "/etc/romeo/release-provenance.json",
-      RELEASE_APPROVAL_EVIDENCE_PATH: "/etc/romeo/release-approval.json",
       RELEASE_PUBLISH_PLAN_PATH: "/etc/romeo/publish-plan.json",
       RELEASE_AIRGAP_VERIFICATION_PATH:
         "/etc/romeo/airgap-bundle-verification.json",
       RELEASE_READBACK_PLAN_PATH: "/etc/romeo/release-readback-plan.json",
-      RELEASE_READBACK_EVIDENCE_PATH: "/etc/romeo/release-readback.json",
       RELEASE_READBACK_VALIDATION_PATH: "/etc/romeo/readback-validation.json",
       SUPPORT_BUNDLE_PATH: "/etc/romeo/support-bundle.json",
-      SUPPORT_BUNDLE_REDACTION_EVIDENCE_PATH:
-        "/etc/romeo/support-bundle-redaction.json",
       CI_BRANCH_PROTECTION_PLAN_PATH: "/etc/romeo/branch-protection-plan.json",
       CI_HOSTED_RUN_VERIFICATION_PATH:
         "/etc/romeo/hosted-ci-run-verification.json",
       CI_BRANCH_PROTECTION_VERIFICATION_PATH:
         "/etc/romeo/branch-protection-verification.json",
-      AUDIT_INTEGRITY_EVIDENCE_PATH: "/etc/romeo/audit-integrity-evidence.json",
-      TARGET_QUALITY_EVIDENCE_PATH: "/etc/romeo/target-quality-evidence.json",
-      ALERT_FIRING_EVIDENCE_PATH: "/etc/romeo/live-alert-firing.json",
-      PROVIDER_OUTAGE_EVIDENCE_PATH: "/etc/romeo/provider-outage-evidence.json",
-      MIGRATION_DRILL_EVIDENCE_PATH: "/etc/romeo/migration-drill-evidence.json",
-      NETWORK_PARTITION_EVIDENCE_PATH:
-        "/etc/romeo/network-partition-evidence.json",
-      SECRET_ROTATION_DRILL_EVIDENCE_PATH:
-        "/etc/romeo/secret-rotation-drill-evidence.json",
       EDGE_ENFORCEMENT_EVIDENCE_PATH: "/etc/romeo/live-edge-enforcement.json",
-      KUBERNETES_LIVE_SMOKE_EVIDENCE_PATH:
-        "/etc/romeo/kubernetes-live-smoke.json",
-      KUBERNETES_WORKERS_EVIDENCE_PATH:
-        "/etc/romeo/kubernetes-workers-smoke.json",
-      KUBERNETES_NETWORKPOLICY_EVIDENCE_PATH:
-        "/etc/romeo/kubernetes-networkpolicy-smoke.json",
-      KUBERNETES_CLOUDNATIVEPG_DR_EVIDENCE_PATH:
-        "/etc/romeo/kubernetes-cloudnativepg-dr.json",
-      KUBERNETES_EXTERNAL_POSTGRES_DR_EVIDENCE_PATH:
-        "/etc/romeo/kubernetes-external-postgres-dr.json",
-      KUBERNETES_TIERED_RAG_EVIDENCE_PATH:
-        "/etc/romeo/kubernetes-tiered-rag-smoke.json",
-      KUBERNETES_LOAD_SOAK_EVIDENCE_PATH:
-        "/etc/romeo/kubernetes-load-soak.json",
-      KUBERNETES_KEDA_EVIDENCE_PATH: "/etc/romeo/kubernetes-keda-smoke.json",
-      KUBERNETES_LOG_REDACTION_EVIDENCE_PATH:
-        "/etc/romeo/kubernetes-log-redaction-smoke.json",
       POSTGRES_QUERY_PLAN_EVIDENCE_PATH: "/etc/romeo/postgres-query-plan.json",
       POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH:
         "/etc/romeo/postgres-slow-query.json",
@@ -151,14 +116,10 @@ describe("Romeo config", () => {
         "/etc/romeo/log-retention-evidence.json",
       DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH:
         "/etc/romeo/backup-retention-evidence.json",
-      BILLING_OPERATIONS_EVIDENCE_PATH:
-        "/etc/romeo/billing-operations-evidence.json",
       DATA_CONNECTOR_LIVE_EVIDENCE_PATH:
         "/etc/romeo/data-connector-live-evidence.json",
       DATA_CONNECTOR_WORKER_ENABLED: "true",
       DATA_CONNECTOR_NETWORK_POLICY_ENABLED: "true",
-      TOOL_DISPATCH_LIVE_EVIDENCE_PATH:
-        "/etc/romeo/tool-dispatch-live-evidence.json",
       TOOL_DISPATCH_WORKER_ENABLED: "true",
       TOOL_DISPATCH_NETWORK_POLICY_ENABLED: "true",
       POSTGRES_POOL_MAX: "7",
@@ -269,17 +230,11 @@ describe("Romeo config", () => {
     expect(env.NOTIFICATION_SMTP_TIMEOUT_MS).toBe(5500);
     expect(env.NOTIFICATION_SMTP_USER).toBe("smtp-user");
     expect(env.NOTIFICATION_TEAMS_TIMEOUT_MS).toBe(7500);
-    expect(env.NOTIFICATION_ADAPTER_LIVE_EVIDENCE_PATH).toBe(
-      "/etc/romeo/notification-adapter-live-evidence.json",
-    );
     expect(env.VOICE_PROVIDER_DRIVER).toBe("openai-compatible");
     expect(env.VOICE_OPENAI_BASE_URL).toBe("https://voice.example.com/v1");
     expect(env.VOICE_OPENAI_MODEL).toBe("tts-model");
     expect(env.VOICE_OPENAI_VOICES).toBe("alloy=Alloy,echo=Echo");
     expect(env.VOICE_OPENAI_TIMEOUT_MS).toBe(12000);
-    expect(env.VOICE_PROVIDER_LIVE_EVIDENCE_PATH).toBe(
-      "/etc/romeo/voice-provider-live-evidence.json",
-    );
     expect(env.BILLING_STRIPE_WEBHOOK_SECRET).toBe("whsec_test_secret");
     expect(env.BILLING_STRIPE_WEBHOOK_TOLERANCE_SECONDS).toBe(600);
     expect(env.BILLING_GENERIC_WEBHOOK_SECRET).toBe("generic_billing_secret");
@@ -307,12 +262,6 @@ describe("Romeo config", () => {
     expect(env.GA_EVIDENCE_BUNDLE_PATH).toBe(
       "/etc/romeo/ga-evidence-bundle.json",
     );
-    expect(env.RELEASE_PROVENANCE_EVIDENCE_PATH).toBe(
-      "/etc/romeo/release-provenance.json",
-    );
-    expect(env.RELEASE_APPROVAL_EVIDENCE_PATH).toBe(
-      "/etc/romeo/release-approval.json",
-    );
     expect(env.RELEASE_PUBLISH_PLAN_PATH).toBe("/etc/romeo/publish-plan.json");
     expect(env.RELEASE_AIRGAP_VERIFICATION_PATH).toBe(
       "/etc/romeo/airgap-bundle-verification.json",
@@ -320,16 +269,10 @@ describe("Romeo config", () => {
     expect(env.RELEASE_READBACK_PLAN_PATH).toBe(
       "/etc/romeo/release-readback-plan.json",
     );
-    expect(env.RELEASE_READBACK_EVIDENCE_PATH).toBe(
-      "/etc/romeo/release-readback.json",
-    );
     expect(env.RELEASE_READBACK_VALIDATION_PATH).toBe(
       "/etc/romeo/readback-validation.json",
     );
     expect(env.SUPPORT_BUNDLE_PATH).toBe("/etc/romeo/support-bundle.json");
-    expect(env.SUPPORT_BUNDLE_REDACTION_EVIDENCE_PATH).toBe(
-      "/etc/romeo/support-bundle-redaction.json",
-    );
     expect(env.CI_BRANCH_PROTECTION_PLAN_PATH).toBe(
       "/etc/romeo/branch-protection-plan.json",
     );
@@ -339,50 +282,8 @@ describe("Romeo config", () => {
     expect(env.CI_BRANCH_PROTECTION_VERIFICATION_PATH).toBe(
       "/etc/romeo/branch-protection-verification.json",
     );
-    expect(env.TARGET_QUALITY_EVIDENCE_PATH).toBe(
-      "/etc/romeo/target-quality-evidence.json",
-    );
-    expect(env.ALERT_FIRING_EVIDENCE_PATH).toBe(
-      "/etc/romeo/live-alert-firing.json",
-    );
-    expect(env.MIGRATION_DRILL_EVIDENCE_PATH).toBe(
-      "/etc/romeo/migration-drill-evidence.json",
-    );
-    expect(env.NETWORK_PARTITION_EVIDENCE_PATH).toBe(
-      "/etc/romeo/network-partition-evidence.json",
-    );
-    expect(env.SECRET_ROTATION_DRILL_EVIDENCE_PATH).toBe(
-      "/etc/romeo/secret-rotation-drill-evidence.json",
-    );
     expect(env.EDGE_ENFORCEMENT_EVIDENCE_PATH).toBe(
       "/etc/romeo/live-edge-enforcement.json",
-    );
-    expect(env.KUBERNETES_LIVE_SMOKE_EVIDENCE_PATH).toBe(
-      "/etc/romeo/kubernetes-live-smoke.json",
-    );
-    expect(env.KUBERNETES_WORKERS_EVIDENCE_PATH).toBe(
-      "/etc/romeo/kubernetes-workers-smoke.json",
-    );
-    expect(env.KUBERNETES_NETWORKPOLICY_EVIDENCE_PATH).toBe(
-      "/etc/romeo/kubernetes-networkpolicy-smoke.json",
-    );
-    expect(env.KUBERNETES_CLOUDNATIVEPG_DR_EVIDENCE_PATH).toBe(
-      "/etc/romeo/kubernetes-cloudnativepg-dr.json",
-    );
-    expect(env.KUBERNETES_EXTERNAL_POSTGRES_DR_EVIDENCE_PATH).toBe(
-      "/etc/romeo/kubernetes-external-postgres-dr.json",
-    );
-    expect(env.KUBERNETES_TIERED_RAG_EVIDENCE_PATH).toBe(
-      "/etc/romeo/kubernetes-tiered-rag-smoke.json",
-    );
-    expect(env.KUBERNETES_LOAD_SOAK_EVIDENCE_PATH).toBe(
-      "/etc/romeo/kubernetes-load-soak.json",
-    );
-    expect(env.KUBERNETES_KEDA_EVIDENCE_PATH).toBe(
-      "/etc/romeo/kubernetes-keda-smoke.json",
-    );
-    expect(env.KUBERNETES_LOG_REDACTION_EVIDENCE_PATH).toBe(
-      "/etc/romeo/kubernetes-log-redaction-smoke.json",
     );
     expect(env.POSTGRES_QUERY_PLAN_EVIDENCE_PATH).toBe(
       "/etc/romeo/postgres-query-plan.json",
@@ -402,31 +303,19 @@ describe("Romeo config", () => {
     expect(env.QDRANT_LIVE_EVIDENCE_PATH).toBe(
       "/etc/romeo/qdrant-live-evidence.json",
     );
-    expect(env.AUDIT_INTEGRITY_EVIDENCE_PATH).toBe(
-      "/etc/romeo/audit-integrity-evidence.json",
-    );
     expect(env.DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH).toBe(
       "/etc/romeo/log-retention-evidence.json",
     );
     expect(env.DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH).toBe(
       "/etc/romeo/backup-retention-evidence.json",
     );
-    expect(env.BILLING_OPERATIONS_EVIDENCE_PATH).toBe(
-      "/etc/romeo/billing-operations-evidence.json",
-    );
     expect(env.DATA_CONNECTOR_LIVE_EVIDENCE_PATH).toBe(
       "/etc/romeo/data-connector-live-evidence.json",
     );
     expect(env.DATA_CONNECTOR_WORKER_ENABLED).toBe(true);
     expect(env.DATA_CONNECTOR_NETWORK_POLICY_ENABLED).toBe(true);
-    expect(env.TOOL_DISPATCH_LIVE_EVIDENCE_PATH).toBe(
-      "/etc/romeo/tool-dispatch-live-evidence.json",
-    );
     expect(env.TOOL_DISPATCH_WORKER_ENABLED).toBe(true);
     expect(env.TOOL_DISPATCH_NETWORK_POLICY_ENABLED).toBe(true);
-    expect(env.PROVIDER_OUTAGE_EVIDENCE_PATH).toBe(
-      "/etc/romeo/provider-outage-evidence.json",
-    );
     expect(env.POSTGRES_POOL_MAX).toBe(7);
     expect(env.REQUEST_BODY_MAX_BYTES).toBe(75000000);
     expect(env.FILE_INLINE_MAX_BYTES).toBe(12000000);
