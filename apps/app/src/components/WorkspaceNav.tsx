@@ -122,6 +122,7 @@ export function WorkspaceNav({
         </div>
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">Romeo</div>
+          <div className="rm-brand-tagline truncate">Enterprise AI Chat</div>
           {workspaces.length > 1 ? (
             <select
               aria-label="Switch workspace"
@@ -256,6 +257,13 @@ export function WorkspaceNav({
               size={14}
             />
           </button>
+        </div>
+
+        <div className="rm-built-by">
+          built by{" "}
+          <a href="https://alphabravo.io" rel="noreferrer" target="_blank">
+            AlphaBravo
+          </a>
         </div>
       </div>
 
