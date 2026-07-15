@@ -794,9 +794,15 @@ describe("fixture rot guard", () => {
       lines.forEach((line, index) => {
         const match = /expiresAt:\s*"(\d{4}-\d{2}-\d{2}T[^"]+)"/.exec(line);
         if (match === null) return;
-        if (new Date(match[1]).getTime() > Date.now()) return;
+        // This repo compiles with noUncheckedIndexedAccess, so match[1] is
+        // `string | undefined`. Bind and narrow it — `new Date(match[1])`
+        // does not typecheck, and vitest will not catch that (it does not
+        // typecheck); only `pnpm check` will.
+        const iso = match[1];
+        if (iso === undefined) return;
+        if (new Date(iso).getTime() > Date.now()) return;
         if (line.includes("deliberately-expired:")) return;
-        offenders.push(`${file}:${index + 1} -> ${match[1]}`);
+        offenders.push(`${file}:${index + 1} -> ${iso}`);
       });
     }
 
