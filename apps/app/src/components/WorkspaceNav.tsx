@@ -106,7 +106,7 @@ export function WorkspaceNav({
   async function confirmDeleteChat(chat: Chat) {
     const confirmed = await ask({
       title: "Delete chat",
-      body: `Delete "${chat.title}"? You can restore it from archived chats.`,
+      body: `Delete "${chat.title}"? This archives the chat rather than erasing it immediately.`,
       confirmLabel: "Delete",
       tone: "danger",
     });

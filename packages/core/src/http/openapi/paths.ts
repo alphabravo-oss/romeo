@@ -2,7 +2,6 @@ import { auditPaths } from "./audit-paths";
 import { authPaths } from "./auth-paths";
 import { abuseControlPaths } from "./abuse-control-paths";
 import { adminAnalyticsPaths } from "./admin-analytics-paths";
-import { alertFiringPaths } from "./alert-firing-paths";
 import { apiKeyPaths } from "./api-key-paths";
 import { billingPaths } from "./billing-paths";
 import { browserAutomationPaths } from "./browser-automation-paths";
@@ -38,7 +37,6 @@ import { readinessPaths } from "./readiness-paths";
 import { scimPaths } from "./scim-paths";
 import { serviceAccountPaths } from "./service-account-paths";
 import { sessionPaths } from "./session-paths";
-import { targetQualityPaths } from "./target-quality-paths";
 import { tenantAdminPaths } from "./tenant-admin-paths";
 import { toolPaths } from "./tool-paths";
 import { usagePaths } from "./usage-paths";
@@ -57,7 +55,6 @@ export function openApiPaths(options: OpenApiPathOptions = {}) {
     ...authPaths,
     ...abuseControlPaths,
     ...adminAnalyticsPaths,
-    ...alertFiringPaths,
     ...apiKeyPaths,
     ...serviceAccountPaths,
     ...auditPaths,
@@ -91,7 +88,6 @@ export function openApiPaths(options: OpenApiPathOptions = {}) {
     ...readinessPaths,
     ...scimPaths,
     ...jobPaths,
-    ...targetQualityPaths,
     ...tenantAdminPaths,
     ...toolPaths,
     ...workflowPaths,
@@ -640,6 +636,7 @@ export function openApiPaths(options: OpenApiPathOptions = {}) {
           200: success("Message", { $ref: "#/components/schemas/Message" }),
           403: errorResponse,
           404: errorResponse,
+          409: errorResponse,
         },
       },
     },

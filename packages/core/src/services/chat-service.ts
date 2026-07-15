@@ -235,13 +235,36 @@ export class ChatService {
     const message = await this.repository.getMessage(input.messageId);
     if (!message || message.chatId !== chat.id) throw notFound("Message");
 
-    await this.repository.deleteMessage(message.id);
-    await this.audit(input.subject, "chat.message.delete", chat.id, {
-      workspaceId: chat.workspaceId,
-      messageId: message.id,
-      messageRole: message.role,
+    const plan = await this.repository.getDataDeletionPlan(
+      chat.orgId,
+      "chat",
+      chat.id,
+    );
+    if (!plan) throw notFound("Chat");
+    if (plan.legalHold !== undefined) {
+      throw new ApiError(
+        "chat_delete_legal_hold",
+        "Chat is under legal hold and cannot be deleted.",
+        409,
+        { legalHoldUntil: plan.legalHold.until },
+      );
+    }
+
+    return this.repository.transaction(async (repository) => {
+      await repository.deleteMessage(message.id);
+      await this.audit(
+        input.subject,
+        "chat.message.delete",
+        chat.id,
+        {
+          workspaceId: chat.workspaceId,
+          messageId: message.id,
+          messageRole: message.role,
+        },
+        repository,
+      );
+      return message;
     });
-    return message;
   }
 
   async readAttachment(input: {

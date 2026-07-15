@@ -190,13 +190,28 @@ export function useWorkspaceController() {
 
     setError(undefined);
     try {
-      // Resolve attachment bytes before deleting anything, so a failed
+      // Resolve attachment bytes before starting anything, so a failed
       // re-fetch aborts cleanly instead of destroying the old answer first.
       const attachmentsForRun = await resolveAttachmentsForResend(
         lastUser.attachments,
       );
 
       const chatId = activeChatId;
+
+      // Start the new run before touching the old pair. Both deletes commit
+      // server-side with no soft delete, so if startRun fails (quota,
+      // provider outage, network blip), the user's prompt and the previous
+      // answer must still be there afterward — only delete once the run has
+      // actually started.
+      const run = await startRunMutation.mutateAsync({
+        chatId,
+        agentId: activeAgent.id,
+        content: lastUser.content,
+        ...(attachmentsForRun.length === 0
+          ? {}
+          : { attachments: attachmentsForRun }),
+      });
+
       if (trailingAssistant !== undefined)
         await deleteMessage(chatId, trailingAssistant.id);
       await deleteMessage(chatId, lastUser.id);
@@ -207,14 +222,6 @@ export function useWorkspaceController() {
       appendMessage("user", lastUser.content, lastUser.attachments);
       appendMessage("assistant", "");
 
-      const run = await startRunMutation.mutateAsync({
-        chatId,
-        agentId: activeAgent.id,
-        content: lastUser.content,
-        ...(attachmentsForRun.length === 0
-          ? {}
-          : { attachments: attachmentsForRun }),
-      });
       setActiveRunId(run.id);
       await consumeRunStream(run.id);
       await syncPersistedMessages(chatId);

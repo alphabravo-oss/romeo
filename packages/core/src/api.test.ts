@@ -13869,6 +13869,61 @@ describe("Romeo API thin slice", () => {
     expect(missingResponse.status).toBe(404);
   });
 
+  it("blocks deleting a single chat message while the chat is under legal hold", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const now = new Date().toISOString();
+    const legalHoldUntil = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    await repository.createChat({
+      id: "chat_message_hold",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      title: "Held matter",
+      createdBy: "user_dev_admin",
+      updatedAt: now,
+    });
+    await repository.createMessage({
+      id: "msg_hold_delete",
+      chatId: "chat_message_hold",
+      role: "user",
+      content: "raw message-hold sentinel",
+      createdAt: now,
+    });
+    const api = createRomeoApi(repository);
+
+    const holdResponse = await api.request(
+      "/api/v1/chats/chat_message_hold/legal-hold",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          legalHoldUntil,
+          legalHoldReason: "Privileged investigation notes",
+        }),
+      },
+    );
+    const blockedResponse = await api.request(
+      "/api/v1/chats/chat_message_hold/messages/msg_hold_delete",
+      { method: "DELETE" },
+    );
+    const blocked = await blockedResponse.json();
+    const messagesResponse = await api.request(
+      "/api/v1/chats/chat_message_hold/messages",
+    );
+    const messages = await messagesResponse.json();
+
+    expect(holdResponse.status).toBe(200);
+    expect(blockedResponse.status).toBe(409);
+    expect(blocked.error.code).toBe("chat_delete_legal_hold");
+    expect(blocked.error.details.legalHoldUntil).toBe(legalHoldUntil);
+    expect(messagesResponse.status).toBe(200);
+    expect(
+      messages.data.map((message: { id: string }) => message.id),
+    ).toEqual(["msg_hold_delete"]);
+    expect(await repository.getMessage("msg_hold_delete")).toBeDefined();
+  });
+
   it("creates a chat, starts a run, and replays completed events", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
     const agentsResponse = await api.request(
