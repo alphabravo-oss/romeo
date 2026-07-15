@@ -42,7 +42,13 @@ import {
   terminalRunEvents,
 } from "./run-events";
 import type { RunEventSequencer } from "./run-event-sequencer";
-import { appendAgentMemoryToSystemPrompt } from "./agent-memory";
+import { historyMessageLimit } from "./agent-memory";
+import {
+  buildRunMessages,
+  compareChatMessages,
+  historyBefore,
+  orderChatHistory,
+} from "./run-messages";
 import { enforceAgentSafetySettings } from "./agent-safety";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import { consumeQuota } from "./consume-quota";
@@ -124,12 +130,17 @@ interface PreparedRunStart {
   agentId: string;
   agentVersionId: string;
   citations: RunKnowledgeCitation[];
+  estimatedInputTokens: number;
+  historyMessages: number;
+  historyTruncated: boolean;
   input: {
     content: string;
     subject: AuthSubject;
   };
+  knowledgeHitsDropped: number;
   knowledgeSafety?: RunKnowledgeSafetySummary;
   messageParts: MessagePart[];
+  messages: ChatMessage[];
   model: BaseModel;
   provider: ProviderInstance;
   providerTools: ProviderToolDefinition[];
@@ -139,7 +150,6 @@ interface PreparedRunStart {
   };
   routePlan: ProviderRoutePlan;
   run: Omit<RunRecord, "createdBy">;
-  systemPrompt: string;
   userMessage: Message;
 }
 
@@ -242,11 +252,8 @@ export class RunService {
       workspaceId: chat.workspaceId,
     });
 
-    const systemPrompt = appendAgentMemoryToSystemPrompt(
-      agentVersion.systemPrompt,
-      agentVersion.memoryPolicy,
-      await repository.listMessages(chat.id),
-    );
+    // Read before createMessage below persists this turn, so this is exactly the prior history.
+    const history = await repository.listMessages(chat.id);
 
     const userMessageId = createId("msg");
     const attachmentParts = await storeMessageAttachments({
@@ -287,13 +294,22 @@ export class RunService {
       subject: input.subject,
       query: input.content,
       safetySettings: agentVersion.safetySettings,
-      systemPrompt,
       ...(this.embeddingFetch === undefined
         ? {}
         : { fetchImpl: this.embeddingFetch }),
       ...(this.options.knowledgeVectorStore === undefined
         ? {}
         : { vectorStore: this.options.knowledgeVectorStore }),
+    });
+    const maxHistoryMessages = historyMessageLimit(agentVersion.memoryPolicy);
+    const built = buildRunMessages({
+      systemPrompt: agentVersion.systemPrompt,
+      history,
+      userContent: input.content,
+      knowledgeHits: knowledge.hits,
+      models: [model, routePlan.fallback?.model],
+      modelId: model.id,
+      ...(maxHistoryMessages === undefined ? {} : { maxHistoryMessages }),
     });
     const providerTools = await buildProviderToolDefinitions(
       repository,
@@ -307,19 +323,24 @@ export class RunService {
     return {
       agentId: agent.id,
       agentVersionId: agentVersion.id,
-      citations: knowledge.citations,
+      // The shed-aware citations: the budget may drop hits the raw retrieval returned.
+      citations: built.citations,
+      estimatedInputTokens: built.estimatedInputTokens,
+      historyMessages: built.historyMessages,
+      historyTruncated: built.historyTruncated,
       input: { content: input.content, subject: input.subject },
+      knowledgeHitsDropped: built.knowledgeHitsDropped,
       ...(knowledge.safety === undefined
         ? {}
         : { knowledgeSafety: knowledge.safety }),
       messageParts: attachmentParts,
+      messages: built.messages,
       model,
       provider,
       providerTools,
       quotaTarget,
       routePlan,
       run,
-      systemPrompt: knowledge.systemPrompt,
       userMessage,
     };
   }
@@ -371,18 +392,18 @@ export class RunService {
         modelId: prepared.quotaTarget.model.id,
         providerId: prepared.quotaTarget.provider.id,
       },
-      inputText: `${prepared.systemPrompt}\n${prepared.input.content}`,
+      inputTokens: prepared.estimatedInputTokens,
       model: prepared.quotaTarget.model,
+      historyMessages: prepared.historyMessages,
+      historyTruncated: prepared.historyTruncated,
+      knowledgeHitsDropped: prepared.knowledgeHitsDropped,
     });
     return {
       run,
       startExecution: () => {
         void this.execute({
           run,
-          messages: [
-            { role: "system", content: prepared.systemPrompt },
-            { role: "user", content: prepared.input.content },
-          ],
+          messages: prepared.messages,
           provider: prepared.provider,
           model: prepared.model,
           citations: prepared.citations,
@@ -495,6 +516,8 @@ export class RunService {
     const resumeContext = await this.buildToolApprovalResumeContext({
       agentVersion,
       approvalRequestId: input.approvalRequestId,
+      model,
+      routePlan,
       run,
       subject: input.subject,
       toolId: input.toolId,
@@ -618,6 +641,8 @@ export class RunService {
     const resumeContext = await this.buildToolDispatchResumeContext({
       agentVersion,
       job,
+      model,
+      routePlan,
       run,
       subject: runSubject,
       ...(input.response === undefined ? {} : { response: input.response }),
@@ -790,6 +815,8 @@ export class RunService {
   private async buildToolApprovalResumeContext(input: {
     agentVersion: AgentVersion;
     approvalRequestId: string;
+    model: BaseModel;
+    routePlan: ProviderRoutePlan;
     run: RunRecord;
     subject: AuthSubject;
     toolId: string;
@@ -814,18 +841,15 @@ export class RunService {
       );
     }
 
-    const priorMessages = chatMessagesBefore(chatMessages, userMessage);
-    const systemPrompt = appendAgentMemoryToSystemPrompt(
-      input.agentVersion.systemPrompt,
-      input.agentVersion.memoryPolicy,
-      priorMessages,
+    const priorMessages = historyBefore(
+      orderChatHistory(chatMessages),
+      userMessage.id,
     );
     const knowledge = await buildRunKnowledgeContext(this.repository, {
       agentId: input.run.agentId,
       subject: input.subject,
       query: userMessage.content,
       safetySettings: input.agentVersion.safetySettings,
-      systemPrompt,
       ...(this.embeddingFetch === undefined
         ? {}
         : { fetchImpl: this.embeddingFetch }),
@@ -841,16 +865,19 @@ export class RunService {
       argumentKeys: objectKeys(input.toolInput),
     };
     const assistantContentPrefix = assistantContentFromRunEvents(runEvents);
-
-    return {
-      assistantContentPrefix,
-      citations:
-        existingCitations.length === 0
-          ? knowledge.citations
-          : existingCitations,
-      messages: [
-        { role: "system", content: knowledge.systemPrompt },
-        { role: "user", content: userMessage.content },
+    const maxHistoryMessages = historyMessageLimit(
+      input.agentVersion.memoryPolicy,
+    );
+    const built = buildRunMessages({
+      systemPrompt: input.agentVersion.systemPrompt,
+      history: priorMessages,
+      userContent: userMessage.content,
+      knowledgeHits: knowledge.hits,
+      models: [input.model, input.routePlan.fallback?.model],
+      modelId: input.model.id,
+      ...(maxHistoryMessages === undefined ? {} : { maxHistoryMessages }),
+      // The assistant/tool pair must stay adjacent and last, so it is passed as an unevictable tail.
+      tail: [
         {
           role: "assistant",
           content: assistantContentPrefix,
@@ -863,6 +890,13 @@ export class RunService {
           toolCallId: input.approvalRequestId,
         },
       ],
+    });
+
+    return {
+      assistantContentPrefix,
+      citations:
+        existingCitations.length === 0 ? built.citations : existingCitations,
+      messages: built.messages,
     };
   }
 
@@ -870,7 +904,9 @@ export class RunService {
     agentVersion: AgentVersion;
     errorCode?: string;
     job: BackgroundJob;
+    model: BaseModel;
     response?: ToolOperationDispatchReadbackResponse;
+    routePlan: ProviderRoutePlan;
     run: RunRecord;
     subject: AuthSubject;
   }): Promise<{
@@ -892,18 +928,15 @@ export class RunService {
       );
     }
 
-    const priorMessages = chatMessagesBefore(chatMessages, userMessage);
-    const systemPrompt = appendAgentMemoryToSystemPrompt(
-      input.agentVersion.systemPrompt,
-      input.agentVersion.memoryPolicy,
-      priorMessages,
+    const priorMessages = historyBefore(
+      orderChatHistory(chatMessages),
+      userMessage.id,
     );
     const knowledge = await buildRunKnowledgeContext(this.repository, {
       agentId: input.run.agentId,
       subject: input.subject,
       query: userMessage.content,
       safetySettings: input.agentVersion.safetySettings,
-      systemPrompt,
       ...(this.embeddingFetch === undefined
         ? {}
         : { fetchImpl: this.embeddingFetch }),
@@ -929,15 +962,19 @@ export class RunService {
       argumentKeys: ["bodyKeys", "parameterKeys"],
     };
 
-    return {
-      assistantContentPrefix,
-      citations:
-        existingCitations.length === 0
-          ? knowledge.citations
-          : existingCitations,
-      messages: [
-        { role: "system", content: knowledge.systemPrompt },
-        { role: "user", content: userMessage.content },
+    const maxHistoryMessages = historyMessageLimit(
+      input.agentVersion.memoryPolicy,
+    );
+    const built = buildRunMessages({
+      systemPrompt: input.agentVersion.systemPrompt,
+      history: priorMessages,
+      userContent: userMessage.content,
+      knowledgeHits: knowledge.hits,
+      models: [input.model, input.routePlan.fallback?.model],
+      modelId: input.model.id,
+      ...(maxHistoryMessages === undefined ? {} : { maxHistoryMessages }),
+      // The assistant/tool pair must stay adjacent and last, so it is passed as an unevictable tail.
+      tail: [
         {
           role: "assistant",
           content: assistantContentPrefix,
@@ -959,6 +996,13 @@ export class RunService {
           toolCallId: input.job.id,
         },
       ],
+    });
+
+    return {
+      assistantContentPrefix,
+      citations:
+        existingCitations.length === 0 ? built.citations : existingCitations,
+      messages: built.messages,
     };
   }
 
@@ -1330,9 +1374,8 @@ function runUserMessage(
   run: RunRecord,
   messages: Message[],
 ): Message | undefined {
-  const sorted = [...messages].sort((left, right) =>
-    left.createdAt.localeCompare(right.createdAt),
-  );
+  // Shares the assembler's comparator: a divergent order here would shift the history boundary.
+  const sorted = [...messages].sort(compareChatMessages);
   return (
     sorted
       .filter(
@@ -1352,12 +1395,6 @@ function isTerminalRunStatus(status: RunRecord["status"]): boolean {
   return (
     status === "cancelled" || status === "completed" || status === "failed"
   );
-}
-
-function chatMessagesBefore(messages: Message[], message: Message): Message[] {
-  return messages
-    .filter((item) => item.createdAt < message.createdAt)
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
 function assistantContentFromRunEvents(events: RunEvent[]): string {

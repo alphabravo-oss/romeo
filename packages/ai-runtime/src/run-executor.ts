@@ -376,13 +376,15 @@ export async function* streamRunEvents(
         yield event("run.cancelled", {});
         return;
       }
-      const failure =
+      const failure: { errorCode: string; errorType?: string } =
         runtime.outcome === "timeout"
           ? { errorCode: "provider_stream_timeout" }
           : providerFailureData(error);
-      const circuitState = input.providerCircuitBreaker?.recordFailure(
-        active.provider.id,
-      );
+      // A malformed payload is not a provider health signal: the breaker keys on providerId alone, so
+      // one tenant's oversized request could otherwise open the circuit for every tenant on that provider.
+      const circuitState = countsAgainstProviderHealth(failure.errorType)
+        ? input.providerCircuitBreaker?.recordFailure(active.provider.id)
+        : input.providerCircuitBreaker?.snapshot(active.provider.id);
       const currentRetryAttempts =
         retryAttemptsByProvider.get(active.provider.id) ?? 0;
 
@@ -613,6 +615,14 @@ function isRetryableProviderFailure(errorCode: string): boolean {
   );
 }
 
+// Only rejections of the request payload itself are excluded. 401/403/404/429/5xx must keep counting:
+// a revoked key is exactly the condition the breaker exists to back off from.
+const clientPayloadErrorTypes = new Set(["http_400", "http_413", "http_422"]);
+
+function countsAgainstProviderHealth(errorType: string | undefined): boolean {
+  return errorType === undefined || !clientPayloadErrorTypes.has(errorType);
+}
+
 function retryDelay(
   ms: number,
   signal: AbortSignal | undefined,
@@ -802,12 +812,3 @@ export async function executeRun(
   return { content, events };
 }
 
-export function buildRuntimeMessages(
-  systemPrompt: string,
-  userContent: string,
-): ChatMessage[] {
-  return [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userContent },
-  ];
-}

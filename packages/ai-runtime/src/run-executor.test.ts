@@ -943,6 +943,95 @@ describe("streamRunEvents", () => {
       },
     });
   });
+
+  describe("provider health accounting", () => {
+    const failingAdapter = (failure: unknown): ModelProviderAdapter => ({
+      kind: "openai-compatible",
+      async health() {
+        return { ok: true, message: "ok" };
+      },
+      async listModels() {
+        return [model];
+      },
+      async *streamChat() {
+        throw failure;
+      },
+    });
+
+    async function failTwice(
+      failure: unknown,
+    ): Promise<{ breaker: ProviderCircuitBreaker; events: RunEvent[] }> {
+      const breaker = new ProviderCircuitBreaker({
+        failureThreshold: 2,
+        cooldownMs: 60_000,
+      });
+      let events: RunEvent[] = [];
+      for (const runId of ["run_health_first", "run_health_second"]) {
+        events = await collectRunEvents(
+          streamRunEvents({
+            adapter: failingAdapter(failure),
+            provider,
+            model,
+            runId,
+            messages: [{ role: "user", content: "probe" }],
+            providerCircuitBreaker: breaker,
+            providerRetryPolicy: { maxRetries: 0, backoffMs: 0 },
+          }),
+        );
+      }
+      return { breaker, events };
+    }
+
+    it.each([["http_400"], ["http_413"], ["http_422"]])(
+      "does not count a %s payload rejection against provider health",
+      async (errorType) => {
+        const { breaker, events } = await failTwice({
+          errorCode: "provider_http_error",
+          errorType,
+        });
+
+        // A malformed payload is this run's fault, not the provider's: the breaker must stay closed
+        // so one tenant's oversized request cannot open the circuit for every tenant on that provider.
+        expect(breaker.snapshot(provider.id)).toEqual({
+          state: "closed",
+          consecutiveFailures: 0,
+        });
+        // The suppressed path still hands a valid snapshot down; a closed circuit is simply not serialized.
+        expect(events.at(-1)?.data).toEqual({
+          errorCode: "provider_http_error",
+          errorType,
+        });
+      },
+    );
+
+    it.each([["http_401"], ["http_403"], ["http_429"], ["http_500"]])(
+      "counts a %s failure against provider health",
+      async (errorType) => {
+        const { breaker, events } = await failTwice({
+          errorCode: "provider_http_error",
+          errorType,
+        });
+
+        // A revoked key or an overloaded provider is exactly what the breaker exists to back off from.
+        expect(breaker.snapshot(provider.id)).toEqual({
+          state: "open",
+          consecutiveFailures: 2,
+        });
+        expect(events.at(-1)?.data).toMatchObject({
+          providerCircuit: { state: "open", consecutiveFailures: 2 },
+        });
+      },
+    );
+
+    it("counts a stream error with no errorType against provider health", async () => {
+      const { breaker } = await failTwice(new Error("provider unavailable"));
+
+      expect(breaker.snapshot(provider.id)).toEqual({
+        state: "open",
+        consecutiveFailures: 2,
+      });
+    });
+  });
 });
 
 async function collectRunEvents(

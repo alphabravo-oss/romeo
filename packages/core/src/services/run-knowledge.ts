@@ -12,8 +12,8 @@ import type { KnowledgeVectorStore } from './knowledge-vector-store'
 export interface RunKnowledgeContext {
   citations: RunKnowledgeCitation[]
   hits: RetrievalHit[]
+  knowledgeContext?: string
   safety?: RunKnowledgeSafetySummary
-  systemPrompt: string
 }
 
 export interface RunKnowledgeSafetySummary {
@@ -30,7 +30,7 @@ export interface RunKnowledgeCitation {
 
 export async function buildRunKnowledgeContext(
   repository: RomeoRepository,
-  input: { agentId: string; fetchImpl?: typeof fetch; query: string; safetySettings?: AgentSafetySettings; subject: AuthSubject; systemPrompt: string; vectorStore?: KnowledgeVectorStore }
+  input: { agentId: string; fetchImpl?: typeof fetch; query: string; safetySettings?: AgentSafetySettings; subject: AuthSubject; vectorStore?: KnowledgeVectorStore }
 ): Promise<RunKnowledgeContext> {
   const bindings = (await repository.listAgentKnowledgeBindings(input.agentId)).filter((binding) => binding.enabled)
   const rawHits = (
@@ -69,21 +69,41 @@ export async function buildRunKnowledgeContext(
     .slice(0, 5)
   const { hits, safety } = filterPromptInjectionGuardedHits(rawHits, input.safetySettings)
 
-  if (hits.length === 0) return { citations: [], hits, ...(safety === undefined ? {} : { safety }), systemPrompt: input.systemPrompt }
-
-  const knowledgeContext = hits.map((hit, index) => `[${index + 1}] ${hit.citation.title}: ${hit.content}`).join('\n')
+  const knowledgeContext = renderKnowledgeContext(hits)
   return {
     citations: hits.map((hit) => hit.citation),
     hits,
-    ...(safety === undefined ? {} : { safety }),
-    systemPrompt: `${input.systemPrompt}\n\nRomeo knowledge context:\n${knowledgeContext}\n\nUse this context when relevant and cite sources by bracket number.`
+    ...(knowledgeContext === undefined ? {} : { knowledgeContext }),
+    ...(safety === undefined ? {} : { safety })
   }
+}
+
+// Exported so bracket numbering has one owner: the budget may shed hits after retrieval, and a
+// second renderer would desync the numbers from the citations array.
+export function renderKnowledgeContext(hits: RetrievalHit[]): string | undefined {
+  if (hits.length === 0) return undefined
+  return hits.map((hit, index) => `[${index + 1}] ${hit.citation.title}: ${hit.content}`).join('\n')
+}
+
+// Retrieved context rides the user turn, not the system prompt: that keeps messages[0] byte-stable
+// for the life of the agent version, which is what provider prompt caching keys on.
+export function knowledgeUserContent(knowledgeContext: string | undefined, userContent: string): string {
+  if (knowledgeContext === undefined) return userContent
+  return `Romeo knowledge context:\n${knowledgeContext}\n\nUse this context when relevant and cite sources by bracket number.\n\n${userContent}`
 }
 
 export function appendRunCitations(content: string, citations: RunKnowledgeCitation[]): string {
   if (content.trim().length === 0 || citations.length === 0) return content
   const citationLines = citations.map((citation, index) => `- [${index + 1}] ${citation.title} (${citation.chunkId})`).join('\n')
   return `${content}\n\nCitations:\n${citationLines}`
+}
+
+// End-anchored so it can only match what appendRunCitations produces; a pathological title simply
+// fails to match and leaves the footer intact rather than truncating real assistant content.
+const runCitationFooter = /\n\nCitations:\n(?:- \[\d+\] [^\n]*\n?)+$/
+
+export function stripRunCitations(content: string): string {
+  return content.replace(runCitationFooter, '')
 }
 
 function filterPromptInjectionGuardedHits(hits: RetrievalHit[], settings: AgentSafetySettings | undefined): { hits: RetrievalHit[]; safety?: RunKnowledgeSafetySummary } {
