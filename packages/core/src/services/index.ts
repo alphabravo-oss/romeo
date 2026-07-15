@@ -16,9 +16,6 @@ import {
 import type { RomeoRepository } from "../domain/repository";
 import { AbuseControlService } from "./abuse-control-service";
 import { AnalyticsService } from "./analytics-service";
-import { AnalyticsAuthzPostureService } from "./analytics-authz-posture-service";
-import { AlertFiringPostureService } from "./alert-firing-posture-service";
-import { AuditIntegrityPostureService } from "./audit-integrity-posture-service";
 import { AuditService } from "./audit-service";
 import { AuthProviderSettingsService } from "./auth-provider-settings-service";
 import { AgentKnowledgeService } from "./agent-knowledge-service";
@@ -26,13 +23,11 @@ import { AgentService } from "./agent-service";
 import { ApiKeyService } from "./api-key-service";
 import { AtlassianDataConnectorExecutor } from "./atlassian-data-connector-executor";
 import { BillingService } from "./billing-service";
-import { BillingOperationsPostureService } from "./billing-operations-posture-service";
 import { BrowserAutomationService } from "./browser-automation-service";
 import { ChannelService } from "./channel-service";
 import { ChatService } from "./chat-service";
 import { ChatCommentService } from "./chat-comment-service";
 import { ChatTagService } from "./chat-tag-service";
-import { CiGovernancePostureService } from "./ci-governance-posture-service";
 import { CollaborationService } from "./collaboration-service";
 import {
   AwsSecretsManagerResolver,
@@ -57,8 +52,6 @@ import {
 import { GroupService } from "./group-service";
 import { DeviceAuthorizationService } from "./device-authorization-service";
 import { KnowledgeService } from "./knowledge-service";
-import { KubernetesPostureService } from "./kubernetes-posture-service";
-import { MigrationDrillPostureService } from "./migration-drill-posture-service";
 import {
   disabledKnowledgeBinaryExtractor,
   type KnowledgeBinaryExtractor,
@@ -75,10 +68,7 @@ import { EdgeSecurityService } from "./edge-security-service";
 import { FileService } from "./file-service";
 import { GaEvidencePostureService } from "./ga-evidence-posture-service";
 import { GovernanceService } from "./governance-service";
-import { IdentityLivePostureService } from "./identity-live-posture-service";
 import { ManagedSecretService } from "./managed-secret-service";
-import { NetworkPartitionPostureService } from "./network-partition-posture-service";
-import { NotificationAdapterLivePostureService } from "./notification-adapter-live-posture-service";
 import { VaultSecretWriter, type SecretWriter } from "./secret-writer";
 import {
   disabledNotificationDeliverySender,
@@ -108,7 +98,6 @@ import { NotionDataConnectorExecutor } from "./notion-data-connector-executor";
 import { OidcPkceService } from "./oidc-pkce-service";
 import { OAuth2PkceService } from "./oauth2-pkce-service";
 import { ProviderService } from "./provider-service";
-import { ProviderOutagePostureService } from "./provider-outage-posture-service";
 import { PostgresOperationalPostureService } from "./postgres-operational-posture-service";
 import { PromptTemplateService } from "./prompt-template-service";
 import { createQdrantKnowledgeVectorStore } from "./qdrant-knowledge-vector-store";
@@ -120,13 +109,10 @@ import { QuotaService } from "./quota-service";
 import { RagPolicyService } from "./rag-policy-service";
 import { RagPostureService } from "./rag-posture-service";
 import { ReadinessService } from "./readiness-service";
-import { ReleaseReadbackPostureService } from "./release-readback-posture-service";
-import { ReleaseSecurityPostureService } from "./release-security-posture-service";
 import { RunEventSequencer } from "./run-event-sequencer";
 import { RunService } from "./run-service";
 import { S3HttpConnectorReader } from "./s3-data-connector-reader";
 import { ServiceAccountService } from "./service-account-service";
-import { SecretRotationDrillPostureService } from "./secret-rotation-drill-posture-service";
 import { SecretRotationService } from "./secret-rotation-service";
 import { SessionService } from "./session-service";
 import { SlackDataConnectorExecutor } from "./slack-data-connector-executor";
@@ -145,17 +131,12 @@ import { SamlAuthService } from "./saml-auth-service";
 import type { SamlClientFactory } from "./saml-client";
 import { ScimService } from "./scim-service";
 import { SsoSettingsService } from "./sso-settings-service";
-import { SupportBundlePostureService } from "./support-bundle-posture-service";
-import { TargetQualityPostureService } from "./target-quality-posture-service";
 import { TenantAdminService } from "./tenant-admin-service";
-import { TenantPurgeEvidencePostureService } from "./tenant-purge-evidence-posture-service";
 import { ToolConnectorService } from "./tool-connector-service";
-import { ToolDispatchPostureService } from "./tool-dispatch-posture-service";
 import { ToolService } from "./tool-service";
 import { UsageService } from "./usage-service";
 import { UserLifecycleService } from "./user-lifecycle-service";
 import { ValkeyQuotaCoordinator } from "./valkey-quota-coordinator";
-import { VoiceProviderLivePostureService } from "./voice-provider-live-posture-service";
 import { VoiceService } from "./voice-service";
 import { WebhookService } from "./webhook-service";
 import { WorkflowService } from "./workflow-service";
@@ -168,22 +149,17 @@ import {
 export interface RomeoServices {
   abuseControls: AbuseControlService;
   analytics: AnalyticsService;
-  analyticsAuthzPosture: AnalyticsAuthzPostureService;
   agentKnowledge: AgentKnowledgeService;
   agents: AgentService;
-  alertFiringPosture: AlertFiringPostureService;
   apiKeys: ApiKeyService;
   audit: AuditService;
-  auditIntegrityPosture: AuditIntegrityPostureService;
   authProviderSettings: AuthProviderSettingsService;
   billing: BillingService;
-  billingOperationsPosture: BillingOperationsPostureService;
   browserAutomation: BrowserAutomationService;
   channels: ChannelService;
   chats: ChatService;
   chatComments: ChatCommentService;
   chatTags: ChatTagService;
-  ciGovernancePosture: CiGovernancePostureService;
   collaboration: CollaborationService;
   dataConnectors: DataConnectorService;
   delegatedOAuth: DelegatedOAuthService;
@@ -195,17 +171,12 @@ export interface RomeoServices {
   files: FileService;
   gaEvidencePosture: GaEvidencePostureService;
   knowledge: KnowledgeService;
-  kubernetesPosture: KubernetesPostureService;
-  migrationDrillPosture: MigrationDrillPostureService;
   jobs: JobService;
   ldapAuth: LdapAuthService;
   localAuth: LocalAuthService;
   managedSecrets: ManagedSecretService;
-  networkPartitionPosture: NetworkPartitionPostureService;
-  notificationAdapterLivePosture: NotificationAdapterLivePostureService;
   governance: GovernanceService;
   groups: GroupService;
-  identityLivePosture: IdentityLivePostureService;
   notifications: NotificationService;
   oidc: OidcAuthenticator;
   oidcPkce: OidcPkceService;
@@ -215,33 +186,24 @@ export interface RomeoServices {
   openAiModels: OpenAiModelsService;
   openWebUiCompatibility: OpenWebUiCompatibilityService;
   postgresOperationalPosture: PostgresOperationalPostureService;
-  providerOutagePosture: ProviderOutagePostureService;
   providers: ProviderService;
   prompts: PromptTemplateService;
   quotas: QuotaService;
   ragPolicy: RagPolicyService;
   ragPosture: RagPostureService;
   readiness: ReadinessService;
-  releaseReadbackPosture: ReleaseReadbackPostureService;
-  releaseSecurityPosture: ReleaseSecurityPostureService;
   runs: RunService;
   samlAuth: SamlAuthService;
   scim: ScimService;
-  secretRotationDrillPosture: SecretRotationDrillPostureService;
   secretRotation: SecretRotationService;
   serviceAccounts: ServiceAccountService;
   sessions: SessionService;
   ssoSettings: SsoSettingsService;
-  supportBundlePosture: SupportBundlePostureService;
-  targetQualityPosture: TargetQualityPostureService;
   tenantAdmin: TenantAdminService;
-  tenantPurgeEvidencePosture: TenantPurgeEvidencePostureService;
   toolConnectors: ToolConnectorService;
-  toolDispatchPosture: ToolDispatchPostureService;
   tools: ToolService;
   usage: UsageService;
   users: UserLifecycleService;
-  voiceProviderLivePosture: VoiceProviderLivePostureService;
   voices: VoiceService;
   webhooks: WebhookService;
   workflows: WorkflowService;
@@ -442,13 +404,10 @@ export function createServices(
   return {
     abuseControls,
     analytics: new AnalyticsService(repository),
-    analyticsAuthzPosture: new AnalyticsAuthzPostureService(env),
     agentKnowledge: new AgentKnowledgeService(repository),
     agents: new AgentService(repository),
-    alertFiringPosture: new AlertFiringPostureService(env),
     apiKeys: new ApiKeyService(repository),
     audit: new AuditService(repository),
-    auditIntegrityPosture: new AuditIntegrityPostureService(env),
     authProviderSettings,
     billing: new BillingService(repository, {
       genericWebhookSecret: env.BILLING_GENERIC_WEBHOOK_SECRET,
@@ -459,13 +418,11 @@ export function createServices(
         env.BILLING_STRIPE_WEBHOOK_TOLERANCE_SECONDS,
       webhookOrgId: env.BILLING_WEBHOOK_ORG_ID,
     }),
-    billingOperationsPosture: new BillingOperationsPostureService(env),
     browserAutomation,
     channels: new ChannelService(repository, openWebUiCompatibility),
     chats: new ChatService(repository, objectStore),
     chatComments: new ChatCommentService(repository, notificationDelivery),
     chatTags: new ChatTagService(repository),
-    ciGovernancePosture: new CiGovernancePostureService(env),
     collaboration: new CollaborationService(repository),
     dataConnectors: new DataConnectorService(
       repository,
@@ -523,11 +480,8 @@ export function createServices(
       deleteKnowledgeSource: (input) => knowledge.deleteSource(input),
     }),
     groups: new GroupService(repository),
-    identityLivePosture: new IdentityLivePostureService(env),
     jobs: new JobService(repository),
     knowledge,
-    kubernetesPosture: new KubernetesPostureService(env),
-    migrationDrillPosture: new MigrationDrillPostureService(env),
     ldapAuth: new LdapAuthService(
       repository,
       sessions,
@@ -540,10 +494,6 @@ export function createServices(
     ),
     localAuth: new LocalAuthService(repository, sessions, env),
     managedSecrets,
-    networkPartitionPosture: new NetworkPartitionPostureService(env),
-    notificationAdapterLivePosture: new NotificationAdapterLivePostureService(
-      env,
-    ),
     notifications: new NotificationService(repository, notificationDelivery),
     oidc,
     oidcPkce: new OidcPkceService(
@@ -593,7 +543,6 @@ export function createServices(
     openAiModels: new OpenAiModelsService(repository),
     openWebUiCompatibility,
     postgresOperationalPosture: new PostgresOperationalPostureService(env),
-    providerOutagePosture: new ProviderOutagePostureService(env),
     providers: new ProviderService(repository),
     prompts: new PromptTemplateService(repository),
     quotas: new QuotaService(repository, quotaCoordinator),
@@ -610,11 +559,8 @@ export function createServices(
       activeVectorStoreDeployment,
       knowledgeVectorStore,
     ),
-    releaseReadbackPosture: new ReleaseReadbackPostureService(env),
-    releaseSecurityPosture: new ReleaseSecurityPostureService(env),
     runs,
     serviceAccounts: new ServiceAccountService(repository),
-    secretRotationDrillPosture: new SecretRotationDrillPostureService(env),
     secretRotation: new SecretRotationService(repository, env, managedSecrets),
     sessions,
     ssoSettings: new SsoSettingsService(
@@ -623,20 +569,15 @@ export function createServices(
       options.oidcFetch,
       users,
     ),
-    supportBundlePosture: new SupportBundlePostureService(env),
-    targetQualityPosture: new TargetQualityPostureService(env),
     tenantAdmin: new TenantAdminService(repository, abuseControls, objectStore),
-    tenantPurgeEvidencePosture: new TenantPurgeEvidencePostureService(env),
     toolConnectors: new ToolConnectorService(
       repository,
       secretResolver,
       toolConnectorOptions,
     ),
-    toolDispatchPosture: new ToolDispatchPostureService(repository, env),
     tools,
     usage: new UsageService(repository),
     users,
-    voiceProviderLivePosture: new VoiceProviderLivePostureService(env),
     voices: new VoiceService(repository, voiceProvider, objectStore),
     webhooks,
     workflows,

@@ -2,15 +2,11 @@ import { auditPaths } from "./audit-paths";
 import { authPaths } from "./auth-paths";
 import { abuseControlPaths } from "./abuse-control-paths";
 import { adminAnalyticsPaths } from "./admin-analytics-paths";
-import { analyticsAuthzPosturePaths } from "./analytics-authz-posture-paths";
 import { alertFiringPaths } from "./alert-firing-paths";
 import { apiKeyPaths } from "./api-key-paths";
-import { auditIntegrityPosturePaths } from "./audit-integrity-posture-paths";
 import { billingPaths } from "./billing-paths";
-import { billingOperationsPosturePaths } from "./billing-operations-posture-paths";
 import { browserAutomationPaths } from "./browser-automation-paths";
 import { channelPaths } from "./channel-paths";
-import { ciGovernancePosturePaths } from "./ci-governance-posture-paths";
 import { collaborationPaths } from "./collaboration-paths";
 import { compatibilityPaths } from "./compatibility-paths";
 import { dataConnectorPaths } from "./data-connector-paths";
@@ -22,7 +18,6 @@ import { filePaths } from "./file-paths";
 import { gaEvidencePaths } from "./ga-evidence-paths";
 import { groupPaths } from "./group-paths";
 import { governancePaths } from "./governance-paths";
-import { identityLivePosturePaths } from "./identity-live-posture-paths";
 import {
   arrayEnvelope,
   dataEnvelope,
@@ -33,33 +28,21 @@ import {
 } from "./helpers";
 import { jobPaths } from "./job-paths";
 import { knowledgePaths } from "./knowledge-paths";
-import { kubernetesPosturePaths } from "./kubernetes-posture-paths";
-import { migrationDrillPosturePaths } from "./migration-drill-posture-paths";
-import { networkPartitionPosturePaths } from "./network-partition-posture-paths";
-import { notificationAdapterLivePosturePaths } from "./notification-adapter-live-posture-paths";
 import { notificationPaths } from "./notification-paths";
 import { openWebUiPaths } from "./openwebui-paths";
 import { postgresOperationalPaths } from "./postgres-operational-paths";
 import { promptTemplatePaths } from "./prompt-template-paths";
-import { providerOutagePosturePaths } from "./provider-outage-posture-paths";
 import { providerPaths } from "./provider-paths";
 import { quotaPaths } from "./quota-paths";
 import { readinessPaths } from "./readiness-paths";
-import { releaseReadbackPosturePaths } from "./release-readback-posture-paths";
-import { releaseSecurityPosturePaths } from "./release-security-posture-paths";
 import { scimPaths } from "./scim-paths";
-import { secretRotationDrillPosturePaths } from "./secret-rotation-drill-posture-paths";
 import { serviceAccountPaths } from "./service-account-paths";
 import { sessionPaths } from "./session-paths";
-import { supportBundlePosturePaths } from "./support-bundle-posture-paths";
 import { targetQualityPaths } from "./target-quality-paths";
 import { tenantAdminPaths } from "./tenant-admin-paths";
-import { tenantPurgeEvidencePosturePaths } from "./tenant-purge-evidence-posture-paths";
-import { toolDispatchPosturePaths } from "./tool-dispatch-posture-paths";
 import { toolPaths } from "./tool-paths";
 import { usagePaths } from "./usage-paths";
 import { userPaths } from "./user-paths";
-import { voiceProviderLivePosturePaths } from "./voice-provider-live-posture-paths";
 import { voicePaths } from "./voice-paths";
 import { webhookPaths } from "./webhook-paths";
 import { workflowPaths } from "./workflow-paths";
@@ -74,17 +57,13 @@ export function openApiPaths(options: OpenApiPathOptions = {}) {
     ...authPaths,
     ...abuseControlPaths,
     ...adminAnalyticsPaths,
-    ...analyticsAuthzPosturePaths,
     ...alertFiringPaths,
     ...apiKeyPaths,
     ...serviceAccountPaths,
-    ...auditIntegrityPosturePaths,
     ...auditPaths,
     ...billingPaths,
-    ...billingOperationsPosturePaths,
     ...browserAutomationPaths,
     ...channelPaths,
-    ...ciGovernancePosturePaths,
     ...compatibilityPaths,
     ...governancePaths,
     ...mergePathGroups(
@@ -101,32 +80,19 @@ export function openApiPaths(options: OpenApiPathOptions = {}) {
     ...filePaths,
     ...gaEvidencePaths,
     ...groupPaths,
-    ...identityLivePosturePaths,
     ...voicePaths,
     ...usagePaths,
     ...userPaths,
-    ...voiceProviderLivePosturePaths,
     ...webhookPaths,
     ...quotaPaths,
-    ...notificationAdapterLivePosturePaths,
     ...notificationPaths,
     ...postgresOperationalPaths,
     ...providerPaths,
-    ...providerOutagePosturePaths,
     ...readinessPaths,
-    ...releaseReadbackPosturePaths,
-    ...releaseSecurityPosturePaths,
     ...scimPaths,
-    ...secretRotationDrillPosturePaths,
     ...jobPaths,
-    ...kubernetesPosturePaths,
-    ...migrationDrillPosturePaths,
-    ...networkPartitionPosturePaths,
-    ...supportBundlePosturePaths,
     ...targetQualityPaths,
     ...tenantAdminPaths,
-    ...tenantPurgeEvidencePosturePaths,
-    ...toolDispatchPosturePaths,
     ...toolPaths,
     ...workflowPaths,
     ...workspacePaths,

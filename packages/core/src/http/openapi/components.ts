@@ -1,18 +1,7 @@
 import { jsonContent, objectSchema } from "./helpers";
-import { analyticsAuthzPostureSchemas } from "./analytics-authz-posture-components";
-import { auditIntegrityPostureSchemas } from "./audit-integrity-posture-components";
-import { ciGovernancePostureSchemas } from "./ci-governance-posture-components";
 import { dataConnectorPostureSchemas } from "./data-connector-components";
 import { identityAuthSchemas } from "./identity-auth-components";
-import { identityLivePostureSchemas } from "./identity-live-posture-components";
-import { notificationAdapterLivePostureSchemas } from "./notification-adapter-live-posture-components";
-import { releaseSecurityPostureSchemas } from "./release-security-posture-components";
-import { secretRotationDrillPostureSchemas } from "./secret-rotation-drill-posture-components";
 import { sessionAuthSchemas } from "./session-auth-components";
-import { supportBundlePostureSchemas } from "./support-bundle-posture-components";
-import { tenantPurgeEvidencePostureSchemas } from "./tenant-purge-evidence-posture-components";
-import { toolDispatchPostureSchemas } from "./tool-dispatch-posture-components";
-import { voiceProviderLivePostureSchemas } from "./voice-provider-live-posture-components";
 
 const nullableString = { oneOf: [{ type: "string" }, { type: "null" }] };
 const nullableNumber = { oneOf: [{ type: "integer" }, { type: "null" }] };
@@ -313,20 +302,9 @@ const baseOpenApiComponents = {
     },
   },
   schemas: {
-    ...ciGovernancePostureSchemas,
-    ...analyticsAuthzPostureSchemas,
-    ...auditIntegrityPostureSchemas,
     ...dataConnectorPostureSchemas,
     ...identityAuthSchemas,
-    ...identityLivePostureSchemas,
-    ...notificationAdapterLivePostureSchemas,
-    ...releaseSecurityPostureSchemas,
-    ...secretRotationDrillPostureSchemas,
     ...sessionAuthSchemas,
-    ...supportBundlePostureSchemas,
-    ...tenantPurgeEvidencePostureSchemas,
-    ...toolDispatchPostureSchemas,
-    ...voiceProviderLivePostureSchemas,
     AuthSubject: {
       type: "object",
       required: ["id", "type", "orgId", "workspaceIds", "groupIds", "scopes"],
