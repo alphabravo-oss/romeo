@@ -180,6 +180,10 @@ tmp/
 release/
 *.tsbuildinfo
 
+# Python artifacts (sdks/python ships a real client; its bytecode must not be tracked)
+__pycache__/
+*.py[cod]
+
 # Local env + secrets (keep .env.example tracked)
 .env
 .env.*
@@ -215,15 +219,25 @@ Expected: the grep prints `CLEAN`. If it prints any path, fix `.gitignore`, run 
 
 - [ ] **Step 6: Scan staged content for secrets**
 
+Scan for **real credential formats and high entropy**, not for the word "secret". This codebase is full of synthetic fixtures like `apiKey: "provider-api-key"`, `SECRET_PREFLIGHT_API_KEY`, and `xoxb-secret-slack-token`; a keyword scan drowns in them. Real credentials have recognisable prefixes or entropy, and those are what matter.
+
 ```bash
 cd /Users/mj/mjcode/ab/ab-live-products/romeo/romeo
-git diff --cached -- . ':(exclude)pnpm-lock.yaml' \
-  | grep -inE "(api[_-]?key|secret|password|token)\s*[:=]\s*['\"][A-Za-z0-9/+_-]{16,}" \
-  | grep -viE "example|placeholder|test|fixture|RAW_EDGE|hash_|\.md:" \
-  | head -20 || echo "NO OBVIOUS SECRETS"
+echo "--- provider token formats, JWTs, private keys ---"
+git diff --cached -- . ':(exclude)pnpm-lock.yaml' ':(exclude)**/*.test.ts' ':(exclude)**/*.test.tsx' \
+  | grep -inE "sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|xox[baprs]-[0-9]{9,}-|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY" \
+  | head -10 || true
+echo "--- high-entropy strings (>=32 base64 chars) outside tests/lockfile ---"
+git diff --cached -- . ':(exclude)pnpm-lock.yaml' ':(exclude)**/*.test.ts' ':(exclude)**/*.test.tsx' \
+  | grep -oE "['\"][A-Za-z0-9+/]{32,}={0,2}['\"]" | sort -u | head -5 || true
+echo "--- SCAN COMPLETE: any lines above (other than URL paths) are blockers ---"
 ```
 
-Expected: `NO OBVIOUS SECRETS`. Any hit must be reviewed by a human before Step 7. Fixture/test values (e.g. `RAW_EDGE_TOKEN` in `api.test.ts`) are intentional and safe.
+Expected: no credential-format hits, and the entropy scan returns only long URL paths (e.g. `"/api/v1/admin/impersonation/requests"`), which are not secrets.
+
+**Any real hit must be reviewed by a human before Step 7.** Do not broaden the exclusions to make a hit disappear.
+
+> **Why not a keyword scan.** The first version of this step grepped for `(api_key|secret|password|token): "…"` and excluded lines containing the word `test`. It produced **37 false positives and zero true positives**, because the fixtures live in files named `*.test.ts` while the *lines* never contain the word "test". Every hit was a self-describing placeholder (`provider-api-key`, `gcp-access-token`, the xkcd `correcthorsebattery`) or a Kubernetes Secret **resource name** (`romeo-worker-api-key` — a name, not a value). Excluding by filename and matching on format/entropy is what actually distinguishes a credential from a fixture.
 
 - [ ] **Step 7: Commit the baseline**
 
