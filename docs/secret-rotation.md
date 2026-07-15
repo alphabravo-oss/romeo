@@ -50,16 +50,6 @@ Staged rewrap follows the same pattern as local MFA:
 
 Record only key-reference names, report counts, failure codes, and rollout timestamps. Never record old/new key values, `romeo-secret://` refs, local TOTP secrets, recovery-code values, or managed secret values in tickets, logs, or evidence.
 
-## Target Evidence And Readback
-
-After a reviewed Kubernetes or production-like target rotation has completed, record metadata-only evidence:
-
-```sh
-pnpm evidence:secret-rotation-drill -- --output dist/ci/secret-rotation-drill-evidence.json
-```
-
-Review the generated file, mount it read-only, and set `SECRET_ROTATION_DRILL_EVIDENCE_PATH`. Admins can then read `GET /api/v1/admin/secret-rotation/drill-posture` or `client.admin.secretRotationDrillPosture()` for staged-cutover posture, rewrap counts, old/new secret acceptance counts, dependency credential review, readiness, alerting, warning codes, and redaction booleans. The posture API does not return mounted paths, evidence bodies, secret refs, secret values, tokens, API keys, key material, webhook signing secrets, or raw log lines.
-
 ## Webhook Signing Key
 
 `WEBHOOK_SIGNING_KEY` derives one-time outbound webhook subscription secrets. Romeo does not persist raw subscription secrets, and list APIs do not return them.

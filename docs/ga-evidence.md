@@ -216,14 +216,6 @@ pnpm smoke:analytics:authz-contract -- --output dist/ci/analytics-authz-contract
 
 This local contract evidence proves the admin analytics JSON/CSV surfaces require authenticated `admin:read` plus `usage:read`, release-candidate eval evidence requires `agents:read` plus a resource grant, and the exported evidence omits raw eval inputs, rubric terms, usage metadata, job payloads, API tokens, and raw CSV rows. It does not replace live `romeo.target-quality-evidence.v1` capture.
 
-For representative target analytics authorization evidence, run the approved target checks first, then persist metadata-only posture:
-
-```sh
-pnpm evidence:analytics-authz-live -- --output dist/ci/analytics-authz-live-evidence.json
-```
-
-Mount the reviewed file read-only and set `ANALYTICS_AUTHZ_EVIDENCE_PATH` when admins need runtime readback through `GET /api/v1/admin/analytics/authz-posture` or `client.admin.analyticsAuthzPosture()`. The posture report returns required-check coverage, subject counts, allow/deny counts, analytics readback counts, CSV hash counts, warnings, and redaction booleans only; it does not return evidence bodies, CSV rows, eval inputs/outputs, usage metadata, job payloads, provider config, org/workspace names, user emails, API keys, tokens, secret refs, or secret values.
-
 Generate auth-provider acceptance contract evidence before live IdP/directory acceptance:
 
 ```sh
