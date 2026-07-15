@@ -1665,6 +1665,13 @@ export function useStickToBottom(dep: unknown) {
   const stick = useRef(true);
 
   // Record intent on every user scroll, before the next append changes metrics.
+  //
+  // Depends on `dep`, NOT `[]`. ChatPanel renders its empty-state branch on the
+  // first paint (messages hydrate asynchronously), so the scroll container does
+  // not exist yet and `ref.current` is null the one time an `[]` effect would
+  // ever run — the listener would never attach, `stick` would stay permanently
+  // true, and the near-bottom check would silently never engage. Re-running on
+  // `dep` guarantees a run lands after the container mounts.
   useEffect(() => {
     const node = ref.current;
     if (node === null) return;
@@ -1673,7 +1680,7 @@ export function useStickToBottom(dep: unknown) {
     };
     node.addEventListener("scroll", onScroll, { passive: true });
     return () => node.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [dep]);
 
   useEffect(() => {
     const node = ref.current;
