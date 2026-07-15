@@ -31,8 +31,7 @@ const baseInput = {
   history: [] as Message[],
   userContent: 'What is the status?',
   knowledgeHits: [] as RetrievalHit[],
-  models: [largeModel] as (BaseModel | undefined)[],
-  modelId: largeModel.id
+  model: largeModel
 }
 
 describe('buildRunMessages shape', () => {
@@ -191,8 +190,7 @@ describe('context budget', () => {
   it('evicts the oldest history first and never the system or current user turn', () => {
     const result = buildRunMessages({
       ...baseInput,
-      models: [model('model_small', 2_000)],
-      modelId: 'model_small',
+      model: model('model_small', 2_000),
       history: [
         longMessage('msg_1', '2026-07-15T10:00:00.000Z', 'oldest '),
         longMessage('msg_2', '2026-07-15T10:00:01.000Z', 'middle '),
@@ -209,8 +207,11 @@ describe('context budget', () => {
     expect(result.historyMessages).toBeLessThan(3)
   })
 
-  it('budgets to the smaller fallback window rather than the primary', () => {
-    // 3004 tokens each: all three fit a 128k window, only one fits an 8k fallback.
+  it('budgets to the serving model window, keeping history a small fallback would have amputated', () => {
+    // 3004 tokens each: all three fit the 128k primary, only one would fit an 8k fallback.
+    // The old budget took min(primary, fallback) and kept 1 of 3 on the primary — ~92% of the
+    // conversation dropped on the model that serves virtually every run, re-breaking multi-turn
+    // for the sake of a fallback that usually never runs. The serving model's window is the budget.
     const bulky = (id: string, createdAt: string, filler: string): Message =>
       message({ id, role: 'user', content: filler.repeat(2_000), createdAt })
     const history = [
@@ -218,14 +219,14 @@ describe('context budget', () => {
       bulky('msg_2', '2026-07-15T10:00:01.000Z', 'bravo '),
       bulky('msg_3', '2026-07-15T10:00:02.000Z', 'delta ')
     ]
-    const primaryOnly = buildRunMessages({ ...baseInput, history })
-    const withFallback = buildRunMessages({ ...baseInput, history, models: [largeModel, model('model_fallback', 8_000)] })
+    const onPrimary = buildRunMessages({ ...baseInput, history })
+    // A small model only trims when it is itself the model serving the run.
+    const onSmallServingModel = buildRunMessages({ ...baseInput, history, model: model('model_fallback', 8_000) })
 
-    expect(primaryOnly.historyMessages).toBe(3)
-    expect(primaryOnly.historyTruncated).toBe(false)
-    // tryFallback swaps without re-trimming, so a 128k-sized payload would be invalid on the 8k fallback.
-    expect(withFallback.historyMessages).toBe(1)
-    expect(withFallback.historyTruncated).toBe(true)
+    expect(onPrimary.historyMessages).toBe(3)
+    expect(onPrimary.historyTruncated).toBe(false)
+    expect(onSmallServingModel.historyMessages).toBe(1)
+    expect(onSmallServingModel.historyTruncated).toBe(true)
   })
 
   it('degrades history to zero rather than throwing when the floor consumes the budget', () => {
@@ -233,8 +234,7 @@ describe('context budget', () => {
     const result = buildRunMessages({
       ...baseInput,
       systemPrompt: 'x'.repeat(4_900),
-      models: [model('model_small', 2_000)],
-      modelId: 'model_small',
+      model: model('model_small', 2_000),
       history: [message({ id: 'msg_1', role: 'user', content: 'prior '.repeat(100) })],
       tail: [{ role: 'assistant', content: 'partial' }]
     })
@@ -251,8 +251,7 @@ describe('context budget', () => {
   ])('filters a %s context window and sends no history without throwing', (_label, contextWindow) => {
     const result = buildRunMessages({
       ...baseInput,
-      models: [model('model_broken', contextWindow)],
-      modelId: 'model_broken',
+      model: model('model_broken', contextWindow),
       history: [message({ id: 'msg_1', role: 'user', content: 'Prior turn' })]
     })
 
@@ -268,7 +267,7 @@ describe('context budget', () => {
     const history = Array.from({ length: 120 }, (_item, index) =>
       message({ id: `msg_${String(index).padStart(3, '0')}`, role: 'user', content: 'a'.repeat(384), createdAt: `2026-07-15T10:00:00.${String(index).padStart(3, '0')}Z` })
     )
-    const result = buildRunMessages({ ...baseInput, history, models: [model('model_16k', 16_000)], modelId: 'model_16k' })
+    const result = buildRunMessages({ ...baseInput, history, model: model('model_16k', 16_000) })
 
     expect(result.historyMessages).toBe(101)
     expect(result.historyTruncated).toBe(true)
@@ -281,8 +280,7 @@ describe('knowledge shedding', () => {
     const filler = 'knowledge '.repeat(400)
     const result = buildRunMessages({
       ...baseInput,
-      models: [model('model_small', 2_000)],
-      modelId: 'model_small',
+      model: model('model_small', 2_000),
       knowledgeHits: [hit('c_high', `${filler} high`, 0.9), hit('c_mid', `${filler} mid`, 0.5), hit('c_low', `${filler} low`, 0.1)]
     })
 
@@ -299,8 +297,7 @@ describe('knowledge shedding', () => {
       buildRunMessages({
         ...baseInput,
         systemPrompt: 'You are Romeo. '.repeat(2_000),
-        models: [model('model_small', 1_000)],
-        modelId: 'model_small'
+        model: model('model_small', 1_000)
       })
     ).toThrowError(ApiError)
 
@@ -308,8 +305,7 @@ describe('knowledge shedding', () => {
       buildRunMessages({
         ...baseInput,
         systemPrompt: 'You are Romeo. '.repeat(2_000),
-        models: [model('model_small', 1_000)],
-        modelId: 'model_small'
+        model: model('model_small', 1_000)
       })
       expect.unreachable('expected the floor overflow to throw')
     } catch (error) {
@@ -317,6 +313,22 @@ describe('knowledge shedding', () => {
       expect(apiError.code).toBe('run_context_window_exceeded')
       expect(apiError.status).toBe(400)
       expect(apiError.details).toMatchObject({ modelId: 'model_small', contextWindow: 1_000 })
+    }
+  })
+
+  it('reports a modelId and contextWindow that describe the same model', () => {
+    // The min(primary, fallback) budget reported the primary's modelId next to the fallback's
+    // window, so the payload named a model whose real window was 128k while claiming 8k. Reading
+    // both fields off one model makes that contradiction unrepresentable.
+    const serving = model('model_serving', 1_000)
+
+    try {
+      buildRunMessages({ ...baseInput, systemPrompt: 'You are Romeo. '.repeat(2_000), model: serving })
+      expect.unreachable('expected the floor overflow to throw')
+    } catch (error) {
+      const details = (error as ApiError).details as { modelId: string; contextWindow: number }
+      expect(details.modelId).toBe(serving.id)
+      expect(details.contextWindow).toBe(serving.contextWindow)
     }
   })
 })
@@ -330,8 +342,7 @@ describe('resume tail', () => {
   it('keeps the assistant/tool pair last and never evicts it under a tight budget', () => {
     const result = buildRunMessages({
       ...baseInput,
-      models: [model('model_small', 2_000)],
-      modelId: 'model_small',
+      model: model('model_small', 2_000),
       history: [message({ id: 'msg_1', role: 'user', content: 'prior '.repeat(400) })],
       tail
     })

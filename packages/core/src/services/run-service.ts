@@ -126,6 +126,19 @@ export interface DeferredRunStart {
   startExecution(): void;
 }
 
+export interface StartRunInput {
+  attachments?: ChatAttachmentInput[];
+  subject: AuthSubject;
+  chatId: string;
+  agentId: string;
+  content: string;
+  modelId?: string;
+  // Id of a user message in this chat to cut prior history at, exclusive. Regenerate sets it to the
+  // message it is re-running so the pair being replaced is not replayed back to the model. Omit for
+  // an ordinary turn to send the chat's full history.
+  historyBoundaryMessageId?: string;
+}
+
 interface PreparedRunStart {
   agentId: string;
   agentVersionId: string;
@@ -180,14 +193,7 @@ export class RunService {
     });
   }
 
-  async start(input: {
-    attachments?: ChatAttachmentInput[];
-    subject: AuthSubject;
-    chatId: string;
-    agentId: string;
-    content: string;
-    modelId?: string;
-  }): Promise<RunRecord> {
+  async start(input: StartRunInput): Promise<RunRecord> {
     const storedObjectKeys: string[] = [];
     try {
       const prepared = await this.prepareRunStart(this.repository, input, {
@@ -206,14 +212,7 @@ export class RunService {
 
   async startDeferred(
     repository: RomeoRepository,
-    input: {
-      attachments?: ChatAttachmentInput[];
-      subject: AuthSubject;
-      chatId: string;
-      agentId: string;
-      content: string;
-      modelId?: string;
-    },
+    input: StartRunInput,
   ): Promise<DeferredRunStart> {
     const prepared = await this.prepareRunStart(repository, input);
     return this.persistPreparedRunStart(repository, prepared);
@@ -221,14 +220,7 @@ export class RunService {
 
   private async prepareRunStart(
     repository: RomeoRepository,
-    input: {
-      attachments?: ChatAttachmentInput[];
-      subject: AuthSubject;
-      chatId: string;
-      agentId: string;
-      content: string;
-      modelId?: string;
-    },
+    input: StartRunInput,
     options: { storedObjectKeys?: string[] } = {},
   ): Promise<PreparedRunStart> {
     const { chat, agent, agentVersion, model, provider } =
@@ -253,7 +245,18 @@ export class RunService {
     });
 
     // Read before createMessage below persists this turn, so this is exactly the prior history.
-    const history = await repository.listMessages(chat.id);
+    const chatMessages = await repository.listMessages(chat.id);
+    // Regenerate starts the run before deleting the pair it replaces, so that a failed run does not
+    // destroy the user's prompt and previous answer. That old pair is therefore still persisted here,
+    // and without a boundary the model would be fed its own previous answer plus the same question
+    // twice. Cutting at the message being re-run restores the history the original turn saw.
+    const history =
+      input.historyBoundaryMessageId === undefined
+        ? chatMessages
+        : historyBefore(
+            orderChatHistory(chatMessages),
+            input.historyBoundaryMessageId,
+          );
 
     const userMessageId = createId("msg");
     const attachmentParts = await storeMessageAttachments({
@@ -307,8 +310,7 @@ export class RunService {
       history,
       userContent: input.content,
       knowledgeHits: knowledge.hits,
-      models: [model, routePlan.fallback?.model],
-      modelId: model.id,
+      model: routeServingModel(routePlan, model),
       ...(maxHistoryMessages === undefined ? {} : { maxHistoryMessages }),
     });
     const providerTools = await buildProviderToolDefinitions(
@@ -873,8 +875,7 @@ export class RunService {
       history: priorMessages,
       userContent: userMessage.content,
       knowledgeHits: knowledge.hits,
-      models: [input.model, input.routePlan.fallback?.model],
-      modelId: input.model.id,
+      model: routeServingModel(input.routePlan, input.model),
       ...(maxHistoryMessages === undefined ? {} : { maxHistoryMessages }),
       // The assistant/tool pair must stay adjacent and last, so it is passed as an unevictable tail.
       tail: [
@@ -970,8 +971,7 @@ export class RunService {
       history: priorMessages,
       userContent: userMessage.content,
       knowledgeHits: knowledge.hits,
-      models: [input.model, input.routePlan.fallback?.model],
-      modelId: input.model.id,
+      model: routeServingModel(input.routePlan, input.model),
       ...(maxHistoryMessages === undefined ? {} : { maxHistoryMessages }),
       // The assistant/tool pair must stay adjacent and last, so it is passed as an unevictable tail.
       tail: [
@@ -1368,6 +1368,18 @@ function payloadScopes(job: BackgroundJob, key: string): Scope[] {
   return payloadStringArray(job, key).filter((item): item is Scope =>
     allowed.has(item),
   );
+}
+
+function routeServingModel(
+  routePlan: ProviderRoutePlan,
+  model: BaseModel,
+): BaseModel {
+  // The executor swaps to the fallback before its first attempt when the primary provider is
+  // disabled, so in that case the fallback — not the primary — is the model that serves this run.
+  // Everywhere else the primary serves it, and the payload is budgeted for the primary's window.
+  return routePlan.primaryDisabled && routePlan.fallback !== undefined
+    ? routePlan.fallback.model
+    : model;
 }
 
 function runUserMessage(

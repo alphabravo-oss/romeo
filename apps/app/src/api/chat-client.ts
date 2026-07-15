@@ -134,6 +134,9 @@ export async function startRun(input: {
   agentId: string;
   content: string;
   modelId?: string;
+  // Cuts prior history at this message, exclusive. Regenerate passes the message it is re-running
+  // so the model is not fed the answer it is replacing. Omit to send the chat's full history.
+  historyBoundaryMessageId?: string;
   attachments?: Array<{
     dataBase64: string;
     fileName: string;

@@ -224,10 +224,16 @@ export function useWorkspaceController() {
       // provider outage, network blip), the user's prompt and the previous
       // answer must still be there afterward — only delete once the run has
       // actually started.
+      //
+      // That ordering means the pair being replaced is still persisted when the
+      // run assembles its history, so historyBoundaryMessageId cuts it off:
+      // without it the model would be sent the question, its own previous
+      // answer, then the same question again as the current turn.
       const run = await startRunMutation.mutateAsync({
         chatId,
         agentId: activeAgent.id,
         content: lastUser.content,
+        historyBoundaryMessageId: lastUser.id,
         ...(selectedModelId === undefined ? {} : { modelId: selectedModelId }),
         ...(attachmentsForRun.length === 0
           ? {}

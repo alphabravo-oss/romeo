@@ -15662,15 +15662,43 @@ describe("Romeo chat history", () => {
     api: ReturnType<typeof createRomeoApi>,
     chatId: string,
     content: string,
+    options: { historyBoundaryMessageId?: string } = {},
   ) {
     const response = await api.request("/api/v1/runs", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chatId, agentId: "agent_default", content }),
+      body: JSON.stringify({
+        chatId,
+        agentId: "agent_default",
+        content,
+        ...options,
+      }),
     });
     const body = await response.json();
     await waitForAssistantMessage(api, chatId);
     return body;
+  }
+
+  // waitForAssistantMessage returns as soon as any assistant message exists, which is already true
+  // from turn one onwards. Assertions about turn N's payload must wait for that payload instead.
+  async function waitForBodies(bodies: ProviderBody[], count: number) {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (bodies.length >= count) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(
+      `Timed out waiting for ${count} provider bodies; saw ${bodies.length}.`,
+    );
+  }
+
+  async function userMessageId(
+    api: ReturnType<typeof createRomeoApi>,
+    chatId: string,
+  ) {
+    const messages = await waitForAssistantMessage(api, chatId);
+    const user = messages.find((message) => message.role === "user");
+    if (user === undefined) throw new Error("Expected a persisted user message");
+    return user.id;
   }
 
   it("sends prior turns to the model as turn-structured history", async () => {
@@ -15872,6 +15900,98 @@ describe("Romeo chat history", () => {
     expect(estimatedFor(second.data.id)).toBeGreaterThan(
       estimatedFor(first.data.id),
     );
+  });
+
+  it("excludes the pair being replaced when regenerate supplies a history boundary", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({ repository, bodies, reply: "First answer." });
+    const chatId = await createChat(api, "Regenerate");
+
+    await runTurn(api, chatId, "First question.");
+    await waitForBodies(bodies, 1);
+    const boundary = await userMessageId(api, chatId);
+
+    // Regenerate deliberately starts the replacement run before deleting the old pair, so a failed
+    // run cannot destroy the prompt and previous answer. Both rows are therefore still persisted
+    // here — exactly the state in which the model used to be handed the answer it was replacing.
+    await runTurn(api, chatId, "First question.", {
+      historyBoundaryMessageId: boundary,
+    });
+    await waitForBodies(bodies, 2);
+
+    const regenerated = bodies[1];
+    expect(regenerated?.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+    ]);
+    // The question is asked once, not twice, and the previous answer is gone.
+    expect(
+      regenerated?.messages.filter(
+        (message) => message.content === "First question.",
+      ),
+    ).toHaveLength(1);
+    expect(JSON.stringify(regenerated)).not.toContain("First answer.");
+  });
+
+  it("sends the full history when no boundary is supplied", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({ repository, bodies, reply: "First answer." });
+    const chatId = await createChat(api, "No boundary");
+
+    await runTurn(api, chatId, "First question.");
+    await waitForBodies(bodies, 1);
+    // The control for the regenerate case above: same two turns, no boundary, nothing cut.
+    await runTurn(api, chatId, "Second question.");
+    await waitForBodies(bodies, 2);
+
+    expect(bodies[1]?.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "user",
+    ]);
+    expect(bodies[1]?.messages[1]?.content).toBe("First question.");
+    expect(bodies[1]?.messages[2]?.content).toBe("First answer.");
+  });
+
+  it("sends no history and does not throw for a boundary id from another chat", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({ repository, bodies, reply: "First answer." });
+    const otherChatId = await createChat(api, "Other chat");
+    const chatId = await createChat(api, "Target chat");
+
+    await runTurn(api, otherChatId, "Other chat secret question.");
+    await waitForBodies(bodies, 1);
+    const foreignBoundary = await userMessageId(api, otherChatId);
+
+    await runTurn(api, chatId, "First question.");
+    await waitForBodies(bodies, 2);
+
+    const response = await api.request("/api/v1/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId,
+        agentId: "agent_default",
+        content: "Second question.",
+        historyBoundaryMessageId: foreignBoundary,
+      }),
+    });
+    await waitForBodies(bodies, 3);
+
+    // The boundary is searched only within this chat's own messages, so a foreign id matches
+    // nothing and degrades to no history. It must not throw, and it must not splice the other
+    // chat's turns into this payload.
+    expect(response.status).toBe(202);
+    expect(bodies[2]?.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+    ]);
+    expect(bodies[2]?.messages.at(-1)?.content).toBe("Second question.");
+    expect(JSON.stringify(bodies[2])).not.toContain("Other chat secret");
   });
 });
 

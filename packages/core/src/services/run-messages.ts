@@ -25,6 +25,8 @@ export function orderChatHistory(messages: Message[]): Message[] {
 
 export function historyBefore(ordered: Message[], userMessageId: string): Message[] {
   // Index cut, not a createdAt compare: a strict '<' drops prior messages sharing the boundary millisecond.
+  // Security: the search is confined to this chat's own ordered messages, so an id from another chat
+  // simply misses (index -1) and yields no history — it can never splice in another chat's turns.
   const index = ordered.findIndex((message) => message.id === userMessageId)
   return index === -1 ? [] : ordered.slice(0, index)
 }
@@ -54,9 +56,10 @@ export interface BuildRunMessagesInput {
   userContent: string
   knowledgeHits: RetrievalHit[]
   tail?: ChatMessage[]
-  models: (BaseModel | undefined)[]
+  // The model that will actually serve this run. One model, not a route: the id and the window
+  // reported by run_context_window_exceeded are read off this same object, so they cannot disagree.
+  model: BaseModel
   maxHistoryMessages?: number
-  modelId: string
 }
 
 export interface BuildRunMessagesResult {
@@ -69,7 +72,7 @@ export interface BuildRunMessagesResult {
 }
 
 export function buildRunMessages(input: BuildRunMessagesInput): BuildRunMessagesResult {
-  const contextWindow = routeContextWindow(input.models)
+  const contextWindow = modelContextWindow(input.model)
   const reserve = Math.min(maxOutputReserveTokens, Math.floor(contextWindow * outputReserveWindowFraction))
   const usable = Math.floor(Math.max(0, contextWindow - reserve) * estimatorSafetyFraction)
   const tail = input.tail ?? []
@@ -99,7 +102,8 @@ export function buildRunMessages(input: BuildRunMessagesInput): BuildRunMessages
     }
     if (floorTokens > usable) {
       throw new ApiError('run_context_window_exceeded', 'The conversation exceeds the model context window.', 400, {
-        modelId: input.modelId,
+        // Both fields come off input.model, so the payload always describes one real model.
+        modelId: input.model.id,
         contextWindow,
         estimatedTokens: floorTokens
       })
@@ -123,14 +127,14 @@ function knowledgeUserMessage(hits: RetrievalHit[], userContent: string): ChatMe
   return { role: 'user', content: knowledgeUserContent(renderKnowledgeContext(hits), userContent) }
 }
 
-function routeContextWindow(models: (BaseModel | undefined)[]): number {
-  // Budget to the smallest window on the route: tryFallback swaps models without re-trimming, so a
-  // payload sized for the primary is guaranteed invalid once a smaller fallback takes over.
-  const windows = models.flatMap((model) => {
-    const window = model?.contextWindow
-    return typeof window === 'number' && Number.isFinite(window) && window > 0 ? [window] : []
-  })
-  return windows.length === 0 ? 0 : Math.min(...windows)
+function modelContextWindow(model: BaseModel | undefined): number {
+  // Budget to the window of the model that actually serves the run, not to min(primary, fallback).
+  // A fallback is the rare path; sizing every run to it amputated most of the conversation on the
+  // primary — re-breaking the multi-turn bug this assembler exists to fix. If a smaller fallback
+  // later takes over, that is the fallback swap's problem to re-trim, not a tax on every run.
+  // NaN/Infinity/<=0 degrade to 0, which disables the budget rather than throwing.
+  const window = model?.contextWindow
+  return typeof window === 'number' && Number.isFinite(window) && window > 0 ? window : 0
 }
 
 function keepNewestWithinBudget(candidates: ChatMessage[], budget: number): ChatMessage[] {
