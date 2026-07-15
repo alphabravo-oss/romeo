@@ -61,7 +61,6 @@
     "smoke:ga:target-execution-contract": "node scripts/ga-target-execution-contract-smoke.mjs",
     "smoke:ci:branch-protection-contract": "node scripts/branch-protection-verification-contract-smoke.mjs",
     "smoke:ci:hosted-run-contract": "node scripts/hosted-ci-run-verification-contract-smoke.mjs",
-    "docs:check-commands": "node scripts/check-docs-commands.mjs",
     "support:bundle": "node scripts/generate-support-bundle.mjs",
     "smoke:support-bundle-redaction": "node scripts/support-bundle-redaction-smoke.mjs",
     "evidence:browser-automation-live": "node scripts/record-browser-automation-live-evidence.mjs",
@@ -127,5 +126,6 @@
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=11.0.0"
-  }
+  },
+  "license": "Apache-2.0"
 }

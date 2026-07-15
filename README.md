@@ -1,112 +1,160 @@
 # Romeo
 
-Romeo is a greenfield AI workspace platform guided by `../romeo-full-product-prd.md`.
+**Enterprise AI Chat.**
 
-Open WebUI is a product and UX reference only. Romeo is not a fork, rebrand, or code reuse project.
+A self-hosted AI workspace that treats identity, tenancy, and governance as
+first-class — not as a plugin you bolt on later. Bring your own models, keep
+your data on your own infrastructure.
 
-The repository package scope, CLI command, SDK names, API metadata, and deployment examples now use Romeo naming.
+Built by [AlphaBravo](https://alphabravo.io).
 
-## Milestone 1
+---
 
-The first executable slice proves:
+## Quick start
 
-- seeded local login or local auth path
-- default organization and workspace
-- OpenAI-compatible and Ollama provider records
-- default model-backed assistant
-- chat creation
-- `POST /api/v1/runs`
-- `GET /api/v1/runs/{runId}/events`
-- `POST /api/v1/runs/{runId}/cancel`
-- `GET /api/v1/health`
-- `GET /api/v1/openapi.json`
-- persisted messages and replayable run events
-- object-level authorization on the run path
-
-## Stack
-
-- pnpm workspaces
-- TanStack Start, Router, Query, Form, Table, Virtual, Store
-- Hono and `@hono/zod-openapi` for `/api/v1`
-- Drizzle schema for Postgres and pgvector-ready persistence
-- Valkey, RustFS/S3, Docker Compose, and Helm deployment structure
-
-## Local Development
+You need [Node.js](https://nodejs.org) 22+ and pnpm 11.7.0.
 
 ```bash
+git clone https://github.com/alphabravo-oss/romeo.git
+cd romeo
 pnpm install
 pnpm dev
 ```
 
-### If `pnpm` fails with "Failed to switch pnpm to v11.7.0 ... ENOENT"
+Open the URL it prints (usually http://localhost:3000). You're signed in as a
+seeded local admin with an in-memory store — no database, no config, nothing
+else to install. Good for a look around; **not** for anything you care about
+keeping.
 
-This repository pins `pnpm@11.7.0` via the `packageManager` field. The
-standalone pnpm installer (`~/Library/pnpm/pnpm` on macOS) manages its own
-versions and **cannot install pnpm 11.x** — it fetches the platform package but
-never creates the `bin/` directory the shim then looks for, so it fails with
-`ENOENT` on every invocation.
+<details>
+<summary><code>pnpm</code> fails with "Failed to switch pnpm to v11.7.0 … ENOENT"?</summary>
 
-Corepack handles the pinned version correctly. Activate it once:
-
-```bash
-corepack enable
-corepack prepare pnpm@11.7.0 --activate
-```
-
-Then make sure your Node `bin` directory precedes the standalone pnpm on
-`PATH`, so corepack's shim wins:
+The standalone pnpm installer can't self-install pnpm 11.x. Activate the
+pinned version once with corepack:
 
 ```bash
-# check which one is first — it should be the Node/corepack one
-which -a pnpm
+corepack enable && corepack prepare pnpm@11.7.0 --activate
 ```
 
-If `~/Library/pnpm/pnpm` still comes first, either remove the standalone
-install or move your Node bin ahead of it in your shell profile.
+Make sure your Node `bin` directory comes before `~/Library/pnpm` on `PATH`
+(`which -a pnpm`). Otherwise, prefix any command with `npx --yes pnpm@11.7.0`.
 
-Without that, every command in this README still works when prefixed with
-`npx --yes pnpm@11.7.0` — for example `npx --yes pnpm@11.7.0 verify`.
+</details>
 
-The dev server prints its local URL when it starts. The Milestone 1 API uses an in-memory repository by default so the app can run before external services are configured.
+### Connect a model
 
-## Verification
+Romeo talks to any **OpenAI-compatible** endpoint and to **Ollama**. To run
+fully local, point it at Ollama:
 
 ```bash
-pnpm verify
+ollama serve
+ollama pull llama3.2
 ```
 
-`pnpm verify` runs tests, TypeScript checks, and the production build across the workspace.
+Then add the provider under **Admin → Providers** and pick a model for your
+assistant in **Workspace → Agents**.
 
-Generate a CycloneDX SBOM for release artifacts with:
+### Run it for real
 
 ```bash
-pnpm run sbom:generate -- --output release/sbom.cdx.json
+cp deploy/compose/.env.example deploy/compose/.env   # set your secrets
+docker compose -f deploy/compose/compose.yml up
 ```
 
-Generate package tarballs and release-channel metadata with:
+That brings up the app with Postgres, Valkey, and S3-compatible object
+storage, and runs migrations first. For Kubernetes, a Helm chart lives in
+`deploy/helm` (external Postgres or CloudNativePG, HPA, NetworkPolicies,
+backup CronJob).
+
+---
+
+## What you get
+
+**Chat that works the way you expect.** Real token streaming over SSE, stop
+mid-response, markdown with syntax-highlighted code and one-click copy, image
+attachments, voice input, and read-aloud.
+
+**Assistants, not just models.** Build agents with their own system prompt,
+model, parameters, tools, and knowledge — versioned, diffable, and testable in
+a built-in console before you ship them.
+
+**Knowledge that respects boundaries.** Upload documents into knowledge bases
+with pgvector or Qdrant behind them, hybrid retrieval, and per-tier retrieval
+policy (private / workspace / org / shared) enforced at the service layer.
+
+**Tools with a leash.** Connect MCP servers, OpenAPI specs, or webhooks.
+Network policy, per-operation enablement, and an approval step before a tool
+does anything consequential.
+
+**Identity you already run.** Local accounts with TOTP, OIDC, OAuth2, LDAP,
+**SAML**, and **SCIM** provisioning — plus service accounts, API keys, and
+device authorization for native clients.
+
+**Multi-tenancy that isn't an afterthought.** Organizations and workspaces run
+through the whole model, with roles, permissions, group membership, and
+resource-level grants checked on every path.
+
+**Governance for people who get audited.** Immutable audit log, retention
+policies, legal hold, data export and deletion, access review, usage metering
+and quotas, and billing.
+
+**An API, not just a UI.** Every capability is a documented `/api/v1` endpoint
+with an OpenAPI spec, a TypeScript SDK, a dependency-free Python SDK, and a
+`romeo` CLI.
+
+### Not here yet
+
+Being straight with you, so you don't find out the hard way:
+
+- No image generation
+- No web search
+- English only — no localization yet
+- No code execution / artifact sandbox
+- One assistant per conversation (no side-by-side model comparison)
+
+---
+
+## Development
 
 ```bash
-pnpm release:pack
-pnpm release:channel -- --manifest dist/release/release-manifest.json --output dist/release/release-channel.json
+pnpm dev        # dev server, in-memory store, seeded login
+pnpm verify     # tests + typecheck + production build across the workspace
+pnpm test       # tests only
 ```
 
-Generate release security evidence and validate an upgrade candidate with:
+`pnpm verify` is the gate — it must exit 0 before anything merges.
 
-```bash
-pnpm release:security -- --manifest dist/release/release-manifest.json --sbom dist/release/sbom.cdx.json
-pnpm release:upgrade-check -- --channel-file dist/release/release-channel.json
-```
+### Layout
 
-Inspect Postgres backup/restore command plans with:
+| Path | What lives there |
+|---|---|
+| `apps/app` | TanStack Start + React frontend, and the server entry that mounts the API |
+| `packages/core` | Domain, services, and the Hono `/api/v1` surface |
+| `packages/db` | Drizzle schema and the Postgres repository |
+| `packages/providers` | Model adapters (OpenAI-compatible, Ollama) |
+| `packages/ai-runtime` | Run executor and SSE event stream |
+| `packages/cli` | The `romeo` CLI |
+| `sdks/python` | Python SDK (standard library only) |
+| `deploy/` | Docker Compose, Helm, CloudNativePG, monitoring |
 
-```bash
-DATABASE_URL=postgres://user:password@localhost:5432/romeo pnpm backup:postgres -- --dry-run --retention-days 30
-DATABASE_URL=postgres://user:password@localhost:5432/romeo pnpm restore:postgres -- --input backups/romeo-postgres.dump --expected-sha256 "$BACKUP_SHA256" --dry-run
-DRILL_DATABASE_URL=postgres://user:password@localhost:5432/romeo_drill pnpm drill:postgres-restore -- --input backups/romeo-postgres.dump --expected-sha256 "$BACKUP_SHA256" --dry-run
-```
+`packages/core` defines a `RomeoRepository` contract and deliberately does not
+depend on `packages/db`; the app composes the driver at the edge. Keep it that
+way.
 
-Private-network deployment notes live in [docs/air-gapped-deployment.md](./docs/air-gapped-deployment.md).
+Schema changes are forward-only. The greenfield baseline is locked at
+`packages/db/migrations/0000_greenfield_baseline.sql`.
 
-## Migration Discipline
+---
 
-The greenfield baseline is locked at `packages/db/migrations/0000_greenfield_baseline.sql`. Keep Drizzle schema changes split by domain under `packages/db/src/schema`; future schema changes require forward-only migrations with upgrade tests and rollback or mitigation notes. Do not add corrective migration chains that undo earlier greenfield mistakes.
+## Contributing
+
+Issues and pull requests are welcome. Run `pnpm verify` before opening a PR —
+if it isn't green, CI won't be either.
+
+## License
+
+[Apache 2.0](./LICENSE) © AlphaBravo
+
+Romeo is an independent, greenfield implementation.
+[Open WebUI](https://github.com/open-webui/open-webui) was a product and UX
+reference only — Romeo is not a fork and contains no Open WebUI code.

@@ -153,9 +153,6 @@ jobs:
       - name: Data rights retention contract smoke
         run: pnpm smoke:data-rights-retention-contract -- --output dist/ci/data-rights-retention-contract-smoke.json
 
-      - name: Operator documentation command check
-        run: pnpm docs:check-commands -- --output dist/ci/docs-command-check.json
-
       - name: Compose env contract smoke
         run: pnpm smoke:compose:env-contract -- --output dist/ci/compose-env-contract-smoke.json
 

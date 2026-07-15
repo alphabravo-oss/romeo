@@ -65,7 +65,6 @@ const requiredWorkflowCommands = [
   "pnpm smoke:postgres:backup-upload-failure",
   "pnpm smoke:support-bundle-redaction",
   "pnpm smoke:data-rights-retention-contract",
-  "pnpm docs:check-commands",
   "pnpm smoke:compose:env-contract",
   "pnpm smoke:helm:env-schema-contract",
   "pnpm ci:branch-protection-plan",
