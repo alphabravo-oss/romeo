@@ -1,0 +1,513 @@
+const nullableString = { oneOf: [{ type: "string" }, { type: "null" }] };
+
+const authProviderId = {
+  type: "string",
+  enum: [
+    "active-directory",
+    "auth0",
+    "azure-ad",
+    "generic-oidc",
+    "github",
+    "google",
+    "keycloak",
+    "ldap",
+    "local",
+    "okta",
+    "saml",
+  ],
+};
+
+const authProviderProtocol = {
+  type: "string",
+  enum: ["ldap", "local", "oauth2", "oidc", "saml"],
+};
+
+const providerPresetId = {
+  type: "string",
+  enum: [
+    "auth0",
+    "azure-ad",
+    "generic",
+    "github",
+    "google",
+    "keycloak",
+    "okta",
+  ],
+};
+
+const stringArray = { type: "array", items: { type: "string" } };
+const nonNegativeInteger = { type: "integer", minimum: 0 };
+
+export const identityAuthSchemas = {
+  SsoOidcProviderPreset: {
+    type: "object",
+    required: ["id", "name", "recommendedGroupClaim", "issuerHint", "notes"],
+    additionalProperties: false,
+    properties: {
+      id: providerPresetId,
+      name: { type: "string" },
+      recommendedGroupClaim: { type: "string" },
+      issuerHint: { type: "string" },
+      notes: stringArray,
+    },
+  },
+  SsoSettingsReport: {
+    type: "object",
+    required: [
+      "generatedAt",
+      "configurationSource",
+      "status",
+      "localLogin",
+      "oidc",
+      "notes",
+    ],
+    additionalProperties: false,
+    properties: {
+      generatedAt: { type: "string", format: "date-time" },
+      configurationSource: {
+        type: "string",
+        enum: ["database", "environment"],
+      },
+      status: { type: "string", enum: ["disabled", "enabled", "partial"] },
+      localLogin: {
+        type: "object",
+        required: ["seededDevelopmentLoginEnabled"],
+        additionalProperties: false,
+        properties: {
+          seededDevelopmentLoginEnabled: { type: "boolean" },
+        },
+      },
+      oidc: {
+        type: "object",
+        required: [
+          "detectedProviderPreset",
+          "providerPresets",
+          "bearerTokenAuthEnabled",
+          "browserPkceLoginEnabled",
+          "issuerConfigured",
+          "clientIdConfigured",
+          "groupClaim",
+          "adminGroupCount",
+          "groupMappingCount",
+          "workspaceGroupMappingCount",
+          "workspaceGroupPrefixConfigured",
+          "jitProvisioningEnabled",
+          "accountLinkingEnabled",
+        ],
+        additionalProperties: false,
+        properties: {
+          detectedProviderPreset: providerPresetId,
+          providerPresets: {
+            type: "array",
+            items: { $ref: "#/components/schemas/SsoOidcProviderPreset" },
+          },
+          bearerTokenAuthEnabled: { type: "boolean" },
+          browserPkceLoginEnabled: { type: "boolean" },
+          issuerConfigured: { type: "boolean" },
+          issuerHost: { type: "string" },
+          clientIdConfigured: { type: "boolean" },
+          groupClaim: { type: "string" },
+          adminGroupCount: nonNegativeInteger,
+          groupMappingCount: nonNegativeInteger,
+          workspaceGroupMappingCount: nonNegativeInteger,
+          workspaceGroupPrefixConfigured: { type: "boolean" },
+          jitProvisioningEnabled: { type: "boolean" },
+          accountLinkingEnabled: { type: "boolean", enum: [false] },
+        },
+      },
+      notes: stringArray,
+    },
+  },
+  SsoConnectionTestCheck: {
+    type: "object",
+    required: ["id", "status", "code"],
+    additionalProperties: false,
+    properties: {
+      id: { type: "string", enum: ["configuration", "discovery", "jwks"] },
+      status: { type: "string", enum: ["fail", "pass", "skip"] },
+      code: { type: "string" },
+    },
+  },
+  SsoConnectionTestReport: {
+    type: "object",
+    required: ["generatedAt", "status", "checks", "notes"],
+    additionalProperties: false,
+    properties: {
+      generatedAt: { type: "string", format: "date-time" },
+      status: {
+        type: "string",
+        enum: ["disabled", "failed", "partial", "passed"],
+      },
+      issuerHost: { type: "string" },
+      checks: {
+        type: "array",
+        items: { $ref: "#/components/schemas/SsoConnectionTestCheck" },
+      },
+      notes: stringArray,
+    },
+  },
+  SsoOidcDeprovisionResult: {
+    type: "object",
+    required: ["status", "user"],
+    additionalProperties: false,
+    properties: {
+      status: { type: "string", enum: ["already_disabled", "disabled"] },
+      issuerHost: { type: "string" },
+      user: { $ref: "#/components/schemas/User" },
+    },
+  },
+  AuthProviderCatalogEntry: {
+    type: "object",
+    required: [
+      "id",
+      "name",
+      "protocol",
+      "configurationScopes",
+      "runtimePackage",
+      "status",
+      "supportsJitProvisioning",
+      "supportsLocalFallback",
+      "supportsMfaDelegation",
+      "notes",
+    ],
+    additionalProperties: false,
+    properties: {
+      id: authProviderId,
+      name: { type: "string" },
+      protocol: authProviderProtocol,
+      configurationScopes: {
+        type: "array",
+        items: { type: "string", enum: ["global", "org"] },
+      },
+      runtimePackage: nullableString,
+      status: { type: "string", enum: ["implemented", "planned"] },
+      supportsJitProvisioning: { type: "boolean" },
+      supportsLocalFallback: { type: "boolean" },
+      supportsMfaDelegation: { type: "boolean" },
+      notes: stringArray,
+    },
+  },
+  AuthProviderOidcConnectionSummary: {
+    type: "object",
+    required: [
+      "issuerConfigured",
+      "clientIdConfigured",
+      "groupClaim",
+      "adminGroupCount",
+      "groupMappingCount",
+      "workspaceGroupMappingCount",
+      "workspaceGroupPrefixConfigured",
+    ],
+    additionalProperties: false,
+    properties: {
+      issuerConfigured: { type: "boolean" },
+      issuerHost: { type: "string" },
+      clientIdConfigured: { type: "boolean" },
+      groupClaim: { type: "string" },
+      adminGroupCount: nonNegativeInteger,
+      groupMappingCount: nonNegativeInteger,
+      workspaceGroupMappingCount: nonNegativeInteger,
+      workspaceGroupPrefixConfigured: { type: "boolean" },
+    },
+  },
+  AuthProviderOAuth2ConnectionSummary: {
+    type: "object",
+    required: [
+      "adminTeamCount",
+      "clientIdConfigured",
+      "groupMappingCount",
+      "requiredOrganizationCount",
+      "requiredTeamCount",
+      "scopeCount",
+      "workspaceTeamMappingCount",
+      "workspaceTeamPrefixConfigured",
+    ],
+    additionalProperties: false,
+    properties: {
+      adminTeamCount: nonNegativeInteger,
+      clientIdConfigured: { type: "boolean" },
+      groupMappingCount: nonNegativeInteger,
+      requiredOrganizationCount: nonNegativeInteger,
+      requiredTeamCount: nonNegativeInteger,
+      scopeCount: nonNegativeInteger,
+      workspaceTeamMappingCount: nonNegativeInteger,
+      workspaceTeamPrefixConfigured: { type: "boolean" },
+    },
+  },
+  AuthProviderLdapConnectionSummary: {
+    type: "object",
+    required: [
+      "adminGroupCount",
+      "baseDnConfigured",
+      "bindDnConfigured",
+      "groupMappingCount",
+      "groupSearchConfigured",
+      "requiredGroupCount",
+      "startTls",
+      "urlConfigured",
+      "userSearchFilterConfigured",
+      "workspaceGroupMappingCount",
+      "workspaceGroupPrefixConfigured",
+    ],
+    additionalProperties: false,
+    properties: {
+      adminGroupCount: nonNegativeInteger,
+      baseDnConfigured: { type: "boolean" },
+      bindDnConfigured: { type: "boolean" },
+      groupMappingCount: nonNegativeInteger,
+      groupSearchConfigured: { type: "boolean" },
+      requiredGroupCount: nonNegativeInteger,
+      startTls: { type: "boolean" },
+      urlConfigured: { type: "boolean" },
+      urlHost: { type: "string" },
+      userSearchFilterConfigured: { type: "boolean" },
+      workspaceGroupMappingCount: nonNegativeInteger,
+      workspaceGroupPrefixConfigured: { type: "boolean" },
+    },
+  },
+  AuthProviderSamlConnectionSummary: {
+    type: "object",
+    required: [
+      "acceptedClockSkewMs",
+      "adminGroupCount",
+      "emailAttribute",
+      "entryPointConfigured",
+      "groupMappingCount",
+      "groupsAttribute",
+      "idpIssuerConfigured",
+      "maxAssertionAgeMs",
+      "nameAttribute",
+      "requiredGroupCount",
+      "signedAssertionRequired",
+      "signedResponseRequired",
+      "spEntityIdConfigured",
+      "subjectAttribute",
+      "workspaceGroupMappingCount",
+      "workspaceGroupPrefixConfigured",
+    ],
+    additionalProperties: false,
+    properties: {
+      acceptedClockSkewMs: nonNegativeInteger,
+      adminGroupCount: nonNegativeInteger,
+      emailAttribute: { type: "string" },
+      entryPointConfigured: { type: "boolean" },
+      entryPointHost: { type: "string" },
+      groupMappingCount: nonNegativeInteger,
+      groupsAttribute: { type: "string" },
+      idpIssuerConfigured: { type: "boolean" },
+      maxAssertionAgeMs: nonNegativeInteger,
+      nameAttribute: { type: "string" },
+      requiredGroupCount: nonNegativeInteger,
+      signedAssertionRequired: { type: "boolean", enum: [true] },
+      signedResponseRequired: { type: "boolean" },
+      spEntityIdConfigured: { type: "boolean" },
+      subjectAttribute: { type: "string" },
+      workspaceGroupMappingCount: nonNegativeInteger,
+      workspaceGroupPrefixConfigured: { type: "boolean" },
+    },
+  },
+  AuthProviderSettingSummary: authProviderSettingSummarySchema("default", [
+    "global",
+  ]),
+  AuthProviderOrgOverrideSummary: authProviderOrgOverrideSummarySchema(),
+  EffectiveAuthProviderSetting: {
+    type: "object",
+    required: [
+      "providerId",
+      "enabled",
+      "displayName",
+      "loginOrder",
+      "allowedEmailDomains",
+      "orgOverridesAllowed",
+      "secretRefConfigured",
+      "source",
+      "catalogStatus",
+      "protocol",
+      "runtimePackage",
+    ],
+    additionalProperties: false,
+    properties: {
+      ...authProviderCommonSettingProperties(),
+      enabled: { type: "boolean" },
+      displayName: { type: "string" },
+      loginOrder: { type: "integer" },
+      allowedEmailDomains: stringArray,
+      orgOverridesAllowed: { type: "boolean" },
+      source: { type: "string", enum: ["default", "global", "org"] },
+      catalogStatus: { type: "string", enum: ["implemented", "planned"] },
+      protocol: authProviderProtocol,
+      runtimePackage: nullableString,
+    },
+  },
+  AuthProviderSettingsReport: {
+    type: "object",
+    required: ["generatedAt", "global", "orgOverride", "effective", "notes"],
+    additionalProperties: false,
+    properties: {
+      generatedAt: { type: "string", format: "date-time" },
+      global: {
+        type: "object",
+        required: ["providers"],
+        additionalProperties: false,
+        properties: {
+          providers: {
+            type: "array",
+            items: { $ref: "#/components/schemas/AuthProviderSettingSummary" },
+          },
+        },
+      },
+      orgOverride: {
+        type: "object",
+        required: ["orgId", "providers"],
+        additionalProperties: false,
+        properties: {
+          orgId: { type: "string" },
+          providers: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/AuthProviderOrgOverrideSummary",
+            },
+          },
+        },
+      },
+      effective: {
+        type: "object",
+        required: ["orgId", "providers"],
+        additionalProperties: false,
+        properties: {
+          orgId: { type: "string" },
+          providers: {
+            type: "array",
+            items: {
+              $ref: "#/components/schemas/EffectiveAuthProviderSetting",
+            },
+          },
+        },
+      },
+      notes: stringArray,
+    },
+  },
+  AuthProviderConnectionTestCheck: {
+    type: "object",
+    required: ["id", "status", "code"],
+    additionalProperties: false,
+    properties: {
+      id: {
+        type: "string",
+        enum: [
+          "adapter",
+          "api",
+          "configuration",
+          "discovery",
+          "jwks",
+          "ldap_bind",
+          "ldap_search",
+          "oauth2_endpoints",
+          "saml_endpoints",
+          "secret",
+        ],
+      },
+      status: { type: "string", enum: ["fail", "pass", "skip"] },
+      code: { type: "string" },
+    },
+  },
+  AuthProviderConnectionTestReport: {
+    type: "object",
+    required: [
+      "generatedAt",
+      "providerId",
+      "catalogStatus",
+      "protocol",
+      "runtimePackage",
+      "configurationSource",
+      "status",
+      "enabled",
+      "checks",
+      "notes",
+    ],
+    additionalProperties: false,
+    properties: {
+      generatedAt: { type: "string", format: "date-time" },
+      providerId: authProviderId,
+      catalogStatus: { type: "string", enum: ["implemented", "planned"] },
+      protocol: authProviderProtocol,
+      runtimePackage: nullableString,
+      configurationSource: {
+        type: "string",
+        enum: ["active_sso", "provider_settings", "transient_request"],
+      },
+      status: {
+        type: "string",
+        enum: ["disabled", "failed", "partial", "passed"],
+      },
+      enabled: { type: "boolean" },
+      issuerHost: { type: "string" },
+      detectedProviderPreset: { type: "string" },
+      checks: {
+        type: "array",
+        items: { $ref: "#/components/schemas/AuthProviderConnectionTestCheck" },
+      },
+      notes: stringArray,
+    },
+  },
+};
+
+function authProviderSettingSummarySchema(
+  source: "default",
+  extraSources: Array<"global" | "org">,
+) {
+  return {
+    type: "object",
+    required: [
+      "providerId",
+      "enabled",
+      "displayName",
+      "loginOrder",
+      "allowedEmailDomains",
+      "orgOverridesAllowed",
+      "secretRefConfigured",
+      "source",
+    ],
+    additionalProperties: false,
+    properties: {
+      ...authProviderCommonSettingProperties(),
+      enabled: { type: "boolean" },
+      displayName: { type: "string" },
+      loginOrder: { type: "integer" },
+      allowedEmailDomains: stringArray,
+      orgOverridesAllowed: { type: "boolean" },
+      source: { type: "string", enum: [source, ...extraSources] },
+    },
+  };
+}
+
+function authProviderOrgOverrideSummarySchema() {
+  return {
+    type: "object",
+    required: ["providerId", "secretRefConfigured", "source"],
+    additionalProperties: false,
+    properties: {
+      ...authProviderCommonSettingProperties(),
+      enabled: { type: "boolean" },
+      displayName: { type: "string" },
+      loginOrder: { type: "integer" },
+      allowedEmailDomains: stringArray,
+      source: { type: "string", enum: ["org"] },
+    },
+  };
+}
+
+function authProviderCommonSettingProperties() {
+  return {
+    providerId: authProviderId,
+    disabledReason: { type: "string" },
+    ldap: { $ref: "#/components/schemas/AuthProviderLdapConnectionSummary" },
+    oauth2: {
+      $ref: "#/components/schemas/AuthProviderOAuth2ConnectionSummary",
+    },
+    oidc: { $ref: "#/components/schemas/AuthProviderOidcConnectionSummary" },
+    saml: { $ref: "#/components/schemas/AuthProviderSamlConnectionSummary" },
+    secretRefConfigured: { type: "boolean" },
+    secretRefScheme: { type: "string" },
+  };
+}

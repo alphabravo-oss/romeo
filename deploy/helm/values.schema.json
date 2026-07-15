@@ -1,0 +1,1012 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "global": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "production": { "type": "boolean" }
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["external", "cloudnativepg", "disabled"]
+        },
+        "databaseUrlSecret": {
+          "$ref": "#/$defs/secretKeyRef"
+        },
+        "cloudnativepg": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "clusterName": { "type": "string" },
+            "databaseUrlSecret": {
+              "$ref": "#/$defs/secretKeyRef"
+            }
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "existingSecret": { "type": "string" },
+        "create": { "type": "boolean" }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "useHelmHook": { "type": "boolean" },
+        "backoffLimit": { "type": "integer", "minimum": 0 },
+        "ttlSecondsAfterFinished": { "type": "integer", "minimum": 0 },
+        "activeDeadlineSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "APP_ORIGIN": {
+          "type": "string",
+          "pattern": "^https?://.+$"
+        },
+        "REPOSITORY_DRIVER": {
+          "type": "string",
+          "enum": ["postgres"]
+        },
+        "OBJECT_STORE_DRIVER": {
+          "type": "string",
+          "enum": ["s3"]
+        },
+        "DATA_CONNECTOR_EXECUTION_DRIVER": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "website-fetch",
+            "github-fetch",
+            "s3-fetch",
+            "atlassian-fetch",
+            "notion-fetch",
+            "linear-fetch",
+            "slack-fetch",
+            "managed-fetch"
+          ]
+        },
+        "DATA_CONNECTOR_EGRESS_POLICY": {
+          "type": "string",
+          "enum": ["allow_public", "require_allowlist"]
+        },
+        "DATA_CONNECTOR_FETCH_ALLOWED_HOSTS": {
+          "type": "string"
+        },
+        "DATA_CONNECTOR_FETCH_MAX_BYTES": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "DATA_CONNECTOR_FETCH_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "DATA_CONNECTOR_LIVE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "DATA_CONNECTOR_WORKER_ENABLED": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "DATA_CONNECTOR_NETWORK_POLICY_ENABLED": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "NOTIFICATION_ADAPTER_LIVE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "VOICE_PROVIDER_LIVE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "TOOL_DISPATCH_LIVE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "TOOL_DISPATCH_WORKER_ENABLED": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "TOOL_DISPATCH_NETWORK_POLICY_ENABLED": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "KNOWLEDGE_EXTRACTION_DRIVER": {
+          "type": "string",
+          "enum": ["disabled", "local-pdftotext", "local-documents"]
+        },
+        "KNOWLEDGE_EXTRACTION_MAX_BYTES": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "KNOWLEDGE_EXTRACTION_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "PDFTOTEXT_PATH": {
+          "type": "string",
+          "minLength": 1
+        },
+        "SECRET_RESOLVER_DRIVER": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "env",
+            "vault",
+            "aws-sm",
+            "gcp-sm",
+            "azure-kv",
+            "cloud"
+          ]
+        },
+        "VAULT_ADDR": {
+          "type": "string"
+        },
+        "VAULT_NAMESPACE": {
+          "type": "string"
+        },
+        "VAULT_KV_MOUNT": {
+          "type": "string",
+          "minLength": 1
+        },
+        "VAULT_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "AWS_REGION": {
+          "type": "string"
+        },
+        "AWS_SECRET_MANAGER_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "GCP_SECRET_MANAGER_PROJECT": {
+          "type": "string"
+        },
+        "GCP_SECRET_MANAGER_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "AZURE_KEY_VAULT_URL": {
+          "type": "string"
+        },
+        "AZURE_KEY_VAULT_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "NOTIFICATION_DELIVERY_DRIVER": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "configured",
+            "fcm-mobile-push",
+            "pagerduty-events",
+            "resend-email",
+            "slack-webhook",
+            "smtp-email",
+            "teams-webhook",
+            "webhook"
+          ]
+        },
+        "NOTIFICATION_EMAIL_DELIVERY_DRIVER": {
+          "type": "string",
+          "enum": ["resend", "smtp"]
+        },
+        "NOTIFICATION_EMAIL_FROM": {
+          "type": "string"
+        },
+        "NOTIFICATION_FCM_BASE_URL": {
+          "type": "string",
+          "pattern": "^https?://.+$"
+        },
+        "NOTIFICATION_FCM_PROJECT_ID": {
+          "type": "string"
+        },
+        "NOTIFICATION_FCM_SERVICE_ACCOUNT_REF": {
+          "type": "string"
+        },
+        "NOTIFICATION_FCM_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "NOTIFICATION_FCM_TOKEN_URL": {
+          "type": "string",
+          "pattern": "^https?://.+$"
+        },
+        "NOTIFICATION_PAGERDUTY_EVENTS_URL": {
+          "type": "string",
+          "pattern": "^https?://.+$"
+        },
+        "NOTIFICATION_PAGERDUTY_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "NOTIFICATION_RESEND_BASE_URL": {
+          "type": "string",
+          "pattern": "^https?://.+$"
+        },
+        "NOTIFICATION_RESEND_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "NOTIFICATION_SLACK_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "NOTIFICATION_SMTP_HOST": {
+          "type": "string"
+        },
+        "NOTIFICATION_SMTP_PORT": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 65535 },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"
+            }
+          ]
+        },
+        "NOTIFICATION_SMTP_SECURE": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "NOTIFICATION_SMTP_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "NOTIFICATION_TEAMS_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "VOICE_PROVIDER_DRIVER": {
+          "type": "string",
+          "enum": ["disabled", "dev", "openai-compatible"]
+        },
+        "VOICE_OPENAI_BASE_URL": {
+          "type": "string",
+          "pattern": "^https?://.+$"
+        },
+        "VOICE_OPENAI_MODEL": {
+          "type": "string",
+          "minLength": 1
+        },
+        "VOICE_OPENAI_TRANSCRIPTION_MODEL": {
+          "type": "string",
+          "minLength": 1
+        },
+        "VOICE_OPENAI_VOICES": {
+          "type": "string",
+          "minLength": 1
+        },
+        "VOICE_OPENAI_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "S3_ENDPOINT": {
+          "type": "string"
+        },
+        "S3_BUCKET": {
+          "type": "string",
+          "minLength": 1
+        },
+        "S3_REGION": {
+          "type": "string",
+          "minLength": 1
+        },
+        "BILLING_STRIPE_WEBHOOK_TOLERANCE_SECONDS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "BILLING_GENERIC_WEBHOOK_TOLERANCE_SECONDS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "BILLING_WEBHOOK_ORG_ID": {
+          "type": "string",
+          "minLength": 1
+        },
+        "OIDC_ISSUER_URL": {
+          "type": "string"
+        },
+        "OIDC_CLIENT_ID": {
+          "type": "string"
+        },
+        "OIDC_GROUP_CLAIM": {
+          "type": "string",
+          "minLength": 1
+        },
+        "OIDC_ADMIN_GROUPS": {
+          "type": "string"
+        },
+        "OIDC_GROUP_MAP": {
+          "type": "string"
+        },
+        "OIDC_WORKSPACE_GROUP_MAP": {
+          "type": "string"
+        },
+        "OIDC_WORKSPACE_GROUP_PREFIX": {
+          "type": "string"
+        },
+        "DEV_SEEDED_LOGIN": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "POSTGRES_POOL_MAX": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "REQUEST_BODY_MAX_BYTES": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 250000000 },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,7}|1[0-9]{8}|2[0-4][0-9]{7}|250000000)$"
+            }
+          ]
+        },
+        "FILE_INLINE_MAX_BYTES": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 250000000 },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,7}|1[0-9]{8}|2[0-4][0-9]{7}|250000000)$"
+            }
+          ]
+        },
+        "FILE_DIRECT_UPLOAD_MAX_BYTES": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 1000000000 },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,8}|1000000000)$"
+            }
+          ]
+        },
+        "FILE_RESUMABLE_UPLOAD_MAX_BYTES": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 5000000000 },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,8}|[1-4][0-9]{9}|5000000000)$"
+            }
+          ]
+        },
+        "MESSAGE_ATTACHMENT_MAX_BYTES": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 100000000 },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,7}|100000000)$"
+            }
+          ]
+        },
+        "HTTP_RATE_LIMIT_DRIVER": {
+          "type": "string",
+          "enum": ["disabled", "memory", "valkey"]
+        },
+        "HTTP_RATE_LIMIT_KEY_PREFIX": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:._-]+$"
+        },
+        "HTTP_RATE_LIMIT_WINDOW_SECONDS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 86400 },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)$"
+            }
+          ]
+        },
+        "HTTP_RATE_LIMIT_AUTH_MAX": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 100000 },
+            { "type": "string", "pattern": "^([1-9][0-9]{0,4}|100000)$" }
+          ]
+        },
+        "HTTP_RATE_LIMIT_PUBLIC_MAX": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 100000 },
+            { "type": "string", "pattern": "^([1-9][0-9]{0,4}|100000)$" }
+          ]
+        },
+        "HTTP_RATE_LIMIT_AUTHENTICATED_MAX": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 250000 },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,4}|1[0-9]{5}|2[0-4][0-9]{4}|250000)$"
+            }
+          ]
+        },
+        "HTTP_RATE_LIMIT_WEBHOOK_MAX": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 250000 },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,4}|1[0-9]{5}|2[0-4][0-9]{4}|250000)$"
+            }
+          ]
+        },
+        "MODEL_PROVIDER_STREAM_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "MODEL_PROVIDER_RETRY_ATTEMPTS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
+          ]
+        },
+        "MODEL_PROVIDER_RETRY_BACKOFF_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
+          ]
+        },
+        "MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
+          ]
+        },
+        "MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
+          ]
+        },
+        "MODEL_PROVIDER_DISABLED_IDS": {
+          "type": "string",
+          "pattern": "^$|^[A-Za-z0-9_:-]+(,[A-Za-z0-9_:-]+)*$"
+        },
+        "MODEL_PROVIDER_FALLBACK_MODEL_ID": {
+          "type": "string",
+          "pattern": "^$|^[A-Za-z0-9_:-]+$"
+        },
+        "QUOTA_COORDINATION_DRIVER": {
+          "type": "string",
+          "enum": ["disabled", "valkey"]
+        },
+        "QUOTA_COORDINATION_KEY_PREFIX": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:._-]+$"
+        },
+        "QUOTA_COORDINATION_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "EDGE_TLS_TERMINATION": {
+          "type": "string",
+          "enum": ["app", "ingress", "external_lb"]
+        },
+        "EDGE_TRUSTED_PROXY_MODE": {
+          "type": "string",
+          "enum": ["direct", "trusted_proxy"]
+        },
+        "EDGE_WAF_MODE": {
+          "type": "string",
+          "enum": ["disabled", "monitor", "block"]
+        },
+        "EDGE_ALLOWED_ORIGINS": {
+          "type": "string"
+        },
+        "EDGE_HSTS_ENABLED": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "EDGE_HSTS_MAX_AGE_SECONDS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
+          ]
+        },
+        "EDGE_HSTS_INCLUDE_SUBDOMAINS": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "EDGE_HSTS_PRELOAD": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "TENANCY_MODE": {
+          "type": "string",
+          "enum": ["single", "multi"]
+        },
+        "OPENWEBUI_COMPATIBILITY_ENABLED": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "GA_CHECKLIST_PATH": {
+          "type": "string"
+        },
+        "GA_TARGET_PREFLIGHT_PATH": {
+          "type": "string"
+        },
+        "GA_TARGET_PLAN_PATH": {
+          "type": "string"
+        },
+        "GA_TARGET_EXECUTION_PATH": {
+          "type": "string"
+        },
+        "GA_EVIDENCE_BUNDLE_PATH": {
+          "type": "string"
+        },
+        "RELEASE_PROVENANCE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "RELEASE_APPROVAL_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "RELEASE_PUBLISH_PLAN_PATH": {
+          "type": "string"
+        },
+        "RELEASE_AIRGAP_VERIFICATION_PATH": {
+          "type": "string"
+        },
+        "RELEASE_READBACK_PLAN_PATH": {
+          "type": "string"
+        },
+        "RELEASE_READBACK_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "RELEASE_READBACK_VALIDATION_PATH": {
+          "type": "string"
+        },
+        "SUPPORT_BUNDLE_PATH": {
+          "type": "string"
+        },
+        "SUPPORT_BUNDLE_REDACTION_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "CI_BRANCH_PROTECTION_PLAN_PATH": {
+          "type": "string"
+        },
+        "CI_HOSTED_RUN_VERIFICATION_PATH": {
+          "type": "string"
+        },
+        "CI_BRANCH_PROTECTION_VERIFICATION_PATH": {
+          "type": "string"
+        },
+        "IDENTITY_LIVE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "ANALYTICS_AUTHZ_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "AUDIT_INTEGRITY_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "TARGET_QUALITY_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "ALERT_FIRING_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "MIGRATION_DRILL_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "NETWORK_PARTITION_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "SECRET_ROTATION_DRILL_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "EDGE_ENFORCEMENT_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "KUBERNETES_LIVE_SMOKE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "KUBERNETES_WORKERS_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "KUBERNETES_NETWORKPOLICY_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "KUBERNETES_CLOUDNATIVEPG_DR_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "KUBERNETES_EXTERNAL_POSTGRES_DR_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "KUBERNETES_TIERED_RAG_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "KUBERNETES_LOAD_SOAK_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "KUBERNETES_KEDA_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "KUBERNETES_LOG_REDACTION_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "POSTGRES_QUERY_PLAN_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH": {
+          "type": "string"
+        },
+        "DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "TENANT_PURGE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "BILLING_OPERATIONS_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "PROVIDER_OUTAGE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "NOTIFICATION_ADAPTER_LIVE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "VOICE_PROVIDER_LIVE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "BROWSER_AUTOMATION_WORKER_ENABLED": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "BROWSER_AUTOMATION_RUNNER_URL": {
+          "type": "string"
+        },
+        "BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "BROWSER_AUTOMATION_MAX_JOBS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "BROWSER_AUTOMATION_LEASE_SECONDS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "BROWSER_AUTOMATION_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "BROWSER_AUTOMATION_MAX_BYTES": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "SCIM_ENABLED": {
+          "type": "string",
+          "enum": ["true", "false"]
+        },
+        "EXTERNAL_VECTOR_STORE_DRIVER": {
+          "type": "string",
+          "enum": ["disabled", "qdrant"]
+        },
+        "QDRANT_URL": {
+          "type": "string",
+          "pattern": "^$|^https?://.+$"
+        },
+        "QDRANT_COLLECTION": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "QDRANT_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "VECTOR_NAMESPACE_POLICY": {
+          "type": "string",
+          "enum": ["none", "org", "workspace", "knowledge_base"]
+        },
+        "VECTOR_PARTITIONING_POLICY": {
+          "type": "string",
+          "enum": ["none", "org", "workspace", "knowledge_base"]
+        },
+        "VECTOR_ISOLATION_MODE": {
+          "type": "string",
+          "enum": [
+            "shared_row_scope",
+            "pgvector_partitioned_by_org",
+            "external_namespace_per_org",
+            "external_collection_per_org",
+            "dedicated_vector_store_per_org"
+          ]
+        },
+        "PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "QDRANT_LIVE_EVIDENCE_PATH": {
+          "type": "string"
+        },
+        "DELEGATED_OAUTH_GITHUB_CLIENT_ID": {
+          "type": "string"
+        },
+        "DELEGATED_OAUTH_GITHUB_SCOPES": {
+          "type": "string",
+          "pattern": "^$|^[A-Za-z0-9_:./-]+(,[A-Za-z0-9_:./-]+)*$"
+        },
+        "TOOL_OPERATION_EXECUTION_DRIVER": {
+          "type": "string",
+          "enum": ["disabled", "http-fetch"]
+        },
+        "TOOL_OPERATION_FETCH_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "TOOL_OPERATION_FETCH_MAX_BYTES": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "TOOL_DISPATCH_PAYLOAD_STORE_DRIVER": {
+          "type": "string",
+          "enum": ["disabled", "object-store"]
+        },
+        "TOOL_DISPATCH_PAYLOAD_STORE_PREFIX": {
+          "type": "string",
+          "minLength": 1
+        },
+        "DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 5 },
+            { "type": "string", "pattern": "^[0-5]$" }
+          ]
+        },
+        "DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 60000 },
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,3}|[1-5][0-9]{4}|60000)$"
+            }
+          ]
+        }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minReplicas": { "type": "integer", "minimum": 1 },
+        "maxReplicas": { "type": "integer", "minimum": 1 },
+        "targetCPUUtilizationPercentage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "targetMemoryUtilizationPercentage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      }
+    },
+    "evidenceMount": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        },
+        "mountPath": {
+          "type": "string",
+          "minLength": 2,
+          "pattern": "^/.*$"
+        },
+        "configMapName": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+        },
+        "secretName": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+        }
+      }
+    },
+    "workers": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "apiKeySecret": {
+          "$ref": "#/$defs/secretKeyRef"
+        },
+        "dataConnectorSync": { "$ref": "#/$defs/workerToggle" },
+        "workflowResume": { "$ref": "#/$defs/workerToggle" },
+        "webhookRetry": { "$ref": "#/$defs/workerToggle" },
+        "notificationRetry": { "$ref": "#/$defs/workerToggle" },
+        "retentionEnforce": { "$ref": "#/$defs/workerToggle" },
+        "billingEntitlementReconcile": { "$ref": "#/$defs/workerToggle" },
+        "billingLifecycleEnforce": { "$ref": "#/$defs/workerToggle" },
+        "toolDispatch": {
+          "allOf": [{ "$ref": "#/$defs/workerToggle" }],
+          "properties": {
+            "maxJobs": { "type": "integer", "minimum": 1 },
+            "leaseSeconds": { "type": "integer", "minimum": 1 },
+            "timeoutMs": { "type": "integer", "minimum": 1 },
+            "maxBytes": { "type": "integer", "minimum": 1 },
+            "allowPrivateNetwork": { "type": "boolean" },
+            "secretResolverDriver": {
+              "type": "string",
+              "enum": [
+                "disabled",
+                "env",
+                "vault",
+                "aws-sm",
+                "gcp-sm",
+                "azure-kv",
+                "cloud"
+              ]
+            },
+            "payloadSecret": {
+              "$ref": "#/$defs/secretKeyRef"
+            },
+            "networkPolicy": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "egress": { "type": "array" }
+              }
+            }
+          }
+        },
+        "browserAutomation": {
+          "allOf": [{ "$ref": "#/$defs/workerToggle" }],
+          "properties": {
+            "runnerUrl": {
+              "type": "string"
+            },
+            "maxJobs": { "type": "integer", "minimum": 1 },
+            "leaseSeconds": { "type": "integer", "minimum": 1 },
+            "timeoutMs": { "type": "integer", "minimum": 1 },
+            "maxBytes": { "type": "integer", "minimum": 1 },
+            "networkPolicy": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "egress": { "type": "array" }
+              }
+            }
+          }
+        },
+        "knowledgeExtraction": {
+          "allOf": [{ "$ref": "#/$defs/workerToggle" }],
+          "properties": {
+            "knowledgeBaseId": { "type": "string" },
+            "maxSources": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "voiceCatalogSync": { "$ref": "#/$defs/workerToggle" }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "schedule": { "type": "string" },
+        "retentionDays": { "type": "integer", "minimum": 0 },
+        "uploadTimeoutMs": { "type": "integer", "minimum": 1 },
+        "uploadUrlSecret": {
+          "$ref": "#/$defs/secretKeyRef"
+        },
+        "manifestUploadUrlSecret": {
+          "$ref": "#/$defs/secretKeyRef"
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "ingressFrom": { "type": "array" },
+        "egress": { "type": "array" }
+      }
+    }
+  },
+  "$defs": {
+    "secretKeyRef": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "key": { "type": "string" }
+      }
+    },
+    "workerToggle": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "schedule": { "type": "string" }
+      }
+    }
+  }
+}

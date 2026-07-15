@@ -1,0 +1,9 @@
+[project]
+name = "romeo-client"
+version = "0.1.0"
+description = "Generated Python client for the Romeo API"
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

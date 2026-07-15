@@ -1,0 +1,76 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-postgres-backup
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres-backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: postgres-backup
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: postgres-backup
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["/bin/sh", "-lc"]
+              args:
+                - |
+                  set -eu
+                  pnpm backup:postgres -- \
+                    --output /tmp/romeo-postgres.dump \
+                    --manifest-output /tmp/romeo-postgres.dump.manifest.json \
+                    --retention-days "${POSTGRES_BACKUP_RETENTION_DAYS:-30}" \
+                    --upload-timeout-ms "${POSTGRES_BACKUP_UPLOAD_TIMEOUT_MS:-30000}"
+              env:
+                {{- include "romeo.nodeWritableEnv" . | nindent 16 }}
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "romeo.databaseUrlSecretName" . }}
+                      key: {{ include "romeo.databaseUrlSecretKey" . }}
+                - name: POSTGRES_BACKUP_RETENTION_DAYS
+                  value: {{ .Values.backup.retentionDays | quote }}
+                - name: POSTGRES_BACKUP_UPLOAD_TIMEOUT_MS
+                  value: {{ .Values.backup.uploadTimeoutMs | quote }}
+                {{- if .Values.backup.uploadUrlSecret.name }}
+                - name: POSTGRES_BACKUP_UPLOAD_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.uploadUrlSecret.name }}
+                      key: {{ .Values.backup.uploadUrlSecret.key }}
+                {{- end }}
+                {{- if .Values.backup.manifestUploadUrlSecret.name }}
+                - name: POSTGRES_BACKUP_MANIFEST_UPLOAD_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.manifestUploadUrlSecret.name }}
+                      key: {{ .Values.backup.manifestUploadUrlSecret.key }}
+                {{- end }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
+{{- end }}

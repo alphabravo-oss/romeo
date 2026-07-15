@@ -1,0 +1,100 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: romeo-webhook-retry-postgres
+  labels:
+    app.kubernetes.io/name: romeo
+    app.kubernetes.io/component: webhook-retry
+spec:
+  secretTargetRef:
+    - parameter: connection
+      name: romeo-postgres
+      key: DATABASE_URL
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: romeo-webhook-retry
+  labels:
+    app.kubernetes.io/name: romeo
+    app.kubernetes.io/component: webhook-retry
+spec:
+  pollingInterval: 30
+  minReplicaCount: 0
+  maxReplicaCount: 3
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  rollout:
+    strategy: gradual
+    propagationPolicy: foreground
+  scalingStrategy:
+    strategy: default
+  jobTargetRef:
+    parallelism: 1
+    completions: 1
+    backoffLimit: 1
+    activeDeadlineSeconds: 600
+    template:
+      metadata:
+        labels:
+          app.kubernetes.io/name: romeo
+          app.kubernetes.io/component: webhook-retry
+      spec:
+        restartPolicy: Never
+        serviceAccountName: romeo-worker
+        automountServiceAccountToken: false
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          runAsGroup: 10001
+          fsGroup: 10001
+          seccompProfile:
+            type: RuntimeDefault
+        containers:
+          - name: webhook-retry
+            image: romeo/app:0.1.0
+            imagePullPolicy: IfNotPresent
+            command:
+              - pnpm
+              - --filter
+              - "@romeo/cli"
+              - start
+              - --
+              - workers
+              - webhook-retry
+              - --once
+            env:
+              - name: ROMEO_BASE_URL
+                value: http://romeo:3000
+              - name: ROMEO_API_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: romeo-worker-api-key
+                    key: ROMEO_API_KEY
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: false
+              capabilities:
+                drop:
+                  - ALL
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+  triggers:
+    - type: postgresql
+      authenticationRef:
+        name: romeo-webhook-retry-postgres
+      metadata:
+        query: >-
+          SELECT count(*)
+          FROM webhook_deliveries
+          WHERE status = 'failed'
+            AND next_attempt_at IS NOT NULL
+            AND next_attempt_at <= now()
+            AND attempt_count < 5
+        targetQueryValue: "1"
+        activationTargetQueryValue: "0"

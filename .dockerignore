@@ -1,0 +1,17 @@
+.git
+.turbo
+.DS_Store
+
+node_modules
+**/node_modules
+
+.output
+**/.output
+dist
+**/dist
+coverage
+**/coverage
+
+backups
+tmp
+*.log

@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: romeo-postgres-backup
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup
+              image: romeo/ops:0.1.0
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - secretRef:
+                    name: romeo-postgres-backup
+              command: ["/bin/sh", "-lc"]
+              args:
+                - |
+                  set -eu
+                  pnpm backup:postgres -- \
+                    --output /tmp/romeo-postgres.dump \
+                    --manifest-output /tmp/romeo-postgres.dump.manifest.json \
+                    --retention-days "${POSTGRES_BACKUP_RETENTION_DAYS:-30}" \
+                    --upload-timeout-ms "${POSTGRES_BACKUP_UPLOAD_TIMEOUT_MS:-30000}"
+              volumeMounts:
+                - name: work
+                  mountPath: /tmp
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 512Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+          volumes:
+            - name: work
+              emptyDir: {}

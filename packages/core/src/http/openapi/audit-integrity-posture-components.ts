@@ -1,0 +1,228 @@
+export const auditIntegrityPostureSchemas = {
+  AuditIntegrityPostureReport: {
+    type: "object",
+    required: [
+      "schema",
+      "generatedAt",
+      "orgId",
+      "status",
+      "evidence",
+      "checks",
+      "export",
+      "immutability",
+      "retention",
+      "timeSync",
+      "checksumChain",
+      "redaction",
+      "warnings",
+    ],
+    properties: {
+      schema: {
+        type: "string",
+        enum: ["romeo.audit-integrity-posture.v1"],
+      },
+      generatedAt: { type: "string", format: "date-time" },
+      orgId: { type: "string" },
+      status: { type: "string", enum: ["attention_required", "ready"] },
+      evidence: {
+        type: "object",
+        required: ["configured", "source", "status", "failureCodes"],
+        properties: {
+          configured: { type: "boolean" },
+          source: {
+            type: "string",
+            enum: ["configured_file", "not_configured"],
+          },
+          status: {
+            type: "string",
+            enum: [
+              "failed",
+              "invalid",
+              "not_configured",
+              "planned",
+              "satisfied",
+            ],
+          },
+          schemaVersion: {
+            type: "string",
+            enum: ["romeo.audit-integrity-evidence.v1"],
+          },
+          generatedAt: { type: "string", format: "date-time" },
+          evidenceStatus: {
+            type: "string",
+            enum: ["failed", "passed", "planned", "unknown"],
+          },
+          mode: { type: "string", enum: ["dry-run", "live", "unknown"] },
+          deployment: {
+            type: "string",
+            enum: ["compose", "kubernetes", "target", "unknown"],
+          },
+          invalidReason: {
+            type: "string",
+            enum: ["invalid_json", "read_failed", "schema_mismatch"],
+          },
+          failureCodes: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+        additionalProperties: false,
+      },
+      checks: {
+        type: "object",
+        required: [
+          "total",
+          "requiredTotal",
+          "requiredPresent",
+          "missingRequired",
+        ],
+        properties: {
+          total: { type: "integer", minimum: 0 },
+          requiredTotal: { type: "integer", minimum: 0 },
+          requiredPresent: { type: "integer", minimum: 0 },
+          missingRequired: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: [
+                "audit_export_configured",
+                "siem_delivery_readback",
+                "immutable_storage_reviewed",
+                "retention_policy_reviewed",
+                "time_sync_reviewed",
+                "checksum_chain_verified",
+                "audit_evidence_redaction_flags",
+              ],
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+      export: {
+        type: "object",
+        required: [
+          "enabled",
+          "destinationType",
+          "successfulDeliveryCount",
+          "failedDeliveryCount",
+          "lastDeliveryStatus",
+        ],
+        properties: {
+          enabled: { type: "boolean" },
+          destinationType: {
+            type: "string",
+            enum: ["both", "none", "object_store", "siem", "unknown"],
+          },
+          successfulDeliveryCount: { type: "integer", minimum: 0 },
+          failedDeliveryCount: { type: "integer", minimum: 0 },
+          lastDeliveryStatus: {
+            type: "string",
+            enum: ["failed", "passed", "unknown"],
+          },
+        },
+        additionalProperties: false,
+      },
+      immutability: {
+        type: "object",
+        required: [
+          "wormStorageConfigured",
+          "retentionLockConfigured",
+          "deleteProtectionReviewed",
+        ],
+        properties: {
+          wormStorageConfigured: { type: "boolean" },
+          retentionLockConfigured: { type: "boolean" },
+          immutableWindowDays: { type: "number", minimum: 0 },
+          deleteProtectionReviewed: { type: "boolean" },
+        },
+        additionalProperties: false,
+      },
+      retention: {
+        type: "object",
+        required: ["policyReviewed"],
+        properties: {
+          auditLogRetentionDays: { type: "number", minimum: 0 },
+          exportRetentionDays: { type: "number", minimum: 0 },
+          policyReviewed: { type: "boolean" },
+        },
+        additionalProperties: false,
+      },
+      timeSync: {
+        type: "object",
+        required: [
+          "sourceConfigured",
+          "checkedHostCount",
+          "driftWithinThreshold",
+        ],
+        properties: {
+          sourceConfigured: { type: "boolean" },
+          checkedHostCount: { type: "integer", minimum: 0 },
+          maxClockSkewMs: { type: "number", minimum: 0 },
+          driftWithinThreshold: { type: "boolean" },
+        },
+        additionalProperties: false,
+      },
+      checksumChain: {
+        type: "object",
+        required: [
+          "checked",
+          "status",
+          "verifiedRecordCount",
+          "brokenLinkCount",
+        ],
+        properties: {
+          checked: { type: "boolean" },
+          status: { type: "string", enum: ["failed", "passed", "unknown"] },
+          verifiedRecordCount: { type: "integer", minimum: 0 },
+          brokenLinkCount: { type: "integer", minimum: 0 },
+        },
+        additionalProperties: false,
+      },
+      redaction: {
+        type: "object",
+        required: [
+          "evidenceFileBodyReturned",
+          "rawActorIdentifiersReturned",
+          "rawAuditMetadataReturned",
+          "rawDestinationReturned",
+          "rawEvidencePathsReturned",
+          "rawSiemPayloadsReturned",
+          "secretValuesReturned",
+        ],
+        properties: {
+          evidenceFileBodyReturned: { type: "boolean", enum: [false] },
+          rawActorIdentifiersReturned: { type: "boolean", enum: [false] },
+          rawAuditMetadataReturned: { type: "boolean", enum: [false] },
+          rawDestinationReturned: { type: "boolean", enum: [false] },
+          rawEvidencePathsReturned: { type: "boolean", enum: [false] },
+          rawSiemPayloadsReturned: { type: "boolean", enum: [false] },
+          secretValuesReturned: { type: "boolean", enum: [false] },
+        },
+        additionalProperties: false,
+      },
+      warnings: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: [
+            "audit_integrity_chain_missing",
+            "audit_integrity_delivery_missing",
+            "audit_integrity_deployment_invalid",
+            "audit_integrity_evidence_failed",
+            "audit_integrity_evidence_invalid",
+            "audit_integrity_evidence_not_configured",
+            "audit_integrity_evidence_not_live",
+            "audit_integrity_export_missing",
+            "audit_integrity_failure_codes_present",
+            "audit_integrity_immutability_missing",
+            "audit_integrity_redaction_missing",
+            "audit_integrity_required_checks_missing",
+            "audit_integrity_retention_missing",
+            "audit_integrity_time_sync_missing",
+          ],
+        },
+      },
+    },
+    additionalProperties: false,
+  },
+};

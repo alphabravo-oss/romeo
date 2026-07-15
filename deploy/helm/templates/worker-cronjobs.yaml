@@ -1,0 +1,594 @@
+{{- if .Values.workers.dataConnectorSync.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-data-connector-sync
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: data-connector-sync
+spec:
+  schedule: {{ .Values.workers.dataConnectorSync.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: data-connector-sync
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: data-connector-sync
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["/bin/sh", "-lc"]
+              args:
+                - |
+                  set -eu
+                  args="--once --max-connectors ${DATA_CONNECTOR_SYNC_MAX_CONNECTORS:-10}"
+                  if [ -n "${DATA_CONNECTOR_SYNC_WORKSPACE_ID:-}" ]; then
+                    args="$args --workspace ${DATA_CONNECTOR_SYNC_WORKSPACE_ID}"
+                  fi
+                  pnpm --filter @romeo/cli start -- workers data-connector-sync $args
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+                - name: DATA_CONNECTOR_SYNC_MAX_CONNECTORS
+                  value: {{ .Values.workers.dataConnectorSync.maxConnectors | quote }}
+                - name: DATA_CONNECTOR_SYNC_WORKSPACE_ID
+                  value: {{ .Values.workers.dataConnectorSync.workspaceId | quote }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.workers.dataConnectorSync.resources | nindent 16 }}
+{{- end }}
+{{- if .Values.workers.workflowResume.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-workflow-resume
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workflow-resume
+spec:
+  schedule: {{ .Values.workers.workflowResume.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: workflow-resume
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: workflow-resume
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["/bin/sh", "-lc"]
+              args:
+                - |
+                  set -eu
+                  args="--once --max-workflows ${WORKFLOW_RESUME_MAX_WORKFLOWS:-10} --max-runs ${WORKFLOW_RESUME_MAX_RUNS:-10}"
+                  if [ -n "${WORKFLOW_RESUME_WORKSPACE_ID:-}" ]; then
+                    args="$args --workspace ${WORKFLOW_RESUME_WORKSPACE_ID}"
+                  fi
+                  pnpm --filter @romeo/cli start -- workers workflow-resume $args
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+                - name: WORKFLOW_RESUME_MAX_WORKFLOWS
+                  value: {{ .Values.workers.workflowResume.maxWorkflows | quote }}
+                - name: WORKFLOW_RESUME_MAX_RUNS
+                  value: {{ .Values.workers.workflowResume.maxRuns | quote }}
+                - name: WORKFLOW_RESUME_WORKSPACE_ID
+                  value: {{ .Values.workers.workflowResume.workspaceId | quote }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.workers.workflowResume.resources | nindent 16 }}
+{{- end }}
+{{- if .Values.workers.webhookRetry.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-webhook-retry
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webhook-retry
+spec:
+  schedule: {{ .Values.workers.webhookRetry.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: webhook-retry
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: webhook-retry
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "webhook-retry", "--once"]
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.workers.webhookRetry.resources | nindent 16 }}
+{{- end }}
+{{- if .Values.workers.notificationRetry.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-notification-retry
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: notification-retry
+spec:
+  schedule: {{ .Values.workers.notificationRetry.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: notification-retry
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: notification-retry
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "notification-retry", "--once"]
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.workers.notificationRetry.resources | nindent 16 }}
+{{- end }}
+{{- if .Values.workers.retentionEnforce.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-retention-enforce
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: retention-enforce
+spec:
+  schedule: {{ .Values.workers.retentionEnforce.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: retention-enforce
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: retention-enforce
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "retention-enforce", "--once"]
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.workers.retentionEnforce.resources | nindent 16 }}
+{{- end }}
+{{- if .Values.workers.billingEntitlementReconcile.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-billing-entitlement-reconcile
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: billing-entitlement-reconcile
+spec:
+  schedule: {{ .Values.workers.billingEntitlementReconcile.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: billing-entitlement-reconcile
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: billing-entitlement-reconcile
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "billing-entitlement-reconcile", "--once"]
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.workers.billingEntitlementReconcile.resources | nindent 16 }}
+{{- end }}
+{{- if .Values.workers.billingLifecycleEnforce.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-billing-lifecycle-enforce
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: billing-lifecycle-enforce
+spec:
+  schedule: {{ .Values.workers.billingLifecycleEnforce.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: billing-lifecycle-enforce
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: billing-lifecycle-enforce
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "billing-lifecycle-enforce", "--once"]
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.workers.billingLifecycleEnforce.resources | nindent 16 }}
+{{- end }}
+{{- if .Values.workers.toolDispatch.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-tool-dispatch
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tool-dispatch
+spec:
+  schedule: {{ .Values.workers.toolDispatch.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: tool-dispatch
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: tool-dispatch
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["/bin/sh", "-lc"]
+              args:
+                - |
+                  set -eu
+                  args="--once --max-jobs ${TOOL_DISPATCH_MAX_JOBS:-10} --lease-seconds ${TOOL_DISPATCH_LEASE_SECONDS:-300} --timeout-ms ${TOOL_DISPATCH_TIMEOUT_MS:-10000} --max-bytes ${TOOL_DISPATCH_MAX_BYTES:-1000000}"
+                  args="$args --secret-resolver ${TOOL_DISPATCH_SECRET_RESOLVER_DRIVER:-disabled}"
+                  payload="/var/run/romeo-tool-dispatch/${TOOL_DISPATCH_PAYLOAD_KEY:-payloads.json}"
+                  if [ -f "$payload" ]; then
+                    args="$args --payload-file $payload"
+                  fi
+                  if [ "${TOOL_DISPATCH_ALLOW_PRIVATE_NETWORK:-false}" = "true" ]; then
+                    args="$args --allow-private-network"
+                  fi
+                  pnpm --filter @romeo/cli start -- workers tool-dispatch $args
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+                - name: TOOL_DISPATCH_MAX_JOBS
+                  value: {{ .Values.workers.toolDispatch.maxJobs | quote }}
+                - name: TOOL_DISPATCH_LEASE_SECONDS
+                  value: {{ .Values.workers.toolDispatch.leaseSeconds | quote }}
+                - name: TOOL_DISPATCH_TIMEOUT_MS
+                  value: {{ .Values.workers.toolDispatch.timeoutMs | quote }}
+                - name: TOOL_DISPATCH_MAX_BYTES
+                  value: {{ .Values.workers.toolDispatch.maxBytes | quote }}
+                - name: TOOL_DISPATCH_ALLOW_PRIVATE_NETWORK
+                  value: {{ .Values.workers.toolDispatch.allowPrivateNetwork | quote }}
+                - name: TOOL_DISPATCH_SECRET_RESOLVER_DRIVER
+                  value: {{ .Values.workers.toolDispatch.secretResolverDriver | quote }}
+                - name: TOOL_DISPATCH_PAYLOAD_KEY
+                  value: {{ .Values.workers.toolDispatch.payloadSecret.key | quote }}
+                - name: VAULT_ADDR
+                  value: {{ .Values.env.VAULT_ADDR | quote }}
+                - name: VAULT_NAMESPACE
+                  value: {{ .Values.env.VAULT_NAMESPACE | quote }}
+                - name: VAULT_KV_MOUNT
+                  value: {{ .Values.env.VAULT_KV_MOUNT | quote }}
+                - name: VAULT_TIMEOUT_MS
+                  value: {{ .Values.env.VAULT_TIMEOUT_MS | quote }}
+                - name: AWS_REGION
+                  value: {{ .Values.env.AWS_REGION | quote }}
+                - name: AWS_SECRET_MANAGER_TIMEOUT_MS
+                  value: {{ .Values.env.AWS_SECRET_MANAGER_TIMEOUT_MS | quote }}
+                - name: GCP_SECRET_MANAGER_PROJECT
+                  value: {{ .Values.env.GCP_SECRET_MANAGER_PROJECT | quote }}
+                - name: GCP_SECRET_MANAGER_TIMEOUT_MS
+                  value: {{ .Values.env.GCP_SECRET_MANAGER_TIMEOUT_MS | quote }}
+                - name: AZURE_KEY_VAULT_URL
+                  value: {{ .Values.env.AZURE_KEY_VAULT_URL | quote }}
+                - name: AZURE_KEY_VAULT_TIMEOUT_MS
+                  value: {{ .Values.env.AZURE_KEY_VAULT_TIMEOUT_MS | quote }}
+                {{- if or .Values.secrets.existingSecret .Values.secrets.create }}
+                - name: VAULT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "romeo.secretName" . }}
+                      key: VAULT_TOKEN
+                      optional: true
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "romeo.secretName" . }}
+                      key: AWS_ACCESS_KEY_ID
+                      optional: true
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "romeo.secretName" . }}
+                      key: AWS_SECRET_ACCESS_KEY
+                      optional: true
+                - name: AWS_SESSION_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "romeo.secretName" . }}
+                      key: AWS_SESSION_TOKEN
+                      optional: true
+                - name: GCP_ACCESS_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "romeo.secretName" . }}
+                      key: GCP_ACCESS_TOKEN
+                      optional: true
+                - name: AZURE_ACCESS_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "romeo.secretName" . }}
+                      key: AZURE_ACCESS_TOKEN
+                      optional: true
+                {{- end }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              {{- if .Values.workers.toolDispatch.payloadSecret.name }}
+              volumeMounts:
+                - name: tool-dispatch-payloads
+                  mountPath: /var/run/romeo-tool-dispatch
+                  readOnly: true
+              {{- end }}
+              resources:
+                {{- toYaml .Values.workers.toolDispatch.resources | nindent 16 }}
+          {{- if .Values.workers.toolDispatch.payloadSecret.name }}
+          volumes:
+            - name: tool-dispatch-payloads
+              secret:
+                secretName: {{ .Values.workers.toolDispatch.payloadSecret.name | quote }}
+                items:
+                  - key: {{ .Values.workers.toolDispatch.payloadSecret.key | quote }}
+                    path: {{ .Values.workers.toolDispatch.payloadSecret.key | quote }}
+          {{- end }}
+{{- end }}
+{{- if .Values.workers.browserAutomation.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-browser-automation
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: browser-automation
+spec:
+  schedule: {{ .Values.workers.browserAutomation.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: browser-automation
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: browser-automation
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["/bin/sh", "-lc"]
+              args:
+                - |
+                  set -eu
+                  pnpm --filter @romeo/cli start -- workers browser-automation --once --runner-url "${BROWSER_AUTOMATION_RUNNER_URL}" --max-jobs "${BROWSER_AUTOMATION_MAX_JOBS:-5}" --lease-seconds "${BROWSER_AUTOMATION_LEASE_SECONDS:-300}" --timeout-ms "${BROWSER_AUTOMATION_TIMEOUT_MS:-30000}" --max-bytes "${BROWSER_AUTOMATION_MAX_BYTES:-20000}"
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+                - name: BROWSER_AUTOMATION_RUNNER_URL
+                  value: {{ required "workers.browserAutomation.runnerUrl is required when workers.browserAutomation.enabled=true" .Values.workers.browserAutomation.runnerUrl | quote }}
+                - name: BROWSER_AUTOMATION_MAX_JOBS
+                  value: {{ .Values.workers.browserAutomation.maxJobs | quote }}
+                - name: BROWSER_AUTOMATION_LEASE_SECONDS
+                  value: {{ .Values.workers.browserAutomation.leaseSeconds | quote }}
+                - name: BROWSER_AUTOMATION_TIMEOUT_MS
+                  value: {{ .Values.workers.browserAutomation.timeoutMs | quote }}
+                - name: BROWSER_AUTOMATION_MAX_BYTES
+                  value: {{ .Values.workers.browserAutomation.maxBytes | quote }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.workers.browserAutomation.resources | nindent 16 }}
+{{- end }}
+{{- if .Values.workers.knowledgeExtraction.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-knowledge-extraction
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: knowledge-extraction
+spec:
+  schedule: {{ .Values.workers.knowledgeExtraction.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: knowledge-extraction
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: knowledge-extraction
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["/bin/sh", "-lc"]
+              args:
+                - |
+                  set -eu
+                  pnpm --filter @romeo/cli start -- workers knowledge-extraction --kb "${KNOWLEDGE_EXTRACTION_KB_ID}" --once --max-sources "${KNOWLEDGE_EXTRACTION_MAX_SOURCES:-10}"
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+                - name: KNOWLEDGE_EXTRACTION_KB_ID
+                  value: {{ .Values.workers.knowledgeExtraction.knowledgeBaseId | quote }}
+                - name: KNOWLEDGE_EXTRACTION_MAX_SOURCES
+                  value: {{ .Values.workers.knowledgeExtraction.maxSources | quote }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                {{- toYaml .Values.workers.knowledgeExtraction.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: {{ .Values.workers.knowledgeExtraction.tmpSizeLimit }}
+{{- end }}
+{{- if .Values.workers.voiceCatalogSync.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "romeo.fullname" . }}-voice-catalog-sync
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: voice-catalog-sync
+spec:
+  schedule: {{ .Values.workers.voiceCatalogSync.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            {{- include "romeo.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: voice-catalog-sync
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
+          containers:
+            - name: voice-catalog-sync
+              image: {{ include "romeo.workerImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "voice-catalog-sync", "--once"]
+              env:
+                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+              securityContext:
+                {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              resources:
+                {{- toYaml .Values.workers.voiceCatalogSync.resources | nindent 16 }}
+{{- end }}

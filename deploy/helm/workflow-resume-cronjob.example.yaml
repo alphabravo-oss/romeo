@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: romeo-workflow-resume
+spec:
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: workflow-resume
+              image: romeo/ops:0.1.0
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - secretRef:
+                    name: romeo-workflow-resume
+              command: ["/bin/sh", "-lc"]
+              args:
+                - |
+                  set -eu
+                  args="--once --max-workflows ${WORKFLOW_RESUME_MAX_WORKFLOWS:-10} --max-runs ${WORKFLOW_RESUME_MAX_RUNS:-10}"
+                  if [ -n "${WORKFLOW_RESUME_WORKSPACE_ID:-}" ]; then
+                    args="$args --workspace ${WORKFLOW_RESUME_WORKSPACE_ID}"
+                  fi
+                  pnpm --filter @romeo/cli start -- workers workflow-resume $args
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi

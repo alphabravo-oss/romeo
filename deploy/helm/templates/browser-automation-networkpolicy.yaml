@@ -1,0 +1,22 @@
+{{- if and .Values.workers.browserAutomation.enabled .Values.workers.browserAutomation.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "romeo.fullname" . }}-browser-automation
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: browser-automation
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "romeo.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: browser-automation
+  policyTypes:
+    - Egress
+  egress:
+    {{- if .Values.workers.browserAutomation.networkPolicy.egress }}
+    {{- toYaml .Values.workers.browserAutomation.networkPolicy.egress | nindent 4 }}
+    {{- else }}
+    []
+    {{- end }}
+{{- end }}

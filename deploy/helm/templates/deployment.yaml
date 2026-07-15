@@ -1,0 +1,133 @@
+{{- if .Values.evidenceMount.enabled }}
+{{- if and .Values.evidenceMount.configMapName .Values.evidenceMount.secretName }}
+{{- fail "evidenceMount supports exactly one of configMapName or secretName" }}
+{{- end }}
+{{- if not (or .Values.evidenceMount.configMapName .Values.evidenceMount.secretName) }}
+{{- fail "evidenceMount.enabled requires configMapName or secretName" }}
+{{- end }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "romeo.fullname" . }}
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "romeo.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: app
+  template:
+    metadata:
+      labels:
+        {{- include "romeo.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: app
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "romeo.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: app
+          image: {{ include "romeo.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "romeo.configMapName" . }}
+            {{- if or .Values.secrets.existingSecret .Values.secrets.create }}
+            - secretRef:
+                name: {{ include "romeo.secretName" . }}
+            {{- end }}
+          env:
+            {{- include "romeo.nodeWritableEnv" . | nindent 12 }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "romeo.databaseUrlSecretName" . }}
+                  key: {{ include "romeo.databaseUrlSecretKey" . }}
+            {{- if .Values.valkey.urlSecret.name }}
+            - name: VALKEY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.valkey.urlSecret.name }}
+                  key: {{ .Values.valkey.urlSecret.key }}
+            {{- end }}
+          {{- if .Values.probes.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.evidenceMount.enabled }}
+          volumeMounts:
+            - name: {{ .Values.evidenceMount.name | quote }}
+              mountPath: {{ .Values.evidenceMount.mountPath | quote }}
+              readOnly: true
+          {{- end }}
+      {{- if .Values.evidenceMount.enabled }}
+      volumes:
+        - name: {{ .Values.evidenceMount.name | quote }}
+          {{- if .Values.evidenceMount.configMapName }}
+          configMap:
+            name: {{ .Values.evidenceMount.configMapName | quote }}
+          {{- else }}
+          secret:
+            secretName: {{ .Values.evidenceMount.secretName | quote }}
+          {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

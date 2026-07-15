@@ -1,0 +1,100 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: romeo-operational-alerts
+  labels:
+    app.kubernetes.io/name: romeo
+    app.kubernetes.io/component: monitoring
+spec:
+  groups:
+    - name: romeo.operational
+      rules:
+        - alert: RomeoOperationalExporterDown
+          expr: romeo_operational_exporter_up == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Romeo operational exporter cannot scrape summaries
+            description: The exporter cannot read provider or background-job operational summaries.
+
+        - alert: RomeoProviderNoAvailableProviders
+          expr: romeo_provider_alert{code="no_available_providers"} > 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: Romeo has no available model providers
+            description: Provider operational summary reports no available providers.
+
+        - alert: RomeoProviderFallbackUnavailable
+          expr: romeo_provider_fallback_configured == 1 and romeo_provider_fallback_available == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Romeo provider fallback is configured but unavailable
+            description: Check fallback model/provider enablement and provider kill switches.
+
+        - alert: RomeoProviderCircuitOpen
+          expr: romeo_provider_circuit_state{state="open"} == 1
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo provider circuit is open
+            description: A provider circuit is open after consecutive pre-output failures.
+
+        - alert: RomeoProviderKillSwitchActive
+          expr: romeo_provider_kill_switch_active == 1
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo provider kill switch is active
+            description: A configured provider kill switch is active and should be tracked as an incident or planned maintenance item.
+
+        - alert: RomeoBackgroundJobQueuedLag
+          expr: romeo_background_job_alert{metric="queued_lag_seconds"} > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Romeo background job queue lag is high
+            description: A background job type has exceeded the configured queued-lag threshold.
+
+        - alert: RomeoBackgroundJobStaleRunning
+          expr: romeo_background_job_alert{metric="running_stale_seconds"} > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Romeo background job appears stale
+            description: A running background job has exceeded the configured stale-running threshold.
+
+        - alert: RomeoBackgroundJobRecentFailures
+          expr: romeo_background_job_alert{metric="recent_failed_jobs"} > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo background jobs are failing
+            description: A background job type has recent failures inside the configured lookback window.
+
+        - alert: RomeoBackgroundJobDeadLetters
+          expr: romeo_background_job_alert{metric="dead_letter_jobs"} > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo background jobs reached dead-letter state
+            description: A background job type has exhausted retry policy and requires operator review before replay or dismissal.
+
+        - alert: RomeoPostgresBackupJobFailed
+          expr: kube_job_status_failed{job_name=~"romeo.*postgres-backup.*"} > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Romeo Postgres backup job failed
+            description: The Kubernetes Postgres backup job has recorded a failed run. Verify backup artifacts, upload status, and the next successful backup before clearing the incident.

@@ -1,0 +1,26 @@
+services:
+  postgres:
+    profiles: ["bundled-postgres"]
+
+  migrate:
+    depends_on: !reset []
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  app:
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      object-store-init:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  postgres-backup:
+    depends_on: !reset []
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

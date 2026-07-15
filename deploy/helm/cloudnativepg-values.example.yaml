@@ -1,0 +1,45 @@
+postgres:
+  mode: cloudnativepg
+  cloudnativepg:
+    clusterName: romeo-pg
+    databaseUrlSecret:
+      name: romeo-pg-app
+      key: uri
+
+secrets:
+  existingSecret: romeo-runtime
+
+env:
+  APP_ORIGIN: https://romeo.example.com
+  OBJECT_STORE_DRIVER: s3
+  S3_ENDPOINT: https://s3.example.com
+  S3_BUCKET: romeo
+  S3_REGION: us-east-1
+  DEV_SEEDED_LOGIN: "false"
+
+valkey:
+  urlSecret:
+    name: romeo-valkey
+    key: VALKEY_URL
+
+workers:
+  apiKeySecret:
+    name: romeo-worker-api-key
+    key: ROMEO_API_KEY
+  dataConnectorSync:
+    enabled: true
+  workflowResume:
+    enabled: true
+  webhookRetry:
+    enabled: true
+  notificationRetry:
+    enabled: true
+  retentionEnforce:
+    enabled: true
+  billingEntitlementReconcile:
+    enabled: true
+  billingLifecycleEnforce:
+    enabled: true
+
+backup:
+  enabled: false

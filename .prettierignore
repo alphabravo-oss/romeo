@@ -1,0 +1,14 @@
+node_modules
+.turbo
+.vinxi
+.output
+.tanstack
+dist
+coverage
+tmp
+.env
+.env.local
+*.log
+*.tsbuildinfo
+pnpm-lock.yaml
+deploy/helm/templates/**

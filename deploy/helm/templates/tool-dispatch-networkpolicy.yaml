@@ -1,0 +1,22 @@
+{{- if and .Values.workers.toolDispatch.enabled .Values.workers.toolDispatch.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "romeo.fullname" . }}-tool-dispatch
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tool-dispatch
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "romeo.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: tool-dispatch
+  policyTypes:
+    - Egress
+  egress:
+    {{- if .Values.workers.toolDispatch.networkPolicy.egress }}
+    {{- toYaml .Values.workers.toolDispatch.networkPolicy.egress | nindent 4 }}
+    {{- else }}
+    []
+    {{- end }}
+{{- end }}
