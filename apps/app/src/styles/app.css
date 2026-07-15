@@ -1207,6 +1207,61 @@ html.dark .rm-composer:focus-within {
   z-index: 1;
 }
 
+/* Composer-scoped model override: which model answers the next message in
+   this chat. Reuses .rm-model-menu/.rm-model-option (see the top-bar
+   ModelSelector) so the dropdown look is consistent app-wide; only the
+   trigger and menu anchor are composer-specific. */
+.rm-composer-model-selector {
+  position: relative;
+  margin-right: 4px;
+}
+
+.rm-composer-model-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 9rem;
+  border: 0;
+  border-radius: var(--rm-radius-item);
+  background: transparent;
+  padding: 4px 6px;
+  color: var(--rm-muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rm-composer-model-select:hover:not(:disabled) {
+  background: var(--rm-gray-50);
+  color: var(--rm-text);
+}
+
+html.dark .rm-composer-model-select:hover:not(:disabled) {
+  background: var(--rm-gray-850);
+}
+
+.rm-composer-model-select:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.rm-composer-model-select svg {
+  flex-shrink: 0;
+}
+
+/* Anchor upward from the composer instead of .rm-model-menu's downward
+   top-bar anchor -- the composer sits at the bottom of the screen (or
+   floats centered in the empty state), so a downward menu would run off
+   the viewport. */
+.rm-composer-model-menu.rm-model-menu {
+  top: auto;
+  right: 0;
+  left: auto;
+  bottom: calc(100% + 6px);
+  width: 16rem;
+}
+
 .rm-icon-button,
 .rm-send-button,
 .rm-composer-actions .rm-button {

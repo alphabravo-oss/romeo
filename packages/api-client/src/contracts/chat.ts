@@ -168,6 +168,7 @@ export interface StartRunInput {
   chatId: string;
   agentId: string;
   content: string;
+  modelId?: string;
   attachments?: Array<{
     dataBase64: string;
     fileName: string;

@@ -54,6 +54,7 @@ export function useWorkspaceController() {
   const [activeAgentId, setActiveAgentId] = useState<string>();
   const [activeChatId, setActiveChatId] = useState<string>();
   const [activeRunId, setActiveRunId] = useState<string>();
+  const [modelOverrideId, setModelOverrideId] = useState<string>();
   const [speechArtifacts, setSpeechArtifacts] = useState<
     Record<string, SpeechArtifact>
   >({});
@@ -75,6 +76,11 @@ export function useWorkspaceController() {
     tools,
     workspace,
   } = useWorkspaceData(activeAgentId);
+  // The composer lets the caller override the agent's published model for a
+  // single run. `modelOverrideId` is undefined until the user picks one, at
+  // which point it wins over the agent's baseModelId; switching chats or
+  // agents clears it so a stale override never silently rides along.
+  const selectedModelId = modelOverrideId ?? activeAgent?.baseModelId;
   const toolExecution = useToolExecution(activeAgent, tools, setError);
   const createChatMutation = useMutation({ mutationFn: createChat });
   const cloneAgentMutation = useMutation({ mutationFn: cloneAgent });
@@ -100,6 +106,13 @@ export function useWorkspaceController() {
       ),
     );
   }, [activeChatId, firstChatId, isStreaming]);
+
+  // A model override is scoped to the chat/agent it was picked for -- carrying
+  // it across a chat switch or an agent switch would silently send a run to a
+  // model the composer no longer shows as selected.
+  useEffect(() => {
+    setModelOverrideId(undefined);
+  }, [activeChatId, activeAgent?.id]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -148,6 +161,7 @@ export function useWorkspaceController() {
         chatId: chat.id,
         agentId: activeAgent.id,
         content,
+        ...(selectedModelId === undefined ? {} : { modelId: selectedModelId }),
         ...(attachmentsForRun.length === 0
           ? {}
           : {
@@ -207,6 +221,7 @@ export function useWorkspaceController() {
         chatId,
         agentId: activeAgent.id,
         content: lastUser.content,
+        ...(selectedModelId === undefined ? {} : { modelId: selectedModelId }),
         ...(attachmentsForRun.length === 0
           ? {}
           : { attachments: attachmentsForRun }),
@@ -277,6 +292,10 @@ export function useWorkspaceController() {
     setMessages([]);
     setSpeechArtifacts({});
     setError(undefined);
+  }
+
+  function handleSelectModel(modelId: string) {
+    setModelOverrideId(modelId);
   }
 
   async function handleCloneAgent() {
@@ -620,6 +639,7 @@ export function useWorkspaceController() {
     providerOperationalSummary,
     regenerateLast,
     renameChat,
+    selectedModelId,
     setActiveAgentId,
     setDraft,
     speechArtifacts,
@@ -628,6 +648,7 @@ export function useWorkspaceController() {
     syncingProviderId,
     toolResult: toolExecution.toolResult,
     tools,
+    handleSelectModel,
     workspace,
   };
 }

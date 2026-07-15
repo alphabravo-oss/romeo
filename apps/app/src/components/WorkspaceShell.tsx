@@ -72,6 +72,9 @@ export function WorkspaceShell() {
         <ChatPanel
           activeVoiceProfileId={workspace.activeAgent?.voiceProfileId}
           agentName={workspace.activeAgent?.name ?? "Romeo Assistant"}
+          models={workspace.models}
+          selectedModelId={workspace.selectedModelId}
+          onSelectModel={workspace.handleSelectModel}
           draft={workspace.draft}
           error={workspace.error}
           imageAttachments={workspace.imageAttachments}

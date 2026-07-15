@@ -176,6 +176,7 @@ export class RunService {
     chatId: string;
     agentId: string;
     content: string;
+    modelId?: string;
   }): Promise<RunRecord> {
     const storedObjectKeys: string[] = [];
     try {
@@ -201,6 +202,7 @@ export class RunService {
       chatId: string;
       agentId: string;
       content: string;
+      modelId?: string;
     },
   ): Promise<DeferredRunStart> {
     const prepared = await this.prepareRunStart(repository, input);
@@ -215,6 +217,7 @@ export class RunService {
       chatId: string;
       agentId: string;
       content: string;
+      modelId?: string;
     },
     options: { storedObjectKeys?: string[] } = {},
   ): Promise<PreparedRunStart> {

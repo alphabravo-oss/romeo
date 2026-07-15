@@ -12,6 +12,7 @@ export function registerRunRoutes(app: RomeoApi): void {
       chatId: body.chatId,
       agentId: body.agentId,
       content: body.content,
+      ...(body.modelId === undefined ? {} : { modelId: body.modelId }),
       ...(body.attachments === undefined ? {} : { attachments: body.attachments })
     })
     return context.json({ data }, 202)

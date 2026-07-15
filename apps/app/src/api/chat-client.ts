@@ -133,6 +133,7 @@ export async function startRun(input: {
   chatId: string;
   agentId: string;
   content: string;
+  modelId?: string;
   attachments?: Array<{
     dataBase64: string;
     fileName: string;
