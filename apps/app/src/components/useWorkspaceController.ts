@@ -81,10 +81,12 @@ export function useWorkspaceController() {
     tools,
     workspace,
   } = useWorkspaceData(activeAgentId);
-  // The composer lets the caller override the agent's published model for a
-  // single run. `modelOverrideId` is undefined until the user picks one, at
-  // which point it wins over the agent's baseModelId; switching chats or
-  // agents clears it so a stale override never silently rides along.
+  // The composer lets the caller override the agent's published model.
+  // `modelOverrideId` is undefined until the user picks one, at which point it
+  // wins over the agent's baseModelId and STICKS for every following message --
+  // it is not per-message. Only an agent switch clears it (see the effect
+  // below); a chat switch deliberately does not, because the composer always
+  // renders the selection, so what you see is what the next run uses.
   const selectedModelId = modelOverrideId ?? activeAgent?.baseModelId;
   const toolExecution = useToolExecution(activeAgent, tools, setError);
   const createChatMutation = useMutation({ mutationFn: createChat });

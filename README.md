@@ -68,9 +68,10 @@ ollama pull llama3.2
 ```
 
 Then add the provider under **Admin → Providers** and pick a model for your
-assistant in **Workspace → Agents**. The composer also has a model picker, so
-you can override the assistant's model for a single message without editing the
-assistant.
+assistant in **Workspace → Agents**. The composer also has a model picker: it
+names the model that will answer, and choosing a different one overrides the
+assistant's model for the rest of the conversation — no need to edit the
+assistant. Switching assistants resets it to that assistant's own model.
 
 ### Run the full stack
 
