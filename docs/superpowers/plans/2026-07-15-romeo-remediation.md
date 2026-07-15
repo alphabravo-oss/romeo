@@ -820,17 +820,24 @@ If it reports offenders, each one is either a fixture Task 1.1 missed (fix it wi
 
 A guard that never fires is decoration. Verify it fails on a real offender before trusting it.
 
+> **Do not use `sed -i '' '0,/re/s//repl/'` here.** The `0,/re/` address is a GNU extension; BSD `sed` (macOS) **exits 0 and silently changes nothing**. A plant that never happened makes the guard "pass", which reads as a successful verification when in fact nothing was tested. Use the portable `perl` form below, and assert the plant landed before trusting the result.
+
 ```bash
 cd /Users/mj/mjcode/ab/ab-live-products/romeo/romeo/packages/core
 cp src/transaction-boundaries.test.ts /tmp/rot-guard-check.bak
-sed -i '' '0,/expiresAt: fixtureFuture()/s//expiresAt: "2020-01-01T00:00:00.000Z"/' src/transaction-boundaries.test.ts
+# Replace only the FIRST fixtureFuture() occurrence. Portable across BSD/GNU.
+perl -i -pe 'if (!$d && s/expiresAt: fixtureFuture\(\)/expiresAt: "2020-01-01T00:00:00.000Z"/) { $d = 1 }' src/transaction-boundaries.test.ts
+# Prove the plant actually landed before drawing any conclusion from the guard.
+grep -q '2020-01-01T00:00:00.000Z' src/transaction-boundaries.test.ts \
+  && echo "PLANT OK" \
+  || { echo "PLANT FAILED — the guard result below is meaningless"; }
 pnpm exec vitest run src/test-support/fixture-clock.test.ts 2>&1 | grep -E "passed|failed|2020-01-01"
 echo "--- restoring ---"
 cp /tmp/rot-guard-check.bak src/transaction-boundaries.test.ts
 rm /tmp/rot-guard-check.bak
 ```
 
-Expected: the run **fails** and names `transaction-boundaries.test.ts:<line> -> 2020-01-01T00:00:00.000Z`.
+Expected: `PLANT OK`, then the run **fails** and names `transaction-boundaries.test.ts:<line> -> 2020-01-01T00:00:00.000Z`. If you see `PLANT FAILED`, fix the plant before believing anything about the guard.
 
 - [ ] **Step 5: Prove the opt-out works**
 
@@ -839,14 +846,17 @@ The marker must actually suppress a finding, or Step 1's six annotations are loa
 ```bash
 cd /Users/mj/mjcode/ab/ab-live-products/romeo/romeo/packages/core
 cp src/transaction-boundaries.test.ts /tmp/rot-guard-check2.bak
-sed -i '' '0,/expiresAt: fixtureFuture()/s//expiresAt: "2020-01-01T00:00:00.000Z", \/\/ deliberately-expired: guard opt-out check/' src/transaction-boundaries.test.ts
+perl -i -pe 'if (!$d && s{expiresAt: fixtureFuture\(\)}{expiresAt: "2020-01-01T00:00:00.000Z", // deliberately-expired: guard opt-out check}) { $d = 1 }' src/transaction-boundaries.test.ts
+grep -q 'guard opt-out check' src/transaction-boundaries.test.ts \
+  && echo "PLANT OK" \
+  || { echo "PLANT FAILED — the guard result below is meaningless"; }
 pnpm exec vitest run src/test-support/fixture-clock.test.ts 2>&1 | grep -E "Tests.*passed|Tests.*failed"
 echo "--- restoring ---"
 cp /tmp/rot-guard-check2.bak src/transaction-boundaries.test.ts
 rm /tmp/rot-guard-check2.bak
 ```
 
-Expected: the run **passes** — the same past date that failed Step 4 is suppressed by the marker.
+Expected: `PLANT OK`, then the run **passes** — the same past date that failed Step 4 is suppressed by the marker. Together, Steps 4 and 5 prove the guard discriminates rather than merely always-passing or always-failing.
 
 - [ ] **Step 6: Confirm the restore and re-run**
 
