@@ -20,7 +20,7 @@ describe("repository contract inventory", () => {
       ...(interfaceBody ?? "").matchAll(/^\s{2}([a-zA-Z]\w+)(?:<[^>]+>)?\(/gm),
     ].map((match) => match[1]);
 
-    expect(repositoryMethods).toHaveLength(229);
+    expect(repositoryMethods).toHaveLength(230);
     expect(ROMEO_REPOSITORY_METHOD_NAMES).toEqual(repositoryMethods);
     expect(repositoryContractInventory.map((entry) => entry.method)).toEqual(
       repositoryMethods,

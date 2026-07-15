@@ -881,6 +881,20 @@ describe("RomeoRepository conformance", () => {
             id: "part_one",
           });
 
+          await repository.deleteMessage("message_second");
+          expect(
+            (await repository.listMessages(chat.id)).map((item) => item.id),
+          ).toEqual(["message_first"]);
+          expect(
+            await repository.getMessage("message_second"),
+          ).toBeUndefined();
+
+          await repository.deleteMessage(firstMessage.id);
+          expect(await repository.getMessage(firstMessage.id)).toBeUndefined();
+          expect(
+            await repository.listMessageParts(firstMessage.id),
+          ).toEqual([]);
+
           const comment = await repository.createChatComment({
             id: "comment_one",
             orgId: "org_default",

@@ -2,6 +2,7 @@ import ArrowUp from "lucide-react/dist/esm/icons/arrow-up.mjs";
 import BotMessageSquare from "lucide-react/dist/esm/icons/bot-message-square.mjs";
 import Copy from "lucide-react/dist/esm/icons/copy.mjs";
 import ImagePlus from "lucide-react/dist/esm/icons/image-plus.mjs";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
 import Square from "lucide-react/dist/esm/icons/square.mjs";
 import Volume2 from "lucide-react/dist/esm/icons/volume-2.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
@@ -35,6 +36,7 @@ export function ChatPanel({
   onCancel,
   onDraftChange,
   onGenerateSpeech,
+  onRegenerate,
   onRemoveImageAttachment,
   onTranscribeAudio,
   onTranscriptionError,
@@ -55,6 +57,7 @@ export function ChatPanel({
   onCancel: () => void;
   onDraftChange: (value: string) => void;
   onGenerateSpeech: (messageId: string) => void;
+  onRegenerate: () => void;
   onRemoveImageAttachment: (attachmentId: string) => void;
   onTranscribeAudio: (blob: Blob) => Promise<void>;
   onTranscriptionError: (message: string) => void;
@@ -230,7 +233,7 @@ export function ChatPanel({
     <section className="rm-chat-panel">
       <div className="rm-conversation" ref={conversationRef}>
         <div className="rm-message-list">
-          {messages.map((message) => {
+          {messages.map((message, index) => {
             const speechArtifact = speechArtifacts[message.id];
             const isAssistant = message.role === "assistant";
 
@@ -319,6 +322,17 @@ export function ChatPanel({
                       >
                         <Volume2 aria-hidden="true" size={16} />
                       </button>
+                      {!isStreaming && index === messages.length - 1 ? (
+                        <button
+                          aria-label="Regenerate response"
+                          className="rm-message-tool"
+                          onClick={onRegenerate}
+                          title="Regenerate response"
+                          type="button"
+                        >
+                          <RefreshCw aria-hidden="true" size={16} />
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>

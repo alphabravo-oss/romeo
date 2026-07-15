@@ -13800,6 +13800,75 @@ describe("Romeo API thin slice", () => {
     expect(serializedAudit).not.toContain("raw user feedback sentinel");
   });
 
+  it("deletes a single chat message and its attachments without leaking content", async () => {
+    const repository = new InMemoryRomeoRepository();
+    await repository.createMessage({
+      id: "msg_delete_user",
+      chatId: "chat_welcome",
+      role: "user",
+      content: "raw delete-me sentinel",
+      createdAt: "2026-07-06T18:00:00.000Z",
+    });
+    await repository.createMessageParts([
+      {
+        id: "msg_part_delete_image",
+        messageId: "msg_delete_user",
+        type: "attachment",
+        content: "chat-attachments/msg_delete_user/msg_part_delete_image/raw.png",
+        metadata: {
+          fileName: "raw.png",
+          kind: "image",
+          mimeType: "image/png",
+          sizeBytes: 11,
+        },
+      },
+    ]);
+    await repository.createMessage({
+      id: "msg_delete_survivor",
+      chatId: "chat_welcome",
+      role: "assistant",
+      content: "survives the delete",
+      createdAt: "2026-07-06T18:01:00.000Z",
+    });
+    const api = createRomeoApi(repository);
+
+    const deleteResponse = await api.request(
+      "/api/v1/chats/chat_welcome/messages/msg_delete_user",
+      { method: "DELETE" },
+    );
+    const deleted = await deleteResponse.json();
+    const messagesResponse = await api.request(
+      "/api/v1/chats/chat_welcome/messages",
+    );
+    const messages = await messagesResponse.json();
+    const auditResponse = await api.request(
+      "/api/v1/audit-logs?action=chat.message.delete",
+    );
+    const audit = await auditResponse.json();
+    const missingResponse = await api.request(
+      "/api/v1/chats/chat_welcome/messages/msg_delete_user",
+      { method: "DELETE" },
+    );
+
+    expect(deleteResponse.status).toBe(200);
+    expect(deleted.data).toMatchObject({
+      id: "msg_delete_user",
+      role: "user",
+    });
+    expect(messagesResponse.status).toBe(200);
+    expect(
+      messages.data.map((message: { id: string }) => message.id),
+    ).toEqual(["msg_delete_survivor"]);
+    expect(await repository.listMessageParts("msg_delete_user")).toEqual([]);
+    expect(audit.data[0].metadata).toMatchObject({
+      workspaceId: "workspace_default",
+      messageId: "msg_delete_user",
+      messageRole: "user",
+    });
+    expect(JSON.stringify(audit.data)).not.toContain("raw delete-me sentinel");
+    expect(missingResponse.status).toBe(404);
+  });
+
   it("creates a chat, starts a run, and replays completed events", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
     const agentsResponse = await api.request(

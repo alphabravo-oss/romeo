@@ -78,6 +78,19 @@ export function registerChatRoutes(app: RomeoApi): void {
     return context.json({ data });
   });
 
+  app.delete(
+    "/api/v1/chats/:chatId/messages/:messageId",
+    async (context) => {
+      const subject = context.get("subject");
+      const data = await context.get("services").chats.deleteMessage({
+        subject,
+        chatId: context.req.param("chatId"),
+        messageId: context.req.param("messageId"),
+      });
+      return context.json({ data });
+    },
+  );
+
   app.get("/api/v1/chats/:chatId/message-feedback", async (context) => {
     const subject = context.get("subject");
     const data = await context

@@ -207,6 +207,7 @@ export interface RomeoRepository {
   listMessages(chatId: string): Promise<Message[]>;
   getMessage(messageId: string): Promise<Message | undefined>;
   createMessage(message: Message): Promise<Message>;
+  deleteMessage(messageId: string): Promise<void>;
   listMessageParts(messageId: string): Promise<MessagePart[]>;
   getMessagePart(messagePartId: string): Promise<MessagePart | undefined>;
   createMessageParts(parts: MessagePart[]): Promise<MessagePart[]>;

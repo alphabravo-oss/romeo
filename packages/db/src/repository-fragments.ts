@@ -166,6 +166,7 @@ export type ChatRepositoryFragment = Pick<
   | "createChatComment"
   | "createMessage"
   | "createMessageParts"
+  | "deleteMessage"
   | "getChat"
   | "getMessage"
   | "getMessagePart"
@@ -530,6 +531,7 @@ export function createChatRepositoryFragment(
     createChatComment: repository.createChatComment.bind(repository),
     createMessage: repository.createMessage.bind(repository),
     createMessageParts: repository.createMessageParts.bind(repository),
+    deleteMessage: repository.deleteMessage.bind(repository),
     getChat: repository.getChat.bind(repository),
     getMessage: repository.getMessage.bind(repository),
     getMessagePart: repository.getMessagePart.bind(repository),

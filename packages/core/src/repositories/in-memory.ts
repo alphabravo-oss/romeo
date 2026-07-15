@@ -1158,6 +1158,16 @@ export class InMemoryRomeoRepository implements RomeoRepository {
     return append(this.data.messages, message);
   }
 
+  async deleteMessage(messageId: string): Promise<void> {
+    const index = this.data.messages.findIndex(
+      (message) => message.id === messageId,
+    );
+    if (index >= 0) this.data.messages.splice(index, 1);
+    this.data.messageParts = this.data.messageParts.filter(
+      (part) => part.messageId !== messageId,
+    );
+  }
+
   async listMessageParts(messageId: string): Promise<MessagePart[]> {
     return this.data.messageParts.filter(
       (part) => part.messageId === messageId,

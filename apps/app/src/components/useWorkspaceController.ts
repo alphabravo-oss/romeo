@@ -8,6 +8,7 @@ import {
   cloneAgent,
   createChat,
   createProvider,
+  deleteMessage,
   generateMessageSpeech,
   listMessages,
   startRun,
@@ -171,6 +172,60 @@ export function useWorkspaceController() {
       attachmentsForRun.forEach((attachment) =>
         URL.revokeObjectURL(attachment.previewUrl),
       );
+    }
+  }
+
+  async function regenerateLast(): Promise<void> {
+    if (isStreaming || activeChatId === undefined || activeAgent === undefined)
+      return;
+
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUser === undefined) return;
+
+    // Only the trailing assistant turn is being replaced. If the last
+    // message isn't an assistant reply (e.g. a prior run never completed),
+    // there is nothing trailing to remove.
+    const trailingAssistant =
+      messages.at(-1)?.role === "assistant" ? messages.at(-1) : undefined;
+
+    setError(undefined);
+    try {
+      // Resolve attachment bytes before deleting anything, so a failed
+      // re-fetch aborts cleanly instead of destroying the old answer first.
+      const attachmentsForRun = await resolveAttachmentsForResend(
+        lastUser.attachments,
+      );
+
+      const chatId = activeChatId;
+      if (trailingAssistant !== undefined)
+        await deleteMessage(chatId, trailingAssistant.id);
+      await deleteMessage(chatId, lastUser.id);
+
+      setMessages((current) =>
+        current.slice(0, trailingAssistant === undefined ? -1 : -2),
+      );
+      appendMessage("user", lastUser.content, lastUser.attachments);
+      appendMessage("assistant", "");
+
+      const run = await startRunMutation.mutateAsync({
+        chatId,
+        agentId: activeAgent.id,
+        content: lastUser.content,
+        ...(attachmentsForRun.length === 0
+          ? {}
+          : { attachments: attachmentsForRun }),
+      });
+      setActiveRunId(run.id);
+      await consumeRunStream(run.id);
+      await syncPersistedMessages(chatId);
+      await refreshUsageControls();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to regenerate the response.",
+      );
+      setActiveRunId(undefined);
     }
   }
 
@@ -556,6 +611,7 @@ export function useWorkspaceController() {
     pendingToolApproval: toolExecution.pendingApproval,
     providers,
     providerOperationalSummary,
+    regenerateLast,
     renameChat,
     setActiveAgentId,
     setDraft,
@@ -567,6 +623,45 @@ export function useWorkspaceController() {
     tools,
     workspace,
   };
+}
+
+// Persisted message attachments only carry metadata plus a fetchable
+// previewUrl, not the original base64 bytes. Regenerating a message that had
+// an image means re-fetching those bytes so the run can resend them, or the
+// image would silently disappear from the new answer's context.
+async function resolveAttachmentsForResend(
+  attachments: Message["attachments"],
+): Promise<
+  Array<{
+    dataBase64: string;
+    fileName: string;
+    mimeType: ImageAttachmentMimeType;
+    sizeBytes: number;
+  }>
+> {
+  if (attachments === undefined || attachments.length === 0) return [];
+  const resolved: Array<{
+    dataBase64: string;
+    fileName: string;
+    mimeType: ImageAttachmentMimeType;
+    sizeBytes: number;
+  }> = [];
+  for (const attachment of attachments) {
+    const mimeType = normalizeImageMimeType(attachment.mimeType);
+    if (attachment.previewUrl === undefined || mimeType === undefined)
+      continue;
+    const response = await fetch(attachment.previewUrl);
+    if (!response.ok)
+      throw new Error(`Unable to re-fetch attachment ${attachment.fileName}.`);
+    const blob = await response.blob();
+    resolved.push({
+      dataBase64: await blobToBase64(blob),
+      fileName: attachment.fileName,
+      mimeType,
+      sizeBytes: blob.size,
+    });
+  }
+  return resolved;
 }
 
 function normalizeImageMimeType(

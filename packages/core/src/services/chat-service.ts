@@ -221,6 +221,29 @@ export class ChatService {
     return publicMessageFeedback(chat.id, message.id, event);
   }
 
+  async deleteMessage(input: {
+    chatId: string;
+    messageId: string;
+    subject: AuthSubject;
+  }): Promise<Message> {
+    const chat = await getAuthorizedChat(this.repository, {
+      chatId: input.chatId,
+      subject: input.subject,
+      scope: "chats:write",
+      permission: "write",
+    });
+    const message = await this.repository.getMessage(input.messageId);
+    if (!message || message.chatId !== chat.id) throw notFound("Message");
+
+    await this.repository.deleteMessage(message.id);
+    await this.audit(input.subject, "chat.message.delete", chat.id, {
+      workspaceId: chat.workspaceId,
+      messageId: message.id,
+      messageRole: message.role,
+    });
+    return message;
+  }
+
   async readAttachment(input: {
     attachmentId: string;
     chatId: string;

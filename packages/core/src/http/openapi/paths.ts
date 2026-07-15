@@ -627,6 +627,22 @@ export function openApiPaths(options: OpenApiPathOptions = {}) {
         },
       },
     },
+    "/chats/{chatId}/messages/{messageId}": {
+      delete: {
+        summary: "Delete a single chat message",
+        description:
+          "Deletes one message, and its attachments, from a writable chat. Used to remove the trailing message pair being replaced before a regenerated run is started.",
+        parameters: [
+          { $ref: "#/components/parameters/ChatId" },
+          { $ref: "#/components/parameters/MessageId" },
+        ],
+        responses: {
+          200: success("Message", { $ref: "#/components/schemas/Message" }),
+          403: errorResponse,
+          404: errorResponse,
+        },
+      },
+    },
     "/chats/{chatId}/message-feedback": {
       get: {
         summary: "List the caller's assistant-message feedback for a chat",

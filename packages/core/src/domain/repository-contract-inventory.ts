@@ -94,6 +94,7 @@ export const ROMEO_REPOSITORY_METHOD_NAMES = [
   "listMessages",
   "getMessage",
   "createMessage",
+  "deleteMessage",
   "listMessageParts",
   "getMessagePart",
   "createMessageParts",

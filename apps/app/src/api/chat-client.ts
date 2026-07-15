@@ -30,6 +30,25 @@ export async function listMessages(chatId: string): Promise<Message[]> {
   return response.data;
 }
 
+export async function deleteMessage(
+  chatId: string,
+  messageId: string,
+): Promise<Message> {
+  const response = await apiJson<Envelope<Message>>(
+    `/api/v1/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}`,
+    {
+      method: "DELETE",
+      // A body-less DELETE crashes Hono's body-limit middleware under the
+      // Node/h3 request adapter this app runs on (pre-existing bug that
+      // affects every other body-less DELETE route too, e.g.
+      // /api/v1/groups/{id}/members/{id}). Sending an empty JSON body takes
+      // the working code path without touching that shared middleware.
+      body: "{}",
+    },
+  );
+  return response.data;
+}
+
 export async function listChatComments(chatId: string): Promise<ChatComment[]> {
   const response = await apiJson<Envelope<ChatComment[]>>(
     `/api/v1/chats/${encodeURIComponent(chatId)}/comments`,

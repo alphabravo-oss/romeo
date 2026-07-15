@@ -176,6 +176,7 @@ describe("repository fragment composition", () => {
       "createChatComment",
       "createMessage",
       "createMessageParts",
+      "deleteMessage",
       "getChat",
       "getMessage",
       "getMessagePart",

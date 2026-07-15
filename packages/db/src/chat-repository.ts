@@ -117,6 +117,12 @@ export class PgChatRepository {
     return row === undefined ? message : toMessageRecord(row);
   }
 
+  async deleteMessage(messageId: string): Promise<void> {
+    // message_parts.message_id has ON DELETE CASCADE, so this also removes
+    // any attachment parts for the message.
+    await this.db.delete(messages).where(eq(messages.id, messageId));
+  }
+
   async listMessageParts(messageId: string): Promise<MessagePartRecord[]> {
     const rows = await this.db
       .select()

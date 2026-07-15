@@ -85,6 +85,7 @@ export function WorkspaceShell() {
           onGenerateSpeech={(messageId) =>
             void workspace.handleGenerateSpeech(messageId)
           }
+          onRegenerate={() => void workspace.regenerateLast()}
           onRemoveImageAttachment={workspace.handleRemoveImageAttachment}
           onTranscribeAudio={(blob) => workspace.handleTranscribeAudio(blob)}
           onTranscriptionError={workspace.handleTranscriptionError}
