@@ -964,21 +964,26 @@ Expected: tag created; four commits listed.
 
 **Why it's safe:** dependency analysis shows every service in the delete set is referenced *only* by the barrel `packages/core/src/services/index.ts`. The two with real consumers are explicitly kept.
 
-**What is kept and why:**
+**What is kept and why — THREE services, not two:**
 
 | Service | Kept because |
 |---|---|
 | `ga-evidence-posture-service.ts` | `readiness-service.ts:32-34` imports it for the `ga_evidence` readiness check **and** the admin UI renders it via `posture-client.ts:12`. Real consumers. |
 | `postgres-operational-posture-service.ts` | Admin UI renders it via `posture-client.ts:19`. Real consumer. |
+| `rag-posture-service.ts` | **Fully live.** Route registered at `http/routes/readiness.ts:34` via `context.get("services").ragPosture.report(subject)`; `getRagPosture()` in `apps/app/src/api/rag-admin-client.ts:29` calls `/api/v1/admin/rag/posture`; `RagGovernancePanel` is mounted at `apps/app/src/routes/admin.tsx:310`. |
+
+> **This plan originally listed only two keepers and was wrong.** `rag-posture-service` was missed because the first audit grepped for direct file imports (`from "…rag-posture-service"`), but its only consumer reaches it through the **services container** (`services.ragPosture`) and registers its route in `readiness.ts` — a file not named `*posture*`. A file-import grep cannot see either. Caught when the Task 2.1 implementer ran Step 1's audit and refused to proceed.
+>
+> Two live endpoints, `/api/v1/admin/delegated-oauth/posture` and `/api/v1/admin/edge-security/posture`, are **not** at risk: they are served by `routes/delegated-oauth.ts` and `routes/edge-security.ts`, which the `*posture*` glob never matches. Verified explicitly.
 
 **Expected recovery** (measured, not estimated):
 
 | Delete set | LOC |
 |---|---|
-| `services/*posture*.ts` minus the 2 survivors | 14,167 |
-| `http/routes/*posture*.ts` minus the 2 survivors | 217 |
-| `http/openapi/*posture*.ts` minus the 2 survivors | 3,428 |
-| **Direct subtotal** | **17,812** |
+| `services/*posture*.ts` minus the 3 survivors | 13,713 |
+| `http/routes/*posture*.ts` minus the survivors | 217 |
+| `http/openapi/*posture*.ts` minus the survivors | 3,428 |
+| **Direct subtotal (measured, 3 keepers)** | **17,358** |
 | Posture blocks in `api.test.ts` + 3 dedicated test files | ~6,700 |
 | **Total** | **~24,500** |
 
@@ -986,7 +991,7 @@ Against a 334,040-line baseline that is **~7.3% of the repository**.
 
 **Phase Definition of Done:**
 - `pnpm verify` exits 0.
-- The 2 surviving posture endpoints still return 200 and still render in the admin UI.
+- The 3 surviving posture endpoints still return 200 and still render in the admin UI.
 - `GET /api/v1/admin/network-partition/posture` (and the other 16) return 404.
 - Repo LOC is at least 17,000 lower than the `green-baseline` tag.
 - No `deploy/` or `.env.example` reference to a deleted env var remains.
@@ -996,40 +1001,65 @@ Against a 334,040-line baseline that is **~7.3% of the repository**.
 ### Task 2.1: Delete the unconsumed posture services and their routes
 
 **Files:**
-- Delete: 22 files matching `packages/core/src/services/*posture*.ts` (excluding `ga-evidence-posture-service.ts`, `postgres-operational-posture-service.ts`, and the 3 `kubernetes-posture-*.ts` helpers — see Step 2)
-- Delete: 17 files matching `packages/core/src/http/routes/*posture*.ts` (excluding `ga-evidence-posture.ts`, `postgres-operational-posture.ts`)
+- Delete: 21 files matching `packages/core/src/services/*posture*.ts` (excluding the **three** keepers: `ga-evidence-posture-service.ts`, `postgres-operational-posture-service.ts`, `rag-posture-service.ts`). The 3 `kubernetes-posture-*.ts` files are a trio and are all deleted — see Step 2.
+- Delete: files matching `packages/core/src/http/routes/*posture*.ts` excluding the keepers' route files. Note `rag-posture` has **no** dedicated route file — its route lives in `routes/readiness.ts`, which must NOT be touched.
 - Delete: matching files in `packages/core/src/http/openapi/`
 - Modify: `packages/core/src/services/index.ts`
 - Modify: `packages/core/src/api.ts:16-73` (imports), `:104-136` (registrations)
 
 **Interfaces:**
 - Consumes: the `green-baseline` tag from Task 1.4.
-- Produces: a `services/index.ts` barrel exporting only `GaEvidencePostureService` and `PostgresOperationalPostureService` from the posture family. `readiness-service.ts` continues to import `GaEvidencePostureService` from `./ga-evidence-posture-service` — that import path is unchanged.
+- Produces: a `services/index.ts` barrel exporting only `GaEvidencePostureService`, `PostgresOperationalPostureService`, and `RagPostureService` from the posture family. `RagPostureService` must remain wired into the services container (`services/index.ts:223,601`) — `readiness.ts:34` depends on it. `readiness-service.ts` continues to import `GaEvidencePostureService` from `./ga-evidence-posture-service` — that import path is unchanged.
 
 - [ ] **Step 1: Verify the dependency claim before deleting anything**
 
 Do not take the plan's word for it. Prove that nothing outside the posture family and the barrel imports the delete set.
 
+A file-import grep alone is **not sufficient** — that is exactly how this plan originally lost `rag-posture-service`. A posture service can be reached three ways, and the audit must check all three:
+
+1. a direct file import (`from "./foo-posture-service"`),
+2. the **services container** (`context.get("services").fooPosture`) — invisible to an import grep,
+3. a route registered from a file **not** named `*posture*` (e.g. `readiness.ts`).
+
 ```bash
 cd /Users/mj/mjcode/ab/ab-live-products/romeo/romeo
-KEEP="ga-evidence-posture|postgres-operational-posture"
+KEEP="ga-evidence-posture|postgres-operational-posture|rag-posture"
+
+echo "### 1. direct references (bare substring, not just import form)"
 for f in packages/core/src/services/*posture*.ts; do
   base=$(basename "$f" .ts)
   echo "$base" | grep -qE "$KEEP" && continue
-  hits=$(grep -rln "${base}" packages/core/src packages/api-client/src packages/cli/src apps/app/src sdks 2>/dev/null \
+  hits=$(grep -rln "${base}" packages/core/src packages/api-client/src packages/cli/src apps/app/src sdks scripts 2>/dev/null \
     | grep -v "posture" | grep -v "\.test\.ts")
   [ -n "$hits" ] && echo "!! UNEXPECTED CONSUMER: $base <- $hits"
 done
-echo "--- audit complete: any '!!' lines above are blockers ---"
+
+echo "### 2. services-container usage (catches what an import grep cannot)"
+for f in packages/core/src/services/*posture*service.ts; do
+  base=$(basename "$f" .ts)
+  echo "$base" | grep -qE "$KEEP" && continue
+  key=$(echo "$base" | sed 's/-service$//' | awk -F- '{p=$1; for(i=2;i<=NF;i++){p=p toupper(substr($i,1,1)) substr($i,2)}; print p}')
+  hits=$(grep -rn "services\")\.$key\b\|services\.$key\b" packages/core/src apps/app/src 2>/dev/null | grep -v "services/index.ts")
+  [ -n "$hits" ] && echo "!! LIVE VIA CONTAINER: $base (key=$key) <- $hits"
+done
+
+echo "### 3. every posture endpoint the frontend/CLI actually calls"
+grep -rhoE "'/api/v1/[a-z0-9/_-]*posture[a-z0-9/_-]*'|\"/api/v1/[a-z0-9/_-]*posture[a-z0-9/_-]*\"" apps/app/src packages/cli/src 2>/dev/null | tr -d "'\"" | sort -u
+
+echo "--- audit complete: any '!!' line is a blocker ---"
 ```
 
-Expected: **no `!!` lines.** Every hit should be `services/index.ts` only, which the grep already excludes by not matching. If a `!!` line appears, **stop and escalate** — the delete set is wrong.
+Expected:
+- No `!!` lines from sections 1 or 2.
+- Section 3 lists exactly five endpoints: `ga/evidence-posture`, `postgres/operational-posture`, `rag/posture` (the three keepers), plus `delegated-oauth/posture` and `edge-security/posture` — the latter two served by `routes/delegated-oauth.ts` and `routes/edge-security.ts`, which the `*posture*` glob never matches. **Confirm that before proceeding**; if section 3 lists any endpoint whose route file *is* in the delete set, stop and escalate.
+
+If a `!!` line appears, **stop and escalate** — the delete set is wrong, as it was the first time.
 
 - [ ] **Step 2: Build the exact delete list and review it by eye**
 
 ```bash
 cd /Users/mj/mjcode/ab/ab-live-products/romeo/romeo
-KEEP="ga-evidence-posture|postgres-operational-posture"
+KEEP="ga-evidence-posture|postgres-operational-posture|rag-posture"
 find packages/core/src/services packages/core/src/http/routes packages/core/src/http/openapi \
   -name '*posture*' | grep -vE "$KEEP" | sort > /tmp/posture-delete-list.txt
 wc -l /tmp/posture-delete-list.txt
