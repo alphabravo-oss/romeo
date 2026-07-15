@@ -19,6 +19,7 @@ import {
   updateModelPricing,
 } from "../api/client";
 import type { Message, SpeechArtifact } from "../api/types";
+import { shouldAutoSelectChat } from "./chat-selection";
 import { useToolExecution } from "./useToolExecution";
 import { useWorkspaceData } from "./useWorkspaceData";
 
@@ -53,6 +54,10 @@ export function useWorkspaceController() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string>();
   const [activeChatId, setActiveChatId] = useState<string>();
+  // Explicit intent: the user asked for a blank chat and there is no chat row
+  // behind it yet. Distinguishes "New chat" from "the active chat vanished",
+  // which look identical from activeChatId alone. See ./chat-selection.
+  const [isDraftingNewChat, setIsDraftingNewChat] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string>();
   const [modelOverrideId, setModelOverrideId] = useState<string>();
   const [speechArtifacts, setSpeechArtifacts] = useState<
@@ -96,8 +101,20 @@ export function useWorkspaceController() {
   const isStreaming = activeRunId !== undefined;
   const firstChatId = chats[0]?.id;
 
+  // Fall back to the most recent chat whenever the active one goes away, so an
+  // archive/delete lands the user somewhere real instead of on a dead view.
+  // It must NOT fire when the user asked for a blank chat -- see
+  // ./chat-selection for why activeChatId alone cannot tell those apart.
   useEffect(() => {
-    if (activeChatId !== undefined || firstChatId === undefined || isStreaming)
+    if (firstChatId === undefined) return;
+    if (
+      !shouldAutoSelectChat({
+        activeChatId,
+        firstChatId,
+        isDraftingNewChat,
+        isStreaming,
+      })
+    )
       return;
     setActiveChatId(firstChatId);
     void syncPersistedMessages(firstChatId).catch((caught) =>
@@ -105,7 +122,7 @@ export function useWorkspaceController() {
         caught instanceof Error ? caught.message : "Unable to load chat.",
       ),
     );
-  }, [activeChatId, firstChatId, isStreaming]);
+  }, [activeChatId, firstChatId, isDraftingNewChat, isStreaming]);
 
   // Reset on agent change only -- NOT on chat change.
   //
@@ -146,6 +163,11 @@ export function useWorkspaceController() {
           });
 
       setActiveChatId(chat.id);
+      // The chat now exists and is active, so the draft has landed. Left set,
+      // this flag would keep suppressing auto-select after a later archive.
+      // On failure it stays set on purpose: the blank chat is preserved so the
+      // user can retry rather than being bounced into an unrelated chat.
+      setIsDraftingNewChat(false);
       await queryClient.invalidateQueries({
         queryKey: ["chats", workspace.id],
       });
@@ -295,6 +317,8 @@ export function useWorkspaceController() {
   async function handleSelectChat(chatId: string) {
     if (isStreaming) return;
     setActiveChatId(chatId);
+    // Picking an existing chat abandons any blank one being drafted.
+    setIsDraftingNewChat(false);
     setError(undefined);
     await syncPersistedMessages(chatId);
   }
@@ -302,6 +326,11 @@ export function useWorkspaceController() {
   function handleNewChat() {
     if (isStreaming) return;
     setActiveChatId(undefined);
+    // Deliberate: hold the blank chat open. Without this the auto-select
+    // effect re-selects chats[0] on the next render and this whole handler is
+    // a no-op for anyone who already has a chat. The chat row itself is
+    // created lazily by handleSubmit on the first send.
+    setIsDraftingNewChat(true);
     setMessages([]);
     setSpeechArtifacts({});
     setError(undefined);
@@ -394,6 +423,11 @@ export function useWorkspaceController() {
   async function handleChatDeleted(chatId: string) {
     if (activeChatId === chatId) {
       setActiveChatId(undefined);
+      // The chat vanished rather than being dismissed -- let the auto-select
+      // effect land the user on the next chat. Only clears when the deleted
+      // chat was the active one: deleting some other chat must not cancel a
+      // blank chat the user is drafting.
+      setIsDraftingNewChat(false);
       setMessages([]);
       setSpeechArtifacts({});
     }
@@ -413,6 +447,9 @@ export function useWorkspaceController() {
   async function handleChatArchived(chatId: string) {
     if (activeChatId === chatId) {
       setActiveChatId(undefined);
+      // Same as handleChatDeleted: the active chat vanished, so auto-select
+      // must be allowed to run and land the user on the next one.
+      setIsDraftingNewChat(false);
       setMessages([]);
       setSpeechArtifacts({});
     }
@@ -461,6 +498,9 @@ export function useWorkspaceController() {
 
   async function handleWorkspaceArchived(workspaceId: string) {
     setActiveChatId(undefined);
+    // The whole workspace went away, so any blank chat drafted against it is
+    // moot; let the next workspace's chats auto-select normally.
+    setIsDraftingNewChat(false);
     setActiveAgentId(undefined);
     setMessages([]);
     setSpeechArtifacts({});
@@ -689,8 +729,7 @@ async function resolveAttachmentsForResend(
   }> = [];
   for (const attachment of attachments) {
     const mimeType = normalizeImageMimeType(attachment.mimeType);
-    if (attachment.previewUrl === undefined || mimeType === undefined)
-      continue;
+    if (attachment.previewUrl === undefined || mimeType === undefined) continue;
     const response = await fetch(attachment.previewUrl);
     if (!response.ok)
       throw new Error(`Unable to re-fetch attachment ${attachment.fileName}.`);
