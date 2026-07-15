@@ -1018,9 +1018,19 @@ html.dark .rm-topbar-button:hover {
   white-space: pre-wrap;
 }
 
+/* The 90% cap belongs on the body, not the bubble.
+   .rm-message-body shrink-wraps its content, so `max-width: 90%` on the bubble
+   resolved against a parent the bubble itself had sized — clamping the bubble
+   to 90% of its own natural width. Long messages escaped it (the body hits the
+   768px row cap first), but a short one collapsed: "hi" became a 39px-wide,
+   60px-tall column wrapping one character per line. Capping the body against
+   the row keeps the limit meaningful and lets the bubble hug its text. */
+.rm-message-row.user .rm-message-body {
+  max-width: 90%;
+}
+
 .rm-message-row.user .rm-message-content {
   width: fit-content;
-  max-width: 90%;
   border-radius: var(--rm-radius-bubble);
   background: var(--rm-bubble);
   padding: 6px 16px;

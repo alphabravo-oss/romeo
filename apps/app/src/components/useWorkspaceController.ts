@@ -107,12 +107,19 @@ export function useWorkspaceController() {
     );
   }, [activeChatId, firstChatId, isStreaming]);
 
-  // A model override is scoped to the chat/agent it was picked for -- carrying
-  // it across a chat switch or an agent switch would silently send a run to a
-  // model the composer no longer shows as selected.
+  // Reset on agent change only -- NOT on chat change.
+  //
+  // A new agent brings its own baseModelId, so a leftover override there would
+  // be wrong. Chat changes must not reset: sending the first message *creates*
+  // a chat, so keying this on activeChatId silently reverted the user's pick
+  // the moment they pressed send, and the next message went to a different
+  // model than the one they chose.
+  //
+  // Carrying an override across a chat switch is safe because the composer
+  // always renders the selection -- what you see is what the next run uses.
   useEffect(() => {
     setModelOverrideId(undefined);
-  }, [activeChatId, activeAgent?.id]);
+  }, [activeAgent?.id]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

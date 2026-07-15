@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" role="img" aria-label="Romeo">
+  <title>Romeo</title>
+  <!--
+    Mirrors the in-app logo mark (.rm-logo-mark): the rm-accent square with an
+    8px radius on a 32px box (25%), and the bot-message-square glyph at 18/32
+    (56.25%). Kept in the same ratios so the README mark and the running app
+    read as the same thing.
+
+    Glyph: bot-message-square from Lucide (https://lucide.dev), ISC licensed.
+  -->
+  <rect width="88" height="88" rx="22" fill="#5e6ad2"/>
+  <g transform="translate(19.25 19.25) scale(2.0625)"
+     fill="none"
+     stroke="#ffffff"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+    <path d="M12 6V2H8"/>
+    <path d="M15 11v2"/>
+    <path d="M2 12h2"/>
+    <path d="M20 12h2"/>
+    <path d="M20 16a2 2 0 0 1-2 2H8.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 4 20.286V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/>
+    <path d="M9 11v2"/>
+  </g>
+</svg>
