@@ -31,7 +31,7 @@ describe("Romeo background job operations", () => {
         workerLease: {
           attempt: 1,
           claimedAt: "2026-06-30T00:01:00.000Z",
-          expiresAt: "2026-06-30T00:06:00.000Z",
+          expiresAt: "2026-06-30T00:06:00.000Z", // deliberately-expired: expected expiry from claimedAt 00:01 + 300s leaseSeconds on this test's synthetic `now` clock; part of the fabricated-past timeline whose staleness (see line ~72) drives the reclaim assertion below
           leaseSeconds: 300,
           renewedAt: "2026-06-30T00:01:00.000Z",
           workerId: "worker_a",
@@ -69,7 +69,7 @@ describe("Romeo background job operations", () => {
       payload: {
         workerLease: {
           attempt: 1,
-          expiresAt: "2026-06-30T00:12:00.000Z",
+          expiresAt: "2026-06-30T00:12:00.000Z", // deliberately-expired: renewed lease's expected expiry (renewedAt 00:02 + 600s leaseSeconds); must be stale relative to the reclaim's now: 00:13:00 for job_claimable to be reclaimed by worker_b as attempt 2
           leaseSeconds: 600,
           renewedAt: "2026-06-30T00:02:00.000Z",
           workerId: "worker_a",

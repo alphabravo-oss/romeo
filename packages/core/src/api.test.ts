@@ -16598,7 +16598,7 @@ describe("Romeo API thin slice", () => {
           attempt: 3,
           claimedAt: "2026-06-30T00:00:00.000Z",
           renewedAt: "2026-06-30T00:00:00.000Z",
-          expiresAt: "2026-06-30T00:05:00.000Z",
+          expiresAt: "2026-06-30T00:05:00.000Z", // deliberately-expired: stale lease lets /claim evaluate reclaim eligibility; attempt is already at max (3), so it dead-letters instead of reclaiming
           leaseSeconds: 300,
           workerId: "svc_previous_worker",
         },
@@ -16704,7 +16704,7 @@ describe("Romeo API thin slice", () => {
           attempt: 1,
           claimedAt: "2020-01-01T00:00:00.000Z",
           renewedAt: "2020-01-01T00:00:00.000Z",
-          expiresAt: "2020-01-01T00:05:00.000Z",
+          expiresAt: "2020-01-01T00:05:00.000Z", // deliberately-expired: lease timed out long ago so /expire's running_lease_timeout branch fires for svc_expired_worker's job
           leaseSeconds: 300,
           workerId: "svc_expired_worker",
         },

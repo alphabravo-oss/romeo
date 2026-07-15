@@ -968,7 +968,7 @@ describe("data connector API", () => {
         tokenType: "bearer",
         scopes: ["repo"],
         obtainedAt: "2026-07-01T00:00:00.000Z",
-        expiresAt: "2026-07-01T00:00:01.000Z",
+        expiresAt: "2026-07-01T00:00:01.000Z", // deliberately-expired: 1s token lifetime exercises the GitHub OAuth refresh-before-sync path
       }),
       accessTokenExpiresAt: "2026-07-01T00:00:01.000Z",
       createdAt: "2026-07-01T00:00:00.000Z",
@@ -1113,7 +1113,7 @@ describe("data connector API", () => {
         tokenType: "bearer",
         scopes: ["repo"],
         obtainedAt: "2026-07-01T00:00:00.000Z",
-        expiresAt: "2026-07-01T00:00:01.000Z",
+        expiresAt: "2026-07-01T00:00:01.000Z", // deliberately-expired: forces both concurrent getConnectorAccessToken calls onto the refresh path, so the test can prove refreshes are serialized to a single call
       }),
       accessTokenExpiresAt: "2026-07-01T00:00:01.000Z",
       createdAt: "2026-07-01T00:00:00.000Z",
