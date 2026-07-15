@@ -2815,17 +2815,24 @@ describe("Romeo API thin slice", () => {
       }),
     });
 
+    const payload = JSON.stringify({
+      name: "oversized body test",
+      scopes: ["me:read"],
+      padding: "x".repeat(200),
+    });
     const response = await api.request("/api/v1/api-keys", {
       method: "POST",
       headers: {
         "content-type": "application/json",
         "x-request-id": "req_body_limit_test",
+        // Declared explicitly because `new Request(url, { body })` does not
+        // populate content-length -- undici only computes it when dispatching.
+        // Every real HTTP client frames its body (RFC 9112 6.3; Node's parser
+        // rejects an unframed body with 400 before the app is reached), so
+        // stating it here makes this request match what production receives.
+        "content-length": String(new TextEncoder().encode(payload).length),
       },
-      body: JSON.stringify({
-        name: "oversized body test",
-        scopes: ["me:read"],
-        padding: "x".repeat(200),
-      }),
+      body: payload,
     });
     const body = await response.json();
 
@@ -2835,6 +2842,38 @@ describe("Romeo API thin slice", () => {
     expect(body.error.code).toBe("request_body_too_large");
     expect(body.error.request_id).toBe("req_body_limit_test");
     expect(body.error.details.maxBytes).toBe(96);
+  });
+
+  it("does not read the body of a request that declares no body framing", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      env: readEnv({ REQUEST_BODY_MAX_BYTES: "96" }),
+    });
+
+    // Reproduce the precondition the Node adapter (srvx) creates: it decides
+    // "has a body" from the METHOD alone, so a body-less DELETE still arrives
+    // carrying a non-null (empty) ReadableStream and no content-length. A stream
+    // body sets no content-length, so this Request has neither framing header.
+    const request = new Request("http://localhost/api/v1/api-keys", {
+      method: "DELETE",
+      body: new ReadableStream({
+        start: (controller) => controller.close(),
+      }),
+      duplex: "half",
+    } as RequestInit);
+    expect(request.headers.has("content-length")).toBe(false);
+
+    await api.request(request);
+
+    // Assert on bodyUsed, NOT on status: this middleware returns the same status
+    // either way, so a status assertion passes even against the unfixed code.
+    // bodyUsed is the signal that discriminates -- it is true when bodyLimit
+    // drains the stream (the path that crashes under the real adapter).
+    //
+    // Honest scope: this pins the RFC 9112 guard. It does NOT reproduce srvx's
+    // `#state` TypeError -- a native undici Request survives hono's Request
+    // reconstruction, so the 500 only appears through the real adapter. This is
+    // a regression fence, not a reproduction of the production crash.
+    expect(request.bodyUsed).toBe(false);
   });
 
   it("rate limits public API traffic with sanitized 429 responses", async () => {
