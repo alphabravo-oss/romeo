@@ -556,7 +556,8 @@ EOF
 
 **Task Definition of Done:**
 - `pnpm exec vitest run src/transaction-boundaries.test.ts` passes fully.
-- No hardcoded `2026-07-0*` literal remains in that file.
+- Neither `expiresAt: "2026-07-08T12:00:00.000Z"` occurrence remains (Step 6 prints `BOTH REPLACED`).
+- Exactly **6** `createdAt: "2026-07-07T12:00:00.000Z"` literals remain untouched. Other hardcoded `2026-07-0*` dates (`archivedAt`, `updatedAt`, and the six inert `createdAt`s) are **expected to remain** — they are never compared against `Date.now()` and cannot rot. Only `expiresAt` is in scope.
 - `SessionService` source is **unmodified** — the fix is confined to test fixtures.
 
 ---
