@@ -7,6 +7,7 @@ import Volume2 from "lucide-react/dist/esm/icons/volume-2.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
 import Zap from "lucide-react/dist/esm/icons/zap.mjs";
 import type { FormEvent, KeyboardEvent } from "react";
+import { useRef } from "react";
 
 import type { Message, SpeechArtifact } from "../api/types";
 import { Markdown } from "../lib/markdown";
@@ -71,8 +72,18 @@ export function ChatPanel({
   // fires throughout the stream, not just on message boundaries.
   const conversationRef = useStickToBottom(messages);
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function handleComposerSubmit(event: FormEvent<HTMLFormElement>) {
+    onSubmit(event);
+    // The value is cleared but the inline height persists; reset it so the
+    // composer collapses back to one row.
+    if (textareaRef.current !== null)
+      textareaRef.current.style.height = "auto";
+  }
+
   const composer = (
-    <form className="rm-composer-wrap" onSubmit={onSubmit}>
+    <form className="rm-composer-wrap" onSubmit={handleComposerSubmit}>
         <label className="sr-only" htmlFor="prompt">
           Message
         </label>
@@ -100,12 +111,21 @@ export function ChatPanel({
             disabled={isStreaming}
             id="prompt"
             onChange={(event) => onDraftChange(event.currentTarget.value)}
+            onInput={(event) => {
+              // ponytail: replace this whole handler with `field-sizing: content` in
+              // app.css once Safari/Firefox support is broad enough. Until then CSS
+              // cannot measure content, so the height comes from scrollHeight.
+              const el = event.currentTarget;
+              el.style.height = "auto"; // reset first, or it can only ever grow
+              el.style.height = `${el.scrollHeight}px`;
+            }}
             onKeyDown={handleDraftKeyDown}
             placeholder={
               messages.length === 0
                 ? "How can I help you today?"
                 : "Send a message"
             }
+            ref={textareaRef}
             rows={1}
             value={draft}
           />
