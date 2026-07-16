@@ -30,6 +30,15 @@ export const errorHandler: ErrorHandler<AppBindings> = (error, context) => {
     )
   }
 
+  // Genuinely unexpected: log to stderr so the crash is traceable. Path (not url)
+  // keeps query-string secrets out of logs; the Error carries its own stack.
+  console.error('unhandled request error', {
+    requestId,
+    method: context.req.method,
+    path: context.req.path,
+    error
+  })
+
   return context.json(
     { error: { code: 'internal_error', message: 'Unexpected server error.', request_id: requestId, details: {} } },
     500
