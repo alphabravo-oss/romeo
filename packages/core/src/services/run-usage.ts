@@ -3,13 +3,23 @@ import type { BaseModel, ProviderTokenUsage } from '@romeo/providers'
 import type { RunRecord } from '../domain/entities'
 import type { RomeoRepository } from '../domain/repository'
 import { recordUsage } from './record-usage'
+import { estimateTokens } from './token-estimate'
 
 export async function recordRunStartedUsage(
   repository: RomeoRepository,
-  input: { run: RunRecord; inputText: string; model: BaseModel }
+  input: {
+    run: RunRecord
+    inputTokens: number
+    model: BaseModel
+    historyMessages?: number
+    historyTruncated?: boolean
+    knowledgeHitsDropped?: number
+  }
 ): Promise<void> {
   const metadata = runMetadata(input.run)
-  const inputTokens = estimateTokens(input.inputText)
+  // The assembler's estimate is billed verbatim so the number that gated the context budget and the
+  // number that bills cannot drift.
+  const inputTokens = input.inputTokens
   await Promise.all([
     recordUsage(repository, {
       orgId: input.run.orgId,
@@ -31,7 +41,16 @@ export async function recordRunStartedUsage(
       metric: 'llm.input_token.estimated',
       quantity: inputTokens,
       unit: 'token',
-      metadata: withCost(metadata, costFor(input.model, 'input', inputTokens))
+      // Counts only, never message text: usage metadata is a read-wide surface and must not leak chat content.
+      metadata: withCost(
+        {
+          ...metadata,
+          ...(input.historyMessages === undefined ? {} : { historyMessages: input.historyMessages }),
+          ...(input.historyTruncated === undefined ? {} : { historyTruncated: input.historyTruncated }),
+          ...(input.knowledgeHitsDropped === undefined ? {} : { knowledgeHitsDropped: input.knowledgeHitsDropped })
+        },
+        costFor(input.model, 'input', inputTokens)
+      )
     })
   ])
 }
@@ -132,12 +151,6 @@ function recordTokenUsage(
 
 function runMetadata(run: RunRecord): Record<string, unknown> {
   return { providerId: run.providerId, modelId: run.modelId, agentId: run.agentId, agentVersionId: run.agentVersionId }
-}
-
-function estimateTokens(text: string): number {
-  const trimmed = text.trim()
-  if (trimmed.length === 0) return 0
-  return Math.max(1, Math.ceil(trimmed.length / 4))
 }
 
 function costFor(model: BaseModel, side: 'input' | 'output', tokens: number): number | undefined {

@@ -36,15 +36,7 @@ export async function deleteMessage(
 ): Promise<Message> {
   const response = await apiJson<Envelope<Message>>(
     `/api/v1/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}`,
-    {
-      method: "DELETE",
-      // A body-less DELETE crashes Hono's body-limit middleware under the
-      // Node/h3 request adapter this app runs on (pre-existing bug that
-      // affects every other body-less DELETE route too, e.g.
-      // /api/v1/groups/{id}/members/{id}). Sending an empty JSON body takes
-      // the working code path without touching that shared middleware.
-      body: "{}",
-    },
+    { method: "DELETE" },
   );
   return response.data;
 }
@@ -133,6 +125,10 @@ export async function startRun(input: {
   chatId: string;
   agentId: string;
   content: string;
+  modelId?: string;
+  // Cuts prior history at this message, exclusive. Regenerate passes the message it is re-running
+  // so the model is not fed the answer it is replacing. Omit to send the chat's full history.
+  historyBoundaryMessageId?: string;
   attachments?: Array<{
     dataBase64: string;
     fileName: string;

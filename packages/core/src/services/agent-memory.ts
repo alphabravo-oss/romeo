@@ -1,11 +1,10 @@
-import type { AgentMemoryPolicy, Message } from '../domain/entities'
+import type { AgentMemoryPolicy } from '../domain/entities'
 import { ApiError } from '../errors'
 
 export const defaultAgentMemoryPolicy: AgentMemoryPolicy = { mode: 'disabled' }
 
 const defaultRecentMessageCount = 6
 const maxRecentMessageCount = 20
-const maxMemoryMessageChars = 1_000
 
 export function normalizeAgentMemoryPolicy(input: AgentMemoryPolicy | undefined): AgentMemoryPolicy {
   if (input === undefined || input.mode === 'disabled') return defaultAgentMemoryPolicy
@@ -19,21 +18,9 @@ export function normalizeAgentMemoryPolicy(input: AgentMemoryPolicy | undefined)
   return { mode: 'recent_messages', maxMessages }
 }
 
-export function appendAgentMemoryToSystemPrompt(systemPrompt: string, policy: AgentMemoryPolicy, messages: Message[]): string {
+// History is now unconditional and budget-bounded, so the policy is an optional additional cap
+// rather than an on/off switch. Counts messages, not turn pairs, matching the previous slice(-maxMessages).
+export function historyMessageLimit(policy: AgentMemoryPolicy): number | undefined {
   const normalized = normalizeAgentMemoryPolicy(policy)
-  if (normalized.mode === 'disabled') return systemPrompt
-
-  const memoryLines = messages
-    .filter((message) => message.role === 'user' || message.role === 'assistant')
-    .slice(-(normalized.maxMessages ?? defaultRecentMessageCount))
-    .map((message) => `${message.role}: ${compactMessageContent(message.content)}`)
-    .filter((line) => !line.endsWith(': '))
-
-  if (memoryLines.length === 0) return systemPrompt
-  return `${systemPrompt}\n\nRomeo chat memory:\n${memoryLines.join('\n')}\n\nUse this prior chat context only when relevant.`
-}
-
-function compactMessageContent(content: string): string {
-  const normalized = content.replace(/\s+/g, ' ').trim()
-  return normalized.length > maxMemoryMessageChars ? `${normalized.slice(0, maxMemoryMessageChars)}...` : normalized
+  return normalized.mode === 'recent_messages' ? normalized.maxMessages : undefined
 }

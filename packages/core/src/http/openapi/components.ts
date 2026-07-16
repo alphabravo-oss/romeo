@@ -8441,6 +8441,16 @@ const baseOpenApiComponents = {
         chatId: { type: "string" },
         agentId: { type: "string" },
         content: { type: "string" },
+        modelId: {
+          type: "string",
+          description:
+            "Override the agent's published model for this run. Must be an enabled model belonging to the caller's org, and the caller must hold a `use` grant for it -- the same authorization applied to the agent's default model. Omit to use the agent's published baseModelId.",
+        },
+        historyBoundaryMessageId: {
+          type: "string",
+          description:
+            "Id of a message in `chatId` to cut prior history at, exclusive: that message and everything after it is not replayed to the model. Intended for regenerate, which starts the replacement run before deleting the pair it replaces and would otherwise resend the previous answer and a duplicate question. An id that is not in `chatId` -- including one from another chat -- matches nothing and simply sends no prior history; it can never read another chat's messages. Omit to send the chat's full history.",
+        },
         attachments: {
           type: "array",
           maxItems: 4,

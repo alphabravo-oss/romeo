@@ -849,6 +849,8 @@ export function openApiPaths(options: OpenApiPathOptions = {}) {
           202: success("Run", { $ref: "#/components/schemas/RunRecord" }),
           400: errorResponse,
           403: errorResponse,
+          404: errorResponse,
+          409: errorResponse,
         },
       },
     },

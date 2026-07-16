@@ -188,9 +188,12 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
     safetySettings: {},
     voiceProfileId: "voice_default",
     knowledgeBaseBindings: [{ knowledgeBaseId: "kb_default", enabled: true }],
+    // Must match agentToolBindings below: rolling back to this version
+    // re-applies these bindings to the agent, which would otherwise silently
+    // re-enable the tools this seed deliberately ships disabled.
     toolBindings: [
-      { toolId: "tool_calculator", enabled: true, approvalRequired: false },
-      { toolId: "tool_datetime", enabled: true, approvalRequired: true },
+      { toolId: "tool_calculator", enabled: false, approvalRequired: false },
+      { toolId: "tool_datetime", enabled: false, approvalRequired: true },
     ],
     createdBy: "user_dev_admin",
     createdAt: now,
@@ -269,16 +272,26 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
         now,
       ),
     ],
+    // Bindings ship attached but DISABLED, so Agent Studio still demonstrates
+    // tools wired to an agent while the default agent advertises no tools to
+    // the model. Enabled by default they break the README's Ollama quick start
+    // on both common local models: llama3.2 fires tool_calculator on a bare
+    // "hi" with an empty expression and then confabulates a question around the
+    // result ("You asked for 1 + 2 * 3, which is 7"), which reads to users like
+    // context leaking from another chat; gemma3:4b cannot use tools at all and
+    // hard-errors "does not support tools". Turn a tool on per agent to use it.
     agentToolBindings: [
       createToolBinding(
         "agent_tool_binding_calculator",
         "tool_calculator",
+        false,
         false,
         now,
       ),
       createToolBinding(
         "agent_tool_binding_datetime",
         "tool_datetime",
+        false,
         true,
         now,
       ),
@@ -404,6 +417,7 @@ function createSeedGrants(): ResourceGrant[] {
 function createToolBinding(
   id: string,
   toolId: string,
+  enabled: boolean,
   approvalRequired: boolean,
   now: string,
 ): AgentToolBinding {
@@ -412,7 +426,7 @@ function createToolBinding(
     orgId: "org_default",
     agentId: "agent_default",
     toolId,
-    enabled: true,
+    enabled,
     approvalRequired,
     createdAt: now,
     updatedAt: now,

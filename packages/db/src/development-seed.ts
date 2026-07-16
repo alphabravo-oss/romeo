@@ -286,9 +286,12 @@ function defaultAgentVersion(now: Date) {
     safetySettings: {},
     voiceProfileId: "voice_default",
     knowledgeBaseBindings: [{ knowledgeBaseId: "kb_default", enabled: true }],
+    // Must match defaultAgentToolBindings below: rolling back to this version
+    // re-applies these bindings to the agent, which would otherwise silently
+    // re-enable the tools this seed deliberately ships disabled.
     toolBindings: [
-      { toolId: "tool_calculator", enabled: true, approvalRequired: false },
-      { toolId: "tool_datetime", enabled: true, approvalRequired: true },
+      { toolId: "tool_calculator", enabled: false, approvalRequired: false },
+      { toolId: "tool_datetime", enabled: false, approvalRequired: true },
     ],
     createdBy: "user_dev_admin",
     createdAt: now,
@@ -308,6 +311,15 @@ function defaultAgentKnowledgeBinding(now: Date) {
   };
 }
 
+// Bindings ship attached but DISABLED, matching the in-memory seed in
+// packages/core/src/repositories/seed-data.ts (the two must agree or Postgres
+// and dev diverge). Agent Studio still shows tools wired to an agent, but the
+// default agent advertises no tools to the model. Enabled by default they break
+// the README's Ollama quick start on both common local models: llama3.2 fires
+// tool_calculator on a bare "hi" with an empty expression and then confabulates
+// a question around the result, which reads to users like context leaking from
+// another chat; gemma3:4b cannot use tools at all and hard-errors "does not
+// support tools". Turn a tool on per agent to use it.
 function defaultAgentToolBindings(now: Date) {
   return [
     {
@@ -315,7 +327,7 @@ function defaultAgentToolBindings(now: Date) {
       orgId: "org_default",
       agentId: "agent_default",
       toolId: "tool_calculator",
-      enabled: true,
+      enabled: false,
       approvalRequired: false,
       createdAt: now,
       updatedAt: now,
@@ -325,7 +337,7 @@ function defaultAgentToolBindings(now: Date) {
       orgId: "org_default",
       agentId: "agent_default",
       toolId: "tool_datetime",
-      enabled: true,
+      enabled: false,
       approvalRequired: true,
       createdAt: now,
       updatedAt: now,

@@ -2,11 +2,14 @@ import type { AuthSubject } from "@romeo/auth";
 import { describe, expect, it } from "vitest";
 
 import { InMemoryRomeoRepository } from "../repositories/in-memory";
+import { enableAgentToolBinding } from "../test-support/agent-tools";
 import { buildProviderToolDefinitions } from "./provider-tool-schemas";
 
 describe("buildProviderToolDefinitions", () => {
   it("builds JSON-schema provider tools from enabled, granted agent bindings", async () => {
     const repository = new InMemoryRomeoRepository();
+    await enableAgentToolBinding(repository, "tool_calculator");
+    await enableAgentToolBinding(repository, "tool_datetime");
 
     const tools = await buildProviderToolDefinitions(
       repository,
@@ -36,6 +39,10 @@ describe("buildProviderToolDefinitions", () => {
 
   it("omits tools when the subject lacks tool scope or grants", async () => {
     const repository = new InMemoryRomeoRepository();
+    // Enabled so an empty result proves the scope/grant check, not that the
+    // seed happens to ship these bindings disabled.
+    await enableAgentToolBinding(repository, "tool_calculator");
+    await enableAgentToolBinding(repository, "tool_datetime");
 
     await expect(
       buildProviderToolDefinitions(
@@ -55,6 +62,9 @@ describe("buildProviderToolDefinitions", () => {
 
   it("omits disabled agent tool bindings", async () => {
     const repository = new InMemoryRomeoRepository();
+    // Enable both first, so disabling datetime below is what removes it.
+    await enableAgentToolBinding(repository, "tool_calculator");
+    await enableAgentToolBinding(repository, "tool_datetime");
     const datetime = (
       await repository.listAgentToolBindings("agent_default")
     ).find((binding) => binding.toolId === "tool_datetime");

@@ -1,14 +1,30 @@
+<div align="center">
+
+<img src="apps/app/public/logo.svg?v=1" alt="Romeo" width="88" height="88" />
+
 # Romeo
 
-**Enterprise AI Chat.**
+### Enterprise AI Chat
 
 A self-hosted AI workspace that treats identity, tenancy, and governance as
 first-class — not as a plugin you bolt on later. Bring your own models, keep
 your data on your own infrastructure.
 
-Built by [AlphaBravo](https://alphabravo.io).
+[![CI](https://github.com/alphabravo-oss/romeo/actions/workflows/ci.yml/badge.svg)](https://github.com/alphabravo-oss/romeo/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Status: Alpha](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/alphabravo-oss/romeo)
+
+**Built by [AlphaBravo](https://alphabravo.io)**
+
+</div>
 
 ---
+
+> **Alpha software.** Romeo is under active development. The `/api/v1` surface,
+> Helm chart values, and UI are subject to change without notice, and it is
+> **not yet recommended for production use**. Feedback and issues are very welcome.
+
+![Romeo chat in dark mode](.github/assets/romeo-chat-dark.png)
 
 ## Quick start
 
@@ -52,9 +68,12 @@ ollama pull llama3.2
 ```
 
 Then add the provider under **Admin → Providers** and pick a model for your
-assistant in **Workspace → Agents**.
+assistant in **Workspace → Agents**. The composer also has a model picker: it
+names the model that will answer, and choosing a different one overrides the
+assistant's model for the rest of the conversation — no need to edit the
+assistant. Switching assistants resets it to that assistant's own model.
 
-### Run it for real
+### Run the full stack
 
 ```bash
 cp deploy/compose/.env.example deploy/compose/.env   # set your secrets
@@ -110,7 +129,8 @@ Being straight with you, so you don't find out the hard way:
 - No web search
 - English only — no localization yet
 - No code execution / artifact sandbox
-- One assistant per conversation (no side-by-side model comparison)
+- One assistant per conversation — you can switch the model per message, but not
+  run two side by side to compare them
 
 ---
 

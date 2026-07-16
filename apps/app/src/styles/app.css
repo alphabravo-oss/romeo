@@ -1018,9 +1018,19 @@ html.dark .rm-topbar-button:hover {
   white-space: pre-wrap;
 }
 
+/* The 90% cap belongs on the body, not the bubble.
+   .rm-message-body shrink-wraps its content, so `max-width: 90%` on the bubble
+   resolved against a parent the bubble itself had sized — clamping the bubble
+   to 90% of its own natural width. Long messages escaped it (the body hits the
+   768px row cap first), but a short one collapsed: "hi" became a 39px-wide,
+   60px-tall column wrapping one character per line. Capping the body against
+   the row keeps the limit meaningful and lets the bubble hug its text. */
+.rm-message-row.user .rm-message-body {
+  max-width: 90%;
+}
+
 .rm-message-row.user .rm-message-content {
   width: fit-content;
-  max-width: 90%;
   border-radius: var(--rm-radius-bubble);
   background: var(--rm-bubble);
   padding: 6px 16px;
@@ -1205,6 +1215,61 @@ html.dark .rm-composer:focus-within {
   align-items: center;
   gap: 4px;
   z-index: 1;
+}
+
+/* Composer-scoped model override: which model answers the next message in
+   this chat. Reuses .rm-model-menu/.rm-model-option (see the top-bar
+   ModelSelector) so the dropdown look is consistent app-wide; only the
+   trigger and menu anchor are composer-specific. */
+.rm-composer-model-selector {
+  position: relative;
+  margin-right: 4px;
+}
+
+.rm-composer-model-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 9rem;
+  border: 0;
+  border-radius: var(--rm-radius-item);
+  background: transparent;
+  padding: 4px 6px;
+  color: var(--rm-muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rm-composer-model-select:hover:not(:disabled) {
+  background: var(--rm-gray-50);
+  color: var(--rm-text);
+}
+
+html.dark .rm-composer-model-select:hover:not(:disabled) {
+  background: var(--rm-gray-850);
+}
+
+.rm-composer-model-select:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.rm-composer-model-select svg {
+  flex-shrink: 0;
+}
+
+/* Anchor upward from the composer instead of .rm-model-menu's downward
+   top-bar anchor -- the composer sits at the bottom of the screen (or
+   floats centered in the empty state), so a downward menu would run off
+   the viewport. */
+.rm-composer-model-menu.rm-model-menu {
+  top: auto;
+  right: 0;
+  left: auto;
+  bottom: calc(100% + 6px);
+  width: 16rem;
 }
 
 .rm-icon-button,

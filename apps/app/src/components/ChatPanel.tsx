@@ -1,5 +1,7 @@
 import ArrowUp from "lucide-react/dist/esm/icons/arrow-up.mjs";
 import BotMessageSquare from "lucide-react/dist/esm/icons/bot-message-square.mjs";
+import Check from "lucide-react/dist/esm/icons/check.mjs";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
 import Copy from "lucide-react/dist/esm/icons/copy.mjs";
 import ImagePlus from "lucide-react/dist/esm/icons/image-plus.mjs";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
@@ -8,9 +10,9 @@ import Volume2 from "lucide-react/dist/esm/icons/volume-2.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
 import Zap from "lucide-react/dist/esm/icons/zap.mjs";
 import type { FormEvent, KeyboardEvent } from "react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import type { Message, SpeechArtifact } from "../api/types";
+import type { BaseModel, Message, SpeechArtifact } from "../api/types";
 import { Markdown } from "../lib/markdown";
 import { useStickToBottom } from "../lib/use-stick-to-bottom";
 import type { PendingImageAttachment } from "./useWorkspaceController";
@@ -32,6 +34,9 @@ export function ChatPanel({
   isStreaming,
   isTranscribingVoice,
   messages,
+  models,
+  selectedModelId,
+  onSelectModel,
   onAttachImage,
   onCancel,
   onDraftChange,
@@ -53,6 +58,15 @@ export function ChatPanel({
   isStreaming: boolean;
   isTranscribingVoice: boolean;
   messages: Message[];
+  /** Every model known to the workspace; the composer filters to enabled ones. */
+  models: BaseModel[];
+  /**
+   * The model that will answer the next message: the caller's override if
+   * one is selected, otherwise the active agent's published baseModelId.
+   * Undefined only while the active agent hasn't loaded yet.
+   */
+  selectedModelId: string | undefined;
+  onSelectModel: (modelId: string) => void;
   onAttachImage: (file: File | undefined) => void;
   onCancel: () => void;
   onDraftChange: (value: string) => void;
@@ -133,6 +147,12 @@ export function ChatPanel({
             value={draft}
           />
           <div className="rm-composer-actions">
+            <ComposerModelSelect
+              disabled={isStreaming}
+              models={models}
+              onSelectModel={onSelectModel}
+              selectedModelId={selectedModelId}
+            />
             <label
               className={`rm-icon-button ${isStreaming ? "disabled" : ""}`}
               htmlFor="chat-image-attachment"
@@ -269,7 +289,9 @@ export function ChatPanel({
               message.content.length === 0 && isStreaming;
             return (
               <article className="rm-message-row assistant" key={message.id}>
-                <div className="rm-message-avatar">H</div>
+                <div className="rm-message-avatar">
+                  <BotMessageSquare aria-hidden="true" size={16} />
+                </div>
                 <div className="rm-message-body">
                   <div className="rm-message-heading">
                     <span>Romeo</span>
@@ -344,6 +366,87 @@ export function ChatPanel({
 
       {composer}
     </section>
+  );
+}
+
+/**
+ * Composer-scoped model picker: which model answers the *next* message in
+ * this chat. Mirrors ModelSelector's trigger/menu/click-outside pattern, but
+ * lists enabled models rather than agents, and is styled to sit quietly among
+ * the composer's other muted icon buttons instead of the top bar.
+ */
+function ComposerModelSelect({
+  disabled,
+  models,
+  onSelectModel,
+  selectedModelId,
+}: {
+  disabled: boolean;
+  models: BaseModel[];
+  onSelectModel: (modelId: string) => void;
+  selectedModelId: string | undefined;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const enabledModels = models.filter((model) => model.enabled);
+  const selectedModel = enabledModels.find(
+    (model) => model.id === selectedModelId,
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  if (enabledModels.length === 0) return null;
+
+  return (
+    <div className="rm-composer-model-selector" ref={ref}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className="rm-composer-model-select"
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        title="Choose the model for this run"
+        type="button"
+      >
+        <span className="truncate">
+          {selectedModel?.displayName ?? "Select model"}
+        </span>
+        <ChevronDown aria-hidden="true" size={12} strokeWidth={2.5} />
+      </button>
+
+      {open ? (
+        <div
+          className="rm-composer-model-menu rm-model-menu"
+          role="listbox"
+        >
+          {enabledModels.map((model) => (
+            <button
+              aria-selected={model.id === selectedModelId}
+              className="rm-model-option"
+              key={model.id}
+              onClick={() => {
+                onSelectModel(model.id);
+                setOpen(false);
+              }}
+              role="option"
+              type="button"
+            >
+              <span className="truncate">{model.displayName}</span>
+              {model.id === selectedModelId ? (
+                <Check aria-hidden="true" size={16} />
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

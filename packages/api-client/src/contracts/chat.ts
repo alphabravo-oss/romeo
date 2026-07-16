@@ -168,6 +168,13 @@ export interface StartRunInput {
   chatId: string;
   agentId: string;
   content: string;
+  modelId?: string;
+  /**
+   * Id of a message in `chatId` to cut prior history at, exclusive. Regenerate sets it to the
+   * message being re-run so the pair it replaces is not fed back to the model. Omit to send the
+   * chat's full history.
+   */
+  historyBoundaryMessageId?: string;
   attachments?: Array<{
     dataBase64: string;
     fileName: string;

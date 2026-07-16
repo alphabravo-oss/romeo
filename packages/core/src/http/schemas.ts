@@ -1270,6 +1270,8 @@ export const startRunSchema = z.object({
   chatId: z.string().min(1),
   agentId: z.string().min(1),
   content: z.string().min(1),
+  modelId: z.string().min(1).optional(),
+  historyBoundaryMessageId: z.string().min(1).optional(),
   attachments: z
     .array(
       z.object({

@@ -5,6 +5,7 @@ import { readEnv } from "@romeo/config";
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import type { QuotaCoordinator } from "./services/quota-coordination";
+import { enableDefaultAgentTool } from "./test-support/agent-tools";
 
 describe("Romeo quota controls", () => {
   it("creates and lists quota buckets without storing duplicates", async () => {
@@ -84,6 +85,7 @@ describe("Romeo quota controls", () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       quotaCoordinator,
     });
+    await enableDefaultAgentTool(api, "tool_calculator");
     await createQuota(api, "tool.call", 10);
 
     const allowedResponse = await api.request(
@@ -130,6 +132,9 @@ describe("Romeo quota controls", () => {
 
   it("updates, resets, and deletes quota buckets", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    // Enabled so the execute below actually consumes quota; if it were blocked
+    // at the binding check, used would stay 0 and resetUsage would prove nothing.
+    await enableDefaultAgentTool(api, "tool_calculator");
     const createResponse = await createQuota(api, "tool.call", 2);
     const created = await createResponse.json();
 
@@ -189,6 +194,7 @@ describe("Romeo quota controls", () => {
       updatedAt: now,
     });
     const api = createRomeoApi(repository);
+    await enableDefaultAgentTool(api, "tool_calculator");
 
     const response = await api.request(
       "/api/v1/tools/tool_calculator/execute",
@@ -215,6 +221,8 @@ describe("Romeo quota controls", () => {
 
   it("blocks tool execution when the tool call quota is exhausted", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    // Bound, so the block below is the quota's doing and not the binding check.
+    await enableDefaultAgentTool(api, "tool_calculator");
     await createQuota(api, "tool.call", 0);
 
     const response = await api.request(
@@ -299,6 +307,8 @@ describe("Romeo quota controls", () => {
 
   it("blocks tool execution through an agent-scoped quota", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    // Bound, so the block below is the quota's doing and not the binding check.
+    await enableDefaultAgentTool(api, "tool_calculator");
     await createQuota(api, "tool.call", 0, {
       scopeType: "agent",
       scopeId: "agent_default",
@@ -323,6 +333,8 @@ describe("Romeo quota controls", () => {
 
   it("blocks tool execution through an API-key scoped quota", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    // Bound, so the block below is the quota's doing and not the binding check.
+    await enableDefaultAgentTool(api, "tool_calculator");
     const apiKeyResponse = await api.request("/api/v1/api-keys", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -644,6 +656,9 @@ describe("Romeo quota controls", () => {
         throw new Error("Suspended tenant model provider call was reached.");
       },
     });
+    // Bound before the tenant is suspended below, so the tool block later in
+    // this test is the suspension's doing and not the binding check.
+    await enableDefaultAgentTool(api, "tool_calculator");
     const chatResponse = await api.request("/api/v1/chats", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1066,6 +1081,9 @@ describe("Romeo quota controls", () => {
     const billingBlocked = await billingBlockedResponse.json();
 
     const killSwitchApi = createRomeoApi(new InMemoryRomeoRepository());
+    // Bound on this api's own repository, so the tool block below is the kill
+    // switch's doing and not the binding check.
+    await enableDefaultAgentTool(killSwitchApi, "tool_calculator");
     await killSwitchApi.request("/api/v1/admin/abuse-controls", {
       method: "PATCH",
       headers: { "content-type": "application/json" },

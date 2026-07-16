@@ -193,7 +193,7 @@ export function AgentDraftForm({ activeAgent, isSaving, models, providers = [], 
 
       <div className="grid gap-3 rounded-md border border-border p-3">
         <label className="text-sm text-muted" htmlFor="agent-memory-mode">
-          Memory
+          Conversation history
         </label>
         <form.Field name="memoryMode">
           {(field) => (
@@ -205,8 +205,8 @@ export function AgentDraftForm({ activeAgent, isSaving, models, providers = [], 
               onChange={(event) => field.handleChange(event.currentTarget.value as AgentMemoryPolicy['mode'])}
               value={field.state.value}
             >
-              <option value="disabled">Disabled</option>
-              <option value="recent_messages">Recent messages</option>
+              <option value="disabled">Full history (default)</option>
+              <option value="recent_messages">Limit to recent messages</option>
             </select>
           )}
         </form.Field>

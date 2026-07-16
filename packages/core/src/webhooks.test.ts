@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { WebhookService } from "./services/webhook-service";
+import { enableDefaultAgentTool } from "./test-support/agent-tools";
 
 interface FetchCall {
   url: string;
@@ -361,6 +362,9 @@ describe("webhook API", () => {
         return new Response(null, { status: 204 });
       },
     });
+    // Bound, so the executes below emit tool.call.succeeded/failed rather than
+    // stopping at the binding check.
+    await enableDefaultAgentTool(api, "tool_calculator");
 
     await api.request("/api/v1/webhooks", {
       method: "POST",
