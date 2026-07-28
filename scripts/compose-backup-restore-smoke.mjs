@@ -14,6 +14,7 @@ import {
   createComposeHarness,
   createDurableSmokeRecords,
   expectUnauthorizedMe,
+  normalizeComposeBindMountPermissions,
   parsePositiveInteger,
   randomProjectName,
   repoPath,
@@ -338,6 +339,7 @@ try {
   });
 } finally {
   if (!keep) {
+    normalizeComposeBindMountPermissions(source, backupDir);
     cleanupComposeHarness(source);
     cleanupComposeHarness(restore);
     rmSync(tempDir, { force: true, recursive: true });
