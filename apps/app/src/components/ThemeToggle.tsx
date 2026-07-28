@@ -3,7 +3,9 @@ import Moon from "lucide-react/dist/esm/icons/moon.mjs";
 import Sun from "lucide-react/dist/esm/icons/sun.mjs";
 import { useSyncExternalStore } from "react";
 
-import { getStoredTheme, setTheme } from "../lib/theme";
+import { useLocale } from "../lib/i18n";
+import { getStoredTheme } from "../lib/theme";
+import { useThemePreference } from "../lib/use-theme-preference";
 
 function isDarkTheme(): boolean {
   if (typeof document === "undefined") return false;
@@ -20,15 +22,17 @@ function subscribe(onStoreChange: () => void) {
 }
 
 export function ThemeToggle() {
+  const { t } = useLocale();
+  const { updateTheme } = useThemePreference();
   const dark = useSyncExternalStore(subscribe, isDarkTheme, () => false);
 
   function toggleTheme() {
     const next = !dark;
-    setTheme(next ? "dark" : "light");
+    updateTheme(next ? "dark" : "light");
   }
 
   const storedTheme = getStoredTheme();
-  const label = dark ? "Use light theme" : "Use dark theme";
+  const label = dark ? t("switchToLight") : t("switchToDark");
 
   return (
     <Button

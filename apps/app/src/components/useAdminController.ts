@@ -192,44 +192,53 @@ export function useAdminController() {
       refreshModels?: boolean;
     },
   ) {
-    setError(undefined);
     const { apiKey, refreshModels = false, ...providerInput } = input;
-    let credentialRef = providerInput.credentialRef;
-    if (apiKey?.trim()) {
-      const provider = data.providers.find(
-        (item) => item.id === input.providerId,
-      );
-      const secret = await createManagedSecret({
-        purpose: "model_provider_credential",
-        scope: "org",
-        value: apiKey.trim(),
-        name: `${provider?.name ?? "Provider"} API key`,
-      });
-      credentialRef = secret.secretRef;
-    }
-    await updateProviderMutation.mutateAsync({
-      ...providerInput,
-      ...(credentialRef === undefined ? {} : { credentialRef }),
-    });
-    if (refreshModels) {
-      setSyncingProviderId(input.providerId);
-      try {
-        await syncProviderModels(input.providerId);
-      } catch (caught) {
-        setError(
-          `Connection saved, but model refresh failed: ${caught instanceof Error ? caught.message : "Unable to reach the model endpoint."}`,
+    try {
+      let credentialRef = providerInput.credentialRef;
+      if (apiKey?.trim()) {
+        const provider = data.providers.find(
+          (item) => item.id === input.providerId,
         );
-      } finally {
-        setSyncingProviderId(undefined);
+        const secret = await createManagedSecret({
+          purpose: "model_provider_credential",
+          scope: "org",
+          value: apiKey.trim(),
+          name: `${provider?.name ?? "Provider"} API key`,
+        });
+        credentialRef = secret.secretRef;
       }
+      await updateProviderMutation.mutateAsync({
+        ...providerInput,
+        ...(credentialRef === undefined ? {} : { credentialRef }),
+      });
+      setError(undefined);
+      if (refreshModels) {
+        setSyncingProviderId(input.providerId);
+        try {
+          await syncProviderModels(input.providerId);
+        } catch (caught) {
+          setError(
+            `Connection saved, but model refresh failed: ${caught instanceof Error ? caught.message : "Unable to reach the model endpoint."}`,
+          );
+        } finally {
+          setSyncingProviderId(undefined);
+        }
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["providers"] }),
+        queryClient.invalidateQueries({ queryKey: ["models"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["providerOperationalSummary"],
+        }),
+      ]);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to update the provider.",
+      );
+      throw caught;
     }
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["providers"] }),
-      queryClient.invalidateQueries({ queryKey: ["models"] }),
-      queryClient.invalidateQueries({
-        queryKey: ["providerOperationalSummary"],
-      }),
-    ]);
   }
 
   async function handleVerifyProvider(providerId: string) {

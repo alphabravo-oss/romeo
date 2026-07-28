@@ -7,6 +7,29 @@ import { type ReactNode, useRef } from "react";
 import { Button, type ButtonProps } from "./button";
 import { cn } from "./lib/cn";
 
+let pendingMenuDialogOpener: HTMLElement | null = null;
+
+function menuTriggerForElement(element: Element): HTMLElement | null {
+  const menu = element.closest<HTMLElement>('[role="menu"][aria-labelledby]');
+  const triggerId = menu?.getAttribute("aria-labelledby");
+  const triggerElement = triggerId ? document.getElementById(triggerId) : null;
+  return triggerElement instanceof HTMLElement ? triggerElement : null;
+}
+
+function activeOverlayOpener(): HTMLElement | null {
+  const pendingOpener = pendingMenuDialogOpener;
+  pendingMenuDialogOpener = null;
+  if (pendingOpener?.isConnected === true) return pendingOpener;
+  if (
+    typeof document === "undefined" ||
+    !(document.activeElement instanceof HTMLElement)
+  )
+    return null;
+  const activeElement = document.activeElement;
+  if (activeElement.getAttribute("role") !== "menuitem") return activeElement;
+  return menuTriggerForElement(activeElement) ?? activeElement;
+}
+
 export interface DialogProps {
   children: ReactNode;
   className?: string;
@@ -37,10 +60,7 @@ export function Dialog({
     previousOpenRef.current !== true &&
     typeof document !== "undefined"
   ) {
-    openerRef.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
+    openerRef.current = activeOverlayOpener();
   }
   previousOpenRef.current = open;
   return (
@@ -63,10 +83,7 @@ export function Dialog({
             opener.focus();
           }}
           onOpenAutoFocus={() => {
-            openerRef.current ??=
-              document.activeElement instanceof HTMLElement
-                ? document.activeElement
-                : null;
+            openerRef.current ??= activeOverlayOpener();
           }}
         >
           <div className="rm-ui-dialog__header">
@@ -136,10 +153,7 @@ export function AlertDialog({
     previousOpenRef.current !== true &&
     typeof document !== "undefined"
   ) {
-    openerRef.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
+    openerRef.current = activeOverlayOpener();
   }
   previousOpenRef.current = open;
   return (
@@ -164,10 +178,7 @@ export function AlertDialog({
             opener.focus();
           }}
           onOpenAutoFocus={() => {
-            openerRef.current ??=
-              document.activeElement instanceof HTMLElement
-                ? document.activeElement
-                : null;
+            openerRef.current ??= activeOverlayOpener();
           }}
         >
           <AlertDialogPrimitive.Title className="rm-ui-dialog__title">
@@ -247,13 +258,33 @@ export function DropdownMenu({
   items: readonly DropdownMenuItem[];
   trigger: ReactNode;
 }) {
+  const closedByEscapeRef = useRef(false);
   return (
     <DropdownMenuPrimitive.Root>
       <DropdownMenuPrimitive.Trigger asChild>
         {trigger}
       </DropdownMenuPrimitive.Trigger>
       <DropdownMenuPrimitive.Portal>
-        <DropdownMenuPrimitive.Content align={align} className="rm-ui-menu">
+        <DropdownMenuPrimitive.Content
+          align={align}
+          className="rm-ui-menu"
+          onCloseAutoFocus={(event) => {
+            if (!closedByEscapeRef.current) return;
+            closedByEscapeRef.current = false;
+            const contentElement = event.currentTarget;
+            if (!(contentElement instanceof Element)) return;
+            const triggerId = contentElement.getAttribute("aria-labelledby");
+            const triggerElement = triggerId
+              ? document.getElementById(triggerId)
+              : null;
+            if (!(triggerElement instanceof HTMLElement)) return;
+            event.preventDefault();
+            triggerElement.focus();
+          }}
+          onEscapeKeyDown={() => {
+            closedByEscapeRef.current = true;
+          }}
+        >
           {items.map((item, index) => (
             <div key={index}>
               {item.separatorBefore ? (
@@ -265,7 +296,23 @@ export function DropdownMenu({
                   item.danger && "rm-ui-menu__item--danger",
                 )}
                 {...(item.disabled ? { disabled: true } : {})}
-                {...(item.onSelect ? { onSelect: item.onSelect } : {})}
+                {...(item.onSelect
+                  ? {
+                      onSelect: (event) => {
+                        const currentTarget = event.currentTarget;
+                        pendingMenuDialogOpener =
+                          currentTarget instanceof Element
+                            ? menuTriggerForElement(currentTarget)
+                            : null;
+                        const pendingOpener = pendingMenuDialogOpener;
+                        queueMicrotask(() => {
+                          if (pendingMenuDialogOpener === pendingOpener)
+                            pendingMenuDialogOpener = null;
+                        });
+                        item.onSelect?.();
+                      },
+                    }
+                  : {})}
               >
                 {item.label}
               </DropdownMenuPrimitive.Item>

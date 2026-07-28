@@ -31,6 +31,7 @@ import { FormDialog } from "./FormDialog";
 
 export const ChatMessages = memo(function ChatMessages({
   activeVoiceProfileId,
+  agentName,
   citations,
   feedback,
   isGeneratingSpeech,
@@ -49,6 +50,7 @@ export const ChatMessages = memo(function ChatMessages({
   speechMessageId,
 }: {
   activeVoiceProfileId: string | undefined;
+  agentName: string;
   citations: ChatCitation[];
   feedback: Record<string, MessageFeedbackState>;
   isGeneratingSpeech: boolean;
@@ -62,7 +64,7 @@ export const ChatMessages = memo(function ChatMessages({
   ) => void;
   onContinue: () => void;
   onDelete: (messageId: string) => void;
-  onEditAndResend: (messageId: string, content: string) => void;
+  onEditAndResend: (messageId: string, content: string) => Promise<boolean>;
   onGenerateSpeech: (messageId: string) => void;
   onRate: (messageId: string, rating: "negative" | "none" | "positive") => void;
   onRegenerate: () => void;
@@ -95,6 +97,7 @@ export const ChatMessages = memo(function ChatMessages({
           const messageFeedback = feedback[message.id];
           const attachments = (
             <MessageAttachments
+              isStreaming={isStreaming}
               message={message}
               onRetentionChange={onAttachmentRetention}
               onPreview={setPreviewAttachment}
@@ -129,11 +132,21 @@ export const ChatMessages = memo(function ChatMessages({
                         </Button>
                         <Button
                           className="primary"
-                          disabled={editValue.trim().length === 0}
+                          disabled={
+                            isStreaming || editValue.trim().length === 0
+                          }
                           onClick={() => {
-                            onEditAndResend(message.id, editValue);
-                            setEditingId(undefined);
+                            void (async () => {
+                              const ok = await onEditAndResend(
+                                message.id,
+                                editValue,
+                              );
+                              if (ok) setEditingId(undefined);
+                            })();
                           }}
+                          title={
+                            isStreaming ? t("waitForResponse") : t("saveSubmit")
+                          }
                           type="button"
                         >
                           {t("saveSubmit")}
@@ -161,23 +174,35 @@ export const ChatMessages = memo(function ChatMessages({
                         )}
                       </Action>
                       <Action
+                        disabled={isStreaming}
                         label={t("editResend")}
                         onClick={() => {
                           setEditingId(message.id);
                           setEditValue(message.content);
                         }}
+                        title={
+                          isStreaming ? t("waitForResponse") : t("editResend")
+                        }
                       >
                         <Pencil size={15} />
                       </Action>
                       <Action
+                        disabled={isStreaming}
                         label={t("branch")}
                         onClick={() => onBranch(message.id)}
+                        title={isStreaming ? t("waitForResponse") : t("branch")}
                       >
                         <GitBranch size={15} />
                       </Action>
                       <Action
+                        disabled={isStreaming}
                         label={t("deleteMessage")}
                         onClick={() => onDelete(message.id)}
+                        title={
+                          isStreaming
+                            ? t("waitForResponse")
+                            : t("deleteMessage")
+                        }
                       >
                         <Trash2 size={15} />
                       </Action>
@@ -198,7 +223,7 @@ export const ChatMessages = memo(function ChatMessages({
               </div>
               <div className="rm-message-body">
                 <div className="rm-message-heading">
-                  <span>Romeo</span>
+                  <span>{agentName}</span>
                 </div>
                 <div className="rm-message-content">
                   {isThinking ? (
@@ -256,6 +281,7 @@ export const ChatMessages = memo(function ChatMessages({
                               : "positive",
                           )
                         }
+                        pressed={messageFeedback?.rating === "positive"}
                       >
                         <ThumbsUp size={15} />
                       </Action>
@@ -270,6 +296,7 @@ export const ChatMessages = memo(function ChatMessages({
                               : "negative",
                           )
                         }
+                        pressed={messageFeedback?.rating === "negative"}
                       >
                         <ThumbsDown size={15} />
                       </Action>
@@ -285,14 +312,22 @@ export const ChatMessages = memo(function ChatMessages({
                         <Volume2 size={15} />
                       </Action>
                       <Action
+                        disabled={isStreaming}
                         label={t("branch")}
                         onClick={() => onBranch(message.id)}
+                        title={isStreaming ? t("waitForResponse") : t("branch")}
                       >
                         <GitBranch size={15} />
                       </Action>
                       <Action
+                        disabled={isStreaming}
                         label={t("deleteMessage")}
                         onClick={() => onDelete(message.id)}
+                        title={
+                          isStreaming
+                            ? t("waitForResponse")
+                            : t("deleteMessage")
+                        }
                       >
                         <Trash2 size={15} />
                       </Action>
@@ -385,10 +420,12 @@ function isOfficeMimeType(mimeType: string): boolean {
 }
 
 function MessageAttachments({
+  isStreaming,
   message,
   onRetentionChange,
   onPreview,
 }: {
+  isStreaming: boolean;
   message: Message;
   onRetentionChange: (
     messageId: string,
@@ -420,9 +457,12 @@ function MessageAttachments({
             ) : null}
             <div className="truncate">{attachment.fileName}</div>
           </Button>
-          <label title={t("keepContextTitle")}>
+          <label
+            title={isStreaming ? t("waitForResponse") : t("keepContextTitle")}
+          >
             <Input
               checked={attachment.retainedInContext}
+              disabled={isStreaming}
               onChange={(event) =>
                 onRetentionChange(
                   message.id,
@@ -450,20 +490,25 @@ function Action({
   disabled = false,
   label,
   onClick,
+  pressed,
+  title,
 }: {
   active?: boolean;
   children: React.ReactNode;
   disabled?: boolean;
   label: string;
   onClick: () => void;
+  pressed?: boolean;
+  title?: string;
 }) {
   return (
     <Button
       aria-label={label}
+      aria-pressed={pressed || undefined}
       className={`rm-message-tool ${active ? "active" : ""}`}
       disabled={disabled}
       onClick={onClick}
-      title={label}
+      title={title ?? label}
       type="button"
     >
       {children}

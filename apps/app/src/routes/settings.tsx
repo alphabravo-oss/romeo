@@ -4,6 +4,7 @@ import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal.mjs";
 import Brain from "lucide-react/dist/esm/icons/brain.mjs";
 import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen.mjs";
+import Smartphone from "lucide-react/dist/esm/icons/smartphone.mjs";
 import UserIcon from "lucide-react/dist/esm/icons/user.mjs";
 
 import { AccountSecurityPanel } from "../components/AccountSecurityPanel";
@@ -13,6 +14,7 @@ import { InterfaceSettings } from "../components/InterfaceSettings";
 import { NotificationPanel } from "../components/NotificationPanel";
 import { PageHeader } from "../components/PageHeader";
 import { SessionsPanel } from "../components/SessionsPanel";
+import { DeviceTokensPanel } from "../components/DeviceTokensPanel";
 import { PersonalContentPanel } from "../components/PersonalContentPanel";
 import { useWorkspaceData } from "../components/useWorkspaceData";
 import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
@@ -21,6 +23,7 @@ import {
   useLocale,
   useLocaleNamespaces,
 } from "../lib/i18n";
+import { resolveSectionKey } from "../lib/section-routing";
 
 export const Route = createFileRoute("/settings")({
   validateSearch: (search: Record<string, unknown>): { section?: string } =>
@@ -34,7 +37,6 @@ function SettingsPage() {
   const { t } = useLocale();
   const { section: sectionParam } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const section = sectionParam ?? "interface";
   const groups = [
     {
       label: t("preferences"),
@@ -50,6 +52,11 @@ function SettingsPage() {
       items: [
         { key: "account", label: t("profile"), icon: UserIcon },
         { key: "security", label: t("security"), icon: ShieldCheck },
+        {
+          key: "device-tokens",
+          label: t("deviceTokensTitle"),
+          icon: Smartphone,
+        },
       ],
     },
   ];
@@ -66,7 +73,12 @@ function SettingsPage() {
     notes: { title: t("note"), description: t("notesDescription") },
     account: { title: t("profile"), description: t("profileDescription") },
     security: { title: t("security"), description: t("securityDescription") },
+    "device-tokens": {
+      title: t("deviceTokensTitle"),
+      description: t("adminDeviceTokensDescription"),
+    },
   };
+  const section = resolveSectionKey(sectionParam, meta, "interface");
 
   return (
     <ConsoleLayout
@@ -129,6 +141,7 @@ function SettingsPage() {
           <SessionsPanel />
         </div>
       ) : null}
+      {section === "device-tokens" ? <DeviceTokensPanel /> : null}
     </ConsoleLayout>
   );
 }

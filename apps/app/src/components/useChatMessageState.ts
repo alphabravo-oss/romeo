@@ -8,6 +8,7 @@ import {
   updateMessageFeedback,
 } from "../features";
 import type { Message, MessageFeedbackState } from "../features/types";
+import { isMessageActionEnabled } from "./turn-rollback";
 import { clientMessageId } from "./workspace-controller-media";
 
 interface ChatMessageStateOptions {
@@ -57,6 +58,10 @@ export function useChatMessageState({
     setMessages((current) => [...current, message]);
   }
 
+  function restoreMessages(snapshot: readonly Message[]): void {
+    setMessages([...snapshot]);
+  }
+
   async function handleRateMessage(
     messageId: string,
     rating: "negative" | "none" | "positive",
@@ -81,7 +86,14 @@ export function useChatMessageState({
   }
 
   async function handleDeleteMessage(messageId: string) {
-    if (activeChatId === undefined || isStreaming) return;
+    if (
+      !isMessageActionEnabled({
+        isStreaming,
+        hasActiveChat: activeChatId !== undefined,
+      }) ||
+      activeChatId === undefined
+    )
+      return;
     setError(undefined);
     try {
       await deleteMessage(activeChatId, messageId);
@@ -98,7 +110,14 @@ export function useChatMessageState({
     attachmentId: string,
     retainedInContext: boolean,
   ) {
-    if (activeChatId === undefined || isStreaming) return;
+    if (
+      !isMessageActionEnabled({
+        isStreaming,
+        hasActiveChat: activeChatId !== undefined,
+      }) ||
+      activeChatId === undefined
+    )
+      return;
     setError(undefined);
     try {
       await updateAttachmentRetention({
@@ -135,6 +154,7 @@ export function useChatMessageState({
     handleAttachmentRetention,
     handleDeleteMessage,
     handleRateMessage,
+    restoreMessages,
     syncPersistedMessages,
   };
 }

@@ -1,4 +1,4 @@
-import { Input, NativeSelect, Button } from "@romeo/ui";
+import { Button, Field, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -9,14 +9,21 @@ import {
   syncExternalBillingEvent,
 } from "../features/billing";
 import type {
+  BillingPlan,
   BillingPlanQuotaTemplate,
   BillingPlanStatus,
   ExternalBillingEventType,
 } from "../features/billing";
 import { toast } from "../lib/toast";
-import { useLocale } from "../lib/i18n";
+import { useLocale, type MessageKey } from "../lib/i18n";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { EntitlementsTab, LifecycleTab } from "./BillingGovernanceTabs";
+import {
+  buildApplyPayload,
+  buildPlanDefaults,
+  type BillingQuotaMetric,
+} from "./billing-plan-payload";
+import { useConfirm } from "./ConfirmDialog";
 import { Tabs } from "./Tabs";
 
 const templateCol = createColumnHelper<BillingPlanQuotaTemplate>();
@@ -26,6 +33,15 @@ const planStatuses: BillingPlanStatus[] = [
   "canceled",
   "past_due",
   "trialing",
+];
+const quotaMetrics: BillingQuotaMetric[] = [
+  "image.cost.micro_usd",
+  "image.generated",
+  "web.search.request",
+  "web.url.fetch",
+  "run.started",
+  "storage.byte",
+  "tool.call",
 ];
 const eventTypes: ExternalBillingEventType[] = [
   "customer.updated",
@@ -50,42 +66,6 @@ export function BillingPanel() {
 
   const plan = planQuery.data ?? null;
 
-  const planForm = useForm({
-    defaultValues: {
-      code: "pro",
-      name: "Pro",
-      status: "active" as BillingPlanStatus,
-      metric: "tool.call" as BillingPlanQuotaTemplate["metric"],
-      limit: 1000,
-      resetInterval: "monthly" as BillingPlanQuotaTemplate["resetInterval"],
-    },
-    onSubmit: async ({ value }) => {
-      try {
-        await applyMutation.mutateAsync({
-          code: value.code,
-          name: value.name,
-          status: value.status,
-          source: "manual",
-          quotaTemplates: [
-            {
-              metric: value.metric,
-              limit: value.limit,
-              resetInterval: value.resetInterval,
-            },
-          ],
-        });
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["billingPlan"] }),
-          queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-        ]);
-        toast(t("billingPlanUpdated"), "success");
-      } catch (caught) {
-        toast(t("couldNotUpdateBillingPlan"), "error");
-        throw caught;
-      }
-    },
-  });
-
   const eventForm = useForm({
     defaultValues: {
       provider: "stripe",
@@ -109,24 +89,6 @@ export function BillingPanel() {
     },
   });
 
-  const columns = useMemo<ColumnDef<BillingPlanQuotaTemplate, any>[]>(
-    () => [
-      templateCol.accessor("metric", {
-        header: t("metric"),
-        cell: (c) => <span className="font-medium">{c.getValue()}</span>,
-      }),
-      templateCol.accessor("limit", {
-        header: t("limit"),
-        cell: (c) => <span>{c.getValue()}</span>,
-      }),
-      templateCol.accessor("resetInterval", {
-        header: t("reset"),
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-      }),
-    ],
-    [t],
-  );
-
   return (
     <section className="rm-panel p-4">
       <div className="rm-card-header">
@@ -144,7 +106,7 @@ export function BillingPanel() {
         {plan ? (
           <span>
             {t("currentPlan")}: <span className="font-medium">{plan.name}</span>{" "}
-            ({plan.code}) — {plan.status} / {plan.source}
+            ({plan.code}) — {t(planStatusKey(plan.status))} / {plan.source}
           </span>
         ) : (
           <span>{t("noBillingPlan")}</span>
@@ -157,141 +119,25 @@ export function BillingPanel() {
             id: "plan",
             label: t("plan"),
             content: (
-              <form
-                className="grid gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void planForm.handleSubmit();
+              <BillingPlanEditor
+                isApplying={applyMutation.isPending}
+                key={plan?.updatedAt ?? "new"}
+                onApply={async (input) => {
+                  try {
+                    await applyMutation.mutateAsync(input);
+                    await Promise.all([
+                      queryClient.invalidateQueries({
+                        queryKey: ["billingPlan"],
+                      }),
+                      queryClient.invalidateQueries({ queryKey: ["quotas"] }),
+                    ]);
+                    toast(t("billingPlanUpdated"), "success");
+                  } catch (caught) {
+                    toast(t("couldNotUpdateBillingPlan"), "error");
+                    throw caught;
+                  }
                 }}
-              >
-                <planForm.Field name="code" validators={{ onChange: required }}>
-                  {(field) => (
-                    <Input
-                      name="code"
-                      aria-label={t("planCode")}
-                      onBlur={field.handleBlur}
-                      onChange={(event) =>
-                        field.handleChange(event.currentTarget.value)
-                      }
-                      placeholder={t("planCode")}
-                      value={field.state.value}
-                    />
-                  )}
-                </planForm.Field>
-                <planForm.Field name="name" validators={{ onChange: required }}>
-                  {(field) => (
-                    <Input
-                      name="name"
-                      aria-label={t("planName")}
-                      onBlur={field.handleBlur}
-                      onChange={(event) =>
-                        field.handleChange(event.currentTarget.value)
-                      }
-                      placeholder={t("planName")}
-                      value={field.state.value}
-                    />
-                  )}
-                </planForm.Field>
-                <planForm.Field name="status">
-                  {(field) => (
-                    <NativeSelect
-                      name="status"
-                      aria-label="Status"
-                      onBlur={field.handleBlur}
-                      onChange={(event) =>
-                        field.handleChange(
-                          event.currentTarget.value as BillingPlanStatus,
-                        )
-                      }
-                      value={field.state.value}
-                    >
-                      {planStatuses.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </NativeSelect>
-                  )}
-                </planForm.Field>
-                <planForm.Field name="metric">
-                  {(field) => (
-                    <NativeSelect
-                      name="metric"
-                      aria-label="Metric"
-                      onBlur={field.handleBlur}
-                      onChange={(event) =>
-                        field.handleChange(
-                          event.currentTarget
-                            .value as BillingPlanQuotaTemplate["metric"],
-                        )
-                      }
-                      value={field.state.value}
-                    >
-                      <option value="run.started">run.started</option>
-                      <option value="tool.call">tool.call</option>
-                      <option value="storage.byte">storage.byte</option>
-                    </NativeSelect>
-                  )}
-                </planForm.Field>
-                <planForm.Field name="limit">
-                  {(field) => (
-                    <Input
-                      name="limit"
-                      aria-label="Limit"
-                      min={0}
-                      onBlur={field.handleBlur}
-                      onChange={(event) =>
-                        field.handleChange(Number(event.currentTarget.value))
-                      }
-                      type="number"
-                      value={field.state.value}
-                    />
-                  )}
-                </planForm.Field>
-                <planForm.Field name="resetInterval">
-                  {(field) => (
-                    <NativeSelect
-                      name="resetInterval"
-                      aria-label="Reset Interval"
-                      onBlur={field.handleBlur}
-                      onChange={(event) =>
-                        field.handleChange(
-                          event.currentTarget
-                            .value as BillingPlanQuotaTemplate["resetInterval"],
-                        )
-                      }
-                      value={field.state.value}
-                    >
-                      <option value="none">{t("noReset")}</option>
-                      <option value="daily">{t("daily")}</option>
-                      <option value="monthly">{t("monthly")}</option>
-                    </NativeSelect>
-                  )}
-                </planForm.Field>
-                <planForm.Subscribe
-                  selector={(state) => ({
-                    canSubmit: state.canSubmit,
-                    isSubmitting: state.isSubmitting,
-                  })}
-                >
-                  {({ canSubmit, isSubmitting }) => (
-                    <Button disabled={!canSubmit || isSubmitting} type="submit">
-                      {isSubmitting ? t("saving") : t("savePlan")}
-                    </Button>
-                  )}
-                </planForm.Subscribe>
-              </form>
-            ),
-          },
-          {
-            id: "quota-tiers",
-            label: t("quotaTiers"),
-            content: (
-              <DataTable
-                columns={columns}
-                data={plan?.quotaTemplates ?? []}
-                empty={t("noPlanQuotas")}
+                plan={plan}
               />
             ),
           },
@@ -326,23 +172,25 @@ export function BillingPanel() {
                 </eventForm.Field>
                 <eventForm.Field name="eventType">
                   {(field) => (
-                    <NativeSelect
-                      name="eventType"
-                      aria-label="Event Type"
-                      onBlur={field.handleBlur}
-                      onChange={(event) =>
-                        field.handleChange(
-                          event.currentTarget.value as ExternalBillingEventType,
-                        )
-                      }
-                      value={field.state.value}
-                    >
-                      {eventTypes.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </NativeSelect>
+                    <Field label={t("billingEventType")}>
+                      <NativeSelect
+                        name="eventType"
+                        onBlur={field.handleBlur}
+                        onChange={(event) =>
+                          field.handleChange(
+                            event.currentTarget
+                              .value as ExternalBillingEventType,
+                          )
+                        }
+                        value={field.state.value}
+                      >
+                        {eventTypes.map((option) => (
+                          <option key={option} value={option}>
+                            {t(billingEventTypeKey(option))}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </Field>
                   )}
                 </eventForm.Field>
                 <eventForm.Subscribe
@@ -374,4 +222,296 @@ export function BillingPanel() {
       />
     </section>
   );
+}
+
+function BillingPlanEditor({
+  isApplying,
+  onApply,
+  plan,
+}: {
+  isApplying: boolean;
+  onApply: (input: ReturnType<typeof buildApplyPayload>) => Promise<void>;
+  plan: BillingPlan | null;
+}) {
+  const { t } = useLocale();
+  const { ask, dialog } = useConfirm();
+  const required = ({ value }: { value: string }) =>
+    !value?.trim() ? t("required") : undefined;
+  const planForm = useForm({
+    defaultValues: buildPlanDefaults(plan),
+    onSubmit: async ({ value }) => {
+      if (
+        !(await ask({
+          title: t("billingApplyPlanTitle"),
+          body: t("billingApplyPlanBody"),
+          confirmLabel: t("billingApplyPlan"),
+          tone: "danger",
+        }))
+      )
+        return;
+      await onApply(buildApplyPayload(plan, value));
+    },
+  });
+
+  const columns = useMemo<ColumnDef<BillingPlanQuotaTemplate, any>[]>(
+    () => [
+      templateCol.accessor("metric", {
+        header: t("metric"),
+        cell: (cell) => (
+          <planForm.Field name={`quotaTemplates[${cell.row.index}].metric`}>
+            {(field) => (
+              <NativeSelect
+                name={`quotaTemplates[${cell.row.index}].metric`}
+                aria-label={t("metric")}
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(
+                    event.currentTarget
+                      .value as BillingPlanQuotaTemplate["metric"],
+                  )
+                }
+                value={field.state.value}
+              >
+                {quotaMetrics.map((metric) => (
+                  <option key={metric} value={metric}>
+                    {t(billingMetricKey(metric))}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
+          </planForm.Field>
+        ),
+      }),
+      templateCol.accessor("limit", {
+        header: t("limit"),
+        cell: (cell) => (
+          <planForm.Field name={`quotaTemplates[${cell.row.index}].limit`}>
+            {(field) => (
+              <Input
+                name={`quotaTemplates[${cell.row.index}].limit`}
+                aria-label={t("limit")}
+                min={0}
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(Number(event.currentTarget.value))
+                }
+                type="number"
+                value={field.state.value}
+              />
+            )}
+          </planForm.Field>
+        ),
+      }),
+      templateCol.accessor("resetInterval", {
+        header: t("reset"),
+        cell: (cell) => (
+          <planForm.Field
+            name={`quotaTemplates[${cell.row.index}].resetInterval`}
+          >
+            {(field) => (
+              <NativeSelect
+                name={`quotaTemplates[${cell.row.index}].resetInterval`}
+                aria-label={t("reset")}
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(
+                    event.currentTarget
+                      .value as BillingPlanQuotaTemplate["resetInterval"],
+                  )
+                }
+                value={field.state.value}
+              >
+                <option value="none">{t("noReset")}</option>
+                <option value="daily">{t("daily")}</option>
+                <option value="monthly">{t("monthly")}</option>
+              </NativeSelect>
+            )}
+          </planForm.Field>
+        ),
+      }),
+      templateCol.display({
+        id: "actions",
+        header: "",
+        cell: (cell) => (
+          <Button
+            onClick={() =>
+              void planForm.removeFieldValue("quotaTemplates", cell.row.index)
+            }
+            type="button"
+            variant="danger"
+          >
+            {t("quotaDelete")}
+          </Button>
+        ),
+      }),
+    ],
+    [planForm, t],
+  );
+
+  return (
+    <>
+      <form
+        className="grid gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void planForm.handleSubmit();
+        }}
+      >
+        <planForm.Field name="code" validators={{ onChange: required }}>
+          {(field) => (
+            <Field label={t("planCode")}>
+              <Input
+                name="code"
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
+                value={field.state.value}
+              />
+            </Field>
+          )}
+        </planForm.Field>
+        <planForm.Field name="name" validators={{ onChange: required }}>
+          {(field) => (
+            <Field label={t("planName")}>
+              <Input
+                name="name"
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
+                value={field.state.value}
+              />
+            </Field>
+          )}
+        </planForm.Field>
+        <planForm.Field name="status">
+          {(field) => (
+            <Field label={t("status")}>
+              <NativeSelect
+                name="status"
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(
+                    event.currentTarget.value as BillingPlanStatus,
+                  )
+                }
+                value={field.state.value}
+              >
+                {planStatuses.map((option) => (
+                  <option key={option} value={option}>
+                    {t(planStatusKey(option))}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+          )}
+        </planForm.Field>
+        <planForm.Field mode="array" name="quotaTemplates">
+          {(field) => {
+            const usedMetrics = new Set(
+              field.state.value.map((template) => template.metric),
+            );
+            const nextMetric = quotaMetrics.find(
+              (metric) => !usedMetrics.has(metric),
+            );
+            return (
+              <div className="grid gap-2">
+                <div className="text-sm font-medium">{t("quotaTiers")}</div>
+                <DataTable
+                  columns={columns}
+                  data={field.state.value}
+                  empty={t("noPlanQuotas")}
+                />
+                <Button
+                  disabled={nextMetric === undefined}
+                  onClick={() => {
+                    if (nextMetric === undefined) return;
+                    field.pushValue({
+                      metric: nextMetric,
+                      limit: 0,
+                      resetInterval: "monthly",
+                    });
+                  }}
+                  type="button"
+                >
+                  {t("addQuota")}
+                </Button>
+              </div>
+            );
+          }}
+        </planForm.Field>
+        <planForm.Subscribe
+          selector={(state) => ({
+            canSubmit: state.canSubmit,
+            hasQuotaTemplates: state.values.quotaTemplates.length > 0,
+            isSubmitting: state.isSubmitting,
+          })}
+        >
+          {({ canSubmit, hasQuotaTemplates, isSubmitting }) => (
+            <Button
+              disabled={
+                !canSubmit || !hasQuotaTemplates || isSubmitting || isApplying
+              }
+              pending={isSubmitting || isApplying}
+              type="submit"
+            >
+              {isSubmitting || isApplying ? t("saving") : t("billingApplyPlan")}
+            </Button>
+          )}
+        </planForm.Subscribe>
+      </form>
+      {dialog}
+    </>
+  );
+}
+
+function planStatusKey(status: BillingPlanStatus): MessageKey {
+  switch (status) {
+    case "active":
+      return "billingStatusActive";
+    case "canceled":
+      return "billingStatusCanceled";
+    case "past_due":
+      return "billingStatusPastDue";
+    case "trialing":
+      return "billingStatusTrialing";
+  }
+}
+
+function billingMetricKey(metric: BillingQuotaMetric): MessageKey {
+  switch (metric) {
+    case "image.cost.micro_usd":
+      return "quotaMetricImageCost";
+    case "image.generated":
+      return "quotaMetricImagesGenerated";
+    case "run.started":
+      return "quotaMetricRunsStarted";
+    case "storage.byte":
+      return "quotaMetricStorageBytes";
+    case "tool.call":
+      return "quotaMetricToolCalls";
+    case "web.search.request":
+      return "quotaMetricWebSearches";
+    case "web.url.fetch":
+      return "quotaMetricWebFetches";
+  }
+}
+
+function billingEventTypeKey(type: ExternalBillingEventType): MessageKey {
+  switch (type) {
+    case "customer.updated":
+      return "billingEventCustomerUpdated";
+    case "invoice.paid":
+      return "billingEventInvoicePaid";
+    case "invoice.payment_failed":
+      return "billingEventInvoicePaymentFailed";
+    case "subscription.canceled":
+      return "billingEventSubscriptionCanceled";
+    case "subscription.created":
+      return "billingEventSubscriptionCreated";
+    case "subscription.updated":
+      return "billingEventSubscriptionUpdated";
+  }
 }

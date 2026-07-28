@@ -104,28 +104,42 @@ export function WorkspaceShell() {
               onSelectAgent={workspace.setActiveAgentId}
             />
             <ManagedModelPersonalization agentId={workspace.activeAgent?.id} />
-            <span className="rm-main-context-divider" aria-hidden="true" />
-            <label className="rm-main-workspace">
-              <LayoutGrid aria-hidden="true" size={14} />
-              <span className="sr-only">{t("switchWorkspace")}</span>
-              {workspaces.length > 1 ? (
-                <NativeSelect
-                  aria-label={t("switchWorkspace")}
-                  onChange={(event) =>
-                    setWorkspaceId(event.currentTarget.value)
-                  }
-                  value={workspaceId ?? ""}
-                >
-                  {workspaces.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-              ) : (
-                <span>{workspace.workspace?.name ?? t("loading")}</span>
-              )}
-            </label>
+            {/*
+             * Rendered only when there is somewhere to switch to. Previously the
+             * single-workspace case fell back to a plain <span> holding the
+             * workspace name, which put an inert word in the top bar that looked
+             * like a control, and left this <label> wrapping no form element
+             * while still announcing "Switch workspace" to assistive tech — a
+             * promise of an action that did not exist.
+             *
+             * Note nothing in the UI calls createWorkspace() today, so this
+             * branch is currently unreachable in practice. When workspace
+             * creation ships, prefer moving this to the sidebar footer beside
+             * the account row: workspace is account scope, not conversation
+             * scope, which is why the top bar reads cleaner without it.
+             */}
+            {workspaces.length > 1 ? (
+              <>
+                <span className="rm-main-context-divider" aria-hidden="true" />
+                <label className="rm-main-workspace">
+                  <LayoutGrid aria-hidden="true" size={14} />
+                  <span className="sr-only">{t("switchWorkspace")}</span>
+                  <NativeSelect
+                    aria-label={t("switchWorkspace")}
+                    onChange={(event) =>
+                      setWorkspaceId(event.currentTarget.value)
+                    }
+                    value={workspaceId ?? ""}
+                  >
+                    {workspaces.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </label>
+              </>
+            ) : null}
           </div>
           <div className="rm-topbar-actions">
             <ThemeToggle />
@@ -203,9 +217,7 @@ export function WorkspaceShell() {
             void workspace.handleGenerateImages(input)
           }
           onInspectContext={() => void workspace.handleInspectContext()}
-          onEditAndResend={(messageId, content) =>
-            void workspace.handleEditAndResend(messageId, content)
-          }
+          onEditAndResend={workspace.handleEditAndResend}
           onRateMessage={(messageId, rating) =>
             void workspace.handleRateMessage(messageId, rating)
           }

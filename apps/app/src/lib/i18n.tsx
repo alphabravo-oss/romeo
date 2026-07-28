@@ -37,6 +37,9 @@ export const localeNamespaceGroups = {
   ],
   settings: [
     "access-credential",
+    "admin-navigation",
+    "admin-section",
+    "device-impersonation",
     "notification-admin",
     "prompt-template-admin",
     "security",
@@ -47,6 +50,7 @@ export const localeNamespaceGroups = {
     "workspace-shell-and-connector",
   ],
   workspace: [
+    "admin-navigation",
     "agent-studio",
     "eval-workspace",
     "group-organization",
@@ -104,7 +108,14 @@ export function useLocale() {
 }
 
 export function useLocaleNamespaces(namespaces: readonly LocaleNamespace[]) {
-  useTranslation([...namespaces]);
+  const { i18n } = useTranslation([...namespaces]);
+  // Components intentionally use one global MessageKey union. Limit that
+  // global lookup to the namespaces declared by the active route instead of
+  // silently searching every catalog in the product.
+  i18n.options.fallbackNS = [
+    "core",
+    ...namespaces.filter((namespace) => namespace !== "core"),
+  ];
 }
 
 function createRomeoI18n() {
@@ -114,7 +125,7 @@ function createRomeoI18n() {
   void instance.init({
     defaultNS: "core",
     fallbackLng: "en",
-    fallbackNS: [...namespaceNames],
+    fallbackNS: ["core"],
     initImmediate: false,
     interpolation: { escapeValue: false },
     lng: "en",

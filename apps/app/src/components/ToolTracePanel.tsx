@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listToolCalls } from "../features/tools";
 import type { ToolCallRecord } from "../features/tools";
 import { useLocale } from "../lib/i18n";
+import { PanelState } from "../lib/panel-state";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 
 const col = createColumnHelper<ToolCallRecord>();
@@ -19,7 +20,18 @@ export function ToolTracePanel({
     queryFn: () => listToolCalls(activeAgentId),
     enabled: activeAgentId !== undefined,
   });
-  const calls = callsQuery.data ?? [];
+
+  if (activeAgentId === undefined) {
+    return (
+      <section className="rm-panel p-4">
+        <div className="rm-card-header">
+          <div className="text-sm text-muted">{t("toolTraceCalls")}</div>
+        </div>
+        <div className="rm-empty">{t("toolTraceSelectAgent")}</div>
+      </section>
+    );
+  }
+
   const columns: ColumnDef<ToolCallRecord, any>[] = [
     col.accessor("toolId", {
       header: t("toolTraceTool"),
@@ -72,7 +84,15 @@ export function ToolTracePanel({
           {callsQuery.isFetching ? t("refreshing") : t("refresh")}
         </Button>
       </div>
-      <DataTable columns={columns} data={calls} empty={t("toolTraceNone")} />
+      <PanelState query={callsQuery} empty={t("toolTraceNone")}>
+        {(calls) => (
+          <DataTable
+            columns={columns}
+            data={calls}
+            empty={t("toolTraceNone")}
+          />
+        )}
+      </PanelState>
     </section>
   );
 }

@@ -106,18 +106,18 @@ export function ProviderPanel({
     <section className="rm-panel p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="rm-card-title">{t("connections")}</div>
+          <div className="rm-card-title">{t("providerCredentials")}</div>
           <p className="text-sm text-muted">{t("connectionsDescription")}</p>
         </div>
         <Button onClick={() => setDialog("new")} variant="primary">
-          + {t("addConnection")}
+          + {t("addProvider")}
         </Button>
       </div>
 
       <div className="mt-4 grid gap-4">
         <PanelStats
           items={[
-            { label: t("connections"), value: providers.length },
+            { label: t("providerCredentials"), value: providers.length },
             {
               label: t("enabled"),
               value: providers.filter((provider) => provider.enabled).length,
@@ -215,7 +215,7 @@ export function ProviderPanel({
           <EmptyState
             action={
               <Button onClick={() => setDialog("new")} variant="primary">
-                + {t("addConnection")}
+                + {t("addProvider")}
               </Button>
             }
             title={t("connectEndpoint")}
@@ -305,7 +305,7 @@ export function ProviderPanel({
                       checked={provider.enabled}
                       disabled={isUpdating}
                       label={t("enabled")}
-                      onCheckedChange={(checked) =>
+                      onCheckedChange={(checked) => {
                         void onUpdateProvider({
                           providerId: provider.id,
                           name: provider.name,
@@ -314,8 +314,8 @@ export function ProviderPanel({
                             ? {}
                             : { modelIds: provider.modelIds }),
                           enabled: checked === true,
-                        })
-                      }
+                        }).catch(() => undefined);
+                      }}
                     />
                     <Button
                       disabled={verifyingProviderId === provider.id}

@@ -1,4 +1,4 @@
-import { Input, Textarea, NativeSelect, Button } from "@romeo/ui";
+import { Button, Field, NativeSelect, Select, Textarea } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -19,9 +19,10 @@ import {
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
 import { toast } from "../lib/toast";
-import { useLocale } from "../lib/i18n";
+import { useLocale, type MessageKey } from "../lib/i18n";
 import { useConfirm } from "./ConfirmDialog";
 import { PanelStats } from "./PanelStats";
+import { parseRagPolicyPatch } from "./rag-change-request";
 import { RagPolicyTab } from "./RagPolicyTab";
 import { RagReplayTab } from "./RagReplayTab";
 import { Tabs } from "./Tabs";
@@ -109,7 +110,7 @@ function PostureView(props: { report: RagPostureReport }) {
             label: t("knowledgeBases"),
             value: report.corpus.knowledgeBaseCount,
           },
-          { label: t("sources"), value: report.corpus.sourceCount },
+          { label: t("ragSources"), value: report.corpus.sourceCount },
           {
             label: t("indexedSources"),
             value: report.corpus.indexedSourceCount,
@@ -196,7 +197,19 @@ function ChangeRequestTab() {
     queryFn: getRagPolicyChangeRequest,
   });
   const { ask, dialog } = useConfirm();
+  const [justificationCode, setJustificationCode] =
+    useState<RagPolicyChangeJustificationCode>(
+      ragPolicyChangeJustificationCodes[0],
+    );
+  const [policyPatch, setPolicyPatch] = useState(
+    '{\n  "enabledTiers": ["workspace"]\n}',
+  );
+  const [createError, setCreateError] = useState<MessageKey>();
 
+  const createMutation = useMutation({
+    mutationFn: (input: CreateRagPolicyChangeRequestInput) =>
+      createRagPolicyChangeRequest(input),
+  });
   const approveMutation = useMutation({
     mutationFn: (requestId: string) =>
       approveRagPolicyChangeRequest(requestId, { confirmRequestId: requestId }),
@@ -211,6 +224,28 @@ function ChangeRequestTab() {
         reasonCode: input.reasonCode,
       }),
   });
+
+  async function handleCreate() {
+    const parsed = parseRagPolicyPatch(policyPatch);
+    if (!parsed.ok) {
+      setCreateError(ragPolicyPatchErrorKey(parsed.error));
+      return;
+    }
+    setCreateError(undefined);
+    const input: CreateRagPolicyChangeRequestInput = {
+      justificationCode,
+      policy: parsed.policy as CreateRagPolicyChangeRequestInput["policy"],
+    };
+    try {
+      await createMutation.mutateAsync(input);
+      await queryClient.invalidateQueries({
+        queryKey: ["ragPolicyChangeRequest"],
+      });
+      toast(t("changeRequestCreated"), "success");
+    } catch {
+      toast(t("couldNotCreateChangeRequest"), "error");
+    }
+  }
 
   async function handleApprove(request: RagPolicyChangeRequest) {
     const confirmed = await ask({
@@ -227,9 +262,8 @@ function ChangeRequestTab() {
       await queryClient.invalidateQueries({ queryKey: ["ragPolicy"] });
       await queryClient.invalidateQueries({ queryKey: ["ragPosture"] });
       toast(t("changeRequestApproved"), "success");
-    } catch (caught) {
+    } catch {
       toast(t("couldNotApproveChangeRequest"), "error");
-      throw caught;
     }
   }
 
@@ -253,9 +287,8 @@ function ChangeRequestTab() {
         queryKey: ["ragPolicyChangeRequest"],
       });
       toast(t("changeRequestRejected"), "success");
-    } catch (caught) {
+    } catch {
       toast(t("couldNotRejectChangeRequest"), "error");
-      throw caught;
     }
   }
 
@@ -271,6 +304,63 @@ function ChangeRequestTab() {
           {changeRequestQuery.isFetching ? t("refreshing") : t("refresh")}
         </Button>
       </div>
+      <form
+        className="grid gap-3 rounded-md border border-border p-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleCreate();
+        }}
+      >
+        <div className="font-medium">{t("proposePolicyChange")}</div>
+        <Field label={t("changeRequestJustification")}>
+          <Select
+            name="justificationCode"
+            onValueChange={(value) =>
+              setJustificationCode(value as RagPolicyChangeJustificationCode)
+            }
+            options={ragPolicyChangeJustificationCodes.map((code) => ({
+              label: t(ragPolicyJustificationKey(code)),
+              value: code,
+            }))}
+            value={justificationCode}
+          />
+        </Field>
+        <Field
+          description={t("policyPatchJsonHelp")}
+          label={t("proposedPolicyPatch")}
+          {...(createError === undefined ? {} : { error: t(createError) })}
+        >
+          <Textarea
+            name="policyPatch"
+            onChange={(event) => {
+              setPolicyPatch(event.currentTarget.value);
+              if (createError !== undefined) setCreateError(undefined);
+            }}
+            rows={7}
+            spellCheck={false}
+            value={policyPatch}
+          />
+        </Field>
+        <Button
+          variant="primary"
+          disabled={
+            !changeRequestQuery.isSuccess ||
+            changeRequestQuery.data?.status === "pending" ||
+            createMutation.isPending
+          }
+          pending={createMutation.isPending}
+          type="submit"
+        >
+          {createMutation.isPending
+            ? t("creatingChangeRequest")
+            : t("createChangeRequest")}
+        </Button>
+        {changeRequestQuery.data?.status === "pending" ? (
+          <div className="text-xs text-muted">
+            {t("pendingChangeRequestExists")}
+          </div>
+        ) : null}
+      </form>
       <PanelState
         query={changeRequestQuery}
         empty={t("noChangeRequest")}
@@ -315,7 +405,10 @@ function ChangeRequestView(props: {
           { label: t("changedFields"), value: request.changedFields.length },
           {
             label: t("justification"),
-            value: request.justificationCode ?? "—",
+            value:
+              request.justificationCode === undefined
+                ? "—"
+                : t(ragPolicyJustificationKey(request.justificationCode)),
           },
           {
             label: t("replayCases"),
@@ -394,4 +487,36 @@ function ChangeRequestView(props: {
       )}
     </div>
   );
+}
+
+function ragPolicyJustificationKey(
+  code: RagPolicyChangeJustificationCode,
+): MessageKey {
+  switch (code) {
+    case "compliance_update":
+      return "ragJustificationComplianceUpdate";
+    case "incident_response":
+      return "ragJustificationIncidentResponse";
+    case "manual_risk_reduction":
+      return "ragJustificationManualRiskReduction";
+    case "retrieval_replay_improvement":
+      return "ragJustificationRetrievalReplayImprovement";
+    default:
+      return code satisfies never;
+  }
+}
+
+function ragPolicyPatchErrorKey(
+  error: "empty_patch" | "invalid_json" | "object_required",
+): MessageKey {
+  switch (error) {
+    case "empty_patch":
+      return "policyPatchEmpty";
+    case "invalid_json":
+      return "policyPatchInvalidJson";
+    case "object_required":
+      return "policyPatchObjectRequired";
+    default:
+      return error satisfies never;
+  }
 }

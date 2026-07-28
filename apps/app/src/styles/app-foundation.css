@@ -70,11 +70,27 @@
   --rm-on-accent: #ffffff;
   --rm-accent-strong: #2563eb;
   --rm-accent-secondary: #7c3aed;
+  /* Status tokens. These were referenced by .rm-connection-checks and the run
+     activity dots long before they existed, and an undefined var resolves to
+     `unset` — transparent for background, inherit for color — so a failed run
+     rendered an invisible dot. Defined here so status has one source of truth.
+     Values are the 700 ramp, not 600: these carry text (.rm-connection-checks
+     .fail/.warning), so they must clear 4.5:1 on #ffffff, and 600 does not —
+     emerald-600 lands at 3.77:1 and amber-600 at 3.19:1. Measured:
+     success 5.48:1, warning 5.02:1, danger 4.83:1. */
+  --rm-success: #047857;
+  --rm-warning: #b45309;
+  --rm-danger: #dc2626;
   --rm-shadow: 0 1px 2px rgb(24 24 27 / 5%), 0 12px 36px rgb(24 24 27 / 10%);
   --rm-radius-item: 8px;
   --rm-radius-lg: 10px;
   --rm-radius-bubble: 12px;
   --rm-shell-header-height: 60px;
+  /* Sidebar row rhythm. Every interactive row in the rail is exactly one of
+     these tall, with one inset. Matches Open WebUI's px-2 py-[6px] over a 20px
+     line box. See the row contract in app-navigation.css. */
+  --rm-row-h: 32px;
+  --rm-row-px: 8px;
 
   /* Compatibility tokens for surfaces that use the shadcn/Astronomer vocabulary. */
   --background: 0 0% 100%;
@@ -101,6 +117,11 @@ html.dark {
   --rm-on-accent: #ffffff;
   --rm-accent-strong: #60a5fa;
   --rm-accent-secondary: #8b5cf6;
+  /* The 400 ramp against #09090b — measured 10.35:1, 11.92:1, 7.19:1. The
+     light-mode 700 values would invert to roughly 2:1 here. */
+  --rm-success: #34d399;
+  --rm-warning: #fbbf24;
+  --rm-danger: #f87171;
   --rm-shadow: 0 2px 8px rgb(0 0 0 / 35%), 0 18px 54px rgb(0 0 0 / 48%);
 
   --background: 240 10% 3.9%;
@@ -523,19 +544,11 @@ html.dark .rm-new-chat-button:hover {
 }
 
 .rm-connection-result.success {
-  color: #15803d;
+  color: var(--rm-success);
 }
 
 .rm-connection-result.error {
-  color: #b91c1c;
-}
-
-html.dark .rm-connection-result.success {
-  color: #86efac;
-}
-
-html.dark .rm-connection-result.error {
-  color: #fca5a5;
+  color: var(--rm-danger);
 }
 
 @media (max-width: 780px) {
@@ -846,31 +859,26 @@ html.dark .rm-connection-result.error {
   font: inherit;
 }
 
+/* Geometry (height, inset, radius, justification) is owned by the sidebar row
+   contract in app-navigation.css — keep only type and icon spacing here. */
+
 .rm-new-chat-button {
   display: flex;
   align-items: center;
   gap: 10px;
-  border-radius: var(--rm-radius-item);
-  background: transparent;
-  padding: 8px 10px; /* Open WebUI px-2.5 py-2 */
   font-size: 14px;
   font-weight: 500;
 }
 
 .rm-chat-create-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .rm-chat-create-row .rm-new-chat-button {
   min-width: 0;
-}
-
-.rm-chat-create-row .rm-icon-button {
-  width: 32px;
-  height: 32px;
 }
 
 .rm-sidebar-section {
@@ -883,7 +891,9 @@ html.dark .rm-connection-result.error {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 6px;
+  /* Same inset as every row, so the section title's text starts on the same
+     vertical line as the chat titles beneath it. */
+  padding: 0 var(--rm-row-px);
   color: var(--rm-muted);
   font-size: 12px;
   font-weight: 600;
@@ -901,21 +911,24 @@ html.dark .rm-connection-result.error {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 4px 8px 7px;
-  padding: 6px 8px;
+  min-height: var(--rm-row-h);
+  padding: 0 var(--rm-row-px);
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--rm-radius-bubble);
   color: var(--rm-muted);
   background: var(--rm-surface-soft);
 }
 
+/* No inline margin: the rail's own padding sets the inset, so the search box
+   shares a left edge with the rows above and below it. */
+
 .rm-sidebar-search-row {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px;
+  grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
-  gap: 4px;
-  margin: 4px 8px 7px;
+  gap: 2px;
+  margin: 4px 0 7px;
 }
 
 .rm-sidebar-search-row .rm-sidebar-search {

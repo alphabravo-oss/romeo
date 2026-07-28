@@ -8,6 +8,7 @@ import { downloadCsv } from "../lib/csv";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
+import { toast } from "../lib/toast";
 import { PanelStats } from "./PanelStats";
 import {
   type ColumnDef,
@@ -100,6 +101,7 @@ export function AuditPanel() {
       setExportError(
         caught instanceof Error ? caught.message : t("auditUnableExport"),
       );
+      toast(t("auditUnableExport"), "error");
     } finally {
       setIsExporting(false);
     }
@@ -142,7 +144,9 @@ export function AuditPanel() {
         </div>
       </div>
       {exportError ? (
-        <div className="mb-3 text-sm text-red-300">{exportError}</div>
+        <div className="rm-composer-error mb-3" role="alert">
+          {exportError}
+        </div>
       ) : null}
       <div className="mb-3 flex flex-wrap gap-2">
         <Input

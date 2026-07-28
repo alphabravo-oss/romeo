@@ -1,8 +1,6 @@
 import { Input, Textarea, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import GlobeLock from "lucide-react/dist/esm/icons/globe-lock.mjs";
-import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
 import Power from "lucide-react/dist/esm/icons/power.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import Upload from "lucide-react/dist/esm/icons/upload.mjs";
@@ -13,10 +11,8 @@ import {
   importOpenApiTool,
   listToolConnectors,
   updateToolConnector,
-  updateToolConnectorAuth,
-  updateToolConnectorNetworkPolicy,
 } from "../features/tool-connectors";
-import type { ToolConnector, ToolConnectorAuthCheck } from "../features/types";
+import type { ToolConnectorAuthCheck } from "../features/types";
 import { PanelState } from "../lib/panel-state";
 import { type MessageKey, useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
@@ -35,10 +31,6 @@ export function ToolConnectorPanel() {
   const authCheckMutation = useMutation({ mutationFn: checkToolConnectorAuth });
   const importMutation = useMutation({ mutationFn: importOpenApiTool });
   const connectorMutation = useMutation({ mutationFn: updateToolConnector });
-  const authMutation = useMutation({ mutationFn: updateToolConnectorAuth });
-  const networkPolicyMutation = useMutation({
-    mutationFn: updateToolConnectorNetworkPolicy,
-  });
   const [error, setError] = useState<string>();
   const [addOpen, setAddOpen] = useState(false);
   const [authChecks, setAuthChecks] = useState<
@@ -64,42 +56,6 @@ export function ToolConnectorPanel() {
     },
   });
 
-  async function handleSetAuthRef(connectorId: string) {
-    setError(undefined);
-    try {
-      await authMutation.mutateAsync({
-        connectorId,
-        type: "api_key",
-        secretRef: `vault://tools/${connectorId}/api-key`,
-      });
-      await queryClient.invalidateQueries({ queryKey: ["toolConnectors"] });
-      toast(t("toolApiKeyRefSet"), "success");
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : t("toolUnableUpdateAuth"),
-      );
-      toast(t("toolCouldNotUpdateAuth"), "error");
-    }
-  }
-
-  async function handleSetOAuthRef(connectorId: string) {
-    setError(undefined);
-    try {
-      await authMutation.mutateAsync({
-        connectorId,
-        type: "oauth2_client_credentials",
-        secretRef: `vault://tools/${connectorId}/oauth-client`,
-      });
-      await queryClient.invalidateQueries({ queryKey: ["toolConnectors"] });
-      toast(t("toolOAuthRefSet"), "success");
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : t("toolUnableUpdateAuth"),
-      );
-      toast(t("toolCouldNotUpdateAuth"), "error");
-    }
-  }
-
   async function handleToggleConnector(connectorId: string, enabled: boolean) {
     setError(undefined);
     try {
@@ -114,24 +70,6 @@ export function ToolConnectorPanel() {
         caught instanceof Error ? caught.message : t("toolUnableUpdate"),
       );
       toast(t("toolCouldNotUpdate"), "error");
-    }
-  }
-
-  async function handleAllowExampleHost(connectorId: string) {
-    setError(undefined);
-    try {
-      await networkPolicyMutation.mutateAsync({
-        connectorId,
-        mode: "allow_hosts",
-        allowedHosts: ["api.example.com"],
-      });
-      await queryClient.invalidateQueries({ queryKey: ["toolConnectors"] });
-      toast(t("toolNetworkPolicyUpdated"), "success");
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : t("toolUnableUpdateNetwork"),
-      );
-      toast(t("toolCouldNotUpdateNetwork"), "error");
     }
   }
 
@@ -345,30 +283,6 @@ export function ToolConnectorPanel() {
                                 </Button>
                                 <Button
                                   className="inline-flex items-center gap-2"
-                                  disabled={authMutation.isPending}
-                                  onClick={() =>
-                                    void handleSetAuthRef(connector.id)
-                                  }
-                                  type="button"
-                                >
-                                  <KeyRound aria-hidden="true" size={16} />
-                                  <span>{t("toolSetApiKeyRef")}</span>
-                                </Button>
-                                {hasOAuthHint(connector) ? (
-                                  <Button
-                                    className="inline-flex items-center gap-2"
-                                    disabled={authMutation.isPending}
-                                    onClick={() =>
-                                      void handleSetOAuthRef(connector.id)
-                                    }
-                                    type="button"
-                                  >
-                                    <KeyRound aria-hidden="true" size={16} />
-                                    <span>{t("toolSetOAuthRef")}</span>
-                                  </Button>
-                                ) : null}
-                                <Button
-                                  className="inline-flex items-center gap-2"
                                   disabled={authCheckMutation.isPending}
                                   onClick={() =>
                                     void handleCheckAuth(connector.id)
@@ -377,17 +291,6 @@ export function ToolConnectorPanel() {
                                 >
                                   <ShieldCheck aria-hidden="true" size={16} />
                                   <span>{t("toolCheckAuth")}</span>
-                                </Button>
-                                <Button
-                                  className="inline-flex items-center gap-2"
-                                  disabled={networkPolicyMutation.isPending}
-                                  onClick={() =>
-                                    void handleAllowExampleHost(connector.id)
-                                  }
-                                  type="button"
-                                >
-                                  <GlobeLock aria-hidden="true" size={16} />
-                                  <span>{t("toolAllowHost")}</span>
                                 </Button>
                               </div>
                             ),
@@ -429,17 +332,4 @@ function networkPolicyText(
   return policy.mode === "allow_hosts"
     ? `${t("toolNetwork")}: ${policy.allowedHosts.join(", ")}`
     : `${t("toolNetwork")}: ${t("toolNetworkDenyAll")}`;
-}
-
-function hasOAuthHint(connector: ToolConnector): boolean {
-  const hints = Array.isArray(connector.schema.authHints)
-    ? connector.schema.authHints
-    : [];
-  return hints.some(
-    (hint) =>
-      typeof hint === "object" &&
-      hint !== null &&
-      !Array.isArray(hint) &&
-      (hint as { type?: unknown }).type === "oauth2_client_credentials",
-  );
 }

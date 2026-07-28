@@ -280,16 +280,16 @@ select:focus-visible {
 .rm-status.pass::before,
 .rm-status.ok::before,
 .rm-status.healthy::before {
-  background: #10b981;
+  background: var(--rm-success);
 }
 
 .rm-status.warn::before {
-  background: #f59e0b;
+  background: var(--rm-warning);
 }
 
 .rm-status.fail::before,
 .rm-status.error::before {
-  background: #ef4444;
+  background: var(--rm-danger);
 }
 
 /* Monospace treatment for identifiers/tokens/keys */
@@ -604,15 +604,15 @@ select:focus-visible {
 }
 
 .rm-status-dot.pass {
-  background: #10b981;
+  background: var(--rm-success);
 }
 
 .rm-status-dot.warn {
-  background: #f59e0b;
+  background: var(--rm-warning);
 }
 
 .rm-status-dot.fail {
-  background: #ef4444;
+  background: var(--rm-danger);
 }
 
 /* ============================================================
@@ -873,4 +873,51 @@ select:focus-visible {
 
 .rm-table-wrap.compact .rm-table tbody td {
   padding: 5px 12px;
+}
+
+/* ── Route error / not-found boundary ───────────────────────────────────── */
+
+/* align-content rather than `margin: auto`: the boundary renders both as a
+   whole page (not-found) and nested inside the workspace shell (route throw),
+   and only one of those parents is a full-height flex container. */
+
+.rm-route-error {
+  display: grid;
+  min-height: 60dvh;
+  align-content: center;
+  justify-items: center;
+  margin-inline: auto;
+  padding: 2.5rem 1.5rem;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.rm-route-error-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--rm-danger) 14%, transparent);
+  color: var(--rm-danger);
+}
+
+.rm-route-error-title,
+.rm-route-error-body {
+  margin: 0;
+}
+
+.rm-route-error-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.rm-route-error-body {
+  color: var(--rm-muted);
+}
+
+.rm-route-error-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
 }

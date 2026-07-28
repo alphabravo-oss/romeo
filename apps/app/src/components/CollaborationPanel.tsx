@@ -1,6 +1,7 @@
-import { Input, Button } from "@romeo/ui";
+import { Button, Field, Input, Select } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
 import {
@@ -17,8 +18,10 @@ import {
 } from "../features";
 import { listAgentGallery, shareAgent } from "../features/managed-models";
 import { useLocale, type MessageKey } from "../lib/i18n";
+import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
 import type { Agent } from "../features/types";
+import { resolveKnowledgeBaseBinding } from "./data-connector-binding";
 
 export function CollaborationPanel({
   activeAgent,
@@ -32,6 +35,8 @@ export function CollaborationPanel({
   const queryClient = useQueryClient();
   const { t } = useLocale();
   const [principalId, setPrincipalId] = useState("group_reviewers");
+  const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] =
+    useState<string>();
   const galleryQuery = useQuery({
     queryKey: ["agentGallery", workspaceId],
     queryFn: () => listAgentGallery(workspaceId),
@@ -60,7 +65,6 @@ export function CollaborationPanel({
   const shareFolderMutation = useMutation({ mutationFn: shareFolder });
   const addFolderItemMutation = useMutation({ mutationFn: addFolderItem });
   const favoriteMutation = useMutation({ mutationFn: favoriteResource });
-  const firstKnowledgeBase = knowledgeBasesQuery.data?.[0];
   const activeFolder = foldersQuery.data?.[0];
   const folderItemsQuery = useQuery({
     queryKey: ["folderItems", activeFolder?.id],
@@ -88,10 +92,14 @@ export function CollaborationPanel({
   }
 
   async function handleShareKnowledgeBase() {
-    if (!firstKnowledgeBase) return;
+    const binding = resolveKnowledgeBaseBinding({
+      selectedKnowledgeBaseId,
+      availableIds: (knowledgeBasesQuery.data ?? []).map((base) => base.id),
+    });
+    if (!binding.ok) return;
     try {
       await shareKnowledgeMutation.mutateAsync({
-        knowledgeBaseId: firstKnowledgeBase.id,
+        knowledgeBaseId: binding.knowledgeBaseId,
         principalId,
       });
       await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
@@ -214,14 +222,46 @@ export function CollaborationPanel({
           >
             {t("workspaceShareChat")}
           </Button>
-          <Button
-            disabled={!firstKnowledgeBase || shareKnowledgeMutation.isPending}
-            onClick={() => void handleShareKnowledgeBase()}
-            type="button"
-          >
-            {t("workspaceShareKnowledge")}
-          </Button>
         </div>
+        <PanelState
+          empty={t("dataConnectorNeedsKb")}
+          emptyAction={
+            <Button asChild variant="primary">
+              <Link search={{ section: "knowledge" }} to="/workspace">
+                {t("knowledgeAddBase")}
+              </Link>
+            </Button>
+          }
+          query={knowledgeBasesQuery}
+        >
+          {(knowledgeBases) => (
+            <div className="grid gap-2">
+              <Field label={t("knowledgeBase")} required>
+                <Select
+                  onValueChange={setSelectedKnowledgeBaseId}
+                  options={knowledgeBases.map((base) => ({
+                    label: base.name,
+                    value: base.id,
+                  }))}
+                  placeholder={t("knowledgeBase")}
+                  {...(selectedKnowledgeBaseId === undefined
+                    ? {}
+                    : { value: selectedKnowledgeBaseId })}
+                />
+              </Field>
+              <Button
+                disabled={
+                  selectedKnowledgeBaseId === undefined ||
+                  shareKnowledgeMutation.isPending
+                }
+                onClick={() => void handleShareKnowledgeBase()}
+                type="button"
+              >
+                {t("workspaceShareKnowledge")}
+              </Button>
+            </div>
+          )}
+        </PanelState>
         <Button
           disabled={
             !activeAgent ||
@@ -330,11 +370,14 @@ export function CollaborationPanel({
             data-testid="folder-add-kb"
             disabled={
               !activeFolder ||
-              !firstKnowledgeBase ||
+              selectedKnowledgeBaseId === undefined ||
               addFolderItemMutation.isPending
             }
             onClick={() =>
-              void handleAddFolderItem("knowledge_base", firstKnowledgeBase?.id)
+              void handleAddFolderItem(
+                "knowledge_base",
+                selectedKnowledgeBaseId,
+              )
             }
             type="button"
           >

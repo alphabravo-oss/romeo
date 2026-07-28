@@ -1,4 +1,6 @@
 {
+  "approveImpersonationBody": "Cela accorde immédiatement une session active au nom de cet utilisateur.",
+  "approveImpersonationTitle": "Approuver l'usurpation d'identité ?",
   "deviceTokensTitle": "Jetons d’appareil",
   "deviceTokensAdd": "Ajouter un jeton d’appareil",
   "deviceTokensCreated": "Jeton d’appareil créé",

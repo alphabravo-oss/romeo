@@ -11,6 +11,7 @@ import {
   rejectImpersonationRequest,
   revokeImpersonationSession,
 } from "../features/sessions";
+import { listShareTargets } from "../features";
 import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
@@ -33,6 +34,10 @@ export function ImpersonationPanel() {
     queryKey: ["impersonationSessions"],
     queryFn: listImpersonationSessions,
   });
+  const shareTargetsQuery = useQuery({
+    queryKey: ["shareTargets", "impersonation"],
+    queryFn: () => listShareTargets(),
+  });
   const approveMutation = useMutation({
     mutationFn: approveImpersonationRequest,
   });
@@ -50,6 +55,15 @@ export function ImpersonationPanel() {
       ),
     [requestsQuery.data],
   );
+  const userLabels = useMemo(
+    () =>
+      new Map(
+        (shareTargetsQuery.data ?? [])
+          .filter((target) => target.principalType === "user")
+          .map((target) => [target.principalId, target.label]),
+      ),
+    [shareTargetsQuery.data],
+  );
 
   const activeSessions = useMemo(
     () =>
@@ -61,7 +75,9 @@ export function ImpersonationPanel() {
     () => [
       requestCol.accessor("targetUserId", {
         header: t("impersonationTargetUser"),
-        cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+        cell: (c) => (
+          <span>{userLabels.get(c.getValue()) ?? c.getValue()}</span>
+        ),
       }),
       requestCol.accessor("requestedByUserId", {
         header: t("impersonationRequestedBy"),
@@ -98,7 +114,7 @@ export function ImpersonationPanel() {
           <span className="flex gap-2">
             <Button
               disabled={approveMutation.isPending || rejectMutation.isPending}
-              onClick={() => void handleApprove(c.row.original.id)}
+              onClick={() => void handleApprove(c.row.original)}
               type="button"
             >
               {t("impersonationApprove")}
@@ -115,7 +131,7 @@ export function ImpersonationPanel() {
       }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [approveMutation.isPending, rejectMutation.isPending, t],
+    [approveMutation.isPending, rejectMutation.isPending, t, userLabels],
   );
 
   const sessionColumns = useMemo<ColumnDef<ImpersonationSession, any>[]>(
@@ -173,9 +189,20 @@ export function ImpersonationPanel() {
     [revokeMutation.isPending, t],
   );
 
-  async function handleApprove(requestId: string) {
+  async function handleApprove(request: ImpersonationRequest) {
+    if (
+      !(await ask({
+        title: t("approveImpersonationTitle"),
+        body: `${t("approveImpersonationBody")} ${
+          userLabels.get(request.targetUserId) ?? request.targetUserId
+        }`,
+        confirmLabel: t("impersonationApprove"),
+        tone: "danger",
+      }))
+    )
+      return;
     try {
-      await approveMutation.mutateAsync(requestId);
+      await approveMutation.mutateAsync(request.id);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["impersonationRequests"] }),
         queryClient.invalidateQueries({ queryKey: ["impersonationSessions"] }),
@@ -232,11 +259,13 @@ export function ImpersonationPanel() {
         </Button>
       </div>
       <div className="mt-4">
-        <DataTable
-          columns={columns}
-          data={pending}
+        <PanelState
+          query={requestsQuery}
           empty={t("impersonationNoPending")}
-        />
+          isEmpty={() => pending.length === 0}
+        >
+          {() => <DataTable columns={columns} data={pending} />}
+        </PanelState>
       </div>
 
       <div className="rm-card-header mt-6">

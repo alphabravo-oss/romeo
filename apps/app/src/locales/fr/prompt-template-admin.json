@@ -19,6 +19,7 @@
   "promptSaveTemplate": "Enregistrer le modèle",
   "promptSaving": "Enregistrement",
   "promptTags": "Étiquettes",
+  "promptTagsHelp": "Séparez les étiquettes par des virgules ou des sauts de ligne.",
   "promptTemplateBody": "Contenu du modèle",
   "promptTemplateCreated": "Modèle créé",
   "promptTemplateName": "Nom du modèle",

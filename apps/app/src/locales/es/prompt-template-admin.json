@@ -19,6 +19,7 @@
   "promptSaveTemplate": "Guardar plantilla",
   "promptSaving": "Guardando",
   "promptTags": "Etiquetas",
+  "promptTagsHelp": "Separa las etiquetas con comas o saltos de línea.",
   "promptTemplateBody": "Cuerpo de la plantilla",
   "promptTemplateCreated": "Plantilla creada",
   "promptTemplateName": "Nombre de la plantilla",

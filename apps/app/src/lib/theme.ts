@@ -28,6 +28,15 @@ export function setTheme(theme: Theme): void {
   window.dispatchEvent(new Event("romeo-theme-change"));
 }
 
+/** Re-apply a system-selected theme whenever the operating system changes. */
+export function watchSystemTheme(): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  const onChange = () => applyTheme(getStoredTheme());
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+
 // Inlined into <head> before hydration to avoid a flash of the wrong theme.
 // Mirrors applyTheme for the very first paint. Keep in sync with the above.
 export const themeInitScript = `(function(){try{var t=localStorage.theme;if(t!=='light'&&t!=='dark'&&t!=='system'){t='system';localStorage.theme='system';}var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var r=document.documentElement;r.classList.add(d?'dark':'light');var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',d?'${DARK_META}':'${LIGHT_META}');}catch(e){}})();`;

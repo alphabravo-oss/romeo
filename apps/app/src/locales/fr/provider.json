@@ -1,5 +1,6 @@
 {
   "addConnection": "Ajouter une connexion",
+  "addProvider": "Ajouter un fournisseur",
   "advancedModelAccess": "Accès avancé aux modèles",
   "allowedModelIds": "Liste des modèles autorisés",
   "allowedModelsDescription": "Laissez vide pour découvrir tous les modèles. Si des identifiants sont indiqués, Romeo n’expose que les correspondances exactes.",
@@ -24,7 +25,6 @@
   "couldNotSyncModels": "Impossible de synchroniser les modèles",
   "couldNotVerifyConnection": "Impossible de vérifier la connexion",
   "credentialConfigured": "Identifiant configuré",
-  "discoverAllModels": "Découvrir tous les modèles",
   "discoveredModels": "Modèles découverts",
   "disabled": "Désactivée",
   "encryptedManagedSecret": "Stockée comme secret géré chiffré",
@@ -34,7 +34,6 @@
   "leaveBlankDiscovery": "Laisser vide pour découvrir /models",
   "managedCredential": "identifiant géré",
   "minutes": "minutes",
-  "modelsAvailable": "modèles disponibles",
   "modelsSynced": "Modèles synchronisés",
   "modelPulled": "Modèle téléchargé et catalogue actualisé",
   "modelDeleted": "Modèle supprimé et catalogue actualisé",
@@ -52,6 +51,7 @@
   "deleteOllamaModel": "Supprimer le modèle Ollama",
   "deleteOllamaModelDescription": "Cette action supprime le modèle de l’environnement Ollama :",
   "providerErrors": "Erreurs fournisseur",
+  "providerCredentials": "Identifiants du fournisseur",
   "queueP95": "File p95",
   "quickSetup": "Configuration rapide",
   "reconnects": "Reconnexions",
@@ -66,6 +66,5 @@
   "ttftP95": "TTFT p95",
   "unknown": "Inconnu",
   "verify": "Vérifier",
-  "verifyConnection": "Vérifier la connexion",
   "modelsAllowed": "identifiants de modèles autorisés"
 }

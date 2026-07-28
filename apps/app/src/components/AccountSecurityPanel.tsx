@@ -1,11 +1,12 @@
-import { Input, Button } from "@romeo/ui";
+import { Button, Field, Input, LinkButton } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   confirmTotpEnrollment,
   disableTotpFactor,
+  generateRecoveryCodes,
   getLocalAuthStatus,
   setLocalPassword,
   startTotpEnrollment,
@@ -15,13 +16,14 @@ import { PanelState } from "../lib/panel-state";
 import { LocalizedDate } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
-import { useConfirm } from "./ConfirmDialog";
 import { FormDialog } from "./FormDialog";
+import { isLockoutRisk, recoveryCodesRemaining } from "./mfa-recovery";
+
+type RecoveryStep = "awaiting-code" | "showing-codes";
 
 export function AccountSecurityPanel() {
   const queryClient = useQueryClient();
   const { t } = useLocale();
-  const { ask, dialog } = useConfirm();
   const statusQuery = useQuery({
     queryKey: ["localAuthStatus"],
     queryFn: getLocalAuthStatus,
@@ -30,11 +32,27 @@ export function AccountSecurityPanel() {
   const [pwOpen, setPwOpen] = useState(false);
   const [enrollment, setEnrollment] = useState<TotpEnrollment>();
   const [totpCode, setTotpCode] = useState("");
+  const [recoveryStep, setRecoveryStep] = useState<RecoveryStep>();
+  const [recoveryTotpCode, setRecoveryTotpCode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<readonly string[]>([]);
+  const [recoveryDownloadUrl, setRecoveryDownloadUrl] = useState<string>();
+  const [disableFactorId, setDisableFactorId] = useState<string>();
+  const [disableCode, setDisableCode] = useState("");
 
   const passwordMutation = useMutation({ mutationFn: setLocalPassword });
   const enrollMutation = useMutation({ mutationFn: startTotpEnrollment });
   const confirmMutation = useMutation({ mutationFn: confirmTotpEnrollment });
+  const recoveryMutation = useMutation({ mutationFn: generateRecoveryCodes });
   const disableMutation = useMutation({ mutationFn: disableTotpFactor });
+
+  useEffect(
+    () => () => {
+      if (recoveryDownloadUrl !== undefined) {
+        URL.revokeObjectURL(recoveryDownloadUrl);
+      }
+    },
+    [recoveryDownloadUrl],
+  );
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ["localAuthStatus"] });
@@ -84,27 +102,75 @@ export function AccountSecurityPanel() {
       });
       await refresh();
       toast(t("authenticatorEnabled"), "success");
-      setEnrollment(undefined);
       setTotpCode("");
+      // Confirmation activates MFA, but enrollment is not complete until the
+      // user has generated and explicitly acknowledged their recovery codes.
+      setRecoveryStep("awaiting-code");
     } catch {
       toast(t("verifyFailed"), "error");
     }
   }
 
-  async function handleDisableFactor(factorId: string) {
-    if (
-      !(await ask({
-        title: t("removeAuthenticatorTitle"),
-        body: t("removeAuthenticatorBody"),
-        confirmLabel: t("remove"),
-        tone: "danger",
-      }))
-    )
-      return;
+  async function handleGenerateRecoveryCodes() {
+    if (!/^\d{6}$/u.test(recoveryTotpCode)) return;
     try {
-      await disableMutation.mutateAsync({ factorId });
+      const result = await recoveryMutation.mutateAsync({
+        totpCode: recoveryTotpCode,
+      });
+      await refresh();
+      setRecoveryCodes(result.codes);
+      setRecoveryTotpCode("");
+      setRecoveryDownloadUrl(
+        URL.createObjectURL(
+          new Blob([`${result.codes.join("\n")}\n`], {
+            type: "text/plain;charset=utf-8",
+          }),
+        ),
+      );
+      setRecoveryStep("showing-codes");
+    } catch {
+      toast(t("recoveryCodesFailed"), "error");
+    }
+  }
+
+  async function handleCopyRecoveryCodes() {
+    if (recoveryCodes.length === 0) return;
+    try {
+      // Recovery codes are security-sensitive; use the modern Clipboard API
+      // only and do not fall back to the deprecated document.execCommand API.
+      await navigator.clipboard.writeText(recoveryCodes.join("\n"));
+    } catch {
+      toast(t("recoveryCodesCopyFailed"), "error");
+    }
+  }
+
+  function handleRecoveryCodesSaved() {
+    setEnrollment(undefined);
+    setRecoveryStep(undefined);
+    setRecoveryTotpCode("");
+    setRecoveryCodes([]);
+    setRecoveryDownloadUrl(undefined);
+  }
+
+  function handleRegenerateRecoveryCodes() {
+    setEnrollment(undefined);
+    setRecoveryTotpCode("");
+    setRecoveryCodes([]);
+    setRecoveryDownloadUrl(undefined);
+    setRecoveryStep("awaiting-code");
+  }
+
+  async function handleDisableFactor() {
+    if (disableFactorId === undefined || !/^\d{6}$/u.test(disableCode)) return;
+    try {
+      await disableMutation.mutateAsync({
+        factorId: disableFactorId,
+        code: disableCode,
+      });
       await refresh();
       toast(t("authenticatorRemoved"), "success");
+      setDisableFactorId(undefined);
+      setDisableCode("");
     } catch {
       toast(t("removeAuthenticatorFailed"), "error");
     }
@@ -162,7 +228,10 @@ export function AccountSecurityPanel() {
               </div>
               <div className="grid gap-2">
                 {status.factors
-                  .filter((factor) => factor.disabledAt === undefined)
+                  .filter(
+                    (factor) =>
+                      factor.type === "totp" && factor.disabledAt === undefined,
+                  )
                   .map((factor) => (
                     <div
                       className="flex items-center justify-between gap-3 rounded-md border border-border p-3"
@@ -187,7 +256,10 @@ export function AccountSecurityPanel() {
                       </div>
                       <Button
                         variant="danger"
-                        onClick={() => void handleDisableFactor(factor.id)}
+                        onClick={() => {
+                          setDisableFactorId(factor.id);
+                          setDisableCode("");
+                        }}
                         type="button"
                       >
                         {t("remove")}
@@ -195,6 +267,33 @@ export function AccountSecurityPanel() {
                     </div>
                   ))}
               </div>
+              {status.mfaEnabled ? (
+                <div className="grid gap-2 rounded-md border border-border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium">
+                        {t("recoveryCodes")}
+                      </div>
+                      <div className="text-xs text-muted">
+                        {t("recoveryCodesRemaining")}:{" "}
+                        {recoveryCodesRemaining(status)}
+                      </div>
+                    </div>
+                    <Button
+                      disabled={recoveryStep !== undefined}
+                      onClick={handleRegenerateRecoveryCodes}
+                      type="button"
+                    >
+                      {t("recoveryCodesRegenerate")}
+                    </Button>
+                  </div>
+                  {isLockoutRisk(status) ? (
+                    <div className="rm-composer-error" role="status">
+                      {t("recoveryCodesNone")}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
         )}
@@ -316,15 +415,97 @@ export function AccountSecurityPanel() {
 
       {/* TOTP enrollment dialog */}
       <FormDialog
-        open={enrollment !== undefined}
-        title={t("setupAuthenticator")}
-        description={t("scanAuthenticator")}
+        open={enrollment !== undefined || recoveryStep !== undefined}
+        title={
+          recoveryStep === undefined
+            ? t("setupAuthenticator")
+            : t("recoveryCodes")
+        }
+        description={
+          recoveryStep === undefined
+            ? t("scanAuthenticator")
+            : t("recoveryCodesWhy")
+        }
         onClose={() => {
+          // Once MFA is active, closing this dialog before recovery codes are
+          // saved would recreate the lockout this flow exists to prevent.
+          if (recoveryStep !== undefined) return;
           setEnrollment(undefined);
           setTotpCode("");
         }}
       >
-        {enrollment !== undefined ? (
+        {recoveryStep === "awaiting-code" ? (
+          <form
+            className="grid gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleGenerateRecoveryCodes();
+            }}
+          >
+            <p className="text-sm text-muted">{t("recoveryCodesWhy")}</p>
+            <Field label={t("verificationCode")}>
+              <Input
+                name="recoveryTotpCode"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                maxLength={6}
+                onChange={(event) =>
+                  setRecoveryTotpCode(
+                    event.currentTarget.value.replace(/\D/gu, ""),
+                  )
+                }
+                placeholder="000000"
+                value={recoveryTotpCode}
+              />
+            </Field>
+            <Button
+              variant="primary"
+              disabled={
+                !/^\d{6}$/u.test(recoveryTotpCode) || recoveryMutation.isPending
+              }
+              pending={recoveryMutation.isPending}
+              type="submit"
+            >
+              {t("recoveryCodesGenerate")}
+            </Button>
+          </form>
+        ) : recoveryStep === "showing-codes" ? (
+          <div className="grid gap-3">
+            <div className="rm-composer-error" role="status">
+              {t("recoveryCodesShownOnce")}
+            </div>
+            <ul className="grid gap-1 rounded-md border border-border p-3">
+              {recoveryCodes.map((code) => (
+                <li className="font-mono text-sm" key={code}>
+                  {code}
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => void handleCopyRecoveryCodes()}
+                type="button"
+              >
+                {t("recoveryCodesCopyAll")}
+              </Button>
+              {recoveryDownloadUrl !== undefined ? (
+                <LinkButton
+                  download="romeo-recovery-codes.txt"
+                  href={recoveryDownloadUrl}
+                >
+                  {t("recoveryCodesDownload")}
+                </LinkButton>
+              ) : null}
+            </div>
+            <Button
+              variant="primary"
+              onClick={handleRecoveryCodesSaved}
+              type="button"
+            >
+              {t("recoveryCodesSaved")}
+            </Button>
+          </div>
+        ) : enrollment !== undefined ? (
           <div className="grid gap-3">
             <div className="grid gap-1 text-sm">
               <span className="text-muted">{t("setupKey")}</span>
@@ -364,7 +545,51 @@ export function AccountSecurityPanel() {
         ) : null}
       </FormDialog>
 
-      {dialog}
+      <FormDialog
+        open={disableFactorId !== undefined}
+        title={t("removeAuthenticatorTitle")}
+        description={t("removeAuthenticatorBody")}
+        onClose={() => {
+          if (disableMutation.isPending) return;
+          setDisableFactorId(undefined);
+          setDisableCode("");
+        }}
+      >
+        <form
+          className="grid gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleDisableFactor();
+          }}
+        >
+          <Field
+            description={t("removeAuthenticatorCodeRequired")}
+            label={t("verificationCode")}
+          >
+            <Input
+              name="disableAuthenticatorCode"
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              maxLength={6}
+              onChange={(event) =>
+                setDisableCode(event.currentTarget.value.replace(/\D/gu, ""))
+              }
+              placeholder="000000"
+              value={disableCode}
+            />
+          </Field>
+          <Button
+            variant="danger"
+            disabled={
+              !/^\d{6}$/u.test(disableCode) || disableMutation.isPending
+            }
+            pending={disableMutation.isPending}
+            type="submit"
+          >
+            {t("remove")}
+          </Button>
+        </form>
+      </FormDialog>
     </section>
   );
 }

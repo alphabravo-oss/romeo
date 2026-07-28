@@ -204,7 +204,7 @@ export function ComposerModelSelect({
         type="button"
       >
         <span className="truncate">
-          {selectedModel?.displayName ?? "Select model"}
+          {selectedModel?.displayName ?? t("selectModel")}
         </span>
         <ChevronDown aria-hidden="true" size={12} strokeWidth={2.5} />
       </Button>

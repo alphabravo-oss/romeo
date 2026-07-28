@@ -23,6 +23,7 @@ import {
   type PendingDocumentAttachment,
   type PendingImageAttachment,
 } from "./useWorkspaceAttachments";
+import { isMessageActionEnabled, resolveTurnOutcome } from "./turn-rollback";
 import { blobToBase64, clientMessageId } from "./workspace-controller-media";
 
 interface WorkspaceTurnActionsOptions {
@@ -45,6 +46,11 @@ interface WorkspaceTurnActionsOptions {
   queryClient: QueryClient;
   refreshUsageControls: () => Promise<void>;
   resetRunPresentation: () => void;
+  restoreMessages: (snapshot: readonly Message[]) => void;
+  restorePendingAttachments: (
+    images: readonly PendingImageAttachment[],
+    documents: readonly PendingDocumentAttachment[],
+  ) => void;
   selectedModelId: string | undefined;
   setActiveChatId: Dispatch<SetStateAction<string | undefined>>;
   setActiveRunId: Dispatch<SetStateAction<string | undefined>>;
@@ -73,7 +79,7 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       typedContent ||
       (options.imageAttachments.length > 0 ||
       options.documentAttachments.length > 0
-        ? "Review the attached file(s)."
+        ? options.t("chatReviewAttachments")
         : "");
     if (
       content.length === 0 ||
@@ -142,6 +148,11 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     ) {
       return;
     }
+    const snapshot = {
+      draft: options.draft,
+      messages: options.messages,
+    };
+    let accepted = false;
     options.setError(undefined);
     options.setDraft("");
     options.clearPendingAttachments();
@@ -163,7 +174,6 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       await options.queryClient.invalidateQueries({
         queryKey: ["chats", options.workspaceId],
       });
-      appendOptimisticTurn(chat.id, content, images, documents);
       const run = await startRunMutation.mutateAsync({
         chatId: chat.id,
         agentId: options.activeAgentId,
@@ -189,21 +199,34 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           ? {}
           : { urls: options.attachedUrls }),
       });
+      accepted = true;
+      appendOptimisticTurn(chat.id, content, images, documents);
       options.setAttachedUrls([]);
       options.setActiveRunId(run.id);
       await options.consumeRunStream(run.id);
       await options.syncPersistedMessages(chat.id);
       await followQueuedRuns(chat.id, run.id);
       await options.refreshUsageControls();
+      const outcome = resolveTurnOutcome({ snapshot, accepted });
+      if (outcome.revokePreviews) {
+        // Revoked on the success path only: on failure the attachments are
+        // restored to the composer, and a revoked object URL renders as a
+        // broken image.
+        images.forEach((attachment) =>
+          URL.revokeObjectURL(attachment.previewUrl),
+        );
+      }
     } catch (caught) {
       options.setError(
         caught instanceof Error ? caught.message : options.t("unableStartRun"),
       );
       options.setActiveRunId(undefined);
-    } finally {
-      images.forEach((attachment) =>
-        URL.revokeObjectURL(attachment.previewUrl),
-      );
+      const outcome = resolveTurnOutcome({ snapshot, accepted });
+      if (!accepted) {
+        options.setDraft(outcome.draft);
+        options.restoreMessages(outcome.messages);
+        options.restorePendingAttachments(images, documents);
+      }
     }
   }
 
@@ -322,9 +345,12 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
 
   async function handleBranchFromMessage(messageId: string) {
     if (
-      options.activeChatId === undefined ||
+      !isMessageActionEnabled({
+        isStreaming: options.isStreaming,
+        hasActiveChat: options.activeChatId !== undefined,
+      }) ||
       options.workspaceId === undefined ||
-      options.isStreaming
+      options.activeChatId === undefined
     ) {
       return;
     }
@@ -349,18 +375,24 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     }
   }
 
-  async function handleEditAndResend(messageId: string, content: string) {
+  async function handleEditAndResend(
+    messageId: string,
+    content: string,
+  ): Promise<boolean> {
     if (
+      !isMessageActionEnabled({
+        isStreaming: options.isStreaming,
+        hasActiveChat: options.activeChatId !== undefined,
+      }) ||
       options.activeChatId === undefined ||
       options.activeAgentId === undefined ||
-      options.isStreaming ||
       content.trim().length === 0
     ) {
-      return;
+      return false;
     }
     const index = options.messages.findIndex((item) => item.id === messageId);
     const message = options.messages[index];
-    if (message?.role !== "user") return;
+    if (message?.role !== "user") return false;
     options.setError(undefined);
     try {
       const attachments = await resolveAttachmentsForResend(
@@ -393,6 +425,7 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       await options.consumeRunStream(run.id);
       await options.syncPersistedMessages(options.activeChatId);
       await options.refreshUsageControls();
+      return true;
     } catch (caught) {
       options.setError(
         caught instanceof Error
@@ -400,11 +433,12 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           : options.t("workspaceUnableEditMessage"),
       );
       options.setActiveRunId(undefined);
+      return false;
     }
   }
 
   async function handleContinueResponse() {
-    await submitTurn("Continue from where you stopped.");
+    await submitTurn(options.t("chatContinueResponse"));
   }
 
   return {

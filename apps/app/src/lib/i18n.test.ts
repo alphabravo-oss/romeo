@@ -1,3 +1,4 @@
+import { readdir, readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,6 +7,7 @@ import {
   supportedLocales,
   type SupportedLocale,
 } from "../locales";
+import { localeNamespaceGroups } from "./i18n";
 
 function interpolationVariables(message: string): string[] {
   return [...message.matchAll(/{{\s*([^},\s]+)[^}]*}}/g)]
@@ -60,7 +62,73 @@ describe("core chat translation catalogs", () => {
     expect(messages.fr.tableSearch).toBe("Rechercher dans le tableau");
     expect(messages.fr.tableOptions).toBe("Options du tableau");
   });
+
+  it("loads both catalogs used by device tokens on the settings route", () => {
+    expect(localeNamespaceGroups.settings).toEqual(
+      expect.arrayContaining(["admin-section", "device-impersonation"]),
+    );
+  });
+
+  it("has no key defined in more than one namespace with conflicting values", async () => {
+    const conflicts: string[] = [];
+    for (const locale of supportedLocales) {
+      const byKey = new Map<string, Map<string, string>>();
+      for (const namespace of namespaceNames) {
+        const catalog = await loadLocaleNamespace(locale, namespace);
+        for (const [key, value] of Object.entries(catalog)) {
+          const seen = byKey.get(key) ?? new Map<string, string>();
+          seen.set(namespace, value);
+          byKey.set(key, seen);
+        }
+      }
+      conflicts.push(
+        ...[...byKey.entries()]
+          .filter(([, seen]) => new Set(seen.values()).size > 1)
+          .map(
+            ([key, seen]) => `${locale}/${key}: ${[...seen.keys()].join(", ")}`,
+          ),
+      );
+    }
+    expect(conflicts, "duplicate keys with conflicting values").toEqual([]);
+  });
+
+  it("ships no unreferenced message keys", async () => {
+    const sources = await readAllSourceText(new URL("../", import.meta.url));
+    const unused: string[] = [];
+    for (const namespace of namespaceNames) {
+      const catalog = await loadLocaleNamespace("en", namespace);
+      for (const key of Object.keys(catalog)) {
+        // Deliberately conservative substring matching can miss a dead key
+        // embedded in a larger string, but never breaks the build on a live
+        // literal key. There are no dynamic template-literal t() call sites.
+        if (!sources.includes(`"${key}"`) && !sources.includes(`'${key}'`)) {
+          unused.push(`${namespace}.${key}`);
+        }
+      }
+    }
+    expect(unused).toEqual([]);
+  });
 });
+
+async function readAllSourceText(directory: URL): Promise<string> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const contents = await Promise.all(
+    entries.map(async (entry) => {
+      if (entry.isDirectory()) {
+        if (entry.name === "locales") return "";
+        return readAllSourceText(new URL(`${entry.name}/`, directory));
+      }
+      if (
+        !entry.isFile() ||
+        !/\.(?:ts|tsx)$/u.test(entry.name) ||
+        /\.test\.(?:ts|tsx)$/u.test(entry.name)
+      )
+        return "";
+      return readFile(new URL(entry.name, directory), "utf8");
+    }),
+  );
+  return contents.join("\n");
+}
 
 async function loadMessages() {
   return Object.fromEntries(

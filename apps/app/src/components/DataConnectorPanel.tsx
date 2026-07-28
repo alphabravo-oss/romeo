@@ -1,6 +1,7 @@
-import { Input, Textarea, Button } from "@romeo/ui";
+import { Button, Field, Input, Select, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -18,6 +19,7 @@ import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { DataConnectorSyncHistory } from "./DataConnectorSyncHistory";
+import { resolveKnowledgeBaseBinding } from "./data-connector-binding";
 import {
   buildDataConnectorConfig,
   connectorConfigHint,
@@ -58,6 +60,14 @@ export function DataConnectorPanel({
     () => connectorsQuery.data ?? [],
     [connectorsQuery.data],
   );
+  const knowledgeBases = useMemo(
+    () => knowledgeBasesQuery.data ?? [],
+    [knowledgeBasesQuery.data],
+  );
+  const knowledgeBaseNames = useMemo(
+    () => new Map(knowledgeBases.map((base) => [base.id, base.name])),
+    [knowledgeBases],
+  );
   const activeConnector =
     connectors.find((connector) => connector.id === activeConnectorId) ??
     connectors[0];
@@ -68,7 +78,6 @@ export function DataConnectorPanel({
   });
   const createMutation = useMutation({ mutationFn: createDataConnector });
   const syncMutation = useMutation({ mutationFn: syncLocalDataConnector });
-  const firstKnowledgeBase = knowledgeBasesQuery.data?.[0];
   const activeConfigHint = useMemo(
     () => connectorConfigHint(addType, t),
     [addType, t],
@@ -86,17 +95,27 @@ export function DataConnectorPanel({
   }
 
   const createForm = useForm({
-    defaultValues: { name: "", configText: "" } as {
+    defaultValues: {
+      name: "",
+      configText: "",
+      knowledgeBaseId: undefined as string | undefined,
+    } as {
       name: string;
       configText: string;
+      knowledgeBaseId: string | undefined;
     },
     onSubmit: async ({ value }) => {
-      if (!workspaceId || !firstKnowledgeBase) return;
+      if (!workspaceId) return;
+      const binding = resolveKnowledgeBaseBinding({
+        selectedKnowledgeBaseId: value.knowledgeBaseId,
+        availableIds: knowledgeBases.map((base) => base.id),
+      });
+      if (!binding.ok) return;
       const config = buildDataConnectorConfig(addType, value.configText, t);
       try {
         const connector = await createMutation.mutateAsync({
           workspaceId,
-          knowledgeBaseId: firstKnowledgeBase.id,
+          knowledgeBaseId: binding.knowledgeBaseId,
           type: addType,
           name: value.name,
           config,
@@ -160,6 +179,14 @@ export function DataConnectorPanel({
           <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
         ),
       }),
+      col.accessor("knowledgeBaseId", {
+        header: t("knowledgeBase"),
+        cell: (c) => (
+          <span className="rm-cell-muted">
+            {knowledgeBaseNames.get(c.getValue()) ?? c.getValue()}
+          </span>
+        ),
+      }),
       col.accessor("status", {
         header: t("connectorStatus"),
         cell: (c) => (
@@ -199,7 +226,7 @@ export function DataConnectorPanel({
         ),
       }),
     ],
-    [activeConnector?.id, t],
+    [activeConnector?.id, knowledgeBaseNames, t],
   );
 
   const sourcesTab = (
@@ -352,9 +379,7 @@ export function DataConnectorPanel({
     <PanelState query={catalogQuery} empty={t("connectorCatalogEmpty")}>
       {(report) => (
         <DataConnectorCatalog
-          canCreate={
-            workspaceId !== undefined && firstKnowledgeBase !== undefined
-          }
+          canCreate={workspaceId !== undefined}
           onAdd={openAdd}
           report={report}
         />
@@ -417,6 +442,31 @@ export function DataConnectorPanel({
             )}
           </createForm.Field>
 
+          <createForm.Field
+            name="knowledgeBaseId"
+            validators={{
+              onChange: ({ value }: { value: string | undefined }) =>
+                value === undefined ? t("required") : undefined,
+            }}
+          >
+            {(field) => (
+              <Field label={t("knowledgeBase")} required>
+                <Select
+                  name="knowledgeBaseId"
+                  onValueChange={field.handleChange}
+                  options={knowledgeBases.map((base) => ({
+                    label: base.name,
+                    value: base.id,
+                  }))}
+                  placeholder={t("knowledgeBase")}
+                  {...(field.state.value === undefined
+                    ? {}
+                    : { value: field.state.value })}
+                />
+              </Field>
+            )}
+          </createForm.Field>
+
           {activeConfigHint ? (
             <>
               <label className="text-sm text-muted" htmlFor="connector-config">
@@ -467,7 +517,7 @@ export function DataConnectorPanel({
                   !canSubmit ||
                   isSubmitting ||
                   !workspaceId ||
-                  !firstKnowledgeBase
+                  !createForm.state.values.knowledgeBaseId
                 }
                 type="submit"
               >
@@ -479,20 +529,34 @@ export function DataConnectorPanel({
       </FormDialog>
 
       <div className="mt-4">
-        <Tabs
-          tabs={[
-            {
-              id: "sources",
-              label: t("connectorSourcesTab"),
-              content: sourcesTab,
-            },
-            {
-              id: "catalog",
-              label: t("connectorCatalogTab"),
-              content: catalogTab,
-            },
-          ]}
-        />
+        <PanelState
+          empty={t("dataConnectorNeedsKb")}
+          emptyAction={
+            <Button asChild variant="primary">
+              <Link search={{ section: "knowledge" }} to="/workspace">
+                {t("knowledgeAddBase")}
+              </Link>
+            </Button>
+          }
+          query={knowledgeBasesQuery}
+        >
+          {() => (
+            <Tabs
+              tabs={[
+                {
+                  id: "sources",
+                  label: t("connectorSourcesTab"),
+                  content: sourcesTab,
+                },
+                {
+                  id: "catalog",
+                  label: t("connectorCatalogTab"),
+                  content: catalogTab,
+                },
+              ]}
+            />
+          )}
+        </PanelState>
       </div>
     </section>
   );

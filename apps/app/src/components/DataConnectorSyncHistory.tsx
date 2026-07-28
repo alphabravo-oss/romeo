@@ -39,7 +39,7 @@ function syncColumns(t: Translate): ColumnDef<DataConnectorSync, any>[] {
           {c.getValue() === "completed"
             ? t("connectorSyncCompleted")
             : c.getValue() === "failed"
-              ? t("connectorSyncFailed")
+              ? t("connectorSyncStatusFailed")
               : t("connectorSyncRunning")}
         </span>
       ),

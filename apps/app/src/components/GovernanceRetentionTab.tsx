@@ -16,6 +16,7 @@ import {
   RetentionValidationError,
   type RetentionValidationCode,
 } from "../lib/retention";
+import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
 
 const retentionValidationMessageKeys: Record<
@@ -94,8 +95,6 @@ export function GovernanceRetentionTab() {
       }
     },
   });
-  const grants = accessQuery.data ?? [];
-
   return (
     <div className="grid gap-4">
       <form
@@ -219,18 +218,31 @@ export function GovernanceRetentionTab() {
           </Button>
         </div>
       </form>
-      <div className="grid gap-2 text-sm">
-        {grants.slice(0, 6).map((grant) => (
-          <div className="rounded-md border border-border p-2" key={grant.id}>
-            <div className="font-medium">
-              {grant.resourceType}:{grant.resourceId}
+      <PanelState query={accessQuery} empty={t("noAccessGrants")}>
+        {(grants) => (
+          <div className="grid gap-2 text-sm">
+            <div className="text-xs text-muted">
+              {t("showingOfTotal")} {grants.length} {t("of")} {grants.length}
             </div>
-            <div className="break-words text-muted">
-              {grant.principalType}:{grant.principalId} - {grant.permission}
+            <div className="grid max-h-80 gap-2 overflow-y-auto">
+              {grants.map((grant) => (
+                <div
+                  className="rounded-md border border-border p-2"
+                  key={grant.id}
+                >
+                  <div className="font-medium">
+                    {grant.resourceType}:{grant.resourceId}
+                  </div>
+                  <div className="break-words text-muted">
+                    {grant.principalType}:{grant.principalId} -{" "}
+                    {grant.permission}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
+        )}
+      </PanelState>
     </div>
   );
 }

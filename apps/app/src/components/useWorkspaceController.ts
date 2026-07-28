@@ -74,6 +74,7 @@ export function useWorkspaceController() {
     handleAttachmentRetention,
     handleDeleteMessage,
     handleRateMessage,
+    restoreMessages,
     syncPersistedMessages,
   } = useChatMessageState({
     activeChatId,
@@ -107,6 +108,7 @@ export function useWorkspaceController() {
     handleRemoveDocumentAttachment,
     handleRemoveImageAttachment,
     imageAttachments,
+    restorePendingAttachments,
   } = useWorkspaceAttachments({
     queryClient,
     setError,
@@ -183,6 +185,8 @@ export function useWorkspaceController() {
     queryClient,
     refreshUsageControls,
     resetRunPresentation,
+    restoreMessages,
+    restorePendingAttachments,
     selectedModelId,
     setActiveChatId,
     setActiveRunId,

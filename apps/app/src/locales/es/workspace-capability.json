@@ -28,9 +28,6 @@
   "workspaceVoiceExisting": "existentes",
   "workspaceVoiceCatalogSyncFailed": "Falló la sincronización del catálogo de voces.",
   "workspaceVoiceCouldNotSync": "No se pudo sincronizar el catálogo de voces",
-  "workspaceVoiceSyncing": "Sincronizando",
-  "workspaceVoicePreviewing": "Generando vista previa",
-  "workspaceVoiceBinding": "Vinculando",
   "workspaceVoiceBind": "Vincular voz",
   "workspaceShared": "Compartido",
   "workspaceCouldNotShareAgent": "No se pudo compartir el asistente",
@@ -101,6 +98,7 @@
   "toolTraceInput": "Entrada",
   "toolTraceOutput": "Salida",
   "toolTraceRun": "Ejecución",
+  "toolTraceSelectAgent": "Selecciona un asistente para ver sus llamadas a herramientas.",
   "toolTraceNoneValue": "ninguna",
   "toolTraceNone": "Todavía no hay llamadas a herramientas."
 }

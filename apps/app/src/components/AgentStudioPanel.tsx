@@ -20,6 +20,8 @@ import type {
 import type { BaseModel, Provider } from "../features/providers/types";
 import { AgentAccessPanel } from "./AgentAccessPanel";
 import { AgentDraftForm, type AgentDraftInput } from "./AgentDraftForm";
+import { canPublishAgent } from "./agent-publish-gate";
+import { useConfirm } from "./ConfirmDialog";
 import { CreateManagedModelDialog } from "./CreateManagedModelDialog";
 import { AgentTestConsole } from "./AgentTestConsole";
 import { AgentVersionPanel } from "./AgentVersionPanel";
@@ -48,6 +50,8 @@ export function AgentStudioPanel({
   const [rightVersionId, setRightVersionId] = useState("");
   const [diff, setDiff] = useState<AgentVersionDiff>();
   const [notice, setNotice] = useState<string>();
+  const [isDraftDirty, setIsDraftDirty] = useState(false);
+  const { ask, dialog } = useConfirm();
 
   const versionsQuery = useQuery({
     queryKey: ["agentVersions", activeAgent?.id],
@@ -65,6 +69,7 @@ export function AgentStudioPanel({
   useEffect(() => {
     setNotice(undefined);
     setDiff(undefined);
+    setIsDraftDirty(false);
   }, [activeAgent?.id]);
 
   useEffect(() => {
@@ -85,7 +90,24 @@ export function AgentStudioPanel({
   }
 
   async function handlePublish() {
-    if (!activeAgent) return;
+    if (
+      !activeAgent ||
+      !canPublishAgent({
+        hasActiveAgent: true,
+        isDraftDirty,
+        isPublishing: publishMutation.isPending,
+      })
+    )
+      return;
+    if (
+      !(await ask({
+        title: t("agentPublishTitle"),
+        body: t("agentPublishBody"),
+        confirmLabel: t("agentPublish"),
+        tone: "danger",
+      }))
+    )
+      return;
     try {
       const version = await publishMutation.mutateAsync(activeAgent.id);
       setNotice(`${t("agentPublishedVersion")} ${version.version}.`);
@@ -97,7 +119,7 @@ export function AgentStudioPanel({
   }
 
   async function handleRollback(versionId: string) {
-    if (!activeAgent) return;
+    if (!activeAgent || isDraftDirty) return;
     try {
       const rolledBack = await rollbackMutation.mutateAsync({
         agentId: activeAgent.id,
@@ -175,6 +197,7 @@ export function AgentStudioPanel({
         activeAgent={activeAgent}
         isSaving={saveMutation.isPending}
         models={models}
+        onDirtyChange={setIsDraftDirty}
         onNotice={setNotice}
         onSave={handleSave}
         providers={providers}
@@ -188,14 +211,26 @@ export function AgentStudioPanel({
           </span>
         </div>
         <Button
-          disabled={!activeAgent || publishMutation.isPending}
-          onClick={handlePublish}
+          disabled={
+            !canPublishAgent({
+              hasActiveAgent: activeAgent !== undefined,
+              isDraftDirty,
+              isPublishing: publishMutation.isPending,
+            })
+          }
+          onClick={() => void handlePublish()}
           pending={publishMutation.isPending}
+          title={isDraftDirty ? t("agentPublishBlockedByDraft") : undefined}
           variant="primary"
         >
           {t("agentPublish")}
         </Button>
       </div>
+      {isDraftDirty ? (
+        <div className="text-xs text-muted" role="status">
+          {t("agentPublishBlockedByDraft")}
+        </div>
+      ) : null}
 
       {notice ? <div className="mt-3 text-sm text-muted">{notice}</div> : null}
 
@@ -211,6 +246,7 @@ export function AgentStudioPanel({
         activeAgent={activeAgent}
         diff={diff}
         isComparing={diffMutation.isPending}
+        isRollbackBlocked={isDraftDirty}
         isRollingBack={rollbackMutation.isPending}
         leftVersionId={leftVersionId}
         onCompare={() => void handleDiff()}
@@ -220,6 +256,7 @@ export function AgentStudioPanel({
         rightVersionId={rightVersionId}
         versions={versions}
       />
+      {dialog}
     </section>
   );
 }

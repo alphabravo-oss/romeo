@@ -1,4 +1,6 @@
 {
+  "approveImpersonationBody": "This immediately grants a live session acting as that user.",
+  "approveImpersonationTitle": "Approve impersonation?",
   "deviceTokensTitle": "Device tokens",
   "deviceTokensAdd": "Add device token",
   "deviceTokensCreated": "Device token created",

@@ -1,4 +1,4 @@
-import { Button, Input, Textarea } from "@romeo/ui";
+import { Button, DropdownMenu, Input, Textarea } from "@romeo/ui";
 import ArrowUp from "lucide-react/dist/esm/icons/arrow-up.mjs";
 import Clock3 from "lucide-react/dist/esm/icons/clock-3.mjs";
 import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
@@ -7,6 +7,7 @@ import Images from "lucide-react/dist/esm/icons/images.mjs";
 import Library from "lucide-react/dist/esm/icons/library.mjs";
 import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen.mjs";
 import Paperclip from "lucide-react/dist/esm/icons/paperclip.mjs";
+import Plus from "lucide-react/dist/esm/icons/plus.mjs";
 import ScanSearch from "lucide-react/dist/esm/icons/scan-search.mjs";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
 import Square from "lucide-react/dist/esm/icons/square.mjs";
@@ -14,6 +15,7 @@ import X from "lucide-react/dist/esm/icons/x.mjs";
 import Zap from "lucide-react/dist/esm/icons/zap.mjs";
 import { useQuery } from "@tanstack/react-query";
 import {
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -80,6 +82,7 @@ export function ChatComposer({
   const [noteLibraryOpen, setNoteLibraryOpen] = useState(false);
   const [urlDialogOpen, setUrlDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const commandQuery = draft.startsWith("/") ? draft.slice(1).trim() : "";
   const commandPromptsQuery = useQuery({
     queryKey: ["promptTemplates", workspaceId, "command", commandQuery],
@@ -96,18 +99,144 @@ export function ChatComposer({
     () => listImageGenerationModels(models, providers),
     [models, providers],
   );
+  const commandPrompts = useMemo(
+    () =>
+      (commandPromptsQuery.data?.items ?? [])
+        .filter((prompt) =>
+          prompt.name.toLowerCase().includes(commandQuery.toLowerCase()),
+        )
+        .slice(0, 8),
+    [commandPromptsQuery.data?.items, commandQuery],
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ponytail: replace this whole effect with `field-sizing: content` in
+  // app.css once Safari/Firefox support is broad enough. Until then CSS cannot
+  // measure content, so the height comes from scrollHeight. Keyed on `draft`
+  // rather than an onInput handler because React fires no input event for the
+  // programmatic writes (prompt library, notes, "/" menu, voice transcript).
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (el === null) return;
+    el.style.height = "auto"; // reset first, or it can only ever grow
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
 
   function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    // Japanese/Chinese/Korean IMEs commit the candidate word with Enter. Without
+    // this guard that keystroke submits a half-composed message.
+    if (event.nativeEvent.isComposing) return;
+    if (draft.startsWith("/") && commandPrompts.length > 0) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onDraftChange("");
+        setActiveCommandIndex(0);
+        return;
+      }
+      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        setActiveCommandIndex((current) => {
+          if (event.key === "Home") return 0;
+          if (event.key === "End") return commandPrompts.length - 1;
+          if (event.key === "ArrowDown")
+            return (current + 1) % commandPrompts.length;
+          return (current - 1 + commandPrompts.length) % commandPrompts.length;
+        });
+        return;
+      }
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        const selected =
+          commandPrompts[
+            Math.min(activeCommandIndex, commandPrompts.length - 1)
+          ];
+        if (selected !== undefined)
+          onDraftChange(materializePrompt(selected.body));
+        setActiveCommandIndex(0);
+        return;
+      }
+    }
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
   }
 
-  function handleComposerSubmit(event: FormEvent<HTMLFormElement>) {
-    onSubmit(event);
-    if (textareaRef.current !== null) textareaRef.current.style.height = "auto";
-  }
+  // ponytail: the visible menu text replaces the icon-only aria-label/title pair
+  // these actions used to carry, so only the inspect hint (which said something
+  // the label does not) keeps a title. Upgrade path if a second action needs a
+  // hint: give DropdownMenuItem a real `description` slot in @romeo/ui.
+  const composerMenuItems = [
+    {
+      disabled: isStreaming,
+      label: (
+        <span className="rm-composer-menu-item">
+          <Paperclip aria-hidden="true" size={16} />
+          {t("attach")}
+        </span>
+      ),
+      onSelect: () => fileInputRef.current?.click(),
+    },
+    {
+      label: (
+        <span className="rm-composer-menu-item">
+          <Zap aria-hidden="true" size={16} />
+          {t("promptLibrary")}
+        </span>
+      ),
+      onSelect: () => setPromptLibraryOpen(true),
+    },
+    {
+      label: (
+        <span className="rm-composer-menu-item">
+          <Library aria-hidden="true" size={16} />
+          {t("files")}
+        </span>
+      ),
+      onSelect: () => setFileLibraryOpen(true),
+    },
+    {
+      label: (
+        <span className="rm-composer-menu-item">
+          <NotebookPen aria-hidden="true" size={16} />
+          {t("notes")}
+        </span>
+      ),
+      onSelect: () => setNoteLibraryOpen(true),
+    },
+    {
+      label: (
+        <span className="rm-composer-menu-item">
+          <Globe2 aria-hidden="true" size={16} />
+          {t("url")}
+        </span>
+      ),
+      onSelect: () => setUrlDialogOpen(true),
+    },
+    {
+      disabled: imageModels.length === 0,
+      label: (
+        <span className="rm-composer-menu-item">
+          <Images aria-hidden="true" size={16} />
+          {t("image")}
+        </span>
+      ),
+      onSelect: () => setImageDialogOpen(true),
+    },
+    {
+      disabled: !canInspectContext || isStreaming || isInspectingContext,
+      label: (
+        <span
+          className="rm-composer-menu-item"
+          title={canInspectContext ? t("inspectNext") : t("inspectFirst")}
+        >
+          <ScanSearch aria-hidden="true" size={16} />
+          {t("inspect")}
+        </span>
+      ),
+      onSelect: onInspectContext,
+    },
+  ];
 
   return (
     <>
@@ -119,9 +248,9 @@ export function ChatComposer({
           <span>{t("temporaryChatDescription")}</span>
         </div>
       ) : null}
-      <form className="rm-composer-wrap" onSubmit={handleComposerSubmit}>
+      <form className="rm-composer-wrap" onSubmit={onSubmit}>
         <label className="sr-only" htmlFor="prompt">
-          Message
+          {t("message")}
         </label>
         {imageAttachments.length > 0 ? (
           <div className="rm-pending-attachments">
@@ -135,10 +264,10 @@ export function ChatComposer({
                 />
                 <span className="truncate">{attachment.fileName}</span>
                 <Button
-                  aria-label={`Remove ${attachment.fileName}`}
+                  aria-label={`${t("removeAttachment")}: ${attachment.fileName}`}
                   disabled={isStreaming}
                   onClick={() => onRemoveImageAttachment(attachment.id)}
-                  title={`Remove ${attachment.fileName}`}
+                  title={`${t("removeAttachment")}: ${attachment.fileName}`}
                   type="button"
                 >
                   <X aria-hidden="true" size={12} />
@@ -157,10 +286,10 @@ export function ChatComposer({
                 <FileText aria-hidden="true" size={18} />
                 <span className="truncate">{attachment.fileName}</span>
                 <Button
-                  aria-label={`Remove ${attachment.fileName}`}
+                  aria-label={`${t("removeAttachment")}: ${attachment.fileName}`}
                   disabled={isStreaming}
                   onClick={() => onRemoveDocumentAttachment(attachment.id)}
-                  title={`Remove ${attachment.fileName}`}
+                  title={`${t("removeAttachment")}: ${attachment.fileName}`}
                   type="button"
                 >
                   <X aria-hidden="true" size={12} />
@@ -172,16 +301,17 @@ export function ChatComposer({
         <div className="rm-composer">
           <Textarea
             name="prompt"
+            aria-activedescendant={
+              draft.startsWith("/") && commandPrompts.length > 0
+                ? `composer-command-${commandPrompts[Math.min(activeCommandIndex, commandPrompts.length - 1)]?.id}`
+                : undefined
+            }
+            aria-autocomplete="list"
+            aria-controls="composer-command-menu"
             id="prompt"
+            aria-expanded={draft.startsWith("/") && commandPrompts.length > 0}
+            aria-haspopup="listbox"
             onChange={(event) => onDraftChange(event.currentTarget.value)}
-            onInput={(event) => {
-              // ponytail: replace this whole handler with `field-sizing: content` in
-              // app.css once Safari/Firefox support is broad enough. Until then CSS
-              // cannot measure content, so the height comes from scrollHeight.
-              const el = event.currentTarget;
-              el.style.height = "auto"; // reset first, or it can only ever grow
-              el.style.height = `${el.scrollHeight}px`;
-            }}
             onKeyDown={handleDraftKeyDown}
             onPaste={(event) => {
               const files = Array.from(event.clipboardData.files);
@@ -189,42 +319,70 @@ export function ChatComposer({
             }}
             placeholder={messageCount === 0 ? t("prompt") : t("sendMessage")}
             ref={textareaRef}
-            rows={4}
+            rows={1}
             value={draft}
             aria-describedby="composer-status"
+            role="combobox"
           />
-          {draft.startsWith("/") &&
-          (commandPromptsQuery.data?.items.length ?? 0) > 0 ? (
+          {draft.startsWith("/") && commandPrompts.length > 0 ? (
             <div
               className="rm-composer-command-menu"
+              id="composer-command-menu"
               role="listbox"
               aria-label={t("promptTemplates")}
             >
-              {commandPromptsQuery
-                .data!.items.filter((prompt) =>
-                  prompt.name
-                    .toLowerCase()
-                    .includes(draft.slice(1).toLowerCase()),
-                )
-                .slice(0, 8)
-                .map((prompt) => (
-                  <Button
-                    key={prompt.id}
-                    onClick={() =>
-                      onDraftChange(materializePrompt(prompt.body))
-                    }
-                    role="option"
-                    type="button"
-                  >
-                    <strong>/{prompt.name}</strong>
-                    <span>
-                      {prompt.description ?? prompt.body.slice(0, 80)}
-                    </span>
-                  </Button>
-                ))}
+              {commandPrompts.map((prompt, index) => (
+                <Button
+                  aria-selected={index === activeCommandIndex}
+                  id={`composer-command-${prompt.id}`}
+                  key={prompt.id}
+                  onClick={() => {
+                    onDraftChange(materializePrompt(prompt.body));
+                    setActiveCommandIndex(0);
+                  }}
+                  onMouseEnter={() => setActiveCommandIndex(index)}
+                  role="option"
+                  type="button"
+                >
+                  <strong>/{prompt.name}</strong>
+                  <span>{prompt.description ?? prompt.body.slice(0, 80)}</span>
+                </Button>
+              ))}
             </div>
           ) : null}
+          {/* Stays mounted outside the menu: the menu item only forwards a click
+              here, and the input itself remains a labelled keyboard target. */}
+          <Input
+            name="chat-image-attachment"
+            accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.docx,.pptx,.xlsx,text/plain,text/markdown,text/csv,application/json,text/html"
+            aria-label={t("attach")}
+            className="sr-only"
+            disabled={isStreaming}
+            id="chat-image-attachment"
+            onChange={(event) => {
+              const files = Array.from(event.currentTarget.files ?? []);
+              event.currentTarget.value = "";
+              onAttachFiles(files);
+            }}
+            multiple
+            ref={fileInputRef}
+            type="file"
+          />
           <div className="rm-composer-actions">
+            <DropdownMenu
+              align="start"
+              items={composerMenuItems}
+              trigger={
+                <Button
+                  aria-label={t("moreActions")}
+                  className="rm-icon-button"
+                  title={t("moreActions")}
+                  type="button"
+                >
+                  <Plus aria-hidden="true" size={18} />
+                </Button>
+              }
+            />
             {canOverrideModel ? (
               <ComposerModelSelect
                 disabled={isStreaming}
@@ -234,74 +392,6 @@ export function ChatComposer({
                 selectedModelId={selectedModelId}
               />
             ) : null}
-            <label
-              className={`rm-icon-button ${isStreaming ? "disabled" : ""}`}
-              htmlFor="chat-image-attachment"
-              title={t("attach")}
-            >
-              <Paperclip aria-hidden="true" size={17} />
-              <span className="sr-only">{t("attach")}</span>
-            </label>
-            <Input
-              name="chat-image-attachment"
-              accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.docx,.pptx,.xlsx,text/plain,text/markdown,text/csv,application/json,text/html"
-              className="sr-only"
-              disabled={isStreaming}
-              id="chat-image-attachment"
-              onChange={(event) => {
-                const files = Array.from(event.currentTarget.files ?? []);
-                event.currentTarget.value = "";
-                onAttachFiles(files);
-              }}
-              multiple
-              type="file"
-            />
-            <Button
-              aria-label={t("promptLibrary")}
-              className="rm-icon-button"
-              onClick={() => setPromptLibraryOpen(true)}
-              title={t("promptLibrary")}
-              type="button"
-            >
-              <Zap aria-hidden="true" size={17} />
-            </Button>
-            <Button
-              aria-label={t("files")}
-              className="rm-icon-button"
-              onClick={() => setFileLibraryOpen(true)}
-              title={t("files")}
-              type="button"
-            >
-              <Library aria-hidden="true" size={17} />
-            </Button>
-            <Button
-              aria-label={t("notes")}
-              className="rm-icon-button"
-              onClick={() => setNoteLibraryOpen(true)}
-              title={t("notes")}
-              type="button"
-            >
-              <NotebookPen aria-hidden="true" size={17} />
-            </Button>
-            <Button
-              aria-label={t("url")}
-              className="rm-icon-button"
-              onClick={() => setUrlDialogOpen(true)}
-              title={t("url")}
-              type="button"
-            >
-              <Globe2 aria-hidden="true" size={17} />
-            </Button>
-            <Button
-              aria-label={t("image")}
-              className="rm-icon-button"
-              disabled={imageModels.length === 0}
-              onClick={() => setImageDialogOpen(true)}
-              title={t("image")}
-              type="button"
-            >
-              <Images aria-hidden="true" size={17} />
-            </Button>
             <Button
               aria-pressed={webSearchEnabled}
               aria-label={t("search")}
@@ -312,26 +402,14 @@ export function ChatComposer({
             >
               <Search aria-hidden="true" size={17} />
             </Button>
-            <VoiceInputButton
-              disabled={isStreaming}
-              isTranscribing={isTranscribingVoice}
-              onAudio={onTranscribeAudio}
-              onError={onTranscriptionError}
-            />
-            <Button
-              aria-label={t("inspect")}
-              className="rm-icon-button"
-              disabled={
-                !canInspectContext || isStreaming || isInspectingContext
-              }
-              onClick={onInspectContext}
-              title={canInspectContext ? t("inspectNext") : t("inspectFirst")}
-              type="button"
-            >
-              <ScanSearch aria-hidden="true" size={17} />
-            </Button>
-            {isStreaming ? (
-              <>
+            <div className="rm-composer-actions-end">
+              <VoiceInputButton
+                disabled={isStreaming}
+                isTranscribing={isTranscribingVoice}
+                onAudio={onTranscribeAudio}
+                onError={onTranscriptionError}
+              />
+              {isStreaming ? (
                 <Button
                   aria-label={t("stop")}
                   className="rm-icon-button stop"
@@ -341,31 +419,23 @@ export function ChatComposer({
                 >
                   <Square aria-hidden="true" size={15} />
                 </Button>
-                <Button
-                  aria-label={t("queue")}
-                  className="rm-send-button"
-                  disabled={draft.trim() === ""}
-                  title={t("queue")}
-                  type="submit"
-                >
-                  <ArrowUp aria-hidden="true" size={16} />
-                </Button>
-              </>
-            ) : (
+              ) : null}
               <Button
-                aria-label={t("send")}
+                aria-label={isStreaming ? t("queue") : t("send")}
                 className="rm-send-button"
                 disabled={
-                  draft.trim() === "" &&
-                  imageAttachments.length === 0 &&
-                  documentAttachments.length === 0
+                  isStreaming
+                    ? draft.trim() === ""
+                    : draft.trim() === "" &&
+                      imageAttachments.length === 0 &&
+                      documentAttachments.length === 0
                 }
-                title={t("send")}
+                title={isStreaming ? t("queue") : t("send")}
                 type="submit"
               >
                 <ArrowUp aria-hidden="true" size={16} />
               </Button>
-            )}
+            </div>
           </div>
         </div>
         <div className="sr-only" id="composer-status" aria-live="polite">
@@ -378,8 +448,9 @@ export function ChatComposer({
                 <Globe2 aria-hidden="true" size={16} />
                 <span className="truncate">{url}</span>
                 <Button
-                  aria-label={`Remove ${url}`}
+                  aria-label={`${t("removeAttachment")}: ${url}`}
                   onClick={() => onRemoveUrl(url)}
+                  title={`${t("removeAttachment")}: ${url}`}
                   type="button"
                 >
                   <X aria-hidden="true" size={12} />

@@ -13,9 +13,9 @@ try {
   for (const required of [
     "New chat",
     "Message",
-    "Prompt library",
-    "Reusable files",
-    "Inspect context",
+    "More actions",
+    "Search the web",
+    "Send message",
   ])
     assert(
       initial.includes(required),
@@ -132,12 +132,7 @@ try {
     `attachment chat axe violations: ${JSON.stringify(attachmentAxeViolations)}`,
   );
 
-  run(
-    "wait",
-    "--fn",
-    `!document.querySelector('button[aria-label="Inspect context"]')?.disabled`,
-  );
-  run("click", 'button[aria-label="Inspect context"]');
+  clickComposerMenuItem("Inspect context");
   run("wait", ".rm-context-body");
   const retainedContext = run("get", "text", ".rm-context-inspector");
   assert(
@@ -168,12 +163,7 @@ try {
     `([...document.querySelectorAll(".rm-attachment-with-retention")].find((node) => node.textContent?.includes("browser-source.txt"))?.querySelector("input[type=checkbox]"))?.click()`,
   );
   run("wait", "300");
-  run(
-    "wait",
-    "--fn",
-    `!document.querySelector('button[aria-label="Inspect context"]')?.disabled`,
-  );
-  run("click", 'button[aria-label="Inspect context"]');
+  clickComposerMenuItem("Inspect context");
   run("wait", ".rm-context-body");
   const releasedContext = run("get", "text", ".rm-context-inspector");
   assert(
@@ -232,7 +222,7 @@ try {
   );
   run("click", '.rm-ui-dialog button[aria-label="Close"]');
 
-  run("click", 'button[aria-label="Reusable files"]');
+  clickComposerMenuItem("Reusable files");
   run("wait", ".rm-ui-dialog");
   const reusableFiles = run("get", "text", ".rm-ui-dialog");
   assert(
@@ -335,7 +325,7 @@ function seedAndAttachBrowserFixtures() {
   run("reload");
   run("wait", "--load", "networkidle");
   for (const fileName of ["browser-source.txt", "browser-image.png"]) {
-    run("click", 'button[aria-label="Reusable files"]');
+    clickComposerMenuItem("Reusable files");
     run("wait", ".rm-ui-dialog");
     const selected = evaluate(`Boolean((() => {
       const row = [...document.querySelectorAll(".rm-ui-dialog .rm-list-row")].find((item) => item.textContent?.includes(${JSON.stringify(fileName)}));
@@ -411,12 +401,7 @@ function assertContextBudgetOverflow() {
     return input.value.length;
   })()`,
   );
-  run(
-    "wait",
-    "--fn",
-    `!document.querySelector('button[aria-label="Inspect context"]')?.disabled`,
-  );
-  run("click", 'button[aria-label="Inspect context"]');
+  clickComposerMenuItem("Inspect context");
   run("wait", ".rm-context-inspector .rm-composer-error");
   const error = run("get", "text", ".rm-context-inspector .rm-composer-error");
   assert(
@@ -573,8 +558,13 @@ function assertPromptNotesMemoryAndTemporaryChat() {
   );
   run("reload");
   run("wait", "--load", "networkidle");
-  run("click", 'button[aria-label="Prompt library"]');
+  clickComposerMenuItem("Prompt library");
   run("wait", ".rm-ui-dialog");
+  run(
+    "wait",
+    "--fn",
+    `document.querySelector(".rm-ui-dialog")?.textContent?.includes("Browser prompt template")`,
+  );
   const promptSelected = evaluate(`Boolean((() => {
     const row = [...document.querySelectorAll(".rm-ui-dialog .rm-list-row")]
       .find((item) => item.textContent?.includes("Browser prompt template"));
@@ -638,7 +628,7 @@ function assertPromptNotesMemoryAndTemporaryChat() {
 
   run("open", baseUrl);
   run("wait", "--load", "networkidle");
-  run("click", 'button[aria-label="Insert note"]');
+  clickComposerMenuItem("Insert note");
   run("wait", ".rm-ui-dialog");
   run("fill", 'input[aria-label="Search notes"]', "Browser reusable note");
   run(
@@ -674,7 +664,7 @@ function assertPromptNotesMemoryAndTemporaryChat() {
     "web-search composer control did not disable governed retrieval",
   );
 
-  run("click", 'button[aria-label="Attach a webpage"]');
+  clickComposerMenuItem("Attach a webpage");
   run("wait", "#webpage-url");
   run("fill", "#webpage-url", "http://127.0.0.1:3000/private-browser-sentinel");
   run("click", '.rm-ui-dialog button[type="submit"]');
@@ -756,12 +746,7 @@ function assertImageGeneration(port) {
   );
   run("open", baseUrl);
   run("wait", "--load", "networkidle");
-  run(
-    "wait",
-    "--fn",
-    `!document.querySelector('button[aria-label="Generate image"]')?.disabled`,
-  );
-  run("click", 'button[aria-label="Generate image"]');
+  clickComposerMenuItem("Generate image");
   run("wait", "#image-prompt");
   run("select", "#image-model", seeded);
   run("fill", "#image-prompt", "Browser governed image sentinel");
@@ -837,9 +822,24 @@ function assertKeyboardAndFocusNavigation() {
 
   run(
     "eval",
-    `document.querySelector('button[aria-label="Prompt library"]')?.focus()`,
+    `document.querySelector('button[aria-label="More actions"]')?.focus()`,
   );
   run("press", "Enter");
+  run("wait", ".rm-ui-menu");
+  assert(
+    evaluate(`document.activeElement?.getAttribute("role") === "menuitem"`),
+    "composer menu did not enter its actions by keyboard",
+  );
+  run("press", "Escape");
+  run("wait", "--fn", `!document.querySelector(".rm-ui-menu")`);
+  assert(
+    evaluate(
+      `document.activeElement?.getAttribute("aria-label") === "More actions"`,
+    ),
+    "composer menu Escape did not restore trigger focus",
+  );
+
+  clickComposerMenuItem("Prompt library");
   run("wait", ".rm-ui-dialog");
   assert(
     evaluate(
@@ -859,11 +859,11 @@ function assertKeyboardAndFocusNavigation() {
   run(
     "wait",
     "--fn",
-    `document.activeElement?.getAttribute("aria-label") === "Prompt library"`,
+    `document.activeElement?.getAttribute("aria-label") === "More actions"`,
   );
   assert(
     evaluate(
-      `document.activeElement?.getAttribute("aria-label") === "Prompt library"`,
+      `document.activeElement?.getAttribute("aria-label") === "More actions"`,
     ),
     "dialog Escape did not restore opener focus",
   );
@@ -950,7 +950,7 @@ function assertNarrowViewportInteractions(width, height, label) {
     `${label} chat layout overflowed horizontally`,
   );
 
-  run("click", 'button[aria-label="Prompt library"]');
+  clickComposerMenuItem("Prompt library");
   run("wait", ".rm-ui-dialog");
   const dialogBounds = JSON.parse(
     evaluate(`JSON.stringify((() => {
@@ -1038,7 +1038,7 @@ function assertComposerLocalization() {
       admin: "Administración",
       agentAccess: "Acceso",
       agentSaveDraft: "Guardar borrador",
-      agentStudio: "Configuración del modelo administrado",
+      agentStudio: "Configuración del asistente",
       agentTestConsole: "Consola de prueba",
       analyticsTitle: "Analítica",
       auditTitle: "Registro de auditoría",
@@ -1088,6 +1088,7 @@ function assertComposerLocalization() {
       connections: "Conexiones",
       commandPalette: "Paleta de comandos",
       addConnection: "Añadir conexión",
+      addProvider: "Añadir proveedor",
       exportJson: "Exportar JSON",
       fileLibrary: "Biblioteca de archivos",
       displayName: "Nombre visible",
@@ -1136,7 +1137,7 @@ function assertComposerLocalization() {
       users: "Usuarios",
       userManage: "Administrar",
       userManageTitle: "Administrar usuario",
-      promptLibrary: "Biblioteca de instrucciones",
+      moreActions: "Más acciones",
       promptTemplates: "Plantillas de instrucciones",
       promptAddTemplate: "Añadir plantilla",
       promptNewTemplate: "Nueva plantilla",
@@ -1161,7 +1162,7 @@ function assertComposerLocalization() {
       admin: "Administration",
       agentAccess: "Accès",
       agentSaveDraft: "Enregistrer le brouillon",
-      agentStudio: "Configuration du modèle géré",
+      agentStudio: "Configuration de l’assistant",
       agentTestConsole: "Console de test",
       analyticsTitle: "Analytique",
       auditTitle: "Journal d’audit",
@@ -1211,6 +1212,7 @@ function assertComposerLocalization() {
       connections: "Connexions",
       commandPalette: "Palette de commandes",
       addConnection: "Ajouter une connexion",
+      addProvider: "Ajouter un fournisseur",
       exportJson: "Exporter en JSON",
       fileLibrary: "Bibliothèque de fichiers",
       displayName: "Nom affiché",
@@ -1259,7 +1261,7 @@ function assertComposerLocalization() {
       users: "Utilisateurs",
       userManage: "Gérer",
       userManageTitle: "Gérer l’utilisateur",
-      promptLibrary: "Bibliothèque d’invites",
+      moreActions: "Plus d’actions",
       promptTemplates: "Modèles d’invite",
       promptAddTemplate: "Ajouter un modèle",
       promptNewTemplate: "Nouveau modèle",
@@ -1292,7 +1294,7 @@ function assertComposerLocalization() {
       lang: document.documentElement.lang,
       filterTrigger: document.querySelector(${JSON.stringify(`button[aria-label="${locale.filterByTag} / ${locale.filterByFolder}"]`)})?.getAttribute("aria-label"),
       moreChatActions: document.querySelector(${JSON.stringify(`button[aria-label="${locale.moreChatActions}"]`)})?.getAttribute("aria-label"),
-      promptLibrary: document.querySelector(${JSON.stringify(`button[aria-label="${locale.promptLibrary}"]`)})?.getAttribute("aria-label"),
+      moreActions: document.querySelector(${JSON.stringify(`button[aria-label="${locale.moreActions}"]`)})?.getAttribute("aria-label"),
       voiceRecord: document.querySelector(${JSON.stringify(`button[aria-label="${locale.voiceRecord}"]`)})?.getAttribute("aria-label"),
       status: document.querySelector("#composer-status")?.textContent,
       skipToChat: document.querySelector(".rm-skip-link")?.textContent?.trim(),
@@ -1308,8 +1310,8 @@ function assertComposerLocalization() {
       `${locale.code} did not translate chat filters`,
     );
     assert(
-      localized.promptLibrary === locale.promptLibrary,
-      `${locale.code} did not translate the prompt-library control`,
+      localized.moreActions === locale.moreActions,
+      `${locale.code} did not translate the composer actions menu`,
     );
     assert(
       localized.voiceRecord === locale.voiceRecord,
@@ -1343,18 +1345,14 @@ function assertComposerLocalization() {
       `${locale.code} produced an SSR hydration mismatch: ${localeErrors}`,
     );
 
-    run("click", `button[aria-label=${JSON.stringify(locale.files)}]`);
+    clickComposerMenuItem(locale.files, locale.moreActions);
     run("wait", ".rm-ui-dialog");
     assert(
       run("get", "text", ".rm-ui-dialog").includes(locale.fileLibrary),
       `${locale.code} did not translate the reusable file library`,
     );
     run("press", "Escape");
-    run(
-      "wait",
-      `button[aria-label=${JSON.stringify(locale.inspect)}]:not([disabled])`,
-    );
-    run("click", `button[aria-label=${JSON.stringify(locale.inspect)}]`);
+    clickComposerMenuItem(locale.inspect, locale.moreActions);
     run("wait", ".rm-context-inspector");
     assert(
       run("get", "text", ".rm-context-inspector").includes(
@@ -1583,7 +1581,7 @@ function assertComposerLocalization() {
     run("wait", "--load", "networkidle");
     run(
       "eval",
-      `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.addConnection)})))?.click()`,
+      `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.addProvider)})))?.click()`,
     );
     run("wait", '.rm-ui-dialog button[role="combobox"]');
     assert(
@@ -1816,11 +1814,11 @@ function assertComposerLocalization() {
       run("get", "text", "body").includes(locale.organizationsTitle),
       `${locale.code} did not translate organization administration`,
     );
-    run("open", `${baseUrl}/admin?section=device-tokens`);
+    run("open", `${baseUrl}/settings?section=device-tokens`);
     run("wait", "--load", "networkidle");
     assert(
       run("get", "text", "body").includes(locale.deviceTokensTitle),
-      `${locale.code} did not translate device-token administration`,
+      `${locale.code} did not translate device-token settings`,
     );
     run(
       "eval",
@@ -2013,7 +2011,7 @@ function assertProviderSetupAndDiagnostics() {
   function openVllmDialog() {
     run(
       "eval",
-      `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "+ Add connection"))?.click()`,
+      `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "+ Add provider"))?.click()`,
     );
     run("wait", "#connection-preset");
     run("click", "#connection-preset");
@@ -2154,6 +2152,27 @@ function assertProviderSetupAndDiagnostics() {
 function evaluate(script) {
   const output = run("eval", script);
   return JSON.parse(output);
+}
+
+// The composer's secondary actions live behind the "+" dropdown, so they are
+// portalled `[role=menuitem]` nodes identified by their visible text (no
+// aria-label) and only mounted while the menu is open.
+function clickComposerMenuItem(label, triggerLabel = "More actions") {
+  const lookup = `[...document.querySelectorAll('.rm-ui-menu [role="menuitem"]')].find((item) => item.textContent?.trim() === ${JSON.stringify(label)})`;
+  run("click", `button[aria-label=${JSON.stringify(triggerLabel)}]`);
+  run("wait", ".rm-ui-menu");
+  run(
+    "wait",
+    "--fn",
+    `(() => { const item = ${lookup}; return Boolean(item) && item.getAttribute("aria-disabled") !== "true"; })()`,
+  );
+  assert(
+    evaluate(
+      `Boolean((() => { const item = ${lookup}; item?.click(); return item; })())`,
+    ),
+    `composer menu action was unavailable: ${label}`,
+  );
+  run("wait", "--fn", `!document.querySelector(".rm-ui-menu")`);
 }
 
 function axeViolationsForCurrentPage() {

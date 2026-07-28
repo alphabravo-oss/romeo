@@ -13,6 +13,7 @@ import type {
 import { downloadCsv } from "../lib/csv";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
+import { toast } from "../lib/toast";
 import {
   LocalizedCurrency,
   LocalizedDateTime,
@@ -107,7 +108,9 @@ export function AnalyticsPanel() {
         </div>
       </div>
       {exportError ? (
-        <div className="mb-3 text-sm text-red-300">{exportError}</div>
+        <div className="rm-composer-error mb-3" role="alert">
+          {exportError}
+        </div>
       ) : null}
       <PanelState query={summaryQuery} isEmpty={() => false}>
         {(summary) => <AnalyticsSummaryView summary={summary} />}
@@ -125,6 +128,7 @@ export function AnalyticsPanel() {
       setExportError(
         caught instanceof Error ? caught.message : t("analyticsUnableExport"),
       );
+      toast(t("analyticsUnableExport"), "error");
     } finally {
       setIsExporting(false);
     }

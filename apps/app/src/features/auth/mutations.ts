@@ -7,6 +7,7 @@ import {
   type FederatedAuthStartSamlLoginData,
   localAuthConfirmTotpEnrollment,
   localAuthDisableTotpFactor,
+  localAuthGenerateRecoveryCodes,
   localAuthSetPassword,
   localAuthStartTotpEnrollment,
   type LocalAuthenticatedLoginResult,
@@ -14,8 +15,10 @@ import {
   type LocalLoginRequest,
   type LocalLoginResult,
   type LocalMfaFactorSummary,
+  type LocalMfaRecoveryCodes,
   type LocalMfaVerifyRequest,
   type OidcLoginStart,
+  type RecoveryCodesGenerateRequest,
   type SamlLoginStart,
   type SetLocalPasswordRequest,
   type TotpConfirmRequest,
@@ -95,6 +98,17 @@ export async function confirmTotpEnrollment(
 ): Promise<LocalMfaFactorSummary> {
   configureBrowserApiClients();
   const response = await localAuthConfirmTotpEnrollment({
+    body: input,
+    throwOnError: true,
+  });
+  return response.data.data;
+}
+
+export async function generateRecoveryCodes(
+  input: RecoveryCodesGenerateRequest,
+): Promise<LocalMfaRecoveryCodes> {
+  configureBrowserApiClients();
+  const response = await localAuthGenerateRecoveryCodes({
     body: input,
     throwOnError: true,
   });

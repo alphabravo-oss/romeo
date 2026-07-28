@@ -10,15 +10,9 @@ import type {
 } from "../features/auth-provider-administration";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { linesToArray } from "./auth-provider-lines";
 import { AuthProviderProtocolFields } from "./AuthProviderProtocolFields";
 import { FormDialog } from "./FormDialog";
-
-function linesToArray(value: string): string[] {
-  return value
-    .split("\\n")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-}
 
 export function ConfigureDialog(props: {
   entry: AuthProviderCatalogEntry;

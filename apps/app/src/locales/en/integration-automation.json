@@ -1,4 +1,6 @@
 {
+  "dataConnectorNeedsKb": "Create a knowledge base before adding a data connector.",
+  "knowledgeBase": "Knowledge base",
   "webhooksTitle": "Webhooks",
   "webhooksAdd": "Add webhook",
   "webhooksNew": "New webhook",
@@ -76,7 +78,7 @@
   "connectorSyncRunning": "Running",
   "connectorSyncStatus": "Status",
   "connectorSyncCompleted": "Completed",
-  "connectorSyncFailed": "Failed",
+  "connectorSyncStatusFailed": "Failed",
   "connectorSyncItems": "Items",
   "connectorSyncMessage": "Message",
   "connectorSyncLatestFailed": "Latest sync failed",

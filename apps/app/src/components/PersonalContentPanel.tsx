@@ -53,7 +53,8 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
   };
   const save = useMutation({
     mutationFn: async () => {
-      if (workspaceId === undefined) throw new Error(t("noWorkspaceSelected"));
+      if (workspaceId === undefined)
+        throw new Error(t("settingsNoWorkspaceSelected"));
       return editing === "new"
         ? createWorkspaceContent(kind, {
             workspaceId,
@@ -84,6 +85,12 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
         "success",
       );
     },
+    onError: (caught) => {
+      toast(
+        caught instanceof Error ? caught.message : `${label} ${t("failed")}`,
+        "error",
+      );
+    },
   });
 
   function open(item: WorkspaceContentItem | "new") {
@@ -104,8 +111,16 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
     item: WorkspaceContentItem,
     update: { enabled?: boolean; pinned?: boolean },
   ) {
-    await updateWorkspaceContent(kind, item.id, update);
-    await queryClient.invalidateQueries({ queryKey: [kind, workspaceId] });
+    try {
+      await updateWorkspaceContent(kind, item.id, update);
+      await queryClient.invalidateQueries({ queryKey: [kind, workspaceId] });
+    } catch (caught) {
+      await queryClient.invalidateQueries({ queryKey: [kind, workspaceId] });
+      toast(
+        caught instanceof Error ? caught.message : `${label} ${t("failed")}`,
+        "error",
+      );
+    }
   }
 
   async function remove(item: WorkspaceContentItem) {
@@ -117,8 +132,15 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
       }))
     )
       return;
-    await deleteWorkspaceContent(kind, item.id);
-    await queryClient.invalidateQueries({ queryKey: [kind, workspaceId] });
+    try {
+      await deleteWorkspaceContent(kind, item.id);
+      await queryClient.invalidateQueries({ queryKey: [kind, workspaceId] });
+    } catch (caught) {
+      toast(
+        caught instanceof Error ? caught.message : `${label} ${t("failed")}`,
+        "error",
+      );
+    }
   }
 
   const label = kind === "memories" ? t("memory") : t("note");

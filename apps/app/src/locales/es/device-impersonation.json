@@ -1,4 +1,6 @@
 {
+  "approveImpersonationBody": "Esto concede de inmediato una sesión activa actuando como ese usuario.",
+  "approveImpersonationTitle": "¿Aprobar la suplantación?",
   "deviceTokensTitle": "Tokens de dispositivo",
   "deviceTokensAdd": "Añadir token de dispositivo",
   "deviceTokensCreated": "Token de dispositivo creado",

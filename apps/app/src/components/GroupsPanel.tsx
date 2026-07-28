@@ -1,4 +1,4 @@
-import { Input, Button } from "@romeo/ui";
+import { Button, Field, Input, Select } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -10,6 +10,7 @@ import {
   listGroups,
   removeGroupMember,
 } from "../features/administration";
+import { listShareTargets } from "../features";
 import type { Group, GroupMember } from "../features/administration";
 import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
@@ -36,6 +37,14 @@ export function GroupsPanel() {
     queryFn: () => listGroupMembers(selectedGroupId),
     enabled: selectedGroupId !== "",
   });
+  const shareTargetsQuery = useQuery({
+    queryKey: ["shareTargets", "group-members"],
+    queryFn: () => listShareTargets(),
+    enabled: selectedGroupId !== "",
+  });
+  const userTargets = (shareTargetsQuery.data ?? []).filter(
+    (target) => target.principalType === "user",
+  );
 
   const createMutation = useMutation({ mutationFn: createGroup });
   const addMemberMutation = useMutation({ mutationFn: addGroupMember });
@@ -249,18 +258,22 @@ export function GroupsPanel() {
             >
               {(field) => (
                 <>
-                  <Input
-                    name="userId"
-                    onBlur={field.handleBlur}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value)
-                    }
-                    aria-label={t("groupsUserId")}
-                    placeholder={t("groupsUserId")}
-                    value={field.state.value}
-                  />
+                  <Field label={t("groupsAddMember")}>
+                    <Select
+                      name="userId"
+                      disabled={
+                        shareTargetsQuery.isPending || userTargets.length === 0
+                      }
+                      onValueChange={field.handleChange}
+                      options={userTargets.map((target) => ({
+                        label: target.label,
+                        value: target.principalId,
+                      }))}
+                      value={field.state.value}
+                    />
+                  </Field>
                   {field.state.meta.errors.length ? (
-                    <div className="rm-composer-error">
+                    <div className="rm-composer-error" role="alert">
                       {field.state.meta.errors.join(", ")}
                     </div>
                   ) : null}

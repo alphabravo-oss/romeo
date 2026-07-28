@@ -2,7 +2,7 @@ import { Button } from "@romeo/ui";
 import BotMessageSquare from "lucide-react/dist/esm/icons/bot-message-square.mjs";
 import Zap from "lucide-react/dist/esm/icons/zap.mjs";
 import type { DragEvent, FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type {
   BaseModel,
@@ -17,6 +17,7 @@ import { useStickToBottom } from "../lib/use-stick-to-bottom";
 import { ChatMessages } from "./ChatMessages";
 import { ChatComposer } from "./ChatComposer";
 import { ContextInspector } from "./ContextInspector";
+import { isDragOverlayVisible, nextDragDepth } from "./drag-depth";
 import type {
   ChatCitation,
   ChatRunActivity,
@@ -139,7 +140,7 @@ export function ChatPanel({
   }) => void;
   onGenerateSpeech: (messageId: string) => void;
   onInspectContext: () => void;
-  onEditAndResend: (messageId: string, content: string) => void;
+  onEditAndResend: (messageId: string, content: string) => Promise<boolean>;
   onRateMessage: (
     messageId: string,
     rating: "negative" | "none" | "positive",
@@ -157,25 +158,42 @@ export function ChatPanel({
   speechMessageId: string | undefined;
 }) {
   const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
   const { t } = useLocale();
   const [contextInspectorOpen, setContextInspectorOpen] = useState(false);
   // Re-runs on every token: messages is a new array each delta, so the effect
   // fires throughout the stream, not just on message boundaries.
   const conversationRef = useStickToBottom(messages);
 
+  useEffect(() => {
+    const reset = () => {
+      dragDepth.current = nextDragDepth(dragDepth.current, "reset");
+      setDragActive(false);
+    };
+    window.addEventListener("dragend", reset);
+    window.addEventListener("drop", reset);
+    return () => {
+      window.removeEventListener("dragend", reset);
+      window.removeEventListener("drop", reset);
+    };
+  }, []);
+
   const dropTargetProps = {
     onDragEnter: (event: DragEvent<HTMLElement>) => {
       event.preventDefault();
-      setDragActive(true);
+      dragDepth.current = nextDragDepth(dragDepth.current, "enter");
+      setDragActive(isDragOverlayVisible(dragDepth.current));
     },
     onDragOver: (event: DragEvent<HTMLElement>) => {
       event.preventDefault();
     },
-    onDragLeave: (event: DragEvent<HTMLElement>) => {
-      if (event.currentTarget === event.target) setDragActive(false);
+    onDragLeave: () => {
+      dragDepth.current = nextDragDepth(dragDepth.current, "leave");
+      setDragActive(isDragOverlayVisible(dragDepth.current));
     },
     onDrop: (event: DragEvent<HTMLElement>) => {
       event.preventDefault();
+      dragDepth.current = nextDragDepth(dragDepth.current, "reset");
       setDragActive(false);
       onAttachFiles(Array.from(event.dataTransfer.files));
     },
@@ -295,6 +313,7 @@ export function ChatPanel({
       <div className="rm-conversation" ref={conversationRef}>
         <ChatMessages
           activeVoiceProfileId={activeVoiceProfileId}
+          agentName={agentName}
           citations={citations}
           feedback={messageFeedback}
           isGeneratingSpeech={isGeneratingSpeech}

@@ -15,6 +15,7 @@ import { EvalPanel } from "../components/EvalPanel";
 import { KnowledgePanel } from "../components/KnowledgePanel";
 import { PageHeader } from "../components/PageHeader";
 import { ToolPanel } from "../components/ToolPanel";
+import { ToolTracePanel } from "../components/ToolTracePanel";
 import { useToolExecution } from "../components/useToolExecution";
 import { useWorkspaceData } from "../components/useWorkspaceData";
 import { VoicePanel } from "../components/VoicePanel";
@@ -25,6 +26,7 @@ import {
   useLocale,
   useLocaleNamespaces,
 } from "../lib/i18n";
+import { resolveSectionKey } from "../lib/section-routing";
 
 export const Route = createFileRoute("/workspace")({
   validateSearch: (search: Record<string, unknown>): { section?: string } =>
@@ -94,7 +96,7 @@ function WorkspacePage() {
   const { t } = useLocale();
   const { section: sectionParam } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const section = sectionParam ?? "agents";
+  const section = resolveSectionKey(sectionParam, META, "agents");
   const [agentId, setAgentId] = useState<string>();
   const data = useWorkspaceData(agentId);
   const tools = useToolExecution(data.activeAgent, data.tools, () => {});
@@ -171,18 +173,21 @@ function WorkspacePage() {
       ) : null}
 
       {section === "tools" ? (
-        <ToolPanel
-          isExecuting={tools.isExecutingTool}
-          onApproveTool={() => void tools.approvePendingTool()}
-          onCancelToolApproval={tools.cancelPendingTool}
-          onExecuteCalculator={(expression) =>
-            void tools.handleExecuteCalculator(expression)
-          }
-          onExecuteDateTime={() => void tools.handleExecuteDateTime()}
-          pendingApproval={tools.pendingApproval}
-          result={tools.toolResult}
-          tools={data.tools}
-        />
+        <div className="grid gap-4">
+          <ToolPanel
+            isExecuting={tools.isExecutingTool}
+            onApproveTool={() => void tools.approvePendingTool()}
+            onCancelToolApproval={tools.cancelPendingTool}
+            onExecuteCalculator={(expression) =>
+              void tools.handleExecuteCalculator(expression)
+            }
+            onExecuteDateTime={() => void tools.handleExecuteDateTime()}
+            pendingApproval={tools.pendingApproval}
+            result={tools.toolResult}
+            tools={data.tools}
+          />
+          <ToolTracePanel activeAgentId={data.activeAgent?.id} />
+        </div>
       ) : null}
 
       {section === "voice" ? (

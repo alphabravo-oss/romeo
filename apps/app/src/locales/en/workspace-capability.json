@@ -28,9 +28,6 @@
   "workspaceVoiceExisting": "existing",
   "workspaceVoiceCatalogSyncFailed": "Voice catalog sync failed.",
   "workspaceVoiceCouldNotSync": "Could not sync voice catalog",
-  "workspaceVoiceSyncing": "Syncing",
-  "workspaceVoicePreviewing": "Previewing",
-  "workspaceVoiceBinding": "Binding",
   "workspaceVoiceBind": "Bind voice",
   "workspaceShared": "Shared",
   "workspaceCouldNotShareAgent": "Could not share assistant",
@@ -101,6 +98,7 @@
   "toolTraceInput": "Input",
   "toolTraceOutput": "Output",
   "toolTraceRun": "Run",
+  "toolTraceSelectAgent": "Select an assistant to view its tool calls.",
   "toolTraceNoneValue": "none",
   "toolTraceNone": "No tool calls yet."
 }

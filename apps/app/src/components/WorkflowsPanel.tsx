@@ -1,4 +1,4 @@
-import { Input, NativeSelect, Button } from "@romeo/ui";
+import { Button, Field, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
@@ -275,10 +275,16 @@ export function WorkflowsPanel() {
             }}
           >
             {(field) => (
-              <>
+              <Field
+                error={
+                  field.state.meta.errors.length
+                    ? field.state.meta.errors.join(", ")
+                    : undefined
+                }
+                label={t("template")}
+              >
                 <NativeSelect
                   name="templateId"
-                  aria-label="Template Id"
                   onBlur={field.handleBlur}
                   onChange={(event) =>
                     field.handleChange(event.currentTarget.value)
@@ -292,12 +298,7 @@ export function WorkflowsPanel() {
                     </option>
                   ))}
                 </NativeSelect>
-                {field.state.meta.errors.length ? (
-                  <div className="rm-composer-error">
-                    {field.state.meta.errors.join(", ")}
-                  </div>
-                ) : null}
-              </>
+              </Field>
             )}
           </createForm.Field>
           <createForm.Field name="agentId">

@@ -15,6 +15,7 @@ import type {
 } from "../features/types";
 import { downloadCsv } from "../lib/csv";
 import { useLocale, type MessageKey } from "../lib/i18n";
+import { toast } from "../lib/toast";
 import {
   LocalizedCurrency,
   LocalizedDateTime,
@@ -182,7 +183,9 @@ export function UsagePanel() {
         </div>
       </div>
       {exportError ? (
-        <div className="mb-3 text-sm text-red-300">{exportError}</div>
+        <div className="rm-composer-error mb-3" role="alert">
+          {exportError}
+        </div>
       ) : null}
       {alerts.length > 0 ? (
         <>
@@ -233,6 +236,7 @@ export function UsagePanel() {
       setExportError(
         caught instanceof Error ? caught.message : t("usageUnableExport"),
       );
+      toast(t("usageUnableExport"), "error");
     } finally {
       setIsExporting(false);
     }

@@ -13,7 +13,6 @@ import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
 import Link2 from "lucide-react/dist/esm/icons/link-2.mjs";
 import Plug from "lucide-react/dist/esm/icons/plug.mjs";
 import KeySquare from "lucide-react/dist/esm/icons/key-square.mjs";
-import Smartphone from "lucide-react/dist/esm/icons/smartphone.mjs";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text.mjs";
 import Server from "lucide-react/dist/esm/icons/server.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
@@ -36,6 +35,7 @@ import {
   useLocale,
   useLocaleNamespaces,
 } from "../lib/i18n";
+import { resolveSectionKey } from "../lib/section-routing";
 
 function lazyNamed<
   T extends Record<K, React.ComponentType<any>>,
@@ -79,10 +79,6 @@ const DataConnectorPanel = lazyNamed(
 const AuthProvidersPanel = lazyNamed(
   () => import("../components/AuthProvidersPanel"),
   "AuthProvidersPanel",
-);
-const DeviceTokensPanel = lazyNamed(
-  () => import("../components/DeviceTokensPanel"),
-  "DeviceTokensPanel",
 );
 const GovernancePanel = lazyNamed(
   () => import("../components/GovernancePanel"),
@@ -206,7 +202,6 @@ const GROUPS: Array<{
       { key: "groups", labelKey: "navGroups", icon: UsersRound },
       { key: "organizations", labelKey: "navOrganizations", icon: Building2 },
       { key: "impersonation", labelKey: "navImpersonation", icon: UserCog },
-      { key: "device-tokens", labelKey: "navDeviceTokens", icon: Smartphone },
       { key: "auth-providers", labelKey: "navAuthentication", icon: KeySquare },
     ],
   },
@@ -301,10 +296,6 @@ const META: Record<
     titleKey: "navNotifications",
     descriptionKey: "adminNotificationsDescription",
   },
-  "device-tokens": {
-    titleKey: "navDeviceTokens",
-    descriptionKey: "adminDeviceTokensDescription",
-  },
   "auth-providers": {
     titleKey: "navAuthentication",
     descriptionKey: "adminAuthenticationDescription",
@@ -321,7 +312,7 @@ function AdminPage() {
   const admin = useAdminController();
   const { section: sectionParam } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const section = sectionParam ?? "overview";
+  const section = resolveSectionKey(sectionParam, META, "overview");
 
   // Client-side gate is UX only — the API enforces real authz on every
   // admin endpoint. ponytail: no beforeLoad/router-context plumbing needed.
@@ -469,8 +460,6 @@ function AdminPage() {
         {section === "organizations" ? <OrganizationsPanel /> : null}
 
         {section === "impersonation" ? <ImpersonationPanel /> : null}
-
-        {section === "device-tokens" ? <DeviceTokensPanel /> : null}
 
         {section === "auth-providers" ? <AuthProvidersPanel /> : null}
 

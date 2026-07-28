@@ -1,8 +1,10 @@
 import { Input, NativeSelect } from "@romeo/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { getStoredTheme, setTheme, type Theme } from "../lib/theme";
+import { resolveThemeSelection } from "../lib/theme-preference";
+import { useThemePreference } from "../lib/use-theme-preference";
 import { useLocale, type Locale } from "../lib/i18n";
 import {
   applyInterfacePreferences,
@@ -19,6 +21,8 @@ const OPTIONS: Theme[] = ["system", "light", "dark"];
 
 export function InterfaceSettings() {
   const [theme, setThemeState] = useState<Theme>(() => getStoredTheme());
+  const seeded = useRef(false);
+  const themePreference = useThemePreference();
   const { locale, setLocale, t } = useLocale();
   const [preferences, setPreferences] = useState(() =>
     getInterfacePreferences(),
@@ -32,10 +36,16 @@ export function InterfaceSettings() {
   });
 
   useEffect(() => {
-    if (serverPreferences.data === undefined) return;
+    if (seeded.current || serverPreferences.data === undefined) return;
     const remote = serverPreferences.data;
-    setTheme(remote.theme);
-    setThemeState(remote.theme);
+    const resolvedTheme = resolveThemeSelection({
+      serverTheme: remote.theme,
+      localTheme: theme,
+      hasSeeded: seeded.current,
+    });
+    seeded.current = true;
+    setTheme(resolvedTheme);
+    setThemeState(resolvedTheme);
     setLocale(remote.locale);
     const next = {
       density: remote.density,
@@ -44,12 +54,11 @@ export function InterfaceSettings() {
     };
     setPreferences(next);
     applyInterfacePreferences(next);
-  }, [serverPreferences.data, setLocale]);
+  }, [serverPreferences.data, setLocale, theme]);
 
   function choose(next: Theme) {
-    setTheme(next);
+    themePreference.updateTheme(next);
     setThemeState(next);
-    savePreferences.mutate({ theme: next });
   }
 
   function updatePreferences(next: Partial<typeof preferences>) {
@@ -115,7 +124,7 @@ export function InterfaceSettings() {
           value={preferences.fontSize}
         >
           <option value="small">{t("small")}</option>
-          <option value="medium">{t("medium")}</option>
+          <option value="medium">{t("interfaceDensityMedium")}</option>
           <option value="large">{t("large")}</option>
         </NativeSelect>
       </div>
@@ -151,7 +160,7 @@ export function InterfaceSettings() {
           type="checkbox"
         />
       </label>
-      {savePreferences.isError ? (
+      {savePreferences.isError || themePreference.isError ? (
         <p className="text-sm text-danger" role="alert">
           {t("preferencesSyncFailed")}
         </p>

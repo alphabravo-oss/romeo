@@ -109,66 +109,80 @@ export function AgentAccessPanel({
           placeholder={t("agentSearchShareTargets")}
           value={query}
         />
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <Select
-            disabled={targets.length === 0}
-            onValueChange={setSelectedTargetKey}
-            options={targets.map((target) => ({
-              label: target.label,
-              value: targetKey(target),
-            }))}
-            value={selectedTargetKey}
-          />
-          <Button
-            disabled={
-              !activeAgent ||
-              selectedTarget === undefined ||
-              selectedPermissions.length === 0 ||
-              shareMutation.isPending
-            }
-            onClick={() => void handleGrant()}
-            pending={shareMutation.isPending}
-            variant="primary"
-          >
-            {t("agentGrant")}
-          </Button>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {(["read", "run", "write"] as const).map((permission) => (
-            <Checkbox
-              checked={permissions[permission]}
-              key={permission}
-              label={
-                <span className="truncate">
-                  {t(permissionMessageKey(permission))}
-                </span>
-              }
-              onCheckedChange={() => togglePermission(permission)}
-            />
-          ))}
-        </div>
+        <PanelState query={targetsQuery} empty={t("noEligibleShares")}>
+          {(loadedTargets) => (
+            <>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <Select
+                  onValueChange={setSelectedTargetKey}
+                  options={loadedTargets.map((target) => ({
+                    label: target.label,
+                    value: targetKey(target),
+                  }))}
+                  value={selectedTargetKey}
+                />
+                <Button
+                  disabled={
+                    !activeAgent ||
+                    selectedTarget === undefined ||
+                    selectedPermissions.length === 0 ||
+                    shareMutation.isPending
+                  }
+                  onClick={() => void handleGrant()}
+                  pending={shareMutation.isPending}
+                  variant="primary"
+                >
+                  {t("agentGrant")}
+                </Button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(["read", "run", "write"] as const).map((permission) => (
+                  <Checkbox
+                    checked={permissions[permission]}
+                    key={permission}
+                    label={
+                      <span className="truncate">
+                        {t(permissionMessageKey(permission))}
+                      </span>
+                    }
+                    onCheckedChange={() => togglePermission(permission)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </PanelState>
       </div>
       <div className="grid gap-2 text-sm">
         <PanelState query={sharesQuery} empty={t("agentNoAccessGrants")}>
-          {(shares) =>
-            groupShares(shares)
-              .slice(0, 6)
-              .map((share) => (
-                <div
-                  className="rounded-md border border-border p-2"
-                  key={`${share.principalType}:${share.principalId}`}
-                >
-                  <div className="break-all font-medium">
-                    {share.principalId}
-                  </div>
-                  <div className="text-muted">
-                    {share.permissions
-                      .map((permission) => permissionLabel(permission, t))
-                      .join(", ")}
-                  </div>
+          {(shares) => {
+            const groupedShares = groupShares(shares);
+            return (
+              <>
+                <div className="text-xs text-muted">
+                  {t("showingOfTotal")} {groupedShares.length} {t("of")}{" "}
+                  {groupedShares.length}
                 </div>
-              ))
-          }
+                <div className="grid max-h-80 gap-2 overflow-y-auto">
+                  {groupedShares.map((share) => (
+                    <div
+                      className="rounded-md border border-border p-2"
+                      key={`${share.principalType}:${share.principalId}`}
+                    >
+                      <div className="break-all font-medium">
+                        {share.principalId}
+                      </div>
+                      <div className="text-muted">
+                        {share.permissions
+                          .map((permission) => permissionLabel(permission, t))
+                          .join(", ")}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          }}
         </PanelState>
       </div>
     </div>

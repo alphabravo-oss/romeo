@@ -19,6 +19,7 @@
   "promptSaveTemplate": "Save template",
   "promptSaving": "Saving",
   "promptTags": "Tags",
+  "promptTagsHelp": "Separate tags with commas or new lines.",
   "promptTemplateBody": "Template body",
   "promptTemplateCreated": "Template created",
   "promptTemplateName": "Template name",

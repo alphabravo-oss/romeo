@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Button, Select, StatusBadge } from "@romeo/ui";
+import { Button, Field, Select, StatusBadge } from "@romeo/ui";
 
 import type { Agent, AgentVersion, AgentVersionDiff } from "../features/types";
 import { useLocale, type MessageKey } from "../lib/i18n";
@@ -13,6 +13,7 @@ interface AgentVersionPanelProps {
   activeAgent: Agent | undefined;
   diff: AgentVersionDiff | undefined;
   isComparing: boolean;
+  isRollbackBlocked: boolean;
   isRollingBack: boolean;
   leftVersionId: string;
   onCompare: () => void;
@@ -27,6 +28,7 @@ export function AgentVersionPanel({
   activeAgent,
   diff,
   isComparing,
+  isRollbackBlocked,
   isRollingBack,
   leftVersionId,
   onCompare,
@@ -88,10 +90,14 @@ export function AgentVersionPanel({
           <Button
             disabled={
               activeAgent?.publishedVersionId === c.row.original.id ||
+              isRollbackBlocked ||
               isRollingBack
             }
             onClick={() => onRollback(c.row.original.id)}
             pending={isRollingBack}
+            title={
+              isRollbackBlocked ? t("agentPublishBlockedByDraft") : undefined
+            }
           >
             {activeAgent?.publishedVersionId === c.row.original.id
               ? t("agentCurrent")
@@ -100,7 +106,14 @@ export function AgentVersionPanel({
         ),
       }),
     ],
-    [activeAgent?.publishedVersionId, isRollingBack, locale, onRollback, t],
+    [
+      activeAgent?.publishedVersionId,
+      isRollbackBlocked,
+      isRollingBack,
+      locale,
+      onRollback,
+      t,
+    ],
   );
 
   return (
@@ -116,22 +129,26 @@ export function AgentVersionPanel({
 
       <div className="mt-5 grid gap-2">
         <div className="text-sm text-muted">{t("agentDiff")}</div>
-        <Select
-          onValueChange={onLeftVersionChange}
-          options={versions.map((version) => ({
-            label: `${t("agentVersion")} ${formatNumber(version.version, locale)}`,
-            value: version.id,
-          }))}
-          value={leftVersionId}
-        />
-        <Select
-          onValueChange={onRightVersionChange}
-          options={versions.map((version) => ({
-            label: `${t("agentVersion")} ${formatNumber(version.version, locale)}`,
-            value: version.id,
-          }))}
-          value={rightVersionId}
-        />
+        <Field label={t("agentDiffLeftVersion")}>
+          <Select
+            onValueChange={onLeftVersionChange}
+            options={versions.map((version) => ({
+              label: `${t("agentVersion")} ${formatNumber(version.version, locale)}`,
+              value: version.id,
+            }))}
+            value={leftVersionId}
+          />
+        </Field>
+        <Field label={t("agentDiffRightVersion")}>
+          <Select
+            onValueChange={onRightVersionChange}
+            options={versions.map((version) => ({
+              label: `${t("agentVersion")} ${formatNumber(version.version, locale)}`,
+              value: version.id,
+            }))}
+            value={rightVersionId}
+          />
+        </Field>
         <Button
           disabled={versions.length < 2 || isComparing}
           onClick={onCompare}

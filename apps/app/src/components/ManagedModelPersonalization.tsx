@@ -11,7 +11,7 @@ import {
   updateManagedModelPreferences,
 } from "../features/managed-models";
 import type { ManagedModelPreferences } from "../features/managed-models";
-import { useLocale } from "../lib/i18n";
+import { useLocale, type MessageKey } from "../lib/i18n";
 import { toast } from "../lib/toast";
 import { FormDialog } from "./FormDialog";
 
@@ -219,7 +219,7 @@ export function ManagedModelPersonalization({
                   }
                   value={draft.voiceProfileId ?? ""}
                 >
-                  <option value="">Managed model default</option>
+                  <option value="">{t("assistantDefault")}</option>
                   {(voicesQuery.data ?? []).map((voice) => (
                     <option key={voice.id} value={voice.id}>
                       {voice.name}
@@ -251,30 +251,57 @@ export function ManagedModelPersonalization({
   );
 }
 
-function PreferenceSelect({
+type PreferenceOption =
+  | NonNullable<ManagedModelPreferences["communicationStyle"]>
+  | NonNullable<ManagedModelPreferences["responseLength"]>;
+
+function PreferenceSelect<T extends PreferenceOption>({
   label,
   onChange,
   options,
   value,
 }: {
   label: string;
-  onChange: (value: string) => void;
-  options: string[];
-  value: string;
+  onChange: (value: T) => void;
+  options: readonly T[];
+  value: T;
 }) {
+  const { t } = useLocale();
   return (
     <label className="grid gap-1 text-sm">
       <span className="text-muted">{label}</span>
       <NativeSelect
-        onChange={(event) => onChange(event.currentTarget.value)}
+        name="preference"
+        onChange={(event) => onChange(event.currentTarget.value as T)}
         value={value}
       >
         {options.map((option) => (
           <option key={option} value={option}>
-            {option.charAt(0).toUpperCase() + option.slice(1)}
+            {t(preferenceOptionKey(option))}
           </option>
         ))}
       </NativeSelect>
     </label>
   );
+}
+
+function preferenceOptionKey(option: PreferenceOption): MessageKey {
+  switch (option) {
+    case "balanced":
+      return "preferenceBalanced";
+    case "concise":
+      return "preferenceConcise";
+    case "detailed":
+      return "preferenceDetailed";
+    case "formal":
+      return "preferenceFormal";
+    case "friendly":
+      return "preferenceFriendly";
+    case "long":
+      return "preferenceLong";
+    case "short":
+      return "preferenceShort";
+    case "standard":
+      return "preferenceStandard";
+  }
 }

@@ -95,6 +95,47 @@ describe("Romeo UI primitives", () => {
     expect(onSelect).toHaveBeenCalledOnce();
   });
 
+  it("restores menu trigger focus when Escape closes the menu", async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        items={[{ label: "Rename" }]}
+        trigger={<Button>Actions</Button>}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    trigger.focus();
+    await user.keyboard("{Enter}{Escape}");
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("restores menu trigger focus after a menu-launched dialog closes", async () => {
+    const user = userEvent.setup();
+
+    function MenuDialog() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <DropdownMenu
+            items={[{ label: "Rename", onSelect: () => setOpen(true) }]}
+            trigger={<Button>Actions</Button>}
+          />
+          <Dialog onOpenChange={setOpen} open={open} title="Rename item">
+            <Input aria-label="Name" autoFocus />
+          </Dialog>
+        </>
+      );
+    }
+
+    render(<MenuDialog />);
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.click(trigger);
+    screen.getByRole("menuitem", { name: "Rename" }).click();
+    await user.keyboard("{Escape}");
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("labels grouped selects and keeps provider group semantics", async () => {
     const onSubmit = vi.fn((event: FormEvent) => event.preventDefault());
     const user = userEvent.setup();

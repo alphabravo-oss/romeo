@@ -52,7 +52,7 @@
 }
 
 .rm-run-activity.complete .rm-run-activity-dot {
-  background: #10b981;
+  background: var(--rm-success);
 }
 
 .rm-run-activity.error .rm-run-activity-dot {
@@ -194,13 +194,19 @@
   color: white;
 }
 
+/* Textarea and controls are both in normal flow, stacked. Nothing overlaps the
+   text, so no side padding has to be reserved for the button strip. */
+
 .rm-composer {
-  position: relative;
+  position: relative; /* anchor only for the absolute "/" command menu */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   border: 1px solid var(--rm-border);
   border-radius: var(--rm-radius-bubble);
   background: var(--rm-surface);
   box-shadow: 0 10px 30px rgb(24 24 27 / 8%);
-  padding: 10px 126px 10px 10px;
+  padding: 10px;
   transition: border-color 0.15s ease;
 }
 
@@ -225,11 +231,16 @@ html.dark .rm-composer:focus-within {
   border-color: var(--rm-gray-800);
 }
 
+/* Opens one line tall; ChatComposer's draft effect grows it up to max-height.
+   min-height: 0 defeats @romeo/ui's .rm-ui-textarea { min-height: 6rem }, which
+   would otherwise pin a 96px floor and make rows={1} and the scrollHeight sync
+   both unobservable. */
+
 .rm-composer textarea {
-  min-height: calc(4 * 1.55em + 16px);
   max-height: 384px; /* Open WebUI max-h-96 */
   width: 100%;
   min-width: 0;
+  min-height: 0;
   resize: none;
   border: 0;
   outline: none;
@@ -241,13 +252,22 @@ html.dark .rm-composer:focus-within {
 }
 
 .rm-composer-actions {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
   display: flex;
   align-items: center;
   gap: 4px;
-  z-index: 1;
+}
+
+.rm-composer-actions-end {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.rm-composer-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Composer-scoped model override: which model answers the next message in
@@ -257,14 +277,21 @@ html.dark .rm-composer:focus-within {
 
 .rm-composer-model-selector {
   position: relative;
+  min-width: 0; /* let the trigger truncate instead of overflowing the row */
   margin-right: 4px;
 }
+
+/* 9rem clipped real model names to "OpenAI-compatibl…" — the one thing a user
+   must be able to read before sending. 15rem fits the long end of common names
+   ("claude-sonnet-4-5", "gpt-4o-2024-11-20") while still leaving the composer
+   row space for the search and voice buttons; the span still truncates beyond
+   that rather than pushing the row. */
 
 .rm-composer-model-select {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  max-width: 9rem;
+  max-width: 15rem;
   border: 0;
   border-radius: var(--rm-radius-item);
   background: transparent;
@@ -395,7 +422,7 @@ html.dark .rm-composer-model-select:hover:not(:disabled) {
 
 .rm-icon-button,
 .rm-send-button,
-.rm-composer-actions .rm-ui-button {
+.rm-composer-actions .rm-ui-button:not(.rm-composer-model-select) {
   display: grid;
   width: 34px;
   height: 34px;
@@ -407,11 +434,6 @@ html.dark .rm-composer-model-select:hover:not(:disabled) {
   background: transparent;
   color: var(--rm-muted);
   padding: 0;
-}
-
-.rm-icon-button.disabled {
-  pointer-events: none;
-  opacity: 0.5;
 }
 
 .rm-send-button:hover:not(:disabled) {
@@ -444,7 +466,7 @@ html.dark .rm-send-button:disabled {
 
 .rm-composer-error {
   margin-top: 8px;
-  color: #ef4444;
+  color: var(--rm-danger);
   font-size: 13px;
 }
 
@@ -591,24 +613,6 @@ html.dark .rm-send-button:disabled {
     padding: 3px;
   }
 
-  .rm-composer {
-    min-height: 104px;
-    padding: 10px 10px 52px;
-  }
-
-  .rm-composer-actions {
-    right: 8px;
-    bottom: 8px;
-    left: 8px;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scrollbar-width: thin;
-  }
-
-  .rm-composer-actions > * {
-    flex: 0 0 auto;
-  }
-
   .rm-composer-model-menu.rm-model-menu {
     position: fixed;
     right: 8px;
@@ -616,19 +620,6 @@ html.dark .rm-send-button:disabled {
     left: 8px;
     width: auto;
     max-width: none;
-  }
-
-  .rm-composer-actions .rm-icon-button:not(.stop),
-  .rm-composer-actions .rm-ui-button {
-    display: grid;
-  }
-
-  .rm-send-button,
-  .rm-icon-button.stop {
-    display: grid;
-    position: sticky;
-    right: 0;
-    flex: 0 0 auto;
   }
 
   .rm-composer-wrap {
@@ -858,7 +849,7 @@ html.dark .rm-markdown :not(pre) > code {
 }
 
 .rm-code-preview-error {
-  color: #b91c1c;
+  color: var(--rm-danger);
 }
 
 .rm-markdown .katex-display {

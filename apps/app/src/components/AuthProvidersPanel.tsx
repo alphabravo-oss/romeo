@@ -27,6 +27,10 @@ import { AuthDirectorySyncDialog } from "./AuthDirectorySyncDialog";
 import { ConfigureDialog } from "./AuthProviderConfigureDialog";
 import { DeprovisionDialog } from "./AuthProviderDeprovisionDialog";
 import { useConfirm } from "./ConfirmDialog";
+import {
+  canDeprovisionProvider,
+  canTestProvider,
+} from "./auth-provider-card-actions";
 import { PanelStats } from "./PanelStats";
 
 type Scope = "global" | "org";
@@ -257,9 +261,8 @@ export function AuthProvidersPanel(): React.ReactNode {
                       const enabled = setting?.enabled ?? false;
                       const source = setting?.source ?? "default";
                       const test = testResults[entry.id];
-                      const canTest = !planned;
-                      const canDeprovision =
-                        !planned && entry.protocol === "oidc";
+                      const canTest = canTestProvider(entry);
+                      const canDeprovision = canDeprovisionProvider(entry);
 
                       return (
                         <div
@@ -385,7 +388,7 @@ export function AuthProvidersPanel(): React.ReactNode {
                             >
                               {t("authConfigure")}
                             </Button>
-                            {canDeprovision ? (
+                            {canTest ? (
                               <Button
                                 disabled={testMutation.isPending}
                                 onClick={() => void handleTest(entry)}
@@ -396,7 +399,7 @@ export function AuthProvidersPanel(): React.ReactNode {
                                   : t("authTest")}
                               </Button>
                             ) : null}
-                            {canTest ? (
+                            {canDeprovision ? (
                               <Button
                                 variant="danger"
                                 disabled={deprovisionMutation.isPending}

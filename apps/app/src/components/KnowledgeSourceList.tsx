@@ -75,6 +75,7 @@ export function KnowledgeSourceList({
               disabled={isDeleting}
               onClick={() => onDelete(c.row.original.id)}
               type="button"
+              variant="danger"
             >
               {t("knowledgeDelete")}
             </Button>

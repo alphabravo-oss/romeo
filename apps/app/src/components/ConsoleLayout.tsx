@@ -44,9 +44,13 @@ export function ConsoleLayout({
       </a>
       <SidebarFrame className="rm-console-nav">
         <SidebarBrand className="rm-console-brand" />
-        <Link aria-label={t("backToChat")} className="rm-console-back" to="/">
+        <Link
+          aria-label={t("adminBackToChat")}
+          className="rm-console-back"
+          to="/"
+        >
           <ArrowLeft aria-hidden size={16} />
-          <span>{t("backToChat")}</span>
+          <span>{t("adminBackToChat")}</span>
         </Link>
         <div className="rm-console-title">{title}</div>
         <nav className="rm-console-sections">

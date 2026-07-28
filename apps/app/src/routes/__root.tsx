@@ -7,13 +7,13 @@ import {
   createRootRoute,
   useLocation,
 } from "@tanstack/react-router";
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { ToastViewport } from "@romeo/ui";
 
 import { AppProviders } from "../providers/AppProviders";
 import { CommandPalette } from "../components/CommandPalette";
 import { ShortcutsModal } from "../components/ShortcutsModal";
-import { themeInitScript } from "../lib/theme";
+import { themeInitScript, watchSystemTheme } from "../lib/theme";
 import { LocaleProvider } from "../lib/i18n";
 import appCss from "../styles/app.css?url";
 
@@ -29,7 +29,19 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { name: "theme-color", content: "#ffffff" },
+      /* Was a single hardcoded #ffffff, which painted a white status bar and
+         URL bar around an app that defaults to dark. These must track
+         --rm-bg in each scheme. */
+      {
+        name: "theme-color",
+        content: "#ffffff",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        name: "theme-color",
+        content: "#09090b",
+        media: "(prefers-color-scheme: dark)",
+      },
       { title: "Romeo" },
       {
         name: "description",
@@ -47,6 +59,7 @@ export const Route = createRootRoute({
 
 function RootRoute() {
   const pathname = useLocation({ select: (location) => location.pathname });
+  useEffect(() => watchSystemTheme(), []);
   if (DevUiGallery && pathname === "/ui") {
     return (
       <Suspense fallback={null}>

@@ -22,6 +22,7 @@ import {
   parseOptionalInteger,
   parseOptionalNumber,
 } from "./agent-draft-model";
+import { shouldResetDraftForm } from "./agent-publish-gate";
 
 export interface AgentDraftInput {
   agentId: string;
@@ -37,6 +38,7 @@ interface AgentDraftFormProps {
   isSaving: boolean;
   models: BaseModel[];
   providers: Provider[];
+  onDirtyChange: (dirty: boolean) => void;
   onNotice: (message: string) => void;
   onSave: (input: AgentDraftInput) => Promise<Agent>;
 }
@@ -46,6 +48,7 @@ export function AgentDraftForm({
   isSaving,
   models,
   providers = [],
+  onDirtyChange,
   onNotice,
   onSave,
 }: AgentDraftFormProps) {
@@ -156,6 +159,7 @@ export function AgentDraftForm({
   });
 
   const baseModelId = useStore(form.store, (state) => state.values.baseModelId);
+  const isDirty = useStore(form.store, (state) => state.isDirty);
   const memoryMode = useStore(form.store, (state) => state.values.memoryMode);
 
   const modelGroups = useMemo(
@@ -172,10 +176,35 @@ export function AgentDraftForm({
   );
 
   useEffect(() => {
+    onDirtyChange(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    if (
+      !shouldResetDraftForm({
+        isDirty: form.state.isDirty,
+        agentChanged: true,
+      })
+    )
+      return;
+    form.reset(buildDefaults(activeAgent));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAgent?.id]);
+
+  useEffect(() => {
+    // Re-seeding from the server is correct when the user switches assistants,
+    // and destructive when they are mid-edit: publish/rollback both bump
+    // updatedAt, which used to fire this reset and wipe the open form.
+    if (
+      !shouldResetDraftForm({
+        isDirty: form.state.isDirty,
+        agentChanged: false,
+      })
+    )
+      return;
     form.reset(buildDefaults(activeAgent));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    activeAgent?.id,
     activeAgent?.systemPrompt,
     activeAgent?.baseModelId,
     activeAgent?.updatedAt,

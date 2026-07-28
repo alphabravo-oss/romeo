@@ -23,8 +23,11 @@ import {
 import { getBootstrap } from "../features/identity";
 import { RomeoApiError } from "@romeo/api-client";
 import { safeReturnTo } from "../lib/auth-navigation";
+import { useLocale, useLocaleNamespaces } from "../lib/i18n";
 import { setTheme } from "../lib/theme";
 import loginCss from "../styles/login.css?url";
+
+const loginNamespaces = ["auth", "shared-control"] as const;
 
 interface LoginSearch {
   returnTo?: string;
@@ -58,12 +61,17 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
+  useLocaleNamespaces(loginNamespaces);
+  const { t } = useLocale();
   const { returnTo = "/" } = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [organization, setOrganization] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [challengeToken, setChallengeToken] = useState<string>();
+  const [mfaMethods, setMfaMethods] = useState<
+    readonly ("recovery_code" | "totp")[]
+  >([]);
   const [mfaCode, setMfaCode] = useState("");
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [error, setError] = useState<string>();
@@ -97,12 +105,14 @@ function LoginPage() {
       });
       if (result.status === "mfa_required") {
         setChallengeToken(result.challengeToken);
+        setMfaMethods(result.methods);
         setMfaCode("");
+        setUseRecoveryCode(false);
         return;
       }
       window.location.assign(returnTo);
     } catch (caught) {
-      setError(loginError(caught));
+      setError(loginError(caught, t("loginUnable")));
     } finally {
       setPending(undefined);
     }
@@ -122,7 +132,7 @@ function LoginPage() {
           : await startSamlLogin(input);
       window.location.assign(result.authorizationUrl);
     } catch (caught) {
-      setError(loginError(caught));
+      setError(loginError(caught, t("loginUnable")));
       setPending(undefined);
     }
   }
@@ -133,7 +143,7 @@ function LoginPage() {
 
   return (
     <main className="rm-login-shell">
-      <section className="rm-login-brand" aria-label="About Romeo">
+      <section className="rm-login-brand" aria-label={t("loginAboutRomeo")}>
         <div className="rm-login-grid" aria-hidden="true" />
         <div className="rm-login-glow rm-login-glow-blue" aria-hidden="true" />
         <div
@@ -147,38 +157,38 @@ function LoginPage() {
           </span>
           <span>
             <strong>Romeo</strong>
-            <small>by AlphaBravo</small>
+            <small>{t("loginBrandBy")}</small>
           </span>
         </div>
 
         <div className="rm-login-pitch">
-          <p className="rm-login-eyebrow">Enterprise AI, under your control</p>
+          <p className="rm-login-eyebrow">{t("loginEnterpriseEyebrow")}</p>
           <h1>
-            One secure workspace for
-            <span>every conversation.</span>
+            {t("loginWorkspaceHeadline")}
+            <span>{t("loginEveryConversation")}</span>
           </h1>
-          <p>
-            Connect the models your organization trusts, preserve useful
-            context, and keep access, data, and operations governed.
-          </p>
+          <p>{t("loginWorkspaceDescription")}</p>
         </div>
 
         <div className="rm-login-proof">
           <span>
-            <Check aria-hidden="true" size={14} /> Governed model access
+            <Check aria-hidden="true" size={14} />{" "}
+            {t("loginGovernedModelAccess")}
           </span>
           <span>
-            <Check aria-hidden="true" size={14} /> Private workspace context
+            <Check aria-hidden="true" size={14} />{" "}
+            {t("loginPrivateWorkspaceContext")}
           </span>
           <span>
-            <Check aria-hidden="true" size={14} /> Enterprise identity
+            <Check aria-hidden="true" size={14} />{" "}
+            {t("loginEnterpriseIdentity")}
           </span>
         </div>
       </section>
 
       <section className="rm-login-form-pane">
         <Button
-          aria-label={dark ? "Use light theme" : "Use dark theme"}
+          aria-label={dark ? t("switchToLight") : t("switchToDark")}
           className="rm-login-theme"
           onClick={toggleTheme}
           type="button"
@@ -199,9 +209,9 @@ function LoginPage() {
           </div>
 
           <header className="rm-login-heading">
-            <p className="rm-login-eyebrow">Welcome back</p>
-            <h2>Sign in to Romeo</h2>
-            <p>Use your organization credentials to continue.</p>
+            <p className="rm-login-eyebrow">{t("loginWelcomeBack")}</p>
+            <h2>{t("loginSignInTitle")}</h2>
+            <p>{t("loginOrganizationCredentials")}</p>
           </header>
 
           {sessionQuery.data ? (
@@ -210,13 +220,13 @@ function LoginPage() {
                 <ShieldCheck aria-hidden="true" size={18} />
               </span>
               <div>
-                <strong>You already have an active session</strong>
+                <strong>{t("loginActiveSession")}</strong>
                 <small>
                   {sessionQuery.data.subject?.email ??
                     sessionQuery.data.subject?.id}
                 </small>
               </div>
-              <a href={returnTo}>Continue</a>
+              <a href={returnTo}>{t("loginContinue")}</a>
             </div>
           ) : null}
 
@@ -231,7 +241,7 @@ function LoginPage() {
               ) : (
                 <KeyRound aria-hidden="true" size={16} />
               )}
-              Continue with SSO
+              {t("loginContinueSso")}
             </Button>
             <Button
               disabled={pending !== undefined}
@@ -243,12 +253,12 @@ function LoginPage() {
               ) : (
                 <LockKeyhole aria-hidden="true" size={16} />
               )}
-              Continue with SAML
+              {t("loginContinueSaml")}
             </Button>
           </div>
 
           <div className="rm-login-divider">
-            <span>or continue with password</span>
+            <span>{t("loginPasswordDivider")}</span>
           </div>
 
           <form
@@ -260,13 +270,15 @@ function LoginPage() {
                 <div className="rm-login-mfa-intro">
                   <ShieldCheck aria-hidden="true" size={20} />
                   <div>
-                    <strong>Two-factor authentication</strong>
-                    <small>Enter the code for this sign-in attempt.</small>
+                    <strong>{t("loginTwoFactor")}</strong>
+                    <small>{t("loginMfaDescription")}</small>
                   </div>
                 </div>
                 <label>
                   <span>
-                    {useRecoveryCode ? "Recovery code" : "Authentication code"}
+                    {useRecoveryCode
+                      ? t("loginRecoveryCode")
+                      : t("loginAuthenticationCode")}
                   </span>
                   <Input
                     name="mfaCode"
@@ -275,7 +287,9 @@ function LoginPage() {
                     inputMode={useRecoveryCode ? "text" : "numeric"}
                     onChange={(event) => setMfaCode(event.currentTarget.value)}
                     placeholder={
-                      useRecoveryCode ? "Enter a recovery code" : "000000"
+                      useRecoveryCode
+                        ? t("loginRecoveryCodePlaceholder")
+                        : "000000"
                     }
                     required
                     value={mfaCode}
@@ -283,18 +297,27 @@ function LoginPage() {
                 </label>
                 <Button
                   className="rm-login-link"
-                  onClick={() => setUseRecoveryCode((value) => !value)}
+                  onClick={() => {
+                    if (!mfaMethods.includes("recovery_code")) {
+                      setUseRecoveryCode(false);
+                      setError(t("loginNoRecoveryCodes"));
+                      return;
+                    }
+                    setError(undefined);
+                    setMfaCode("");
+                    setUseRecoveryCode((value) => !value);
+                  }}
                   type="button"
                 >
                   {useRecoveryCode
-                    ? "Use authenticator code"
-                    : "Use a recovery code"}
+                    ? t("loginUseAuthenticatorCode")
+                    : t("loginUseRecoveryCode")}
                 </Button>
               </>
             ) : (
               <>
                 <label>
-                  <span>Email address</span>
+                  <span>{t("loginEmail")}</span>
                   <Input
                     name="email"
                     autoComplete="email"
@@ -307,7 +330,7 @@ function LoginPage() {
                   />
                 </label>
                 <label>
-                  <span>Password</span>
+                  <span>{t("loginPassword")}</span>
                   <div className="rm-login-password">
                     <Input
                       name="password"
@@ -315,14 +338,16 @@ function LoginPage() {
                       onChange={(event) =>
                         setPassword(event.currentTarget.value)
                       }
-                      placeholder="Enter your password"
+                      placeholder={t("loginPasswordPlaceholder")}
                       required
                       type={showPassword ? "text" : "password"}
                       value={password}
                     />
                     <Button
                       aria-label={
-                        showPassword ? "Hide password" : "Show password"
+                        showPassword
+                          ? t("loginHidePassword")
+                          : t("loginShowPassword")
                       }
                       onClick={() => setShowPassword((value) => !value)}
                       type="button"
@@ -337,7 +362,7 @@ function LoginPage() {
                 </label>
                 <label>
                   <span>
-                    Organization <small>optional</small>
+                    {t("loginOrganization")} <small>{t("loginOptional")}</small>
                   </span>
                   <Input
                     name="organization"
@@ -345,7 +370,7 @@ function LoginPage() {
                     onChange={(event) =>
                       setOrganization(event.currentTarget.value)
                     }
-                    placeholder="Organization ID"
+                    placeholder={t("loginOrganizationId")}
                     value={organization}
                   />
                 </label>
@@ -366,7 +391,7 @@ function LoginPage() {
               {pending === "local" ? (
                 <LoaderCircle className="rm-spin" size={17} />
               ) : null}
-              {challengeToken ? "Verify and continue" : "Sign in"}
+              {challengeToken ? t("loginVerifyContinue") : t("loginSignIn")}
               {pending !== "local" ? (
                 <ArrowRight aria-hidden="true" size={17} />
               ) : null}
@@ -377,27 +402,26 @@ function LoginPage() {
                 className="rm-login-link"
                 onClick={() => {
                   setChallengeToken(undefined);
+                  setMfaMethods([]);
                   setMfaCode("");
+                  setUseRecoveryCode(false);
                   setError(undefined);
                 }}
                 type="button"
               >
-                Back to password sign in
+                {t("loginBackToPassword")}
               </Button>
             ) : null}
           </form>
 
-          <p className="rm-login-terms">
-            Access is monitored and subject to your organization&apos;s security
-            and retention policies.
-          </p>
+          <p className="rm-login-terms">{t("loginTerms")}</p>
         </div>
       </section>
     </main>
   );
 }
 
-function loginError(error: unknown): string {
+function loginError(error: unknown, fallback: string): string {
   if (error instanceof RomeoApiError) return error.message;
-  return "Unable to sign in. Check your connection and try again.";
+  return fallback;
 }

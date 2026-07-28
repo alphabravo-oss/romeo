@@ -17,9 +17,15 @@
   border-color: var(--rm-border);
 }
 
+/* The wrapper is the row; the input must not set its own height. @romeo/ui's
+   .rm-ui-control ships min-height: 2.375rem + padding, which pushed the search
+   box to 40px against the 32px rows around it. */
+
 .rm-sidebar-search input {
   min-width: 0;
   width: 100%;
+  min-height: 0;
+  padding: 0;
   border: 0;
   outline: 0;
   background: transparent;
@@ -61,33 +67,66 @@
   color: var(--rm-accent);
 }
 
+/* ── Sidebar row contract ─────────────────────────────────────────────────
+ * Every interactive row in the rail is one height, one inset, one radius, and
+ * left-justified. This block exists because @romeo/ui's .rm-ui-button base
+ * ships `min-height: 2.25rem`, `justify-content: center` and its own padding,
+ * which every composed row silently inherited — that is where the 32/34/36/37px
+ * drift and the centred "New chat" label came from. Reset it once here rather
+ * than per call site, so a new sidebar control cannot reintroduce the drift.
+ */
+
 .rm-sidebar-item,
-.rm-sidebar-footer {
+.rm-sidebar-footer,
+.rm-new-chat-button,
+.rm-sidebar-item-label {
   min-width: 0;
-  min-height: 32px;
-  border-radius: var(--rm-radius-item);
+  min-height: var(--rm-row-h);
+  justify-content: flex-start;
+  border-radius: var(--rm-radius-bubble);
   background: transparent;
-  padding: 0 11px;
   text-align: left;
+}
+
+.rm-sidebar-item,
+.rm-sidebar-footer,
+.rm-new-chat-button {
+  padding: 0 var(--rm-row-px);
 }
 
 .rm-sidebar-item {
   display: flex;
   align-items: center;
   gap: 4px;
-  min-height: 32px;
+  padding-right: 2px; /* the trailing kebab supplies the rest of the inset */
   font-size: 14px;
 }
 
 .rm-sidebar-item-label {
   flex: 1;
   min-width: 0; /* lets truncate actually truncate inside a flex child */
-  text-align: left;
-  background: none;
+  padding: 0;
   border: none;
   color: inherit;
   font: inherit;
   cursor: pointer;
+}
+
+/* Trailing icon buttons ride inside a row, so they must never set its height.
+   `min-height` is the property that matters: the base ships min-height 2.25rem,
+   which silently outranks any `height` a call site sets. */
+
+.rm-sidebar-item .rm-ui-button:not(.rm-sidebar-item-label),
+.rm-chat-create-row .rm-ui-button:not(.rm-new-chat-button),
+.rm-sidebar-search-row .rm-ui-button,
+.rm-sidebar-filter-trigger,
+.rm-sidebar-label-action {
+  min-height: 0;
+  height: 24px;
+  width: 24px;
+  flex: 0 0 auto;
+  padding: 0;
+  align-self: center;
 }
 
 /* Active chat: quiet fill without a competing accent edge. */
@@ -356,10 +395,15 @@ html.dark .rm-sidebar-item.active {
   position: relative;
 }
 
+/* inline-flex, not grid: the trigger renders <span>name</span><svg chevron>, and
+   a grid put the chevron on its own row under the label. Flex also survives the
+   child count changing again. */
+
 .rm-model-select {
-  display: grid;
+  display: inline-flex;
+  align-items: center;
   min-width: 0;
-  gap: 1px;
+  gap: 6px;
   border: 0;
   background: transparent;
   border-radius: var(--rm-radius-item);
@@ -432,15 +476,12 @@ html.dark .rm-model-select:hover {
 }
 
 .rm-model-select span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rm-model-select span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: inherit;
   letter-spacing: -0.021em;
   font-size: 0.95rem;
@@ -606,8 +647,16 @@ html.dark .rm-topbar-button:hover {
   gap: 2px;
 }
 
+/* justify-content, not text-align: @romeo/ui's .rm-ui-button sets
+ * justify-content: center (packages/ui/src/styles.css:49) and outranks a bare
+ * .rm-suggestion. The implicit column shrink-wraps to its text, so centring
+ * the *track* pushed the label ~293px right of the "Suggested" heading it sits
+ * under. text-align never got a say — it only aligns text inside a track that
+ * was already the width of its content. */
+
 .rm-suggestion {
   display: grid;
+  justify-content: start;
   gap: 1px;
   border: 0;
   border-radius: var(--rm-radius-item);
@@ -798,6 +847,9 @@ html.dark .rm-message-tool:hover:not(:disabled) {
 .rm-message-tool.active {
   color: var(--rm-accent);
   background: color-mix(in srgb, var(--rm-accent) 12%, transparent);
+  /* Colour alone fails 1.4.1 and vanishes entirely in forced-colors mode. */
+  outline: 1px solid currentColor;
+  outline-offset: -1px;
 }
 
 /* Actions row below the message (Open WebUI) */
@@ -812,6 +864,36 @@ html.dark .rm-message-tool:hover:not(:disabled) {
 .rm-message-row.user .rm-message-actions {
   justify-self: end;
   justify-content: flex-end;
+}
+
+/* ChatGPT-style reveal: the icon row is transparent until its message is
+ * hovered or one of its buttons takes focus, so a long thread reads as prose
+ * instead of a column of lit icons. Deliberately opacity and never
+ * display/visibility — the buttons stay in the tab order, and :focus-within
+ * repaints them in the same style recalculation that focus triggers, so the
+ * row is opaque before a keyboard user can operate it. A pointer likewise
+ * cannot reach a transparent button: .rm-message-actions is a descendant of
+ * .rm-message-row, so hovering the button implies hovering the row.
+ * Gated on (hover: hover) because touch pointers have no hover state and
+ * would otherwise be left with a permanently invisible action row. */
+
+@media (hover: hover) {
+  .rm-message-actions {
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+
+  .rm-message-row:hover .rm-message-actions,
+  .rm-message-actions:focus-within {
+    opacity: 1;
+  }
+
+  /* The newest message keeps its actions lit: regenerate and continue live
+   * there, and they are the two a reader reaches for without aiming first. */
+
+  .rm-message-row:last-child .rm-message-actions {
+    opacity: 1;
+  }
 }
 
 .rm-message-edit {

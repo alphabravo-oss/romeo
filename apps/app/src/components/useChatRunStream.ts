@@ -59,7 +59,7 @@ export function useChatRunStream({
                   (event.data as { text?: string }).text ?? "",
                 );
               }
-              consumeRunActivity(event, setCitations, setRunActivities);
+              consumeRunActivity(event, setCitations, setRunActivities, t);
               if (event.type === "run.failed") {
                 setError(providerRunFailureMessage(event.data, t));
               }
@@ -144,6 +144,7 @@ function consumeRunActivity(
   event: RunEvent,
   setCitations: Dispatch<SetStateAction<ChatCitation[]>>,
   setActivities: Dispatch<SetStateAction<ChatRunActivity[]>>,
+  t: (key: MessageKey) => string,
 ): void {
   if (event.type === "retrieval.completed") {
     const eventCitations = (event.data as { citations?: unknown }).citations;
@@ -160,7 +161,7 @@ function consumeRunActivity(
       );
     }
   }
-  const activity = activityFromEvent(event);
+  const activity = activityFromEvent(event, t);
   if (activity === undefined) return;
   setActivities((current) => [
     ...current.filter((item) => item.id !== activity.id),
@@ -235,26 +236,53 @@ function providerRunFailureMessage(
   return t("providerFailed");
 }
 
-function activityFromEvent(event: RunEvent): ChatRunActivity | undefined {
+function activityFromEvent(
+  event: RunEvent,
+  t: (key: MessageKey) => string,
+): ChatRunActivity | undefined {
   const definitions: Partial<
     Record<RunEvent["type"], { label: string; state: ChatRunActivity["state"] }>
   > = {
-    "run.started": { label: "Generating response", state: "active" },
-    "retrieval.completed": { label: "Sources retrieved", state: "complete" },
-    "tool.started": { label: "Running tool", state: "active" },
+    "run.started": {
+      label: t("chatActivityGeneratingResponse"),
+      state: "active",
+    },
+    "retrieval.completed": {
+      label: t("chatActivitySourcesRetrieved"),
+      state: "complete",
+    },
+    "tool.started": {
+      label: t("chatActivityRunningTool"),
+      state: "active",
+    },
     "tool.approval_required": {
-      label: "Tool approval required",
+      label: t("chatActivityToolApprovalRequired"),
       state: "active",
     },
-    "tool.completed": { label: "Tool completed", state: "complete" },
-    "tool.failed": { label: "Tool failed", state: "error" },
+    "tool.completed": {
+      label: t("chatActivityToolCompleted"),
+      state: "complete",
+    },
+    "tool.failed": {
+      label: t("chatActivityToolFailed"),
+      state: "error",
+    },
     "run.continuing": {
-      label: "Continuing after tool result",
+      label: t("chatActivityContinuingAfterTool"),
       state: "active",
     },
-    "run.completed": { label: "Response complete", state: "complete" },
-    "run.cancelled": { label: "Response stopped", state: "error" },
-    "run.failed": { label: "Response failed", state: "error" },
+    "run.completed": {
+      label: t("chatActivityResponseComplete"),
+      state: "complete",
+    },
+    "run.cancelled": {
+      label: t("chatActivityResponseStopped"),
+      state: "error",
+    },
+    "run.failed": {
+      label: t("chatActivityResponseFailed"),
+      state: "error",
+    },
   };
   const definition = definitions[event.type];
   return definition === undefined

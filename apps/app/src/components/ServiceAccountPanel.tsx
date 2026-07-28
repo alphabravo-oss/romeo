@@ -19,6 +19,7 @@ import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
 import { PanelStats } from "./PanelStats";
+import { SecretRevealCard } from "./SecretRevealCard";
 
 const serviceAccountScopes = [
   "me:read",
@@ -80,6 +81,15 @@ export function ServiceAccountPanel() {
   });
 
   async function handleCreateKey(account: ServiceAccount) {
+    if (
+      !(await ask({
+        title: t("createKey"),
+        body: t("anythingUsingKeyStops"),
+        confirmLabel: t("createKey"),
+        tone: "danger",
+      }))
+    )
+      return;
     try {
       const key = await keyMutation.mutateAsync({
         serviceAccountId: account.id,
@@ -136,7 +146,7 @@ export function ServiceAccountPanel() {
       ).length;
       if (failed > 0) {
         toast(
-          `${t("disable")} ${result.results.length - failed}, ${failed} ${t("failed")}`,
+          `${t("disable")} ${result.results.length - failed}, ${failed} ${t("failedCount")}`,
           "error",
         );
       } else {
@@ -217,10 +227,11 @@ export function ServiceAccountPanel() {
         </Button>
       </div>
       {createdToken ? (
-        <div className="mt-3 rounded-md border border-border p-2 text-sm">
-          <div className="text-muted">{t("token")}</div>
-          <div className="break-all font-mono">{createdToken}</div>
-        </div>
+        <SecretRevealCard
+          label={t("token")}
+          onDismiss={() => setCreatedToken(undefined)}
+          secret={createdToken}
+        />
       ) : null}
       <div className="mt-4">
         <PanelState

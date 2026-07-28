@@ -1,4 +1,4 @@
-import { Input, Textarea, NativeSelect, Button } from "@romeo/ui";
+import { Button, Field, Input, NativeSelect, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -22,6 +22,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { PanelStats } from "./PanelStats";
+import { parsePromptTemplateTags } from "./prompt-template-fields";
 import { useWorkspace } from "./WorkspaceContext";
 
 const templateCol = createColumnHelper<PromptTemplate>();
@@ -56,6 +57,8 @@ export function PromptTemplatePanel() {
   const form = useForm({
     defaultValues: {
       name: "",
+      description: "",
+      tags: "",
       body: "",
       visibility: "private" as PromptTemplateVisibility,
     },
@@ -69,7 +72,11 @@ export function PromptTemplatePanel() {
           workspaceId,
           name: value.name,
           body: value.body,
+          tags: parsePromptTemplateTags(value.tags),
           visibility: value.visibility,
+          ...(value.description.trim().length === 0
+            ? {}
+            : { description: value.description.trim() }),
         };
         await createMutation.mutateAsync(input);
         await Promise.all([
@@ -225,6 +232,36 @@ export function PromptTemplatePanel() {
               </>
             )}
           </form.Field>
+          <form.Field name="description">
+            {(field) => (
+              <Field label={t("promptDescription")}>
+                <Textarea
+                  name="description"
+                  maxLength={500}
+                  onBlur={field.handleBlur}
+                  onChange={(event) =>
+                    field.handleChange(event.currentTarget.value)
+                  }
+                  rows={2}
+                  value={field.state.value}
+                />
+              </Field>
+            )}
+          </form.Field>
+          <form.Field name="tags">
+            {(field) => (
+              <Field description={t("promptTagsHelp")} label={t("promptTags")}>
+                <Input
+                  name="tags"
+                  onBlur={field.handleBlur}
+                  onChange={(event) =>
+                    field.handleChange(event.currentTarget.value)
+                  }
+                  value={field.state.value}
+                />
+              </Field>
+            )}
+          </form.Field>
           <form.Field
             name="body"
             validators={{
@@ -255,23 +292,24 @@ export function PromptTemplatePanel() {
           </form.Field>
           <form.Field name="visibility">
             {(field) => (
-              <NativeSelect
-                name="visibility"
-                aria-label="Visibility"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(
-                    event.currentTarget.value as PromptTemplateVisibility,
-                  )
-                }
-                value={field.state.value}
-              >
-                {visibilities.map((option) => (
-                  <option key={option} value={option}>
-                    {t(visibilityKey(option))}
-                  </option>
-                ))}
-              </NativeSelect>
+              <Field label={t("promptVisibility")}>
+                <NativeSelect
+                  name="visibility"
+                  onBlur={field.handleBlur}
+                  onChange={(event) =>
+                    field.handleChange(
+                      event.currentTarget.value as PromptTemplateVisibility,
+                    )
+                  }
+                  value={field.state.value}
+                >
+                  {visibilities.map((option) => (
+                    <option key={option} value={option}>
+                      {t(visibilityKey(option))}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </Field>
             )}
           </form.Field>
           <form.Subscribe
@@ -365,6 +403,8 @@ function PromptTemplateEditDialog({
   const editForm = useForm({
     defaultValues: {
       name: template.name,
+      description: template.description ?? "",
+      tags: template.tags.join(", "),
       body: template.body,
       visibility: template.visibility,
     },
@@ -372,7 +412,12 @@ function PromptTemplateEditDialog({
       try {
         await updatePromptTemplate(template.id, {
           name: value.name,
+          description:
+            value.description.trim().length === 0
+              ? null
+              : value.description.trim(),
           body: value.body,
+          tags: parsePromptTemplateTags(value.tags),
           visibility: value.visibility,
         });
         toast(t("promptTemplateUpdated"), "success");
@@ -421,6 +466,36 @@ function PromptTemplateEditDialog({
             </>
           )}
         </editForm.Field>
+        <editForm.Field name="description">
+          {(field) => (
+            <Field label={t("promptDescription")}>
+              <Textarea
+                name="description"
+                maxLength={500}
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
+                rows={2}
+                value={field.state.value}
+              />
+            </Field>
+          )}
+        </editForm.Field>
+        <editForm.Field name="tags">
+          {(field) => (
+            <Field description={t("promptTagsHelp")} label={t("promptTags")}>
+              <Input
+                name="tags"
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
+                value={field.state.value}
+              />
+            </Field>
+          )}
+        </editForm.Field>
         <editForm.Field
           name="body"
           validators={{
@@ -451,23 +526,24 @@ function PromptTemplateEditDialog({
         </editForm.Field>
         <editForm.Field name="visibility">
           {(field) => (
-            <NativeSelect
-              name="visibility"
-              aria-label="Visibility"
-              onBlur={field.handleBlur}
-              onChange={(event) =>
-                field.handleChange(
-                  event.currentTarget.value as PromptTemplateVisibility,
-                )
-              }
-              value={field.state.value}
-            >
-              {visibilities.map((option) => (
-                <option key={option} value={option}>
-                  {t(visibilityKey(option))}
-                </option>
-              ))}
-            </NativeSelect>
+            <Field label={t("promptVisibility")}>
+              <NativeSelect
+                name="visibility"
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(
+                    event.currentTarget.value as PromptTemplateVisibility,
+                  )
+                }
+                value={field.state.value}
+              >
+                {visibilities.map((option) => (
+                  <option key={option} value={option}>
+                    {t(visibilityKey(option))}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
           )}
         </editForm.Field>
         <editForm.Subscribe

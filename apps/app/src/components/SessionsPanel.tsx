@@ -2,6 +2,7 @@ import { Button } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
+import { getBootstrap } from "../features";
 import {
   listSessions,
   revokeOtherSessions,
@@ -14,8 +15,11 @@ import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { decorateSessions } from "./session-rows";
 
-const col = createColumnHelper<Session>();
+type SessionRow = Session & { current: boolean };
+
+const col = createColumnHelper<SessionRow>();
 
 function sessionStatus(session: Session): "active" | "expired" | "revoked" {
   if (session.revokedAt !== undefined) return "revoked";
@@ -27,6 +31,10 @@ export function SessionsPanel() {
   const queryClient = useQueryClient();
   const { t } = useLocale();
   const { ask, dialog } = useConfirm();
+  const bootstrapQuery = useQuery({
+    queryKey: ["bootstrap"],
+    queryFn: getBootstrap,
+  });
   const sessionsQuery = useQuery({
     queryKey: ["sessions"],
     queryFn: listSessions,
@@ -36,11 +44,15 @@ export function SessionsPanel() {
   });
   const revokeOthersMutation = useMutation({ mutationFn: revokeOtherSessions });
 
-  async function handleRevoke(session: Session) {
+  async function handleRevoke(session: SessionRow) {
     if (
       !(await ask({
-        title: t("signOutSessionTitle"),
-        body: t("signOutSessionBody"),
+        title: session.current
+          ? t("revokeCurrentSessionTitle")
+          : t("signOutSessionTitle"),
+        body: session.current
+          ? t("revokeCurrentSessionBody")
+          : t("signOutSessionBody"),
         confirmLabel: t("revoke"),
         tone: "danger",
       }))
@@ -74,11 +86,18 @@ export function SessionsPanel() {
     }
   }
 
-  const columns = useMemo<ColumnDef<Session, any>[]>(
+  const columns = useMemo<ColumnDef<SessionRow, any>[]>(
     () => [
       col.accessor("name", {
         header: t("device"),
-        cell: (c) => <span className="font-medium">{c.getValue()}</span>,
+        cell: (c) => (
+          <span className="flex items-center gap-2 font-medium">
+            {c.getValue()}
+            {c.row.original.current ? (
+              <span className="rm-status pass">{t("thisDevice")}</span>
+            ) : null}
+          </span>
+        ),
       }),
       col.accessor("createdAt", {
         header: t("created"),
@@ -171,7 +190,10 @@ export function SessionsPanel() {
           {(rows) => (
             <DataTable
               columns={columns}
-              data={rows}
+              data={decorateSessions(
+                rows,
+                bootstrapQuery.data?.subject.sessionId,
+              )}
               empty={t("noActiveSessions")}
             />
           )}

@@ -273,6 +273,14 @@ export function useWorkspaceAttachments({
     setDocumentAttachments([]);
   }
 
+  function restorePendingAttachments(
+    images: readonly PendingImageAttachment[],
+    documents: readonly PendingDocumentAttachment[],
+  ): void {
+    setImageAttachments([...images]);
+    setDocumentAttachments([...documents]);
+  }
+
   return {
     clearPendingAttachments,
     documentAttachments,
@@ -283,6 +291,7 @@ export function useWorkspaceAttachments({
     handleRemoveDocumentAttachment,
     handleRemoveImageAttachment,
     imageAttachments,
+    restorePendingAttachments,
   };
 }
 

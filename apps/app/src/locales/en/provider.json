@@ -1,5 +1,6 @@
 {
   "addConnection": "Add connection",
+  "addProvider": "Add provider",
   "advancedModelAccess": "Advanced model access",
   "allowedModelIds": "Model allowlist",
   "allowedModelsDescription": "Leave blank to discover every model. When IDs are listed, Romeo discovers the endpoint but exposes only exact matches.",
@@ -24,7 +25,6 @@
   "couldNotSyncModels": "Could not sync models",
   "couldNotVerifyConnection": "Could not verify connection",
   "credentialConfigured": "Credential configured",
-  "discoverAllModels": "Discover all models",
   "discoveredModels": "Discovered models",
   "disabled": "Disabled",
   "encryptedManagedSecret": "Stored as an encrypted managed secret",
@@ -34,7 +34,6 @@
   "leaveBlankDiscovery": "Leave blank to discover /models",
   "managedCredential": "managed credential",
   "minutes": "minutes",
-  "modelsAvailable": "models available",
   "modelsSynced": "Models synced",
   "modelPulled": "Model pulled and catalog refreshed",
   "modelDeleted": "Model deleted and catalog refreshed",
@@ -52,6 +51,7 @@
   "deleteOllamaModel": "Delete Ollama model",
   "deleteOllamaModelDescription": "This removes the model from the Ollama runtime:",
   "providerErrors": "Provider errors",
+  "providerCredentials": "Provider credentials",
   "queueP95": "Queue p95",
   "quickSetup": "Quick setup",
   "reconnects": "Reconnects",
@@ -66,6 +66,5 @@
   "ttftP95": "TTFT p95",
   "unknown": "Unknown",
   "verify": "Verify",
-  "verifyConnection": "Verify connection",
   "modelsAllowed": "allowed model IDs"
 }

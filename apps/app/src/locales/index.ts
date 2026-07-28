@@ -13,6 +13,7 @@ export const namespaceNames = [
   "admin-overview",
   "admin-section",
   "agent-studio",
+  "auth",
   "auth-provider-admin",
   "billing-admin",
   "chat-supplement",
@@ -82,6 +83,7 @@ type EnglishMessages = typeof coreEN &
   typeof import("./en/admin-overview.json") &
   typeof import("./en/admin-section.json") &
   typeof import("./en/agent-studio.json") &
+  typeof import("./en/auth.json") &
   typeof import("./en/auth-provider-admin.json") &
   typeof import("./en/billing-admin.json") &
   typeof import("./en/chat-supplement.json") &

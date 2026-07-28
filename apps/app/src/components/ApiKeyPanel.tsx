@@ -20,6 +20,7 @@ import { Drawer } from "./Drawer";
 import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
 import { PanelStats } from "./PanelStats";
+import { SecretRevealCard } from "./SecretRevealCard";
 
 const col = createColumnHelper<ApiKeySummary>();
 
@@ -111,7 +112,7 @@ export function ApiKeyPanel() {
       ).length;
       if (failed > 0) {
         toast(
-          `${t("revoke")} ${result.results.length - failed}, ${failed} ${t("failed")}`,
+          `${t("revoke")} ${result.results.length - failed}, ${failed} ${t("failedCount")}`,
           "error",
         );
       } else {
@@ -206,10 +207,11 @@ export function ApiKeyPanel() {
       </div>
 
       {createdToken ? (
-        <div className="mt-3 rounded-md border border-border p-2 text-sm">
-          <div className="text-muted">{t("token")}</div>
-          <div className="break-all font-mono">{createdToken}</div>
-        </div>
+        <SecretRevealCard
+          label={t("token")}
+          onDismiss={() => setCreatedToken(undefined)}
+          secret={createdToken}
+        />
       ) : null}
 
       <div className="mt-4">

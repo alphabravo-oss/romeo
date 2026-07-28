@@ -1,4 +1,4 @@
-import { Input, NativeSelect, Button } from "@romeo/ui";
+import { Button, Field, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -18,7 +18,7 @@ import type {
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
-import { useLocale } from "../lib/i18n";
+import { useLocale, type MessageKey } from "../lib/i18n";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { PanelStats } from "./PanelStats";
@@ -135,7 +135,11 @@ function ChannelsTab() {
       }),
       channelCol.accessor("type", {
         header: t("type"),
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+        cell: (c) => (
+          <span className="rm-cell-muted">
+            {t(notificationChannelTypeKey(c.getValue()))}
+          </span>
+        ),
       }),
       channelCol.accessor((row) => (row.enabled ? "enabled" : "disabled"), {
         id: "enabled",
@@ -240,7 +244,7 @@ function ChannelsTab() {
               >
                 {notificationChannelTypes.map((option) => (
                   <option key={option} value={option}>
-                    {option}
+                    {t(notificationChannelTypeKey(option))}
                   </option>
                 ))}
               </NativeSelect>
@@ -271,18 +275,16 @@ function ChannelsTab() {
             {(type) => (
               <form.Field name="target" validators={{ onChange: required }}>
                 {(field) => (
-                  <>
+                  <Field
+                    error={
+                      field.state.meta.errors.length
+                        ? field.state.meta.errors.join(", ")
+                        : undefined
+                    }
+                    label={t("channelTarget")}
+                  >
                     <Input
                       name="target"
-                      aria-label={
-                        type === "email"
-                          ? "to@example.com"
-                          : type === "mobile_push"
-                            ? "romeo-secret://device-token"
-                            : type === "pagerduty"
-                              ? "romeo-secret://routing-key"
-                              : "https://…"
-                      }
                       onBlur={field.handleBlur}
                       onChange={(event) =>
                         field.handleChange(event.currentTarget.value)
@@ -298,12 +300,7 @@ function ChannelsTab() {
                       }
                       value={field.state.value}
                     />
-                    {field.state.meta.errors.length ? (
-                      <div className="rm-composer-error">
-                        {field.state.meta.errors.join(", ")}
-                      </div>
-                    ) : null}
-                  </>
+                  </Field>
                 )}
               </form.Field>
             )}
@@ -439,4 +436,23 @@ function ChannelsTab() {
       </div>
     </div>
   );
+}
+
+function notificationChannelTypeKey(
+  type: NotificationDeliveryChannelType,
+): MessageKey {
+  switch (type) {
+    case "email":
+      return "channelTypeEmail";
+    case "mobile_push":
+      return "channelTypeMobilePush";
+    case "pagerduty":
+      return "channelTypePagerDuty";
+    case "slack":
+      return "channelTypeSlack";
+    case "teams":
+      return "channelTypeTeams";
+    case "webhook":
+      return "channelTypeWebhook";
+  }
 }

@@ -21,6 +21,7 @@ import { PanelState } from "../lib/panel-state";
 import { PanelStats } from "./PanelStats";
 import { EvalDashboardSummary } from "./EvalDashboardSummary";
 import { FormDialog } from "./FormDialog";
+import { resolveActiveSuite } from "./eval-selection";
 
 export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
   const { t } = useLocale();
@@ -28,6 +29,9 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
   const agentId = activeAgent?.id;
   const [ratingComment, setRatingComment] = useState("");
   const [suiteDialogOpen, setSuiteDialogOpen] = useState(false);
+  const [selectedSuiteId, setSelectedSuiteId] = useState<string>();
+  const [selectedRunId, setSelectedRunId] = useState<string>();
+  const [selectedResultId, setSelectedResultId] = useState<string>();
   const suitesQuery = useQuery({
     queryKey: ["evalSuites", agentId],
     queryFn: () => listEvalSuites(agentId!),
@@ -43,7 +47,10 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
     queryFn: () => getEvalDashboard(agentId!),
     enabled: agentId !== undefined,
   });
-  const activeRun = useMemo(() => runsQuery.data?.[0], [runsQuery.data]);
+  const activeRun = useMemo(
+    () => resolveActiveSuite(runsQuery.data ?? [], selectedRunId),
+    [runsQuery.data, selectedRunId],
+  );
   const resultsQuery = useQuery({
     queryKey: ["evalResults", activeRun?.id],
     queryFn: () => listEvalResults(activeRun!.id),
@@ -58,12 +65,14 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
   const runMutation = useMutation({ mutationFn: runEvalSuite });
   const rateMutation = useMutation({ mutationFn: rateEvalResult });
   const suites = suitesQuery.data ?? [];
-  const activeSuite = useMemo(() => suites[0], [suites]);
-  const activeResult = resultsQuery.data?.[0];
-  const activeRating = ratingsQuery.data?.find(
-    (rating) => rating.resultId === activeResult?.id,
+  const activeSuite = useMemo(
+    () => resolveActiveSuite(suites, selectedSuiteId),
+    [selectedSuiteId, suites],
   );
-
+  const activeResult = useMemo(
+    () => resolveActiveSuite(resultsQuery.data ?? [], selectedResultId),
+    [resultsQuery.data, selectedResultId],
+  );
   const form = useForm({
     defaultValues: {
       name: "",
@@ -141,6 +150,14 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
     }
   }
 
+  if (activeAgent === undefined) {
+    return (
+      <section className="rm-panel p-4">
+        <div className="rm-empty">{t("evalSelectAgent")}</div>
+      </section>
+    );
+  }
+
   return (
     <section className="rm-panel p-4">
       <div className="rm-card-header">
@@ -158,7 +175,9 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
             onClick={() => void handleRun()}
             type="button"
           >
-            {runMutation.isPending ? t("evalRunning") : t("evalRunSuite")}
+            {runMutation.isPending
+              ? t("evalRunning")
+              : `${t("evalRunSuite")}${activeSuite ? ` — ${activeSuite.name}` : ""}`}
           </Button>
         </div>
       </div>
@@ -312,7 +331,13 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
         </form>
       </FormDialog>
       <div className="mt-4 grid gap-2 text-sm">
-        <EvalDashboardSummary dashboard={dashboardQuery.data} />
+        <PanelState
+          query={dashboardQuery}
+          empty={t("evalNotAvailable")}
+          isEmpty={() => false}
+        >
+          {(dashboard) => <EvalDashboardSummary dashboard={dashboard} />}
+        </PanelState>
         <PanelState
           query={suitesQuery}
           empty={t("evalNoSuites")}
@@ -331,75 +356,134 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
               <PanelStats
                 items={[
                   { label: t("evalTotalSuites"), value: allSuites.length },
-                  { label: t("evalRuns"), value: runsQuery.data?.length ?? 0 },
+                  {
+                    label: t("evalRuns"),
+                    value: runsQuery.isError
+                      ? t("failed")
+                      : (runsQuery.data?.length ?? t("loading")),
+                  },
                 ]}
               />
-              <div className="grid gap-2">
-                {allSuites.slice(0, 3).map((suite) => (
-                  <div
+              <div className="grid max-h-80 gap-2 overflow-y-auto">
+                {allSuites.map((suite) => (
+                  <button
+                    aria-current={
+                      activeSuite?.id === suite.id ? "true" : undefined
+                    }
                     className="rounded-md border border-border p-2"
                     key={suite.id}
+                    onClick={() => setSelectedSuiteId(suite.id)}
+                    type="button"
                   >
                     <div className="font-medium">{suite.name}</div>
                     <div className="break-words text-muted">{suite.id}</div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
           )}
         </PanelState>
         <PanelState query={runsQuery} empty={t("evalNoRuns")}>
-          {(allRuns) =>
-            allRuns.slice(0, 3).map((run) => (
-              <div className="rounded-md border border-border p-2" key={run.id}>
-                <div className="font-medium">
-                  {t(
-                    run.status === "passed"
-                      ? "evalStatusPassed"
-                      : "evalStatusFailed",
-                  )}{" "}
-                  -{" "}
-                  <LocalizedNumber
-                    options={{ maximumFractionDigits: 0, style: "percent" }}
-                    value={run.score}
-                  />
-                </div>
-                <div className="break-words text-muted">{run.modelId}</div>
-              </div>
-            ))
-          }
-        </PanelState>
-        {activeResult ? (
-          <div className="rounded-md border border-border p-2">
-            <div className="font-medium">
-              {t("evalHumanRating")}{" "}
-              {activeRating === undefined
-                ? t("evalNoRating")
-                : t(ratingKey(activeRating.rating))}
-            </div>
-            <div className="line-clamp-2 break-words text-muted">
-              {activeResult.output}
-            </div>
-            <Input
-              aria-label={t("evalRatingComment")}
-              className="mt-2"
-              onChange={(event) => setRatingComment(event.currentTarget.value)}
-              placeholder={t("evalRatingComment")}
-              value={ratingComment}
-            />
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {(["pass", "neutral", "fail"] as const).map((rating) => (
-                <Button
-                  disabled={rateMutation.isPending}
-                  key={rating}
-                  onClick={() => void handleRate(rating)}
+          {(allRuns) => (
+            <div className="grid max-h-80 gap-2 overflow-y-auto">
+              {allRuns.map((run) => (
+                <button
+                  aria-current={activeRun?.id === run.id ? "true" : undefined}
+                  className="rounded-md border border-border p-2 text-left"
+                  key={run.id}
+                  onClick={() => {
+                    setSelectedRunId(run.id);
+                    setSelectedResultId(undefined);
+                  }}
                   type="button"
                 >
-                  {t(ratingKey(rating))}
-                </Button>
+                  <div className="font-medium">
+                    {t(
+                      run.status === "passed"
+                        ? "evalStatusPassed"
+                        : "evalStatusFailed",
+                    )}{" "}
+                    -{" "}
+                    <LocalizedNumber
+                      options={{ maximumFractionDigits: 0, style: "percent" }}
+                      value={run.score}
+                    />
+                  </div>
+                  <div className="break-words text-muted">{run.modelId}</div>
+                </button>
               ))}
             </div>
-          </div>
+          )}
+        </PanelState>
+        {activeRun === undefined ? null : (
+          <PanelState query={resultsQuery} empty={t("evalNoResults")}>
+            {(results) => (
+              <div className="grid max-h-80 gap-2 overflow-y-auto">
+                {results.map((result) => (
+                  <button
+                    aria-current={
+                      activeResult?.id === result.id ? "true" : undefined
+                    }
+                    className="rounded-md border border-border p-2 text-left"
+                    key={result.id}
+                    onClick={() => setSelectedResultId(result.id)}
+                    type="button"
+                  >
+                    <div className="line-clamp-2 break-words">
+                      {result.output}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </PanelState>
+        )}
+        {activeResult ? (
+          <PanelState
+            query={ratingsQuery}
+            empty={t("evalNoRating")}
+            isEmpty={() => false}
+          >
+            {(ratings) => {
+              const activeRating = ratings.find(
+                (rating) => rating.resultId === activeResult.id,
+              );
+              return (
+                <div className="rounded-md border border-border p-2">
+                  <div className="font-medium">
+                    {t("evalHumanRating")}{" "}
+                    {activeRating === undefined
+                      ? t("evalNoRating")
+                      : t(ratingKey(activeRating.rating))}
+                  </div>
+                  <div className="line-clamp-2 break-words text-muted">
+                    {activeResult.output}
+                  </div>
+                  <Input
+                    aria-label={t("evalRatingComment")}
+                    className="mt-2"
+                    onChange={(event) =>
+                      setRatingComment(event.currentTarget.value)
+                    }
+                    placeholder={t("evalRatingComment")}
+                    value={ratingComment}
+                  />
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {(["pass", "neutral", "fail"] as const).map((rating) => (
+                      <Button
+                        disabled={rateMutation.isPending}
+                        key={rating}
+                        onClick={() => void handleRate(rating)}
+                        type="button"
+                      >
+                        {t(ratingKey(rating))}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              );
+            }}
+          </PanelState>
         ) : null}
       </div>
     </section>
