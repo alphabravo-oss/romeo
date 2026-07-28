@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "romeo.architecture-ratchet.v1",
+  "capturedAt": "2026-07-17",
+  "exceptions": {
+    "feature_api_path_literal": [
+      "apps/app/src/components/useWorkspaceController.ts",
+      "apps/app/src/features/chats/downloads.ts",
+      "apps/app/src/routes/api/v1/$.ts"
+    ]
+  },
+  "limits": {
+    "legacyAppApiFiles": 0,
+    "legacyAppApiLines": 0,
+    "legacyApiClientFiles": 0,
+    "legacyApiClientLines": 0,
+    "manualOpenApiFiles": 0,
+    "manualOpenApiLines": 0,
+    "rawButtons": 0,
+    "rawInputs": 0,
+    "rawSelects": 0,
+    "rawTextareas": 0,
+    "rmButtonReferences": 0,
+    "customFocusTrapImports": 0,
+    "maxCssFileLines": 1000,
+    "maxLocalizationNamespaceLines": 500,
+    "oversizedProductionFiles": 0
+  }
+}

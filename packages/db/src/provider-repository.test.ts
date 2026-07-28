@@ -9,6 +9,7 @@ const capabilities = {
   audioInput: false,
   structuredJson: true,
   reasoning: false,
+  imageGeneration: false,
   modalities: ["text", "vision", "text"],
   deployment: {
     mode: "hosted-api",
@@ -26,6 +27,7 @@ describe("provider repository mappers", () => {
       name: "Provider One",
       baseUrl: "https://api.example.com/v1",
       credentialRef: "vault://providers/provider-1",
+      modelIds: null,
       capabilities,
       enabled: true,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
@@ -55,8 +57,17 @@ describe("provider repository mappers", () => {
       name: "model-one",
       displayName: "Model One",
       capabilities,
+      capabilitiesSource: "detected",
       contextWindow: 128000,
-      pricing: { inputTokenUsd: 0.000001, outputTokenUsd: 0.000002 },
+      pricing: {
+        inputTokenUsd: 0.000001,
+        outputTokenUsd: 0.000002,
+        imageGenerationUsd: {
+          "1024x1024": 0.04,
+          "1024x1536": 0.08,
+          "1536x1024": 0.08,
+        },
+      },
       enabled: true,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
     });
@@ -67,6 +78,7 @@ describe("provider repository mappers", () => {
       name: "model-two",
       displayName: "Model Two",
       capabilities: {},
+      capabilitiesSource: "detected",
       contextWindow: 8192,
       pricing: { inputTokenUsd: Number.NaN, outputTokenUsd: 1 },
       enabled: false,
@@ -76,6 +88,11 @@ describe("provider repository mappers", () => {
     expect(priced.pricing).toEqual({
       inputTokenUsd: 0.000001,
       outputTokenUsd: 0.000002,
+      imageGenerationUsd: {
+        "1024x1024": 0.04,
+        "1024x1536": 0.08,
+        "1536x1024": 0.08,
+      },
     });
     expect(unpriced.pricing).toBeUndefined();
     expect(unpriced.capabilities).toMatchObject({

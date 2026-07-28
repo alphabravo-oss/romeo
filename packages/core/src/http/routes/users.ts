@@ -1,55 +1,66 @@
-import type { RomeoApi } from "../context";
 import {
-  adminSetLocalPasswordSchema,
-  directorySyncSchema,
-  updateUserRoleSchema,
-} from "../schemas";
+  directorySyncRoute,
+  disableUserRoute,
+  listUsersRoute,
+  setUserLocalPasswordRoute,
+  updateUserRoleRoute,
+} from "@romeo/contracts";
+import type { RomeoApi } from "../context";
 
 export function registerUserRoutes(app: RomeoApi): void {
-  app.get("/api/v1/users", async (context) => {
+  app.openapi(listUsersRoute, async (context) => {
     const subject = context.get("subject");
-    const data = await context.get("services").users.list(subject);
+    const users = await context.get("services").users.list(subject);
+    const data = users.map(withEffectiveRole);
     return context.json({ data });
   });
 
-  app.post("/api/v1/users/:userId/disable", async (context) => {
+  app.openapi(disableUserRoute, async (context) => {
     const subject = context.get("subject");
-    const data = await context
+    const user = await context
       .get("services")
-      .users.disable({ subject, userId: context.req.param("userId") });
+      .users.disable({ subject, userId: context.req.valid("param").userId });
+    const data = withEffectiveRole(user);
     return context.json({ data });
   });
 
-  app.patch("/api/v1/users/:userId/role", async (context) => {
+  app.openapi(updateUserRoleRoute, async (context) => {
     const subject = context.get("subject");
-    const body = updateUserRoleSchema.parse(await context.req.json());
-    const data = await context.get("services").users.updateRole({
+    const body = context.req.valid("json");
+    const user = await context.get("services").users.updateRole({
       subject,
-      userId: context.req.param("userId"),
+      userId: context.req.valid("param").userId,
       confirmUserId: body.confirmUserId,
       role: body.role,
     });
+    const data = withEffectiveRole(user);
     return context.json({ data });
   });
 
-  app.post("/api/v1/users/:userId/local-password", async (context) => {
+  app.openapi(setUserLocalPasswordRoute, async (context) => {
     const subject = context.get("subject");
-    const body = adminSetLocalPasswordSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").localAuth.setUserPassword({
       subject,
-      userId: context.req.param("userId"),
+      userId: context.req.valid("param").userId,
       confirmUserId: body.confirmUserId,
       newPassword: body.newPassword,
     });
     return context.json({ data });
   });
 
-  app.post("/api/v1/admin/directory-sync", async (context) => {
+  app.openapi(directorySyncRoute, async (context) => {
     const subject = context.get("subject");
-    const body = directorySyncSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .directorySync.reconcile(subject, body);
     return context.json({ data });
   });
+}
+
+function withEffectiveRole<
+  T extends { role?: "user" | "org_admin" | "global_admin" },
+>(user: T): T & { role: "user" | "org_admin" | "global_admin" } {
+  return { ...user, role: user.role ?? "user" };
 }

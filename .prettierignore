@@ -12,3 +12,6 @@ tmp
 *.tsbuildinfo
 pnpm-lock.yaml
 deploy/helm/templates/**
+apps/app/src/routeTree.gen.ts
+docs/api/openapi-baseline.json
+packages/api-client/src/generated/**

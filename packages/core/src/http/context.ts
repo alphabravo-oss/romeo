@@ -1,14 +1,15 @@
-import type { AuthSubject } from '@romeo/auth'
-import type { OpenAPIHono } from '@hono/zod-openapi'
+import type { AuthSubject } from "@romeo/auth";
+import type { OpenAPIHono } from "@hono/zod-openapi";
 
-import type { RomeoServices } from '../services'
+import type { RomeoServices } from "../services";
 
 export interface AppBindings {
   Variables: {
-    requestId: string
-    subject: AuthSubject
-    services: RomeoServices
-  }
+    requestId: string;
+    traceId: string;
+    subject: AuthSubject;
+    services: RomeoServices;
+  };
 }
 
-export type RomeoApi = OpenAPIHono<AppBindings>
+export type RomeoApi = OpenAPIHono<AppBindings>;

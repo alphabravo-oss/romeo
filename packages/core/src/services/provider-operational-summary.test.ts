@@ -98,4 +98,97 @@ describe("provider operational summary", () => {
       severity: "warning",
     });
   });
+
+  it("summarizes recent metadata-only runtime signals and raises bounded alerts", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const createdAt = "2026-07-16T12:00:00.000Z";
+    const metrics = [
+      ...Array.from({ length: 5 }, () => ["provider.error", 1] as const),
+      ...Array.from({ length: 3 }, () => ["sse.disconnect", 1] as const),
+      ["sse.reconnect", 2] as const,
+      ["queue.wait", 35_000] as const,
+      ["run.time_to_first_token", 12_000] as const,
+      ["run.output_throughput", 25] as const,
+      ["run.recovery", 1] as const,
+      ["llm.input_token.estimated", 4_000] as const,
+      ["file.upload.pipeline_duration", 250] as const,
+    ];
+    for (const [index, [metric, quantity]] of metrics.entries()) {
+      await repository.createUsageEvent({
+        id: `usage_runtime_${index}`,
+        orgId: "org_default",
+        workspaceId: "workspace_default",
+        actorId: "user_dev_admin",
+        sourceType: metric.startsWith("file.") ? "storage" : "run",
+        sourceId: `runtime_${index}`,
+        metric,
+        quantity,
+        unit: "count",
+        metadata: {},
+        createdAt,
+      });
+    }
+    await repository.createUsageEvent({
+      id: "usage_runtime_web",
+      orgId: "org_default",
+      actorId: "user_dev_admin",
+      sourceType: "retrieval",
+      sourceId: "web_runtime",
+      metric: "web.search.request",
+      quantity: 1,
+      unit: "request",
+      metadata: { latencyMs: 420 },
+      createdAt,
+    });
+    await repository.createUsageEvent({
+      id: "usage_runtime_object_store_failure",
+      orgId: "org_default",
+      actorId: "user_dev_admin",
+      sourceType: "storage",
+      sourceId: "file_safe_identifier",
+      metric: "trace.span",
+      quantity: 12,
+      unit: "millisecond",
+      metadata: {
+        boundary: "object_store",
+        operation: "get_content",
+        outcome: "failure",
+      },
+      createdAt,
+    });
+
+    const summary = await summarizeProviderOperations({
+      circuitBreaker: new ProviderCircuitBreaker(),
+      now: "2026-07-16T12:05:00.000Z",
+      options: {},
+      orgId: "org_default",
+      repository,
+      routingPolicy: createProviderRoutingPolicy({}),
+    });
+
+    expect(summary.runtime).toMatchObject({
+      contextInputTokensAverage: 4000,
+      objectStoreFailureCount: 1,
+      providerErrorCount: 5,
+      queueWaitP95Ms: 35000,
+      recoveryCount: 1,
+      sseDisconnectCount: 3,
+      sseReconnectCount: 2,
+      timeToFirstTokenP95Ms: 12000,
+      uploadPipelineAverageMs: 250,
+      webRetrievalAverageMs: 420,
+      outputThroughputAverage: 25,
+    });
+    expect(summary.alerts.map((alert) => alert.code)).toEqual(
+      expect.arrayContaining([
+        "provider_errors_recent",
+        "object_store_failures_recent",
+        "queue_wait_high",
+        "sse_disconnects_recent",
+        "time_to_first_token_high",
+      ]),
+    );
+    expect(JSON.stringify(summary)).not.toContain("web_runtime");
+    expect(JSON.stringify(summary)).not.toContain("usage_runtime");
+  });
 });

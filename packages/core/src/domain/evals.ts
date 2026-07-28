@@ -82,22 +82,6 @@ export interface EvalResultHumanRating {
   updatedAt: string;
 }
 
-export interface EvalModelComparisonItem {
-  modelId: string;
-  runId: string;
-  status: EvalRun["status"];
-  score: number;
-  resultCount: number;
-  passedResultCount: number;
-  failedResultCount: number;
-}
-
-export interface EvalModelComparison {
-  suiteId: string;
-  comparedAt: string;
-  comparisons: EvalModelComparisonItem[];
-}
-
 export interface EvalDashboardSuiteSummary {
   suiteId: string;
   name: string;

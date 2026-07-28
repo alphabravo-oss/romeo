@@ -7,6 +7,7 @@ export const openAiCompatibleCapabilities: ProviderCapabilities = {
   audioInput: false,
   structuredJson: true,
   reasoning: false,
+  imageGeneration: false,
   modalities: ["text"],
   deployment: {
     mode: "hosted-api",
@@ -20,6 +21,13 @@ export const openAiResponsesCompatibleCapabilities: ProviderCapabilities = {
   reasoning: true,
 };
 
+export const anthropicCapabilities: ProviderCapabilities = {
+  ...openAiCompatibleCapabilities,
+  vision: true,
+  structuredJson: false,
+  modalities: ["text", "vision"],
+};
+
 export const ollamaCapabilities: ProviderCapabilities = {
   streaming: true,
   toolCalling: true,
@@ -27,6 +35,7 @@ export const ollamaCapabilities: ProviderCapabilities = {
   audioInput: false,
   structuredJson: false,
   reasoning: false,
+  imageGeneration: false,
   modalities: ["text"],
   deployment: {
     mode: "local-runtime",
@@ -38,8 +47,15 @@ export const ollamaCapabilities: ProviderCapabilities = {
 export function defaultProviderCapabilities(
   kind: ProviderKind,
 ): ProviderCapabilities {
+  if (kind === "anthropic") return anthropicCapabilities;
   if (kind === "openai-compatible") return openAiCompatibleCapabilities;
   if (kind === "openai-responses-compatible")
     return openAiResponsesCompatibleCapabilities;
   return ollamaCapabilities;
+}
+
+export function detectsImageGenerationModel(name: string): boolean {
+  return /(?:^|[-_.])(gpt[-_.]?image|dall[-_.]?e|imagegen|imagen)(?:$|[-_.0-9])/iu.test(
+    name,
+  );
 }

@@ -1,19 +1,11 @@
-import X from "lucide-react/dist/esm/icons/x.mjs";
 import { useEffect, useState } from "react";
 
-import { useFocusTrap } from "../lib/use-focus-trap";
-
-const SHORTCUTS: { keys: string[]; label: string }[] = [
-  { keys: ["⌘", "K"], label: "Open command palette" },
-  { keys: ["?"], label: "Show this shortcuts sheet" },
-  { keys: ["Esc"], label: "Close dialogs & menus" },
-  { keys: ["↑", "↓"], label: "Move through command results" },
-  { keys: ["↵"], label: "Run the selected command" },
-];
+import { useLocale } from "../lib/i18n";
+import { OverlayHeader, OverlayShell } from "./OverlayShell";
 
 export function ShortcutsModal() {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
-  const dialogRef = useFocusTrap({ active: open, onEscape: () => setOpen(false) });
 
   useEffect(() => {
     const onOpen = () => setOpen(true);
@@ -38,49 +30,42 @@ export function ShortcutsModal() {
     };
   }, []);
 
-  if (!open) return null;
+  const shortcuts = [
+    { keys: ["⌘", "K"], label: t("openCommandPalette") },
+    { keys: ["?"], label: t("showShortcutsSheet") },
+    { keys: ["Esc"], label: t("closeDialogsMenus") },
+    { keys: ["↑", "↓"], label: t("moveThroughCommandResults") },
+    { keys: ["↵"], label: t("runSelectedCommand") },
+  ];
 
   return (
-    <>
-      <button
-        aria-label="Close shortcuts"
-        className="rm-modal-backdrop"
-        onClick={() => setOpen(false)}
-        type="button"
+    <OverlayShell
+      ariaLabel={t("keyboardShortcuts")}
+      labelledBy="rm-shortcuts-title"
+      onClose={() => setOpen(false)}
+      open={open}
+      variant="shortcuts"
+    >
+      <OverlayHeader
+        closeLabel={t("close")}
+        onClose={() => setOpen(false)}
+        title={t("keyboardShortcuts")}
+        titleId="rm-shortcuts-title"
       />
-      <div
-        aria-label="Keyboard shortcuts"
-        aria-modal="true"
-        className="rm-shortcuts"
-        ref={dialogRef}
-        role="dialog"
-      >
-        <div className="rm-shortcuts-head">
-          <span>Keyboard shortcuts</span>
-          <button
-            aria-label="Close"
-            className="rm-icon-button"
-            onClick={() => setOpen(false)}
-            type="button"
-          >
-            <X aria-hidden size={16} />
-          </button>
-        </div>
-        <div className="rm-shortcuts-body">
-          {SHORTCUTS.map((s) => (
-            <div className="rm-shortcuts-row" key={s.label}>
-              <span>{s.label}</span>
-              <span className="rm-shortcuts-keys">
-                {s.keys.map((k) => (
-                  <kbd className="rm-kbd" key={k}>
-                    {k}
-                  </kbd>
-                ))}
-              </span>
-            </div>
-          ))}
-        </div>
+      <div className="rm-ui-dialog__body rm-shortcuts-body">
+        {shortcuts.map((s) => (
+          <div className="rm-shortcuts-row" key={s.label}>
+            <span>{s.label}</span>
+            <span className="rm-shortcuts-keys">
+              {s.keys.map((k) => (
+                <kbd className="rm-kbd" key={k}>
+                  {k}
+                </kbd>
+              ))}
+            </span>
+          </div>
+        ))}
       </div>
-    </>
+    </OverlayShell>
   );
 }

@@ -1,0 +1,22 @@
+{
+  "allow": "Allow",
+  "allowedDomainsPerLine": "Allowed domains (one per line)",
+  "blockedDomainsPerLine": "Blocked domains (one per line)",
+  "checked": "checked",
+  "credentialConfiguredReplace": "Credential configured — enter to replace",
+  "endpointUrl": "Endpoint URL",
+  "exclude": "Exclude",
+  "failRequest": "Fail the request",
+  "governedWebSearch": "Governed web search",
+  "managedCredentialReference": "Managed credential reference",
+  "maximumResults": "Maximum results",
+  "maximumSourceAge": "Maximum source age (days; blank disables)",
+  "providerHealth": "Provider health",
+  "providerPreset": "Provider preset",
+  "saveConfiguration": "Save configuration",
+  "searchGovernanceDescription": "Search and URL ingestion use the same domain, secret, audit, and citation controls as other governed context.",
+  "searchSettingsSaved": "Web search settings saved",
+  "skipUnreachable": "Skip unreachable only",
+  "unknownPublicationDates": "Unknown publication dates",
+  "unreachableUrls": "Unreachable URLs"
+}

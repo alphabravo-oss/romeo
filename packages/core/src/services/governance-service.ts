@@ -1,7 +1,4 @@
 import { assertScope, type AuthSubject, type ResourceGrant } from "@romeo/auth";
-import type { RomeoEnv } from "@romeo/config";
-import type { ObjectStore } from "@romeo/storage";
-
 import type {
   AccessReviewReport,
   ComplianceReport,
@@ -17,8 +14,6 @@ import type {
   DataExportRequest,
   DataRightsCoverageReport,
   IdentityLifecyclePolicy,
-  RetentionEnforcementResult,
-  RetentionPolicy,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
@@ -35,7 +30,6 @@ import { executeDataExport, previewDataExport } from "./data-export";
 import {
   createGovernedDataExportPackage,
   deleteGovernedDataExportPackageObject,
-  enforceGovernedDataExportPackageRetention,
   type DataExportPackageRead,
   listGovernedDataExportPackages,
   prepareGovernedDataExportPackageDelete,
@@ -50,276 +44,11 @@ import {
 } from "./data-rights-retention-evidence";
 import { deleteFileObjectStoredObjects } from "./file-service";
 import { buildIdentityLifecyclePolicy } from "./identity-lifecycle-policy";
-import {
-  browserAutomationJobType,
-  readBrowserAutomationStoredArtifacts,
-} from "./workflow-browser-tasks";
-import {
-  readVoiceArtifactUsageMetadata,
-  redactVoiceArtifactStorageMetadata,
-} from "./voice-artifact-metadata";
+import { GovernanceRetentionService } from "./governance-retention-service";
 
-export interface GovernanceServiceOptions {
-  env?: RomeoEnv | undefined;
-  scimEnabled?: boolean | undefined;
-  deleteKnowledgeSource?: (input: {
-    subject: AuthSubject;
-    knowledgeBaseId: string;
-    sourceId: string;
-  }) => Promise<unknown>;
-}
+export * from "./governance-retention-service";
 
-export class GovernanceService {
-  constructor(
-    private readonly repository: RomeoRepository,
-    private readonly objectStore: ObjectStore,
-    private readonly options: GovernanceServiceOptions = {},
-  ) {}
-
-  async retentionPolicy(subject: AuthSubject): Promise<RetentionPolicy> {
-    assertScope(subject, "admin:read");
-    return (
-      (await this.repository.getRetentionPolicy(subject.orgId)) ??
-      defaultPolicy(subject)
-    );
-  }
-
-  async updateRetentionPolicy(input: {
-    subject: AuthSubject;
-    auditLogRetentionDays: number;
-  }): Promise<RetentionPolicy> {
-    assertScope(input.subject, "admin:write");
-    if (
-      input.auditLogRetentionDays < 30 ||
-      input.auditLogRetentionDays > 3650
-    ) {
-      throw new ApiError(
-        "invalid_retention_policy",
-        "Audit retention must be between 30 and 3650 days.",
-        400,
-      );
-    }
-
-    const updatedAt = new Date().toISOString();
-    return this.repository.transaction(async (repository) => {
-      const policy = await repository.upsertRetentionPolicy({
-        orgId: input.subject.orgId,
-        auditLogRetentionDays: input.auditLogRetentionDays,
-        updatedBy: input.subject.id,
-        updatedAt,
-      });
-      await repository.createAuditLog({
-        id: createId("audit"),
-        orgId: input.subject.orgId,
-        actorId: input.subject.id,
-        action: "governance.retention.update",
-        resourceType: "organization",
-        resourceId: input.subject.orgId,
-        outcome: "success",
-        metadata: { auditLogRetentionDays: input.auditLogRetentionDays },
-        createdAt: updatedAt,
-      });
-      return policy;
-    });
-  }
-
-  async enforceRetention(
-    subject: AuthSubject,
-  ): Promise<RetentionEnforcementResult> {
-    assertScope(subject, "admin:write");
-    const policy = await retentionPolicyForOrg(this.repository, subject);
-    const enforcedAt = new Date();
-    const cutoffAt = new Date(
-      enforcedAt.getTime() - policy.auditLogRetentionDays * 24 * 60 * 60 * 1000,
-    ).toISOString();
-    const browserArtifacts = await this.enforceBrowserArtifactRetention(
-      subject,
-      cutoffAt,
-      enforcedAt.toISOString(),
-    );
-    const voiceArtifacts = await this.enforceVoiceArtifactRetention(
-      subject,
-      cutoffAt,
-      enforcedAt.toISOString(),
-    );
-    const dataExportPackages = await enforceGovernedDataExportPackageRetention({
-      repository: this.repository,
-      objectStore: this.objectStore,
-      orgId: subject.orgId,
-      cutoffAt,
-    });
-    const deletedAuditLogCount = await this.repository.transaction(
-      async (repository) => {
-        const deletedAuditLogCount = await repository.deleteAuditLogsBefore(
-          subject.orgId,
-          cutoffAt,
-        );
-        await repository.createAuditLog({
-          id: createId("audit"),
-          orgId: subject.orgId,
-          actorId: subject.id,
-          action: "governance.retention.enforce",
-          resourceType: "organization",
-          resourceId: subject.orgId,
-          outcome: "success",
-          metadata: {
-            auditLogRetentionDays: policy.auditLogRetentionDays,
-            cutoffAt,
-            cleanedBrowserAutomationJobCount:
-              browserArtifacts.cleanedBrowserAutomationJobCount,
-            deletedBrowserAutomationArtifactCount:
-              browserArtifacts.deletedBrowserAutomationArtifactCount,
-            cleanedVoiceArtifactUsageEventCount:
-              voiceArtifacts.cleanedVoiceArtifactUsageEventCount,
-            deletedVoiceArtifactCount: voiceArtifacts.deletedVoiceArtifactCount,
-            missingVoiceArtifactCount: voiceArtifacts.missingVoiceArtifactCount,
-            deletedDataExportPackageCount:
-              dataExportPackages.deletedDataExportPackageCount,
-            missingDataExportPackageCount:
-              dataExportPackages.missingDataExportPackageCount,
-            deletedAuditLogCount,
-          },
-          createdAt: enforcedAt.toISOString(),
-        });
-        return deletedAuditLogCount;
-      },
-    );
-    return {
-      orgId: subject.orgId,
-      auditLogRetentionDays: policy.auditLogRetentionDays,
-      cutoffAt,
-      cleanedBrowserAutomationJobCount:
-        browserArtifacts.cleanedBrowserAutomationJobCount,
-      deletedBrowserAutomationArtifactCount:
-        browserArtifacts.deletedBrowserAutomationArtifactCount,
-      cleanedVoiceArtifactUsageEventCount:
-        voiceArtifacts.cleanedVoiceArtifactUsageEventCount,
-      deletedVoiceArtifactCount: voiceArtifacts.deletedVoiceArtifactCount,
-      missingVoiceArtifactCount: voiceArtifacts.missingVoiceArtifactCount,
-      deletedDataExportPackageCount:
-        dataExportPackages.deletedDataExportPackageCount,
-      missingDataExportPackageCount:
-        dataExportPackages.missingDataExportPackageCount,
-      deletedAuditLogCount,
-      enforcedAt: enforcedAt.toISOString(),
-    };
-  }
-
-  private async enforceVoiceArtifactRetention(
-    subject: AuthSubject,
-    cutoffAt: string,
-    enforcedAt: string,
-  ): Promise<{
-    cleanedVoiceArtifactUsageEventCount: number;
-    deletedVoiceArtifactCount: number;
-    missingVoiceArtifactCount: number;
-  }> {
-    const cutoffMs = Date.parse(cutoffAt);
-    if (!Number.isFinite(cutoffMs)) {
-      return {
-        cleanedVoiceArtifactUsageEventCount: 0,
-        deletedVoiceArtifactCount: 0,
-        missingVoiceArtifactCount: 0,
-      };
-    }
-    let cleanedVoiceArtifactUsageEventCount = 0;
-    let deletedVoiceArtifactCount = 0;
-    let missingVoiceArtifactCount = 0;
-    const events = await this.repository.listUsageEvents(subject.orgId);
-    for (const event of events) {
-      const artifact = readVoiceArtifactUsageMetadata(event);
-      const createdAtMs = Date.parse(event.createdAt);
-      if (
-        artifact === undefined ||
-        !Number.isFinite(createdAtMs) ||
-        createdAtMs >= cutoffMs
-      ) {
-        continue;
-      }
-      const existing = await this.objectStore.getObject(artifact.storageKey);
-      if (existing === undefined) {
-        missingVoiceArtifactCount += 1;
-      } else {
-        await this.objectStore.deleteObject(artifact.storageKey);
-        deletedVoiceArtifactCount += 1;
-      }
-      await this.repository.updateUsageEvent({
-        ...event,
-        metadata: redactVoiceArtifactStorageMetadata(
-          event.metadata,
-          artifact.storageKey,
-          {
-            artifactDeletedAt: enforcedAt,
-            artifactDeletionReason: "retention",
-          },
-        ),
-      });
-      cleanedVoiceArtifactUsageEventCount += 1;
-    }
-    return {
-      cleanedVoiceArtifactUsageEventCount,
-      deletedVoiceArtifactCount,
-      missingVoiceArtifactCount,
-    };
-  }
-
-  private async enforceBrowserArtifactRetention(
-    subject: AuthSubject,
-    cutoffAt: string,
-    enforcedAt: string,
-  ): Promise<{
-    cleanedBrowserAutomationJobCount: number;
-    deletedBrowserAutomationArtifactCount: number;
-  }> {
-    const cutoffMs = Date.parse(cutoffAt);
-    if (!Number.isFinite(cutoffMs)) {
-      return {
-        cleanedBrowserAutomationJobCount: 0,
-        deletedBrowserAutomationArtifactCount: 0,
-      };
-    }
-    let cleanedBrowserAutomationJobCount = 0;
-    let deletedBrowserAutomationArtifactCount = 0;
-    const jobs = await this.repository.listBackgroundJobs(subject.orgId);
-    for (const job of jobs) {
-      if (
-        job.type !== browserAutomationJobType ||
-        (job.status !== "completed" && job.status !== "failed")
-      ) {
-        continue;
-      }
-      const artifacts = readBrowserAutomationStoredArtifacts(job);
-      const expired = artifacts.filter((artifact) => {
-        const registeredAtMs = Date.parse(artifact.registeredAt);
-        return Number.isFinite(registeredAtMs) && registeredAtMs < cutoffMs;
-      });
-      if (expired.length === 0) continue;
-      for (const artifact of expired) {
-        await this.objectStore.deleteObject(artifact.storageKey);
-      }
-      const expiredIds = new Set(
-        expired.map((artifact) => artifact.artifactId),
-      );
-      const remaining = artifacts.filter(
-        (artifact) => !expiredIds.has(artifact.artifactId),
-      );
-      await this.repository.updateBackgroundJob({
-        ...job,
-        payload:
-          remaining.length === 0
-            ? withoutBrowserArtifacts(job.payload)
-            : { ...job.payload, browserArtifacts: remaining },
-        updatedAt: enforcedAt,
-      });
-      cleanedBrowserAutomationJobCount += 1;
-      deletedBrowserAutomationArtifactCount += expired.length;
-    }
-    return {
-      cleanedBrowserAutomationJobCount,
-      deletedBrowserAutomationArtifactCount,
-    };
-  }
-
+export class GovernanceService extends GovernanceRetentionService {
   async previewDataDeletion(input: {
     subject: AuthSubject;
     resourceType: DataDeletionResourceType;
@@ -723,32 +452,6 @@ export class GovernanceService {
 function csvCell(value: string): string {
   if (!/[",\n\r]/.test(value)) return value;
   return `"${value.replace(/"/g, '""')}"`;
-}
-
-function defaultPolicy(subject: AuthSubject): RetentionPolicy {
-  return {
-    orgId: subject.orgId,
-    auditLogRetentionDays: 365,
-    updatedBy: subject.id,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-async function retentionPolicyForOrg(
-  repository: RomeoRepository,
-  subject: AuthSubject,
-): Promise<RetentionPolicy> {
-  return (
-    (await repository.getRetentionPolicy(subject.orgId)) ??
-    defaultPolicy(subject)
-  );
-}
-
-function withoutBrowserArtifacts(
-  payload: Record<string, unknown>,
-): Record<string, unknown> {
-  const { browserArtifacts: _browserArtifacts, ...rest } = payload;
-  return rest;
 }
 
 function notFoundDeletionResource(

@@ -7,5 +7,6 @@ export function getEmbeddingAdapter(
 ): EmbeddingProviderAdapter {
   if (kind === "openai-compatible" || kind === "openai-responses-compatible")
     return openAiCompatibleEmbeddingAdapter;
-  return ollamaEmbeddingAdapter;
+  if (kind === "ollama") return ollamaEmbeddingAdapter;
+  throw new Error("Anthropic does not expose an embeddings API.");
 }

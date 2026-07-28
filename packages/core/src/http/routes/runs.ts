@@ -1,45 +1,122 @@
-import { createSseStream } from '@romeo/ai-runtime'
+import { createSseStream } from "@romeo/ai-runtime";
+import {
+  cancelQueuedChatTurnRoute,
+  cancelRunRoute,
+  enqueueChatTurnRoute,
+  getActiveRunRoute,
+  getRunRoute,
+  inspectRunContextRoute,
+  listQueuedChatTurnsRoute,
+  startRunRoute,
+  streamRunEventsRoute,
+} from "@romeo/contracts";
 
-import type { RomeoApi } from '../context'
-import { startRunSchema } from '../schemas'
+import type { RomeoApi } from "../context";
 
 export function registerRunRoutes(app: RomeoApi): void {
-  app.post('/api/v1/runs', async (context) => {
-    const subject = context.get('subject')
-    const body = startRunSchema.parse(await context.req.json())
-    const data = await context.get('services').runs.start({
+  app.openapi(getActiveRunRoute, async (context) => {
+    const { chatId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .runs.activeForChat(chatId, context.get("subject"));
+    return context.json({ data: data ?? null }, 200);
+  });
+  app.openapi(listQueuedChatTurnsRoute, async (context) => {
+    const { chatId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .runs.queuedForChat(chatId, context.get("subject"));
+    return context.json({ data }, 200);
+  });
+  app.openapi(enqueueChatTurnRoute, async (context) => {
+    const { chatId } = context.req.valid("param");
+    const body = context.req.valid("json");
+    const data = await context.get("services").runs.enqueueTurn({
+      subject: context.get("subject"),
+      chatId,
+      agentId: body.agentId,
+      content: body.content,
+      ...(body.modelId === undefined ? {} : { modelId: body.modelId }),
+      ...(body.webSearch === undefined ? {} : { webSearch: body.webSearch }),
+      ...(body.urls === undefined ? {} : { urls: body.urls }),
+      ...(body.idempotencyKey === undefined
+        ? {}
+        : { idempotencyKey: body.idempotencyKey }),
+    });
+    return context.json({ data }, 202);
+  });
+  app.openapi(cancelQueuedChatTurnRoute, async (context) => {
+    const { chatId, turnId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .runs.cancelQueuedTurn(chatId, turnId, context.get("subject"));
+    return context.json({ data }, 200);
+  });
+  app.openapi(inspectRunContextRoute, async (context) => {
+    const body = context.req.valid("json");
+    const data = await context.get("services").runs.inspectContext({
+      subject: context.get("subject"),
+      chatId: body.chatId,
+      agentId: body.agentId,
+      content: body.content,
+      ...(body.modelId === undefined ? {} : { modelId: body.modelId }),
+      ...(body.fileIds === undefined ? {} : { fileIds: body.fileIds }),
+      ...(body.webSearch === undefined ? {} : { webSearch: body.webSearch }),
+      ...(body.urls === undefined ? {} : { urls: body.urls }),
+      imageCount: body.imageCount ?? 0,
+    });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(startRunRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const data = await context.get("services").runs.start({
       subject,
       chatId: body.chatId,
       agentId: body.agentId,
       content: body.content,
       ...(body.modelId === undefined ? {} : { modelId: body.modelId }),
-      ...(body.historyBoundaryMessageId === undefined ? {} : { historyBoundaryMessageId: body.historyBoundaryMessageId }),
-      ...(body.attachments === undefined ? {} : { attachments: body.attachments })
-    })
-    return context.json({ data }, 202)
-  })
+      ...(body.historyBoundaryMessageId === undefined
+        ? {}
+        : { historyBoundaryMessageId: body.historyBoundaryMessageId }),
+      ...(body.fileIds === undefined ? {} : { fileIds: body.fileIds }),
+      ...(body.webSearch === undefined ? {} : { webSearch: body.webSearch }),
+      ...(body.urls === undefined ? {} : { urls: body.urls }),
+      ...(body.attachments === undefined
+        ? {}
+        : { attachments: body.attachments }),
+    });
+    return context.json({ data }, 202);
+  });
 
-  app.get('/api/v1/runs/:runId', async (context) => {
-    const subject = context.get('subject')
-    const data = await context.get('services').runs.get(context.req.param('runId'), subject)
-    return context.json({ data })
-  })
+  app.openapi(getRunRoute, async (context) => {
+    const subject = context.get("subject");
+    const { runId } = context.req.valid("param");
+    const data = await context.get("services").runs.get(runId, subject);
+    return context.json({ data }, 200);
+  });
 
-  app.get('/api/v1/runs/:runId/events', (context) => {
-    const subject = context.get('subject')
-    const events = context.get('services').runs.events(context.req.param('runId'), subject)
+  app.openapi(streamRunEventsRoute, (context) => {
+    const subject = context.get("subject");
+    const { runId } = context.req.valid("param");
+    const { after: afterSequence = 0 } = context.req.valid("query");
+    const events = context
+      .get("services")
+      .runs.events(runId, subject, afterSequence);
     return new Response(createSseStream(events), {
       headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-store',
-        connection: 'keep-alive'
-      }
-    })
-  })
+        "content-type": "text/event-stream",
+        "cache-control": "no-store",
+        connection: "keep-alive",
+      },
+    });
+  });
 
-  app.post('/api/v1/runs/:runId/cancel', async (context) => {
-    const subject = context.get('subject')
-    const data = await context.get('services').runs.cancel(context.req.param('runId'), subject)
-    return context.json({ data })
-  })
+  app.openapi(cancelRunRoute, async (context) => {
+    const subject = context.get("subject");
+    const { runId } = context.req.valid("param");
+    const data = await context.get("services").runs.cancel(runId, subject);
+    return context.json({ data }, 200);
+  });
 }

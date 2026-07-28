@@ -1,22 +1,15 @@
 import { type AuthSubject, type Scope } from "@romeo/auth";
 import type { RomeoEnv } from "@romeo/config";
-import {
-  createHash,
-  createHmac,
-  randomBytes,
-  timingSafeEqual,
-} from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 import type { AuthProviderId } from "../domain/auth-providers";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
-import { createId } from "../ids";
 import type {
   AuthProviderSettingsService,
   SamlProviderLoginConfig,
 } from "./auth-provider-settings-service";
 import { createUserAuthSubject, localUserScopes } from "./auth-subject";
-import { writeAuditLog } from "./audit-log";
 import {
   provisionExternalUser,
   syncExternalGroupMemberships,
@@ -24,60 +17,39 @@ import {
 import {
   defaultSamlClientFactory,
   type SamlClientFactory,
-  type SamlValidatedProfile,
 } from "./saml-client";
 import type { SecretResolver } from "./secret-resolver";
-import type { CreatedUserSession, SessionService } from "./session-service";
-import { ensureSystemAuditActor } from "./system-audit-actor";
+import type { SessionService } from "./session-service";
+import { auditSamlFailure, auditSamlSuccess } from "./saml-auth-audit";
+import {
+  base64Url,
+  compactLedger,
+  invalidSamlLogin,
+  isSamlStateCookie,
+  mapSamlProfile,
+  normalizeAppOrigin,
+  normalizeOrgId,
+  normalizeSamlProviderId,
+  parseJsonState,
+  parseLedger,
+  pruneLedger,
+  randomToken,
+  requestKey,
+  samlLoginDenied,
+  samlUserId,
+  sanitizeReturnTo,
+  stableHash,
+} from "./saml-auth-helpers";
+import type {
+  SamlCallbackResult,
+  SamlRequestRecord,
+  SamlStartResult,
+  SamlStateCookie,
+} from "./saml-auth-types";
 
-export interface SamlStartResult {
-  authorizationUrl: string;
-  expiresAt: string;
-  providerId: "saml";
-  stateCookie: string;
-}
+export * from "./saml-auth-types";
+export { samlUserId };
 
-export interface SamlCallbackResult extends CreatedUserSession {
-  returnTo: string;
-}
-
-interface SamlStateCookie {
-  entryPointHash: string;
-  expiresAt: string;
-  orgId: string;
-  providerId: "saml";
-  relayState: string;
-  requestId: string;
-  requestInstant: string;
-  returnTo: string;
-  spEntityIdHash: string;
-  v: 1;
-}
-
-interface SamlRequestLedger {
-  requests: Record<string, SamlRequestRecord>;
-  version: 1;
-}
-
-interface SamlRequestRecord {
-  consumedAt?: string;
-  expiresAt: string;
-  orgId: string;
-  providerId: "saml";
-  relayStateHash: string;
-  requestInstant: string;
-}
-
-interface SamlIdentity {
-  email: string;
-  externalGroupIds: string[];
-  groups: string[];
-  isAdmin: boolean;
-  name: string;
-  subject: string;
-}
-
-const defaultOrgId = "org_default";
 const defaultSessionTtlHours = 12;
 const samlRequestLedgerKey = "auth_saml_request_state.v1";
 const samlStateTtlMs = 10 * 60 * 1000;
@@ -163,7 +135,7 @@ export class SamlAuthService {
       );
     }
     if (input.relayState !== stored.relayState) {
-      await this.auditFailure({
+      await auditSamlFailure(this.repository, {
         failureClass: "saml_relay_state_mismatch",
         orgId: stored.orgId,
         providerId: stored.providerId,
@@ -195,7 +167,7 @@ export class SamlAuthService {
           error instanceof ApiError
             ? error
             : invalidSamlLogin("saml_request_state_invalid");
-        await this.auditFailure({
+        await auditSamlFailure(this.repository, {
           failureClass: apiError.code,
           orgId: stored.orgId,
           providerId: stored.providerId,
@@ -244,17 +216,13 @@ export class SamlAuthService {
           forceAdmin: identity.isAdmin,
           sessionScopes: samlLoginScopes,
         });
-        await this.auditSuccess(
-          subject,
-          {
-            config,
-            groupCount: identity.groups.length,
-            mappedGroupCount: identity.externalGroupIds.length,
-            subject: identity.subject,
-            userId,
-          },
-          repository,
-        );
+        await auditSamlSuccess(repository, subject, {
+          config,
+          groupCount: identity.groups.length,
+          mappedGroupCount: identity.externalGroupIds.length,
+          subject: identity.subject,
+          userId,
+        });
         return this.sessions.createInRepository(repository, {
           subject,
           name: "SAML browser login",
@@ -267,7 +235,7 @@ export class SamlAuthService {
         error instanceof ApiError
           ? error
           : invalidSamlLogin("saml_login_failed");
-      await this.auditFailure({
+      await auditSamlFailure(this.repository, {
         failureClass: apiError.code,
         orgId: stored.orgId,
         providerId: stored.providerId,
@@ -409,66 +377,6 @@ export class SamlAuthService {
     });
   }
 
-  private async auditSuccess(
-    subject: AuthSubject,
-    input: {
-      config: SamlProviderLoginConfig;
-      groupCount: number;
-      mappedGroupCount: number;
-      subject: string;
-      userId: string;
-    },
-    repository: RomeoRepository = this.repository,
-  ): Promise<void> {
-    await writeAuditLog(repository, {
-      subject,
-      action: "auth.saml.login.success",
-      resourceType: "user",
-      resourceId: input.userId,
-      metadata: {
-        adminGroupPolicyActive: input.config.adminGroups.length > 0,
-        allowedDomainPolicyActive: input.config.allowedEmailDomains.length > 0,
-        groupCount: input.groupCount,
-        mappedGroupCount: input.mappedGroupCount,
-        providerId: input.config.providerId,
-        requiredGroupCount: input.config.requiredGroups.length,
-        signedAssertionRequired: true,
-        signedResponseRequired: input.config.wantAuthnResponseSigned,
-        subjectHash: stableHash(input.subject),
-      },
-    });
-  }
-
-  private async auditFailure(input: {
-    failureClass: string;
-    orgId: string;
-    providerId: "saml";
-    requestId?: string;
-  }): Promise<void> {
-    const actor = await ensureSystemAuditActor(this.repository, {
-      kind: "saml_auth",
-      name: "SAML Auth Audit Actor",
-      orgId: input.orgId,
-    });
-    await this.repository.createAuditLog({
-      id: createId("audit"),
-      orgId: input.orgId,
-      actorId: actor.id,
-      action: "auth.saml.login.failure",
-      resourceType: "auth_provider",
-      resourceId: input.providerId,
-      outcome: "failure",
-      metadata: {
-        failureClass: input.failureClass,
-        providerId: input.providerId,
-        ...(input.requestId === undefined
-          ? {}
-          : { requestIdHash: stableHash(input.requestId) }),
-      },
-      createdAt: new Date().toISOString(),
-    });
-  }
-
   private signState(state: SamlStateCookie): string {
     const payload = base64Url(JSON.stringify(state));
     const signature = this.signPayload(payload);
@@ -541,312 +449,4 @@ export class SamlAuthService {
     const right = Buffer.from(expected);
     return left.length === right.length && timingSafeEqual(left, right);
   }
-}
-
-export function samlUserId(
-  config: Pick<SamlProviderLoginConfig, "spEntityId">,
-  subject: string,
-): string {
-  return `user_saml_${createHash("sha256")
-    .update(`${config.spEntityId}\0${subject}`)
-    .digest("hex")
-    .slice(0, 24)}`;
-}
-
-function mapSamlProfile(
-  config: SamlProviderLoginConfig,
-  profile: SamlValidatedProfile,
-): SamlIdentity {
-  const subject = selectProfileString(profile, config.subjectAttribute);
-  if (subject === undefined) {
-    throw new ApiError(
-      "saml_subject_missing",
-      "SAML assertion did not include a usable subject.",
-      403,
-    );
-  }
-  const groups = selectProfileStrings(profile, config.groupsAttribute);
-  assertRequiredGroups(config, groups);
-  const email = selectSamlEmail(config, profile, subject);
-  return {
-    email,
-    externalGroupIds: mappedGroupIds(config, groups),
-    groups,
-    isAdmin: matchesAnyGroup(config.adminGroups, groups),
-    name: selectProfileString(profile, config.nameAttribute) ?? email,
-    subject,
-  };
-}
-
-function selectSamlEmail(
-  config: SamlProviderLoginConfig,
-  profile: SamlValidatedProfile,
-  subject: string,
-): string {
-  const candidate =
-    selectProfileString(profile, config.emailAttribute) ??
-    selectProfileString(profile, "email") ??
-    selectProfileString(profile, "mail") ??
-    selectProfileString(profile, "urn:oid:0.9.2342.19200300.100.1.3");
-  if (candidate !== undefined && candidate.includes("@")) {
-    const normalized = candidate.trim().toLowerCase();
-    if (
-      config.allowedEmailDomains.length > 0 &&
-      !config.allowedEmailDomains.includes(emailDomain(normalized))
-    ) {
-      throw samlLoginDenied();
-    }
-    return normalized;
-  }
-  if (config.allowedEmailDomains.length > 0) throw samlLoginDenied();
-  return `saml-${createHash("sha256")
-    .update(`${config.spEntityId}\0${subject}`)
-    .digest("hex")
-    .slice(0, 24)}@saml.local.invalid`;
-}
-
-function selectProfileString(
-  profile: SamlValidatedProfile,
-  attribute: string,
-): string | undefined {
-  if (attribute === "nameID") return nonEmptyString(profile.nameID);
-  const value = profile.attributes[attribute];
-  if (Array.isArray(value)) {
-    return value.map(stringValue).find((item) => item !== undefined);
-  }
-  return stringValue(value);
-}
-
-function selectProfileStrings(
-  profile: SamlValidatedProfile,
-  attribute: string,
-): string[] {
-  const value = profile.attributes[attribute];
-  const values = Array.isArray(value) ? value : [value];
-  return [...new Set(values.map(stringValue).filter(isDefined))].sort();
-}
-
-function assertRequiredGroups(
-  config: SamlProviderLoginConfig,
-  groups: string[],
-): void {
-  if (config.requiredGroups.length === 0) return;
-  if (!matchesAnyGroup(config.requiredGroups, groups)) throw samlLoginDenied();
-}
-
-function matchesAnyGroup(policyGroups: string[], groups: string[]): boolean {
-  if (policyGroups.length === 0) return false;
-  const keys = samlGroupKeys(groups);
-  return policyGroups.some((group) => keys.has(normalizeGroupKey(group)));
-}
-
-function mappedGroupIds(
-  config: SamlProviderLoginConfig,
-  groups: string[],
-): string[] {
-  const keys = samlGroupKeys(groups);
-  return [...keys]
-    .map(
-      (key) =>
-        config.groupMap[key] ??
-        config.groupMap[key.replace(/^saml:group:/u, "")],
-    )
-    .filter(isDefined)
-    .sort();
-}
-
-function samlGroupKeys(groups: string[]): Set<string> {
-  const keys = new Set<string>();
-  for (const group of groups) {
-    const normalized = normalizeGroupKey(group);
-    keys.add(normalized);
-    keys.add(`saml:group:${normalized}`);
-  }
-  return keys;
-}
-
-function normalizeSamlProviderId(providerId: AuthProviderId): "saml" {
-  if (providerId === "saml") return providerId;
-  throw new ApiError(
-    "invalid_saml_provider",
-    "SAML provider ID is not recognized.",
-    400,
-    { providerId },
-  );
-}
-
-function normalizeOrgId(value: string | undefined): string {
-  const normalized = value?.trim();
-  if (normalized === undefined || normalized.length === 0) return defaultOrgId;
-  if (normalized.length > 120) {
-    throw new ApiError(
-      "invalid_saml_org_id",
-      "SAML login organization ID is too long.",
-      400,
-    );
-  }
-  return normalized;
-}
-
-function sanitizeReturnTo(value: string | undefined): string {
-  if (value === undefined || value.length === 0) return "/";
-  if (
-    value.length > 500 ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    /[\r\n]/u.test(value)
-  ) {
-    throw new ApiError(
-      "invalid_saml_return_to",
-      "SAML return path must be a relative application path.",
-      400,
-    );
-  }
-  return value;
-}
-
-function normalizeAppOrigin(value: string): string {
-  const url = new URL(value);
-  return `${url.protocol}//${url.host}`;
-}
-
-function parseLedger(
-  value: Record<string, unknown> | undefined,
-): SamlRequestLedger {
-  if (value === undefined || value.version !== 1) {
-    return { version: 1, requests: {} };
-  }
-  const requests: Record<string, SamlRequestRecord> = {};
-  const record = value.requests;
-  if (typeof record === "object" && record !== null && !Array.isArray(record)) {
-    for (const [key, item] of Object.entries(record)) {
-      const parsed = parseRequestRecord(item);
-      if (parsed !== undefined) requests[key] = parsed;
-    }
-  }
-  return { version: 1, requests };
-}
-
-function parseRequestRecord(value: unknown): SamlRequestRecord | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const record = value as Record<string, unknown>;
-  if (
-    record.providerId !== "saml" ||
-    typeof record.expiresAt !== "string" ||
-    typeof record.orgId !== "string" ||
-    typeof record.relayStateHash !== "string" ||
-    typeof record.requestInstant !== "string"
-  ) {
-    return undefined;
-  }
-  return {
-    expiresAt: record.expiresAt,
-    orgId: record.orgId,
-    providerId: "saml",
-    relayStateHash: record.relayStateHash,
-    requestInstant: record.requestInstant,
-    ...(typeof record.consumedAt === "string"
-      ? { consumedAt: record.consumedAt }
-      : {}),
-  };
-}
-
-function pruneLedger(ledger: SamlRequestLedger): SamlRequestLedger {
-  const now = Date.now();
-  const entries = Object.entries(ledger.requests)
-    .filter(([, record]) => new Date(record.expiresAt).getTime() > now)
-    .sort((left, right) =>
-      left[1].expiresAt === right[1].expiresAt
-        ? left[0].localeCompare(right[0])
-        : left[1].expiresAt.localeCompare(right[1].expiresAt),
-    )
-    .slice(-1_000);
-  return { version: 1, requests: Object.fromEntries(entries) };
-}
-
-function compactLedger(ledger: SamlRequestLedger): Record<string, unknown> {
-  return { version: 1, requests: ledger.requests };
-}
-
-function requestKey(requestId: string): string {
-  return stableHash(`saml-request\0${requestId}`);
-}
-
-function stableHash(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function randomToken(byteLength: number): string {
-  return randomBytes(byteLength).toString("base64url");
-}
-
-function base64Url(value: string): string {
-  return Buffer.from(value, "utf8").toString("base64url");
-}
-
-function parseJsonState(payload: string): unknown {
-  try {
-    return JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8"),
-    ) as unknown;
-  } catch {
-    throw new ApiError(
-      "saml_state_invalid",
-      "SAML login state is invalid.",
-      400,
-    );
-  }
-}
-
-function isSamlStateCookie(value: unknown): value is SamlStateCookie {
-  const candidate = value as Partial<SamlStateCookie>;
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    candidate.v === 1 &&
-    typeof candidate.entryPointHash === "string" &&
-    typeof candidate.expiresAt === "string" &&
-    typeof candidate.orgId === "string" &&
-    candidate.providerId === "saml" &&
-    typeof candidate.relayState === "string" &&
-    typeof candidate.requestId === "string" &&
-    typeof candidate.requestInstant === "string" &&
-    typeof candidate.returnTo === "string" &&
-    typeof candidate.spEntityIdHash === "string"
-  );
-}
-
-function invalidSamlLogin(code = "saml_login_invalid"): ApiError {
-  return new ApiError(code, "SAML login failed.", 401);
-}
-
-function samlLoginDenied(): ApiError {
-  return new ApiError(
-    "saml_login_denied",
-    "SAML login is not allowed for this account.",
-    403,
-  );
-}
-
-function emailDomain(email: string): string {
-  return email.slice(email.lastIndexOf("@") + 1).toLowerCase();
-}
-
-function normalizeGroupKey(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function nonEmptyString(value: string): string | undefined {
-  const normalized = value.trim();
-  return normalized.length === 0 ? undefined : normalized;
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" ? nonEmptyString(value) : undefined;
-}
-
-function isDefined<T>(value: T | undefined): value is T {
-  return value !== undefined;
 }

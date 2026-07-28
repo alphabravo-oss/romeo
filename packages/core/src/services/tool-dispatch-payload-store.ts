@@ -65,9 +65,7 @@ export interface ToolDispatchPayloadStore {
   ): Promise<ToolOperationDispatchPayloadStoreReference>;
 }
 
-export class EncryptedObjectToolDispatchPayloadStore
-  implements ToolDispatchPayloadStore
-{
+export class EncryptedObjectToolDispatchPayloadStore implements ToolDispatchPayloadStore {
   private readonly key: Buffer;
   private readonly prefix: string;
 
@@ -166,10 +164,7 @@ function encryptPayload(input: {
   const cipher = createCipheriv("aes-256-gcm", input.key, iv);
   cipher.setAAD(payloadAad(input.objectKey));
   const plaintext = Buffer.from(JSON.stringify(input.plaintext), "utf8");
-  const ciphertext = Buffer.concat([
-    cipher.update(plaintext),
-    cipher.final(),
-  ]);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   return {
     algorithm: "aes-256-gcm",
     ciphertext: ciphertext.toString("base64url"),
@@ -313,13 +308,12 @@ function readUnknownRecord(
 ): Record<string, unknown> | undefined {
   if (value === undefined) return undefined;
   const record = asRecord(value);
-  if (record === undefined) throw new Error("tool_dispatch_payload_store_invalid");
+  if (record === undefined)
+    throw new Error("tool_dispatch_payload_store_invalid");
   return record;
 }
 
-function readStringRecord(
-  value: unknown,
-): Record<string, string> | undefined {
+function readStringRecord(value: unknown): Record<string, string> | undefined {
   if (value === undefined) return undefined;
   const record = asRecord(value);
   if (
@@ -338,7 +332,10 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 function payloadAad(objectKey: string): Buffer {
-  return Buffer.from(`${toolDispatchPayloadSchemaVersion}\0${objectKey}`, "utf8");
+  return Buffer.from(
+    `${toolDispatchPayloadSchemaVersion}\0${objectKey}`,
+    "utf8",
+  );
 }
 
 function deriveEncryptionKey(secret: string): Buffer {

@@ -1,9 +1,25 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 
-import type { FileObjectPurpose, FileObjectStatus } from "@romeo/core";
+import type {
+  AuthorizedFileCatalogQuery,
+  FileObjectPurpose,
+  FileObjectStatus,
+} from "@romeo/core";
 
 import type { RomeoDatabase } from "./client";
-import { objectRecords } from "./schema";
+import { objectRecords, resourceGrants } from "./schema";
 import {
   optionalDate,
   optionalIsoString,
@@ -49,6 +65,82 @@ export class PgFileRepository {
       )
       .orderBy(desc(objectRecords.updatedAt), asc(objectRecords.id));
     return rows.map(toFileObjectRecord);
+  }
+
+  async listAuthorizedFileObjectsPage(
+    input: AuthorizedFileCatalogQuery,
+  ): Promise<{ items: FileObjectRecord[]; total: number }> {
+    const principalMatch = or(
+      and(
+        eq(resourceGrants.principalType, input.principalType),
+        eq(resourceGrants.principalId, input.principalId),
+      ),
+      input.groupIds.length === 0
+        ? undefined
+        : and(
+            eq(resourceGrants.principalType, "group"),
+            inArray(resourceGrants.principalId, input.groupIds),
+          ),
+    );
+    const grantMatch = exists(
+      this.db
+        .select({ value: sql`1` })
+        .from(resourceGrants)
+        .where(
+          and(
+            eq(resourceGrants.orgId, input.orgId),
+            eq(resourceGrants.resourceType, "file"),
+            eq(resourceGrants.resourceId, objectRecords.id),
+            inArray(resourceGrants.permission, ["read", "write"]),
+            principalMatch,
+          ),
+        ),
+    );
+    const ownerMatch = and(
+      eq(objectRecords.ownerType, input.principalType),
+      eq(objectRecords.ownerId, input.principalId),
+    );
+    const query = input.query?.trim();
+    const predicate = and(
+      eq(objectRecords.orgId, input.orgId),
+      eq(objectRecords.workspaceId, input.workspaceId),
+      eq(objectRecords.status, "available"),
+      input.purposes === undefined
+        ? undefined
+        : inArray(objectRecords.purpose, input.purposes),
+      input.excludePurposes === undefined
+        ? undefined
+        : notInArray(objectRecords.purpose, input.excludePurposes),
+      query === undefined || query === ""
+        ? undefined
+        : or(
+            ilike(objectRecords.fileName, `%${query}%`),
+            ilike(objectRecords.mimeType, `%${query}%`),
+            ilike(sql`${objectRecords.metadata}->>'title'`, `%${query}%`),
+          ),
+      input.isAdmin
+        ? undefined
+        : input.accessMode === "workspace_content"
+          ? or(
+              ownerMatch,
+              sql`${objectRecords.metadata}->>'scope' = 'workspace'`,
+            )
+          : or(ownerMatch, grantMatch),
+    );
+    const [rows, totals] = await Promise.all([
+      this.db
+        .select()
+        .from(objectRecords)
+        .where(predicate)
+        .orderBy(desc(objectRecords.updatedAt), asc(objectRecords.id))
+        .limit(input.limit)
+        .offset(input.offset),
+      this.db.select({ value: count() }).from(objectRecords).where(predicate),
+    ]);
+    return {
+      items: rows.map(toFileObjectRecord),
+      total: Number(totals[0]?.value ?? 0),
+    };
   }
 
   async getFileObject(fileId: string): Promise<FileObjectRecord | undefined> {
@@ -158,6 +250,9 @@ const fileObjectPurposes = new Set<string>([
   "general",
   "generated_image",
   "knowledge_source",
+  "memory",
+  "note",
+  "web_source",
   "voice_artifact",
 ]);
 

@@ -1,15 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
+import { getBootstrap, listChatsPage } from "../features";
+import { listAgents } from "../features/managed-models";
 import {
-  getBootstrap,
   getProviderOperationalSummary,
-  listAgents,
-  listChats,
   listModels,
   listProviders,
-} from "../api/client";
-import { listAgentTools } from "../api/tools";
+} from "../features/providers/queries";
+import { listAgentTools } from "../features/tools";
 import { useWorkspace } from "./WorkspaceContext";
 
 export function useWorkspaceData(activeAgentId: string | undefined) {
@@ -26,9 +25,13 @@ export function useWorkspaceData(activeAgentId: string | undefined) {
     queryFn: () => listAgents(workspace!.id),
     enabled: workspace !== undefined,
   });
-  const chatsQuery = useQuery({
+  const chatsQuery = useInfiniteQuery({
     queryKey: ["chats", workspace?.id],
-    queryFn: () => listChats(workspace!.id),
+    queryFn: ({ pageParam }) =>
+      listChatsPage(workspace!.id, { limit: 50, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.offset + lastPage.items.length : undefined,
     enabled: workspace !== undefined,
   });
   const modelsQuery = useQuery({ queryKey: ["models"], queryFn: listModels });
@@ -53,7 +56,11 @@ export function useWorkspaceData(activeAgentId: string | undefined) {
   return {
     activeAgent,
     agents,
-    chats: chatsQuery.data ?? [],
+    chats: chatsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    chatsTotal: chatsQuery.data?.pages[0]?.total ?? 0,
+    hasMoreChats: chatsQuery.hasNextPage,
+    isLoadingMoreChats: chatsQuery.isFetchingNextPage,
+    loadMoreChats: chatsQuery.fetchNextPage,
     models: modelsQuery.data ?? [],
     providerOperationalSummary: providerOperationalSummaryQuery.data,
     providers: providersQuery.data ?? [],

@@ -1,14 +1,12 @@
-import type { WorkflowDefinition, WorkflowRun } from "@romeo/api-client";
-
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
 import { workerSignalAborted } from "./worker-control";
 
 export interface WorkflowResumeWorkerClient {
   workflows: {
-    list(workspaceId?: string): Promise<WorkflowDefinition[]>;
-    resumeRun(workflowRunId: string): Promise<WorkflowRun>;
-    runs(workflowId: string): Promise<WorkflowRun[]>;
+    list(workspaceId?: string): Promise<WorkerWorkflow[]>;
+    resumeRun(workflowRunId: string): Promise<WorkerWorkflowRun>;
+    runs(workflowId: string): Promise<WorkerWorkflowRun[]>;
   };
 }
 
@@ -35,7 +33,7 @@ export async function runWorkflowResumeWorker(
     const workflows = (await input.client.workflows.list(input.workspaceId))
       .filter((workflow) => workflow.enabled)
       .slice(0, input.maxWorkflowsPerIteration ?? 10);
-    const resumedRuns: WorkflowRun[] = [];
+    const resumedRuns: WorkerWorkflowRun[] = [];
     const errors: Array<{
       error: string;
       workflowId?: string;
@@ -100,7 +98,7 @@ function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function workerRunSummary(run: WorkflowRun) {
+function workerRunSummary(run: WorkerWorkflowRun) {
   const steps = Array.isArray(run.steps) ? run.steps : [];
   return {
     id: run.id,
@@ -115,4 +113,22 @@ function workerRunSummary(run: WorkflowRun) {
       outputKeys: Object.keys(step.output).sort(),
     })),
   };
+}
+
+export interface WorkerWorkflow {
+  enabled: boolean;
+  id: string;
+}
+
+export interface WorkerWorkflowRun {
+  currentStepId: string | undefined;
+  id: string;
+  status: string;
+  steps: Array<{
+    output: Record<string, unknown>;
+    status: string;
+    stepId: string;
+    type: string;
+  }>;
+  workflowId: string;
 }

@@ -1,32 +1,38 @@
 import type { RomeoApi } from "../context";
 import {
-  compareTieredKnowledgeReplaySchema,
-  createKnowledgeBaseSchema,
-  createKnowledgeSourceSchema,
-  createKnowledgeUploadSchema,
-  indexKnowledgeEmbeddingsSchema,
-  queryKnowledgeBaseSchema,
-  queryTieredKnowledgeSchema,
-  replayTieredKnowledgeSchema,
-  reindexKnowledgeSourceSchema,
-  updateKnowledgeBaseSchema,
-} from "../schemas";
+  compareTieredKnowledgeReplayRoute,
+  completeKnowledgeUploadRoute,
+  createKnowledgeBaseRoute,
+  createKnowledgeSourceRoute,
+  createKnowledgeUploadRoute,
+  deleteKnowledgeSourceRoute,
+  extractKnowledgeSourceRoute,
+  getKnowledgeBaseRoute,
+  indexKnowledgeEmbeddingsRoute,
+  listKnowledgeBasesRoute,
+  listKnowledgeSourcesRoute,
+  queryKnowledgeBaseRoute,
+  queryTieredKnowledgeRoute,
+  reindexKnowledgeSourceRoute,
+  replayTieredKnowledgeRoute,
+  updateKnowledgeBaseRoute,
+} from "@romeo/contracts";
 import type { KnowledgeRetrievalReplayCaseInput } from "../../services/knowledge-service";
 
 export function registerKnowledgeRoutes(app: RomeoApi): void {
-  app.get("/api/v1/knowledge-bases", async (context) => {
+  app.openapi(listKnowledgeBasesRoute, async (context) => {
     const subject = context.get("subject");
     const workspaceId =
-      context.req.query("workspaceId") ?? subject.workspaceIds[0];
+      context.req.valid("query").workspaceId ?? subject.workspaceIds[0];
     const data = workspaceId
       ? await context.get("services").knowledge.list(workspaceId, subject)
       : [];
     return context.json({ data });
   });
 
-  app.post("/api/v1/knowledge-bases", async (context) => {
+  app.openapi(createKnowledgeBaseRoute, async (context) => {
     const subject = context.get("subject");
-    const body = createKnowledgeBaseSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const input: {
       subject: typeof subject;
       workspaceId: string;
@@ -43,20 +49,20 @@ export function registerKnowledgeRoutes(app: RomeoApi): void {
     return context.json({ data }, 201);
   });
 
-  app.get("/api/v1/knowledge-bases/:knowledgeBaseId", async (context) => {
+  app.openapi(getKnowledgeBaseRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
-      .knowledge.get(context.req.param("knowledgeBaseId"), subject);
+      .knowledge.get(context.req.valid("param").knowledgeBaseId, subject);
     return context.json({ data });
   });
 
-  app.patch("/api/v1/knowledge-bases/:knowledgeBaseId", async (context) => {
+  app.openapi(updateKnowledgeBaseRoute, async (context) => {
     const subject = context.get("subject");
-    const body = updateKnowledgeBaseSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").knowledge.update({
       subject,
-      knowledgeBaseId: context.req.param("knowledgeBaseId"),
+      knowledgeBaseId: context.req.valid("param").knowledgeBaseId,
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.description !== undefined
         ? { description: body.description }
@@ -65,148 +71,126 @@ export function registerKnowledgeRoutes(app: RomeoApi): void {
     return context.json({ data });
   });
 
-  app.get(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/sources",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context
-        .get("services")
-        .knowledge.listSources(context.req.param("knowledgeBaseId"), subject);
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/sources",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = createKnowledgeSourceSchema.parse(await context.req.json());
-      const data = await context.get("services").knowledge.createSource({
-        subject,
-        knowledgeBaseId: context.req.param("knowledgeBaseId"),
-        fileName: body.fileName,
-        mimeType: body.mimeType,
-        sizeBytes: body.sizeBytes,
-        ...(body.content !== undefined ? { content: body.content } : {}),
-      });
-      return context.json({ data }, 202);
-    },
-  );
-
-  app.post(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/uploads",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = createKnowledgeUploadSchema.parse(await context.req.json());
-      const data = await context.get("services").knowledge.createUpload({
-        subject,
-        knowledgeBaseId: context.req.param("knowledgeBaseId"),
-        fileName: body.fileName,
-        mimeType: body.mimeType,
-        sizeBytes: body.sizeBytes,
-      });
-      return context.json({ data }, 202);
-    },
-  );
-
-  app.post(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/sources/:sourceId/complete",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context.get("services").knowledge.completeUpload({
-        subject,
-        knowledgeBaseId: context.req.param("knowledgeBaseId"),
-        sourceId: context.req.param("sourceId"),
-      });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/sources/:sourceId/extract",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context.get("services").knowledge.extractUpload({
-        subject,
-        knowledgeBaseId: context.req.param("knowledgeBaseId"),
-        sourceId: context.req.param("sourceId"),
-      });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/embeddings",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = indexKnowledgeEmbeddingsSchema.parse(
-        await context.req.json(),
-      );
-      const data = await context.get("services").knowledge.indexEmbeddings({
-        subject,
-        knowledgeBaseId: context.req.param("knowledgeBaseId"),
-        providerId: body.providerId,
-        model: body.model,
-        ...(body.batchSize !== undefined ? { batchSize: body.batchSize } : {}),
-      });
-      return context.json({ data });
-    },
-  );
-
-  app.delete(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/sources/:sourceId",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context.get("services").knowledge.deleteSource({
-        subject,
-        knowledgeBaseId: context.req.param("knowledgeBaseId"),
-        sourceId: context.req.param("sourceId"),
-      });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/sources/:sourceId/reindex",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = reindexKnowledgeSourceSchema.parse(await context.req.json());
-      const data = await context.get("services").knowledge.reindexSource({
-        subject,
-        knowledgeBaseId: context.req.param("knowledgeBaseId"),
-        sourceId: context.req.param("sourceId"),
-        content: body.content,
-        ...(body.sizeBytes !== undefined ? { sizeBytes: body.sizeBytes } : {}),
-      });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/query",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = queryKnowledgeBaseSchema.parse(await context.req.json());
-      const input: {
-        subject: typeof subject;
-        knowledgeBaseId: string;
-        query: string;
-        maxResults?: number;
-      } = {
-        subject,
-        knowledgeBaseId: context.req.param("knowledgeBaseId"),
-        query: body.query,
-      };
-      if (body.maxResults !== undefined) input.maxResults = body.maxResults;
-
-      const data = await context.get("services").knowledge.query(input);
-      return context.json({ data });
-    },
-  );
-
-  app.post("/api/v1/knowledge-bases/query", async (context) => {
+  app.openapi(listKnowledgeSourcesRoute, async (context) => {
     const subject = context.get("subject");
-    const body = queryTieredKnowledgeSchema.parse(await context.req.json());
+    const data = await context
+      .get("services")
+      .knowledge.listSources(
+        context.req.valid("param").knowledgeBaseId,
+        subject,
+      );
+    return context.json({ data });
+  });
+
+  app.openapi(createKnowledgeSourceRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const data = await context.get("services").knowledge.createSource({
+      subject,
+      knowledgeBaseId: context.req.valid("param").knowledgeBaseId,
+      fileName: body.fileName,
+      mimeType: body.mimeType,
+      sizeBytes: body.sizeBytes,
+      ...(body.content !== undefined ? { content: body.content } : {}),
+    });
+    return context.json({ data }, 202);
+  });
+
+  app.openapi(createKnowledgeUploadRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const data = await context.get("services").knowledge.createUpload({
+      subject,
+      knowledgeBaseId: context.req.valid("param").knowledgeBaseId,
+      fileName: body.fileName,
+      mimeType: body.mimeType,
+      sizeBytes: body.sizeBytes,
+    });
+    return context.json({ data }, 202);
+  });
+
+  app.openapi(completeKnowledgeUploadRoute, async (context) => {
+    const params = context.req.valid("param");
+    const subject = context.get("subject");
+    const data = await context.get("services").knowledge.completeUpload({
+      subject,
+      knowledgeBaseId: params.knowledgeBaseId,
+      sourceId: params.sourceId,
+    });
+    return context.json({ data });
+  });
+
+  app.openapi(extractKnowledgeSourceRoute, async (context) => {
+    const params = context.req.valid("param");
+    const subject = context.get("subject");
+    const data = await context.get("services").knowledge.extractUpload({
+      subject,
+      knowledgeBaseId: params.knowledgeBaseId,
+      sourceId: params.sourceId,
+    });
+    return context.json({ data });
+  });
+
+  app.openapi(indexKnowledgeEmbeddingsRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const data = await context.get("services").knowledge.indexEmbeddings({
+      subject,
+      knowledgeBaseId: context.req.valid("param").knowledgeBaseId,
+      providerId: body.providerId,
+      model: body.model,
+      ...(body.batchSize !== undefined ? { batchSize: body.batchSize } : {}),
+    });
+    return context.json({ data });
+  });
+
+  app.openapi(deleteKnowledgeSourceRoute, async (context) => {
+    const params = context.req.valid("param");
+    const subject = context.get("subject");
+    const data = await context.get("services").knowledge.deleteSource({
+      subject,
+      knowledgeBaseId: params.knowledgeBaseId,
+      sourceId: params.sourceId,
+    });
+    return context.json({ data });
+  });
+
+  app.openapi(reindexKnowledgeSourceRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const params = context.req.valid("param");
+    const data = await context.get("services").knowledge.reindexSource({
+      subject,
+      knowledgeBaseId: params.knowledgeBaseId,
+      sourceId: params.sourceId,
+      content: body.content,
+      ...(body.sizeBytes !== undefined ? { sizeBytes: body.sizeBytes } : {}),
+    });
+    return context.json({ data });
+  });
+
+  app.openapi(queryKnowledgeBaseRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const input: {
+      subject: typeof subject;
+      knowledgeBaseId: string;
+      query: string;
+      maxResults?: number;
+    } = {
+      subject,
+      knowledgeBaseId: context.req.valid("param").knowledgeBaseId,
+      query: body.query,
+    };
+    if (body.maxResults !== undefined) input.maxResults = body.maxResults;
+
+    const data = await context.get("services").knowledge.query(input);
+    return context.json({ data });
+  });
+
+  app.openapi(queryTieredKnowledgeRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
     const data = await context.get("services").knowledge.queryTiered({
       subject,
       knowledgeBaseIds: body.knowledgeBaseIds,
@@ -218,9 +202,9 @@ export function registerKnowledgeRoutes(app: RomeoApi): void {
     return context.json({ data });
   });
 
-  app.post("/api/v1/admin/rag/replay", async (context) => {
+  app.openapi(replayTieredKnowledgeRoute, async (context) => {
     const subject = context.get("subject");
-    const body = replayTieredKnowledgeSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").knowledge.replayTiered({
       subject,
       cases: cleanReplayCases(body.cases),
@@ -228,11 +212,9 @@ export function registerKnowledgeRoutes(app: RomeoApi): void {
     return context.json({ data });
   });
 
-  app.post("/api/v1/admin/rag/replay/compare", async (context) => {
+  app.openapi(compareTieredKnowledgeReplayRoute, async (context) => {
     const subject = context.get("subject");
-    const body = compareTieredKnowledgeReplaySchema.parse(
-      await context.req.json(),
-    );
+    const body = context.req.valid("json");
     const data = await context.get("services").knowledge.compareTieredReplay({
       subject,
       baselineCases: cleanReplayCases(body.baseline),

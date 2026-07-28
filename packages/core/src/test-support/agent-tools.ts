@@ -37,9 +37,9 @@ export async function enableAgentToolBinding(
   repository: InMemoryRomeoRepository,
   toolId: string,
 ): Promise<void> {
-  const binding = (await repository.listAgentToolBindings("agent_default")).find(
-    (candidate) => candidate.toolId === toolId,
-  );
+  const binding = (
+    await repository.listAgentToolBindings("agent_default")
+  ).find((candidate) => candidate.toolId === toolId);
   if (binding === undefined) throw new Error(`Missing ${toolId} binding`);
   await repository.upsertAgentToolBinding({
     ...binding,

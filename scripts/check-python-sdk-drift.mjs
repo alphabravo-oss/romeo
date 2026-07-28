@@ -25,6 +25,7 @@ try {
     "exec",
     "tsx",
     "../../scripts/export-openapi.ts",
+    "--include-openwebui",
     "--output",
     openApiFile,
   ]);

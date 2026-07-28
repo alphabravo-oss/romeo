@@ -1,0 +1,45 @@
+extends: []
+
+rules:
+  romeo-operation-id:
+    description: Every HTTP operation has a stable operationId.
+    given: $.paths.*[get,post,put,patch,delete]
+    severity: error
+    then:
+      field: operationId
+      function: truthy
+  romeo-operation-tags:
+    description: Every HTTP operation belongs to a domain tag.
+    given: $.paths.*[get,post,put,patch,delete]
+    severity: error
+    then:
+      field: tags
+      function: truthy
+  romeo-operation-security:
+    description: Every HTTP operation explicitly declares its security posture.
+    given: $.paths.*[get,post,put,patch,delete]
+    severity: error
+    then:
+      field: security
+      function: defined
+  romeo-operation-summary:
+    description: Every HTTP operation has a concise summary.
+    given: $.paths.*[get,post,put,patch,delete]
+    severity: error
+    then:
+      field: summary
+      function: truthy
+  romeo-operation-responses:
+    description: Every HTTP operation declares responses.
+    given: $.paths.*[get,post,put,patch,delete]
+    severity: error
+    then:
+      field: responses
+      function: truthy
+  romeo-security-schemes:
+    description: The API declares reusable authentication schemes.
+    given: $.components
+    severity: error
+    then:
+      field: securitySchemes
+      function: truthy

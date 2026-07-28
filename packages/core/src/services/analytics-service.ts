@@ -12,6 +12,10 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import type { JobOperationalSummary } from "./job-service";
 import type { ProviderOperationalSummary } from "./provider-operational-summary";
+import { overallStatus, summarizeJobs } from "./analytics-status";
+import { countToolCall, emptyToolSummary } from "./analytics-tool-summary";
+
+export { formatAdminAnalyticsSummaryCsv } from "./analytics-csv";
 
 export type AdminAnalyticsStatus =
   | "critical"
@@ -255,104 +259,6 @@ export class AnalyticsService {
   }
 }
 
-export function formatAdminAnalyticsSummaryCsv(
-  summary: AdminAnalyticsSummary,
-): string {
-  const rows: string[][] = [
-    ["category", "dimension", "id", "metric", "value"],
-    ["overall", "org", summary.orgId, "status", summary.status],
-    ["eval", "org", summary.orgId, "status", summary.evals.status],
-    [
-      "eval",
-      "org",
-      summary.orgId,
-      "suite_count",
-      String(summary.evals.suiteCount),
-    ],
-    [
-      "eval",
-      "org",
-      summary.orgId,
-      "run_count",
-      String(summary.evals.generatedRunCount),
-    ],
-    [
-      "usage",
-      "org",
-      summary.orgId,
-      "estimated_cost_usd",
-      String(summary.usage.estimatedCostUsd),
-    ],
-    [
-      "provider",
-      "org",
-      summary.orgId,
-      "critical_alert_count",
-      String(summary.providers.criticalAlertCount),
-    ],
-    [
-      "job",
-      "org",
-      summary.orgId,
-      "critical_alert_count",
-      String(summary.jobs.criticalAlertCount),
-    ],
-    [
-      "tool",
-      "org",
-      summary.orgId,
-      "failure_count",
-      String(summary.tools.failureCount),
-    ],
-  ];
-
-  for (const suite of summary.evals.suites) {
-    rows.push([
-      "eval",
-      "suite",
-      suite.suiteId,
-      "latest_status",
-      suite.latestStatus,
-    ]);
-    if (suite.latestScore !== undefined) {
-      rows.push([
-        "eval",
-        "suite",
-        suite.suiteId,
-        "latest_score",
-        String(suite.latestScore),
-      ]);
-    }
-  }
-  for (const metric of summary.usage.totals) {
-    rows.push([
-      "usage",
-      "metric",
-      `${metric.metric}:${metric.unit}`,
-      "quantity",
-      String(metric.quantity),
-    ]);
-  }
-  for (const tool of summary.tools.byTool) {
-    rows.push([
-      "tool",
-      "tool",
-      tool.toolId,
-      "total_count",
-      String(tool.totalCount),
-    ]);
-    rows.push([
-      "tool",
-      "tool",
-      tool.toolId,
-      "failure_count",
-      String(tool.failureCount),
-    ]);
-  }
-
-  return `${rows.map(formatCsvRow).join("\n")}\n`;
-}
-
 function summarizeSuite(
   agent: Agent,
   suite: EvalSuite,
@@ -384,7 +290,9 @@ function summarizeAgent(
   runs: EvalRun[],
 ): AdminAnalyticsEvalAgentSummary {
   const latestRun = [...runs].sort(compareRunsNewestFirst)[0];
-  const suiteSummaries = suites.map((suite) => summarizeSuite(agent, suite, runs));
+  const suiteSummaries = suites.map((suite) =>
+    summarizeSuite(agent, suite, runs),
+  );
   const failedSuiteCount = suiteSummaries.filter(
     (suite) => suite.latestStatus === "failed",
   ).length;
@@ -415,7 +323,9 @@ function summarizeAgent(
   };
 }
 
-function summarizeEvalModels(runs: EvalRun[]): AdminAnalyticsEvalModelSummary[] {
+function summarizeEvalModels(
+  runs: EvalRun[],
+): AdminAnalyticsEvalModelSummary[] {
   const byModel = new Map<string, EvalRun[]>();
   for (const run of runs) {
     byModel.set(run.modelId, [...(byModel.get(run.modelId) ?? []), run]);
@@ -494,10 +404,7 @@ function summarizeProviders(
 }
 
 function summarizeTools(calls: ToolCallRecord[]): AdminAnalyticsToolSummary {
-  const byTool = new Map<
-    string,
-    AdminAnalyticsToolSummary["byTool"][number]
-  >();
+  const byTool = new Map<string, AdminAnalyticsToolSummary["byTool"][number]>();
   const totals = emptyToolSummary();
   for (const call of calls) {
     countToolCall(totals, call);
@@ -524,44 +431,6 @@ function summarizeTools(calls: ToolCallRecord[]): AdminAnalyticsToolSummary {
   };
 }
 
-function summarizeJobs(summary: JobOperationalSummary): AdminAnalyticsJobSummary {
-  return {
-    alertCount: summary.alerts.length,
-    completed: summary.totals.completed,
-    criticalAlertCount: summary.alerts.filter(
-      (alert) => alert.severity === "critical",
-    ).length,
-    deadLettered: summary.totals.deadLettered,
-    failed: summary.totals.failed,
-    queued: summary.totals.queued,
-    running: summary.totals.running,
-    status: summary.status,
-    total: summary.totals.total,
-  };
-}
-
-function overallStatus(
-  evals: AdminAnalyticsEvalSummary,
-  providers: AdminAnalyticsProviderSummary,
-  jobs: AdminAnalyticsJobSummary,
-): Exclude<AdminAnalyticsStatus, "not_required"> {
-  if (
-    providers.status === "critical" ||
-    jobs.status === "critical" ||
-    evals.status === "failed"
-  ) {
-    return "critical";
-  }
-  if (
-    providers.status === "degraded" ||
-    jobs.status === "degraded" ||
-    evals.status === "missing"
-  ) {
-    return "degraded";
-  }
-  return "healthy";
-}
-
 function rollupUsage<T extends UsageSummaryMetric>(
   events: UsageEvent[],
   keyFor: (event: UsageEvent) => Omit<T, "estimatedCostUsd" | "quantity">,
@@ -571,13 +440,16 @@ function rollupUsage<T extends UsageSummaryMetric>(
     const keyFields = keyFor(event);
     const key = JSON.stringify(keyFields);
     const current =
-      byKey.get(key) ?? ({ ...keyFields, estimatedCostUsd: 0, quantity: 0 } as T);
+      byKey.get(key) ??
+      ({ ...keyFields, estimatedCostUsd: 0, quantity: 0 } as T);
     current.quantity += event.quantity;
     current.estimatedCostUsd += usageCost(event);
     byKey.set(key, current);
   }
   return Array.from(byKey.values()).sort((left, right) =>
-    `${left.metric}:${left.unit}`.localeCompare(`${right.metric}:${right.unit}`),
+    `${left.metric}:${left.unit}`.localeCompare(
+      `${right.metric}:${right.unit}`,
+    ),
   );
 }
 
@@ -586,32 +458,11 @@ function usageCost(event: UsageEvent): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function emptyToolSummary(): Omit<AdminAnalyticsToolSummary, "byTool"> {
-  return {
-    approvalRequiredCount: 0,
-    blockedCount: 0,
-    failureCount: 0,
-    pendingApprovalCount: 0,
-    successCount: 0,
-    totalCount: 0,
-  };
-}
-
-function countToolCall(
-  target: Omit<AdminAnalyticsToolSummary, "byTool">,
-  call: ToolCallRecord,
-): void {
-  target.totalCount += 1;
-  if (call.approvalRequired) target.approvalRequiredCount += 1;
-  if (call.status === "approval_required") target.pendingApprovalCount += 1;
-  if (call.status === "blocked") target.blockedCount += 1;
-  if (call.status === "failure") target.failureCount += 1;
-  if (call.status === "success") target.successCount += 1;
-}
-
 function compareRunsNewestFirst(left: EvalRun, right: EvalRun): number {
   const completedDelta = right.completedAt.localeCompare(left.completedAt);
-  return completedDelta === 0 ? right.id.localeCompare(left.id) : completedDelta;
+  return completedDelta === 0
+    ? right.id.localeCompare(left.id)
+    : completedDelta;
 }
 
 function compareAgentSummaries(
@@ -634,12 +485,4 @@ function compareSuiteSummaries(
   return agentDelta === 0
     ? left.suiteId.localeCompare(right.suiteId)
     : agentDelta;
-}
-
-function formatCsvRow(row: string[]): string {
-  return row.map(csvCell).join(",");
-}
-
-function csvCell(value: string): string {
-  return /[",\n\r]/u.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }

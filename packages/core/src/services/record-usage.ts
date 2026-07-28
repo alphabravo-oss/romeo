@@ -4,6 +4,7 @@ import type { UsageEvent } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { createId } from "../ids";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
+import { currentTelemetryMetadata } from "./telemetry-context";
 
 export function recordUsage(
   repository: RomeoRepository,
@@ -13,6 +14,7 @@ export function recordUsage(
     id: createId("usage"),
     createdAt: new Date().toISOString(),
     ...event,
+    metadata: { ...event.metadata, ...currentTelemetryMetadata() },
   });
 }
 

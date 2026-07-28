@@ -1,12 +1,14 @@
-import { useForm } from '@tanstack/react-form'
-import Calculator from 'lucide-react/dist/esm/icons/calculator.mjs'
-import Clock3 from 'lucide-react/dist/esm/icons/clock-3.mjs'
-import type { FormEvent } from 'react'
+import { Input, Button } from "@romeo/ui";
+import { useForm } from "@tanstack/react-form";
+import Calculator from "lucide-react/dist/esm/icons/calculator.mjs";
+import Clock3 from "lucide-react/dist/esm/icons/clock-3.mjs";
+import type { FormEvent } from "react";
 
-import type { AgentToolSummary } from '../api/types'
-import { toast } from '../lib/toast'
-import { ToolApprovalModal } from './ToolApprovalModal'
-import type { PendingToolApproval } from './useToolExecution'
+import type { AgentToolSummary } from "../features/types";
+import { useLocale, type MessageKey } from "../lib/i18n";
+import { toast } from "../lib/toast";
+import { ToolApprovalModal } from "./ToolApprovalModal";
+import type { PendingToolApproval } from "./useToolExecution";
 
 export function ToolPanel({
   isExecuting,
@@ -16,122 +18,169 @@ export function ToolPanel({
   onExecuteDateTime,
   pendingApproval,
   result,
-  tools
+  tools,
 }: {
-  isExecuting: boolean
-  onExecuteCalculator: (expression: string) => void
-  onApproveTool: () => void
-  onCancelToolApproval: () => void
-  onExecuteDateTime: () => void
-  pendingApproval: PendingToolApproval | undefined
-  result: string | undefined
-  tools: AgentToolSummary[]
+  isExecuting: boolean;
+  onExecuteCalculator: (expression: string) => void;
+  onApproveTool: () => void;
+  onCancelToolApproval: () => void;
+  onExecuteDateTime: () => void;
+  pendingApproval: PendingToolApproval | undefined;
+  result: string | undefined;
+  tools: AgentToolSummary[];
 }) {
-  const calculator = tools.find((tool) => tool.id === 'tool_calculator')
-  const dateTime = tools.find((tool) => tool.id === 'tool_datetime')
-  const canRunCalculator = isCallable(calculator)
-  const canRunDateTime = isCallable(dateTime)
+  const { t } = useLocale();
+  const calculator = tools.find((tool) => tool.id === "tool_calculator");
+  const dateTime = tools.find((tool) => tool.id === "tool_datetime");
+  const canRunCalculator = isCallable(calculator);
+  const canRunDateTime = isCallable(dateTime);
 
   const calculatorForm = useForm({
-    defaultValues: { expression: '2 + 3 * 4' },
+    defaultValues: { expression: "2 + 3 * 4" },
     onSubmit: async ({ value }) => {
       try {
-        onExecuteCalculator(value.expression)
-        toast('Calculator run', 'success')
+        onExecuteCalculator(value.expression);
+        toast(t("workspaceToolCalculatorRun"), "success");
       } catch {
-        toast('Could not run calculator', 'error')
+        toast(t("workspaceToolCalculatorFailed"), "error");
       }
-    }
-  })
+    },
+  });
 
   function handleDateTimeSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
     try {
-      onExecuteDateTime()
-      toast('Date/time run', 'success')
+      onExecuteDateTime();
+      toast(t("workspaceToolDateTimeRun"), "success");
     } catch {
-      toast('Could not run date/time', 'error')
+      toast(t("workspaceToolDateTimeFailed"), "error");
     }
   }
 
   return (
     <section className="rm-panel p-4">
-      <div className="rm-card-title">Tools</div>
+      <div className="rm-card-title">{t("tools")}</div>
       <div className="grid gap-2 text-sm">
         {tools.map((tool) => (
           <div className="rounded-md border border-border p-3" key={tool.id}>
             <div className="flex items-center justify-between gap-3">
               <div className="font-medium">{tool.name}</div>
-              <div className="text-xs text-muted">{toolState(tool)}</div>
+              <div className="text-xs text-muted">{toolState(tool, t)}</div>
             </div>
-            <div className="text-muted">{tool.riskLevel} risk</div>
+            <div className="text-muted">
+              {t(riskMessageKey(tool.riskLevel))} {t("workspaceToolRisk")}
+            </div>
           </div>
         ))}
       </div>
       <form
         className="mt-4 grid gap-2"
         onSubmit={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          void calculatorForm.handleSubmit()
+          event.preventDefault();
+          event.stopPropagation();
+          void calculatorForm.handleSubmit();
         }}
       >
         <label className="text-sm text-muted" htmlFor="calculator-expression">
-          Calculator
+          {t("workspaceToolCalculator")}
         </label>
         <calculatorForm.Field
           name="expression"
-          validators={{ onChange: ({ value }: { value: string }) => (!value?.trim() ? 'Expression is required' : undefined) }}
+          validators={{
+            onChange: ({ value }: { value: string }) =>
+              !value?.trim() ? t("workspaceToolExpressionRequired") : undefined,
+          }}
         >
           {(field) => (
             <>
-              <input
-                className="rm-input"
+              <Input
+                name="expression"
                 id="calculator-expression"
                 onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.currentTarget.value)}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
                 value={field.state.value}
               />
               {field.state.meta.errors.length ? (
-                <div className="rm-composer-error">{field.state.meta.errors.join(', ')}</div>
+                <div className="rm-composer-error">
+                  {field.state.meta.errors.join(", ")}
+                </div>
               ) : null}
             </>
           )}
         </calculatorForm.Field>
-        <calculatorForm.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
+        <calculatorForm.Subscribe
+          selector={(state) => ({
+            canSubmit: state.canSubmit,
+            isSubmitting: state.isSubmitting,
+          })}
+        >
           {({ canSubmit, isSubmitting }) => (
-            <button
-              className="rm-button inline-flex items-center justify-center gap-2"
-              disabled={!canSubmit || isSubmitting || isExecuting || !canRunCalculator}
+            <Button
+              className="inline-flex items-center justify-center gap-2"
+              disabled={
+                !canSubmit || isSubmitting || isExecuting || !canRunCalculator
+              }
               type="submit"
             >
               <Calculator aria-hidden="true" size={16} />
-              <span>{isExecuting ? 'Running' : 'Run calculator'}</span>
-            </button>
+              <span>
+                {isExecuting
+                  ? t("agentRunning")
+                  : t("workspaceToolRunCalculator")}
+              </span>
+            </Button>
           )}
         </calculatorForm.Subscribe>
       </form>
       <form className="mt-4 grid gap-2" onSubmit={handleDateTimeSubmit}>
-        <button className="rm-button inline-flex items-center justify-center gap-2" disabled={isExecuting || !canRunDateTime} type="submit">
+        <Button
+          className="inline-flex items-center justify-center gap-2"
+          disabled={isExecuting || !canRunDateTime}
+          type="submit"
+        >
           <Clock3 aria-hidden="true" size={16} />
-          <span>{isExecuting ? 'Running' : 'Run date/time'}</span>
-        </button>
+          <span>
+            {isExecuting ? t("agentRunning") : t("workspaceToolRunDateTime")}
+          </span>
+        </Button>
       </form>
-      {result ? <div className="mt-3 rounded-md border border-border p-3 text-sm">{result}</div> : null}
+      {result ? (
+        <div className="mt-3 rounded-md border border-border p-3 text-sm">
+          {result}
+        </div>
+      ) : null}
       {pendingApproval ? (
-        <ToolApprovalModal approval={pendingApproval} isExecuting={isExecuting} onApprove={onApproveTool} onCancel={onCancelToolApproval} />
+        <ToolApprovalModal
+          approval={pendingApproval}
+          isExecuting={isExecuting}
+          onApprove={onApproveTool}
+          onCancel={onCancelToolApproval}
+        />
       ) : null}
     </section>
-  )
+  );
 }
 
 function isCallable(tool: AgentToolSummary | undefined): boolean {
-  return tool?.bound === true && tool.enabled && tool.hasAccess
+  return tool?.bound === true && tool.enabled && tool.hasAccess;
 }
 
-function toolState(tool: AgentToolSummary): string {
-  if (!tool.hasAccess) return 'No access'
-  if (!tool.bound) return 'Not bound'
-  if (!tool.enabled) return 'Disabled'
-  return tool.approvalRequired ? 'Approval required' : 'Enabled'
+function toolState(
+  tool: AgentToolSummary,
+  t: (key: MessageKey) => string,
+): string {
+  if (!tool.hasAccess) return t("workspaceToolNoAccess");
+  if (!tool.bound) return t("workspaceToolNotBound");
+  if (!tool.enabled) return t("disabled");
+  return tool.approvalRequired
+    ? t("workspaceToolApprovalRequired")
+    : t("enabled");
+}
+
+function riskMessageKey(riskLevel: AgentToolSummary["riskLevel"]): MessageKey {
+  if (riskLevel === "low") return "workspaceToolRiskLow";
+  if (riskLevel === "medium") return "workspaceToolRiskMedium";
+  return "workspaceToolRiskHigh";
 }

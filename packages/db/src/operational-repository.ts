@@ -1,6 +1,7 @@
 import type {
   ClaimBackgroundJobInput,
   RenewBackgroundJobLeaseInput,
+  UpdateBackgroundJobWithLeaseInput,
 } from "@romeo/core";
 import { and, asc, desc, eq, lt, lte, or, sql } from "drizzle-orm";
 
@@ -16,63 +17,22 @@ import {
   optionalIsoString,
   toIsoString,
 } from "./repository-mapping";
+import type {
+  AuditLogRecord,
+  AuditOutcomeRecord,
+  BackgroundJobRecord,
+  BackgroundJobStatusRecord,
+  SystemSettingRecord,
+  UsageEventRecord,
+  UsageSourceTypeRecord,
+} from "./operational-records";
+import {
+  applyWorkerLease,
+  readWorkerLease,
+  renewWorkerLease,
+} from "./operational-worker-lease";
 
-export type AuditOutcomeRecord = "failure" | "success";
-export type UsageSourceTypeRecord =
-  | "chat"
-  | "run"
-  | "storage"
-  | "tool"
-  | "voice";
-export type BackgroundJobStatusRecord =
-  | "completed"
-  | "failed"
-  | "queued"
-  | "running";
-
-export interface AuditLogRecord {
-  id: string;
-  orgId: string;
-  actorId: string;
-  action: string;
-  resourceType: string;
-  resourceId: string;
-  outcome: AuditOutcomeRecord;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-}
-
-export interface UsageEventRecord {
-  id: string;
-  orgId: string;
-  workspaceId?: string;
-  actorId: string;
-  sourceType: UsageSourceTypeRecord;
-  sourceId: string;
-  metric: string;
-  quantity: number;
-  unit: string;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-}
-
-export interface BackgroundJobRecord {
-  id: string;
-  orgId: string;
-  workspaceId?: string;
-  type: string;
-  status: BackgroundJobStatusRecord;
-  payload: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  completedAt?: string;
-}
-
-export interface SystemSettingRecord {
-  key: string;
-  value: Record<string, unknown>;
-  updatedAt: string;
-}
+export type * from "./operational-records";
 
 export class PgOperationalRepository {
   constructor(private readonly db: RomeoDatabase) {}
@@ -279,6 +239,51 @@ export class PgOperationalRepository {
       .returning();
     return row === undefined ? job : toBackgroundJobRecord(row);
   }
+
+  async updateBackgroundJobWithLease(
+    input: UpdateBackgroundJobWithLeaseInput,
+  ): Promise<BackgroundJobRecord | undefined> {
+    const [currentRow] = await this.db
+      .select()
+      .from(backgroundJobs)
+      .where(
+        and(
+          eq(backgroundJobs.id, input.job.id),
+          eq(backgroundJobs.orgId, input.job.orgId),
+          eq(backgroundJobs.status, "running"),
+        ),
+      )
+      .limit(1);
+    if (currentRow === undefined) return undefined;
+    const current = toBackgroundJobRecord(currentRow);
+    const lease = readWorkerLease(current.payload);
+    const now = input.now ?? new Date().toISOString();
+    if (
+      lease === undefined ||
+      lease.workerId !== input.workerId ||
+      Date.parse(lease.expiresAt) <= Date.parse(now)
+    )
+      return undefined;
+    const [updated] = await this.db
+      .update(backgroundJobs)
+      .set({
+        completedAt: optionalDate(input.job.completedAt),
+        payload: { ...input.job.payload, workerLease: lease },
+        status: input.job.status,
+        type: input.job.type,
+        updatedAt: new Date(input.job.updatedAt),
+      })
+      .where(
+        and(
+          eq(backgroundJobs.id, input.job.id),
+          eq(backgroundJobs.orgId, input.job.orgId),
+          eq(backgroundJobs.status, "running"),
+          eq(backgroundJobs.updatedAt, currentRow.updatedAt),
+        ),
+      )
+      .returning();
+    return updated === undefined ? undefined : toBackgroundJobRecord(updated);
+  }
 }
 
 export function toAuditLogRecord(
@@ -427,93 +432,6 @@ function claimableBackgroundJobWhere(
   );
 }
 
-interface WorkerLeasePayload {
-  attempt: number;
-  claimedAt: string;
-  expiresAt: string;
-  leaseSeconds: number;
-  renewedAt: string;
-  workerId: string;
-}
-
-function applyWorkerLease(
-  job: BackgroundJobRecord,
-  input: ClaimBackgroundJobInput,
-  now: string,
-): BackgroundJobRecord {
-  const previousLease = readWorkerLease(job.payload);
-  return {
-    ...job,
-    status: "running",
-    payload: {
-      ...job.payload,
-      workerLease: {
-        attempt: (previousLease?.attempt ?? 0) + 1,
-        claimedAt: now,
-        expiresAt: leaseExpiresAt(now, input.leaseSeconds),
-        leaseSeconds: input.leaseSeconds,
-        renewedAt: now,
-        workerId: input.workerId,
-      },
-    },
-    updatedAt: now,
-  };
-}
-
-function renewWorkerLease(
-  job: BackgroundJobRecord,
-  input: RenewBackgroundJobLeaseInput,
-  now: string,
-  lease: WorkerLeasePayload,
-): BackgroundJobRecord {
-  return {
-    ...job,
-    payload: {
-      ...job.payload,
-      workerLease: {
-        ...lease,
-        expiresAt: leaseExpiresAt(now, input.leaseSeconds),
-        leaseSeconds: input.leaseSeconds,
-        renewedAt: now,
-      },
-    },
-    updatedAt: now,
-  };
-}
-
-function readWorkerLease(
-  payload: Record<string, unknown>,
-): WorkerLeasePayload | undefined {
-  const value = payload.workerLease;
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return undefined;
-  const lease = value as Partial<WorkerLeasePayload>;
-  if (
-    typeof lease.workerId !== "string" ||
-    typeof lease.claimedAt !== "string" ||
-    typeof lease.renewedAt !== "string" ||
-    typeof lease.expiresAt !== "string" ||
-    typeof lease.leaseSeconds !== "number" ||
-    typeof lease.attempt !== "number"
-  ) {
-    return undefined;
-  }
-  return {
-    attempt: lease.attempt,
-    claimedAt: lease.claimedAt,
-    expiresAt: lease.expiresAt,
-    leaseSeconds: lease.leaseSeconds,
-    renewedAt: lease.renewedAt,
-    workerId: lease.workerId,
-  };
-}
-
-function leaseExpiresAt(now: string, leaseSeconds: number): string {
-  return new Date(
-    Date.parse(now) + Math.max(1, leaseSeconds) * 1000,
-  ).toISOString();
-}
-
 function asAuditOutcome(value: string): AuditOutcomeRecord {
   if (value === "failure" || value === "success") return value;
   return "failure";
@@ -522,6 +440,7 @@ function asAuditOutcome(value: string): AuditOutcomeRecord {
 function asUsageSourceType(value: string): UsageSourceTypeRecord {
   if (
     value === "chat" ||
+    value === "retrieval" ||
     value === "run" ||
     value === "storage" ||
     value === "tool" ||

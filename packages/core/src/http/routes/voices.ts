@@ -1,70 +1,75 @@
-import type { RomeoApi } from "../context";
 import {
-  bindAgentVoiceSchema,
-  createVoiceProfileSchema,
-  generateMessageSpeechSchema,
-  previewVoiceSchema,
-  transcribeVoiceSchema,
-} from "../schemas";
+  bindManagedModelVoiceRoute,
+  createVoiceProfileRoute,
+  deleteVoiceArtifactRoute,
+  generateMessageSpeechRoute,
+  listVoicesRoute,
+  previewVoiceRoute,
+  syncVoiceCatalogRoute,
+  transcribeVoiceRoute,
+} from "@romeo/contracts";
+
+import type { RomeoApi } from "../context";
 
 export function registerVoiceRoutes(app: RomeoApi): void {
-  app.get("/api/v1/voices", async (context) => {
+  app.openapi(listVoicesRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").voices.list(subject);
     return context.json({ data });
   });
 
-  app.post("/api/v1/voices", async (context) => {
+  app.openapi(createVoiceProfileRoute, async (context) => {
     const subject = context.get("subject");
-    const body = createVoiceProfileSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .voices.create({ subject, ...body });
     return context.json({ data }, 201);
   });
 
-  app.post("/api/v1/voices/sync", async (context) => {
+  app.openapi(syncVoiceCatalogRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").voices.syncCatalog(subject);
     return context.json({ data });
   });
 
-  app.post("/api/v1/voices/:voiceProfileId/preview", async (context) => {
+  app.openapi(previewVoiceRoute, async (context) => {
     const subject = context.get("subject");
-    const body = previewVoiceSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").voices.preview({
       subject,
-      voiceProfileId: context.req.param("voiceProfileId"),
+      voiceProfileId: context.req.valid("param").voiceProfileId,
       text: body.text,
     });
     return context.json({ data });
   });
 
-  app.post("/api/v1/agents/:agentId/voice", async (context) => {
+  app.openapi(bindManagedModelVoiceRoute, async (context) => {
     const subject = context.get("subject");
-    const body = bindAgentVoiceSchema.parse(await context.req.json());
+    const { agentId } = context.req.valid("param");
+    const body = context.req.valid("json");
     const data = await context.get("services").voices.bindAgent({
       subject,
-      agentId: context.req.param("agentId"),
+      agentId,
       voiceProfileId: body.voiceProfileId,
     });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/messages/:messageId/speech", async (context) => {
+  app.openapi(generateMessageSpeechRoute, async (context) => {
     const subject = context.get("subject");
-    const body = generateMessageSpeechSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").voices.generateMessageSpeech({
       subject,
-      messageId: context.req.param("messageId"),
+      messageId: context.req.valid("param").messageId,
       voiceProfileId: body.voiceProfileId,
     });
     return context.json({ data });
   });
 
-  app.post("/api/v1/voice/transcriptions", async (context) => {
+  app.openapi(transcribeVoiceRoute, async (context) => {
     const subject = context.get("subject");
-    const body = transcribeVoiceSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").voices.transcribe({
       subject,
       audioBase64: body.audioBase64,
@@ -92,11 +97,11 @@ export function registerVoiceRoutes(app: RomeoApi): void {
     });
   });
 
-  app.delete("/api/v1/voice-artifacts/:artifactId", async (context) => {
+  app.openapi(deleteVoiceArtifactRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").voices.deleteArtifact({
       subject,
-      artifactId: context.req.param("artifactId"),
+      artifactId: context.req.valid("param").artifactId,
     });
     return context.json({ data });
   });

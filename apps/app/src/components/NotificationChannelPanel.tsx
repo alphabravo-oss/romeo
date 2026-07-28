@@ -1,256 +1,417 @@
-import { useForm } from '@tanstack/react-form'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { Input, NativeSelect, Button } from "@romeo/ui";
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
 import {
   createNotificationChannel,
-  getNotificationPolicy,
   listNotificationChannels,
   listNotificationDeliveries,
-  updateNotificationPolicy
-} from '../api/notification-channel-client'
+  notificationChannelTypes,
+} from "../features/notifications";
 import type {
   CreateNotificationChannelInput,
   NotificationDelivery,
   NotificationDeliveryChannel,
   NotificationDeliveryChannelType,
-  NotificationPolicyReport,
-  NotificationType,
-  UpdateNotificationPolicyRequest
-} from '../api/notification-channel-types'
-import { PanelState } from '../lib/panel-state'
-import { toast } from '../lib/toast'
-import { type ColumnDef, DataTable, createColumnHelper } from './DataTable'
-import { FormDialog } from './FormDialog'
-import { PanelStats } from './PanelStats'
-import { Tabs } from './Tabs'
+} from "../features/notifications";
+import { PanelState } from "../lib/panel-state";
+import { LocalizedDateTime } from "../lib/locale-format";
+import { toast } from "../lib/toast";
+import { useLocale } from "../lib/i18n";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { FormDialog } from "./FormDialog";
+import { PanelStats } from "./PanelStats";
+import { NotificationPolicyForm } from "./NotificationPolicyForm";
+import { Tabs } from "./Tabs";
 
-const channelCol = createColumnHelper<NotificationDeliveryChannel>()
-const deliveryCol = createColumnHelper<NotificationDelivery>()
+const channelCol = createColumnHelper<NotificationDeliveryChannel>();
+const deliveryCol = createColumnHelper<NotificationDelivery>();
 
-const channelTypes = ['email', 'slack', 'webhook'] as const
-type UiNotificationChannelType = (typeof channelTypes)[number]
-
-/** Enum-driven suppression options (tolerant of future additions). */
-const notificationTypes: { value: NotificationType; label: string }[] = [
-  { value: 'chat_mention', label: 'Chat mention' }
-]
-
-const required = ({ value }: { value: string }) => (!value?.trim() ? 'Required' : undefined)
-
-/** textarea (one-per-line) <-> string[] helpers. Server trims/normalizes. */
-function linesToArray(text: string): string[] {
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-}
-
-function arrayToLines(values: string[]): string {
-  return values.join('\n')
+function notificationChannelInput(value: {
+  type: NotificationDeliveryChannelType;
+  name: string;
+  target: string;
+  platform: "android" | "ios" | "web";
+  collapseKey: string;
+  severity: "critical" | "error" | "info" | "warning";
+}): CreateNotificationChannelInput {
+  switch (value.type) {
+    case "email":
+      return { type: "email", name: value.name, config: { to: value.target } };
+    case "mobile_push":
+      return {
+        type: "mobile_push",
+        name: value.name,
+        config: {
+          tokenRef: value.target,
+          platform: value.platform,
+          ...(value.collapseKey.trim() === ""
+            ? {}
+            : { collapseKey: value.collapseKey.trim() }),
+        },
+      };
+    case "pagerduty":
+      return {
+        type: "pagerduty",
+        name: value.name,
+        config: { routingKeyRef: value.target, severity: value.severity },
+      };
+    case "slack":
+    case "teams":
+    case "webhook":
+      return {
+        type: value.type,
+        name: value.name,
+        config: { url: value.target },
+      };
+  }
 }
 
 export function NotificationChannelPanel() {
+  const { t } = useLocale();
   return (
     <section className="rm-panel p-4">
       <Tabs
         tabs={[
-          { id: 'channels', label: 'Channels', content: <ChannelsTab /> },
-          { id: 'policy', label: 'Policy', content: <NotificationPolicyForm /> }
+          { id: "channels", label: t("channels"), content: <ChannelsTab /> },
+          {
+            id: "policy",
+            label: t("notificationPolicy"),
+            content: <NotificationPolicyForm />,
+          },
         ]}
       />
     </section>
-  )
+  );
 }
 
 function ChannelsTab() {
-  const queryClient = useQueryClient()
-  const channelsQuery = useQuery({ queryKey: ['notificationChannels'], queryFn: listNotificationChannels })
-  const deliveriesQuery = useQuery({ queryKey: ['notificationDeliveries'], queryFn: listNotificationDeliveries })
-  const createMutation = useMutation({ mutationFn: createNotificationChannel })
-  const [addOpen, setAddOpen] = useState(false)
+  const { t } = useLocale();
+  const required = ({ value }: { value: string }) =>
+    !value?.trim() ? t("required") : undefined;
+  const queryClient = useQueryClient();
+  const channelsQuery = useQuery({
+    queryKey: ["notificationChannels"],
+    queryFn: listNotificationChannels,
+  });
+  const deliveriesQuery = useQuery({
+    queryKey: ["notificationDeliveries"],
+    queryFn: listNotificationDeliveries,
+  });
+  const createMutation = useMutation({ mutationFn: createNotificationChannel });
+  const [addOpen, setAddOpen] = useState(false);
 
   const form = useForm({
     defaultValues: {
-      type: 'email' as NotificationDeliveryChannelType,
-      name: '',
-      target: ''
+      type: "email" as NotificationDeliveryChannelType,
+      name: "",
+      target: "",
+      platform: "ios" as "android" | "ios" | "web",
+      collapseKey: "",
+      severity: "warning" as "critical" | "error" | "info" | "warning",
     },
     onSubmit: async ({ value }) => {
       try {
-        const input: CreateNotificationChannelInput =
-          value.type === 'email'
-            ? { type: 'email', name: value.name, config: { to: value.target } }
-            : value.type === 'slack'
-              ? { type: 'slack', name: value.name, config: { url: value.target } }
-              : { type: 'webhook', name: value.name, config: { url: value.target } }
-        await createMutation.mutateAsync(input)
-        await queryClient.invalidateQueries({ queryKey: ['notificationChannels'] })
-        toast('Channel created', 'success')
-        setAddOpen(false)
+        const input = notificationChannelInput(value);
+        await createMutation.mutateAsync(input);
+        await queryClient.invalidateQueries({
+          queryKey: ["notificationChannels"],
+        });
+        toast(t("channelCreated"), "success");
+        setAddOpen(false);
       } catch (caught) {
-        toast('Could not create channel', 'error')
-        throw caught
+        toast(t("couldNotCreateChannel"), "error");
+        throw caught;
       }
-    }
-  })
+    },
+  });
 
   const channelColumns = useMemo<ColumnDef<NotificationDeliveryChannel, any>[]>(
     () => [
-      channelCol.accessor('name', {
-        header: 'Name',
-        cell: (c) => <span className="font-medium">{c.getValue()}</span>
+      channelCol.accessor("name", {
+        header: t("name"),
+        cell: (c) => <span className="font-medium">{c.getValue()}</span>,
       }),
-      channelCol.accessor('type', {
-        header: 'Type',
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>
+      channelCol.accessor("type", {
+        header: t("type"),
+        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
       }),
-      channelCol.accessor((row) => (row.enabled ? 'enabled' : 'disabled'), {
-        id: 'enabled',
-        header: 'State',
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>
+      channelCol.accessor((row) => (row.enabled ? "enabled" : "disabled"), {
+        id: "enabled",
+        header: t("state"),
+        cell: (c) => (
+          <span className="rm-cell-muted">
+            {c.getValue() === "enabled" ? t("enabled") : t("disabled")}
+          </span>
+        ),
       }),
-      channelCol.accessor('createdAt', {
-        header: 'Created',
-        cell: (c) => <span className="rm-cell-muted">{new Date(c.getValue()).toLocaleString()}</span>
-      })
+      channelCol.accessor("createdAt", {
+        header: t("created"),
+        cell: (c) => (
+          <span className="rm-cell-muted">
+            <LocalizedDateTime value={c.getValue()} />
+          </span>
+        ),
+      }),
     ],
-    []
-  )
+    [t],
+  );
 
   const deliveryColumns = useMemo<ColumnDef<NotificationDelivery, any>[]>(
     () => [
-      deliveryCol.accessor('notificationId', {
-        header: 'Notification',
-        cell: (c) => <span className="rm-mono rm-cell-muted">{c.getValue()}</span>
+      deliveryCol.accessor("notificationId", {
+        header: t("notification"),
+        cell: (c) => (
+          <span className="rm-mono rm-cell-muted">{c.getValue()}</span>
+        ),
       }),
-      deliveryCol.accessor('channelId', {
-        header: 'Channel',
-        cell: (c) => <span className="rm-mono rm-cell-muted">{c.getValue()}</span>
+      deliveryCol.accessor("channelId", {
+        header: t("channel"),
+        cell: (c) => (
+          <span className="rm-mono rm-cell-muted">{c.getValue()}</span>
+        ),
       }),
-      deliveryCol.accessor('status', {
-        header: 'Status',
-        cell: (c) => <span className="font-medium">{c.getValue()}</span>
+      deliveryCol.accessor("status", {
+        header: t("status"),
+        cell: (c) => <span className="font-medium">{c.getValue()}</span>,
       }),
-      deliveryCol.accessor('attemptCount', {
-        header: 'Attempts',
-        cell: (c) => <span>{c.getValue()}</span>
+      deliveryCol.accessor("attemptCount", {
+        header: t("attempts"),
+        cell: (c) => <span>{c.getValue()}</span>,
       }),
-      deliveryCol.accessor((row) => row.errorCode ?? '', {
-        id: 'error',
-        header: 'Error',
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>
-      })
+      deliveryCol.accessor((row) => row.errorCode ?? "", {
+        id: "error",
+        header: t("error"),
+        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+      }),
     ],
-    []
-  )
+    [t],
+  );
 
   return (
     <div className="grid gap-2">
       <div className="rm-card-header">
-        <div className="rm-card-title">Notification channels</div>
+        <div className="rm-card-title">{t("notificationChannels")}</div>
         <div className="flex items-center gap-2">
-          <button
-            className="rm-button"
+          <Button
             disabled={channelsQuery.isFetching}
             onClick={() => void channelsQuery.refetch()}
             type="button"
           >
-            {channelsQuery.isFetching ? 'Refreshing' : 'Refresh'}
-          </button>
-          <button className="rm-button primary" onClick={() => setAddOpen(true)} type="button">
-            + Add channel
-          </button>
+            {channelsQuery.isFetching ? t("refreshing") : t("refresh")}
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => setAddOpen(true)}
+            type="button"
+          >
+            + {t("addChannel")}
+          </Button>
         </div>
       </div>
 
-      <FormDialog open={addOpen} title="New channel" onClose={() => setAddOpen(false)}>
-      <form
-        className="grid gap-2"
-        onSubmit={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          void form.handleSubmit()
-        }}
+      <FormDialog
+        open={addOpen}
+        title={t("newChannel")}
+        onClose={() => setAddOpen(false)}
       >
-        <form.Field name="type">
-          {(field) => (
-            <select
-              className="rm-input"
-              onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.currentTarget.value as UiNotificationChannelType)}
-              value={field.state.value}
-            >
-              {channelTypes.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          )}
-        </form.Field>
-        <form.Field name="name" validators={{ onChange: required }}>
-          {(field) => (
-            <>
-              <input
-                className="rm-input"
+        <form
+          className="grid gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void form.handleSubmit();
+          }}
+        >
+          <form.Field name="type">
+            {(field) => (
+              <NativeSelect
+                name="type"
+                aria-label="Type"
                 onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.currentTarget.value)}
-                placeholder="Channel name"
+                onChange={(event) =>
+                  field.handleChange(
+                    event.currentTarget
+                      .value as NotificationDeliveryChannelType,
+                  )
+                }
                 value={field.state.value}
-              />
-              {field.state.meta.errors.length ? (
-                <div className="rm-composer-error">{field.state.meta.errors.join(', ')}</div>
-              ) : null}
-            </>
-          )}
-        </form.Field>
-        <form.Subscribe selector={(state) => state.values.type}>
-          {(type) => (
-            <form.Field name="target" validators={{ onChange: required }}>
-              {(field) => (
-                <>
-                  <input
-                    className="rm-input"
-                    onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.currentTarget.value)}
-                    placeholder={type === 'email' ? 'to@example.com' : 'https://…'}
-                    value={field.state.value}
-                  />
-                  {field.state.meta.errors.length ? (
-                    <div className="rm-composer-error">{field.state.meta.errors.join(', ')}</div>
-                  ) : null}
-                </>
-              )}
-            </form.Field>
-          )}
-        </form.Subscribe>
-        <form.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
-          {({ canSubmit, isSubmitting }) => (
-            <button className="rm-button" disabled={!canSubmit || isSubmitting} type="submit">
-              {isSubmitting ? 'Creating' : 'Create channel'}
-            </button>
-          )}
-        </form.Subscribe>
-      </form>
+              >
+                {notificationChannelTypes.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
+          </form.Field>
+          <form.Field name="name" validators={{ onChange: required }}>
+            {(field) => (
+              <>
+                <Input
+                  name="name"
+                  aria-label={t("channelName")}
+                  onBlur={field.handleBlur}
+                  onChange={(event) =>
+                    field.handleChange(event.currentTarget.value)
+                  }
+                  placeholder={t("channelName")}
+                  value={field.state.value}
+                />
+                {field.state.meta.errors.length ? (
+                  <div className="rm-composer-error">
+                    {field.state.meta.errors.join(", ")}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </form.Field>
+          <form.Subscribe selector={(state) => state.values.type}>
+            {(type) => (
+              <form.Field name="target" validators={{ onChange: required }}>
+                {(field) => (
+                  <>
+                    <Input
+                      name="target"
+                      aria-label={
+                        type === "email"
+                          ? "to@example.com"
+                          : type === "mobile_push"
+                            ? "romeo-secret://device-token"
+                            : type === "pagerduty"
+                              ? "romeo-secret://routing-key"
+                              : "https://…"
+                      }
+                      onBlur={field.handleBlur}
+                      onChange={(event) =>
+                        field.handleChange(event.currentTarget.value)
+                      }
+                      placeholder={
+                        type === "email"
+                          ? "to@example.com"
+                          : type === "mobile_push"
+                            ? "romeo-secret://device-token"
+                            : type === "pagerduty"
+                              ? "romeo-secret://routing-key"
+                              : "https://…"
+                      }
+                      value={field.state.value}
+                    />
+                    {field.state.meta.errors.length ? (
+                      <div className="rm-composer-error">
+                        {field.state.meta.errors.join(", ")}
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </form.Field>
+            )}
+          </form.Subscribe>
+          <form.Subscribe selector={(state) => state.values.type}>
+            {(type) =>
+              type === "mobile_push" ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <form.Field name="platform">
+                    {(field) => (
+                      <NativeSelect
+                        name="platform"
+                        aria-label="Platform"
+                        onChange={(event) =>
+                          field.handleChange(
+                            event.currentTarget.value as
+                              | "android"
+                              | "ios"
+                              | "web",
+                          )
+                        }
+                        value={field.state.value}
+                      >
+                        <option value="android">Android</option>
+                        <option value="ios">iOS</option>
+                        <option value="web">Web</option>
+                      </NativeSelect>
+                    )}
+                  </form.Field>
+                  <form.Field name="collapseKey">
+                    {(field) => (
+                      <Input
+                        name="collapseKey"
+                        aria-label="Collapse key (optional)"
+                        onChange={(event) =>
+                          field.handleChange(event.currentTarget.value)
+                        }
+                        placeholder="Collapse key (optional)"
+                        value={field.state.value}
+                      />
+                    )}
+                  </form.Field>
+                </div>
+              ) : type === "pagerduty" ? (
+                <form.Field name="severity">
+                  {(field) => (
+                    <NativeSelect
+                      name="severity"
+                      aria-label="Severity"
+                      onChange={(event) =>
+                        field.handleChange(
+                          event.currentTarget.value as
+                            | "critical"
+                            | "error"
+                            | "info"
+                            | "warning",
+                        )
+                      }
+                      value={field.state.value}
+                    >
+                      <option value="critical">Critical</option>
+                      <option value="error">Error</option>
+                      <option value="warning">Warning</option>
+                      <option value="info">Info</option>
+                    </NativeSelect>
+                  )}
+                </form.Field>
+              ) : null
+            }
+          </form.Subscribe>
+          <form.Subscribe
+            selector={(state) => ({
+              canSubmit: state.canSubmit,
+              isSubmitting: state.isSubmitting,
+            })}
+          >
+            {({ canSubmit, isSubmitting }) => (
+              <Button disabled={!canSubmit || isSubmitting} type="submit">
+                {isSubmitting ? t("creating") : t("createChannel")}
+              </Button>
+            )}
+          </form.Subscribe>
+        </form>
       </FormDialog>
 
       <div className="mt-4">
         <PanelState
           query={channelsQuery}
-          empty="No channels yet."
+          empty={t("noChannels")}
           emptyAction={
-            <button className="rm-button primary" onClick={() => setAddOpen(true)} type="button">
-              + Add channel
-            </button>
+            <Button
+              variant="primary"
+              onClick={() => setAddOpen(true)}
+              type="button"
+            >
+              + {t("addChannel")}
+            </Button>
           }
         >
           {(rows) => (
             <div className="grid gap-4">
               <PanelStats
                 items={[
-                  { label: 'Total channels', value: rows.length },
-                  { label: 'Enabled', value: rows.filter((row) => row.enabled).length }
+                  { label: t("totalChannels"), value: rows.length },
+                  {
+                    label: t("enabled"),
+                    value: rows.filter((row) => row.enabled).length,
+                  },
                 ]}
               />
               <DataTable columns={channelColumns} data={rows} />
@@ -260,262 +421,22 @@ function ChannelsTab() {
       </div>
 
       <div className="rm-card-header mt-4">
-        <div className="rm-card-title">Deliveries</div>
-        <button
-          className="rm-button"
+        <div className="rm-card-title">{t("deliveries")}</div>
+        <Button
           disabled={deliveriesQuery.isFetching}
           onClick={() => void deliveriesQuery.refetch()}
           type="button"
         >
-          {deliveriesQuery.isFetching ? 'Refreshing' : 'Refresh'}
-        </button>
+          {deliveriesQuery.isFetching ? t("refreshing") : t("refresh")}
+        </Button>
       </div>
       <div className="mt-2">
-        <DataTable columns={deliveryColumns} data={deliveriesQuery.data ?? []} empty="No deliveries yet." />
+        <DataTable
+          columns={deliveryColumns}
+          data={deliveriesQuery.data ?? []}
+          empty={t("noDeliveries")}
+        />
       </div>
     </div>
-  )
-}
-
-function NotificationPolicyForm() {
-  const queryClient = useQueryClient()
-  const policyQuery = useQuery({ queryKey: ['notificationPolicy'], queryFn: getNotificationPolicy })
-
-  return (
-    <div className="grid gap-2">
-      <div className="rm-card-header">
-        <div className="rm-card-title">Delivery policy</div>
-        <button
-          className="rm-button"
-          disabled={policyQuery.isFetching}
-          onClick={() => void policyQuery.refetch()}
-          type="button"
-        >
-          {policyQuery.isFetching ? 'Refreshing' : 'Refresh'}
-        </button>
-      </div>
-      <PanelState query={policyQuery} empty="No policy loaded.">
-        {(report) => <PolicyEditor report={report} queryClient={queryClient} />}
-      </PanelState>
-    </div>
-  )
-}
-
-function PolicyEditor(props: {
-  report: NotificationPolicyReport
-  queryClient: ReturnType<typeof useQueryClient>
-}) {
-  const { report, queryClient } = props
-  const updateMutation = useMutation({ mutationFn: updateNotificationPolicy })
-
-  const form = useForm({
-    defaultValues: {
-      deliveryEnabled: report.policy.deliveryEnabled,
-      allowedChannelTypes: report.policy.allowedChannelTypes,
-      allowedWebhookHosts: arrayToLines(report.policy.allowedWebhookHosts),
-      allowedSlackHosts: arrayToLines(report.policy.allowedSlackHosts),
-      allowedEmailDomains: arrayToLines(report.policy.allowedEmailDomains),
-      suppressedNotificationTypes: report.policy.suppressedNotificationTypes
-    },
-    onSubmit: async ({ value }) => {
-      try {
-        const input: UpdateNotificationPolicyRequest = {
-          deliveryEnabled: value.deliveryEnabled,
-          allowedChannelTypes: value.allowedChannelTypes,
-          allowedWebhookHosts: linesToArray(value.allowedWebhookHosts),
-          allowedSlackHosts: linesToArray(value.allowedSlackHosts),
-          allowedEmailDomains: linesToArray(value.allowedEmailDomains),
-          suppressedNotificationTypes: value.suppressedNotificationTypes
-        }
-        await updateMutation.mutateAsync(input)
-        // Server normalizes (dedupe/sort/drop) — re-render from the fresh report.
-        await queryClient.invalidateQueries({ queryKey: ['notificationPolicy'] })
-        toast('Policy updated', 'success')
-      } catch (caught) {
-        toast('Could not update policy', 'error')
-        throw caught
-      }
-    }
-  })
-
-  return (
-    <div className="grid gap-4">
-      <PanelStats
-        items={[
-          { label: 'Delivery', value: report.posture.deliveryEnabled ? 'enabled' : 'disabled' },
-          {
-            label: 'Channel types',
-            value: report.posture.channelTypeRestrictionActive ? 'restricted' : 'all'
-          },
-          {
-            label: 'Host allowlists',
-            value:
-              (report.posture.webhookHostRestrictionActive ? 1 : 0) +
-              (report.posture.slackHostRestrictionActive ? 1 : 0)
-          },
-          {
-            label: 'Email restriction',
-            value: report.posture.emailDomainRestrictionActive ? 'on' : 'off'
-          },
-          { label: 'Suppressed types', value: report.posture.suppressedNotificationTypeCount }
-        ]}
-      />
-
-      <form
-        className="grid gap-4"
-        onSubmit={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          void form.handleSubmit()
-        }}
-      >
-        <form.Field name="deliveryEnabled">
-          {(field) => (
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                checked={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.currentTarget.checked)}
-                type="checkbox"
-              />
-              <span>Delivery enabled (master switch)</span>
-            </label>
-          )}
-        </form.Field>
-
-        <form.Field name="allowedChannelTypes">
-          {(field) => (
-            <div className="grid gap-1">
-              <div className="text-sm text-muted">Allowed channel types</div>
-              <div className="flex flex-wrap gap-3">
-                {channelTypes.map((type) => {
-                  const checked = field.state.value.includes(type)
-                  return (
-                    <label className="flex items-center gap-2 text-sm" key={type}>
-                      <input
-                        checked={checked}
-                        onChange={(event) => {
-                          const next = event.currentTarget.checked
-                            ? [...field.state.value, type]
-                            : field.state.value.filter((value) => value !== type)
-                          field.handleChange(next)
-                        }}
-                        type="checkbox"
-                      />
-                      <span>{type}</span>
-                    </label>
-                  )
-                })}
-              </div>
-              <div className="text-xs text-muted">Empty = no channels allowed.</div>
-            </div>
-          )}
-        </form.Field>
-
-        <form.Field name="allowedWebhookHosts">
-          {(field) => (
-            <div className="grid gap-1">
-              <label className="text-sm text-muted" htmlFor="policy-webhook-hosts">
-                Allowed webhook hosts (one per line)
-              </label>
-              <textarea
-                className="rm-input"
-                id="policy-webhook-hosts"
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.currentTarget.value)}
-                placeholder={'hooks.example.com\n*.internal.example.com'}
-                rows={3}
-                value={field.state.value}
-              />
-              <div className="text-xs text-muted">Empty = no host restriction. Wildcards like *.example.com allowed.</div>
-            </div>
-          )}
-        </form.Field>
-
-        <form.Field name="allowedSlackHosts">
-          {(field) => (
-            <div className="grid gap-1">
-              <label className="text-sm text-muted" htmlFor="policy-slack-hosts">
-                Allowed Slack hosts (one per line)
-              </label>
-              <textarea
-                className="rm-input"
-                id="policy-slack-hosts"
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.currentTarget.value)}
-                placeholder={'hooks.slack.com'}
-                rows={3}
-                value={field.state.value}
-              />
-              <div className="text-xs text-muted">Empty = no host restriction. Wildcards like *.slack.com allowed.</div>
-            </div>
-          )}
-        </form.Field>
-
-        <form.Field name="allowedEmailDomains">
-          {(field) => (
-            <div className="grid gap-1">
-              <label className="text-sm text-muted" htmlFor="policy-email-domains">
-                Allowed email domains (one per line)
-              </label>
-              <textarea
-                className="rm-input"
-                id="policy-email-domains"
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.currentTarget.value)}
-                placeholder={'example.com'}
-                rows={3}
-                value={field.state.value}
-              />
-              <div className="text-xs text-muted">Empty = no restriction. No @, /, : or leading/trailing dots.</div>
-            </div>
-          )}
-        </form.Field>
-
-        <form.Field name="suppressedNotificationTypes">
-          {(field) => (
-            <div className="grid gap-1">
-              <div className="text-sm text-muted">Suppressed notification types</div>
-              <div className="flex flex-wrap gap-3">
-                {notificationTypes.map((option) => {
-                  const checked = field.state.value.includes(option.value)
-                  return (
-                    <label className="flex items-center gap-2 text-sm" key={option.value}>
-                      <input
-                        checked={checked}
-                        onChange={(event) => {
-                          const next = event.currentTarget.checked
-                            ? [...field.state.value, option.value]
-                            : field.state.value.filter((value) => value !== option.value)
-                          field.handleChange(next)
-                        }}
-                        type="checkbox"
-                      />
-                      <span>{option.label}</span>
-                    </label>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </form.Field>
-
-        <form.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
-          {({ canSubmit, isSubmitting }) => (
-            <div className="flex items-center gap-2">
-              <button className="rm-button primary" disabled={!canSubmit || isSubmitting} type="submit">
-                {isSubmitting ? 'Saving' : 'Save policy'}
-              </button>
-              {report.updatedAt ? (
-                <span className="text-xs text-muted">
-                  Updated {new Date(report.updatedAt).toLocaleString()}
-                  {report.updatedBy ? ` by ${report.updatedBy}` : ''}
-                </span>
-              ) : null}
-            </div>
-          )}
-        </form.Subscribe>
-      </form>
-    </div>
-  )
+  );
 }

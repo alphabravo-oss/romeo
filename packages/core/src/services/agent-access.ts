@@ -24,6 +24,7 @@ export async function getAuthorizedAgent(
   assertScope(input.subject, input.scope);
   const agent = await repository.getAgent(input.agentId);
   if (!agent) throw notFound("Agent");
+  if (agent.archivedAt !== undefined) throw notFound("Agent");
 
   if (!canAccessOrg(input.subject, agent.orgId)) {
     throw new AuthorizationError(

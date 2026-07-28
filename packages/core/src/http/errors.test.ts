@@ -6,20 +6,23 @@ import type { AppBindings } from "./context";
 import { errorHandler } from "./errors";
 
 describe("errorHandler", () => {
-  it("logs the unhandled fall-through error without changing the 500 response body", async () => {
+  it("logs only metadata for an unhandled fall-through error without changing the 500 response body", async () => {
     const app = new Hono<AppBindings>();
     app.use("*", async (context, next) => {
       context.set("requestId", "test-req");
       await next();
     });
+    const sentinel = "RAW_PROMPT_PROVIDER_SECRET_SENTINEL";
     app.get("/boom", () => {
-      throw new Error("kaboom");
+      const error = new Error(`provider payload: ${sentinel}`);
+      Object.assign(error, { code: sentinel, cause: sentinel });
+      throw error;
     });
     app.onError(errorHandler);
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const response = await app.request("/boom");
+    const response = await app.request(`/boom?token=${sentinel}`);
 
     // The client contract must be untouched.
     expect(response.status).toBe(500);
@@ -36,16 +39,16 @@ describe("errorHandler", () => {
     expect(errorSpy).toHaveBeenCalledTimes(1);
     const call = errorSpy.mock.calls[0];
     expect(call).toBeDefined();
-    const payload = call?.[1] as
-      | { requestId?: unknown; method?: unknown; path?: unknown; error?: unknown }
-      | undefined;
-    expect(payload).toMatchObject({
-      requestId: "test-req",
+    const payload = call?.[1];
+    expect(payload).toEqual({
+      requestIdFingerprint: expect.stringMatching(/^[0-9a-f]{16}$/),
       method: "GET",
-      path: "/boom",
+      errorKind: "Error",
     });
-    // The Error itself (with its stack), not just a message string.
-    expect(payload?.error).toBeInstanceOf(Error);
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(sentinel);
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
+      "provider payload",
+    );
 
     errorSpy.mockRestore();
   });

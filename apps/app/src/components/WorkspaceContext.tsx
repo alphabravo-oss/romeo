@@ -9,8 +9,8 @@ import {
   useState,
 } from "react";
 
-import { getBootstrap } from "../api/client";
-import type { Workspace } from "../api/workspace-types";
+import { getBootstrap } from "../features";
+import type { Workspace } from "../features/tenancy";
 
 const STORAGE_KEY = "hm.workspaceId";
 

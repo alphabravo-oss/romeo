@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, notInArray } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import { runEvents, runs, toolCalls } from "./schema";
@@ -102,6 +102,15 @@ export class PgRunRepository {
     return row === undefined ? undefined : toRunRecord(row);
   }
 
+  async listRuns(chatId: string): Promise<RunRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(runs)
+      .where(eq(runs.chatId, chatId))
+      .orderBy(desc(runs.createdAt), asc(runs.id));
+    return rows.map(toRunRecord);
+  }
+
   async updateRun(run: RunRecord): Promise<RunRecord> {
     const [row] = await this.db
       .update(runs)
@@ -112,6 +121,27 @@ export class PgRunRepository {
       .where(eq(runs.id, run.id))
       .returning();
     return row === undefined ? run : toRunRecord(row);
+  }
+
+  async finalizeRun(input: {
+    runId: string;
+    status: "cancelled" | "completed" | "failed";
+    completedAt: string;
+  }): Promise<RunRecord | undefined> {
+    const [row] = await this.db
+      .update(runs)
+      .set({
+        completedAt: new Date(input.completedAt),
+        status: input.status,
+      })
+      .where(
+        and(
+          eq(runs.id, input.runId),
+          notInArray(runs.status, ["cancelled", "completed", "failed"]),
+        ),
+      )
+      .returning();
+    return row === undefined ? undefined : toRunRecord(row);
   }
 
   async appendRunEvents(events: RunEventRecord[]): Promise<void> {

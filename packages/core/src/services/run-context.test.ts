@@ -15,15 +15,22 @@ import { RunService } from "./run-service";
 describe("resolveRunContext model override", () => {
   it("uses the requested model when an override is supplied", async () => {
     const repository = new InMemoryRomeoRepository();
-    const service = new RunService(repository, new RunEventSequencer(), undefined, undefined, undefined, {
-      // The background streaming call is fire-and-forget from start()'s
-      // perspective (see transaction-boundaries.test.ts's "rolls back run
-      // start" test for the same pattern) -- start() resolves once the run
-      // row is persisted, before this ever runs.
-      providerFetch: async () => {
-        throw new Error("Provider should not be called for this assertion.");
+    const service = new RunService(
+      repository,
+      new RunEventSequencer(),
+      undefined,
+      undefined,
+      undefined,
+      {
+        // The background streaming call is fire-and-forget from start()'s
+        // perspective (see transaction-boundaries.test.ts's "rolls back run
+        // start" test for the same pattern) -- start() resolves once the run
+        // row is persisted, before this ever runs.
+        providerFetch: async () => {
+          throw new Error("Provider should not be called for this assertion.");
+        },
       },
-    });
+    );
 
     const run = await service.start({
       subject: modelOverrideSubject(),
@@ -43,11 +50,18 @@ describe("resolveRunContext model override", () => {
 
   it("falls back to the agent version's baseModelId when no override is supplied", async () => {
     const repository = new InMemoryRomeoRepository();
-    const service = new RunService(repository, new RunEventSequencer(), undefined, undefined, undefined, {
-      providerFetch: async () => {
-        throw new Error("Provider should not be called for this assertion.");
+    const service = new RunService(
+      repository,
+      new RunEventSequencer(),
+      undefined,
+      undefined,
+      undefined,
+      {
+        providerFetch: async () => {
+          throw new Error("Provider should not be called for this assertion.");
+        },
       },
-    });
+    );
 
     const run = await service.start({
       subject: modelOverrideSubject(),
@@ -77,8 +91,9 @@ describe("resolveRunContext model override", () => {
       name: "Cross-org provider",
       baseUrl: "https://provider.example.com/v1",
       enabled: true,
-      capabilities: (await repository.getProvider("provider_openai_compatible"))!
-        .capabilities,
+      capabilities: (await repository.getProvider(
+        "provider_openai_compatible",
+      ))!.capabilities,
     });
     const [foreignModel] = await repository.upsertModels([
       {
@@ -164,8 +179,9 @@ describe("resolveRunContext model override", () => {
       name: "Disabled provider",
       baseUrl: "https://provider.example.com/v1",
       enabled: false,
-      capabilities: (await repository.getProvider("provider_openai_compatible"))!
-        .capabilities,
+      capabilities: (await repository.getProvider(
+        "provider_openai_compatible",
+      ))!.capabilities,
     });
     const [modelOnDisabledProvider] = await repository.upsertModels([
       {

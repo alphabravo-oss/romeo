@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
+import { AlertDialog } from "@romeo/ui";
 
-import { useFocusTrap } from "../lib/use-focus-trap";
+import { useLocale } from "../lib/i18n";
 
 export type ConfirmTone = "default" | "danger";
 
@@ -30,57 +31,32 @@ export function ConfirmDialog(props: {
   onConfirm: () => void;
   onCancel: () => void;
 }): React.ReactNode {
+  const { t } = useLocale();
   const {
     open,
     title,
     body,
-    confirmLabel = "Confirm",
-    cancelLabel = "Cancel",
+    confirmLabel = t("confirm"),
+    cancelLabel = t("cancel"),
     tone = "default",
     onConfirm,
     onCancel,
   } = props;
 
-  const ref = useFocusTrap({ active: open, onEscape: onCancel });
-  if (!open) return null;
-
   return (
-    <>
-      <button
-        aria-label={cancelLabel}
-        className="rm-modal-backdrop"
-        onClick={onCancel}
-        tabIndex={-1}
-        type="button"
-      />
-      <div
-        aria-modal="true"
-        className="rm-confirm"
-        ref={ref}
-        role="dialog"
-        aria-labelledby="rm-confirm-title"
-      >
-        <div className="rm-confirm-title" id="rm-confirm-title">
-          {title}
-        </div>
-        {body !== undefined && body !== null ? (
-          <div className="rm-confirm-body">{body}</div>
-        ) : null}
-        <div className="rm-confirm-actions">
-          <button className="rm-button" onClick={onCancel} type="button">
-            {cancelLabel}
-          </button>
-          <button
-            autoFocus
-            className={`rm-button primary${tone === "danger" ? " danger" : ""}`}
-            onClick={onConfirm}
-            type="button"
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </>
+    <AlertDialog
+      actionLabel={confirmLabel}
+      actionProps={{ variant: tone === "danger" ? "danger" : "primary" }}
+      cancelLabel={cancelLabel}
+      onConfirm={onConfirm}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onCancel();
+      }}
+      open={open}
+      title={title}
+    >
+      {body ?? t("confirmDefaultBody")}
+    </AlertDialog>
   );
 }
 

@@ -1,4 +1,4 @@
-import type { NotificationRetryResult } from "@romeo/api-client";
+import type { NotificationRetryResult } from "./api-types";
 
 import type { CliIo } from "./io";
 import { writeJson } from "./io";

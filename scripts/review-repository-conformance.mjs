@@ -1,5 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
+import { ROMEO_REPOSITORY_METHOD_NAMES } from "../packages/core/src/domain/repository-method-names.ts";
+
 import {
   argValue,
   ensureParentDirectory,
@@ -8,9 +10,6 @@ import {
   repoPath,
 } from "./lib/postgres-maintenance.mjs";
 
-const inventoryPath = repoPath(
-  "packages/core/src/domain/repository-contract-inventory.ts",
-);
 const conformanceTestPath = repoPath(
   "packages/db/src/romeo-repository.test.ts",
 );
@@ -55,7 +54,7 @@ if (output !== undefined)
   console.log(`Wrote repository conformance coverage evidence to ${output}`);
 
 function reviewConformanceCoverage() {
-  const methods = extractMethodInventory(readFileSync(inventoryPath, "utf8"));
+  const methods = [...ROMEO_REPOSITORY_METHOD_NAMES];
   const conformanceSource = conformanceSection(
     readFileSync(conformanceTestPath, "utf8"),
   );
@@ -77,14 +76,6 @@ function reviewConformanceCoverage() {
     uncoveredMethods,
     note: "Coverage is based on direct method references inside the shared RomeoRepository conformance test block. It is a planning gate, not a substitute for behavioral assertions.",
   };
-}
-
-function extractMethodInventory(source) {
-  const match = source.match(
-    /ROMEO_REPOSITORY_METHOD_NAMES\s*=\s*\[([\s\S]*?)\]\s*as const/u,
-  );
-  if (match === null) throw new Error("Repository method inventory not found.");
-  return [...match[1].matchAll(/"([^"]+)"/gu)].map((method) => method[1]);
 }
 
 function conformanceSection(source) {

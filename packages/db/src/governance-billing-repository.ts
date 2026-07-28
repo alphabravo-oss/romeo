@@ -8,7 +8,14 @@ import {
   toIsoString,
 } from "./repository-mapping";
 
-export type QuotaMetricRecord = "run.started" | "storage.byte" | "tool.call";
+export type QuotaMetricRecord =
+  | "image.cost.micro_usd"
+  | "image.generated"
+  | "web.search.request"
+  | "web.url.fetch"
+  | "run.started"
+  | "storage.byte"
+  | "tool.call";
 export type QuotaScopeTypeRecord =
   | "agent"
   | "api_key"
@@ -27,6 +34,9 @@ export type BillingPlanSourceRecord = "external" | "manual";
 export interface RetentionPolicyRecord {
   orgId: string;
   auditLogRetentionDays: number;
+  fileRetentionDays: number | null;
+  workspaceFileRetentionDays: Record<string, number | null>;
+  userFileRetentionDays: Record<string, number | null>;
   updatedBy: string;
   updatedAt: string;
 }
@@ -90,6 +100,9 @@ export class PgGovernanceBillingRepository {
         target: retentionPolicies.orgId,
         set: {
           auditLogRetentionDays: policy.auditLogRetentionDays,
+          fileRetentionDays: policy.fileRetentionDays,
+          workspaceFileRetentionDays: policy.workspaceFileRetentionDays,
+          userFileRetentionDays: policy.userFileRetentionDays,
           updatedBy: policy.updatedBy,
           updatedAt: new Date(policy.updatedAt),
         },
@@ -194,6 +207,11 @@ export function toRetentionPolicyRecord(
   return {
     orgId: row.orgId,
     auditLogRetentionDays: row.auditLogRetentionDays,
+    fileRetentionDays: row.fileRetentionDays,
+    workspaceFileRetentionDays: retentionOverrideMap(
+      row.workspaceFileRetentionDays,
+    ),
+    userFileRetentionDays: retentionOverrideMap(row.userFileRetentionDays),
     updatedBy: row.updatedBy,
     updatedAt: toIsoString(row.updatedAt),
   };
@@ -249,9 +267,27 @@ function toRetentionPolicyInsert(
   return {
     orgId: record.orgId,
     auditLogRetentionDays: record.auditLogRetentionDays,
+    fileRetentionDays: record.fileRetentionDays,
+    workspaceFileRetentionDays: record.workspaceFileRetentionDays,
+    userFileRetentionDays: record.userFileRetentionDays,
     updatedBy: record.updatedBy,
     updatedAt: new Date(record.updatedAt),
   };
+}
+
+function retentionOverrideMap(value: unknown): Record<string, number | null> {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, number | null] =>
+        entry[1] === null ||
+        (typeof entry[1] === "number" &&
+          Number.isInteger(entry[1]) &&
+          entry[1] >= 1 &&
+          entry[1] <= 3650),
+    ),
+  );
 }
 
 function toQuotaBucketInsert(
@@ -320,6 +356,10 @@ function asBillingPlanQuotaTemplate(
 
 function asQuotaMetric(value: unknown): QuotaMetricRecord {
   if (
+    value === "image.cost.micro_usd" ||
+    value === "image.generated" ||
+    value === "web.search.request" ||
+    value === "web.url.fetch" ||
     value === "run.started" ||
     value === "storage.byte" ||
     value === "tool.call"

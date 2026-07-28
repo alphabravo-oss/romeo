@@ -1,17 +1,11 @@
-import type {
-  DataConnector,
-  DataConnectorSync,
-  SyncDataConnectorInput,
-} from "@romeo/api-client";
-
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
 import { workerSignalAborted } from "./worker-control";
 
 export interface DataConnectorSyncWorkerClient {
   dataConnectors: {
-    list(workspaceId?: string): Promise<DataConnector[]>;
-    sync(input: SyncDataConnectorInput): Promise<DataConnectorSync>;
+    list(workspaceId?: string): Promise<WorkerDataConnector[]>;
+    sync(input: { connectorId: string }): Promise<unknown>;
   };
 }
 
@@ -46,7 +40,7 @@ export async function runDataConnectorSyncWorker(
           connectorSyncIsDue(connector, now),
       )
       .slice(0, input.maxConnectorsPerIteration ?? 10);
-    const syncs: DataConnectorSync[] = [];
+    const syncs: unknown[] = [];
     const errors: Array<{ connectorId: string; error: string }> = [];
 
     for (const connector of candidates) {
@@ -83,8 +77,18 @@ export async function runDataConnectorSyncWorker(
   return 0;
 }
 
-function connectorSyncIsDue(connector: DataConnector, now: string): boolean {
+function connectorSyncIsDue(
+  connector: WorkerDataConnector,
+  now: string,
+): boolean {
   return connector.nextSyncAt === undefined || connector.nextSyncAt <= now;
+}
+
+interface WorkerDataConnector {
+  id: string;
+  nextSyncAt?: string | undefined;
+  status: string;
+  type: string;
 }
 
 function sleepMs(ms: number): Promise<void> {

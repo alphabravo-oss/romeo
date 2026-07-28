@@ -1,9 +1,10 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, or } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import { baseModels, providerInstances } from "./schema";
 
 export type ProviderKind =
+  | "anthropic"
   | "ollama"
   | "openai-compatible"
   | "openai-responses-compatible";
@@ -29,6 +30,7 @@ export interface ProviderCapabilities {
   audioInput: boolean;
   structuredJson: boolean;
   reasoning: boolean;
+  imageGeneration?: boolean;
   modalities: ModelModality[];
   deployment: ProviderDeploymentConstraints;
 }
@@ -36,6 +38,11 @@ export interface ProviderCapabilities {
 export interface ModelPricing {
   inputTokenUsd: number;
   outputTokenUsd: number;
+  imageGenerationUsd?: {
+    "1024x1024": number;
+    "1024x1536": number;
+    "1536x1024": number;
+  };
 }
 
 export interface ProviderRecord {
@@ -45,6 +52,7 @@ export interface ProviderRecord {
   name: string;
   baseUrl: string;
   credentialRef?: string;
+  modelIds?: string[];
   enabled: boolean;
   capabilities: ProviderCapabilities;
 }
@@ -58,6 +66,7 @@ export interface BaseModelRecord {
   capabilities: ProviderCapabilities;
   contextWindow: number;
   pricing?: ModelPricing;
+  capabilitiesSource?: "detected" | "override";
 }
 
 export class PgProviderRepository {
@@ -89,6 +98,15 @@ export class PgProviderRepository {
     return row === undefined ? provider : toProviderRecord(row);
   }
 
+  async updateProvider(provider: ProviderRecord): Promise<ProviderRecord> {
+    const [row] = await this.db
+      .update(providerInstances)
+      .set(toProviderInsert(provider))
+      .where(eq(providerInstances.id, provider.id))
+      .returning();
+    return row === undefined ? provider : toProviderRecord(row);
+  }
+
   async listModels(orgId: string): Promise<BaseModelRecord[]> {
     const rows = await this.db
       .select()
@@ -96,6 +114,48 @@ export class PgProviderRepository {
       .where(eq(baseModels.orgId, orgId))
       .orderBy(asc(baseModels.displayName));
     return rows.map(toBaseModelRecord);
+  }
+
+  async listModelsPage(
+    orgId: string,
+    input: {
+      enabled?: boolean;
+      limit: number;
+      offset: number;
+      providerId?: string;
+      query?: string;
+    },
+  ): Promise<{ items: BaseModelRecord[]; total: number }> {
+    const query = input.query?.trim();
+    const where = and(
+      eq(baseModels.orgId, orgId),
+      input.providerId === undefined
+        ? undefined
+        : eq(baseModels.providerId, input.providerId),
+      input.enabled === undefined
+        ? undefined
+        : eq(baseModels.enabled, input.enabled),
+      query === undefined || query === ""
+        ? undefined
+        : or(
+            ilike(baseModels.name, `%${query}%`),
+            ilike(baseModels.displayName, `%${query}%`),
+          ),
+    );
+    const [rows, totals] = await Promise.all([
+      this.db
+        .select()
+        .from(baseModels)
+        .where(where)
+        .orderBy(asc(baseModels.displayName), asc(baseModels.id))
+        .limit(input.limit)
+        .offset(input.offset),
+      this.db.select({ value: count() }).from(baseModels).where(where),
+    ]);
+    return {
+      items: rows.map(toBaseModelRecord),
+      total: totals[0]?.value ?? 0,
+    };
   }
 
   async getModel(modelId: string): Promise<BaseModelRecord | undefined> {
@@ -119,6 +179,7 @@ export class PgProviderRepository {
         name: model.name,
         orgId,
         pricing: model.pricing ?? null,
+        capabilitiesSource: model.capabilitiesSource ?? "detected",
         providerId: model.providerId,
       })
       .where(eq(baseModels.id, model.id))
@@ -146,6 +207,7 @@ export class PgProviderRepository {
           target: baseModels.id,
           set: {
             capabilities: model.capabilities,
+            capabilitiesSource: model.capabilitiesSource ?? "detected",
             contextWindow: model.contextWindow,
             displayName: model.displayName,
             enabled: model.enabled,
@@ -194,6 +256,13 @@ export function toProviderRecord(
     name: row.name,
     baseUrl: row.baseUrl,
     ...(row.credentialRef === null ? {} : { credentialRef: row.credentialRef }),
+    ...(Array.isArray(row.modelIds)
+      ? {
+          modelIds: row.modelIds.filter(
+            (id): id is string => typeof id === "string",
+          ),
+        }
+      : {}),
     enabled: row.enabled,
     capabilities: asProviderCapabilities(row.capabilities),
   };
@@ -210,6 +279,8 @@ export function toBaseModelRecord(
     enabled: row.enabled,
     capabilities: asProviderCapabilities(row.capabilities),
     contextWindow: row.contextWindow,
+    capabilitiesSource:
+      row.capabilitiesSource === "override" ? "override" : "detected",
   };
   const pricing = asModelPricing(row.pricing);
   if (pricing !== undefined) model.pricing = pricing;
@@ -226,6 +297,7 @@ function toProviderInsert(
     name: record.name,
     baseUrl: record.baseUrl,
     credentialRef: record.credentialRef ?? null,
+    modelIds: record.modelIds ?? null,
     capabilities: record.capabilities,
     enabled: record.enabled,
   };
@@ -242,6 +314,7 @@ function toBaseModelInsert(
     name: record.name,
     displayName: record.displayName,
     capabilities: record.capabilities,
+    capabilitiesSource: record.capabilitiesSource ?? "detected",
     contextWindow: record.contextWindow,
     pricing: record.pricing ?? null,
     enabled: record.enabled,
@@ -260,6 +333,7 @@ function asProviderCapabilities(value: unknown): ProviderCapabilities {
     audioInput: input.audioInput === true,
     structuredJson: input.structuredJson === true,
     reasoning: input.reasoning === true,
+    imageGeneration: input.imageGeneration === true,
     modalities: asModalities(input.modalities),
     deployment: asDeploymentConstraints(deployment),
   };
@@ -312,9 +386,45 @@ function asModelPricing(value: unknown): ModelPricing | undefined {
     !Number.isFinite(input.outputTokenUsd)
   )
     return undefined;
+  const imageGenerationUsd = asImageGenerationPricing(input.imageGenerationUsd);
+  if (
+    input.imageGenerationUsd !== undefined &&
+    imageGenerationUsd === undefined
+  )
+    return undefined;
   return {
     inputTokenUsd: input.inputTokenUsd,
     outputTokenUsd: input.outputTokenUsd,
+    ...(imageGenerationUsd === undefined ? {} : { imageGenerationUsd }),
+  };
+}
+
+function asImageGenerationPricing(value: unknown):
+  | {
+      "1024x1024": number;
+      "1024x1536": number;
+      "1536x1024": number;
+    }
+  | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return undefined;
+  const input = value as Record<string, unknown>;
+  const square = input["1024x1024"];
+  const portrait = input["1024x1536"];
+  const landscape = input["1536x1024"];
+  if (
+    typeof square !== "number" ||
+    typeof portrait !== "number" ||
+    typeof landscape !== "number" ||
+    !Number.isFinite(square) ||
+    !Number.isFinite(portrait) ||
+    !Number.isFinite(landscape)
+  )
+    return undefined;
+  return {
+    "1024x1024": square,
+    "1024x1536": portrait,
+    "1536x1024": landscape,
   };
 }
 
@@ -326,6 +436,7 @@ function conservativeCapabilities(): ProviderCapabilities {
     audioInput: false,
     structuredJson: false,
     reasoning: false,
+    imageGeneration: false,
     modalities: [],
     deployment: {
       mode: "hosted-api",

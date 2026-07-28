@@ -1,5 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
-
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import type { RomeoDatabase } from "./client";
 import {
   agentKnowledgeBindings,
@@ -8,100 +7,38 @@ import {
   agentVersions,
 } from "./schema";
 import { optionalIsoString, toIsoString } from "./repository-mapping";
+import { PgManagedModelPreferenceRepository } from "./managed-model-preference-repository";
+import type {
+  AgentKnowledgeBindingRecord,
+  AgentMemoryPolicyRecord,
+  AgentParametersRecord,
+  AgentRecord,
+  AgentSafetySettingsRecord,
+  AgentToolBindingRecord,
+  AgentVersionRecord,
+} from "./agent-record-types";
 
-export interface AgentParametersRecord {
-  temperature?: number;
-  topP?: number;
-  maxTokens?: number;
-  [key: string]: unknown;
-}
+export * from "./agent-record-types";
+export {
+  toManagedModelPolicyRecord,
+  toManagedModelPreferenceRecord,
+} from "./managed-model-preference-repository";
 
-export interface AgentSafetySettingsRecord {
-  maxUserInputLength?: number;
-  blockedTerms?: string[];
-  promptInjectionGuard?: AgentPromptInjectionGuardRecord;
-}
-
-export interface AgentPromptInjectionGuardRecord {
-  mode: "block";
-  scanUserInput: boolean;
-  scanRetrievedContext: boolean;
-}
-
-export interface AgentMemoryPolicyRecord {
-  mode: "disabled" | "recent_messages";
-  maxMessages?: number;
-}
-
-export interface AgentRecord {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  name: string;
-  createdBy: string;
-  baseModelId: string;
-  systemPrompt: string;
-  parameters: AgentParametersRecord;
-  memoryPolicy: AgentMemoryPolicyRecord;
-  safetySettings: AgentSafetySettingsRecord;
-  voiceProfileId?: string;
-  publishedVersionId?: string;
-  updatedAt: string;
-}
-
-export interface AgentKnowledgeBindingRecord {
-  id: string;
-  orgId: string;
-  agentId: string;
-  knowledgeBaseId: string;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface AgentToolBindingRecord {
-  id: string;
-  orgId: string;
-  agentId: string;
-  toolId: string;
-  enabled: boolean;
-  approvalRequired: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface AgentVersionRecord {
-  id: string;
-  agentId: string;
-  orgId: string;
-  workspaceId: string;
-  version: number;
-  status: "published";
-  baseModelId: string;
-  systemPrompt: string;
-  parameters: AgentParametersRecord;
-  memoryPolicy: AgentMemoryPolicyRecord;
-  safetySettings: AgentSafetySettingsRecord;
-  voiceProfileId?: string;
-  knowledgeBaseBindings?: Array<{ knowledgeBaseId: string; enabled: boolean }>;
-  toolBindings?: Array<{
-    toolId: string;
-    enabled: boolean;
-    approvalRequired: boolean;
-  }>;
-  createdBy: string;
-  createdAt: string;
-  publishedAt: string;
-}
-
-export class PgAgentRepository {
-  constructor(private readonly db: RomeoDatabase) {}
+export class PgAgentRepository extends PgManagedModelPreferenceRepository {
+  constructor(db: RomeoDatabase) {
+    super(db);
+  }
 
   async listAgents(workspaceId: string): Promise<AgentRecord[]> {
     const rows = await this.db
       .select()
       .from(agentModels)
-      .where(eq(agentModels.workspaceId, workspaceId))
+      .where(
+        and(
+          eq(agentModels.workspaceId, workspaceId),
+          isNull(agentModels.archivedAt),
+        ),
+      )
       .orderBy(asc(agentModels.name));
     return rows.map(toAgentRecord);
   }
@@ -112,6 +49,24 @@ export class PgAgentRepository {
       .values(toAgentInsert(agent))
       .returning();
     return row === undefined ? agent : toAgentRecord(row);
+  }
+
+  async archiveAgent(
+    agentId: string,
+    archivedAt: string,
+  ): Promise<AgentRecord | undefined> {
+    const current = await this.getAgent(agentId);
+    if (!current || current.archivedAt !== undefined) return undefined;
+    const [row] = await this.db
+      .update(agentModels)
+      .set({
+        archivedAt: new Date(archivedAt),
+        slug: `${stableAgentSlug(current)}--archived-${current.id}`,
+        updatedAt: new Date(archivedAt),
+      })
+      .where(eq(agentModels.id, agentId))
+      .returning();
+    return row === undefined ? undefined : toAgentRecord(row);
   }
 
   async updateAgent(agent: AgentRecord): Promise<AgentRecord> {
@@ -259,6 +214,8 @@ export function toAgentRecord(
   const publishedVersionId = optionalIsoString(row.publishedVersionId);
   if (publishedVersionId !== undefined)
     agent.publishedVersionId = publishedVersionId;
+  const archivedAt = optionalIsoString(row.archivedAt);
+  if (archivedAt !== undefined) agent.archivedAt = archivedAt;
   return agent;
 }
 
@@ -339,6 +296,8 @@ function toAgentInsert(record: AgentRecord): typeof agentModels.$inferInsert {
     publishedVersionId: record.publishedVersionId ?? null,
     createdBy: record.createdBy,
     updatedAt: new Date(record.updatedAt),
+    archivedAt:
+      record.archivedAt === undefined ? null : new Date(record.archivedAt),
   };
 }
 
@@ -419,9 +378,7 @@ function asAgentSafetySettings(value: unknown): AgentSafetySettingsRecord {
       settings.promptInjectionGuard = {
         mode: "block",
         scanUserInput:
-          typeof guard.scanUserInput === "boolean"
-            ? guard.scanUserInput
-            : true,
+          typeof guard.scanUserInput === "boolean" ? guard.scanUserInput : true,
         scanRetrievedContext:
           typeof guard.scanRetrievedContext === "boolean"
             ? guard.scanRetrievedContext

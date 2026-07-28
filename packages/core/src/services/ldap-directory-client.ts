@@ -37,7 +37,10 @@ export const defaultLdapClientFactory: LdapClientFactory = (config) => {
       await client.bind(dn, password);
     },
     async search(baseDn, options) {
-      const search = await client.search(baseDn, toLdaptsSearchOptions(options));
+      const search = await client.search(
+        baseDn,
+        toLdaptsSearchOptions(options),
+      );
       return search.searchEntries;
     },
     async startTls() {

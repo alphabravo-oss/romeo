@@ -135,9 +135,8 @@ export function oauth2ConnectionSummary(
     requiredOrganizationCount: connection?.requiredOrganizations?.length ?? 0,
     requiredTeamCount: connection?.requiredTeams?.length ?? 0,
     scopeCount: (connection?.scopes ?? defaultScopes(providerId)).length,
-    workspaceTeamMappingCount: Object.keys(
-      connection?.workspaceTeamMap ?? {},
-    ).length,
+    workspaceTeamMappingCount: Object.keys(connection?.workspaceTeamMap ?? {})
+      .length,
     workspaceTeamPrefixConfigured:
       (connection?.workspaceTeamPrefix?.length ?? 0) > 0,
   };
@@ -343,7 +342,8 @@ function compactConnection(input: {
   if (input.requiredOrganizations !== undefined) {
     output.requiredOrganizations = input.requiredOrganizations;
   }
-  if (input.requiredTeams !== undefined) output.requiredTeams = input.requiredTeams;
+  if (input.requiredTeams !== undefined)
+    output.requiredTeams = input.requiredTeams;
   if (input.scopes !== undefined) output.scopes = input.scopes;
   if (input.workspaceTeamMap !== undefined) {
     output.workspaceTeamMap = input.workspaceTeamMap;

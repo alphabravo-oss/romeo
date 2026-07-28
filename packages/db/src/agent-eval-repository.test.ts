@@ -1,12 +1,75 @@
 import { describe, expect, it } from "vitest";
 
-import { toAgentRecord, toAgentVersionRecord } from "./agent-repository";
+import {
+  toAgentRecord,
+  toAgentVersionRecord,
+  toManagedModelPolicyRecord,
+  toManagedModelPreferenceRecord,
+} from "./agent-repository";
 import {
   toEvalCaseRecord,
   toEvalResultHumanRatingRecord,
 } from "./eval-repository";
 
 describe("agent repository mappers", () => {
+  it("maps first-class managed-model policy and preference rows", () => {
+    const createdAt = new Date("2026-07-17T00:00:00.000Z");
+    const updatedAt = new Date("2026-07-17T00:05:00.000Z");
+
+    expect(
+      toManagedModelPolicyRecord({
+        agentId: "agent_1",
+        allowCommunicationStyle: true,
+        allowCustomInstructions: true,
+        allowLanguage: false,
+        allowPersonalMemory: false,
+        allowResponseLength: true,
+        allowVoiceSelection: false,
+        createdAt,
+        orgId: "org_1",
+        updatedAt,
+      }),
+    ).toEqual({
+      agentId: "agent_1",
+      allowCommunicationStyle: true,
+      allowCustomInstructions: true,
+      allowLanguage: false,
+      allowPersonalMemory: false,
+      allowResponseLength: true,
+      allowVoiceSelection: false,
+      createdAt: createdAt.toISOString(),
+      orgId: "org_1",
+      updatedAt: updatedAt.toISOString(),
+    });
+    expect(
+      toManagedModelPreferenceRecord({
+        agentId: "agent_1",
+        communicationStyle: "concise",
+        createdAt,
+        encodedCustomInstructions: '{"alg":"none","v":1,"value":"x"}',
+        language: null,
+        orgId: "org_1",
+        personalMemoryEnabled: true,
+        principalId: "user_1",
+        principalType: "user",
+        responseLength: "short",
+        updatedAt,
+        voiceProfileId: null,
+      }),
+    ).toEqual({
+      agentId: "agent_1",
+      communicationStyle: "concise",
+      createdAt: createdAt.toISOString(),
+      encodedCustomInstructions: '{"alg":"none","v":1,"value":"x"}',
+      orgId: "org_1",
+      personalMemoryEnabled: true,
+      principalId: "user_1",
+      principalType: "user",
+      responseLength: "short",
+      updatedAt: updatedAt.toISOString(),
+    });
+  });
+
   it("maps agent rows without exposing the internal slug", () => {
     const agent = toAgentRecord({
       id: "agent_1",
@@ -25,6 +88,7 @@ describe("agent repository mappers", () => {
       },
       voiceProfileId: null,
       publishedVersionId: "agent_version_1",
+      archivedAt: null,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
       updatedAt: new Date("2026-06-27T00:05:00.000Z"),
     });

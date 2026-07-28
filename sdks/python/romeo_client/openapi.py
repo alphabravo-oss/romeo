@@ -5,67 +5,49 @@ OPERATIONS = {
         "name": "get_access_review",
         "method": "GET",
         "path": "/api/v1/access-review",
-        "summary": "List resource grants for access review"
+        "summary": "List access-review resource grants"
     },
     "get_access_review_csv": {
         "name": "get_access_review_csv",
         "method": "GET",
         "path": "/api/v1/access-review.csv",
-        "summary": "Export resource grants for access review as CSV"
+        "summary": "Export access-review grants as CSV"
     },
     "get_access_review_report": {
         "name": "get_access_review_report",
         "method": "GET",
         "path": "/api/v1/access-review/report",
-        "summary": "Export a redacted enterprise access review report"
+        "summary": "Get comprehensive access-review report"
     },
     "get_access_review_report_csv": {
         "name": "get_access_review_report_csv",
         "method": "GET",
         "path": "/api/v1/access-review/report.csv",
-        "summary": "Export a redacted enterprise access review report as CSV"
+        "summary": "Export access-review report as CSV"
     },
     "get_admin_abuse_controls": {
         "name": "get_admin_abuse_controls",
         "method": "GET",
         "path": "/api/v1/admin/abuse-controls",
-        "summary": "Get organization abuse controls and entitlement posture"
+        "summary": "Get abuse controls"
     },
     "patch_admin_abuse_controls": {
         "name": "patch_admin_abuse_controls",
         "method": "PATCH",
         "path": "/api/v1/admin/abuse-controls",
-        "summary": "Update organization suspension, entitlement, and kill-switch policy"
-    },
-    "get_admin_alert_firing_posture": {
-        "name": "get_admin_alert_firing_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/alert-firing/posture",
-        "summary": "Report sanitized live alert-firing evidence posture"
-    },
-    "get_admin_analytics_authz_posture": {
-        "name": "get_admin_analytics_authz_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/analytics/authz-posture",
-        "summary": "Read target analytics authorization evidence posture"
+        "summary": "Update abuse controls"
     },
     "get_admin_analytics_summary": {
         "name": "get_admin_analytics_summary",
         "method": "GET",
         "path": "/api/v1/admin/analytics/summary",
-        "summary": "Summarize admin quality, usage, provider, tool, and job analytics"
+        "summary": "Get admin analytics summary"
     },
     "get_admin_analytics_summary_csv": {
         "name": "get_admin_analytics_summary_csv",
         "method": "GET",
         "path": "/api/v1/admin/analytics/summary.csv",
-        "summary": "Export redacted admin analytics summary as CSV"
-    },
-    "get_admin_audit_integrity_posture": {
-        "name": "get_admin_audit_integrity_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/audit-integrity/posture",
-        "summary": "Get metadata-only audit integrity and SIEM export posture"
+        "summary": "Export admin analytics summary"
     },
     "get_admin_auth_providers_catalog": {
         "name": "get_admin_auth_providers_catalog",
@@ -77,55 +59,49 @@ OPERATIONS = {
         "name": "get_admin_auth_providers_settings",
         "method": "GET",
         "path": "/api/v1/admin/auth-providers/settings",
-        "summary": "Get sanitized global and org authentication provider settings"
+        "summary": "Get sanitized authentication provider settings"
     },
     "patch_admin_auth_providers_settings": {
         "name": "patch_admin_auth_providers_settings",
         "method": "PATCH",
         "path": "/api/v1/admin/auth-providers/settings",
-        "summary": "Update global or org authentication provider settings"
+        "summary": "Update global or organization authentication provider settings"
     },
     "post_admin_auth_providers_settings_test": {
         "name": "post_admin_auth_providers_settings_test",
         "method": "POST",
         "path": "/api/v1/admin/auth-providers/settings/test",
-        "summary": "Test an authentication provider connection without exposing secrets"
-    },
-    "get_admin_billing_operations_posture": {
-        "name": "get_admin_billing_operations_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/billing/operations-posture",
-        "summary": "Get metadata-only billing operations cadence and alert posture"
+        "summary": "Test an authentication provider without exposing secrets"
     },
     "get_admin_browser_automation_posture": {
         "name": "get_admin_browser_automation_posture",
         "method": "GET",
         "path": "/api/v1/admin/browser-automation/posture",
-        "summary": "Get sanitized browser automation worker, queue, artifact, and live-evidence posture"
+        "summary": "Get sanitized browser automation operational posture"
     },
-    "get_admin_ci_governance_posture": {
-        "name": "get_admin_ci_governance_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/ci-governance/posture",
-        "summary": "Report sanitized CI governance posture"
+    "post_admin_chats_cleanup_expired": {
+        "name": "post_admin_chats_cleanup_expired",
+        "method": "POST",
+        "path": "/api/v1/admin/chats/cleanup-expired",
+        "summary": "Physically delete expired temporary chats"
     },
     "get_admin_data_connectors_posture": {
         "name": "get_admin_data_connectors_posture",
         "method": "GET",
         "path": "/api/v1/admin/data-connectors/posture",
-        "summary": "Get sanitized data connector runtime, worker, sync, and live-evidence posture"
+        "summary": "Get posture"
     },
     "get_admin_delegated_oauth_posture": {
         "name": "get_admin_delegated_oauth_posture",
         "method": "GET",
         "path": "/api/v1/admin/delegated-oauth/posture",
-        "summary": "Get sanitized delegated OAuth provider and connection health posture"
+        "summary": "Get sanitized delegated OAuth operational posture"
     },
     "post_admin_directory_sync": {
         "name": "post_admin_directory_sync",
         "method": "POST",
         "path": "/api/v1/admin/directory-sync",
-        "summary": "Preview or apply destructive directory lifecycle sync changes with redacted output"
+        "summary": "Preview or apply directory synchronization"
     },
     "get_admin_edge_security_posture": {
         "name": "get_admin_edge_security_posture",
@@ -137,13 +113,7 @@ OPERATIONS = {
         "name": "get_admin_ga_evidence_posture",
         "method": "GET",
         "path": "/api/v1/admin/ga/evidence-posture",
-        "summary": "Report sanitized GA evidence posture from configured checklist, preflight, target-plan, and bundle files"
-    },
-    "get_admin_identity_live_posture": {
-        "name": "get_admin_identity_live_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/identity/live-posture",
-        "summary": "Read target identity live-evidence posture"
+        "summary": "Get sanitized GA evidence posture"
     },
     "get_admin_impersonation_requests": {
         "name": "get_admin_impersonation_requests",
@@ -161,25 +131,25 @@ OPERATIONS = {
         "name": "post_admin_impersonation_requests_requestid_approve",
         "method": "POST",
         "path": "/api/v1/admin/impersonation/requests/{requestId}/approve",
-        "summary": "Approve a support impersonation request and mint the session"
+        "summary": "Approve a support impersonation request"
     },
     "post_admin_impersonation_requests_requestid_reject": {
         "name": "post_admin_impersonation_requests_requestid_reject",
         "method": "POST",
         "path": "/api/v1/admin/impersonation/requests/{requestId}/reject",
-        "summary": "Reject a pending support impersonation request"
+        "summary": "Reject a support impersonation request"
     },
     "get_admin_impersonation_sessions": {
         "name": "get_admin_impersonation_sessions",
         "method": "GET",
         "path": "/api/v1/admin/impersonation/sessions",
-        "summary": "List audited support impersonation session reports"
+        "summary": "List audited support impersonation sessions"
     },
     "post_admin_impersonation_sessions": {
         "name": "post_admin_impersonation_sessions",
         "method": "POST",
         "path": "/api/v1/admin/impersonation/sessions",
-        "summary": "Create an audited short-lived support impersonation session"
+        "summary": "Create an audited support impersonation session"
     },
     "post_admin_impersonation_sessions_sessionid_revoke": {
         "name": "post_admin_impersonation_sessions_sessionid_revoke",
@@ -187,155 +157,125 @@ OPERATIONS = {
         "path": "/api/v1/admin/impersonation/sessions/{sessionId}/revoke",
         "summary": "Revoke an audited support impersonation session"
     },
-    "get_admin_kubernetes_posture": {
-        "name": "get_admin_kubernetes_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/kubernetes/posture",
-        "summary": "Report sanitized Kubernetes live-evidence posture"
-    },
-    "get_admin_migrations_drill_posture": {
-        "name": "get_admin_migrations_drill_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/migrations/drill-posture",
-        "summary": "Get metadata-only failed migration drill posture"
-    },
-    "get_admin_network_partition_posture": {
-        "name": "get_admin_network_partition_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/network/partition-posture",
-        "summary": "Get metadata-only network partition drill posture"
-    },
     "get_admin_notification_policy": {
         "name": "get_admin_notification_policy",
         "method": "GET",
         "path": "/api/v1/admin/notification-policy",
-        "summary": "Inspect organization notification delivery policy"
+        "summary": "Get policy"
     },
     "patch_admin_notification_policy": {
         "name": "patch_admin_notification_policy",
         "method": "PATCH",
         "path": "/api/v1/admin/notification-policy",
-        "summary": "Update organization notification delivery policy"
-    },
-    "get_admin_notifications_adapter_live_posture": {
-        "name": "get_admin_notifications_adapter_live_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/notifications/adapter-live-posture",
-        "summary": "Read target notification adapter live-evidence posture"
+        "summary": "Update policy"
     },
     "get_admin_organizations": {
         "name": "get_admin_organizations",
         "method": "GET",
         "path": "/api/v1/admin/organizations",
-        "summary": "List tenant organizations for global administration"
+        "summary": "List tenant organizations"
     },
     "post_admin_organizations": {
         "name": "post_admin_organizations",
         "method": "POST",
         "path": "/api/v1/admin/organizations",
-        "summary": "Provision a tenant organization with a default workspace"
+        "summary": "Provision a tenant organization"
     },
     "get_admin_organizations_orgid": {
         "name": "get_admin_organizations_orgid",
         "method": "GET",
         "path": "/api/v1/admin/organizations/{orgId}",
-        "summary": "Get tenant organization lifecycle posture"
+        "summary": "Get tenant lifecycle posture"
     },
     "patch_admin_organizations_orgid": {
         "name": "patch_admin_organizations_orgid",
         "method": "PATCH",
         "path": "/api/v1/admin/organizations/{orgId}",
-        "summary": "Update tenant organization metadata"
+        "summary": "Update tenant metadata"
     },
     "post_admin_organizations_orgid_deletion_finalization_evidence": {
         "name": "post_admin_organizations_orgid_deletion_finalization_evidence",
         "method": "POST",
         "path": "/api/v1/admin/organizations/{orgId}/deletion-finalization-evidence",
-        "summary": "Record reviewed metadata-only tenant deletion finalization evidence"
+        "summary": "Record deletion evidence"
     },
     "get_admin_organizations_orgid_deletion_finalization_preview": {
         "name": "get_admin_organizations_orgid_deletion_finalization_preview",
         "method": "GET",
         "path": "/api/v1/admin/organizations/{orgId}/deletion-finalization-preview",
-        "summary": "Preview governed tenant deletion finalization readiness and required evidence"
+        "summary": "Preview deletion finalization"
     },
     "post_admin_organizations_orgid_deletion_finalization_execute": {
         "name": "post_admin_organizations_orgid_deletion_finalization_execute",
         "method": "POST",
         "path": "/api/v1/admin/organizations/{orgId}/deletion-finalization/execute",
-        "summary": "Execute final governed tenant deletion after evidence approval"
+        "summary": "Execute final tenant deletion"
     },
     "post_admin_organizations_orgid_deletion_request": {
         "name": "post_admin_organizations_orgid_deletion_request",
         "method": "POST",
         "path": "/api/v1/admin/organizations/{orgId}/deletion-request",
-        "summary": "Request governed tenant deletion and suspend the tenant"
+        "summary": "Request governed tenant deletion"
     },
     "post_admin_organizations_orgid_deletion_request_cancel": {
         "name": "post_admin_organizations_orgid_deletion_request_cancel",
         "method": "POST",
         "path": "/api/v1/admin/organizations/{orgId}/deletion-request/cancel",
-        "summary": "Cancel a governed tenant deletion request"
+        "summary": "Cancel governed tenant deletion"
     },
     "post_admin_organizations_orgid_reactivate": {
         "name": "post_admin_organizations_orgid_reactivate",
         "method": "POST",
         "path": "/api/v1/admin/organizations/{orgId}/reactivate",
-        "summary": "Reactivate a suspended tenant organization"
+        "summary": "Reactivate a tenant"
     },
     "post_admin_organizations_orgid_suspend": {
         "name": "post_admin_organizations_orgid_suspend",
         "method": "POST",
         "path": "/api/v1/admin/organizations/{orgId}/suspend",
-        "summary": "Suspend a tenant organization through abuse controls"
+        "summary": "Suspend a tenant"
     },
     "get_admin_postgres_operational_posture": {
         "name": "get_admin_postgres_operational_posture",
         "method": "GET",
         "path": "/api/v1/admin/postgres/operational-posture",
-        "summary": "Report sanitized Postgres scale and operations posture for admins"
-    },
-    "get_admin_providers_outage_posture": {
-        "name": "get_admin_providers_outage_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/providers/outage-posture",
-        "summary": "Get metadata-only provider outage drill posture"
+        "summary": "Get sanitized Postgres operational posture"
     },
     "get_admin_rag_policy": {
         "name": "get_admin_rag_policy",
         "method": "GET",
         "path": "/api/v1/admin/rag/policy",
-        "summary": "Get org RAG policy"
+        "summary": "Get organization RAG policy"
     },
     "patch_admin_rag_policy": {
         "name": "patch_admin_rag_policy",
         "method": "PATCH",
         "path": "/api/v1/admin/rag/policy",
-        "summary": "Update org RAG policy"
+        "summary": "Update organization RAG policy"
     },
     "get_admin_rag_policy_change_request": {
         "name": "get_admin_rag_policy_change_request",
         "method": "GET",
         "path": "/api/v1/admin/rag/policy/change-request",
-        "summary": "Get the latest org RAG policy change request"
+        "summary": "Get the latest organization RAG policy change request"
     },
     "post_admin_rag_policy_change_requests": {
         "name": "post_admin_rag_policy_change_requests",
         "method": "POST",
         "path": "/api/v1/admin/rag/policy/change-requests",
-        "summary": "Create a governed org RAG policy change request"
+        "summary": "Create a governed organization RAG policy change request"
     },
     "post_admin_rag_policy_change_requests_requestid_approve": {
         "name": "post_admin_rag_policy_change_requests_requestid_approve",
         "method": "POST",
         "path": "/api/v1/admin/rag/policy/change-requests/{requestId}/approve",
-        "summary": "Approve and apply a governed org RAG policy change request"
+        "summary": "Approve and apply a governed organization RAG policy change request"
     },
     "post_admin_rag_policy_change_requests_requestid_reject": {
         "name": "post_admin_rag_policy_change_requests_requestid_reject",
         "method": "POST",
         "path": "/api/v1/admin/rag/policy/change-requests/{requestId}/reject",
-        "summary": "Reject a governed org RAG policy change request"
+        "summary": "Reject a governed organization RAG policy change request"
     },
     "get_admin_rag_posture": {
         "name": "get_admin_rag_posture",
@@ -347,13 +287,13 @@ OPERATIONS = {
         "name": "post_admin_rag_replay",
         "method": "POST",
         "path": "/api/v1/admin/rag/replay",
-        "summary": "Replay tiered retrieval cases with metadata-only metrics"
+        "summary": "Replay tiered retrieval cases"
     },
     "post_admin_rag_replay_compare": {
         "name": "post_admin_rag_replay_compare",
         "method": "POST",
         "path": "/api/v1/admin/rag/replay/compare",
-        "summary": "Compare baseline and candidate tiered retrieval replay metrics without raw corpus echo"
+        "summary": "Compare tiered retrieval replay metrics"
     },
     "get_admin_readiness": {
         "name": "get_admin_readiness",
@@ -361,41 +301,23 @@ OPERATIONS = {
         "path": "/api/v1/admin/readiness",
         "summary": "Get production readiness checks"
     },
-    "get_admin_release_readback_posture": {
-        "name": "get_admin_release_readback_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/release-readback/posture",
-        "summary": "Report sanitized release readback posture"
-    },
-    "get_admin_release_security_posture": {
-        "name": "get_admin_release_security_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/release-security/posture",
-        "summary": "Report sanitized release security posture"
-    },
-    "get_admin_secret_rotation_drill_posture": {
-        "name": "get_admin_secret_rotation_drill_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/secret-rotation/drill-posture",
-        "summary": "Get metadata-only secret rotation drill posture"
-    },
     "post_admin_secret_rotation_rewrap": {
         "name": "post_admin_secret_rotation_rewrap",
         "method": "POST",
         "path": "/api/v1/admin/secret-rotation/rewrap",
-        "summary": "Rewrap encrypted local MFA and managed-secret envelopes with the active key"
+        "summary": "Rewrap encrypted secret envelopes with the active key"
     },
     "post_admin_secret_rotation_rewrap_preview": {
         "name": "post_admin_secret_rotation_rewrap_preview",
         "method": "POST",
         "path": "/api/v1/admin/secret-rotation/rewrap/preview",
-        "summary": "Preview encrypted local MFA and managed-secret envelope rewrap readiness"
+        "summary": "Preview encrypted secret-envelope rewrap readiness"
     },
     "post_admin_secrets": {
         "name": "post_admin_secrets",
         "method": "POST",
         "path": "/api/v1/admin/secrets",
-        "summary": "Store a managed secret and return a one-time ref"
+        "summary": "Store a managed secret and return its one-time reference"
     },
     "get_admin_sso_settings": {
         "name": "get_admin_sso_settings",
@@ -419,133 +341,151 @@ OPERATIONS = {
         "name": "post_admin_sso_oidc_deprovision",
         "method": "POST",
         "path": "/api/v1/admin/sso/oidc/deprovision",
-        "summary": "Disable a user mapped from the active OIDC issuer and subject"
+        "summary": "Disable a user mapped from an OIDC issuer and subject"
     },
-    "get_admin_support_bundle_posture": {
-        "name": "get_admin_support_bundle_posture",
+    "get_admin_web_search": {
+        "name": "get_admin_web_search",
         "method": "GET",
-        "path": "/api/v1/admin/support-bundle/posture",
-        "summary": "Report sanitized support bundle posture"
+        "path": "/api/v1/admin/web-search",
+        "summary": "Read governed web-search configuration"
     },
-    "get_admin_target_quality_posture": {
-        "name": "get_admin_target_quality_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/target-quality/posture",
-        "summary": "Report sanitized target-quality evidence posture"
-    },
-    "get_admin_tenant_deletion_purge_evidence_posture": {
-        "name": "get_admin_tenant_deletion_purge_evidence_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/tenant-deletion/purge-evidence-posture",
-        "summary": "Get metadata-only tenant purge evidence posture"
-    },
-    "get_admin_tool_dispatch_posture": {
-        "name": "get_admin_tool_dispatch_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/tool-dispatch/posture",
-        "summary": "Get sanitized tool-dispatch worker, queue, payload, and live-evidence posture"
-    },
-    "get_admin_voice_provider_live_posture": {
-        "name": "get_admin_voice_provider_live_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/voice/provider-live-posture",
-        "summary": "Read target voice provider live-evidence posture"
+    "patch_admin_web_search": {
+        "name": "patch_admin_web_search",
+        "method": "PATCH",
+        "path": "/api/v1/admin/web-search",
+        "summary": "Update governed web-search configuration"
     },
     "get_agent_gallery": {
         "name": "get_agent_gallery",
         "method": "GET",
         "path": "/api/v1/agent-gallery",
-        "summary": "List discoverable published agents for a workspace"
+        "summary": "List published managed models available to the caller"
     },
     "get_agents": {
         "name": "get_agents",
         "method": "GET",
         "path": "/api/v1/agents",
-        "summary": "List agents in a workspace"
+        "summary": "List authorized managed models"
     },
     "post_agents": {
         "name": "post_agents",
         "method": "POST",
         "path": "/api/v1/agents",
-        "summary": "Create an agent"
+        "summary": "Create a managed-model draft"
     },
     "post_agents_import": {
         "name": "post_agents_import",
         "method": "POST",
         "path": "/api/v1/agents/import",
-        "summary": "Import an agent draft from a versioned JSON document"
+        "summary": "Import a portable managed-model definition"
+    },
+    "delete_agents_agentid": {
+        "name": "delete_agents_agentid",
+        "method": "DELETE",
+        "path": "/api/v1/agents/{agentId}",
+        "summary": "Archive a managed model"
     },
     "get_agents_agentid": {
         "name": "get_agents_agentid",
         "method": "GET",
         "path": "/api/v1/agents/{agentId}",
-        "summary": "Get an agent"
+        "summary": "Get an authorized managed model"
     },
     "patch_agents_agentid": {
         "name": "patch_agents_agentid",
         "method": "PATCH",
         "path": "/api/v1/agents/{agentId}",
-        "summary": "Update an agent draft"
+        "summary": "Update a managed-model draft"
     },
     "post_agents_agentid_clone": {
         "name": "post_agents_agentid_clone",
         "method": "POST",
         "path": "/api/v1/agents/{agentId}/clone",
-        "summary": "Clone an agent"
+        "summary": "Clone a managed model"
+    },
+    "get_agents_agentid_customization_policy": {
+        "name": "get_agents_agentid_customization_policy",
+        "method": "GET",
+        "path": "/api/v1/agents/{agentId}/customization-policy",
+        "summary": "Get the managed-model customization policy"
+    },
+    "patch_agents_agentid_customization_policy": {
+        "name": "patch_agents_agentid_customization_policy",
+        "method": "PATCH",
+        "path": "/api/v1/agents/{agentId}/customization-policy",
+        "summary": "Update the managed-model customization policy"
     },
     "get_agents_agentid_eval_dashboard": {
         "name": "get_agents_agentid_eval_dashboard",
         "method": "GET",
         "path": "/api/v1/agents/{agentId}/eval-dashboard",
-        "summary": "Summarize historical eval runs for an agent"
+        "summary": "Get dashboard"
     },
     "get_agents_agentid_eval_release_candidate_evidence": {
         "name": "get_agents_agentid_eval_release_candidate_evidence",
         "method": "GET",
         "path": "/api/v1/agents/{agentId}/eval-release-candidate-evidence",
-        "summary": "Generate metadata-only release-candidate eval evidence for an agent"
+        "summary": "Get release candidate evidence"
     },
     "get_agents_agentid_eval_runs": {
         "name": "get_agents_agentid_eval_runs",
         "method": "GET",
         "path": "/api/v1/agents/{agentId}/eval-runs",
-        "summary": "List eval runs for an agent"
+        "summary": "List runs"
     },
     "get_agents_agentid_eval_suites": {
         "name": "get_agents_agentid_eval_suites",
         "method": "GET",
         "path": "/api/v1/agents/{agentId}/eval-suites",
-        "summary": "List eval suites for an agent"
+        "summary": "List suites"
     },
     "get_agents_agentid_export": {
         "name": "get_agents_agentid_export",
         "method": "GET",
         "path": "/api/v1/agents/{agentId}/export",
-        "summary": "Export an agent draft as a versioned JSON document"
+        "summary": "Export a portable managed-model definition"
     },
     "get_agents_agentid_knowledge_bases": {
         "name": "get_agents_agentid_knowledge_bases",
         "method": "GET",
         "path": "/api/v1/agents/{agentId}/knowledge-bases",
-        "summary": "List knowledge bases bound to an agent"
+        "summary": "List managed-model knowledge bindings"
     },
     "patch_agents_agentid_knowledge_bases_knowledgebaseid": {
         "name": "patch_agents_agentid_knowledge_bases_knowledgebaseid",
         "method": "PATCH",
         "path": "/api/v1/agents/{agentId}/knowledge-bases/{knowledgeBaseId}",
-        "summary": "Update an agent knowledge-base binding"
+        "summary": "Enable or disable a managed-model knowledge binding"
+    },
+    "delete_agents_agentid_preferences": {
+        "name": "delete_agents_agentid_preferences",
+        "method": "DELETE",
+        "path": "/api/v1/agents/{agentId}/preferences",
+        "summary": "Clear current-principal managed-model preferences"
+    },
+    "get_agents_agentid_preferences": {
+        "name": "get_agents_agentid_preferences",
+        "method": "GET",
+        "path": "/api/v1/agents/{agentId}/preferences",
+        "summary": "Get current-principal managed-model preferences"
+    },
+    "patch_agents_agentid_preferences": {
+        "name": "patch_agents_agentid_preferences",
+        "method": "PATCH",
+        "path": "/api/v1/agents/{agentId}/preferences",
+        "summary": "Update exposed managed-model preferences"
     },
     "get_agents_agentid_shares": {
         "name": "get_agents_agentid_shares",
         "method": "GET",
         "path": "/api/v1/agents/{agentId}/shares",
-        "summary": "List agent resource shares"
+        "summary": "List managed-model access grants"
     },
     "post_agents_agentid_shares": {
         "name": "post_agents_agentid_shares",
         "method": "POST",
         "path": "/api/v1/agents/{agentId}/shares",
-        "summary": "Share an agent through resource grants"
+        "summary": "Grant managed-model access"
     },
     "get_agents_agentid_tools": {
         "name": "get_agents_agentid_tools",
@@ -563,31 +503,31 @@ OPERATIONS = {
         "name": "get_agents_agentid_versions",
         "method": "GET",
         "path": "/api/v1/agents/{agentId}/versions",
-        "summary": "List published agent versions"
+        "summary": "List published managed-model versions"
     },
     "post_agents_agentid_versions": {
         "name": "post_agents_agentid_versions",
         "method": "POST",
         "path": "/api/v1/agents/{agentId}/versions",
-        "summary": "Publish the current agent draft"
+        "summary": "Publish a managed-model version"
     },
     "get_agents_agentid_versions_versionid_diff": {
         "name": "get_agents_agentid_versions_versionid_diff",
         "method": "GET",
         "path": "/api/v1/agents/{agentId}/versions/{versionId}/diff",
-        "summary": "Diff two published agent versions"
+        "summary": "Diff two published managed-model versions"
     },
     "post_agents_agentid_versions_versionid_rollback": {
         "name": "post_agents_agentid_versions_versionid_rollback",
         "method": "POST",
         "path": "/api/v1/agents/{agentId}/versions/{versionId}/rollback",
-        "summary": "Roll an agent back to a published version"
+        "summary": "Restore a published version into the managed-model draft"
     },
     "post_agents_agentid_voice": {
         "name": "post_agents_agentid_voice",
         "method": "POST",
         "path": "/api/v1/agents/{agentId}/voice",
-        "summary": "Bind a default voice to an agent draft"
+        "summary": "Bind a default voice to a managed-model draft"
     },
     "get_api_keys": {
         "name": "get_api_keys",
@@ -605,7 +545,7 @@ OPERATIONS = {
         "name": "post_api_keys_bulk_revoke",
         "method": "POST",
         "path": "/api/v1/api-keys/bulk-revoke",
-        "summary": "Revoke multiple API keys"
+        "summary": "Bulk revoke API keys"
     },
     "post_api_keys_apikeyid_revoke": {
         "name": "post_api_keys_apikeyid_revoke",
@@ -613,71 +553,113 @@ OPERATIONS = {
         "path": "/api/v1/api-keys/{apiKeyId}/revoke",
         "summary": "Revoke an API key"
     },
+    "post_api_chat_completions": {
+        "name": "post_api_chat_completions",
+        "method": "POST",
+        "path": "/api/chat/completions",
+        "summary": "Create a chat completion through the legacy API alias"
+    },
+    "get_api_config": {
+        "name": "get_api_config",
+        "method": "GET",
+        "path": "/api/config",
+        "summary": "Get configuration through the legacy OpenWebUI alias"
+    },
+    "post_api_embeddings": {
+        "name": "post_api_embeddings",
+        "method": "POST",
+        "path": "/api/embeddings",
+        "summary": "Create embeddings through the legacy API alias"
+    },
+    "get_api_models": {
+        "name": "get_api_models",
+        "method": "GET",
+        "path": "/api/models",
+        "summary": "List OpenAI-compatible models through the legacy API alias"
+    },
+    "get_api_models_model": {
+        "name": "get_api_models_model",
+        "method": "GET",
+        "path": "/api/models/{model}",
+        "summary": "Retrieve an OpenAI-compatible model through the legacy API alias"
+    },
+    "get_api_version": {
+        "name": "get_api_version",
+        "method": "GET",
+        "path": "/api/version",
+        "summary": "Get version through the legacy OpenWebUI alias"
+    },
+    "get_api_version_updates": {
+        "name": "get_api_version_updates",
+        "method": "GET",
+        "path": "/api/version/updates",
+        "summary": "Get version updates through the legacy OpenWebUI alias"
+    },
     "get_audit_logs": {
         "name": "get_audit_logs",
         "method": "GET",
         "path": "/api/v1/audit-logs",
-        "summary": "List audit logs for the caller organization"
+        "summary": "List audit logs"
     },
     "get_audit_logs_csv": {
         "name": "get_audit_logs_csv",
         "method": "GET",
         "path": "/api/v1/audit-logs.csv",
-        "summary": "Export filtered audit logs as CSV"
+        "summary": "Export audit logs as CSV"
     },
     "post_auth_ldap_login": {
         "name": "post_auth_ldap_login",
         "method": "POST",
         "path": "/api/v1/auth/ldap/login",
-        "summary": "Authenticate with LDAP or Active Directory bind/search"
+        "summary": "Authenticate with LDAP or Active Directory"
     },
     "post_auth_local_login": {
         "name": "post_auth_local_login",
         "method": "POST",
         "path": "/api/v1/auth/local/login",
-        "summary": "Authenticate with local email/password and optional local MFA code"
+        "summary": "Authenticate with local credentials"
     },
     "post_auth_local_mfa_factors_factorid_disable": {
         "name": "post_auth_local_mfa_factors_factorid_disable",
         "method": "POST",
         "path": "/api/v1/auth/local/mfa/factors/{factorId}/disable",
-        "summary": "Disable a current user local MFA factor"
+        "summary": "Disable a current-user MFA factor"
     },
     "post_auth_local_mfa_recovery_codes_generate": {
         "name": "post_auth_local_mfa_recovery_codes_generate",
         "method": "POST",
         "path": "/api/v1/auth/local/mfa/recovery-codes/generate",
-        "summary": "Generate one-time local MFA recovery codes"
+        "summary": "Generate one-time MFA recovery codes"
     },
     "post_auth_local_mfa_totp_confirm": {
         "name": "post_auth_local_mfa_totp_confirm",
         "method": "POST",
         "path": "/api/v1/auth/local/mfa/totp/confirm",
-        "summary": "Confirm current user TOTP MFA enrollment"
+        "summary": "Confirm TOTP enrollment"
     },
     "post_auth_local_mfa_totp_enroll": {
         "name": "post_auth_local_mfa_totp_enroll",
         "method": "POST",
         "path": "/api/v1/auth/local/mfa/totp/enroll",
-        "summary": "Start current user TOTP MFA enrollment"
+        "summary": "Start TOTP enrollment"
     },
     "post_auth_local_mfa_verify": {
         "name": "post_auth_local_mfa_verify",
         "method": "POST",
         "path": "/api/v1/auth/local/mfa/verify",
-        "summary": "Complete local login after MFA challenge"
+        "summary": "Complete a local MFA challenge"
     },
     "post_auth_local_password": {
         "name": "post_auth_local_password",
         "method": "POST",
         "path": "/api/v1/auth/local/password",
-        "summary": "Set or change the current user local password"
+        "summary": "Set or change the current-user password"
     },
     "get_auth_local_status": {
         "name": "get_auth_local_status",
         "method": "GET",
         "path": "/api/v1/auth/local/status",
-        "summary": "Inspect current user local password and MFA status"
+        "summary": "Get current-user password and MFA status"
     },
     "get_auth_oauth2_callback": {
         "name": "get_auth_oauth2_callback",
@@ -721,83 +703,89 @@ OPERATIONS = {
         "path": "/api/v1/auth/saml/start",
         "summary": "Start browser SAML login"
     },
+    "get_auths": {
+        "name": "get_auths",
+        "method": "GET",
+        "path": "/api/v1/auths/",
+        "summary": "Get the OpenWebUI-compatible session user"
+    },
     "get_billing_entitlements": {
         "name": "get_billing_entitlements",
         "method": "GET",
         "path": "/api/v1/billing/entitlements",
-        "summary": "Get billing entitlement and quota reconciliation status"
+        "summary": "Get entitlements"
     },
     "post_billing_entitlements_reconcile": {
         "name": "post_billing_entitlements_reconcile",
         "method": "POST",
         "path": "/api/v1/billing/entitlements/reconcile",
-        "summary": "Reconcile org quotas to the current billing entitlement templates"
+        "summary": "Reconcile entitlements"
     },
     "post_billing_external_events": {
         "name": "post_billing_external_events",
         "method": "POST",
         "path": "/api/v1/billing/external-events",
-        "summary": "Sync a sanitized external billing lifecycle event"
+        "summary": "Sync external event"
     },
     "get_billing_lifecycle": {
         "name": "get_billing_lifecycle",
         "method": "GET",
         "path": "/api/v1/billing/lifecycle",
-        "summary": "Get billing lifecycle deadline posture"
+        "summary": "Get lifecycle"
     },
     "post_billing_lifecycle_enforce": {
         "name": "post_billing_lifecycle_enforce",
         "method": "POST",
         "path": "/api/v1/billing/lifecycle/enforce",
-        "summary": "Enforce due billing lifecycle status transitions"
+        "summary": "Enforce lifecycle"
     },
     "get_billing_plan": {
         "name": "get_billing_plan",
         "method": "GET",
         "path": "/api/v1/billing/plan",
-        "summary": "Get the current organization billing plan"
+        "summary": "Get plan"
     },
     "post_billing_plan": {
         "name": "post_billing_plan",
         "method": "POST",
         "path": "/api/v1/billing/plan",
-        "summary": "Apply a billing plan and org quota templates"
+        "summary": "Apply plan"
     },
     "post_billing_webhooks_generic": {
         "name": "post_billing_webhooks_generic",
         "method": "POST",
         "path": "/api/v1/billing/webhooks/generic",
-        "summary": "Receive a signed generic billing webhook"
+        "summary": "Receive generic webhook"
     },
     "post_billing_webhooks_stripe": {
         "name": "post_billing_webhooks_stripe",
         "method": "POST",
         "path": "/api/v1/billing/webhooks/stripe",
-        "summary": "Receive a signed Stripe billing webhook"
+        "summary": "Receive stripe webhook"
     },
     "get_browser_automation_artifacts_artifactid": {
         "name": "get_browser_automation_artifacts_artifactid",
         "method": "GET",
         "path": "/api/v1/browser-automation-artifacts/{artifactId}",
-        "summary": "Read a registered browser automation screenshot or trace artifact"
+        "summary": "Read an authorized browser automation artifact"
     },
     "post_browser_automation_tasks_claim": {
         "name": "post_browser_automation_tasks_claim",
         "method": "POST",
         "path": "/api/v1/browser-automation-tasks/claim",
-        "summary": "Claim an approved browser automation workflow task"
+        "summary": "Claim an approved browser automation task"
     },
     "post_browser_automation_tasks_expire": {
         "name": "post_browser_automation_tasks_expire",
         "method": "POST",
         "path": "/api/v1/browser-automation-tasks/expire",
-        "summary": "Expire stale browser automation workflow tasks"
+        "summary": "Expire stale browser automation tasks"
     },
     "post_browser_automation_tasks_jobid_artifacts_uploads": {
         "name": "post_browser_automation_tasks_jobid_artifacts_uploads",
         "method": "POST",
         "path": "/api/v1/browser-automation-tasks/{jobId}/artifacts/uploads",
-        "summary": "Register a screenshot or trace artifact upload for an active browser automation task"
+        "summary": "Register a browser automation artifact upload"
     },
     "post_browser_automation_tasks_jobid_complete": {
         "name": "post_browser_automation_tasks_jobid_complete",
@@ -817,6 +805,150 @@ OPERATIONS = {
         "path": "/api/v1/browser-automation-tasks/{jobId}/renew-lease",
         "summary": "Renew an active browser automation task lease"
     },
+    "get_channels": {
+        "name": "get_channels",
+        "method": "GET",
+        "path": "/api/v1/channels/",
+        "summary": "List OpenWebUI-compatible channels"
+    },
+    "post_channels_create": {
+        "name": "post_channels_create",
+        "method": "POST",
+        "path": "/api/v1/channels/create",
+        "summary": "Create an OpenWebUI-compatible channel"
+    },
+    "get_channels_list": {
+        "name": "get_channels_list",
+        "method": "GET",
+        "path": "/api/v1/channels/list",
+        "summary": "List OpenWebUI-compatible channels alias"
+    },
+    "get_channels_users_userid": {
+        "name": "get_channels_users_userid",
+        "method": "GET",
+        "path": "/api/v1/channels/users/{userId}",
+        "summary": "Get or create an OpenWebUI-compatible DM channel"
+    },
+    "get_channels_channelid": {
+        "name": "get_channels_channelid",
+        "method": "GET",
+        "path": "/api/v1/channels/{channelId}",
+        "summary": "Get an OpenWebUI-compatible channel"
+    },
+    "delete_channels_channelid_delete": {
+        "name": "delete_channels_channelid_delete",
+        "method": "DELETE",
+        "path": "/api/v1/channels/{channelId}/delete",
+        "summary": "Delete an OpenWebUI-compatible channel"
+    },
+    "get_channels_channelid_events": {
+        "name": "get_channels_channelid_events",
+        "method": "GET",
+        "path": "/api/v1/channels/{channelId}/events",
+        "summary": "Stream OpenWebUI-compatible channel events"
+    },
+    "get_channels_channelid_members": {
+        "name": "get_channels_channelid_members",
+        "method": "GET",
+        "path": "/api/v1/channels/{channelId}/members",
+        "summary": "List OpenWebUI-compatible channel members"
+    },
+    "post_channels_channelid_members_active": {
+        "name": "post_channels_channelid_members_active",
+        "method": "POST",
+        "path": "/api/v1/channels/{channelId}/members/active",
+        "summary": "Update current OpenWebUI-compatible channel active state"
+    },
+    "get_channels_channelid_messages": {
+        "name": "get_channels_channelid_messages",
+        "method": "GET",
+        "path": "/api/v1/channels/{channelId}/messages",
+        "summary": "List OpenWebUI-compatible channel messages"
+    },
+    "get_channels_channelid_messages_pinned": {
+        "name": "get_channels_channelid_messages_pinned",
+        "method": "GET",
+        "path": "/api/v1/channels/{channelId}/messages/pinned",
+        "summary": "List pinned OpenWebUI-compatible channel messages"
+    },
+    "post_channels_channelid_messages_post": {
+        "name": "post_channels_channelid_messages_post",
+        "method": "POST",
+        "path": "/api/v1/channels/{channelId}/messages/post",
+        "summary": "Post an OpenWebUI-compatible channel message"
+    },
+    "post_channels_channelid_messages_read": {
+        "name": "post_channels_channelid_messages_read",
+        "method": "POST",
+        "path": "/api/v1/channels/{channelId}/messages/read",
+        "summary": "Mark an OpenWebUI-compatible channel as read"
+    },
+    "get_channels_channelid_messages_messageid": {
+        "name": "get_channels_channelid_messages_messageid",
+        "method": "GET",
+        "path": "/api/v1/channels/{channelId}/messages/{messageId}",
+        "summary": "Get an OpenWebUI-compatible channel message"
+    },
+    "get_channels_channelid_messages_messageid_data": {
+        "name": "get_channels_channelid_messages_messageid_data",
+        "method": "GET",
+        "path": "/api/v1/channels/{channelId}/messages/{messageId}/data",
+        "summary": "Get OpenWebUI-compatible channel message data"
+    },
+    "delete_channels_channelid_messages_messageid_delete": {
+        "name": "delete_channels_channelid_messages_messageid_delete",
+        "method": "DELETE",
+        "path": "/api/v1/channels/{channelId}/messages/{messageId}/delete",
+        "summary": "Delete an OpenWebUI-compatible channel message"
+    },
+    "post_channels_channelid_messages_messageid_pin": {
+        "name": "post_channels_channelid_messages_messageid_pin",
+        "method": "POST",
+        "path": "/api/v1/channels/{channelId}/messages/{messageId}/pin",
+        "summary": "Pin or unpin an OpenWebUI-compatible channel message"
+    },
+    "post_channels_channelid_messages_messageid_reactions_add": {
+        "name": "post_channels_channelid_messages_messageid_reactions_add",
+        "method": "POST",
+        "path": "/api/v1/channels/{channelId}/messages/{messageId}/reactions/add",
+        "summary": "Add an OpenWebUI-compatible channel message reaction"
+    },
+    "post_channels_channelid_messages_messageid_reactions_remove": {
+        "name": "post_channels_channelid_messages_messageid_reactions_remove",
+        "method": "POST",
+        "path": "/api/v1/channels/{channelId}/messages/{messageId}/reactions/remove",
+        "summary": "Remove an OpenWebUI-compatible channel message reaction"
+    },
+    "get_channels_channelid_messages_messageid_thread": {
+        "name": "get_channels_channelid_messages_messageid_thread",
+        "method": "GET",
+        "path": "/api/v1/channels/{channelId}/messages/{messageId}/thread",
+        "summary": "List OpenWebUI-compatible channel thread replies"
+    },
+    "post_channels_channelid_messages_messageid_update": {
+        "name": "post_channels_channelid_messages_messageid_update",
+        "method": "POST",
+        "path": "/api/v1/channels/{channelId}/messages/{messageId}/update",
+        "summary": "Update an OpenWebUI-compatible channel message"
+    },
+    "post_channels_channelid_update": {
+        "name": "post_channels_channelid_update",
+        "method": "POST",
+        "path": "/api/v1/channels/{channelId}/update",
+        "summary": "Update an OpenWebUI-compatible channel"
+    },
+    "post_channels_channelid_update_members_add": {
+        "name": "post_channels_channelid_update_members_add",
+        "method": "POST",
+        "path": "/api/v1/channels/{channelId}/update/members/add",
+        "summary": "Add OpenWebUI-compatible channel members"
+    },
+    "post_channels_channelid_update_members_remove": {
+        "name": "post_channels_channelid_update_members_remove",
+        "method": "POST",
+        "path": "/api/v1/channels/{channelId}/update/members/remove",
+        "summary": "Remove OpenWebUI-compatible channel members"
+    },
     "get_chat_tags": {
         "name": "get_chat_tags",
         "method": "GET",
@@ -827,7 +959,7 @@ OPERATIONS = {
         "name": "get_chat_tags_tagslug_chats",
         "method": "GET",
         "path": "/api/v1/chat-tags/{tagSlug}/chats",
-        "summary": "List chats assigned to a caller-scoped tag"
+        "summary": "List chats assigned to a tag"
     },
     "post_chat_completions": {
         "name": "post_chat_completions",
@@ -838,14 +970,86 @@ OPERATIONS = {
     "get_chats": {
         "name": "get_chats",
         "method": "GET",
-        "path": "/api/v1/chats",
-        "summary": "List chats in a workspace"
+        "path": "/api/v1/chats/",
+        "summary": "List OpenWebUI-compatible chat summaries"
     },
     "post_chats": {
         "name": "post_chats",
         "method": "POST",
         "path": "/api/v1/chats",
         "summary": "Create a chat"
+    },
+    "get_chats_all_archived": {
+        "name": "get_chats_all_archived",
+        "method": "GET",
+        "path": "/api/v1/chats/all/archived",
+        "summary": "List all OpenWebUI-compatible archived chats"
+    },
+    "get_chats_all_tags": {
+        "name": "get_chats_all_tags",
+        "method": "GET",
+        "path": "/api/v1/chats/all/tags",
+        "summary": "List OpenWebUI-compatible chat tags"
+    },
+    "get_chats_archived": {
+        "name": "get_chats_archived",
+        "method": "GET",
+        "path": "/api/v1/chats/archived",
+        "summary": "List OpenWebUI-compatible archived chat summaries"
+    },
+    "get_chats_folder_folderid": {
+        "name": "get_chats_folder_folderid",
+        "method": "GET",
+        "path": "/api/v1/chats/folder/{folderId}",
+        "summary": "List OpenWebUI-compatible chats in a folder"
+    },
+    "get_chats_folder_folderid_list": {
+        "name": "get_chats_folder_folderid_list",
+        "method": "GET",
+        "path": "/api/v1/chats/folder/{folderId}/list",
+        "summary": "List OpenWebUI-compatible chat summaries in a folder"
+    },
+    "post_chats_import": {
+        "name": "post_chats_import",
+        "method": "POST",
+        "path": "/api/v1/chats/import",
+        "summary": "Import a portable conversation"
+    },
+    "get_chats_list": {
+        "name": "get_chats_list",
+        "method": "GET",
+        "path": "/api/v1/chats/list",
+        "summary": "List OpenWebUI-compatible chat summaries alias"
+    },
+    "post_chats_new": {
+        "name": "post_chats_new",
+        "method": "POST",
+        "path": "/api/v1/chats/new",
+        "summary": "Create an OpenWebUI-compatible chat"
+    },
+    "get_chats_pinned": {
+        "name": "get_chats_pinned",
+        "method": "GET",
+        "path": "/api/v1/chats/pinned",
+        "summary": "List OpenWebUI-compatible pinned chat summaries"
+    },
+    "get_chats_query": {
+        "name": "get_chats_query",
+        "method": "GET",
+        "path": "/api/v1/chats/query",
+        "summary": "Search chat titles, messages, and attachment names"
+    },
+    "get_chats_search": {
+        "name": "get_chats_search",
+        "method": "GET",
+        "path": "/api/v1/chats/search",
+        "summary": "Search OpenWebUI-compatible chat summaries"
+    },
+    "post_chats_tags": {
+        "name": "post_chats_tags",
+        "method": "POST",
+        "path": "/api/v1/chats/tags",
+        "summary": "List OpenWebUI-compatible chats by tag"
     },
     "delete_chats_chatid": {
         "name": "delete_chats_chatid",
@@ -887,7 +1091,19 @@ OPERATIONS = {
         "name": "get_chats_chatid_delete_preview",
         "method": "GET",
         "path": "/api/v1/chats/{chatId}/delete-preview",
-        "summary": "Preview chat deletion counts"
+        "summary": "Preview governed chat deletion"
+    },
+    "get_chats_chatid_export": {
+        "name": "get_chats_chatid_export",
+        "method": "GET",
+        "path": "/api/v1/chats/{chatId}/export",
+        "summary": "Export a portable conversation"
+    },
+    "post_chats_chatid_folder": {
+        "name": "post_chats_chatid_folder",
+        "method": "POST",
+        "path": "/api/v1/chats/{chatId}/folder",
+        "summary": "Move an OpenWebUI-compatible chat to a folder"
     },
     "post_chats_chatid_fork": {
         "name": "post_chats_chatid_fork",
@@ -905,7 +1121,7 @@ OPERATIONS = {
         "name": "get_chats_chatid_message_feedback",
         "method": "GET",
         "path": "/api/v1/chats/{chatId}/message-feedback",
-        "summary": "List the caller's assistant-message feedback for a chat"
+        "summary": "List caller feedback for assistant messages"
     },
     "get_chats_chatid_messages": {
         "name": "get_chats_chatid_messages",
@@ -913,53 +1129,131 @@ OPERATIONS = {
         "path": "/api/v1/chats/{chatId}/messages",
         "summary": "List messages for a chat"
     },
+    "delete_chats_chatid_messages_messageid": {
+        "name": "delete_chats_chatid_messages_messageid",
+        "method": "DELETE",
+        "path": "/api/v1/chats/{chatId}/messages/{messageId}",
+        "summary": "Delete a single chat message"
+    },
     "get_chats_chatid_messages_messageid_attachments_attachmentid": {
         "name": "get_chats_chatid_messages_messageid_attachments_attachmentid",
         "method": "GET",
         "path": "/api/v1/chats/{chatId}/messages/{messageId}/attachments/{attachmentId}",
-        "summary": "Read an authorized message image attachment"
+        "summary": "Read an authorized message attachment"
+    },
+    "patch_chats_chatid_messages_messageid_attachments_attachmentid": {
+        "name": "patch_chats_chatid_messages_messageid_attachments_attachmentid",
+        "method": "PATCH",
+        "path": "/api/v1/chats/{chatId}/messages/{messageId}/attachments/{attachmentId}",
+        "summary": "Retain or release an attachment from future turns"
+    },
+    "get_chats_chatid_messages_messageid_attachments_attachmentid_preview": {
+        "name": "get_chats_chatid_messages_messageid_attachments_attachmentid_preview",
+        "method": "GET",
+        "path": "/api/v1/chats/{chatId}/messages/{messageId}/attachments/{attachmentId}/preview",
+        "summary": "Read a sanitized attachment text preview"
     },
     "get_chats_chatid_messages_messageid_feedback": {
         "name": "get_chats_chatid_messages_messageid_feedback",
         "method": "GET",
         "path": "/api/v1/chats/{chatId}/messages/{messageId}/feedback",
-        "summary": "Get the caller's feedback for a message"
+        "summary": "Get caller feedback for a message"
     },
     "post_chats_chatid_messages_messageid_feedback": {
         "name": "post_chats_chatid_messages_messageid_feedback",
         "method": "POST",
         "path": "/api/v1/chats/{chatId}/messages/{messageId}/feedback",
-        "summary": "Record or clear the caller's feedback for a message"
+        "summary": "Record or clear caller feedback for a message"
+    },
+    "post_chats_chatid_pin": {
+        "name": "post_chats_chatid_pin",
+        "method": "POST",
+        "path": "/api/v1/chats/{chatId}/pin",
+        "summary": "Toggle OpenWebUI-compatible chat pin state"
+    },
+    "get_chats_chatid_pinned": {
+        "name": "get_chats_chatid_pinned",
+        "method": "GET",
+        "path": "/api/v1/chats/{chatId}/pinned",
+        "summary": "Get OpenWebUI-compatible chat pinned status"
+    },
+    "get_chats_chatid_queue": {
+        "name": "get_chats_chatid_queue",
+        "method": "GET",
+        "path": "/api/v1/chats/{chatId}/queue",
+        "summary": "List persisted queued turns"
+    },
+    "post_chats_chatid_queue": {
+        "name": "post_chats_chatid_queue",
+        "method": "POST",
+        "path": "/api/v1/chats/{chatId}/queue",
+        "summary": "Queue a chat turn for durable execution"
+    },
+    "delete_chats_chatid_queue_turnid": {
+        "name": "delete_chats_chatid_queue_turnid",
+        "method": "DELETE",
+        "path": "/api/v1/chats/{chatId}/queue/{turnId}",
+        "summary": "Cancel a queued chat turn"
+    },
+    "get_chats_chatid_runs_active": {
+        "name": "get_chats_chatid_runs_active",
+        "method": "GET",
+        "path": "/api/v1/chats/{chatId}/runs/active",
+        "summary": "Get the active resumable run for a chat"
     },
     "get_chats_chatid_shares": {
         "name": "get_chats_chatid_shares",
         "method": "GET",
         "path": "/api/v1/chats/{chatId}/shares",
-        "summary": "List chat resource shares"
+        "summary": "List chat shares"
     },
     "post_chats_chatid_shares": {
         "name": "post_chats_chatid_shares",
         "method": "POST",
         "path": "/api/v1/chats/{chatId}/shares",
-        "summary": "Share a chat through resource grants"
+        "summary": "Share a chat"
+    },
+    "delete_chats_chatid_shares_grantid": {
+        "name": "delete_chats_chatid_shares_grantid",
+        "method": "DELETE",
+        "path": "/api/v1/chats/{chatId}/shares/{grantId}",
+        "summary": "Revoke a chat share"
     },
     "get_chats_chatid_tag_assignments": {
         "name": "get_chats_chatid_tag_assignments",
         "method": "GET",
         "path": "/api/v1/chats/{chatId}/tag-assignments",
-        "summary": "List caller-scoped tags assigned to a chat"
+        "summary": "List tags assigned to a chat"
     },
     "post_chats_chatid_tag_assignments": {
         "name": "post_chats_chatid_tag_assignments",
         "method": "POST",
         "path": "/api/v1/chats/{chatId}/tag-assignments",
-        "summary": "Assign a caller-scoped tag to a chat"
+        "summary": "Assign a tag to a chat"
     },
     "delete_chats_chatid_tag_assignments_tagslug": {
         "name": "delete_chats_chatid_tag_assignments_tagslug",
         "method": "DELETE",
         "path": "/api/v1/chats/{chatId}/tag-assignments/{tagSlug}",
-        "summary": "Remove a caller-scoped tag assignment from a chat"
+        "summary": "Remove a tag from a chat"
+    },
+    "delete_chats_chatid_tags": {
+        "name": "delete_chats_chatid_tags",
+        "method": "DELETE",
+        "path": "/api/v1/chats/{chatId}/tags",
+        "summary": "Remove an OpenWebUI-compatible tag from a chat"
+    },
+    "get_chats_chatid_tags": {
+        "name": "get_chats_chatid_tags",
+        "method": "GET",
+        "path": "/api/v1/chats/{chatId}/tags",
+        "summary": "List OpenWebUI-compatible tags for a chat"
+    },
+    "post_chats_chatid_tags": {
+        "name": "post_chats_chatid_tags",
+        "method": "POST",
+        "path": "/api/v1/chats/{chatId}/tags",
+        "summary": "Assign an OpenWebUI-compatible tag to a chat"
     },
     "post_chats_chatid_unarchive": {
         "name": "post_chats_chatid_unarchive",
@@ -971,157 +1265,217 @@ OPERATIONS = {
         "name": "get_collaboration_channels",
         "method": "GET",
         "path": "/api/v1/collaboration/channels",
-        "summary": "List native Romeo collaboration channels"
+        "summary": "List native collaboration channels"
     },
     "post_collaboration_channels": {
         "name": "post_collaboration_channels",
         "method": "POST",
         "path": "/api/v1/collaboration/channels",
-        "summary": "Create a native Romeo collaboration channel"
+        "summary": "Create a native collaboration channel"
     },
     "post_collaboration_channels_direct_messages": {
         "name": "post_collaboration_channels_direct_messages",
         "method": "POST",
         "path": "/api/v1/collaboration/channels/direct-messages",
-        "summary": "Get or create a native Romeo direct-message channel"
+        "summary": "Get or create a direct-message channel"
     },
     "delete_collaboration_channels_channelid": {
         "name": "delete_collaboration_channels_channelid",
         "method": "DELETE",
         "path": "/api/v1/collaboration/channels/{channelId}",
-        "summary": "Delete a native Romeo collaboration channel"
+        "summary": "Delete a native collaboration channel"
     },
     "get_collaboration_channels_channelid": {
         "name": "get_collaboration_channels_channelid",
         "method": "GET",
         "path": "/api/v1/collaboration/channels/{channelId}",
-        "summary": "Get a native Romeo collaboration channel"
+        "summary": "Get a native collaboration channel"
     },
     "patch_collaboration_channels_channelid": {
         "name": "patch_collaboration_channels_channelid",
         "method": "PATCH",
         "path": "/api/v1/collaboration/channels/{channelId}",
-        "summary": "Update a native Romeo collaboration channel"
+        "summary": "Update a native collaboration channel"
     },
     "get_collaboration_channels_channelid_events": {
         "name": "get_collaboration_channels_channelid_events",
         "method": "GET",
         "path": "/api/v1/collaboration/channels/{channelId}/events",
-        "summary": "Stream native Romeo channel events"
+        "summary": "Stream native channel events"
     },
     "get_collaboration_channels_channelid_members": {
         "name": "get_collaboration_channels_channelid_members",
         "method": "GET",
         "path": "/api/v1/collaboration/channels/{channelId}/members",
-        "summary": "List native Romeo channel members"
+        "summary": "List channel members"
     },
     "post_collaboration_channels_channelid_members": {
         "name": "post_collaboration_channels_channelid_members",
         "method": "POST",
         "path": "/api/v1/collaboration/channels/{channelId}/members",
-        "summary": "Add native Romeo channel members"
+        "summary": "Add channel members"
     },
     "delete_collaboration_channels_channelid_members_userid": {
         "name": "delete_collaboration_channels_channelid_members_userid",
         "method": "DELETE",
         "path": "/api/v1/collaboration/channels/{channelId}/members/{userId}",
-        "summary": "Remove a native Romeo channel member"
+        "summary": "Remove a channel member"
     },
     "get_collaboration_channels_channelid_messages": {
         "name": "get_collaboration_channels_channelid_messages",
         "method": "GET",
         "path": "/api/v1/collaboration/channels/{channelId}/messages",
-        "summary": "List native Romeo channel messages"
+        "summary": "List channel messages"
     },
     "post_collaboration_channels_channelid_messages": {
         "name": "post_collaboration_channels_channelid_messages",
         "method": "POST",
         "path": "/api/v1/collaboration/channels/{channelId}/messages",
-        "summary": "Post a native Romeo channel message"
+        "summary": "Post a channel message"
     },
     "get_collaboration_channels_channelid_messages_pinned": {
         "name": "get_collaboration_channels_channelid_messages_pinned",
         "method": "GET",
         "path": "/api/v1/collaboration/channels/{channelId}/messages/pinned",
-        "summary": "List pinned native Romeo channel messages"
+        "summary": "List pinned channel messages"
     },
     "delete_collaboration_channels_channelid_messages_messageid": {
         "name": "delete_collaboration_channels_channelid_messages_messageid",
         "method": "DELETE",
         "path": "/api/v1/collaboration/channels/{channelId}/messages/{messageId}",
-        "summary": "Delete a native Romeo channel message"
+        "summary": "Delete a channel message"
     },
     "get_collaboration_channels_channelid_messages_messageid": {
         "name": "get_collaboration_channels_channelid_messages_messageid",
         "method": "GET",
         "path": "/api/v1/collaboration/channels/{channelId}/messages/{messageId}",
-        "summary": "Get a native Romeo channel message"
+        "summary": "Get a channel message"
     },
     "patch_collaboration_channels_channelid_messages_messageid": {
         "name": "patch_collaboration_channels_channelid_messages_messageid",
         "method": "PATCH",
         "path": "/api/v1/collaboration/channels/{channelId}/messages/{messageId}",
-        "summary": "Update a native Romeo channel message"
+        "summary": "Update a channel message"
     },
     "post_collaboration_channels_channelid_messages_messageid_pin": {
         "name": "post_collaboration_channels_channelid_messages_messageid_pin",
         "method": "POST",
         "path": "/api/v1/collaboration/channels/{channelId}/messages/{messageId}/pin",
-        "summary": "Pin or unpin a native Romeo channel message"
+        "summary": "Pin or unpin a channel message"
     },
     "post_collaboration_channels_channelid_messages_messageid_reactions": {
         "name": "post_collaboration_channels_channelid_messages_messageid_reactions",
         "method": "POST",
         "path": "/api/v1/collaboration/channels/{channelId}/messages/{messageId}/reactions",
-        "summary": "Add a native Romeo channel message reaction"
+        "summary": "Add a channel message reaction"
     },
     "delete_collaboration_channels_channelid_messages_messageid_reactions_name": {
         "name": "delete_collaboration_channels_channelid_messages_messageid_reactions_name",
         "method": "DELETE",
         "path": "/api/v1/collaboration/channels/{channelId}/messages/{messageId}/reactions/{name}",
-        "summary": "Remove a native Romeo channel message reaction"
+        "summary": "Remove a channel message reaction"
     },
     "get_collaboration_channels_channelid_messages_messageid_thread": {
         "name": "get_collaboration_channels_channelid_messages_messageid_thread",
         "method": "GET",
         "path": "/api/v1/collaboration/channels/{channelId}/messages/{messageId}/thread",
-        "summary": "List native Romeo channel message thread replies"
+        "summary": "List channel thread replies"
     },
     "post_collaboration_channels_channelid_read": {
         "name": "post_collaboration_channels_channelid_read",
         "method": "POST",
         "path": "/api/v1/collaboration/channels/{channelId}/read",
-        "summary": "Mark a native Romeo channel as read"
+        "summary": "Mark a channel as read"
+    },
+    "get_collaboration_folders": {
+        "name": "get_collaboration_folders",
+        "method": "GET",
+        "path": "/api/v1/collaboration/folders",
+        "summary": "List workspace folders"
+    },
+    "post_collaboration_folders": {
+        "name": "post_collaboration_folders",
+        "method": "POST",
+        "path": "/api/v1/collaboration/folders",
+        "summary": "Create a workspace folder"
+    },
+    "delete_collaboration_folders_folderid": {
+        "name": "delete_collaboration_folders_folderid",
+        "method": "DELETE",
+        "path": "/api/v1/collaboration/folders/{folderId}",
+        "summary": "Delete a workspace folder"
+    },
+    "get_collaboration_folders_folderid": {
+        "name": "get_collaboration_folders_folderid",
+        "method": "GET",
+        "path": "/api/v1/collaboration/folders/{folderId}",
+        "summary": "Get a workspace folder"
+    },
+    "patch_collaboration_folders_folderid": {
+        "name": "patch_collaboration_folders_folderid",
+        "method": "PATCH",
+        "path": "/api/v1/collaboration/folders/{folderId}",
+        "summary": "Update a workspace folder"
+    },
+    "get_collaboration_folders_folderid_items": {
+        "name": "get_collaboration_folders_folderid_items",
+        "method": "GET",
+        "path": "/api/v1/collaboration/folders/{folderId}/items",
+        "summary": "List folder items"
+    },
+    "post_collaboration_folders_folderid_items": {
+        "name": "post_collaboration_folders_folderid_items",
+        "method": "POST",
+        "path": "/api/v1/collaboration/folders/{folderId}/items",
+        "summary": "Add an item to a folder"
+    },
+    "delete_collaboration_folders_folderid_items_itemid": {
+        "name": "delete_collaboration_folders_folderid_items_itemid",
+        "method": "DELETE",
+        "path": "/api/v1/collaboration/folders/{folderId}/items/{itemId}",
+        "summary": "Delete a folder item"
+    },
+    "get_collaboration_folders_folderid_shares": {
+        "name": "get_collaboration_folders_folderid_shares",
+        "method": "GET",
+        "path": "/api/v1/collaboration/folders/{folderId}/shares",
+        "summary": "List folder shares"
+    },
+    "post_collaboration_folders_folderid_shares": {
+        "name": "post_collaboration_folders_folderid_shares",
+        "method": "POST",
+        "path": "/api/v1/collaboration/folders/{folderId}/shares",
+        "summary": "Share a folder"
     },
     "get_data_connectors": {
         "name": "get_data_connectors",
         "method": "GET",
         "path": "/api/v1/data-connectors",
-        "summary": "List data connectors for a workspace"
+        "summary": "List"
     },
     "post_data_connectors": {
         "name": "post_data_connectors",
         "method": "POST",
         "path": "/api/v1/data-connectors",
-        "summary": "Create a data connector for a knowledge base"
+        "summary": "Create"
     },
     "get_data_connectors_catalog": {
         "name": "get_data_connectors_catalog",
         "method": "GET",
         "path": "/api/v1/data-connectors/catalog",
-        "summary": "Inspect supported data connector types and runtime posture"
+        "summary": "Get catalog"
     },
     "post_data_connectors_connectorid_sync": {
         "name": "post_data_connectors_connectorid_sync",
         "method": "POST",
         "path": "/api/v1/data-connectors/{connectorId}/sync",
-        "summary": "Start a data connector sync"
+        "summary": "Sync"
     },
     "get_data_connectors_connectorid_syncs": {
         "name": "get_data_connectors_connectorid_syncs",
         "method": "GET",
         "path": "/api/v1/data-connectors/{connectorId}/syncs",
-        "summary": "List data connector sync attempts"
+        "summary": "List syncs"
     },
     "get_delegated_oauth_callback": {
         "name": "get_delegated_oauth_callback",
@@ -1193,61 +1547,55 @@ OPERATIONS = {
         "name": "post_eval_run_results_resultid_rating",
         "method": "POST",
         "path": "/api/v1/eval-run-results/{resultId}/rating",
-        "summary": "Rate an eval run result"
+        "summary": "Rate result"
     },
     "get_eval_runs_runid_ratings": {
         "name": "get_eval_runs_runid_ratings",
         "method": "GET",
         "path": "/api/v1/eval-runs/{runId}/ratings",
-        "summary": "List human ratings for an eval run"
+        "summary": "List ratings"
     },
     "get_eval_runs_runid_results": {
         "name": "get_eval_runs_runid_results",
         "method": "GET",
         "path": "/api/v1/eval-runs/{runId}/results",
-        "summary": "List eval run results"
+        "summary": "List results"
     },
     "post_eval_suites": {
         "name": "post_eval_suites",
         "method": "POST",
         "path": "/api/v1/eval-suites",
-        "summary": "Create an eval suite"
-    },
-    "post_eval_suites_suiteid_model_comparisons": {
-        "name": "post_eval_suites_suiteid_model_comparisons",
-        "method": "POST",
-        "path": "/api/v1/eval-suites/{suiteId}/model-comparisons",
-        "summary": "Run an eval suite across multiple models"
+        "summary": "Create suite"
     },
     "post_eval_suites_suiteid_runs": {
         "name": "post_eval_suites_suiteid_runs",
         "method": "POST",
         "path": "/api/v1/eval-suites/{suiteId}/runs",
-        "summary": "Run an eval suite against an agent draft"
+        "summary": "Run suite"
     },
     "get_favorites": {
         "name": "get_favorites",
         "method": "GET",
         "path": "/api/v1/favorites",
-        "summary": "List caller resource favorites"
+        "summary": "List caller favorites"
     },
     "post_favorites": {
         "name": "post_favorites",
         "method": "POST",
         "path": "/api/v1/favorites",
-        "summary": "Favorite an agent or knowledge base"
+        "summary": "Favorite a resource"
     },
     "delete_favorites_favoriteid": {
         "name": "delete_favorites_favoriteid",
         "method": "DELETE",
         "path": "/api/v1/favorites/{favoriteId}",
-        "summary": "Delete a resource favorite"
+        "summary": "Delete a favorite"
     },
     "get_files": {
         "name": "get_files",
         "method": "GET",
         "path": "/api/v1/files",
-        "summary": "List authorized files"
+        "summary": "List authorized reusable files"
     },
     "post_files": {
         "name": "post_files",
@@ -1259,49 +1607,49 @@ OPERATIONS = {
         "name": "post_files_uploads",
         "method": "POST",
         "path": "/api/v1/files/uploads",
-        "summary": "Create a direct file upload session"
+        "summary": "Create a direct upload session"
     },
     "post_files_uploads_resumable": {
         "name": "post_files_uploads_resumable",
         "method": "POST",
         "path": "/api/v1/files/uploads/resumable",
-        "summary": "Create a resumable file upload session"
+        "summary": "Create a resumable upload session"
     },
     "delete_files_uploads_resumable_fileid": {
         "name": "delete_files_uploads_resumable_fileid",
         "method": "DELETE",
         "path": "/api/v1/files/uploads/resumable/{fileId}",
-        "summary": "Cancel a resumable file upload session"
+        "summary": "Cancel a resumable upload session"
     },
     "get_files_uploads_resumable_fileid": {
         "name": "get_files_uploads_resumable_fileid",
         "method": "GET",
         "path": "/api/v1/files/uploads/resumable/{fileId}",
-        "summary": "Refresh a resumable file upload session"
+        "summary": "Refresh a resumable upload session"
     },
     "post_files_uploads_resumable_fileid_complete": {
         "name": "post_files_uploads_resumable_fileid_complete",
         "method": "POST",
         "path": "/api/v1/files/uploads/resumable/{fileId}/complete",
-        "summary": "Complete a resumable file upload session"
+        "summary": "Complete a resumable upload session"
     },
     "delete_files_uploads_fileid": {
         "name": "delete_files_uploads_fileid",
         "method": "DELETE",
         "path": "/api/v1/files/uploads/{fileId}",
-        "summary": "Cancel a direct file upload session"
+        "summary": "Cancel a direct upload session"
     },
     "get_files_uploads_fileid": {
         "name": "get_files_uploads_fileid",
         "method": "GET",
         "path": "/api/v1/files/uploads/{fileId}",
-        "summary": "Refresh a direct file upload session"
+        "summary": "Refresh a direct upload session"
     },
     "post_files_uploads_fileid_complete": {
         "name": "post_files_uploads_fileid_complete",
         "method": "POST",
         "path": "/api/v1/files/uploads/{fileId}/complete",
-        "summary": "Complete a direct file upload session"
+        "summary": "Complete a direct upload session"
     },
     "delete_files_fileid": {
         "name": "delete_files_fileid",
@@ -1321,149 +1669,137 @@ OPERATIONS = {
         "path": "/api/v1/files/{fileId}/content",
         "summary": "Read authorized file bytes"
     },
+    "post_files_fileid_extraction_retry": {
+        "name": "post_files_fileid_extraction_retry",
+        "method": "POST",
+        "path": "/api/v1/files/{fileId}/extraction/retry",
+        "summary": "Retry authorized file text extraction"
+    },
     "get_files_fileid_shares": {
         "name": "get_files_fileid_shares",
         "method": "GET",
         "path": "/api/v1/files/{fileId}/shares",
-        "summary": "List file resource shares"
+        "summary": "List file shares"
     },
     "post_files_fileid_shares": {
         "name": "post_files_fileid_shares",
         "method": "POST",
         "path": "/api/v1/files/{fileId}/shares",
-        "summary": "Share a file through resource grants"
+        "summary": "Share a file"
     },
     "get_folders": {
         "name": "get_folders",
         "method": "GET",
-        "path": "/api/v1/folders",
-        "summary": "List caller-visible workspace folders"
+        "path": "/api/v1/folders/",
+        "summary": "List OpenWebUI-compatible folders"
     },
     "post_folders": {
         "name": "post_folders",
         "method": "POST",
-        "path": "/api/v1/folders",
-        "summary": "Create a workspace folder"
+        "path": "/api/v1/folders/",
+        "summary": "Create an OpenWebUI-compatible folder"
     },
     "delete_folders_folderid": {
         "name": "delete_folders_folderid",
         "method": "DELETE",
         "path": "/api/v1/folders/{folderId}",
-        "summary": "Delete a workspace folder"
+        "summary": "Delete an OpenWebUI-compatible folder"
     },
     "get_folders_folderid": {
         "name": "get_folders_folderid",
         "method": "GET",
         "path": "/api/v1/folders/{folderId}",
-        "summary": "Get a workspace folder"
+        "summary": "Get an OpenWebUI-compatible folder"
     },
-    "patch_folders_folderid": {
-        "name": "patch_folders_folderid",
-        "method": "PATCH",
-        "path": "/api/v1/folders/{folderId}",
-        "summary": "Update a workspace folder"
-    },
-    "get_folders_folderid_items": {
-        "name": "get_folders_folderid_items",
-        "method": "GET",
-        "path": "/api/v1/folders/{folderId}/items",
-        "summary": "List visible items in a workspace folder"
-    },
-    "post_folders_folderid_items": {
-        "name": "post_folders_folderid_items",
+    "post_folders_folderid_update": {
+        "name": "post_folders_folderid_update",
         "method": "POST",
-        "path": "/api/v1/folders/{folderId}/items",
-        "summary": "Add an accessible resource to a workspace folder"
+        "path": "/api/v1/folders/{folderId}/update",
+        "summary": "Update an OpenWebUI-compatible folder"
     },
-    "delete_folders_folderid_items_itemid": {
-        "name": "delete_folders_folderid_items_itemid",
-        "method": "DELETE",
-        "path": "/api/v1/folders/{folderId}/items/{itemId}",
-        "summary": "Remove an item from a workspace folder"
-    },
-    "get_folders_folderid_shares": {
-        "name": "get_folders_folderid_shares",
-        "method": "GET",
-        "path": "/api/v1/folders/{folderId}/shares",
-        "summary": "List folder resource shares"
-    },
-    "post_folders_folderid_shares": {
-        "name": "post_folders_folderid_shares",
+    "post_folders_folderid_update_expanded": {
+        "name": "post_folders_folderid_update_expanded",
         "method": "POST",
-        "path": "/api/v1/folders/{folderId}/shares",
-        "summary": "Share a folder through resource grants"
+        "path": "/api/v1/folders/{folderId}/update/expanded",
+        "summary": "Update an OpenWebUI-compatible folder expanded state"
+    },
+    "post_folders_folderid_update_parent": {
+        "name": "post_folders_folderid_update_parent",
+        "method": "POST",
+        "path": "/api/v1/folders/{folderId}/update/parent",
+        "summary": "Update an OpenWebUI-compatible folder parent"
     },
     "get_governance_compliance_report": {
         "name": "get_governance_compliance_report",
         "method": "GET",
         "path": "/api/v1/governance/compliance-report",
-        "summary": "Export a sanitized governance compliance report"
+        "summary": "Get compliance report"
     },
     "get_governance_compliance_report_csv": {
         "name": "get_governance_compliance_report_csv",
         "method": "GET",
         "path": "/api/v1/governance/compliance-report.csv",
-        "summary": "Export a sanitized governance compliance report as CSV"
+        "summary": "Export compliance report as CSV"
     },
     "post_governance_data_deletions_execute": {
         "name": "post_governance_data_deletions_execute",
         "method": "POST",
         "path": "/api/v1/governance/data-deletions/execute",
-        "summary": "Execute a governed data deletion workflow"
+        "summary": "Execute governed resource deletion"
     },
     "post_governance_data_deletions_preview": {
         "name": "post_governance_data_deletions_preview",
         "method": "POST",
         "path": "/api/v1/governance/data-deletions/preview",
-        "summary": "Preview a governed data deletion workflow"
+        "summary": "Preview governed resource deletion"
     },
     "post_governance_data_exports_execute": {
         "name": "post_governance_data_exports_execute",
         "method": "POST",
         "path": "/api/v1/governance/data-exports/execute",
-        "summary": "Execute a governed customer data export"
+        "summary": "Execute a governed data export"
     },
     "get_governance_data_exports_packages": {
         "name": "get_governance_data_exports_packages",
         "method": "GET",
         "path": "/api/v1/governance/data-exports/packages",
-        "summary": "List governed customer data export packages"
+        "summary": "List governed data-export packages"
     },
     "post_governance_data_exports_packages": {
         "name": "post_governance_data_exports_packages",
         "method": "POST",
         "path": "/api/v1/governance/data-exports/packages",
-        "summary": "Create an object-store package for a governed customer data export"
+        "summary": "Create a governed data-export package"
     },
     "delete_governance_data_exports_packages_packageid": {
         "name": "delete_governance_data_exports_packages_packageid",
         "method": "DELETE",
         "path": "/api/v1/governance/data-exports/packages/{packageId}",
-        "summary": "Delete a governed customer data export package"
+        "summary": "Delete a governed data-export package"
     },
     "get_governance_data_exports_packages_packageid_content": {
         "name": "get_governance_data_exports_packages_packageid_content",
         "method": "GET",
         "path": "/api/v1/governance/data-exports/packages/{packageId}/content",
-        "summary": "Download a governed customer data export package"
+        "summary": "Download governed data-export package content"
     },
     "post_governance_data_exports_preview": {
         "name": "post_governance_data_exports_preview",
         "method": "POST",
         "path": "/api/v1/governance/data-exports/preview",
-        "summary": "Preview a governed customer data export"
+        "summary": "Preview a governed data export"
     },
     "get_governance_data_rights_coverage": {
         "name": "get_governance_data_rights_coverage",
         "method": "GET",
         "path": "/api/v1/governance/data-rights/coverage",
-        "summary": "Get metadata-only data rights deletion, export, retention, and support coverage"
+        "summary": "Get data-rights workflow coverage"
     },
     "get_governance_identity_lifecycle_policy": {
         "name": "get_governance_identity_lifecycle_policy",
         "method": "GET",
         "path": "/api/v1/governance/identity-lifecycle-policy",
-        "summary": "Get the enterprise identity lifecycle policy posture"
+        "summary": "Get identity lifecycle policy"
     },
     "get_governance_retention": {
         "name": "get_governance_retention",
@@ -1481,43 +1817,49 @@ OPERATIONS = {
         "name": "post_governance_retention_enforce",
         "method": "POST",
         "path": "/api/v1/governance/retention/enforce",
-        "summary": "Enforce audit-log and browser automation artifact retention for the current organization"
+        "summary": "Enforce organization retention policy"
     },
     "get_groups": {
         "name": "get_groups",
         "method": "GET",
         "path": "/api/v1/groups",
-        "summary": "List organization groups"
+        "summary": "List groups"
     },
     "post_groups": {
         "name": "post_groups",
         "method": "POST",
         "path": "/api/v1/groups",
-        "summary": "Create an organization group"
+        "summary": "Create a group"
     },
     "get_groups_groupid_members": {
         "name": "get_groups_groupid_members",
         "method": "GET",
         "path": "/api/v1/groups/{groupId}/members",
-        "summary": "List group memberships"
+        "summary": "List group members"
     },
     "post_groups_groupid_members": {
         "name": "post_groups_groupid_members",
         "method": "POST",
         "path": "/api/v1/groups/{groupId}/members",
-        "summary": "Add a user to a group"
+        "summary": "Add a group member"
     },
     "delete_groups_groupid_members_userid": {
         "name": "delete_groups_groupid_members_userid",
         "method": "DELETE",
         "path": "/api/v1/groups/{groupId}/members/{userId}",
-        "summary": "Remove a user from a group"
+        "summary": "Remove a group member"
     },
     "get_health": {
         "name": "get_health",
         "method": "GET",
         "path": "/api/v1/health",
         "summary": "Check API readiness"
+    },
+    "post_images_generations": {
+        "name": "post_images_generations",
+        "method": "POST",
+        "path": "/api/v1/images/generations",
+        "summary": "Generate governed image artifacts"
     },
     "get_jobs": {
         "name": "get_jobs",
@@ -1547,7 +1889,7 @@ OPERATIONS = {
         "name": "post_knowledge_bases_query",
         "method": "POST",
         "path": "/api/v1/knowledge-bases/query",
-        "summary": "Query authorized knowledge bases with a tiered retrieval plan"
+        "summary": "Query authorized knowledge bases with a tiered plan"
     },
     "get_knowledge_bases_knowledgebaseid": {
         "name": "get_knowledge_bases_knowledgebaseid",
@@ -1577,13 +1919,13 @@ OPERATIONS = {
         "name": "get_knowledge_bases_knowledgebaseid_shares",
         "method": "GET",
         "path": "/api/v1/knowledge-bases/{knowledgeBaseId}/shares",
-        "summary": "List knowledge-base resource shares"
+        "summary": "List knowledge-base shares"
     },
     "post_knowledge_bases_knowledgebaseid_shares": {
         "name": "post_knowledge_bases_knowledgebaseid_shares",
         "method": "POST",
         "path": "/api/v1/knowledge-bases/{knowledgeBaseId}/shares",
-        "summary": "Share a knowledge base through resource grants"
+        "summary": "Share a knowledge base"
     },
     "get_knowledge_bases_knowledgebaseid_sources": {
         "name": "get_knowledge_bases_knowledgebaseid_sources",
@@ -1595,7 +1937,7 @@ OPERATIONS = {
         "name": "post_knowledge_bases_knowledgebaseid_sources",
         "method": "POST",
         "path": "/api/v1/knowledge-bases/{knowledgeBaseId}/sources",
-        "summary": "Register a knowledge source upload"
+        "summary": "Register a knowledge source"
     },
     "delete_knowledge_bases_knowledgebaseid_sources_sourceid": {
         "name": "delete_knowledge_bases_knowledgebaseid_sources_sourceid",
@@ -1607,13 +1949,13 @@ OPERATIONS = {
         "name": "post_knowledge_bases_knowledgebaseid_sources_sourceid_complete",
         "method": "POST",
         "path": "/api/v1/knowledge-bases/{knowledgeBaseId}/sources/{sourceId}/complete",
-        "summary": "Complete a direct knowledge upload and index text content"
+        "summary": "Complete a knowledge upload"
     },
     "post_knowledge_bases_knowledgebaseid_sources_sourceid_extract": {
         "name": "post_knowledge_bases_knowledgebaseid_sources_sourceid_extract",
         "method": "POST",
         "path": "/api/v1/knowledge-bases/{knowledgeBaseId}/sources/{sourceId}/extract",
-        "summary": "Run a deferred knowledge extraction job"
+        "summary": "Extract an uploaded knowledge source"
     },
     "post_knowledge_bases_knowledgebaseid_sources_sourceid_reindex": {
         "name": "post_knowledge_bases_knowledgebaseid_sources_sourceid_reindex",
@@ -1631,67 +1973,139 @@ OPERATIONS = {
         "name": "get_me",
         "method": "GET",
         "path": "/api/v1/me",
-        "summary": "Get current subject and bootstrap context"
+        "summary": "Bootstrap the current principal"
     },
     "patch_me": {
         "name": "patch_me",
         "method": "PATCH",
         "path": "/api/v1/me",
-        "summary": "Update the current user's email or display name"
+        "summary": "Update the current user's profile"
+    },
+    "get_me_interface_preferences": {
+        "name": "get_me_interface_preferences",
+        "method": "GET",
+        "path": "/api/v1/me/interface-preferences",
+        "summary": "Read synchronized interface preferences"
+    },
+    "patch_me_interface_preferences": {
+        "name": "patch_me_interface_preferences",
+        "method": "PATCH",
+        "path": "/api/v1/me/interface-preferences",
+        "summary": "Update synchronized interface preferences"
+    },
+    "get_memories": {
+        "name": "get_memories",
+        "method": "GET",
+        "path": "/api/v1/memories",
+        "summary": "List explicit retained memories"
+    },
+    "post_memories": {
+        "name": "post_memories",
+        "method": "POST",
+        "path": "/api/v1/memories",
+        "summary": "Create an explicit retained memory"
+    },
+    "delete_memories_contentid": {
+        "name": "delete_memories_contentid",
+        "method": "DELETE",
+        "path": "/api/v1/memories/{contentId}",
+        "summary": "Delete an explicit retained memory"
+    },
+    "patch_memories_contentid": {
+        "name": "patch_memories_contentid",
+        "method": "PATCH",
+        "path": "/api/v1/memories/{contentId}",
+        "summary": "Update an explicit retained memory"
     },
     "post_messages_messageid_speech": {
         "name": "post_messages_messageid_speech",
         "method": "POST",
         "path": "/api/v1/messages/{messageId}/speech",
-        "summary": "Generate speech for an assistant message"
+        "summary": "Generate message speech"
     },
     "get_models": {
         "name": "get_models",
         "method": "GET",
         "path": "/api/v1/models",
-        "summary": "List base models visible to the caller"
+        "summary": "List authorized provider models"
+    },
+    "patch_models_modelid_capabilities": {
+        "name": "patch_models_modelid_capabilities",
+        "method": "PATCH",
+        "path": "/api/v1/models/{modelId}/capabilities",
+        "summary": "Override provider-model capabilities"
+    },
+    "patch_models_modelid_enabled": {
+        "name": "patch_models_modelid_enabled",
+        "method": "PATCH",
+        "path": "/api/v1/models/{modelId}/enabled",
+        "summary": "Enable or disable a provider model"
     },
     "patch_models_modelid_pricing": {
         "name": "patch_models_modelid_pricing",
         "method": "PATCH",
         "path": "/api/v1/models/{modelId}/pricing",
-        "summary": "Update base model token pricing"
+        "summary": "Update provider-model pricing"
+    },
+    "get_notes": {
+        "name": "get_notes",
+        "method": "GET",
+        "path": "/api/v1/notes",
+        "summary": "List reusable notes"
+    },
+    "post_notes": {
+        "name": "post_notes",
+        "method": "POST",
+        "path": "/api/v1/notes",
+        "summary": "Create a reusable note"
+    },
+    "delete_notes_contentid": {
+        "name": "delete_notes_contentid",
+        "method": "DELETE",
+        "path": "/api/v1/notes/{contentId}",
+        "summary": "Delete a reusable note"
+    },
+    "patch_notes_contentid": {
+        "name": "patch_notes_contentid",
+        "method": "PATCH",
+        "path": "/api/v1/notes/{contentId}",
+        "summary": "Update a reusable note"
     },
     "get_notification_channels": {
         "name": "get_notification_channels",
         "method": "GET",
         "path": "/api/v1/notification-channels",
-        "summary": "List current user notification delivery channels"
+        "summary": "List channels"
     },
     "post_notification_channels": {
         "name": "post_notification_channels",
         "method": "POST",
         "path": "/api/v1/notification-channels",
-        "summary": "Create a current user notification delivery channel"
+        "summary": "Create channel"
     },
     "get_notification_deliveries": {
         "name": "get_notification_deliveries",
         "method": "GET",
         "path": "/api/v1/notification-deliveries",
-        "summary": "List current user notification delivery ledger records"
+        "summary": "List deliveries"
     },
     "post_notification_deliveries_retry_due": {
         "name": "post_notification_deliveries_retry_due",
         "method": "POST",
         "path": "/api/v1/notification-deliveries/retry-due",
-        "summary": "Retry due failed notification deliveries"
+        "summary": "Retry due deliveries"
     },
     "get_notifications": {
         "name": "get_notifications",
         "method": "GET",
         "path": "/api/v1/notifications",
-        "summary": "List current user notifications"
+        "summary": "List"
     },
     "post_notifications_notificationid_read": {
         "name": "post_notifications_notificationid_read",
         "method": "POST",
         "path": "/api/v1/notifications/{notificationId}/read",
-        "summary": "Mark a user notification read"
+        "summary": "Mark read"
     },
     "get_openai_models": {
         "name": "get_openai_models",
@@ -1705,83 +2119,131 @@ OPERATIONS = {
         "path": "/api/v1/openai/models/{model}",
         "summary": "Retrieve an OpenAI-compatible model"
     },
+    "get_openapi_json": {
+        "name": "get_openapi_json",
+        "method": "GET",
+        "path": "/api/v1/openapi.json",
+        "summary": "Get the Romeo OpenAPI document"
+    },
+    "get_openwebui_config": {
+        "name": "get_openwebui_config",
+        "method": "GET",
+        "path": "/api/v1/openwebui/config",
+        "summary": "Get OpenWebUI-compatible configuration"
+    },
+    "get_openwebui_version": {
+        "name": "get_openwebui_version",
+        "method": "GET",
+        "path": "/api/v1/openwebui/version",
+        "summary": "Get the OpenWebUI-compatible version"
+    },
+    "get_openwebui_version_updates": {
+        "name": "get_openwebui_version_updates",
+        "method": "GET",
+        "path": "/api/v1/openwebui/version/updates",
+        "summary": "Get OpenWebUI-compatible version update status"
+    },
     "get_organizations": {
         "name": "get_organizations",
         "method": "GET",
         "path": "/api/v1/organizations",
-        "summary": "List organizations visible to the caller"
+        "summary": "List visible organizations"
     },
     "get_prompt_marketplace": {
         "name": "get_prompt_marketplace",
         "method": "GET",
         "path": "/api/v1/prompt-marketplace",
-        "summary": "List visible marketplace prompt templates"
+        "summary": "List marketplace"
     },
     "get_prompt_templates": {
         "name": "get_prompt_templates",
         "method": "GET",
         "path": "/api/v1/prompt-templates",
-        "summary": "List visible prompt templates"
+        "summary": "List templates"
     },
     "post_prompt_templates": {
         "name": "post_prompt_templates",
         "method": "POST",
         "path": "/api/v1/prompt-templates",
-        "summary": "Create a prompt template"
+        "summary": "Create template"
     },
     "delete_prompt_templates_prompttemplateid": {
         "name": "delete_prompt_templates_prompttemplateid",
         "method": "DELETE",
         "path": "/api/v1/prompt-templates/{promptTemplateId}",
-        "summary": "Delete a prompt template"
+        "summary": "Delete template"
     },
     "get_prompt_templates_prompttemplateid": {
         "name": "get_prompt_templates_prompttemplateid",
         "method": "GET",
         "path": "/api/v1/prompt-templates/{promptTemplateId}",
-        "summary": "Get a prompt template"
+        "summary": "Get template"
     },
     "patch_prompt_templates_prompttemplateid": {
         "name": "patch_prompt_templates_prompttemplateid",
         "method": "PATCH",
         "path": "/api/v1/prompt-templates/{promptTemplateId}",
-        "summary": "Update a prompt template"
+        "summary": "Update template"
     },
     "get_prompt_templates_prompttemplateid_shares": {
         "name": "get_prompt_templates_prompttemplateid_shares",
         "method": "GET",
         "path": "/api/v1/prompt-templates/{promptTemplateId}/shares",
-        "summary": "List prompt-template resource shares"
+        "summary": "List shares"
     },
     "post_prompt_templates_prompttemplateid_shares": {
         "name": "post_prompt_templates_prompttemplateid_shares",
         "method": "POST",
         "path": "/api/v1/prompt-templates/{promptTemplateId}/shares",
-        "summary": "Share a prompt template through resource grants"
+        "summary": "Share template"
     },
     "get_providers": {
         "name": "get_providers",
         "method": "GET",
         "path": "/api/v1/providers",
-        "summary": "List configured model providers"
+        "summary": "List provider connections"
     },
     "post_providers": {
         "name": "post_providers",
         "method": "POST",
         "path": "/api/v1/providers",
-        "summary": "Create a provider instance"
+        "summary": "Create a provider connection"
     },
     "get_providers_operational_summary": {
         "name": "get_providers_operational_summary",
         "method": "GET",
         "path": "/api/v1/providers/operational-summary",
-        "summary": "Summarize model-provider health and resilience state"
+        "summary": "Get provider operational diagnostics"
+    },
+    "patch_providers_providerid": {
+        "name": "patch_providers_providerid",
+        "method": "PATCH",
+        "path": "/api/v1/providers/{providerId}",
+        "summary": "Update a provider connection"
+    },
+    "delete_providers_providerid_ollama_models_model": {
+        "name": "delete_providers_providerid_ollama_models_model",
+        "method": "DELETE",
+        "path": "/api/v1/providers/{providerId}/ollama/models/{model}",
+        "summary": "Delete a model from an Ollama connection"
+    },
+    "post_providers_providerid_ollama_pull": {
+        "name": "post_providers_providerid_ollama_pull",
+        "method": "POST",
+        "path": "/api/v1/providers/{providerId}/ollama/pull",
+        "summary": "Pull a model into an Ollama connection"
     },
     "post_providers_providerid_sync": {
         "name": "post_providers_providerid_sync",
         "method": "POST",
         "path": "/api/v1/providers/{providerId}/sync",
-        "summary": "Sync provider models"
+        "summary": "Discover and synchronize provider models"
+    },
+    "post_providers_providerid_verify": {
+        "name": "post_providers_providerid_verify",
+        "method": "POST",
+        "path": "/api/v1/providers/{providerId}/verify",
+        "summary": "Run provider connection diagnostics"
     },
     "get_quotas": {
         "name": "get_quotas",
@@ -1799,7 +2261,7 @@ OPERATIONS = {
         "name": "get_quotas_distributed_status",
         "method": "GET",
         "path": "/api/v1/quotas/distributed-status",
-        "summary": "Get distributed quota coordination status"
+        "summary": "Get quota coordination status"
     },
     "delete_quotas_quotabucketid": {
         "name": "delete_quotas_quotabucketid",
@@ -1818,6 +2280,12 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/runs",
         "summary": "Start a streamed chat run"
+    },
+    "post_runs_context_preview": {
+        "name": "post_runs_context_preview",
+        "method": "POST",
+        "path": "/api/v1/runs/context-preview",
+        "summary": "Inspect the exact governed context for a proposed run"
     },
     "get_runs_runid": {
         "name": "get_runs_runid",
@@ -1895,7 +2363,7 @@ OPERATIONS = {
         "name": "get_scim_v2_serviceproviderconfig",
         "method": "GET",
         "path": "/api/v1/scim/v2/ServiceProviderConfig",
-        "summary": "Get SCIM service provider configuration"
+        "summary": "Get SCIM service-provider configuration"
     },
     "get_scim_v2_users": {
         "name": "get_scim_v2_users",
@@ -1949,49 +2417,49 @@ OPERATIONS = {
         "name": "post_service_accounts_bulk_disable",
         "method": "POST",
         "path": "/api/v1/service-accounts/bulk-disable",
-        "summary": "Disable multiple service accounts and invalidate their API keys"
+        "summary": "Bulk disable service accounts"
     },
     "post_service_accounts_serviceaccountid_api_keys": {
         "name": "post_service_accounts_serviceaccountid_api_keys",
         "method": "POST",
         "path": "/api/v1/service-accounts/{serviceAccountId}/api-keys",
-        "summary": "Create a scoped API key for a service account"
+        "summary": "Create a service-account API key"
     },
     "post_service_accounts_serviceaccountid_disable": {
         "name": "post_service_accounts_serviceaccountid_disable",
         "method": "POST",
         "path": "/api/v1/service-accounts/{serviceAccountId}/disable",
-        "summary": "Disable a service account and invalidate its API keys"
+        "summary": "Disable a service account"
     },
     "get_sessions": {
         "name": "get_sessions",
         "method": "GET",
         "path": "/api/v1/sessions",
-        "summary": "List local sessions for the current user"
+        "summary": "List sessions for the current user"
     },
     "post_sessions": {
         "name": "post_sessions",
         "method": "POST",
         "path": "/api/v1/sessions",
-        "summary": "Create an HttpOnly local session for the current user"
+        "summary": "Create a session for the current user"
     },
     "delete_sessions_current": {
         "name": "delete_sessions_current",
         "method": "DELETE",
         "path": "/api/v1/sessions/current",
-        "summary": "Revoke the current local session"
+        "summary": "Revoke the current session"
     },
     "post_sessions_revoke_others": {
         "name": "post_sessions_revoke_others",
         "method": "POST",
         "path": "/api/v1/sessions/revoke-others",
-        "summary": "Revoke all other active local sessions for the current user"
+        "summary": "Revoke all other current-user sessions"
     },
     "delete_sessions_sessionid": {
         "name": "delete_sessions_sessionid",
         "method": "DELETE",
         "path": "/api/v1/sessions/{sessionId}",
-        "summary": "Revoke a local session by ID"
+        "summary": "Revoke a session by ID"
     },
     "get_share_targets": {
         "name": "get_share_targets",
@@ -2003,25 +2471,25 @@ OPERATIONS = {
         "name": "get_tool_approvals",
         "method": "GET",
         "path": "/api/v1/tool-approvals",
-        "summary": "List caller pending tool approval requests"
+        "summary": "List caller-owned pending tool approvals"
     },
     "post_tool_approvals_approvalrequestid_approve": {
         "name": "post_tool_approvals_approvalrequestid_approve",
         "method": "POST",
         "path": "/api/v1/tool-approvals/{approvalRequestId}/approve",
-        "summary": "Approve a pending caller-owned tool approval request"
+        "summary": "Approve a pending tool approval"
     },
     "post_tool_approvals_approvalrequestid_cancel": {
         "name": "post_tool_approvals_approvalrequestid_cancel",
         "method": "POST",
         "path": "/api/v1/tool-approvals/{approvalRequestId}/cancel",
-        "summary": "Cancel a pending caller-owned tool approval request"
+        "summary": "Cancel a pending tool approval"
     },
     "post_tool_approvals_approvalrequestid_reject": {
         "name": "post_tool_approvals_approvalrequestid_reject",
         "method": "POST",
         "path": "/api/v1/tool-approvals/{approvalRequestId}/reject",
-        "summary": "Reject a pending caller-owned tool approval request"
+        "summary": "Reject a pending tool approval"
     },
     "get_tool_calls": {
         "name": "get_tool_calls",
@@ -2033,109 +2501,109 @@ OPERATIONS = {
         "name": "get_tool_connectors",
         "method": "GET",
         "path": "/api/v1/tool-connectors",
-        "summary": "List imported tool connectors"
+        "summary": "List tool connectors"
     },
     "get_tool_connectors_catalog": {
         "name": "get_tool_connectors_catalog",
         "method": "GET",
         "path": "/api/v1/tool-connectors/catalog",
-        "summary": "Inspect supported tool connector types and execution posture"
+        "summary": "Get connector capability catalog"
     },
     "patch_tool_connectors_connectorid": {
         "name": "patch_tool_connectors_connectorid",
         "method": "PATCH",
         "path": "/api/v1/tool-connectors/{connectorId}",
-        "summary": "Update imported tool connector activation"
+        "summary": "Update connector activation"
     },
     "patch_tool_connectors_connectorid_auth": {
         "name": "patch_tool_connectors_connectorid_auth",
         "method": "PATCH",
         "path": "/api/v1/tool-connectors/{connectorId}/auth",
-        "summary": "Update redacted tool connector auth metadata"
+        "summary": "Update connector authentication"
     },
     "post_tool_connectors_connectorid_auth_check": {
         "name": "post_tool_connectors_connectorid_auth_check",
         "method": "POST",
         "path": "/api/v1/tool-connectors/{connectorId}/auth/check",
-        "summary": "Check redacted tool connector secret availability"
+        "summary": "Check connector credential availability"
     },
     "patch_tool_connectors_connectorid_network_policy": {
         "name": "patch_tool_connectors_connectorid_network_policy",
         "method": "PATCH",
         "path": "/api/v1/tool-connectors/{connectorId}/network-policy",
-        "summary": "Update tool connector network allowlist policy"
+        "summary": "Update connector network policy"
     },
     "get_tool_connectors_connectorid_operations": {
         "name": "get_tool_connectors_connectorid_operations",
         "method": "GET",
         "path": "/api/v1/tool-connectors/{connectorId}/operations",
-        "summary": "List imported tool operations"
+        "summary": "List connector operations"
     },
     "patch_tool_connectors_connectorid_operations_operationid": {
         "name": "patch_tool_connectors_connectorid_operations_operationid",
         "method": "PATCH",
         "path": "/api/v1/tool-connectors/{connectorId}/operations/{operationId}",
-        "summary": "Update imported tool operation activation"
+        "summary": "Update operation activation"
     },
     "post_tool_connectors_connectorid_operations_operationid_dispatch": {
         "name": "post_tool_connectors_connectorid_operations_operationid_dispatch",
         "method": "POST",
         "path": "/api/v1/tool-connectors/{connectorId}/operations/{operationId}/dispatch",
-        "summary": "Dispatch an imported tool operation through the external worker boundary"
+        "summary": "Dispatch a governed connector operation"
     },
     "post_tool_connectors_connectorid_operations_operationid_dispatch_requests": {
         "name": "post_tool_connectors_connectorid_operations_operationid_dispatch_requests",
         "method": "POST",
         "path": "/api/v1/tool-connectors/{connectorId}/operations/{operationId}/dispatch-requests",
-        "summary": "Queue metadata-only imported tool operation dispatch for an external worker"
+        "summary": "Queue a metadata-only tool dispatch request"
     },
     "post_tool_connectors_connectorid_operations_operationid_test": {
         "name": "post_tool_connectors_connectorid_operations_operationid_test",
         "method": "POST",
         "path": "/api/v1/tool-connectors/{connectorId}/operations/{operationId}/test",
-        "summary": "Dry-run an imported tool operation without network execution"
+        "summary": "Dry-run a connector operation"
     },
     "post_tool_operation_dispatch_requests_claim": {
         "name": "post_tool_operation_dispatch_requests_claim",
         "method": "POST",
         "path": "/api/v1/tool-operation-dispatch-requests/claim",
-        "summary": "Claim the next queued imported tool operation dispatch request"
+        "summary": "Claim the next queued tool dispatch request"
     },
     "post_tool_operation_dispatch_requests_expire": {
         "name": "post_tool_operation_dispatch_requests_expire",
         "method": "POST",
         "path": "/api/v1/tool-operation-dispatch-requests/expire",
-        "summary": "Expire stale queued or lease-timed-out imported tool operation dispatch requests"
+        "summary": "Expire stale tool dispatch requests"
     },
     "post_tool_operation_dispatch_requests_jobid_cancel": {
         "name": "post_tool_operation_dispatch_requests_jobid_cancel",
         "method": "POST",
         "path": "/api/v1/tool-operation-dispatch-requests/{jobId}/cancel",
-        "summary": "Cancel a queued or running tool operation dispatch request with sanitized metadata"
+        "summary": "Cancel a tool dispatch request"
     },
     "post_tool_operation_dispatch_requests_jobid_complete": {
         "name": "post_tool_operation_dispatch_requests_jobid_complete",
         "method": "POST",
         "path": "/api/v1/tool-operation-dispatch-requests/{jobId}/complete",
-        "summary": "Mark a claimed tool operation dispatch request completed with sanitized worker metadata"
+        "summary": "Complete a tool dispatch request"
     },
     "post_tool_operation_dispatch_requests_jobid_fail": {
         "name": "post_tool_operation_dispatch_requests_jobid_fail",
         "method": "POST",
         "path": "/api/v1/tool-operation-dispatch-requests/{jobId}/fail",
-        "summary": "Mark a claimed tool operation dispatch request failed with sanitized worker metadata"
+        "summary": "Fail a tool dispatch request"
     },
     "post_tool_operation_dispatch_requests_jobid_payload": {
         "name": "post_tool_operation_dispatch_requests_jobid_payload",
         "method": "POST",
         "path": "/api/v1/tool-operation-dispatch-requests/{jobId}/payload",
-        "summary": "Read the managed encrypted payload for an active imported tool operation dispatch lease"
+        "summary": "Read the encrypted payload for an active lease"
     },
     "post_tool_operation_dispatch_requests_jobid_renew_lease": {
         "name": "post_tool_operation_dispatch_requests_jobid_renew_lease",
         "method": "POST",
         "path": "/api/v1/tool-operation-dispatch-requests/{jobId}/renew-lease",
-        "summary": "Renew an active imported tool operation dispatch request lease"
+        "summary": "Renew a tool dispatch lease"
     },
     "get_tools": {
         "name": "get_tools",
@@ -2147,19 +2615,19 @@ OPERATIONS = {
         "name": "post_tools_mcp",
         "method": "POST",
         "path": "/api/v1/tools/mcp",
-        "summary": "Create a Streamable HTTP MCP tool connector from a reviewed manifest"
+        "summary": "Create an MCP connector"
     },
     "post_tools_openapi": {
         "name": "post_tools_openapi",
         "method": "POST",
         "path": "/api/v1/tools/openapi",
-        "summary": "Import an inline OpenAPI tool connector"
+        "summary": "Import an OpenAPI connector"
     },
     "post_tools_webhook": {
         "name": "post_tools_webhook",
         "method": "POST",
         "path": "/api/v1/tools/webhook",
-        "summary": "Create a single-operation webhook tool connector"
+        "summary": "Create a webhook connector"
     },
     "post_tools_toolid_execute": {
         "name": "post_tools_toolid_execute",
@@ -2171,25 +2639,25 @@ OPERATIONS = {
         "name": "get_usage_alerts",
         "method": "GET",
         "path": "/api/v1/usage/alerts",
-        "summary": "List quota usage alerts"
+        "summary": "List usage alerts"
     },
     "get_usage_events": {
         "name": "get_usage_events",
         "method": "GET",
         "path": "/api/v1/usage/events",
-        "summary": "List organization usage events"
+        "summary": "List usage events"
     },
     "get_usage_events_csv": {
         "name": "get_usage_events_csv",
         "method": "GET",
         "path": "/api/v1/usage/events.csv",
-        "summary": "Export organization usage events as CSV"
+        "summary": "Export usage events as CSV"
     },
     "get_usage_summary": {
         "name": "get_usage_summary",
         "method": "GET",
         "path": "/api/v1/usage/summary",
-        "summary": "Summarize organization usage"
+        "summary": "Summarize usage"
     },
     "get_users": {
         "name": "get_users",
@@ -2201,169 +2669,181 @@ OPERATIONS = {
         "name": "post_users_userid_disable",
         "method": "POST",
         "path": "/api/v1/users/{userId}/disable",
-        "summary": "Disable a user and revoke user credentials"
+        "summary": "Disable a user"
     },
     "post_users_userid_local_password": {
         "name": "post_users_userid_local_password",
         "method": "POST",
         "path": "/api/v1/users/{userId}/local-password",
-        "summary": "Set or reset a user local password for SSO fallback"
+        "summary": "Set a user's local password"
     },
     "patch_users_userid_role": {
         "name": "patch_users_userid_role",
         "method": "PATCH",
         "path": "/api/v1/users/{userId}/role",
-        "summary": "Promote or demote a local or SSO-provisioned user role"
+        "summary": "Update a user role"
     },
     "delete_voice_artifacts_artifactid": {
         "name": "delete_voice_artifacts_artifactid",
         "method": "DELETE",
         "path": "/api/v1/voice-artifacts/{artifactId}",
-        "summary": "Delete an authorized generated voice artifact"
+        "summary": "Delete artifact"
     },
     "get_voice_artifacts_artifactid": {
         "name": "get_voice_artifacts_artifactid",
         "method": "GET",
         "path": "/api/v1/voice-artifacts/{artifactId}",
-        "summary": "Read an authorized generated voice artifact"
+        "summary": "Read artifact"
     },
     "post_voice_transcriptions": {
         "name": "post_voice_transcriptions",
         "method": "POST",
         "path": "/api/v1/voice/transcriptions",
-        "summary": "Transcribe bounded audio input"
+        "summary": "Transcribe"
     },
     "get_voices": {
         "name": "get_voices",
         "method": "GET",
         "path": "/api/v1/voices",
-        "summary": "List voice profiles"
+        "summary": "List"
     },
     "post_voices": {
         "name": "post_voices",
         "method": "POST",
         "path": "/api/v1/voices",
-        "summary": "Create a voice profile"
+        "summary": "Create"
     },
     "post_voices_sync": {
         "name": "post_voices_sync",
         "method": "POST",
         "path": "/api/v1/voices/sync",
-        "summary": "Sync voice profiles from the configured provider catalog"
+        "summary": "Sync catalog"
     },
     "post_voices_voiceprofileid_preview": {
         "name": "post_voices_voiceprofileid_preview",
         "method": "POST",
         "path": "/api/v1/voices/{voiceProfileId}/preview",
-        "summary": "Preview a voice profile"
+        "summary": "Preview"
+    },
+    "post_web_search": {
+        "name": "post_web_search",
+        "method": "POST",
+        "path": "/api/v1/web-search",
+        "summary": "Search the web through organization policy"
+    },
+    "post_web_ingest": {
+        "name": "post_web_ingest",
+        "method": "POST",
+        "path": "/api/v1/web/ingest",
+        "summary": "Fetch governed webpage context"
     },
     "get_webhook_deliveries": {
         "name": "get_webhook_deliveries",
         "method": "GET",
         "path": "/api/v1/webhook-deliveries",
-        "summary": "List recent webhook delivery logs"
+        "summary": "List deliveries page"
     },
     "post_webhook_deliveries_retry_due": {
         "name": "post_webhook_deliveries_retry_due",
         "method": "POST",
         "path": "/api/v1/webhook-deliveries/retry-due",
-        "summary": "Retry due failed webhook deliveries"
+        "summary": "Retry due deliveries"
     },
     "get_webhooks": {
         "name": "get_webhooks",
         "method": "GET",
         "path": "/api/v1/webhooks",
-        "summary": "List webhook subscriptions"
+        "summary": "List"
     },
     "post_webhooks": {
         "name": "post_webhooks",
         "method": "POST",
         "path": "/api/v1/webhooks",
-        "summary": "Create a webhook subscription"
+        "summary": "Create"
     },
     "post_webhooks_bulk_disable": {
         "name": "post_webhooks_bulk_disable",
         "method": "POST",
         "path": "/api/v1/webhooks/bulk-disable",
-        "summary": "Disable multiple webhook subscriptions"
+        "summary": "Bulk disable"
     },
     "get_webhooks_webhookid_deliveries": {
         "name": "get_webhooks_webhookid_deliveries",
         "method": "GET",
         "path": "/api/v1/webhooks/{webhookId}/deliveries",
-        "summary": "List webhook delivery logs for a subscription"
+        "summary": "List deliveries"
     },
     "post_webhooks_webhookid_disable": {
         "name": "post_webhooks_webhookid_disable",
         "method": "POST",
         "path": "/api/v1/webhooks/{webhookId}/disable",
-        "summary": "Disable a webhook subscription"
+        "summary": "Disable"
     },
     "post_webhooks_webhookid_test": {
         "name": "post_webhooks_webhookid_test",
         "method": "POST",
         "path": "/api/v1/webhooks/{webhookId}/test",
-        "summary": "Send a signed webhook test delivery"
+        "summary": "Test"
     },
     "post_workflow_runs_workflowrunid_approve": {
         "name": "post_workflow_runs_workflowrunid_approve",
         "method": "POST",
         "path": "/api/v1/workflow-runs/{workflowRunId}/approve",
-        "summary": "Approve a waiting workflow run"
+        "summary": "Approve run"
     },
     "post_workflow_runs_workflowrunid_resume": {
         "name": "post_workflow_runs_workflowrunid_resume",
         "method": "POST",
         "path": "/api/v1/workflow-runs/{workflowRunId}/resume",
-        "summary": "Resume a workflow run waiting for a linked model run"
+        "summary": "Resume run"
     },
     "get_workflow_templates": {
         "name": "get_workflow_templates",
         "method": "GET",
         "path": "/api/v1/workflow-templates",
-        "summary": "List safe workflow templates"
+        "summary": "List templates"
     },
     "post_workflow_templates_templateid_create": {
         "name": "post_workflow_templates_templateid_create",
         "method": "POST",
         "path": "/api/v1/workflow-templates/{templateId}/create",
-        "summary": "Create a workflow definition from a safe template"
+        "summary": "Create from template"
     },
     "get_workflows": {
         "name": "get_workflows",
         "method": "GET",
         "path": "/api/v1/workflows",
-        "summary": "List workflow definitions"
+        "summary": "List"
     },
     "post_workflows": {
         "name": "post_workflows",
         "method": "POST",
         "path": "/api/v1/workflows",
-        "summary": "Create a safe workflow definition"
+        "summary": "Create"
     },
     "post_workflows_schedules_run_due": {
         "name": "post_workflows_schedules_run_due",
         "method": "POST",
         "path": "/api/v1/workflows/schedules/run-due",
-        "summary": "Start due scheduled workflows visible to the caller"
+        "summary": "Run due schedules"
     },
     "get_workflows_workflowid_runs": {
         "name": "get_workflows_workflowid_runs",
         "method": "GET",
         "path": "/api/v1/workflows/{workflowId}/runs",
-        "summary": "List workflow runs"
+        "summary": "List runs"
     },
     "post_workflows_workflowid_runs": {
         "name": "post_workflows_workflowid_runs",
         "method": "POST",
         "path": "/api/v1/workflows/{workflowId}/runs",
-        "summary": "Start a workflow run"
+        "summary": "Start run"
     },
     "get_workspaces": {
         "name": "get_workspaces",
         "method": "GET",
         "path": "/api/v1/workspaces",
-        "summary": "List workspaces visible to the caller"
+        "summary": "List visible workspaces"
     },
     "post_workspaces": {
         "name": "post_workspaces",
@@ -2381,6 +2861,6 @@ OPERATIONS = {
         "name": "get_workspaces_workspaceid_export",
         "method": "GET",
         "path": "/api/v1/workspaces/{workspaceId}/export",
-        "summary": "Export a sanitized workspace data inventory"
+        "summary": "Export a sanitized workspace inventory"
     }
 }

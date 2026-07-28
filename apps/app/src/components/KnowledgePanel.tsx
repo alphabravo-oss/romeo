@@ -1,7 +1,8 @@
-import { useForm } from '@tanstack/react-form'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
-import Upload from 'lucide-react/dist/esm/icons/upload.mjs'
+import { Input, Textarea, Button } from "@romeo/ui";
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import Upload from "lucide-react/dist/esm/icons/upload.mjs";
 
 import {
   createKnowledgeBase,
@@ -11,425 +12,488 @@ import {
   listKnowledgeBases,
   listKnowledgeSources,
   queryKnowledgeBase,
-  reindexKnowledgeSource
-} from '../api/client'
-import { toast } from '../lib/toast'
-import type { Agent, RetrievalHit } from '../api/types'
-import { PanelState } from '../lib/panel-state'
-import { AgentKnowledgeBindingControls } from './AgentKnowledgeBindingControls'
-import { FormDialog } from './FormDialog'
-import { KnowledgeSourceList } from './KnowledgeSourceList'
-import { PanelStats } from './PanelStats'
-import { Tabs } from './Tabs'
+  reindexKnowledgeSource,
+} from "../features";
+import { toast } from "../lib/toast";
+import { useLocale } from "../lib/i18n";
+import { formatNumber } from "../lib/locale-format";
+import type { Agent, RetrievalHit } from "../features/types";
+import { FormDialog } from "./FormDialog";
+import { Tabs } from "./Tabs";
+import { KnowledgeSourcesTab } from "./KnowledgeSourcesTab";
+import {
+  canInlineUpload,
+  knowledgeJobStatusKey,
+  mimeTypeFor,
+} from "./knowledge-file-utils";
 
-export function KnowledgePanel({ activeAgent, workspaceId }: { activeAgent: Agent | undefined; workspaceId: string | undefined }) {
-  const queryClient = useQueryClient()
-  const [activeKnowledgeBaseId, setActiveKnowledgeBaseId] = useState<string>()
-  const [hits, setHits] = useState<RetrievalHit[]>([])
-  const [notice, setNotice] = useState<string>()
-  const [baseDialogOpen, setBaseDialogOpen] = useState(false)
-  const [sourceDialogOpen, setSourceDialogOpen] = useState(false)
+export function KnowledgePanel({
+  activeAgent,
+  workspaceId,
+}: {
+  activeAgent: Agent | undefined;
+  workspaceId: string | undefined;
+}) {
+  const { locale, t } = useLocale();
+  const queryClient = useQueryClient();
+  const [activeKnowledgeBaseId, setActiveKnowledgeBaseId] = useState<string>();
+  const [hits, setHits] = useState<RetrievalHit[]>([]);
+  const [notice, setNotice] = useState<string>();
+  const [baseDialogOpen, setBaseDialogOpen] = useState(false);
+  const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
 
   const knowledgeBasesQuery = useQuery({
-    queryKey: ['knowledgeBases', workspaceId],
+    queryKey: ["knowledgeBases", workspaceId],
     queryFn: () => listKnowledgeBases(workspaceId!),
-    enabled: workspaceId !== undefined
-  })
-  const knowledgeBases = useMemo(() => knowledgeBasesQuery.data ?? [], [knowledgeBasesQuery.data])
-  const activeKnowledgeBase = knowledgeBases.find((item) => item.id === activeKnowledgeBaseId) ?? knowledgeBases[0]
+    enabled: workspaceId !== undefined,
+  });
+  const knowledgeBases = useMemo(
+    () => knowledgeBasesQuery.data ?? [],
+    [knowledgeBasesQuery.data],
+  );
+  const activeKnowledgeBase =
+    knowledgeBases.find((item) => item.id === activeKnowledgeBaseId) ??
+    knowledgeBases[0];
   const sourcesQuery = useQuery({
-    queryKey: ['knowledgeSources', activeKnowledgeBase?.id],
+    queryKey: ["knowledgeSources", activeKnowledgeBase?.id],
     queryFn: () => listKnowledgeSources(activeKnowledgeBase!.id),
-    enabled: activeKnowledgeBase !== undefined
-  })
+    enabled: activeKnowledgeBase !== undefined,
+  });
 
-  const createBaseMutation = useMutation({ mutationFn: createKnowledgeBase })
-  const createSourceMutation = useMutation({ mutationFn: createKnowledgeSource })
-  const deleteSourceMutation = useMutation({ mutationFn: deleteKnowledgeSource })
-  const extractSourceMutation = useMutation({ mutationFn: extractKnowledgeSource })
-  const reindexSourceMutation = useMutation({ mutationFn: reindexKnowledgeSource })
-  const queryMutation = useMutation({ mutationFn: queryKnowledgeBase })
+  const createBaseMutation = useMutation({ mutationFn: createKnowledgeBase });
+  const createSourceMutation = useMutation({
+    mutationFn: createKnowledgeSource,
+  });
+  const deleteSourceMutation = useMutation({
+    mutationFn: deleteKnowledgeSource,
+  });
+  const extractSourceMutation = useMutation({
+    mutationFn: extractKnowledgeSource,
+  });
+  const reindexSourceMutation = useMutation({
+    mutationFn: reindexKnowledgeSource,
+  });
+  const queryMutation = useMutation({ mutationFn: queryKnowledgeBase });
 
   useEffect(() => {
-    if (activeKnowledgeBaseId === undefined && knowledgeBases[0]) setActiveKnowledgeBaseId(knowledgeBases[0].id)
-  }, [activeKnowledgeBaseId, knowledgeBases])
+    if (activeKnowledgeBaseId === undefined && knowledgeBases[0])
+      setActiveKnowledgeBaseId(knowledgeBases[0].id);
+  }, [activeKnowledgeBaseId, knowledgeBases]);
 
   const KnowledgeBaseForm = useForm({
-    defaultValues: { name: '' },
+    defaultValues: { name: "" },
     onSubmit: async ({ value }) => {
-      if (!workspaceId) return
+      if (!workspaceId) return;
 
       try {
-        const created = await createBaseMutation.mutateAsync({ workspaceId, name: value.name })
-        setActiveKnowledgeBaseId(created.id)
-        setNotice('Knowledge base created.')
-        await queryClient.invalidateQueries({ queryKey: ['knowledgeBases', workspaceId] })
-        toast('Knowledge base created', 'success')
-        setBaseDialogOpen(false)
+        const created = await createBaseMutation.mutateAsync({
+          workspaceId,
+          name: value.name,
+        });
+        setActiveKnowledgeBaseId(created.id);
+        setNotice(t("knowledgeBaseCreatedNotice"));
+        await queryClient.invalidateQueries({
+          queryKey: ["knowledgeBases", workspaceId],
+        });
+        toast(t("knowledgeBaseCreated"), "success");
+        setBaseDialogOpen(false);
       } catch {
-        toast('Could not create knowledge base', 'error')
+        toast(t("knowledgeCouldNotCreateBase"), "error");
       }
-    }
-  })
+    },
+  });
 
   const SourceForm = useForm({
     defaultValues: {
-      fileName: '',
-      sourceContent: ''
+      fileName: "",
+      sourceContent: "",
     },
     onSubmit: async ({ value }) => {
-      if (!activeKnowledgeBase) return
+      if (!activeKnowledgeBase) return;
 
-      const content = value.sourceContent.trim()
+      const content = value.sourceContent.trim();
       const input = {
         knowledgeBaseId: activeKnowledgeBase.id,
         fileName: value.fileName,
         mimeType: mimeTypeFor(value.fileName),
-        sizeBytes: Math.max(1, content.length || value.fileName.length * 16)
-      }
+        sizeBytes: Math.max(1, content.length || value.fileName.length * 16),
+      };
       try {
-        await createSourceMutation.mutateAsync(content.length > 0 ? { ...input, content } : input)
-        setNotice('Source registered for ingestion.')
+        await createSourceMutation.mutateAsync(
+          content.length > 0 ? { ...input, content } : input,
+        );
+        setNotice(t("knowledgeSourceRegistered"));
         await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['knowledgeSources', activeKnowledgeBase.id] }),
-          queryClient.invalidateQueries({ queryKey: ['usageEvents'] }),
-          queryClient.invalidateQueries({ queryKey: ['usageSummary'] }),
-          queryClient.invalidateQueries({ queryKey: ['usageAlerts'] }),
-          queryClient.invalidateQueries({ queryKey: ['quotas'] })
-        ])
-        toast('Knowledge source added', 'success')
-        setSourceDialogOpen(false)
+          queryClient.invalidateQueries({
+            queryKey: ["knowledgeSources", activeKnowledgeBase.id],
+          }),
+          queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
+          queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
+          queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
+          queryClient.invalidateQueries({ queryKey: ["quotas"] }),
+        ]);
+        toast(t("knowledgeSourceAdded"), "success");
+        setSourceDialogOpen(false);
       } catch {
-        toast('Could not add knowledge source', 'error')
+        toast(t("knowledgeCouldNotAddSource"), "error");
       }
-    }
-  })
+    },
+  });
 
   async function handleSourceFileChange(file: File | undefined) {
-    if (file === undefined) return
-    const mimeType = mimeTypeFor(file.name, file.type)
-    SourceForm.setFieldValue('fileName', file.name)
+    if (file === undefined) return;
+    const mimeType = mimeTypeFor(file.name, file.type);
+    SourceForm.setFieldValue("fileName", file.name);
     if (!canInlineUpload(mimeType)) {
-      SourceForm.setFieldValue('sourceContent', '')
-      setNotice('This file type requires upload registration and the extraction worker.')
-      return
+      SourceForm.setFieldValue("sourceContent", "");
+      setNotice(t("knowledgeFileWorkerRequired"));
+      return;
     }
     if (file.size > 200_000) {
-      SourceForm.setFieldValue('sourceContent', '')
-      setNotice('Inline file import supports text files up to 200 KB.')
-      return
+      SourceForm.setFieldValue("sourceContent", "");
+      setNotice(t("knowledgeInlineLimit"));
+      return;
     }
-    SourceForm.setFieldValue('sourceContent', await file.text())
-    setNotice('Local file loaded.')
+    SourceForm.setFieldValue("sourceContent", await file.text());
+    setNotice(t("knowledgeFileLoaded"));
   }
 
   const QueryForm = useForm({
-    defaultValues: { query: '' },
+    defaultValues: { query: "" },
     onSubmit: async ({ value }) => {
-      if (!activeKnowledgeBase) return
+      if (!activeKnowledgeBase) return;
 
-      const results = await queryMutation.mutateAsync({ knowledgeBaseId: activeKnowledgeBase.id, query: value.query })
-      setHits(results)
-      setNotice('Knowledge query completed.')
-    }
-  })
+      const results = await queryMutation.mutateAsync({
+        knowledgeBaseId: activeKnowledgeBase.id,
+        query: value.query,
+      });
+      setHits(results);
+      setNotice(t("knowledgeQueryComplete"));
+    },
+  });
 
   async function handleDeleteSource(sourceId: string) {
-    if (!activeKnowledgeBase) return
+    if (!activeKnowledgeBase) return;
     try {
-      await deleteSourceMutation.mutateAsync({ knowledgeBaseId: activeKnowledgeBase.id, sourceId })
-      setHits([])
-      setNotice('Source deleted.')
+      await deleteSourceMutation.mutateAsync({
+        knowledgeBaseId: activeKnowledgeBase.id,
+        sourceId,
+      });
+      setHits([]);
+      setNotice(t("knowledgeSourceDeletedNotice"));
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['knowledgeSources', activeKnowledgeBase.id] }),
-        queryClient.invalidateQueries({ queryKey: ['usageEvents'] }),
-        queryClient.invalidateQueries({ queryKey: ['usageSummary'] }),
-        queryClient.invalidateQueries({ queryKey: ['usageAlerts'] })
-      ])
-      toast('Knowledge source deleted', 'success')
+        queryClient.invalidateQueries({
+          queryKey: ["knowledgeSources", activeKnowledgeBase.id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
+        queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
+        queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
+      ]);
+      toast(t("knowledgeSourceDeleted"), "success");
     } catch {
-      toast('Could not delete knowledge source', 'error')
+      toast(t("knowledgeCouldNotDeleteSource"), "error");
     }
   }
 
   async function handleReindexSource(sourceId: string) {
-    if (!activeKnowledgeBase) return
-    const content = SourceForm.state.values.sourceContent.trim()
-    if (content.length === 0) return
+    if (!activeKnowledgeBase) return;
+    const content = SourceForm.state.values.sourceContent.trim();
+    if (content.length === 0) return;
 
     try {
       const source = await reindexSourceMutation.mutateAsync({
         knowledgeBaseId: activeKnowledgeBase.id,
         sourceId,
         content,
-        sizeBytes: content.length
-      })
-      setHits([])
-      setNotice(`Source reindexed: ${source.chunkCount ?? 0} chunks.`)
+        sizeBytes: content.length,
+      });
+      setHits([]);
+      setNotice(
+        `${t("knowledgeSourceReindexedNotice")}: ${formatNumber(source.chunkCount ?? 0, locale)} ${t("knowledgeChunksLower")}.`,
+      );
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['knowledgeSources', activeKnowledgeBase.id] }),
-        queryClient.invalidateQueries({ queryKey: ['usageEvents'] }),
-        queryClient.invalidateQueries({ queryKey: ['usageSummary'] }),
-        queryClient.invalidateQueries({ queryKey: ['usageAlerts'] }),
-        queryClient.invalidateQueries({ queryKey: ['jobs'] }),
-        queryClient.invalidateQueries({ queryKey: ['quotas'] })
-      ])
-      toast('Knowledge source reindexed', 'success')
+        queryClient.invalidateQueries({
+          queryKey: ["knowledgeSources", activeKnowledgeBase.id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
+        queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
+        queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
+        queryClient.invalidateQueries({ queryKey: ["jobs"] }),
+        queryClient.invalidateQueries({ queryKey: ["quotas"] }),
+      ]);
+      toast(t("knowledgeSourceReindexed"), "success");
     } catch {
-      toast('Could not reindex knowledge source', 'error')
+      toast(t("knowledgeCouldNotReindexSource"), "error");
     }
   }
 
   async function handleExtractSource(sourceId: string) {
-    if (!activeKnowledgeBase) return
+    if (!activeKnowledgeBase) return;
     try {
-      const result = await extractSourceMutation.mutateAsync({ knowledgeBaseId: activeKnowledgeBase.id, sourceId })
-      setHits([])
-      setNotice(`Extraction ${result.job.status}: ${result.source.chunkCount ?? 0} chunks.`)
+      const result = await extractSourceMutation.mutateAsync({
+        knowledgeBaseId: activeKnowledgeBase.id,
+        sourceId,
+      });
+      setHits([]);
+      setNotice(
+        `${t("knowledgeExtraction")} ${t(knowledgeJobStatusKey(result.job.status))}: ${formatNumber(result.source.chunkCount ?? 0, locale)} ${t("knowledgeChunksLower")}.`,
+      );
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['knowledgeSources', activeKnowledgeBase.id] }),
-        queryClient.invalidateQueries({ queryKey: ['usageEvents'] }),
-        queryClient.invalidateQueries({ queryKey: ['usageSummary'] }),
-        queryClient.invalidateQueries({ queryKey: ['usageAlerts'] }),
-        queryClient.invalidateQueries({ queryKey: ['jobs'] })
-      ])
-      toast('Knowledge source extracted', 'success')
+        queryClient.invalidateQueries({
+          queryKey: ["knowledgeSources", activeKnowledgeBase.id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
+        queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
+        queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
+        queryClient.invalidateQueries({ queryKey: ["jobs"] }),
+      ]);
+      toast(t("knowledgeExtracted"), "success");
     } catch {
-      toast('Could not extract knowledge source', 'error')
+      toast(t("knowledgeCouldNotExtractSource"), "error");
     }
   }
 
   return (
     <section className="rm-panel p-4">
       <div className="rm-card-header">
-        <div className="rm-card-title">Knowledge</div>
+        <div className="rm-card-title">{t("knowledgeTitle")}</div>
         <div className="flex gap-2">
-          <button className="rm-button primary" onClick={() => setBaseDialogOpen(true)} type="button">
-            + Add knowledge base
-          </button>
-          <button
-            className="rm-button primary"
+          <Button
+            variant="primary"
+            onClick={() => setBaseDialogOpen(true)}
+            type="button"
+          >
+            + {t("knowledgeAddBase")}
+          </Button>
+          <Button
+            variant="primary"
             disabled={!activeKnowledgeBase}
             onClick={() => setSourceDialogOpen(true)}
             type="button"
           >
-            + Add source
-          </button>
+            + {t("knowledgeAddSource")}
+          </Button>
         </div>
       </div>
 
-      <FormDialog onClose={() => setBaseDialogOpen(false)} open={baseDialogOpen} title="New knowledge base">
+      <FormDialog
+        onClose={() => setBaseDialogOpen(false)}
+        open={baseDialogOpen}
+        title={t("knowledgeNewBase")}
+      >
         <form
           className="grid gap-2"
           onSubmit={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void KnowledgeBaseForm.handleSubmit()
+            event.preventDefault();
+            event.stopPropagation();
+            void KnowledgeBaseForm.handleSubmit();
           }}
         >
           <label className="text-sm text-muted" htmlFor="knowledge-name">
-            Knowledge base
+            {t("knowledgeBase")}
           </label>
           <KnowledgeBaseForm.Field
             name="name"
-            validators={{ onChange: ({ value }: { value: string }) => (!value?.trim() ? 'Name is required' : undefined) }}
+            validators={{
+              onChange: ({ value }: { value: string }) =>
+                !value?.trim() ? t("knowledgeNameRequired") : undefined,
+            }}
           >
             {(field) => (
               <>
-                <input
-                  className="rm-input"
+                <Input
+                  name="name"
                   id="knowledge-name"
                   onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.currentTarget.value)}
-                  placeholder="Knowledge base name"
+                  onChange={(event) =>
+                    field.handleChange(event.currentTarget.value)
+                  }
+                  placeholder={t("knowledgeBaseName")}
                   value={field.state.value}
                 />
                 {field.state.meta.errors.length ? (
-                  <div className="rm-composer-error">{field.state.meta.errors.join(', ')}</div>
+                  <div className="rm-composer-error">
+                    {field.state.meta.errors.join(", ")}
+                  </div>
                 ) : null}
               </>
             )}
           </KnowledgeBaseForm.Field>
-          <button className="rm-button" disabled={!workspaceId || createBaseMutation.isPending} type="submit">
-            {createBaseMutation.isPending ? 'Creating' : 'Create KB'}
-          </button>
+          <Button
+            disabled={!workspaceId || createBaseMutation.isPending}
+            type="submit"
+          >
+            {createBaseMutation.isPending
+              ? t("knowledgeCreating")
+              : t("knowledgeCreateBase")}
+          </Button>
         </form>
       </FormDialog>
 
-      <FormDialog onClose={() => setSourceDialogOpen(false)} open={sourceDialogOpen} title="Add source">
+      <FormDialog
+        onClose={() => setSourceDialogOpen(false)}
+        open={sourceDialogOpen}
+        title={t("knowledgeAddSource")}
+      >
         <form
           className="grid gap-2"
           onSubmit={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void SourceForm.handleSubmit()
+            event.preventDefault();
+            event.stopPropagation();
+            void SourceForm.handleSubmit();
           }}
         >
           <label className="text-sm text-muted" htmlFor="knowledge-file-name">
-            Source file
+            {t("knowledgeSourceFile")}
           </label>
-          <label className="rm-button inline-flex cursor-pointer items-center justify-center gap-2" htmlFor="knowledge-file-picker">
+          <label
+            className="inline-flex cursor-pointer items-center justify-center gap-2"
+            htmlFor="knowledge-file-picker"
+          >
             <Upload size={16} />
-            <span>Choose file</span>
+            <span>{t("knowledgeChooseFile")}</span>
           </label>
-          <input
+          <Input
+            name="knowledge-file-picker"
             accept=".txt,.md,.markdown,.json,.jsonl,.ndjson,.csv,.html,.htm,text/*,application/json,application/x-ndjson"
             className="sr-only"
             id="knowledge-file-picker"
-            onChange={(event) => void handleSourceFileChange(event.currentTarget.files?.[0])}
+            onChange={(event) =>
+              void handleSourceFileChange(event.currentTarget.files?.[0])
+            }
             type="file"
           />
           <SourceForm.Field name="fileName">
             {(field) => (
-              <input
-                className="rm-input"
+              <Input
+                name="fileName"
                 id="knowledge-file-name"
                 onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.currentTarget.value)}
-                placeholder="Source file name"
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
+                placeholder={t("knowledgeSourceFileName")}
                 value={field.state.value}
               />
             )}
           </SourceForm.Field>
-          <label className="text-sm text-muted" htmlFor="knowledge-source-content">
-            Source text
+          <label
+            className="text-sm text-muted"
+            htmlFor="knowledge-source-content"
+          >
+            {t("knowledgeSourceText")}
           </label>
           <SourceForm.Field name="sourceContent">
             {(field) => (
-              <textarea
-                className="rm-input min-h-24"
+              <Textarea
+                name="sourceContent"
+                className="min-h-24"
                 id="knowledge-source-content"
-                onChange={(event) => field.handleChange(event.currentTarget.value)}
-                placeholder="Source text"
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
+                placeholder={t("knowledgeSourceText")}
                 value={field.state.value}
               />
             )}
           </SourceForm.Field>
-          <button className="rm-button" disabled={!activeKnowledgeBase || createSourceMutation.isPending} type="submit">
-            {createSourceMutation.isPending ? 'Registering' : 'Register source'}
-          </button>
+          <Button
+            disabled={!activeKnowledgeBase || createSourceMutation.isPending}
+            type="submit"
+          >
+            {createSourceMutation.isPending
+              ? t("knowledgeRegistering")
+              : t("knowledgeRegisterSource")}
+          </Button>
         </form>
       </FormDialog>
 
       <Tabs
         tabs={[
           {
-            id: 'sources',
-            label: 'Sources',
+            id: "sources",
+            label: t("knowledgeSources"),
             content: (
-              <div className="grid gap-4">
-                <div className="grid gap-2 text-sm">
-                  {knowledgeBases.map((knowledgeBase) => (
-                    <button
-                      className={`rm-button min-w-0 text-left ${knowledgeBase.id === activeKnowledgeBase?.id ? 'selected' : ''}`}
-                      key={knowledgeBase.id}
-                      onClick={() => setActiveKnowledgeBaseId(knowledgeBase.id)}
-                      type="button"
-                    >
-                      <span className="block truncate">{knowledgeBase.name}</span>
-                    </button>
-                  ))}
-                </div>
-
-                <AgentKnowledgeBindingControls activeAgent={activeAgent} activeKnowledgeBase={activeKnowledgeBase} />
-
-                <PanelState
-                  query={sourcesQuery}
-                  empty="No knowledge sources yet."
-                  emptyAction={
-                    <button className="rm-button primary" disabled={!activeKnowledgeBase} onClick={() => setSourceDialogOpen(true)} type="button">
-                      + Add source
-                    </button>
-                  }
-                >
-                  {(sources) => (
-          <div className="grid gap-4">
-            <PanelStats
-              items={[
-                { label: 'Total sources', value: sources.length },
-                { label: 'Knowledge bases', value: knowledgeBases.length },
-                { label: 'Indexed', value: sources.filter((source) => source.status === 'indexed').length },
-              ]}
-            />
-            <KnowledgeSourceList
-              isDeleting={deleteSourceMutation.isPending}
-              isExtracting={extractSourceMutation.isPending}
-              isReindexing={reindexSourceMutation.isPending}
-              onDelete={(sourceId) => void handleDeleteSource(sourceId)}
-              onExtract={(sourceId) => void handleExtractSource(sourceId)}
-              onReindex={(sourceId) => void handleReindexSource(sourceId)}
-              sources={sources}
-            />
-          </div>
-        )}
-                </PanelState>
-              </div>
-            )
+              <KnowledgeSourcesTab
+                activeAgent={activeAgent}
+                activeKnowledgeBase={activeKnowledgeBase}
+                isDeleting={deleteSourceMutation.isPending}
+                isExtracting={extractSourceMutation.isPending}
+                isReindexing={reindexSourceMutation.isPending}
+                knowledgeBases={knowledgeBases}
+                onAddSource={() => setSourceDialogOpen(true)}
+                onDelete={(sourceId) => void handleDeleteSource(sourceId)}
+                onExtract={(sourceId) => void handleExtractSource(sourceId)}
+                onReindex={(sourceId) => void handleReindexSource(sourceId)}
+                onSelect={setActiveKnowledgeBaseId}
+                sourcesQuery={sourcesQuery}
+              />
+            ),
           },
           {
-            id: 'query',
-            label: 'Query',
+            id: "query",
+            label: t("knowledgeQuery"),
             content: (
               <div>
-      <form
-        className="grid gap-2"
-        onSubmit={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          void QueryForm.handleSubmit()
-        }}
-      >
-        <label className="text-sm text-muted" htmlFor="knowledge-query">
-          Query
-        </label>
-        <QueryForm.Field name="query">
-          {(field) => (
-            <input
-              className="rm-input"
-              id="knowledge-query"
-              onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.currentTarget.value)}
-              placeholder="Ask a question"
-              value={field.state.value}
-            />
-          )}
-        </QueryForm.Field>
-        <button className="rm-button" disabled={!activeKnowledgeBase || queryMutation.isPending} type="submit">
-          {queryMutation.isPending ? 'Querying' : 'Query KB'}
-        </button>
-      </form>
+                <form
+                  className="grid gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void QueryForm.handleSubmit();
+                  }}
+                >
+                  <label
+                    className="text-sm text-muted"
+                    htmlFor="knowledge-query"
+                  >
+                    {t("knowledgeQuery")}
+                  </label>
+                  <QueryForm.Field name="query">
+                    {(field) => (
+                      <Input
+                        name="query"
+                        id="knowledge-query"
+                        onBlur={field.handleBlur}
+                        onChange={(event) =>
+                          field.handleChange(event.currentTarget.value)
+                        }
+                        placeholder={t("knowledgeAskQuestion")}
+                        value={field.state.value}
+                      />
+                    )}
+                  </QueryForm.Field>
+                  <Button
+                    disabled={!activeKnowledgeBase || queryMutation.isPending}
+                    type="submit"
+                  >
+                    {queryMutation.isPending
+                      ? t("knowledgeQuerying")
+                      : t("knowledgeQueryBase")}
+                  </Button>
+                </form>
 
-      {notice ? <div className="mt-3 text-sm text-muted">{notice}</div> : null}
-      <div className="mt-2 grid gap-2 text-sm">
-        {hits.map((hit) => (
-          <div className="rounded-md border border-border p-2" key={hit.id}>
-            <div className="font-medium">{hit.citation.title}</div>
-            <div className="line-clamp-3 text-muted">{hit.content}</div>
-          </div>
-        ))}
-      </div>
+                {notice ? (
+                  <div className="mt-3 text-sm text-muted">{notice}</div>
+                ) : null}
+                <div className="mt-2 grid gap-2 text-sm">
+                  {hits.map((hit) => (
+                    <div
+                      className="rounded-md border border-border p-2"
+                      key={hit.id}
+                    >
+                      <div className="font-medium">{hit.citation.title}</div>
+                      <div className="line-clamp-3 text-muted">
+                        {hit.content}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            )
-          }
+            ),
+          },
         ]}
       />
     </section>
-  )
-}
-
-function mimeTypeFor(fileName: string, reportedType = ''): string {
-  if (reportedType.length > 0) return reportedType
-  if (fileName.endsWith('.md')) return 'text/markdown'
-  if (fileName.endsWith('.markdown')) return 'text/markdown'
-  if (fileName.endsWith('.json')) return 'application/json'
-  if (fileName.endsWith('.jsonl') || fileName.endsWith('.ndjson')) return 'application/x-ndjson'
-  if (fileName.endsWith('.csv')) return 'text/csv'
-  if (fileName.endsWith('.html') || fileName.endsWith('.htm')) return 'text/html'
-  if (fileName.endsWith('.pdf')) return 'application/pdf'
-  return 'text/plain'
-}
-
-function canInlineUpload(mimeType: string): boolean {
-  const normalized = mimeType.split(';', 1)[0]?.trim().toLowerCase() ?? ''
-  return normalized.startsWith('text/') || normalized === 'application/json' || normalized === 'application/x-ndjson'
+  );
 }

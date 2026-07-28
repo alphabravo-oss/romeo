@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 
 import type { AuthSubject } from "@romeo/auth";
-import type { PresignedUpload } from "@romeo/storage";
 
 import type {
   BackgroundJob,
@@ -9,139 +8,24 @@ import type {
   WorkflowStep,
 } from "../domain/entities";
 import { ApiError } from "../errors";
+import { isPrivateNetworkHost } from "./network-host-policy";
+import {
+  browserAutomationJobType,
+  browserAutomationMaxAttempts,
+  browserAutomationPayloadSchemaVersion,
+  browserAutomationWorkerQueue,
+  type BrowserAutomationArtifactSummary,
+  type BrowserAutomationCompletionResult,
+  type BrowserAutomationJobPayload,
+  type BrowserAutomationStoredArtifact,
+  type BrowserAutomationTaskClaimResult,
+  type BrowserAutomationTaskReadbackResult,
+  type BrowserAutomationWorkerLease,
+  type BrowserTaskSandboxPolicy,
+  type NormalizedBrowserTask,
+} from "./workflow-browser-task-types";
 
-export const browserAutomationJobType = "workflow.browser_task.dispatch_request";
-export const browserAutomationMaxAttempts = 3;
-export const browserAutomationWorkerQueue = "browser_automation";
-export const browserAutomationPayloadSchemaVersion =
-  "romeo.browser-automation-task.v1";
-
-export interface NormalizedBrowserTask {
-  targetUrl: string;
-  targetOrigin: string;
-  targetHost: string;
-  task: string;
-}
-
-export interface BrowserAutomationWorkerLease {
-  attempt: number;
-  claimedAt: string;
-  expiresAt: string;
-  leaseSeconds: number;
-  renewedAt: string;
-  workerId: string;
-}
-
-export interface BrowserTaskSandboxPolicy {
-  artifactCapture: "metadata_only" | "screenshots_and_traces";
-  downloadPolicy: "blocked" | "metadata_only";
-  executionDriver: "disabled" | "external_worker";
-  network: "target_origin_only";
-  uploadPolicy: "blocked";
-}
-
-export interface BrowserAutomationJobPayload {
-  approvedAt: string;
-  approvedBy: string;
-  sandboxPolicy: BrowserTaskSandboxPolicy;
-  schemaVersion: typeof browserAutomationPayloadSchemaVersion;
-  stepId: string;
-  targetHost: string;
-  targetOrigin: string;
-  targetUrl: string;
-  taskHash: string;
-  taskLength: number;
-  workflowId: string;
-  workflowRunId: string;
-  workerQueue: typeof browserAutomationWorkerQueue;
-  workspaceId: string;
-}
-
-export interface BrowserAutomationArtifactSummary {
-  artifactId: string;
-  type: "download" | "screenshot" | "trace";
-  artifactUrl?: string;
-  contentType?: string;
-  sizeBytes?: number;
-}
-
-export interface BrowserAutomationStoredArtifact
-  extends BrowserAutomationArtifactSummary {
-  artifactUrl: string;
-  registeredAt: string;
-  registeredBy: string;
-  storageKey: string;
-}
-
-export interface BrowserAutomationArtifactUploadRegistration {
-  artifact: BrowserAutomationArtifactSummary;
-  upload: PresignedUpload;
-}
-
-export interface BrowserAutomationArtifactReadResult {
-  artifact: BrowserAutomationArtifactSummary;
-  bytes: Uint8Array;
-}
-
-export interface BrowserAutomationCompletionResult {
-  artifactCount?: number;
-  artifacts?: BrowserAutomationArtifactSummary[];
-  capturedBytes?: number;
-  durationMs?: number;
-  finalHost?: string;
-  finalOrigin?: string;
-  finalPath?: string;
-  navigationCount?: number;
-  networkDeniedCount?: number;
-  outputKeys?: string[];
-  redactionApplied?: boolean;
-}
-
-export interface BrowserAutomationTaskClaimResult {
-  claimed: boolean;
-  workerQueue: typeof browserAutomationWorkerQueue;
-  job?: { id: string; status: BackgroundJob["status"]; type: string };
-  lease?: BrowserAutomationWorkerLease;
-  request?: {
-    targetHost: string;
-    targetOrigin: string;
-    targetUrl: string;
-    task: string;
-    taskHash: string;
-    taskLength: number;
-  };
-  sandboxPolicy?: BrowserTaskSandboxPolicy;
-  workflow?: {
-    stepId: string;
-    workflowId: string;
-    workflowRunId: string;
-    workspaceId: string;
-  };
-}
-
-export interface BrowserAutomationTaskReadbackResult {
-  job: { id: string; status: BackgroundJob["status"]; type: string };
-  outcome: "cancelled" | "completed" | "failed";
-  workerQueue: typeof browserAutomationWorkerQueue;
-  workflow: {
-    stepId: string;
-    workflowId: string;
-    workflowRunId: string;
-    workspaceId: string;
-  };
-  errorCode?: string;
-  result?: BrowserAutomationCompletionResult;
-}
-
-export interface BrowserAutomationTaskExpiryResult {
-  expired: number;
-  jobs: Array<
-    BrowserAutomationTaskReadbackResult & {
-      reasonCode: "queued_timeout" | "running_lease_timeout";
-    }
-  >;
-  workerQueue: typeof browserAutomationWorkerQueue;
-}
+export * from "./workflow-browser-task-types";
 
 export function normalizeBrowserTaskStep(
   step: Omit<WorkflowStep, "id">,
@@ -186,7 +70,7 @@ export function normalizeBrowserTaskStep(
       400,
     );
   }
-  if (isLocalOrPrivateHost(url.hostname))
+  if (isPrivateNetworkHost(url.hostname))
     throw new ApiError(
       "invalid_workflow_step",
       "Browser task targetUrl must not target local or private hosts.",
@@ -401,7 +285,9 @@ export function publicBrowserAutomationArtifact(
     ...(artifact.contentType === undefined
       ? {}
       : { contentType: artifact.contentType }),
-    ...(artifact.sizeBytes === undefined ? {} : { sizeBytes: artifact.sizeBytes }),
+    ...(artifact.sizeBytes === undefined
+      ? {}
+      : { sizeBytes: artifact.sizeBytes }),
   };
 }
 
@@ -484,7 +370,9 @@ function workflowSummary(
   };
 }
 
-function readSandboxPolicy(value: unknown): BrowserTaskSandboxPolicy | undefined {
+function readSandboxPolicy(
+  value: unknown,
+): BrowserTaskSandboxPolicy | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return undefined;
   const policy = value as Partial<BrowserTaskSandboxPolicy>;
@@ -542,7 +430,7 @@ function normalizeFinalBrowserUrl(value: string): {
       400,
     );
   }
-  if (isLocalOrPrivateHost(url.hostname))
+  if (isPrivateNetworkHost(url.hostname))
     throw new ApiError(
       "browser_automation_final_url_invalid",
       "Browser automation final URL must not target local or private hosts.",
@@ -563,7 +451,9 @@ function normalizeArtifactSummary(
     ...(artifact.contentType === undefined
       ? {}
       : { contentType: artifact.contentType }),
-    ...(artifact.sizeBytes === undefined ? {} : { sizeBytes: artifact.sizeBytes }),
+    ...(artifact.sizeBytes === undefined
+      ? {}
+      : { sizeBytes: artifact.sizeBytes }),
   };
 }
 
@@ -599,27 +489,7 @@ function readBrowserAutomationStoredArtifact(
 }
 
 function uniqueStrings(values: string[], maxItems: number): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].slice(
-    0,
-    maxItems,
-  );
-}
-
-function isLocalOrPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host.endsWith(".local")
-  )
-    return true;
-  if (host === "::1" || host === "[::1]") return true;
-  if (/^127\./u.test(host) || /^10\./u.test(host) || /^192\.168\./u.test(host))
-    return true;
-  const match = /^172\.(\d{1,2})\./u.exec(host);
-  if (match?.[1] !== undefined) {
-    const second = Number(match[1]);
-    if (second >= 16 && second <= 31) return true;
-  }
-  return false;
+  return [
+    ...new Set(values.map((value) => value.trim()).filter(Boolean)),
+  ].slice(0, maxItems);
 }

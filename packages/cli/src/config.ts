@@ -1,7 +1,7 @@
 import {
-  RomeoApiClient,
-  type RomeoClientOptions,
-} from "@romeo/api-client";
+  createGeneratedClient,
+  type GeneratedApiClient,
+} from "@romeo/api-client/runtime/generated-client";
 
 import { flagValue, type ParsedArgs } from "./args";
 
@@ -19,17 +19,23 @@ export function resolveConfig(
     nonEmpty(env.ROMEO_BASE_URL) ??
     "http://127.0.0.1:3000";
   const apiKey =
-    nonEmpty(flagValue(parsed.flags, "api-key")) ??
-    nonEmpty(env.ROMEO_API_KEY);
+    nonEmpty(flagValue(parsed.flags, "api-key")) ?? nonEmpty(env.ROMEO_API_KEY);
   return apiKey === undefined ? { baseUrl } : { baseUrl, apiKey };
 }
 
-export function createClient(config: CliConfig): RomeoApiClient {
-  const options: RomeoClientOptions =
-    config.apiKey === undefined
-      ? { baseUrl: config.baseUrl }
-      : { baseUrl: config.baseUrl, apiKey: config.apiKey };
-  return new RomeoApiClient(options);
+export function createGeneratedApiClient(
+  config: CliConfig,
+): GeneratedApiClient {
+  return createGeneratedClient(clientOptions(config));
+}
+
+function clientOptions(config: CliConfig): {
+  apiKey?: string;
+  baseUrl: string;
+} {
+  return config.apiKey === undefined
+    ? { baseUrl: config.baseUrl }
+    : { baseUrl: config.baseUrl, apiKey: config.apiKey };
 }
 
 function nonEmpty(value: string | undefined): string | undefined {

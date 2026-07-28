@@ -1,16 +1,26 @@
-import type { RomeoApi } from "../context";
 import {
-  createRagPolicyChangeRequestSchema,
-  createManagedSecretSchema,
-  deprovisionSsoOidcUserSchema,
-  reviewRagPolicyChangeRequestSchema,
-  secretRewrapExecuteSchema,
-  secretRewrapPreviewSchema,
-  testAuthProviderConnectionSchema,
-  updateAuthProviderSettingsSchema,
-  updateRagPolicySchema,
-  updateSsoSettingsSchema,
-} from "../schemas";
+  approveRagPolicyChangeRequestRoute,
+  createManagedSecretRoute,
+  createRagPolicyChangeRequestRoute,
+  deprovisionSsoOidcUserRoute,
+  executeSecretRewrapRoute,
+  getAuthProviderSettingsRoute,
+  getRagPolicyChangeRequestRoute,
+  getRagPolicyRoute,
+  getRagPostureRoute,
+  getReadinessReportRoute,
+  getSsoSettingsRoute,
+  listAuthProviderCatalogRoute,
+  previewSecretRewrapRoute,
+  rejectRagPolicyChangeRequestRoute,
+  testAuthProviderConnectionRoute,
+  testSsoSettingsRoute,
+  updateAuthProviderSettingsRoute,
+  updateRagPolicyRoute,
+  updateSsoSettingsRoute,
+} from "@romeo/contracts";
+
+import type { RomeoApi } from "../context";
 import {
   ragPolicyTiers,
   type RagPolicyChangeEvidenceSummary,
@@ -23,45 +33,43 @@ import {
 } from "../../domain/rag-policy";
 
 export function registerReadinessRoutes(app: RomeoApi): void {
-  app.get("/api/v1/admin/readiness", async (context) => {
+  app.openapi(getReadinessReportRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").readiness.report(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/admin/rag/posture", async (context) => {
+  app.openapi(getRagPostureRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").ragPosture.report(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/admin/rag/policy", async (context) => {
+  app.openapi(getRagPolicyRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").ragPolicy.report(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.patch("/api/v1/admin/rag/policy", async (context) => {
+  app.openapi(updateRagPolicyRoute, async (context) => {
     const subject = context.get("subject");
-    const body = updateRagPolicySchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const policy = cleanRagPolicyPatch(body);
     const data = await context
       .get("services")
       .ragPolicy.update({ subject, policy });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/admin/rag/policy/change-request", async (context) => {
+  app.openapi(getRagPolicyChangeRequestRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").ragPolicy.changeRequest(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/admin/rag/policy/change-requests", async (context) => {
+  app.openapi(createRagPolicyChangeRequestRoute, async (context) => {
     const subject = context.get("subject");
-    const body = createRagPolicyChangeRequestSchema.parse(
-      await context.req.json(),
-    );
+    const body = context.req.valid("json");
     const evidenceSummary = cleanRagPolicyChangeEvidenceSummary(
       body.evidenceSummary,
     );
@@ -78,151 +86,126 @@ export function registerReadinessRoutes(app: RomeoApi): void {
     return context.json({ data }, 201);
   });
 
-  app.post(
-    "/api/v1/admin/rag/policy/change-requests/:requestId/approve",
-    async (context) => {
-      const subject = context.get("subject");
-      const requestId = context.req.param("requestId");
-      const body = reviewRagPolicyChangeRequestSchema.parse(
-        await context.req.json(),
-      );
-      const data = await context
-        .get("services")
-        .ragPolicy.approveChangeRequest({
-          subject,
-          requestId,
-          confirmRequestId: body.confirmRequestId,
-        });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/admin/rag/policy/change-requests/:requestId/reject",
-    async (context) => {
-      const subject = context.get("subject");
-      const requestId = context.req.param("requestId");
-      const body = reviewRagPolicyChangeRequestSchema.parse(
-        await context.req.json(),
-      );
-      const data = await context.get("services").ragPolicy.rejectChangeRequest({
-        subject,
-        requestId,
-        confirmRequestId: body.confirmRequestId,
-        ...(body.reasonCode === undefined
-          ? {}
-          : { reasonCode: body.reasonCode }),
-      });
-      return context.json({ data });
-    },
-  );
-
-  app.get("/api/v1/admin/sso-settings", async (context) => {
+  app.openapi(approveRagPolicyChangeRequestRoute, async (context) => {
     const subject = context.get("subject");
-    const data = await context.get("services").ssoSettings.report(subject);
-    return context.json({ data });
+    const { requestId } = context.req.valid("param");
+    const body = context.req.valid("json");
+    const data = await context.get("services").ragPolicy.approveChangeRequest({
+      subject,
+      requestId,
+      confirmRequestId: body.confirmRequestId,
+    });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/admin/auth-providers/catalog", async (context) => {
+  app.openapi(rejectRagPolicyChangeRequestRoute, async (context) => {
+    const subject = context.get("subject");
+    const { requestId } = context.req.valid("param");
+    const body = context.req.valid("json");
+    const data = await context.get("services").ragPolicy.rejectChangeRequest({
+      subject,
+      requestId,
+      confirmRequestId: body.confirmRequestId,
+      ...(body.reasonCode === undefined ? {} : { reasonCode: body.reasonCode }),
+    });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(getSsoSettingsRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context.get("services").ssoSettings.report(subject);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listAuthProviderCatalogRoute, async (context) => {
     const subject = context.get("subject");
     const data = context
       .get("services")
       .ssoSettings.authProviderCatalog(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/admin/auth-providers/settings", async (context) => {
+  app.openapi(getAuthProviderSettingsRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
       .authProviderSettings.report(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.patch("/api/v1/admin/auth-providers/settings", async (context) => {
+  app.openapi(updateAuthProviderSettingsRoute, async (context) => {
     const subject = context.get("subject");
-    const body = updateAuthProviderSettingsSchema.parse(
-      await context.req.json(),
-    );
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .authProviderSettings.update({ subject, settings: body });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/admin/auth-providers/settings/test", async (context) => {
+  app.openapi(testAuthProviderConnectionRoute, async (context) => {
     const subject = context.get("subject");
-    const body = testAuthProviderConnectionSchema.parse(
-      await context.req.json(),
-    );
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .authProviderSettings.connectionTest({ subject, test: body });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/admin/secrets", async (context) => {
+  app.openapi(createManagedSecretRoute, async (context) => {
     const subject = context.get("subject");
-    const body = createManagedSecretSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .managedSecrets.create({ subject, request: body });
     return context.json({ data }, 201);
   });
 
-  app.post("/api/v1/admin/secret-rotation/rewrap/preview", async (context) => {
+  app.openapi(previewSecretRewrapRoute, async (context) => {
     const subject = context.get("subject");
-    const body = secretRewrapPreviewSchema.parse(await optionalJson(context));
+    const body = context.req.valid("json") ?? {};
     const data = await context
       .get("services")
       .secretRotation.preview({ subject, request: body });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/admin/secret-rotation/rewrap", async (context) => {
+  app.openapi(executeSecretRewrapRoute, async (context) => {
     const subject = context.get("subject");
-    const body = secretRewrapExecuteSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .secretRotation.execute({ subject, request: body });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.patch("/api/v1/admin/sso-settings", async (context) => {
+  app.openapi(updateSsoSettingsRoute, async (context) => {
     const subject = context.get("subject");
-    const body = updateSsoSettingsSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .ssoSettings.update({ subject, oidc: body.oidc });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/admin/sso-settings/test", async (context) => {
+  app.openapi(testSsoSettingsRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
       .ssoSettings.connectionTest(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/admin/sso/oidc/deprovision", async (context) => {
+  app.openapi(deprovisionSsoOidcUserRoute, async (context) => {
     const subject = context.get("subject");
-    const body = deprovisionSsoOidcUserSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").ssoSettings.deprovisionOidcUser({
       subject,
       oidcSubject: body.oidcSubject,
       confirmOidcSubject: body.confirmOidcSubject,
       ...(body.issuerUrl === undefined ? {} : { issuerUrl: body.issuerUrl }),
     });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
-}
-
-async function optionalJson(context: {
-  req: { text(): Promise<string> };
-}): Promise<unknown> {
-  const text = await context.req.text();
-  return text.trim().length === 0 ? {} : JSON.parse(text);
 }
 
 type RagPolicyBudgetPatchBody = {

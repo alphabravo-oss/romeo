@@ -13,32 +13,32 @@ import type {
 } from "../types";
 import { usageFromOpenAiResponsesPayload } from "../usage";
 import { devEchoStream } from "./dev-echo";
-import { readSseJson } from "./sse-json";
+import { discoverCompatibleModels } from "./openai-compatible";
+import { createOpenAiClient, normalizeProviderSdkError } from "./provider-sdk";
 
-type ResponsesInputItem = Record<string, unknown>;
+type ResponsesInputItem = ResponseInputItem;
 
 export const openAiResponsesCompatibleAdapter: ModelProviderAdapter = {
   kind: "openai-responses-compatible",
-  async health(provider) {
-    return {
-      ok: provider.enabled,
-      message: provider.enabled
-        ? "Provider is configured."
-        : "Provider is disabled.",
-    };
+  async health(provider, options) {
+    const models = await discoverCompatibleModels(
+      { ...provider, modelIds: [] },
+      openAiResponsesCompatibleCapabilities,
+      options,
+    );
+    return models.length > 0
+      ? {
+          ok: true,
+          message: `Connection available (${models.length} model${models.length === 1 ? "" : "s"}).`,
+        }
+      : { ok: false, message: "The endpoint returned no discoverable models." };
   },
-  async listModels(provider): Promise<BaseModel[]> {
-    return [
-      {
-        id: `model_${provider.id}_responses_default`,
-        providerId: provider.id,
-        name: "gpt-compatible",
-        displayName: "OpenAI Responses-compatible default",
-        enabled: true,
-        capabilities: openAiResponsesCompatibleCapabilities,
-        contextWindow: 128000,
-      },
-    ];
+  async listModels(provider, options): Promise<BaseModel[]> {
+    return discoverCompatibleModels(
+      provider,
+      openAiResponsesCompatibleCapabilities,
+      options,
+    );
   },
   streamChat(input) {
     if (input.apiKey === undefined) {
@@ -61,65 +61,58 @@ async function* providerCredentialUnavailableStream(): AsyncIterable<StreamChatC
 async function* streamOpenAiResponsesCompatible(
   input: StreamChatInput,
 ): AsyncIterable<StreamChatChunk> {
-  const request: RequestInit = {
-    method: "POST",
-    headers: {
-      accept: "text/event-stream",
-      authorization: `Bearer ${input.apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: input.model.name,
-      input: input.messages.flatMap(toResponsesInputItems),
-      stream: true,
-      store: false,
-      ...(input.tools === undefined || input.tools.length === 0
-        ? {}
-        : {
-            tool_choice: "auto",
-            tools: input.tools.map((tool) => ({
+  const client = createOpenAiClient(
+    input.provider,
+    input.apiKey,
+    input.fetchImpl,
+  );
+  const request: ResponseCreateParamsStreaming = {
+    model: input.model.name,
+    input: input.messages.flatMap(toResponsesInputItems),
+    stream: true,
+    store: false,
+    ...(input.tools === undefined || input.tools.length === 0
+      ? {}
+      : {
+          tool_choice: "auto",
+          tools: input.tools.map(
+            (tool): FunctionTool => ({
               type: "function",
               name: tool.name,
               description: tool.description,
               parameters: tool.parameters,
-            })),
-          }),
-    }),
-    ...(input.signal === undefined ? {} : { signal: input.signal }),
+              strict: false,
+            }),
+          ),
+        }),
   };
-  const response = await (input.fetchImpl ?? fetch)(
-    responsesUrl(input),
-    request,
-  );
 
-  if (!response.ok) {
-    throw {
-      errorCode: "provider_http_error",
-      errorType: `http_${response.status}`,
-    };
-  }
-  if (response.body === null) {
-    throw { errorCode: "provider_stream_error", errorType: "empty_body" };
-  }
+  try {
+    const stream = await client.responses.create(
+      request,
+      input.signal === undefined ? undefined : { signal: input.signal },
+    );
+    const toolCalls = new ResponsesToolCallAccumulator();
+    for await (const event of stream) {
+      const usage = usageFromOpenAiResponsesPayload(event);
+      if (usage !== undefined) yield { type: "usage", usage };
 
-  const toolCalls = new ResponsesToolCallAccumulator();
-  for await (const payload of readSseJson(response.body)) {
-    const usage = usageFromOpenAiResponsesPayload(payload);
-    if (usage !== undefined) yield { type: "usage", usage };
-
-    for (const token of textDeltas(payload)) yield token;
-    const calls = toolCalls.merge(payload);
-    if (calls.length === 1) yield { type: "tool_call", toolCall: calls[0]! };
-    if (calls.length > 1) {
-      yield {
-        type: "tool_call",
-        toolCall: calls[0]!,
-        toolCalls: calls,
-      };
+      for (const token of textDeltas(event)) yield token;
+      const calls = toolCalls.merge(event);
+      if (calls.length === 1) yield { type: "tool_call", toolCall: calls[0]! };
+      if (calls.length > 1) {
+        yield {
+          type: "tool_call",
+          toolCall: calls[0]!,
+          toolCalls: calls,
+        };
+      }
+      if (eventType(event) === "error") {
+        throw { errorCode: "provider_stream_error", errorType: "event_error" };
+      }
     }
-    if (eventType(payload) === "error") {
-      throw { errorCode: "provider_stream_error", errorType: "event_error" };
-    }
+  } catch (caught) {
+    throw normalizeProviderSdkError(caught, "openai-responses-compatible");
   }
 }
 
@@ -128,7 +121,7 @@ function toResponsesInputItems(message: ChatMessage): ResponsesInputItem[] {
     return [
       ...(message.content.length === 0
         ? []
-        : [{ role: "assistant", content: message.content }]),
+        : [{ role: "assistant" as const, content: message.content }]),
       ...message.toolCalls.map(toResponsesFunctionCall),
     ];
   }
@@ -137,15 +130,37 @@ function toResponsesInputItems(message: ChatMessage): ResponsesInputItem[] {
     return [
       {
         type: "function_call_output",
-        ...(message.toolCallId === undefined
-          ? {}
-          : { call_id: message.toolCallId }),
+        call_id: message.toolCallId ?? "",
         output: message.content,
       },
     ];
   }
 
-  return [{ role: message.role, content: message.content }];
+  if (message.role === "user" && message.images?.length) {
+    return [
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: message.content },
+          ...message.images.map((image) => ({
+            type: "input_image" as const,
+            image_url: `data:${image.mimeType};base64,${stripDataUrl(image.dataBase64)}`,
+            detail: "auto" as const,
+          })),
+        ],
+      },
+    ];
+  }
+  return [
+    {
+      role: message.role as "assistant" | "system" | "user",
+      content: message.content,
+    },
+  ];
+}
+
+function stripDataUrl(value: string): string {
+  return value.includes(",") ? value.slice(value.indexOf(",") + 1) : value;
 }
 
 function toResponsesFunctionCall(
@@ -157,15 +172,6 @@ function toResponsesFunctionCall(
     name: toolCall.name,
     arguments: JSON.stringify(toolCall.arguments),
   };
-}
-
-function responsesUrl(input: StreamChatInput): string {
-  return new URL(
-    "responses",
-    input.provider.baseUrl.endsWith("/")
-      ? input.provider.baseUrl
-      : `${input.provider.baseUrl}/`,
-  ).toString();
 }
 
 function textDeltas(payload: unknown): string[] {
@@ -314,3 +320,8 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     ? (value as Record<string, unknown>)
     : undefined;
 }
+import type {
+  FunctionTool,
+  ResponseCreateParamsStreaming,
+  ResponseInputItem,
+} from "openai/resources/responses/responses";

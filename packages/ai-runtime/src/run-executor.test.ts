@@ -210,6 +210,43 @@ describe("streamRunEvents", () => {
     expect(seenInput?.tools).toEqual(tools);
   });
 
+  it("drops tools for a model without native tool-calling capability", async () => {
+    let seenInput: StreamChatInput | undefined;
+    const adapter: ModelProviderAdapter = {
+      kind: "openai-compatible",
+      async health() {
+        return { ok: true, message: "ok" };
+      },
+      async listModels() {
+        return [model];
+      },
+      async *streamChat(input) {
+        seenInput = input;
+        yield "hello";
+      },
+    };
+    await collectRunEvents(
+      streamRunEvents({
+        adapter,
+        provider: {
+          ...provider,
+          capabilities: { ...provider.capabilities, toolCalling: true },
+        },
+        model,
+        runId: "run_toolless_model",
+        messages: [{ role: "user", content: "hello" }],
+        tools: [
+          {
+            name: "tool_calculator",
+            description: "Calculate",
+            parameters: { type: "object" },
+          },
+        ],
+      }),
+    );
+    expect(seenInput?.tools).toBeUndefined();
+  });
+
   it("emits sanitized provider tool requests and fails closed without an executor", async () => {
     const rawArgumentValue = "raw-provider-tool-argument-secret";
     const rawProviderCallId = "raw-provider-call-id-secret";

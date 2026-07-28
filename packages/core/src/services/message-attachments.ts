@@ -11,6 +11,11 @@ import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { getAuthorizedChat } from "./chat-access";
 import { assertFileContentMatchesMimeType } from "./file-signature";
+import {
+  assertFileMalwareScanClean,
+  type FileMalwareScanner,
+  type FileMalwareScanPolicy,
+} from "./file-service";
 
 const allowedImageMimeTypes = new Set([
   "image/gif",
@@ -18,14 +23,27 @@ const allowedImageMimeTypes = new Set([
   "image/png",
   "image/webp",
 ]);
-export const defaultMessageAttachmentMaxBytes = 5_000_000;
-const maxAttachments = 4;
+const allowedDocumentMimeTypes = new Set([
+  "application/json",
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/csv",
+  "text/html",
+  "text/markdown",
+  "text/plain",
+]);
+export const defaultMessageAttachmentMaxBytes = 25_000_000;
+const maxAttachments = 8;
 
 export interface ChatAttachmentInput {
   dataBase64: string;
   fileName: string;
   mimeType: string;
   sizeBytes: number;
+  extractedText?: string;
+  retainedInContext?: boolean;
 }
 
 export async function attachMessageParts(
@@ -48,13 +66,17 @@ export async function storeMessageAttachments(input: {
   messageId: string;
   objectStore: ObjectStore;
   storedObjectKeys?: string[];
+  malwareScanning?: {
+    policy: FileMalwareScanPolicy;
+    scanner?: FileMalwareScanner;
+  };
 }): Promise<MessagePart[]> {
   if (input.attachments === undefined || input.attachments.length === 0)
     return [];
   if (input.attachments.length > maxAttachments) {
     throw new ApiError(
       "message_attachment_limit_exceeded",
-      "A message can include at most four image attachments.",
+      "A message can include at most eight attachments.",
       400,
     );
   }
@@ -64,6 +86,13 @@ export async function storeMessageAttachments(input: {
     input.maxAttachmentBytes ?? defaultMessageAttachmentMaxBytes;
   for (const attachment of input.attachments) {
     const normalized = normalizeAttachment(attachment, maxAttachmentBytes);
+    if (input.malwareScanning !== undefined) {
+      await assertFileMalwareScanClean(input.malwareScanning, {
+        bytes: normalized.bytes,
+        fileName: normalized.fileName,
+        mimeType: normalized.mimeType,
+      });
+    }
     const attachmentId = createId("msg_part");
     const objectKey = `chat-attachments/${input.messageId}/${attachmentId}/${normalized.fileName}`;
     await input.objectStore.putObject({
@@ -79,9 +108,15 @@ export async function storeMessageAttachments(input: {
       content: objectKey,
       metadata: {
         fileName: normalized.fileName,
-        kind: "image",
+        kind: allowedImageMimeTypes.has(normalized.mimeType)
+          ? "image"
+          : "document",
         mimeType: normalized.mimeType,
         sizeBytes: normalized.bytes.byteLength,
+        retainedInContext: attachment.retainedInContext !== false,
+        ...(attachment.extractedText === undefined
+          ? {}
+          : { extractedText: attachment.extractedText.slice(0, 500_000) }),
       },
     });
   }
@@ -143,14 +178,19 @@ function publicAttachment(
     typeof sizeBytes !== "number"
   )
     return undefined;
-  if (!allowedImageMimeTypes.has(mimeType)) return undefined;
+  if (
+    !allowedImageMimeTypes.has(mimeType) &&
+    !allowedDocumentMimeTypes.has(mimeType)
+  )
+    return undefined;
   return {
     id: part.id,
     messageId: part.messageId,
     fileName,
     mimeType,
     sizeBytes,
-    kind: "image",
+    kind: allowedImageMimeTypes.has(mimeType) ? "image" : "document",
+    retainedInContext: part.metadata.retainedInContext !== false,
     previewUrl: `/api/v1/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(part.messageId)}/attachments/${encodeURIComponent(part.id)}`,
   };
 }
@@ -160,10 +200,13 @@ function normalizeAttachment(
   maxAttachmentBytes: number,
 ): { bytes: Uint8Array; fileName: string; mimeType: string } {
   const mimeType = input.mimeType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-  if (!allowedImageMimeTypes.has(mimeType)) {
+  if (
+    !allowedImageMimeTypes.has(mimeType) &&
+    !allowedDocumentMimeTypes.has(mimeType)
+  ) {
     throw new ApiError(
       "unsupported_message_attachment_type",
-      "Only PNG, JPEG, GIF, and WebP image attachments are supported.",
+      "The attachment MIME type is not supported.",
       415,
       { mimeType: input.mimeType },
     );
@@ -175,7 +218,7 @@ function normalizeAttachment(
   ) {
     throw new ApiError(
       "message_attachment_size_invalid",
-      "Image attachment size is outside the supported range.",
+      "Attachment size is outside the supported range.",
       400,
       { maxBytes: maxAttachmentBytes },
     );

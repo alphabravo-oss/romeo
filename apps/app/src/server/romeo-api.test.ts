@@ -29,9 +29,7 @@ describe("Romeo server repository runtime", () => {
   });
 
   it("composes every RomeoRepository method for Postgres", () => {
-    const repository = createPostgresRomeoRepositoryFromDatabase(
-      {} as never,
-    );
+    const repository = createPostgresRomeoRepositoryFromDatabase({} as never);
 
     expect(repository.runtime).toMatchObject({
       driver: "postgres",

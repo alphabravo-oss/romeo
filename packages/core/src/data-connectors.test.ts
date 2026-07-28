@@ -606,10 +606,10 @@ describe("data connector API", () => {
     expect(syncResponse.status).toBe(202);
     expect(fetches.map((fetch) => fetch.url)).toEqual([
       "https://api.github.com/repos/openai/romeo/git/trees/main?recursive=1",
-      "https://api.github.com/repos/openai/romeo/contents/docs/intro.md?ref=main",
+      "https://api.github.com/repos/openai/romeo/contents/docs%2Fintro.md?ref=main",
     ]);
     expect(fetches[0]?.headers).toMatchObject({
-      authorization: "Bearer github-token",
+      authorization: "token github-token",
     });
     expect(sync.data.summary).toMatchObject({
       connectorType: "github",
@@ -706,10 +706,10 @@ describe("data connector API", () => {
     expect(fetches.map((fetch) => fetch.url)).toEqual([
       "https://api.github.com/repos/openai/romeo/git/trees/main?recursive=1",
       "https://api.github.com/repos/openai/romeo/git/trees/main?recursive=1",
-      "https://api.github.com/repos/openai/romeo/contents/docs/retry.md?ref=main",
+      "https://api.github.com/repos/openai/romeo/contents/docs%2Fretry.md?ref=main",
     ]);
     expect(fetches[0]?.headers).toMatchObject({
-      authorization: "Bearer github-rate-limit-token",
+      authorization: "token github-rate-limit-token",
     });
     expect(sync.data.summary).toMatchObject({
       connectorType: "github",
@@ -794,8 +794,8 @@ describe("data connector API", () => {
     expect(created.data.config.secretRef).toBe("env://GITHUB_CONNECTOR_TOKEN");
     expect(syncResponse.status).toBe(202);
     expect(authHeaders).toEqual([
-      "Bearer connector-github-token",
-      "Bearer connector-github-token",
+      "token connector-github-token",
+      "token connector-github-token",
     ]);
     expect(JSON.stringify(sync.data.summary)).not.toContain(
       "connector-github-token",
@@ -909,8 +909,8 @@ describe("data connector API", () => {
     );
     expect(syncResponse.status).toBe(202);
     expect(authHeaders).toEqual([
-      "Bearer delegated-github-token",
-      "Bearer delegated-github-token",
+      "token delegated-github-token",
+      "token delegated-github-token",
     ]);
     expect(connection?.lastUsedAt).toEqual(expect.any(String));
     expect(JSON.stringify(sync.data.summary)).not.toContain(
@@ -1042,8 +1042,8 @@ describe("data connector API", () => {
 
     expect(syncResponse.status).toBe(202);
     expect(authHeaders).toEqual([
-      "Bearer refreshed-github-token",
-      "Bearer refreshed-github-token",
+      "token refreshed-github-token",
+      "token refreshed-github-token",
     ]);
     expect(connection?.status).toBe("active");
     expect(connection?.lastUsedAt).toEqual(expect.any(String));

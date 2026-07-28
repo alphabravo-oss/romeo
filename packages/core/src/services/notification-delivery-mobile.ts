@@ -1,4 +1,11 @@
-import { createSign } from "node:crypto";
+import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
+import {
+  FirebaseMessagingError,
+  getMessaging,
+  type Message,
+  type Messaging,
+} from "firebase-admin/messaging";
+import { createHash } from "node:crypto";
 
 import type {
   NotificationDelivery,
@@ -15,7 +22,6 @@ import {
 } from "./notification-delivery";
 import type { SecretResolver } from "./secret-resolver";
 import { parseManagedSecretRef } from "./secret-refs";
-import { normalizeWebhookUrl } from "./webhook-url";
 
 type MobilePushPlatform = "android" | "ios" | "web";
 
@@ -25,34 +31,29 @@ interface FcmServiceAccount {
   projectId?: string;
 }
 
-interface CachedAccessToken {
-  expiresAtMs: number;
-  token: string;
+export interface FcmMessagingClient {
+  send: Messaging["send"];
 }
 
-const fcmScope = "https://www.googleapis.com/auth/firebase.messaging";
+export type FcmMessagingClientFactory = (input: {
+  projectId: string;
+  serviceAccount: FcmServiceAccount;
+}) => FcmMessagingClient;
 
-export class FcmMobilePushNotificationDeliverySender
-  implements NotificationDeliverySender
-{
-  private accessToken: CachedAccessToken | undefined;
-  private readonly baseUrl: string;
+export class FcmMobilePushNotificationDeliverySender implements NotificationDeliverySender {
+  private readonly clientFactory: FcmMessagingClientFactory;
   private readonly timeoutMs: number;
-  private readonly tokenUrl: string;
 
   constructor(
     private readonly options: {
-      baseUrl: string;
-      fetchImpl?: typeof fetch;
+      clientFactory?: FcmMessagingClientFactory;
       projectId: string;
       secretResolver: SecretResolver;
       serviceAccountRef: string;
       timeoutMs?: number;
-      tokenUrl: string;
     },
   ) {
-    this.baseUrl = normalizeWebhookUrl(options.baseUrl);
-    this.tokenUrl = normalizeWebhookUrl(options.tokenUrl);
+    this.clientFactory = options.clientFactory ?? firebaseMessagingClient;
     this.timeoutMs = options.timeoutMs ?? 10_000;
   }
 
@@ -101,11 +102,8 @@ export class FcmMobilePushNotificationDeliverySender
       );
     }
 
-    const tokenRef =
-      typeof channel.config.tokenRef === "string"
-        ? channel.config.tokenRef.trim()
-        : undefined;
-    if (tokenRef === undefined || tokenRef.length === 0) {
+    const tokenRef = stringConfig(channel.config.tokenRef);
+    if (tokenRef === undefined) {
       return repository.updateNotificationDelivery(
         failedDelivery(
           delivery,
@@ -114,20 +112,13 @@ export class FcmMobilePushNotificationDeliverySender
         ),
       );
     }
-
     const tokenSecret = await this.resolveSecret(tokenRef);
     if (tokenSecret.value === undefined) {
       return repository.updateNotificationDelivery(
         failedDelivery(
           delivery,
           "mobile_push_token_unavailable",
-          {
-            provider: "fcm",
-            secretRefScheme: tokenSecret.scheme,
-            ...(tokenSecret.failureCode === undefined
-              ? {}
-              : { secretFailureCode: tokenSecret.failureCode }),
-          },
+          secretFailureMetadata(tokenSecret, "secretRefScheme"),
           { retryable: tokenSecret.retryable },
         ),
       );
@@ -142,38 +133,28 @@ export class FcmMobilePushNotificationDeliverySender
       );
     }
 
-    const serviceAccountSecret = await this.resolveSecret(
+    const accountSecret = await this.resolveSecret(
       this.options.serviceAccountRef,
     );
-    if (serviceAccountSecret.value === undefined) {
+    if (accountSecret.value === undefined) {
       return repository.updateNotificationDelivery(
         failedDelivery(
           delivery,
           "fcm_service_account_unavailable",
-          {
-            provider: "fcm",
-            serviceAccountRefScheme: serviceAccountSecret.scheme,
-            ...(serviceAccountSecret.failureCode === undefined
-              ? {}
-              : {
-                  serviceAccountFailureCode: serviceAccountSecret.failureCode,
-                }),
-          },
-          { retryable: serviceAccountSecret.retryable },
+          secretFailureMetadata(accountSecret, "serviceAccountRefScheme"),
+          { retryable: accountSecret.retryable },
         ),
       );
     }
-
-    const serviceAccount = parseFcmServiceAccount(serviceAccountSecret.value);
+    const serviceAccount = parseFcmServiceAccount(accountSecret.value);
     if (serviceAccount === undefined) {
       return repository.updateNotificationDelivery(
         failedDelivery(delivery, "fcm_service_account_invalid", {
           provider: "fcm",
-          serviceAccountRefScheme: serviceAccountSecret.scheme,
+          serviceAccountRefScheme: accountSecret.scheme,
         }),
       );
     }
-
     const projectId = fcmProjectId(
       this.options.projectId,
       serviceAccount.projectId,
@@ -186,157 +167,42 @@ export class FcmMobilePushNotificationDeliverySender
       );
     }
 
-    const accessToken = await this.fcmAccessToken(serviceAccount);
-    if (accessToken.value === undefined) {
-      return repository.updateNotificationDelivery(
-        failedDelivery(
-          delivery,
-          accessToken.errorCode,
-          { provider: "fcm", responseStatus: accessToken.responseStatus },
-          { retryable: accessToken.retryable },
-        ),
-      );
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const platform = mobilePushPlatform(channel.config.platform);
     try {
-      const response = await (this.options.fetchImpl ?? fetch)(
-        fcmSendUrl(this.baseUrl, projectId),
-        {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${accessToken.value}`,
-            "content-type": "application/json",
-            "user-agent": "Romeo-Notifications/0.1",
-          },
-          signal: controller.signal,
-          body: JSON.stringify(
-            fcmMessagePayload(notification, registrationToken, channel.config),
-          ),
-        },
-      );
-      const platform = mobilePushPlatform(channel.config.platform);
-      return repository.updateNotificationDelivery(
-        response.ok
-          ? sentDelivery(delivery, {
-              provider: "fcm",
-              ...(platform === undefined ? {} : { platform }),
-              responseStatus: response.status,
-            })
-          : failedDelivery(
-              delivery,
-              "http_error",
-              {
-                provider: "fcm",
-                ...(platform === undefined ? {} : { platform }),
-                responseStatus: response.status,
-              },
-              { retryable: isRetryableHttpStatus(response.status) },
-            ),
-      );
-    } catch {
-      return repository.updateNotificationDelivery(
-        failedDelivery(
-          delivery,
-          "network_error",
-          { provider: "fcm" },
-          { retryable: true },
+      const client = this.clientFactory({ projectId, serviceAccount });
+      await withTimeout(
+        client.send(
+          fcmMessage(notification, registrationToken, channel.config),
         ),
+        this.timeoutMs,
       );
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  private async fcmAccessToken(
-    serviceAccount: FcmServiceAccount,
-  ): Promise<{
-    errorCode: string;
-    responseStatus?: number;
-    retryable: boolean;
-    value?: string;
-  }> {
-    const nowMs = Date.now();
-    if (
-      this.accessToken !== undefined &&
-      this.accessToken.expiresAtMs - 60_000 > nowMs
-    ) {
-      return {
-        errorCode: "",
-        retryable: false,
-        value: this.accessToken.token,
-      };
-    }
-
-    const assertion = signedServiceAccountJwt({
-      audience: this.tokenUrl,
-      clientEmail: serviceAccount.clientEmail,
-      nowSeconds: Math.floor(nowMs / 1000),
-      privateKey: serviceAccount.privateKey,
-    });
-    if (assertion === undefined) {
-      return { errorCode: "fcm_service_account_invalid", retryable: false };
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const response = await (this.options.fetchImpl ?? fetch)(this.tokenUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/x-www-form-urlencoded",
-          "user-agent": "Romeo-Notifications/0.1",
-        },
-        signal: controller.signal,
-        body: new URLSearchParams({
-          assertion,
-          grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      return repository.updateNotificationDelivery(
+        sentDelivery(delivery, {
+          provider: "fcm",
+          ...(platform === undefined ? {} : { platform }),
+          responseStatus: 200,
         }),
-      });
-      if (!response.ok) {
-        return {
-          errorCode: "fcm_access_token_unavailable",
-          responseStatus: response.status,
-          retryable: isRetryableHttpStatus(response.status),
-        };
-      }
-      const payload = await response.json().catch(() => undefined);
-      const token =
-        isRecord(payload) && typeof payload.access_token === "string"
-          ? payload.access_token
-          : undefined;
-      if (token === undefined || token.trim().length === 0) {
-        return {
-          errorCode: "fcm_access_token_invalid",
-          retryable: false,
-        };
-      }
-      const expiresIn =
-        isRecord(payload) && typeof payload.expires_in === "number"
-          ? payload.expires_in
-          : 3600;
-      this.accessToken = {
-        expiresAtMs: nowMs + Math.max(1, expiresIn) * 1000,
-        token,
-      };
-      return { errorCode: "", retryable: false, value: token };
-    } catch {
-      return {
-        errorCode: "fcm_access_token_network_error",
-        retryable: true,
-      };
-    } finally {
-      clearTimeout(timeout);
+      );
+    } catch (error) {
+      const code = firebaseErrorCode(error);
+      return repository.updateNotificationDelivery(
+        failedDelivery(
+          delivery,
+          code === "notification_delivery_timeout"
+            ? "network_error"
+            : "fcm_send_failed",
+          {
+            provider: "fcm",
+            ...(platform === undefined ? {} : { platform }),
+            ...(code === undefined ? {} : { providerErrorCode: code }),
+          },
+          { retryable: isRetryableFirebaseError(code) },
+        ),
+      );
     }
   }
 
-  private async resolveSecret(secretRef: string): Promise<{
-    failureCode?: string;
-    retryable: boolean;
-    scheme: string;
-    value?: string;
-  }> {
+  private async resolveSecret(secretRef: string): Promise<ResolvedSecret> {
     let scheme: string;
     try {
       scheme = parseManagedSecretRef(secretRef).scheme;
@@ -354,8 +220,9 @@ export class FcmMobilePushNotificationDeliverySender
         scheme,
       };
     }
-    const resolution = await this.options.secretResolver.resolveValue(secretRef);
-    if (resolution.available === true && resolution.value !== undefined) {
+    const resolution =
+      await this.options.secretResolver.resolveValue(secretRef);
+    if (resolution.available && resolution.value !== undefined) {
       return {
         retryable: false,
         scheme: resolution.scheme,
@@ -371,67 +238,74 @@ export class FcmMobilePushNotificationDeliverySender
   }
 }
 
-function fcmMessagePayload(
+interface ResolvedSecret {
+  failureCode?: string;
+  retryable: boolean;
+  scheme: string;
+  value?: string;
+}
+
+function firebaseMessagingClient(input: {
+  projectId: string;
+  serviceAccount: FcmServiceAccount;
+}): FcmMessagingClient {
+  const appName = `romeo-fcm-${createHash("sha256")
+    .update(input.projectId)
+    .update("\0")
+    .update(input.serviceAccount.clientEmail)
+    .update("\0")
+    .update(input.serviceAccount.privateKey)
+    .digest("hex")
+    .slice(0, 24)}`;
+  const app =
+    existingFirebaseApp(appName) ??
+    initializeApp(
+      {
+        credential: cert({
+          projectId: input.projectId,
+          clientEmail: input.serviceAccount.clientEmail,
+          privateKey: input.serviceAccount.privateKey,
+        }),
+        projectId: input.projectId,
+      },
+      appName,
+    );
+  return getMessaging(app);
+}
+
+function existingFirebaseApp(name: string): App | undefined {
+  return getApps().find((app) => app.name === name);
+}
+
+function fcmMessage(
   notification: UserNotification,
   token: string,
   config: Record<string, unknown>,
-): Record<string, unknown> {
+): Message {
   const collapseKey = collapseKeyValue(config.collapseKey);
   return {
-    message: {
-      token,
-      notification: {
-        title: "Romeo notification",
-        body: notificationTitle(notification),
-      },
-      data: {
-        notificationId: notification.id,
-        notificationType: notification.type,
-        resourceType: notification.resourceType,
-        resourceId: notification.resourceId,
-        actorId: notification.actorId,
-        chatId: stringMetadata(notification.metadata.chatId) ?? "",
-        commentId: stringMetadata(notification.metadata.commentId) ?? "",
-      },
-      ...(collapseKey === undefined
-        ? {}
-        : {
-            android: { collapse_key: collapseKey },
-            apns: { headers: { "apns-collapse-id": collapseKey } },
-            webpush: { headers: { Topic: collapseKey } },
-          }),
+    token,
+    notification: {
+      title: "Romeo notification",
+      body: notificationTitle(notification),
     },
+    data: {
+      notificationId: notification.id,
+      notificationType: notification.type,
+      resourceType: notification.resourceType,
+      resourceId: notification.resourceId,
+      actorId: notification.actorId,
+      chatId: stringMetadata(notification.metadata.chatId) ?? "",
+      commentId: stringMetadata(notification.metadata.commentId) ?? "",
+    },
+    ...(collapseKey === undefined
+      ? {}
+      : {
+          android: { collapseKey },
+          apns: { headers: { "apns-collapse-id": collapseKey } },
+          webpush: { headers: { Topic: collapseKey } },
+        }),
   };
-}
-
-function signedServiceAccountJwt(input: {
-  audience: string;
-  clientEmail: string;
-  nowSeconds: number;
-  privateKey: string;
-}): string | undefined {
-  try {
-    const header = base64UrlJson({ alg: "RS256", typ: "JWT" });
-    const claims = base64UrlJson({
-      aud: input.audience,
-      exp: input.nowSeconds + 3600,
-      iat: input.nowSeconds,
-      iss: input.clientEmail,
-      scope: fcmScope,
-    });
-    const signingInput = `${header}.${claims}`;
-    const signer = createSign("RSA-SHA256");
-    signer.update(signingInput);
-    signer.end();
-    const signature = signer.sign(input.privateKey, "base64url");
-    return `${signingInput}.${signature}`;
-  } catch {
-    return undefined;
-  }
-}
-
-function base64UrlJson(value: Record<string, unknown>): string {
-  return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
 
 function parseFcmServiceAccount(value: string): FcmServiceAccount | undefined {
@@ -443,7 +317,7 @@ function parseFcmServiceAccount(value: string): FcmServiceAccount | undefined {
   const projectId = stringField(parsed, "project_id");
   return {
     clientEmail,
-    privateKey: privateKey.replace(/\\n/g, "\n"),
+    privateKey: privateKey.replace(/\\n/gu, "\n"),
     ...(projectId === undefined ? {} : { projectId }),
   };
 }
@@ -458,7 +332,7 @@ function pushTokenValue(value: string): string | undefined {
     : trimmed;
   return token !== undefined &&
     token.length >= 10 &&
-    token.length <= 4096 &&
+    token.length <= 4_096 &&
     !/\s/u.test(token)
     ? token
     : undefined;
@@ -468,19 +342,10 @@ function fcmProjectId(
   configuredProjectId: string,
   serviceAccountProjectId: string | undefined,
 ): string | undefined {
-  const projectId =
-    configuredProjectId.trim() ||
-    (serviceAccountProjectId === undefined ? "" : serviceAccountProjectId);
+  const projectId = configuredProjectId.trim() || serviceAccountProjectId || "";
   return /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u.test(projectId)
     ? projectId
     : undefined;
-}
-
-function fcmSendUrl(baseUrl: string, projectId: string): string {
-  return new URL(
-    `/v1/projects/${encodeURIComponent(projectId)}/messages:send`,
-    baseUrl,
-  ).toString();
 }
 
 function mobilePushPlatform(value: unknown): MobilePushPlatform | undefined {
@@ -501,6 +366,60 @@ function notificationTitle(notification: UserNotification): string {
     : "You have a new notification.";
 }
 
+function secretFailureMetadata(
+  secret: ResolvedSecret,
+  schemeKey: "secretRefScheme" | "serviceAccountRefScheme",
+): Record<string, unknown> {
+  return {
+    provider: "fcm",
+    [schemeKey]: secret.scheme,
+    ...(secret.failureCode === undefined
+      ? {}
+      : { secretFailureCode: secret.failureCode }),
+  };
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("notification_delivery_timeout")),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+function firebaseErrorCode(error: unknown): string | undefined {
+  if (error instanceof FirebaseMessagingError) return error.code;
+  return error instanceof Error ? error.message : undefined;
+}
+
+function isRetryableFirebaseError(code: string | undefined): boolean {
+  return (
+    code === undefined ||
+    code === "notification_delivery_timeout" ||
+    code === "messaging/internal-error" ||
+    code === "messaging/server-unavailable" ||
+    code === "messaging/unknown-error"
+  );
+}
+
+function stringConfig(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined;
+}
+
 function parseJsonRecord(value: string): unknown {
   try {
     return JSON.parse(value);
@@ -513,18 +432,11 @@ function stringField(
   record: Record<string, unknown>,
   field: string,
 ): string | undefined {
-  const value = record[field];
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : undefined;
+  return stringConfig(record[field]);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isRetryableHttpStatus(status: number): boolean {
-  return status === 408 || status === 429 || status >= 500;
 }
 
 function isRetryableSecretFailure(failureCode: string | undefined): boolean {

@@ -26,6 +26,7 @@
     "postgres": "^3.4.9"
   },
   "devDependencies": {
+    "@romeo/storage": "workspace:*",
     "@types/node": "^26.0.1",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.22.4",

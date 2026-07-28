@@ -46,7 +46,12 @@ describe("governance API", () => {
     const updateResponse = await api.request("/api/v1/governance/retention", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ auditLogRetentionDays: 90 }),
+      body: JSON.stringify({
+        auditLogRetentionDays: 90,
+        fileRetentionDays: 365,
+        workspaceFileRetentionDays: { workspace_default: 120 },
+        userFileRetentionDays: { user_dev_admin: null },
+      }),
     });
     const updated = await updateResponse.json();
 
@@ -64,8 +69,100 @@ describe("governance API", () => {
     expect(existing.data.auditLogRetentionDays).toBe(365);
     expect(updateResponse.status).toBe(200);
     expect(updated.data.auditLogRetentionDays).toBe(90);
+    expect(updated.data).toMatchObject({
+      fileRetentionDays: 365,
+      workspaceFileRetentionDays: { workspace_default: 120 },
+      userFileRetentionDays: { user_dev_admin: null },
+    });
     expect(invalidResponse.status).toBe(400);
     expect(audit.data).toHaveLength(1);
+  });
+
+  it("enforces user-over-workspace file retention without metadata bypass", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const objectStore = new MemoryObjectStore();
+    const api = createRomeoApi(repository, { objectStore });
+    const upload = async (
+      fileName: string,
+      metadata?: Record<string, unknown>,
+    ) => {
+      const bytes = new TextEncoder().encode(`retention:${fileName}`);
+      const response = await api.request("/api/v1/files", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "workspace_default",
+          fileName,
+          mimeType: "text/plain",
+          sizeBytes: bytes.byteLength,
+          dataBase64: Buffer.from(bytes).toString("base64"),
+          metadata,
+        }),
+      });
+      return { body: await response.json(), bytes };
+    };
+    const expired = await upload("expired.txt");
+    const bypassAttempt = await upload("bypass-attempt.txt", {
+      expiresAt: null,
+    });
+    const missing = await upload("missing.txt");
+    const recent = await upload("recent.txt");
+    for (const fixture of [expired, bypassAttempt, missing]) {
+      const file = await repository.getFileObject(fixture.body.data.id);
+      if (file === undefined) throw new Error("Missing retention file fixture");
+      await repository.updateFileObject({
+        ...file,
+        createdAt: "2020-01-01T00:00:00.000Z",
+        updatedAt: "2020-01-01T00:00:00.000Z",
+      });
+    }
+    const missingFile = await repository.getFileObject(missing.body.data.id);
+    if (missingFile === undefined) throw new Error("Missing object fixture");
+    await objectStore.deleteObject(missingFile.objectKey);
+
+    const policyResponse = await api.request("/api/v1/governance/retention", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        auditLogRetentionDays: 365,
+        fileRetentionDays: 365,
+        workspaceFileRetentionDays: { workspace_default: null },
+        userFileRetentionDays: { user_dev_admin: 1 },
+      }),
+    });
+    const enforceResponse = await api.request(
+      "/api/v1/governance/retention/enforce",
+      { method: "POST" },
+    );
+    const enforced = await enforceResponse.json();
+
+    expect(policyResponse.status).toBe(200);
+    expect(enforceResponse.status).toBe(200);
+    expect(enforced.data).toMatchObject({
+      deletedFileObjectCount: 3,
+      missingFileObjectCount: 1,
+      deletedFileObjectBytes:
+        expired.bytes.byteLength + bypassAttempt.bytes.byteLength,
+    });
+    expect(await repository.getFileObject(expired.body.data.id)).toMatchObject({
+      status: "deleted",
+    });
+    expect(await repository.getFileObject(missing.body.data.id)).toMatchObject({
+      status: "deleted",
+    });
+    expect(
+      await repository.getFileObject(bypassAttempt.body.data.id),
+    ).toMatchObject({
+      status: "deleted",
+    });
+    expect(await repository.getFileObject(recent.body.data.id)).toMatchObject({
+      status: "available",
+    });
+    expect(
+      await objectStore.getObject(
+        `files/org_default/workspace_default/${expired.body.data.id}/expired.txt`,
+      ),
+    ).toBeUndefined();
   });
 
   it("enforces audit-log retention without deleting recent audit logs", async () => {
@@ -627,11 +724,19 @@ describe("governance API", () => {
     expect(await repository.getFileObject(fileId)).toMatchObject({
       id: fileId,
       status: "deleted",
+      fileName: "deleted",
+      mimeType: "application/octet-stream",
+      sizeBytes: 0,
+      objectKey: `deleted/${fileId}`,
+      metadata: { contentPurged: true },
     });
     expect(audit.data[0].metadata.counts.fileObjects).toBe(1);
     expect(serializedAudit).not.toContain("secret file bytes");
     expect(serializedAudit).not.toContain("Governed_Delete.txt");
     expect(serializedAudit).not.toContain("objectKey");
+    expect(
+      JSON.stringify(await repository.getFileObject(fileId)),
+    ).not.toContain("Governed_Delete.txt");
   });
 
   it("previews and executes governed knowledge source deletion through the knowledge service", async () => {

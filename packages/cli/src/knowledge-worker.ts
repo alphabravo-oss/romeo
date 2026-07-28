@@ -1,7 +1,7 @@
 import type {
   KnowledgeExtractionJobResult,
   KnowledgeSource,
-} from "@romeo/api-client";
+} from "./api-types";
 
 import type { CliIo } from "./io";
 import { writeJson } from "./io";

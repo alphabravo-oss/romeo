@@ -94,7 +94,7 @@ describe("OpenAI Responses-compatible adapter", () => {
         },
       ],
     });
-    expect(JSON.stringify(calls[0]?.headers)).toContain(
+    expect(new Headers(calls[0]?.headers).get("authorization")).toBe(
       "Bearer provider-api-key",
     );
   });

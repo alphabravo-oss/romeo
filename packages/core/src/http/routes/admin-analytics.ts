@@ -1,8 +1,12 @@
+import {
+  exportAdminAnalyticsSummaryRoute,
+  getAdminAnalyticsSummaryRoute,
+} from "@romeo/contracts";
 import type { RomeoApi } from "../context";
 import { formatAdminAnalyticsSummaryCsv } from "../../services/analytics-service";
 
 export function registerAdminAnalyticsRoutes(app: RomeoApi): void {
-  app.get("/api/v1/admin/analytics/summary", async (context) => {
+  app.openapi(getAdminAnalyticsSummaryRoute, async (context) => {
     const subject = context.get("subject");
     const services = context.get("services");
     const [jobSummary, providerSummary] = await Promise.all([
@@ -16,7 +20,7 @@ export function registerAdminAnalyticsRoutes(app: RomeoApi): void {
     return context.json({ data });
   });
 
-  app.get("/api/v1/admin/analytics/summary.csv", async (context) => {
+  app.openapi(exportAdminAnalyticsSummaryRoute, async (context) => {
     const subject = context.get("subject");
     const services = context.get("services");
     const [jobSummary, providerSummary] = await Promise.all([

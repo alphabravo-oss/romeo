@@ -1,7 +1,8 @@
 CREATE EXTENSION IF NOT EXISTS "vector";--> statement-breakpoint
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";--> statement-breakpoint
 CREATE TYPE "public"."message_role" AS ENUM('system', 'user', 'assistant', 'tool');--> statement-breakpoint
 CREATE TYPE "public"."principal_type" AS ENUM('user', 'group', 'service_account');--> statement-breakpoint
-CREATE TYPE "public"."provider_kind" AS ENUM('openai-compatible', 'openai-responses-compatible', 'ollama');--> statement-breakpoint
+CREATE TYPE "public"."provider_kind" AS ENUM('anthropic', 'openai-compatible', 'openai-responses-compatible', 'ollama');--> statement-breakpoint
 CREATE TYPE "public"."quota_scope_type" AS ENUM('org', 'user', 'workspace', 'provider', 'agent', 'api_key');--> statement-breakpoint
 CREATE TYPE "public"."resource_permission" AS ENUM('read', 'write', 'use', 'run');--> statement-breakpoint
 CREATE TYPE "public"."run_status" AS ENUM('queued', 'running', 'waiting_tool_approval', 'cancelled', 'completed', 'failed');--> statement-breakpoint
@@ -187,6 +188,9 @@ CREATE TABLE "chats" (
 	"org_id" text NOT NULL,
 	"workspace_id" text NOT NULL,
 	"title" text NOT NULL,
+	"model_id" text,
+	"temporary" boolean DEFAULT false NOT NULL,
+	"expires_at" timestamp with time zone,
 	"created_by" text NOT NULL,
 	"archived_at" timestamp with time zone,
 	"legal_hold_until" timestamp with time zone,
@@ -229,9 +233,13 @@ CREATE TABLE "messages" (
 	"chat_id" text NOT NULL,
 	"role" "message_role" NOT NULL,
 	"content" text NOT NULL,
+	"citations" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE INDEX "chats_title_trgm_idx" ON "chats" USING gin ("title" gin_trgm_ops);--> statement-breakpoint
+CREATE INDEX "messages_content_trgm_idx" ON "messages" USING gin ("content" gin_trgm_ops);--> statement-breakpoint
+CREATE INDEX "message_parts_filename_trgm_idx" ON "message_parts" USING gin (("metadata"->>'fileName') gin_trgm_ops);--> statement-breakpoint
 CREATE TABLE "prompt_templates" (
 	"id" text PRIMARY KEY NOT NULL,
 	"org_id" text NOT NULL,
@@ -608,6 +616,7 @@ CREATE TABLE "base_models" (
 	"name" text NOT NULL,
 	"display_name" text NOT NULL,
 	"capabilities" jsonb NOT NULL,
+	"capabilities_source" text DEFAULT 'detected' NOT NULL,
 	"context_window" integer NOT NULL,
 	"pricing" jsonb,
 	"enabled" boolean DEFAULT true NOT NULL,
@@ -635,6 +644,7 @@ CREATE TABLE "provider_instances" (
 	"name" text NOT NULL,
 	"base_url" text NOT NULL,
 	"credential_ref" text,
+	"model_ids" jsonb,
 	"capabilities" jsonb NOT NULL,
 	"enabled" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -1248,4 +1258,96 @@ CREATE UNIQUE INDEX "workflow_definitions_workspace_name_idx" ON "workflow_defin
 CREATE INDEX "workflow_definitions_due_schedule_idx" ON "workflow_definitions" USING btree ("org_id","enabled","next_scheduled_run_at");--> statement-breakpoint
 CREATE INDEX "workflow_runs_workflow_created_idx" ON "workflow_runs" USING btree ("org_id","workflow_id","created_at");--> statement-breakpoint
 CREATE INDEX "workflow_runs_status_updated_idx" ON "workflow_runs" USING btree ("org_id","status","updated_at");--> statement-breakpoint
-CREATE INDEX "workflow_runs_workspace_created_idx" ON "workflow_runs" USING btree ("org_id","workspace_id","created_at");
+CREATE INDEX "workflow_runs_workspace_created_idx" ON "workflow_runs" USING btree ("org_id","workspace_id","created_at");--> statement-breakpoint
+CREATE TYPE "public"."queued_chat_turn_status" AS ENUM('queued', 'leased', 'failed', 'cancelled', 'completed');--> statement-breakpoint
+CREATE TABLE "queued_chat_turns" (
+	"id" text PRIMARY KEY NOT NULL,
+	"org_id" text NOT NULL,
+	"workspace_id" text NOT NULL,
+	"chat_id" text NOT NULL,
+	"agent_id" text NOT NULL,
+	"model_id" text,
+	"content" text NOT NULL,
+	"web_search" boolean DEFAULT false NOT NULL,
+	"urls" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"created_by" text NOT NULL,
+	"principal_id" text NOT NULL,
+	"principal_type" text NOT NULL,
+	"scope_snapshot" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"idempotency_key" text NOT NULL,
+	"status" "queued_chat_turn_status" DEFAULT 'queued' NOT NULL,
+	"attempt_count" integer DEFAULT 0 NOT NULL,
+	"lease_owner" text,
+	"lease_token" text,
+	"lease_expires_at" timestamp with time zone,
+	"heartbeat_at" timestamp with time zone,
+	"last_error_code" text,
+	"last_error_message" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"completed_at" timestamp with time zone
+);--> statement-breakpoint
+ALTER TABLE "queued_chat_turns" ADD CONSTRAINT "queued_chat_turns_org_id_organizations_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "queued_chat_turns" ADD CONSTRAINT "queued_chat_turns_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "queued_chat_turns" ADD CONSTRAINT "queued_chat_turns_chat_id_chats_id_fk" FOREIGN KEY ("chat_id") REFERENCES "public"."chats"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "queued_chat_turns" ADD CONSTRAINT "queued_chat_turns_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "queued_chat_turns_chat_order_idx" ON "queued_chat_turns" USING btree ("chat_id","status","created_at","id");--> statement-breakpoint
+CREATE INDEX "queued_chat_turns_lease_idx" ON "queued_chat_turns" USING btree ("status","lease_expires_at");--> statement-breakpoint
+CREATE INDEX "queued_chat_turns_org_idx" ON "queued_chat_turns" USING btree ("org_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "queued_chat_turns_idempotency_idx" ON "queued_chat_turns" USING btree ("org_id","chat_id","idempotency_key");--> statement-breakpoint
+ALTER TABLE "retention_policies" ADD COLUMN "file_retention_days" integer;--> statement-breakpoint
+ALTER TABLE "retention_policies" ADD COLUMN "workspace_file_retention_days" jsonb DEFAULT '{}'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "retention_policies" ADD COLUMN "user_file_retention_days" jsonb DEFAULT '{}'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_models" ADD COLUMN "archived_at" timestamp with time zone;--> statement-breakpoint
+CREATE TABLE "managed_model_customization_policies" (
+	"org_id" text NOT NULL,
+	"agent_id" text NOT NULL,
+	"allow_communication_style" boolean DEFAULT false NOT NULL,
+	"allow_response_length" boolean DEFAULT false NOT NULL,
+	"allow_language" boolean DEFAULT false NOT NULL,
+	"allow_custom_instructions" boolean DEFAULT false NOT NULL,
+	"allow_personal_memory" boolean DEFAULT false NOT NULL,
+	"allow_voice_selection" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "managed_model_customization_policies_org_agent_pk" PRIMARY KEY("org_id","agent_id")
+);--> statement-breakpoint
+CREATE TABLE "managed_model_preferences" (
+	"org_id" text NOT NULL,
+	"agent_id" text NOT NULL,
+	"principal_type" text NOT NULL,
+	"principal_id" text NOT NULL,
+	"communication_style" text,
+	"response_length" text,
+	"language" text,
+	"encrypted_custom_instructions" text,
+	"personal_memory_enabled" boolean,
+	"voice_profile_id" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "managed_model_preferences_tenant_principal_pk" PRIMARY KEY("org_id","agent_id","principal_type","principal_id")
+);--> statement-breakpoint
+ALTER TABLE "managed_model_customization_policies" ADD CONSTRAINT "managed_model_customization_policies_org_id_organizations_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "managed_model_customization_policies" ADD CONSTRAINT "managed_model_policy_agent_fk" FOREIGN KEY ("agent_id") REFERENCES "public"."agent_models"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "managed_model_preferences" ADD CONSTRAINT "managed_model_preferences_org_id_organizations_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "managed_model_preferences" ADD CONSTRAINT "managed_model_preferences_agent_id_agent_models_id_fk" FOREIGN KEY ("agent_id") REFERENCES "public"."agent_models"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "managed_model_preferences" ADD CONSTRAINT "managed_model_preferences_voice_profile_id_voice_profiles_id_fk" FOREIGN KEY ("voice_profile_id") REFERENCES "public"."voice_profiles"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "managed_model_preferences_agent_idx" ON "managed_model_preferences" USING btree ("org_id","agent_id","updated_at");--> statement-breakpoint
+CREATE FUNCTION "cleanup_managed_model_preferences_for_principal"() RETURNS trigger AS $$
+BEGIN
+	DELETE FROM "managed_model_preferences"
+	WHERE "org_id" = OLD."org_id"
+		AND "principal_type" = TG_ARGV[0]
+		AND "principal_id" = OLD."id";
+	RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;--> statement-breakpoint
+CREATE TRIGGER "managed_model_preferences_user_cleanup"
+	AFTER DELETE ON "users"
+	FOR EACH ROW EXECUTE FUNCTION "cleanup_managed_model_preferences_for_principal"('user');--> statement-breakpoint
+CREATE TRIGGER "managed_model_preferences_group_cleanup"
+	AFTER DELETE ON "groups"
+	FOR EACH ROW EXECUTE FUNCTION "cleanup_managed_model_preferences_for_principal"('group');--> statement-breakpoint
+CREATE TRIGGER "managed_model_preferences_service_account_cleanup"
+	AFTER DELETE ON "service_accounts"
+	FOR EACH ROW EXECUTE FUNCTION "cleanup_managed_model_preferences_for_principal"('service_account');

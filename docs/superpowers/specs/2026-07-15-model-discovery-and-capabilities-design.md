@@ -32,14 +32,14 @@ each model's `meta.capabilities`, default to `true`, and are admin/user-editable
 toggles (`open-webui/.../models/models.py:34-41`, editor
 `.../workspace/Models/Capabilities.svelte`). Tool-calling there is a per-model
 param `function_calling: 'native' | null`; default `null` means Open WebUI injects
-tools via *prompt*, which is why it never 400s on a tool-less model.
+tools via _prompt_, which is why it never 400s on a tool-less model.
 
-Romeo already discovers the Ollama model *list*. So the real gaps are: (a) real
+Romeo already discovers the Ollama model _list_. So the real gaps are: (a) real
 per-model capabilities + context window, (b) real OpenAI-compatible model
 discovery (today it emits one synthetic `"gpt-compatible"` model), and (c) a UI to
 edit capabilities/enable models/enter a credential.
 
-**Decision:** hybrid — auto-detect capabilities as the *seed* (better than Open
+**Decision:** hybrid — auto-detect capabilities as the _seed_ (better than Open
 WebUI, and it fixes gemma automatically), then let an admin override per-model.
 Romeo has no prompt-based tool injection and adding one is out of scope, so
 "toolCalling" continues to mean "send native provider tools", gated as today.
@@ -56,7 +56,7 @@ Romeo has no prompt-based tool injection and adding one is out of scope, so
 ## 4. Architecture (chosen approach)
 
 Extend the existing adapters and reuse the persistence Romeo already has. Romeo
-already models each connection as a provider *record* (`provider_instances`) and
+already models each connection as a provider _record_ (`provider_instances`) and
 persists discovered models as rows (`base_models`, with a `capabilities` jsonb and
 an `enabled` flag). That is a cleaner substrate than Open WebUI's index-aligned
 URL/key config arrays, so we keep it.
@@ -77,6 +77,7 @@ Today: `listModels` (`:26-43`) → `discoverOllamaModels` (`:134-162`) does a si
 
 Change: after `/api/tags`, for each model call `POST {baseUrl}/api/show` with
 `{ model: name }` and read:
+
 - `capabilities: string[]` (Ollama ≥0.4, e.g. `["completion","tools","vision",...]`)
   → `toolCalling = caps.includes("tools")`, `vision = caps.includes("vision")`,
   modalities extended with `"vision"` when present.
@@ -97,6 +98,7 @@ Today: `listModels` (`openai-compatible.ts:27-39`) returns a single synthetic mo
 `model_${provider.id}_default`, never queries the endpoint.
 
 Change:
+
 - If the provider has a non-empty **model-id allowlist**, synthesize one `BaseModel`
   per listed id and skip the network call.
 - Otherwise `GET {baseUrl}/models` (Bearer from the resolved credential), map each
@@ -119,7 +121,7 @@ Change:
   column on `provider_instances` (jsonb, nullable) OR fold into a new provider
   `config` jsonb. **Decision:** add a nullable `model_ids` jsonb column to
   `provider_instances` (one focused migration). NOTE: Global Constraint check — Phase 2
-  of the prior remediation forbade schema/migration churn for *core*; this is a new
+  of the prior remediation forbade schema/migration churn for _core_; this is a new
   feature and a migration is expected. The plan must confirm the migration policy
   (Drizzle migration under `packages/db`) before writing it.
 - Credentials already exist: `provider_instances.credentialRef` +
@@ -132,6 +134,7 @@ Current surface: `GET /providers`, `GET /providers/operational-summary`,
 `POST /providers`, `POST /providers/:id/sync`, `GET /models`, `PATCH /models/:id/pricing`.
 
 Add:
+
 - Credential + `modelIds` on `POST /providers` (extend `createProviderSchema`,
   `packages/core/src/http/schemas.ts:20-25`). Credential is entered as a secret and
   stored via the existing managed-secret path → `credentialRef`.
@@ -165,6 +168,7 @@ Romeo's editable/effective capability shape (`packages/providers/src/types.ts:25
 `streaming, toolCalling, vision, audioInput, structuredJson, reasoning, modalities[], deployment`.
 
 Ollama `/api/show` → capability seed:
+
 - `capabilities.includes("tools")` → `toolCalling`
 - `capabilities.includes("vision")` → `vision` (+ add `"vision"`/`"image"` to `modalities`)
 - `capabilities.includes("embedding")` → route to the embeddings adapter path (out of
@@ -182,10 +186,11 @@ and Romeo has no equivalent surfaces. YAGNI.
 ## 7. Data flow
 
 Add/sync provider → adapter `listModels(provider)`:
+
 - Ollama: `/api/tags` → per-model `/api/show` (bounded, best-effort) → `BaseModel[]`
   with detected caps + contextWindow.
 - OpenAI-compatible: allowlist? synthesize : `GET /models` → `BaseModel[]` with default caps.
-→ `provider-service.syncModels` → `repository.upsertModels` → `base_models` rows.
+  → `provider-service.syncModels` → `repository.upsertModels` → `base_models` rows.
 
 Admin edits a model → `PATCH /models/:id/capabilities` / `.../enabled` → updates the
 `base_models` row (override wins; a later re-sync must NOT clobber an admin override —
@@ -252,7 +257,7 @@ Per phase, write the failing test first, then implement.
 
 ## 12. Open risks / notes for the plan
 
-- Migration policy: prior remediation forbade *core* schema churn; this feature adds a
+- Migration policy: prior remediation forbade _core_ schema churn; this feature adds a
   `provider_instances.model_ids` column — confirm the Drizzle migration workflow under
   `packages/db` before writing it.
 - Credential UX: entering an API key must create/reference a managed secret

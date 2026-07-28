@@ -130,8 +130,10 @@ describe("repository fragment composition", () => {
       "getModel",
       "getProvider",
       "listModels",
+      "listModelsPage",
       "listProviders",
       "updateModel",
+      "updateProvider",
       "upsertModels",
     ]);
   });
@@ -140,18 +142,22 @@ describe("repository fragment composition", () => {
     const fragment = createAgentEvalRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "archiveAgent",
       "createAgent",
       "createAgentVersion",
       "createEvalCases",
       "createEvalRun",
       "createEvalRunResults",
       "createEvalSuite",
+      "deleteManagedModelPreference",
       "getAgent",
       "getAgentVersion",
       "getEvalResultHumanRating",
       "getEvalRun",
       "getEvalRunResult",
       "getEvalSuite",
+      "getManagedModelCustomizationPolicy",
+      "getManagedModelPreference",
       "listAgentKnowledgeBindings",
       "listAgentToolBindings",
       "listAgentVersions",
@@ -161,10 +167,13 @@ describe("repository fragment composition", () => {
       "listEvalRunResults",
       "listEvalRuns",
       "listEvalSuites",
+      "listManagedModelPreferences",
       "updateAgent",
       "upsertAgentKnowledgeBinding",
       "upsertAgentToolBinding",
       "upsertEvalResultHumanRating",
+      "upsertManagedModelCustomizationPolicy",
+      "upsertManagedModelPreference",
     ]);
   });
 
@@ -172,19 +181,31 @@ describe("repository fragment composition", () => {
     const fragment = createChatRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "cancelQueuedChatTurn",
+      "claimNextQueuedChatTurn",
       "createChat",
       "createChatComment",
       "createMessage",
       "createMessageParts",
+      "createQueuedChatTurn",
       "deleteMessage",
+      "finishQueuedChatTurnLease",
       "getChat",
       "getMessage",
       "getMessagePart",
+      "getQueuedChatTurn",
+      "getQueuedChatTurnByIdempotency",
+      "listAuthorizedChatsPage",
       "listChatComments",
       "listChats",
       "listMessageParts",
       "listMessages",
+      "listQueuedChatTurns",
+      "renewQueuedChatTurnLease",
+      "searchChatContent",
       "updateChat",
+      "updateMessagePart",
+      "updateQueuedChatTurn",
     ]);
   });
 
@@ -209,6 +230,7 @@ describe("repository fragment composition", () => {
     expect(Object.keys(fragment).sort()).toEqual([
       "createFileObject",
       "getFileObject",
+      "listAuthorizedFileObjectsPage",
       "listFileObjects",
       "updateFileObject",
     ]);
@@ -238,8 +260,10 @@ describe("repository fragment composition", () => {
       "appendRunEvents",
       "createRun",
       "createToolCall",
+      "finalizeRun",
       "getRun",
       "listRunEvents",
+      "listRuns",
       "listToolCalls",
       "updateRun",
     ]);
@@ -288,6 +312,7 @@ describe("repository fragment composition", () => {
       "listUsageEvents",
       "renewBackgroundJobLease",
       "updateBackgroundJob",
+      "updateBackgroundJobWithLease",
       "updateUsageEvent",
       "upsertSystemSetting",
     ]);
@@ -366,6 +391,7 @@ describe("repository fragment composition", () => {
       "deleteWorkspaceFolderItem",
       "getPromptTemplate",
       "getWorkspaceFolder",
+      "listAuthorizedPromptTemplatesPage",
       "listPromptTemplates",
       "listResourceFavorites",
       "listWorkspaceFolderItems",
@@ -380,6 +406,7 @@ describe("repository fragment composition", () => {
 
     expect(Object.keys(fragment).sort()).toEqual([
       "createResourceGrant",
+      "deleteResourceGrant",
       "deleteResourceGrantsForPrincipal",
       "listResourceGrants",
     ]);

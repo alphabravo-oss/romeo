@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { generateKeyPairSync } from "node:crypto";
 
 import type {
   NotificationDeliveryChannel,
@@ -79,7 +78,6 @@ describe("notification delivery senders", () => {
     const emailDelivery = await new ResendEmailNotificationDeliverySender({
       apiKey: "resend-test-key",
       baseUrl: "https://api.resend.com",
-      fetchImpl,
       from: "notify@romeo.example",
     }).createDelivery({
       repository,
@@ -152,12 +150,9 @@ describe("notification delivery senders", () => {
       })),
     };
     const fcmDelivery = await new FcmMobilePushNotificationDeliverySender({
-      baseUrl: "https://fcm.googleapis.com",
-      fetchImpl,
       projectId: "romeo-prod",
       secretResolver: fcmSecretResolver,
       serviceAccountRef: "env://FCM_SERVICE_ACCOUNT_JSON",
-      tokenUrl: "https://oauth2.googleapis.com/token",
     }).createDelivery({
       repository,
       notification,
@@ -383,35 +378,26 @@ describe("notification delivery senders", () => {
   });
 
   it("sends FCM mobile push notifications through managed secret refs without retaining tokens", async () => {
-    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const serviceAccountJson = JSON.stringify({
       client_email: "firebase-adminsdk@example.iam.gserviceaccount.com",
-      private_key: privateKey.export({ format: "pem", type: "pkcs8" }),
+      private_key:
+        "-----BEGIN PRIVATE KEY-----\nredacted-test-key\n-----END PRIVATE KEY-----",
       project_id: "romeo-prod",
     });
-    const fetchImpl = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url === "https://oauth2.googleapis.com/token") {
-          expect(String(init?.body)).toContain(
-            "urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer",
-          );
-          return new Response(
-            JSON.stringify({ access_token: "fcm-access-token", expires_in: 3600 }),
-            { status: 200 },
-          );
-        }
-        if (
-          url ===
-          "https://fcm.googleapis.com/v1/projects/romeo-prod/messages:send"
-        ) {
-          return new Response(JSON.stringify({ name: "projects/redacted" }), {
-            status: 200,
-          });
-        }
-        return new Response(null, { status: 404 });
+    const messages: unknown[] = [];
+    const clientFactory = vi.fn((input) => ({
+      send: async (message: unknown) => {
+        messages.push(message);
+        expect(input).toMatchObject({
+          projectId: "romeo-prod",
+          serviceAccount: {
+            clientEmail: "firebase-adminsdk@example.iam.gserviceaccount.com",
+            projectId: "romeo-prod",
+          },
+        });
+        return "projects/romeo-prod/messages/redacted";
       },
-    );
+    }));
     const secretResolver = {
       check: vi.fn(),
       resolveValue: vi.fn(async (secretRef: string) =>
@@ -430,12 +416,10 @@ describe("notification delivery senders", () => {
     };
     const repository = new InMemoryRomeoRepository();
     const sender = new FcmMobilePushNotificationDeliverySender({
-      baseUrl: "https://fcm.googleapis.com",
-      fetchImpl,
+      clientFactory,
       projectId: "",
       secretResolver,
       serviceAccountRef: "romeo-secret://secret_fcm_service_account",
-      tokenUrl: "https://oauth2.googleapis.com/token",
     });
 
     const delivery = await sender.createDelivery({
@@ -458,17 +442,12 @@ describe("notification delivery senders", () => {
     expect(secretResolver.resolveValue).toHaveBeenCalledWith(
       "romeo-secret://secret_fcm_service_account",
     );
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    const fcmBody = JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body));
-    expect(fcmBody.message.token).toBe("fcm-secret-device-token");
-    expect(fcmBody.message.notification.body).toBe(
-      "You were mentioned in a chat.",
-    );
-    expect(fcmBody.message.data.notificationId).toBe("notification_test");
-    expect(fcmBody.message.apns.headers["apns-collapse-id"]).toBe("mention");
-    expect(fetchImpl.mock.calls[1]?.[1]?.headers).toMatchObject({
-      authorization: "Bearer fcm-access-token",
-    });
+    expect(clientFactory).toHaveBeenCalledTimes(1);
+    const fcmBody = messages[0] as Record<string, any>;
+    expect(fcmBody.token).toBe("fcm-secret-device-token");
+    expect(fcmBody.notification.body).toBe("You were mentioned in a chat.");
+    expect(fcmBody.data.notificationId).toBe("notification_test");
+    expect(fcmBody.apns.headers["apns-collapse-id"]).toBe("mention");
     expect(delivery).toMatchObject({
       status: "sent",
       attemptCount: 1,
@@ -481,14 +460,13 @@ describe("notification delivery senders", () => {
       },
     });
     expect(JSON.stringify(delivery)).not.toContain("fcm-secret-device-token");
-    expect(JSON.stringify(delivery)).not.toContain("fcm-access-token");
     expect(JSON.stringify(delivery)).not.toContain("secret_device_token");
     expect(JSON.stringify(delivery)).not.toContain("private_key");
     expect(delivery.deliveredAt).toBeDefined();
   });
 
   it("fails FCM mobile push before egress when the device token ref is unavailable", async () => {
-    const fetchImpl = vi.fn(async () => new Response(null, { status: 200 }));
+    const clientFactory = vi.fn();
     const secretResolver = {
       check: vi.fn(),
       resolveValue: vi.fn(async () => ({
@@ -500,12 +478,10 @@ describe("notification delivery senders", () => {
     const repository = new InMemoryRomeoRepository();
 
     const delivery = await new FcmMobilePushNotificationDeliverySender({
-      baseUrl: "https://fcm.googleapis.com",
-      fetchImpl,
+      clientFactory,
       projectId: "romeo-prod",
       secretResolver,
       serviceAccountRef: "romeo-secret://secret_fcm_service_account",
-      tokenUrl: "https://oauth2.googleapis.com/token",
     }).createDelivery({
       repository,
       notification,
@@ -516,7 +492,7 @@ describe("notification delivery senders", () => {
       }),
     });
 
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(clientFactory).not.toHaveBeenCalled();
     expect(delivery).toMatchObject({
       status: "failed",
       attemptCount: 1,

@@ -1,10 +1,14 @@
+import {
+  archiveWorkspaceRoute,
+  createWorkspaceRoute,
+  exportWorkspaceRoute,
+} from "@romeo/contracts";
 import type { RomeoApi } from "../context";
-import { createWorkspaceSchema } from "../schemas";
 
 export function registerWorkspaceRoutes(app: RomeoApi): void {
-  app.post("/api/v1/workspaces", async (context) => {
+  app.openapi(createWorkspaceRoute, async (context) => {
     const subject = context.get("subject");
-    const body = createWorkspaceSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").workspace.create({
       subject,
       name: body.name,
@@ -13,25 +17,21 @@ export function registerWorkspaceRoutes(app: RomeoApi): void {
     return context.json({ data }, 201);
   });
 
-  app.post("/api/v1/workspaces/:workspaceId/archive", async (context) => {
+  app.openapi(archiveWorkspaceRoute, async (context) => {
     const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .workspace.archive({
-        subject,
-        workspaceId: context.req.param("workspaceId"),
-      });
+    const data = await context.get("services").workspace.archive({
+      subject,
+      workspaceId: context.req.valid("param").workspaceId,
+    });
     return context.json({ data });
   });
 
-  app.get("/api/v1/workspaces/:workspaceId/export", async (context) => {
+  app.openapi(exportWorkspaceRoute, async (context) => {
     const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .workspace.exportWorkspace({
-        subject,
-        workspaceId: context.req.param("workspaceId"),
-      });
+    const data = await context.get("services").workspace.exportWorkspace({
+      subject,
+      workspaceId: context.req.valid("param").workspaceId,
+    });
     return context.json({ data });
   });
 }

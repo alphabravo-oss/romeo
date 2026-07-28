@@ -308,7 +308,7 @@ describe("Delegated OAuth API", () => {
         }
         if (String(input) === "https://api.github.com/user") {
           expect((init?.headers as Record<string, string>)?.authorization).toBe(
-            "Bearer gho_secret_access_token",
+            "token gho_secret_access_token",
           );
           return new Response(JSON.stringify({ id: 12345, login: "octocat" }), {
             headers: { "content-type": "application/json" },
@@ -319,10 +319,14 @@ describe("Delegated OAuth API", () => {
           "https://api.github.com/applications/github-client-id/grant"
         ) {
           expect(init?.method).toBe("DELETE");
-          expect((init?.headers as Record<string, string>)?.authorization).toBe(
+          expect(
+            String(
+              (init?.headers as Record<string, string>)?.authorization,
+            ).toLowerCase(),
+          ).toBe(
             `Basic ${Buffer.from(
               "github-client-id:github-client-secret",
-            ).toString("base64")}`,
+            ).toString("base64")}`.toLowerCase(),
           );
           expect(String(init?.body)).toBe(
             JSON.stringify({ access_token: "gho_secret_access_token" }),

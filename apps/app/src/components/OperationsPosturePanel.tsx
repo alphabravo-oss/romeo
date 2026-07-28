@@ -2,17 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 
 import {
   getGaEvidencePosture,
-  getJobsOperationalSummary,
   getPostgresOperationalPosture,
-  getQuotasDistributedStatus,
-} from "../api/posture-client";
+} from "../features/operational-posture";
+import {
+  getJobsOperationalSummary,
+  type BackgroundJobTypeSummary,
+  type JobOperationalAlert,
+} from "../features/jobs";
+import { getQuotasDistributedStatus } from "../features/operational-governance";
 import type {
-  BackgroundJobTypeSummary,
   GaEvidencePostureGate,
-  JobOperationalAlert,
   PostgresOperationalWarningCode,
-} from "../api/posture-types";
+} from "../features/operational-posture";
 import { PanelState } from "../lib/panel-state";
+import { type MessageKey, useLocale } from "../lib/i18n";
+import { LocalizedDateTime } from "../lib/locale-format";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PanelStats } from "./PanelStats";
 import { Tabs } from "./Tabs";
@@ -28,55 +32,77 @@ import { Tabs } from "./Tabs";
  * mutates server state.
  */
 export function OperationsPosturePanel(): React.ReactNode {
+  const { t } = useLocale();
   return (
     <section className="rm-panel p-4">
-      <div className="mb-3 text-sm text-muted">System posture</div>
+      <div className="mb-3 text-sm text-muted">{t("opSystemPosture")}</div>
       <Tabs
         tabs={[
-          { id: "ga", label: "GA evidence", content: <GaEvidenceSection /> },
-          { id: "postgres", label: "Postgres", content: <PostgresSection /> },
-          { id: "jobs", label: "Jobs", content: <JobsSection /> },
-          { id: "quotas", label: "Quotas", content: <QuotasSection /> },
+          {
+            id: "ga",
+            label: t("opGaEvidence"),
+            content: <GaEvidenceSection />,
+          },
+          {
+            id: "postgres",
+            label: t("opPostgres"),
+            content: <PostgresSection />,
+          },
+          { id: "jobs", label: t("opJobs"), content: <JobsSection /> },
+          { id: "quotas", label: t("opQuotas"), content: <QuotasSection /> },
         ]}
       />
     </section>
   );
 }
 
-function StatusDot({ status }: { status: "pass" | "warn" | "fail" }): React.ReactNode {
+function StatusDot({
+  status,
+}: {
+  status: "pass" | "warn" | "fail";
+}): React.ReactNode {
   return <span className={`rm-status-dot ${status}`} />;
 }
 
 /* --------------------------------- GA evidence ---------------------------- */
 
 const gaGateCol = createColumnHelper<GaEvidencePostureGate>();
+type Translate = (key: MessageKey) => string;
 
-const gaGateColumns: ColumnDef<GaEvidencePostureGate, any>[] = [
-  gaGateCol.accessor("title", {
-    header: "Gate",
-    cell: (c) => <span className="font-medium">{c.getValue()}</span>,
-  }),
-  gaGateCol.accessor("phase", {
-    header: "Phase",
-    cell: (c) => <span className="rm-cell-muted rm-mono">{c.getValue()}</span>,
-  }),
-  gaGateCol.accessor("status", {
-    header: "Status",
-    cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-  }),
-  gaGateCol.accessor((row) => (row.requiredForGa ? "yes" : "no"), {
-    id: "requiredForGa",
-    header: "Required for GA",
-    cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-  }),
-  gaGateCol.accessor((row) => (row.securityCritical ? "yes" : "no"), {
-    id: "securityCritical",
-    header: "Security critical",
-    cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-  }),
-];
+function gaGateColumns(t: Translate): ColumnDef<GaEvidencePostureGate, any>[] {
+  return [
+    gaGateCol.accessor("title", {
+      header: t("opGate"),
+      cell: (c) => <span className="font-medium">{c.getValue()}</span>,
+    }),
+    gaGateCol.accessor("phase", {
+      header: t("opPhase"),
+      cell: (c) => (
+        <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+      ),
+    }),
+    gaGateCol.accessor("status", {
+      header: t("opStatus"),
+      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+    }),
+    gaGateCol.accessor((row) => (row.requiredForGa ? t("opYes") : t("opNo")), {
+      id: "requiredForGa",
+      header: t("opRequiredForGa"),
+      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+    }),
+    gaGateCol.accessor(
+      (row) => (row.securityCritical ? t("opYes") : t("opNo")),
+      {
+        id: "securityCritical",
+        header: t("opSecurityCritical"),
+        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+      },
+    ),
+  ];
+}
 
 function GaEvidenceSection(): React.ReactNode {
+  const { t } = useLocale();
   const query = useQuery({
     queryKey: ["postureGaEvidence"],
     queryFn: getGaEvidencePosture,
@@ -93,7 +119,7 @@ function GaEvidenceSection(): React.ReactNode {
             <PanelStats
               items={[
                 {
-                  label: "Status",
+                  label: t("opStatus"),
                   value: (
                     <>
                       <StatusDot
@@ -103,19 +129,21 @@ function GaEvidenceSection(): React.ReactNode {
                     </>
                   ),
                 },
-                { label: "Checklist", value: report.checklist.status },
-                { label: "Gates", value: report.gates.length },
-                { label: "Blocked gates", value: blockedGates },
+                { label: t("opChecklist"), value: report.checklist.status },
+                { label: t("opGates"), value: report.gates.length },
+                { label: t("opBlockedGates"), value: blockedGates },
                 {
-                  label: "Required live blockers",
+                  label: t("opRequiredLiveBlockers"),
                   value: report.requiredLiveBlockers.length,
                 },
-                { label: "Warnings", value: report.warnings.length },
+                { label: t("opWarnings"), value: report.warnings.length },
               ]}
             />
             {report.warnings.length > 0 ? (
               <div className="grid gap-1">
-                <div className="text-xs font-medium text-muted">Warnings</div>
+                <div className="text-xs font-medium text-muted">
+                  {t("opWarnings")}
+                </div>
                 <ul className="grid gap-1">
                   {report.warnings.map((warning) => (
                     <li className="rm-mono text-sm" key={warning}>
@@ -126,11 +154,13 @@ function GaEvidenceSection(): React.ReactNode {
               </div>
             ) : null}
             <div className="grid gap-1">
-              <div className="text-xs font-medium text-muted">Gates</div>
+              <div className="text-xs font-medium text-muted">
+                {t("opGates")}
+              </div>
               <DataTable
-                columns={gaGateColumns}
+                columns={gaGateColumns(t)}
                 data={report.gates}
-                empty="No GA gates reported."
+                empty={t("opNoGaGates")}
               />
             </div>
           </div>
@@ -148,14 +178,17 @@ interface PostgresWarningRow {
 
 const pgWarnCol = createColumnHelper<PostgresWarningRow>();
 
-const pgWarnColumns: ColumnDef<PostgresWarningRow, any>[] = [
-  pgWarnCol.accessor("code", {
-    header: "Warning",
-    cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
-  }),
-];
+function pgWarnColumns(t: Translate): ColumnDef<PostgresWarningRow, any>[] {
+  return [
+    pgWarnCol.accessor("code", {
+      header: t("opWarning"),
+      cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+    }),
+  ];
+}
 
 function PostgresSection(): React.ReactNode {
+  const { t } = useLocale();
   const query = useQuery({
     queryKey: ["postgresOperationalPosture"],
     queryFn: getPostgresOperationalPosture,
@@ -170,7 +203,7 @@ function PostgresSection(): React.ReactNode {
             <PanelStats
               items={[
                 {
-                  label: "Status",
+                  label: t("opStatus"),
                   value: (
                     <>
                       <StatusDot
@@ -180,42 +213,44 @@ function PostgresSection(): React.ReactNode {
                     </>
                   ),
                 },
-                { label: "Driver", value: report.repository.driver },
+                { label: t("opDriver"), value: report.repository.driver },
                 {
-                  label: "Database URL",
+                  label: t("opDatabaseUrl"),
                   value: report.repository.databaseUrlConfigured
-                    ? "configured"
-                    : "not configured",
+                    ? t("opConfiguredLower")
+                    : t("opNotConfigured"),
                 },
                 {
-                  label: "Pool max / process",
+                  label: t("opPoolMaxPerProcess"),
                   value: report.pool.maxConnectionsPerProcess,
                 },
                 {
-                  label: "Query plan review",
+                  label: t("opQueryPlanReview"),
                   value:
                     report.queryPlanReview.representativeVolumeEvidence.status,
                 },
                 {
-                  label: "Slow query telemetry",
+                  label: t("opSlowQueryTelemetry"),
                   value: report.slowQueryTelemetry.status,
                 },
                 {
-                  label: "Lock telemetry",
+                  label: t("opLockTelemetry"),
                   value: report.lockTelemetry.status,
                 },
                 {
-                  label: "Archival partitioning",
+                  label: t("opArchivalPartitioning"),
                   value: report.archivalPartitioning.status,
                 },
               ]}
             />
             <div className="grid gap-1">
-              <div className="text-xs font-medium text-muted">Warnings</div>
+              <div className="text-xs font-medium text-muted">
+                {t("opWarnings")}
+              </div>
               <DataTable
-                columns={pgWarnColumns}
+                columns={pgWarnColumns(t)}
                 data={warningRows}
-                empty="No Postgres warnings."
+                empty={t("opNoPostgresWarnings")}
               />
             </div>
           </div>
@@ -229,60 +264,69 @@ function PostgresSection(): React.ReactNode {
 
 const jobTypeCol = createColumnHelper<BackgroundJobTypeSummary>();
 
-const jobTypeColumns: ColumnDef<BackgroundJobTypeSummary, any>[] = [
-  jobTypeCol.accessor("type", {
-    header: "Type",
-    cell: (c) => <span className="font-medium">{c.getValue()}</span>,
-  }),
-  jobTypeCol.accessor("total", {
-    header: "Total",
-    cell: (c) => <span>{c.getValue()}</span>,
-  }),
-  jobTypeCol.accessor("queued", {
-    header: "Queued",
-    cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-  }),
-  jobTypeCol.accessor("running", {
-    header: "Running",
-    cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-  }),
-  jobTypeCol.accessor("failed", {
-    header: "Failed",
-    cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-  }),
-  jobTypeCol.accessor("deadLettered", {
-    header: "Dead-lettered",
-    cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-  }),
-  jobTypeCol.accessor("recentFailed", {
-    header: "Recent failed",
-    cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-  }),
-];
+function jobTypeColumns(
+  t: Translate,
+): ColumnDef<BackgroundJobTypeSummary, any>[] {
+  return [
+    jobTypeCol.accessor("type", {
+      header: t("opType"),
+      cell: (c) => <span className="font-medium">{c.getValue()}</span>,
+    }),
+    jobTypeCol.accessor("total", {
+      header: t("opTotal"),
+      cell: (c) => <span>{c.getValue()}</span>,
+    }),
+    jobTypeCol.accessor("queued", {
+      header: t("opQueued"),
+      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+    }),
+    jobTypeCol.accessor("running", {
+      header: t("opRunning"),
+      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+    }),
+    jobTypeCol.accessor("failed", {
+      header: t("opFailed"),
+      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+    }),
+    jobTypeCol.accessor("deadLettered", {
+      header: t("opDeadLettered"),
+      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+    }),
+    jobTypeCol.accessor("recentFailed", {
+      header: t("opRecentFailed"),
+      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+    }),
+  ];
+}
 
 const jobAlertCol = createColumnHelper<JobOperationalAlert>();
 
-const jobAlertColumns: ColumnDef<JobOperationalAlert, any>[] = [
-  jobAlertCol.accessor("severity", {
-    header: "Severity",
-    cell: (c) => <span className="font-medium">{c.getValue().toUpperCase()}</span>,
-  }),
-  jobAlertCol.accessor("metric", {
-    header: "Metric",
-    cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
-  }),
-  jobAlertCol.accessor("type", {
-    header: "Type",
-    cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-  }),
-  jobAlertCol.accessor((row) => `${row.value} / ${row.threshold}`, {
-    id: "valueThreshold",
-    header: "Value / Threshold",
-    cell: (c) => <span>{c.getValue()}</span>,
-  }),
-];
+function jobAlertColumns(t: Translate): ColumnDef<JobOperationalAlert, any>[] {
+  return [
+    jobAlertCol.accessor("severity", {
+      header: t("opSeverity"),
+      cell: (c) => (
+        <span className="font-medium">{c.getValue().toUpperCase()}</span>
+      ),
+    }),
+    jobAlertCol.accessor("metric", {
+      header: t("opMetric"),
+      cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+    }),
+    jobAlertCol.accessor("type", {
+      header: t("opType"),
+      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+    }),
+    jobAlertCol.accessor((row) => `${row.value} / ${row.threshold}`, {
+      id: "valueThreshold",
+      header: t("opValueThreshold"),
+      cell: (c) => <span>{c.getValue()}</span>,
+    }),
+  ];
+}
 
 function JobsSection(): React.ReactNode {
+  const { t } = useLocale();
   const query = useQuery({
     queryKey: ["jobsOperationalSummary"],
     queryFn: getJobsOperationalSummary,
@@ -295,7 +339,7 @@ function JobsSection(): React.ReactNode {
           <PanelStats
             items={[
               {
-                label: "Status",
+                label: t("opStatus"),
                 value: (
                   <>
                     <StatusDot status={jobStatusDot(summary.status)} />
@@ -303,29 +347,39 @@ function JobsSection(): React.ReactNode {
                   </>
                 ),
               },
-              { label: "Total jobs", value: summary.totals.total },
-              { label: "Queued", value: summary.totals.queued },
-              { label: "Running", value: summary.totals.running },
-              { label: "Failed", value: summary.totals.failed },
-              { label: "Dead-lettered", value: summary.totals.deadLettered },
-              { label: "Recent failed", value: summary.totals.recentFailed },
-              { label: "Alerts", value: summary.alerts.length },
+              { label: t("opTotalJobs"), value: summary.totals.total },
+              { label: t("opQueued"), value: summary.totals.queued },
+              { label: t("opRunning"), value: summary.totals.running },
+              { label: t("opFailed"), value: summary.totals.failed },
+              {
+                label: t("opDeadLettered"),
+                value: summary.totals.deadLettered,
+              },
+              {
+                label: t("opRecentFailed"),
+                value: summary.totals.recentFailed,
+              },
+              { label: t("opAlerts"), value: summary.alerts.length },
             ]}
           />
           <div className="grid gap-1">
-            <div className="text-xs font-medium text-muted">Alerts</div>
+            <div className="text-xs font-medium text-muted">
+              {t("opAlerts")}
+            </div>
             <DataTable
-              columns={jobAlertColumns}
+              columns={jobAlertColumns(t)}
               data={summary.alerts}
-              empty="No job alerts."
+              empty={t("opNoJobAlerts")}
             />
           </div>
           <div className="grid gap-1">
-            <div className="text-xs font-medium text-muted">By type</div>
+            <div className="text-xs font-medium text-muted">
+              {t("opByType")}
+            </div>
             <DataTable
-              columns={jobTypeColumns}
+              columns={jobTypeColumns(t)}
               data={summary.byType}
-              empty="No background jobs."
+              empty={t("opNoBackgroundJobs")}
             />
           </div>
         </div>
@@ -345,6 +399,7 @@ function jobStatusDot(
 /* ----------------------------------- Quotas ------------------------------- */
 
 function QuotasSection(): React.ReactNode {
+  const { t } = useLocale();
   const query = useQuery({
     queryKey: ["quotasDistributedStatus"],
     queryFn: getQuotasDistributedStatus,
@@ -357,37 +412,43 @@ function QuotasSection(): React.ReactNode {
           <PanelStats
             items={[
               {
-                label: "Health",
+                label: t("opHealth"),
                 value: (
                   <>
                     <StatusDot status={quotaHealthDot(status.healthy)} />
                     {status.healthy === null
-                      ? "unknown"
+                      ? t("opUnknown")
                       : status.healthy
-                        ? "healthy"
-                        : "unhealthy"}
+                        ? t("opHealthy")
+                        : t("opUnhealthy")}
                   </>
                 ),
               },
-              { label: "Driver", value: status.driver },
-              { label: "Enabled", value: status.enabled ? "yes" : "no" },
-              { label: "Configured", value: status.configured ? "yes" : "no" },
-              { label: "Status code", value: status.details.statusCode },
+              { label: t("opDriver"), value: status.driver },
               {
-                label: "Fail closed",
-                value: status.details.failClosed ? "yes" : "no",
+                label: t("opEnabled"),
+                value: status.enabled ? t("opYes") : t("opNo"),
+              },
+              {
+                label: t("opConfigured"),
+                value: status.configured ? t("opYes") : t("opNo"),
+              },
+              { label: t("opStatusCode"), value: status.details.statusCode },
+              {
+                label: t("opFailClosed"),
+                value: status.details.failClosed ? t("opYes") : t("opNo"),
               },
             ]}
           />
           <dl className="grid gap-1 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-muted">Key prefix</dt>
+              <dt className="text-muted">{t("opKeyPrefix")}</dt>
               <dd className="rm-mono">{status.keyPrefix}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted">Checked at</dt>
+              <dt className="text-muted">{t("opCheckedAt")}</dt>
               <dd className="rm-cell-muted">
-                {new Date(status.checkedAt).toLocaleString()}
+                <LocalizedDateTime value={status.checkedAt} />
               </dd>
             </div>
           </dl>

@@ -12,6 +12,9 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   },
+  "dependencies": {
+    "jose": "6.2.3"
+  },
   "devDependencies": {
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"

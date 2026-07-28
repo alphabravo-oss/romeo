@@ -9,6 +9,19 @@ import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
 import {
+  billingWebhookSubject,
+  externalBillingMetadata,
+  statusFromExternalEvent,
+  type ExternalBillingEventInput,
+} from "./billing-external-events";
+import {
+  applyBillingQuotaTemplates,
+  buildBillingEntitlementReport,
+  validateBillingQuotaTemplates,
+  type BillingEntitlementReconciliationResult,
+  type BillingEntitlementReport,
+} from "./billing-entitlements";
+import {
   genericBillingWebhookEvent,
   stripeBillingWebhookEvent,
 } from "./billing-provider-webhooks";
@@ -20,91 +33,13 @@ import {
   type BillingLifecycleInput,
   type BillingLifecycleReport,
 } from "./billing-lifecycle";
-import { nextResetAt } from "./quota-resets";
-import { ensureSystemAuditActor } from "./system-audit-actor";
+
+export * from "./billing-entitlements";
+export * from "./billing-external-events";
 
 export interface BillingPlanApplyResult {
   plan: BillingPlan;
   quotas: QuotaBucket[];
-}
-
-export type BillingEntitlementQuotaStatus =
-  | "limit_and_reset_interval_mismatch"
-  | "limit_mismatch"
-  | "matched"
-  | "missing"
-  | "reset_interval_mismatch";
-
-export interface BillingEntitlementQuotaReport {
-  metric: BillingPlanQuotaTemplate["metric"];
-  expectedLimit: number;
-  expectedResetInterval: BillingPlanQuotaTemplate["resetInterval"];
-  status: BillingEntitlementQuotaStatus;
-  actualLimit?: number;
-  actualResetInterval?: BillingPlanQuotaTemplate["resetInterval"];
-  actualUsed?: number;
-  quotaBucketId?: string;
-  resetAt?: string;
-}
-
-export interface BillingEntitlementReport {
-  orgId: string;
-  generatedAt: string;
-  status: "attention_required" | "healthy";
-  billingPlanConfigured: boolean;
-  quotaTemplateCount: number;
-  unmanagedOrgQuotaCount: number;
-  warnings: Array<
-    | "billing_plan_missing"
-    | "billing_status_not_entitled"
-    | "quota_limit_mismatch"
-    | "quota_missing"
-    | "quota_reset_interval_mismatch"
-  >;
-  billingPlan?: {
-    code: string;
-    name: string;
-    source: BillingPlan["source"];
-    status: BillingPlan["status"];
-    externalCustomerConfigured: boolean;
-    externalSubscriptionConfigured: boolean;
-    updatedAt: string;
-  };
-  quotas: BillingEntitlementQuotaReport[];
-}
-
-export interface BillingEntitlementReconciliationResult {
-  before: BillingEntitlementReport;
-  after: BillingEntitlementReport;
-  actions: {
-    createdQuotaIds: string[];
-    updatedQuotaIds: string[];
-    unchangedQuotaIds: string[];
-  };
-}
-
-export interface ExternalBillingEventInput {
-  amountCents?: number | undefined;
-  currency?: string | undefined;
-  eventType:
-    | "customer.updated"
-    | "invoice.paid"
-    | "invoice.payment_failed"
-    | "subscription.canceled"
-    | "subscription.created"
-    | "subscription.updated";
-  externalCustomerId?: string | undefined;
-  externalInvoiceId?: string | undefined;
-  externalSubscriptionId?: string | undefined;
-  invoiceStatus?: string | undefined;
-  lifecycle?: BillingLifecycleInput | undefined;
-  metadata?: Record<string, unknown> | undefined;
-  occurredAt?: string | undefined;
-  planCode?: string | undefined;
-  planName?: string | undefined;
-  provider: string;
-  quotaTemplates?: BillingPlanQuotaTemplate[] | undefined;
-  status?: BillingPlan["status"] | undefined;
 }
 
 export interface BillingServiceOptions {
@@ -130,14 +65,14 @@ export class BillingService {
     subject: AuthSubject,
   ): Promise<BillingEntitlementReport> {
     assertScope(subject, "admin:read");
-    return this.buildEntitlementReport(this.repository, subject.orgId);
+    return buildBillingEntitlementReport(this.repository, subject.orgId);
   }
 
   async reconcileEntitlements(
     subject: AuthSubject,
   ): Promise<BillingEntitlementReconciliationResult> {
     assertScope(subject, "admin:write");
-    const before = await this.buildEntitlementReport(
+    const before = await buildBillingEntitlementReport(
       this.repository,
       subject.orgId,
     );
@@ -201,12 +136,12 @@ export class BillingService {
           400,
         );
       }
-      const applied = await this.applyQuotaTemplates(
+      const applied = await applyBillingQuotaTemplates(
         repository,
         subject,
         txPlan.quotaTemplates,
       );
-      const after = await this.buildEntitlementReport(
+      const after = await buildBillingEntitlementReport(
         repository,
         subject.orgId,
       );
@@ -271,7 +206,7 @@ export class BillingService {
     lifecycle?: BillingLifecycleInput;
   }): Promise<BillingPlanApplyResult> {
     assertScope(input.subject, "admin:write");
-    validateQuotaTemplates(input.quotaTemplates);
+    validateBillingQuotaTemplates(input.quotaTemplates);
     return this.repository.transaction(async (repository) =>
       this.applyPlanInRepository(repository, input),
     );
@@ -286,7 +221,7 @@ export class BillingService {
       const existing = await repository.getBillingPlan(input.subject.orgId);
       const quotaTemplates =
         input.event.quotaTemplates ?? existing?.quotaTemplates ?? [];
-      validateQuotaTemplates(quotaTemplates);
+      validateBillingQuotaTemplates(quotaTemplates);
       if (quotaTemplates.length === 0)
         throw new ApiError(
           "billing_plan_required",
@@ -483,7 +418,7 @@ export class BillingService {
       plan.externalSubscriptionId = input.externalSubscriptionId;
 
     const storedPlan = await repository.upsertBillingPlan(plan);
-    const quotas = await this.applyQuotaTemplates(
+    const quotas = await applyBillingQuotaTemplates(
       repository,
       input.subject,
       storedPlan.quotaTemplates,
@@ -508,265 +443,10 @@ export class BillingService {
     return { plan: storedPlan, quotas };
   }
 
-  private async applyQuotaTemplates(
-    repository: RomeoRepository,
-    subject: AuthSubject,
-    templates: BillingPlanQuotaTemplate[],
-  ): Promise<QuotaBucket[]> {
-    const existingBuckets = await repository.listQuotaBuckets(subject.orgId);
-    const applied: QuotaBucket[] = [];
-    for (const template of templates) {
-      const existing = existingBuckets.find(
-        (bucket) =>
-          bucket.scopeType === "org" &&
-          bucket.scopeId === subject.orgId &&
-          bucket.metric === template.metric,
-      );
-      if (existing === undefined) {
-        const resetAt = nextResetAt(template.resetInterval);
-        const bucket: QuotaBucket = {
-          id: createId("quota"),
-          orgId: subject.orgId,
-          scopeType: "org",
-          scopeId: subject.orgId,
-          metric: template.metric,
-          limit: template.limit,
-          used: 0,
-          resetInterval: template.resetInterval,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        if (resetAt !== undefined) bucket.resetAt = resetAt;
-        applied.push(await repository.createQuotaBucket(bucket));
-        continue;
-      }
-
-      const resetAt =
-        existing.resetInterval === template.resetInterval
-          ? existing.resetAt
-          : nextResetAt(template.resetInterval);
-      const updated: QuotaBucket = {
-        ...existing,
-        limit: template.limit,
-        resetInterval: template.resetInterval,
-        updatedAt: new Date().toISOString(),
-      };
-      if (resetAt === undefined) delete updated.resetAt;
-      else updated.resetAt = resetAt;
-      applied.push(await repository.updateQuotaBucket(updated));
-    }
-    return applied;
-  }
-
-  private async buildEntitlementReport(
-    repository: RomeoRepository,
-    orgId: string,
-  ): Promise<BillingEntitlementReport> {
-    const [plan, buckets] = await Promise.all([
-      repository.getBillingPlan(orgId),
-      repository.listQuotaBuckets(orgId),
-    ]);
-    const generatedAt = new Date().toISOString();
-    if (plan === undefined) {
-      return {
-        orgId,
-        generatedAt,
-        status: "attention_required",
-        billingPlanConfigured: false,
-        quotaTemplateCount: 0,
-        unmanagedOrgQuotaCount: buckets.filter(
-          (bucket) => bucket.scopeType === "org" && bucket.scopeId === orgId,
-        ).length,
-        warnings: ["billing_plan_missing"],
-        quotas: [],
-      };
-    }
-
-    const planMetrics = new Set(
-      plan.quotaTemplates.map((template) => template.metric),
-    );
-    const orgBuckets = buckets.filter(
-      (bucket) => bucket.scopeType === "org" && bucket.scopeId === orgId,
-    );
-    const quotas = plan.quotaTemplates.map((template) =>
-      entitlementQuotaReport(
-        template,
-        orgBuckets.find((bucket) => bucket.metric === template.metric),
-      ),
-    );
-    const warnings = entitlementWarnings(plan, quotas);
-    return {
-      orgId,
-      generatedAt,
-      status: warnings.length === 0 ? "healthy" : "attention_required",
-      billingPlanConfigured: true,
-      quotaTemplateCount: plan.quotaTemplates.length,
-      unmanagedOrgQuotaCount: orgBuckets.filter(
-        (bucket) => !planMetrics.has(bucket.metric),
-      ).length,
-      warnings,
-      billingPlan: {
-        code: plan.code,
-        name: plan.name,
-        source: plan.source,
-        status: plan.status,
-        externalCustomerConfigured: plan.externalCustomerId !== undefined,
-        externalSubscriptionConfigured:
-          plan.externalSubscriptionId !== undefined,
-        updatedAt: plan.updatedAt,
-      },
-      quotas,
-    };
-  }
-
   private async buildLifecycleReport(
     orgId: string,
   ): Promise<BillingLifecycleReport> {
     const plan = await this.repository.getBillingPlan(orgId);
     return buildBillingLifecycleReport({ orgId, plan });
-  }
-}
-
-function entitlementQuotaReport(
-  template: BillingPlanQuotaTemplate,
-  bucket: QuotaBucket | undefined,
-): BillingEntitlementQuotaReport {
-  if (bucket === undefined) {
-    return {
-      metric: template.metric,
-      expectedLimit: template.limit,
-      expectedResetInterval: template.resetInterval,
-      status: "missing",
-    };
-  }
-
-  const limitMismatch = bucket.limit !== template.limit;
-  const resetMismatch = bucket.resetInterval !== template.resetInterval;
-  const report: BillingEntitlementQuotaReport = {
-    metric: template.metric,
-    expectedLimit: template.limit,
-    expectedResetInterval: template.resetInterval,
-    status: entitlementQuotaStatus(limitMismatch, resetMismatch),
-    actualLimit: bucket.limit,
-    actualResetInterval: bucket.resetInterval,
-    actualUsed: bucket.used,
-    quotaBucketId: bucket.id,
-  };
-  if (bucket.resetAt !== undefined) report.resetAt = bucket.resetAt;
-  return report;
-}
-
-function entitlementQuotaStatus(
-  limitMismatch: boolean,
-  resetMismatch: boolean,
-): BillingEntitlementQuotaStatus {
-  if (limitMismatch && resetMismatch)
-    return "limit_and_reset_interval_mismatch";
-  if (limitMismatch) return "limit_mismatch";
-  if (resetMismatch) return "reset_interval_mismatch";
-  return "matched";
-}
-
-function entitlementWarnings(
-  plan: BillingPlan,
-  quotas: BillingEntitlementQuotaReport[],
-): BillingEntitlementReport["warnings"] {
-  const warnings = new Set<BillingEntitlementReport["warnings"][number]>();
-  if (plan.status === "canceled" || plan.status === "past_due")
-    warnings.add("billing_status_not_entitled");
-  for (const quota of quotas) {
-    if (quota.status === "missing") warnings.add("quota_missing");
-    if (
-      quota.status === "limit_mismatch" ||
-      quota.status === "limit_and_reset_interval_mismatch"
-    )
-      warnings.add("quota_limit_mismatch");
-    if (
-      quota.status === "reset_interval_mismatch" ||
-      quota.status === "limit_and_reset_interval_mismatch"
-    )
-      warnings.add("quota_reset_interval_mismatch");
-  }
-  return [...warnings].sort();
-}
-
-async function billingWebhookSubject(
-  repository: RomeoRepository,
-  orgId: string,
-): Promise<AuthSubject> {
-  const actor = await ensureSystemAuditActor(repository, {
-    kind: "billing_webhook",
-    name: "Romeo system billing webhook",
-    orgId,
-  });
-  return {
-    id: actor.id,
-    type: "service_account",
-    orgId,
-    workspaceIds: [],
-    groupIds: [],
-    scopes: ["admin:write"],
-    isAdmin: true,
-  };
-}
-
-function statusFromExternalEvent(
-  eventType: ExternalBillingEventInput["eventType"],
-  fallback: BillingPlan["status"] | undefined,
-): BillingPlan["status"] {
-  if (eventType === "subscription.canceled") return "canceled";
-  if (eventType === "invoice.payment_failed") return "past_due";
-  if (
-    eventType === "subscription.created" ||
-    eventType === "subscription.updated" ||
-    eventType === "invoice.paid"
-  )
-    return fallback === "trialing" ? "trialing" : "active";
-  return fallback ?? "active";
-}
-
-function externalBillingMetadata(
-  existing: Record<string, unknown>,
-  event: ExternalBillingEventInput,
-): Record<string, unknown> {
-  return {
-    ...existing,
-    billingProvider: event.provider,
-    lastExternalEventType: event.eventType,
-    lastExternalEventAt: event.occurredAt ?? new Date().toISOString(),
-    ...(event.externalInvoiceId === undefined
-      ? {}
-      : {
-          lastInvoice: {
-            externalInvoiceId: event.externalInvoiceId,
-            ...(event.invoiceStatus === undefined
-              ? {}
-              : { status: event.invoiceStatus }),
-            ...(event.amountCents === undefined
-              ? {}
-              : { amountCents: event.amountCents }),
-            ...(event.currency === undefined
-              ? {}
-              : { currency: event.currency }),
-          },
-        }),
-    ...(event.metadata === undefined
-      ? {}
-      : {
-          externalMetadataKeys: Object.keys(event.metadata).sort().slice(0, 25),
-        }),
-  };
-}
-
-function validateQuotaTemplates(templates: BillingPlanQuotaTemplate[]): void {
-  const seen = new Set<string>();
-  for (const template of templates) {
-    if (seen.has(template.metric))
-      throw new ApiError(
-        "billing_plan_duplicate_quota_metric",
-        "Billing plan quota templates must have unique metrics.",
-        400,
-      );
-    seen.add(template.metric);
   }
 }

@@ -27,10 +27,7 @@ export interface ChatTagAssignmentRecord {
 export class PgChatTagRepository {
   constructor(private readonly db: RomeoDatabase) {}
 
-  async listChatTags(
-    orgId: string,
-    userId: string,
-  ): Promise<ChatTagRecord[]> {
+  async listChatTags(orgId: string, userId: string): Promise<ChatTagRecord[]> {
     const rows = await this.db
       .select()
       .from(chatTags)

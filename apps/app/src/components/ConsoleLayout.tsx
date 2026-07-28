@@ -1,6 +1,10 @@
+import { Button } from "@romeo/ui";
 import { Link } from "@tanstack/react-router";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left.mjs";
 import type { ComponentType, ReactNode } from "react";
+import { useLocale } from "../lib/i18n";
+import { SidebarBrand, SidebarFrame } from "./SidebarFrame";
+import { ThemeToggle } from "./ThemeToggle";
 
 export interface ConsoleSection {
   key: string;
@@ -23,19 +27,26 @@ export function ConsoleLayout({
   active,
   onSelect,
   children,
+  userMenu,
 }: {
   title: string;
   groups: ConsoleGroup[];
   active: string;
   onSelect: (key: string) => void;
   children: ReactNode;
+  userMenu?: ReactNode;
 }) {
+  const { t } = useLocale();
   return (
     <main className="rm-console">
-      <aside className="rm-console-nav">
-        <Link className="rm-console-back" to="/">
+      <a className="rm-skip-link" href="#console-content">
+        {t("skipToContent")}
+      </a>
+      <SidebarFrame className="rm-console-nav">
+        <SidebarBrand className="rm-console-brand" />
+        <Link aria-label={t("backToChat")} className="rm-console-back" to="/">
           <ArrowLeft aria-hidden size={16} />
-          <span>Back to chat</span>
+          <span>{t("backToChat")}</span>
         </Link>
         <div className="rm-console-title">{title}</div>
         <nav className="rm-console-sections">
@@ -47,7 +58,7 @@ export function ConsoleLayout({
               {group.items.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <button
+                  <Button
                     className={`rm-console-item ${item.key === active ? "active" : ""}`}
                     key={item.key}
                     onClick={() => onSelect(item.key)}
@@ -55,14 +66,25 @@ export function ConsoleLayout({
                   >
                     {Icon ? <Icon aria-hidden size={16} /> : null}
                     <span>{item.label}</span>
-                  </button>
+                  </Button>
                 );
               })}
             </div>
           ))}
         </nav>
-      </aside>
-      <section className="rm-console-content">
+      </SidebarFrame>
+      <section
+        className="rm-console-content"
+        id="console-content"
+        tabIndex={-1}
+      >
+        <header className="rm-topbar rm-console-topbar">
+          <strong>{title}</strong>
+          <div className="rm-topbar-actions">
+            <ThemeToggle />
+            {userMenu}
+          </div>
+        </header>
         <div className="rm-console-inner">{children}</div>
       </section>
     </main>

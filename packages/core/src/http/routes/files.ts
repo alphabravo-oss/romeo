@@ -1,113 +1,147 @@
 import type { RomeoApi } from "../context";
 import {
-  createFileResumableUploadSessionSchema,
-  createFileSchema,
-  createFileUploadSessionSchema,
-} from "../schemas";
+  cancelFileUploadSessionRoute,
+  cancelResumableUploadSessionRoute,
+  completeFileUploadSessionRoute,
+  completeResumableUploadSessionRoute,
+  createFileRoute,
+  createFileUploadSessionRoute,
+  createResumableUploadSessionRoute,
+  deleteFileRoute,
+  getFileRoute,
+  getFileUploadSessionRoute,
+  getResumableUploadSessionRoute,
+  listFilesRoute,
+  readFileContentRoute,
+  retryFileExtractionRoute,
+} from "@romeo/contracts";
 
 export function registerFileRoutes(app: RomeoApi): void {
-  app.get("/api/v1/files", async (context) => {
+  app.openapi(listFilesRoute, async (context) => {
     const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .files.list(subject, context.req.query("workspaceId"));
+    const { workspaceId, limit, offset, q } = context.req.valid("query");
+    if (limit !== undefined && workspaceId !== undefined) {
+      const page = await context.get("services").files.listPage(subject, {
+        excludePurposes: ["memory", "note"],
+        limit,
+        offset: offset ?? 0,
+        ...(q === undefined ? {} : { query: q }),
+        workspaceId,
+      });
+      return context.json({
+        data: page.items,
+        meta: {
+          limit: page.limit,
+          offset: page.offset,
+          total: page.total,
+          hasMore: page.offset + page.items.length < page.total,
+        },
+      });
+    }
+    const data = await context.get("services").files.list(subject, workspaceId);
     return context.json({ data });
   });
 
-  app.post("/api/v1/files", async (context) => {
+  app.openapi(createFileRoute, async (context) => {
     const subject = context.get("subject");
-    const body = createFileSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").files.create(subject, body);
     return context.json({ data }, 201);
   });
 
-  app.post("/api/v1/files/uploads", async (context) => {
+  app.openapi(createFileUploadSessionRoute, async (context) => {
     const subject = context.get("subject");
-    const body = createFileUploadSessionSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .files.createUploadSession(subject, body);
     return context.json({ data }, 201);
   });
 
-  app.post("/api/v1/files/uploads/resumable", async (context) => {
+  app.openapi(createResumableUploadSessionRoute, async (context) => {
     const subject = context.get("subject");
-    const body = createFileResumableUploadSessionSchema.parse(
-      await context.req.json(),
-    );
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .files.createResumableUploadSession(subject, body);
     return context.json({ data }, 201);
   });
 
-  app.get("/api/v1/files/uploads/resumable/:fileId", async (context) => {
+  app.openapi(getResumableUploadSessionRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
-      .files.getResumableUploadSession(subject, context.req.param("fileId"));
+      .files.getResumableUploadSession(
+        subject,
+        context.req.valid("param").fileId,
+      );
     return context.json({ data });
   });
 
-  app.post(
-    "/api/v1/files/uploads/resumable/:fileId/complete",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context
-        .get("services")
-        .files.completeResumableUploadSession(
-          subject,
-          context.req.param("fileId"),
-        );
-      return context.json({ data });
-    },
-  );
-
-  app.delete("/api/v1/files/uploads/resumable/:fileId", async (context) => {
+  app.openapi(completeResumableUploadSessionRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
-      .files.delete(subject, context.req.param("fileId"));
+      .files.completeResumableUploadSession(
+        subject,
+        context.req.valid("param").fileId,
+      );
     return context.json({ data });
   });
 
-  app.get("/api/v1/files/uploads/:fileId", async (context) => {
+  app.openapi(cancelResumableUploadSessionRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
-      .files.getUploadSession(subject, context.req.param("fileId"));
+      .files.delete(subject, context.req.valid("param").fileId);
     return context.json({ data });
   });
 
-  app.post("/api/v1/files/uploads/:fileId/complete", async (context) => {
+  app.openapi(getFileUploadSessionRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
-      .files.completeUploadSession(subject, context.req.param("fileId"));
+      .files.getUploadSession(subject, context.req.valid("param").fileId);
     return context.json({ data });
   });
 
-  app.delete("/api/v1/files/uploads/:fileId", async (context) => {
+  app.openapi(completeFileUploadSessionRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
-      .files.delete(subject, context.req.param("fileId"));
+      .files.completeUploadSession(subject, context.req.valid("param").fileId);
     return context.json({ data });
   });
 
-  app.get("/api/v1/files/:fileId", async (context) => {
+  app.openapi(cancelFileUploadSessionRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
-      .files.get(subject, context.req.param("fileId"));
+      .files.delete(subject, context.req.valid("param").fileId);
     return context.json({ data });
   });
 
-  app.get("/api/v1/files/:fileId/content", async (context) => {
+  app.openapi(getFileRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context
+      .get("services")
+      .files.get(subject, context.req.valid("param").fileId);
+    return context.json({ data });
+  });
+
+  app.openapi(retryFileExtractionRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context
+      .get("services")
+      .files.retryExtraction(subject, context.req.valid("param").fileId);
+    return context.json({ data });
+  });
+
+  app.openapi(readFileContentRoute, async (context) => {
     const subject = context.get("subject");
     const file = await context
       .get("services")
-      .files.readContent(subject, context.req.param("fileId"));
+      .files.readContent(subject, context.req.valid("param").fileId);
     return new Response(toArrayBuffer(file.bytes), {
       headers: {
         "cache-control": "private, max-age=300",
@@ -119,11 +153,11 @@ export function registerFileRoutes(app: RomeoApi): void {
     });
   });
 
-  app.delete("/api/v1/files/:fileId", async (context) => {
+  app.openapi(deleteFileRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
-      .files.delete(subject, context.req.param("fileId"));
+      .files.delete(subject, context.req.valid("param").fileId);
     return context.json({ data });
   });
 }

@@ -1,0 +1,982 @@
+.rm-sidebar-filter-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 3px);
+  right: 0;
+  display: grid;
+  width: min(196px, calc(100vw - 32px));
+  gap: 6px;
+  border: 1px solid var(--rm-border);
+  border-radius: 10px;
+  padding: 7px;
+  background: var(--rm-bg);
+  box-shadow: var(--rm-shadow);
+}
+
+.rm-sidebar-search:focus-within {
+  border-color: var(--rm-border);
+}
+
+.rm-sidebar-search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--rm-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.rm-sidebar-filter {
+  width: 100%;
+  margin: 0;
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: var(--rm-surface);
+  color: var(--rm-muted);
+  font: inherit;
+  font-size: 11px;
+}
+
+.rm-sidebar-label-action {
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  border: 0;
+  border-radius: 6px;
+  padding: 3px;
+  background: transparent;
+  color: inherit;
+}
+
+.rm-sidebar-label-action:hover {
+  background: var(--rm-hover);
+  color: var(--rm-text);
+}
+
+.rm-chat-pin {
+  flex: 0 0 auto;
+  color: var(--rm-accent);
+}
+
+.rm-sidebar-item,
+.rm-sidebar-footer {
+  min-width: 0;
+  min-height: 32px;
+  border-radius: var(--rm-radius-item);
+  background: transparent;
+  padding: 0 11px;
+  text-align: left;
+}
+
+.rm-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  font-size: 14px;
+}
+
+.rm-sidebar-item-label {
+  flex: 1;
+  min-width: 0; /* lets truncate actually truncate inside a flex child */
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Active chat: quiet fill without a competing accent edge. */
+
+.rm-sidebar-item.active {
+  background: var(--rm-gray-100);
+}
+
+html.dark .rm-sidebar-item.active {
+  background: var(--rm-gray-900);
+}
+
+.rm-sidebar-empty {
+  padding: 8px 10px;
+  color: var(--rm-muted);
+  font-size: 13px;
+}
+
+.rm-sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--rm-border);
+  background: var(--rm-surface-soft);
+  text-decoration: none;
+}
+
+.rm-sidebar-footer:hover {
+  border-color: color-mix(in srgb, var(--rm-accent) 35%, var(--rm-border));
+  background: var(--rm-hover);
+}
+
+.rm-sidebar-footer:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--rm-accent) 65%, transparent);
+  outline-offset: 2px;
+}
+
+.rm-user-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--rm-surface-soft);
+  color: var(--rm-muted);
+}
+
+.rm-user-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius-item);
+  background: var(--rm-surface);
+  box-shadow: var(--rm-shadow);
+  padding: 4px;
+}
+
+.rm-user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 8px 10px;
+  color: var(--rm-text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.rm-user-menu-item:hover {
+  background: var(--rm-hover);
+}
+
+.rm-main {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  background:
+    radial-gradient(
+      circle at 50% -20%,
+      color-mix(in srgb, var(--rm-accent) 5%, transparent),
+      transparent 38%
+    ),
+    var(--rm-bg);
+}
+
+.rm-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--rm-shell-header-height);
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--rm-border);
+  background: color-mix(in srgb, var(--rm-bg) 84%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+
+.rm-topbar > * {
+  pointer-events: auto;
+}
+
+.rm-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rm-theme-toggle {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--rm-border);
+  border-radius: 999px;
+  background: var(--rm-surface);
+  color: var(--rm-muted);
+}
+
+.rm-theme-toggle:hover {
+  background: var(--rm-hover);
+  color: var(--rm-text);
+}
+
+.rm-theme-toggle:focus-visible {
+  outline: 2px solid var(--rm-accent);
+  outline-offset: 2px;
+}
+
+.rm-main-context {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.rm-main-context-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--rm-border);
+}
+
+.rm-main-workspace {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--rm-muted);
+  font-size: 12px;
+}
+
+.rm-main-workspace > span:last-child {
+  overflow: hidden;
+  max-width: 14rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-main-workspace select {
+  max-width: 14rem;
+  border: 0;
+  outline: 0;
+  background-color: transparent;
+  color: var(--rm-muted);
+  font: inherit;
+  font-size: 12px;
+}
+
+.rm-topbar-user {
+  position: relative;
+}
+
+.rm-topbar-user-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: var(--rm-radius-item);
+  background: transparent;
+  color: var(--rm-text);
+  padding: 4px 7px;
+  font: inherit;
+}
+
+.rm-topbar-user-button:hover,
+.rm-topbar-user-button[aria-expanded="true"] {
+  border-color: var(--rm-border);
+  background: var(--rm-hover);
+}
+
+.rm-topbar-user-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  text-align: left;
+}
+
+.rm-topbar-user-copy strong {
+  overflow: hidden;
+  max-width: 13rem;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-topbar-user-copy small {
+  color: var(--rm-muted);
+  font-size: 10px;
+  text-transform: capitalize;
+}
+
+.rm-topbar-user-menu {
+  top: calc(100% + 6px);
+  right: 0;
+  bottom: auto;
+  left: auto;
+  width: 230px;
+}
+
+.rm-user-menu-identity {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px 9px;
+}
+
+.rm-user-menu-identity strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-user-menu-identity small {
+  color: var(--rm-muted);
+  font-size: 10px;
+  text-transform: capitalize;
+}
+
+.rm-user-menu-divider {
+  height: 1px;
+  margin: 4px;
+  background: var(--rm-border);
+}
+
+.rm-model-selector {
+  position: relative;
+}
+
+.rm-model-select {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--rm-radius-item);
+  padding: 4px 8px;
+  text-align: left;
+  color: var(--rm-text);
+  font: inherit;
+}
+
+.rm-model-select:hover {
+  background: var(--rm-gray-50);
+}
+
+html.dark .rm-model-select:hover {
+  background: var(--rm-gray-850);
+}
+
+.rm-model-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  width: 20rem;
+  max-width: calc(100vw - 24px);
+  max-height: 60vh;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius-lg);
+  background: var(--rm-surface);
+  box-shadow: var(--rm-shadow);
+}
+
+.rm-model-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 8px 10px;
+  color: var(--rm-text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+}
+
+.rm-model-option:hover:not(:disabled) {
+  background: var(--rm-hover);
+}
+
+.rm-model-option[aria-selected="true"],
+.rm-model-option[aria-checked="true"] {
+  font-weight: 500;
+}
+
+.rm-model-option:disabled {
+  color: var(--rm-muted);
+  cursor: default;
+}
+
+.rm-model-menu-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--rm-border);
+}
+
+.rm-model-select span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-model-select span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  letter-spacing: -0.021em;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.rm-model-select span svg {
+  flex-shrink: 0;
+  color: var(--rm-muted);
+}
+
+.rm-topbar-button {
+  min-height: 34px;
+  border-radius: var(--rm-radius-item); /* Open WebUI rounded-xl = 12px */
+  background: transparent;
+  padding: 0 10px;
+  color: var(--rm-muted);
+}
+
+.rm-personalize-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+}
+
+.rm-topbar-button:hover {
+  background: var(--rm-gray-50); /* Open WebUI hover:bg-gray-50 (light) */
+}
+
+html.dark .rm-topbar-button:hover {
+  background: var(--rm-gray-850);
+}
+
+.rm-chat-panel {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.rm-chat-panel.drag-active {
+  position: relative;
+}
+
+.rm-drop-overlay {
+  position: absolute;
+  z-index: 30;
+  inset: 16px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--rm-accent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--rm-surface) 90%, transparent);
+  color: var(--rm-accent);
+  font-size: 15px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.rm-conversation {
+  min-height: 0;
+  overflow: auto;
+  /* top padding clears the floating navbar */
+  padding: 72px 18px 12px;
+}
+
+/*
+ * Empty state mirrors Open WebUI's ChatPlaceholder: left-aligned, vertically
+ * centered (m-auto), wide container; agent name as the heading, a muted
+ * "How can I help you today?" subtitle, a "Suggested" label, and a 2-col
+ * suggestion grid. The composer stays pinned at the bottom (not centered).
+ */
+
+/*
+ * Empty state = Open WebUI default landing: whole block vertically centered,
+ * logo inline with the model name, composer floating in the middle,
+ * suggestions listed below. (No bottom-pinned composer here.)
+ */
+
+.rm-chat-panel-empty {
+  /* Override .rm-chat-panel's 1fr/auto rows: a single flex column that truly
+   * centers the placeholder in the viewport (symmetric padding, not top-anchored). */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 18px;
+}
+
+.rm-placeholder {
+  width: 100%;
+}
+
+.rm-placeholder-inner {
+  width: min(100%, 768px);
+  margin: 0 auto;
+}
+
+.rm-placeholder-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.rm-placeholder-logo {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: linear-gradient(
+    135deg,
+    var(--rm-accent),
+    var(--rm-accent-secondary)
+  );
+  box-shadow: 0 8px 26px color-mix(in srgb, var(--rm-accent) 24%, transparent);
+  color: var(--rm-on-accent);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.rm-placeholder-title {
+  margin: 0;
+  /* Open WebUI font-primary = Archivo */
+  font-family: inherit;
+  letter-spacing: -0.021em;
+  font-size: 30px;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+/* Composer sits centered within the empty-state block */
+
+.rm-placeholder .rm-composer-wrap {
+  width: 100%;
+  padding: 0;
+}
+
+.rm-suggestions {
+  margin-top: 18px;
+}
+
+.rm-suggestions-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+  color: var(--rm-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.rm-suggestion-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+
+.rm-suggestion {
+  display: grid;
+  gap: 1px;
+  border: 0;
+  border-radius: var(--rm-radius-item);
+  background: transparent;
+  padding: 8px 12px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rm-suggestion:hover {
+  background: color-mix(in srgb, var(--rm-text) 6%, transparent);
+}
+
+.rm-chat-mode {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  margin: -2px auto 2px;
+  border: 1px solid var(--rm-border);
+  border-radius: 9999px;
+  background: var(--rm-surface-soft);
+  padding: 5px 9px;
+  color: var(--rm-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.rm-chat-mode strong {
+  color: var(--rm-text);
+  font-weight: 600;
+}
+
+.rm-chat-mode svg {
+  flex: 0 0 auto;
+  color: var(--rm-accent);
+}
+
+.rm-suggestion-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--rm-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-suggestion-sub {
+  font-size: 13px;
+  color: var(--rm-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-message-list {
+  display: grid;
+  width: min(100%, 48rem); /* ChatGPT reading column = 768px */
+  gap: 12px; /* Open WebUI mb-3 between messages */
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+
+.rm-message-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  /* Browser-native rendering virtualization keeps the complete conversation in
+   * DOM/document order for find, selection, and assistive technology while
+   * skipping layout/paint work for distant messages. The last (streaming) row
+   * remains fully live below. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
+}
+
+.rm-message-row:last-child {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+}
+
+/* User messages: right-aligned bubble and matching user avatar. */
+
+.rm-message-row.user {
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: start;
+}
+
+.rm-message-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  font-size: 13px;
+}
+
+.rm-message-avatar.user {
+  background: var(--rm-surface-soft);
+  box-shadow: inset 0 0 0 1px var(--rm-border);
+  color: var(--rm-muted);
+}
+
+.rm-message-body {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.rm-message-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--rm-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+/* Assistant name: full-contrast, base size (Open WebUI ~16px, not 12px) */
+
+.rm-message-heading > span {
+  color: var(--rm-text);
+  font-size: 1rem;
+}
+
+.rm-message-content {
+  overflow-wrap: anywhere;
+  line-height: 1.72; /* ChatGPT-relaxed reading */
+}
+
+/* User messages are raw text; assistant is rendered markdown */
+
+.rm-message-row.user .rm-message-content {
+  white-space: pre-wrap;
+}
+
+/* The 90% cap belongs on the body, not the bubble.
+   .rm-message-body shrink-wraps its content, so `max-width: 90%` on the bubble
+   resolved against a parent the bubble itself had sized — clamping the bubble
+   to 90% of its own natural width. Long messages escaped it (the body hits the
+   768px row cap first), but a short one collapsed: "hi" became a 39px-wide,
+   60px-tall column wrapping one character per line. Capping the body against
+   the row keeps the limit meaningful and lets the bubble hug its text. */
+
+.rm-message-row.user .rm-message-body {
+  width: fit-content;
+  max-width: 90%;
+  justify-self: end;
+}
+
+.rm-message-row.user .rm-message-content {
+  width: fit-content;
+  justify-self: end;
+  border-radius: var(--rm-radius-bubble);
+  background: var(--rm-bubble);
+  padding: 6px 16px;
+}
+
+.rm-message-tool {
+  display: inline-grid;
+  place-items: center;
+  padding: 6px; /* Open WebUI p-1.5, box sizes to icon */
+  border-radius: 8px;
+  background: transparent;
+  color: var(--rm-gray-600);
+}
+
+html.dark .rm-message-tool {
+  color: var(--rm-gray-500);
+}
+
+/* Open WebUI action hover: black/5 · white/5, text darkens to full contrast */
+
+.rm-message-tool:hover:not(:disabled) {
+  background: rgb(0 0 0 / 5%);
+  color: var(--rm-gray-900);
+}
+
+html.dark .rm-message-tool:hover:not(:disabled) {
+  background: rgb(255 255 255 / 5%);
+  color: #ffffff;
+}
+
+.rm-message-tool:disabled {
+  opacity: 0.4;
+}
+
+.rm-message-tool.active {
+  color: var(--rm-accent);
+  background: color-mix(in srgb, var(--rm-accent) 12%, transparent);
+}
+
+/* Actions row below the message (Open WebUI) */
+
+.rm-message-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.rm-message-row.user .rm-message-actions {
+  justify-self: end;
+  justify-content: flex-end;
+}
+
+.rm-message-edit {
+  display: grid;
+  gap: 8px;
+  min-width: min(620px, 75vw);
+  padding: 10px;
+  border: 1px solid var(--rm-border);
+  border-radius: 14px;
+  background: var(--rm-surface);
+}
+
+.rm-message-edit textarea {
+  width: 100%;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--rm-text);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.rm-message-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.rm-message-edit-actions button,
+.rm-continue-button {
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  padding: 5px 9px;
+  background: var(--rm-surface-soft);
+  color: var(--rm-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.rm-attachment-with-retention {
+  display: grid;
+  gap: 4px;
+}
+
+.rm-attachment-with-retention > label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  color: var(--rm-muted);
+  font-size: 10px;
+}
+
+.rm-attachment-with-retention > label input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+
+.rm-context-inspector {
+  position: absolute;
+  z-index: 40;
+  inset: 48px 0 0 auto;
+  width: min(520px, 92vw);
+  overflow: auto;
+  border-left: 1px solid var(--rm-border);
+  background: var(--rm-surface);
+  box-shadow: -12px 0 32px rgb(0 0 0 / 12%);
+}
+
+.rm-context-inspector > header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid var(--rm-border);
+  background: var(--rm-surface);
+}
+
+.rm-context-inspector header p,
+.rm-context-body p {
+  margin: 4px 0 0;
+  color: var(--rm-muted);
+  font-size: 12px;
+}
+
+.rm-context-inspector header button {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--rm-muted);
+}
+
+.rm-context-loading,
+.rm-context-body {
+  padding: 16px;
+}
+
+.rm-context-body {
+  display: grid;
+  gap: 18px;
+}
+
+.rm-context-body h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.rm-context-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.rm-context-stats > div {
+  padding: 8px;
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+}
+
+.rm-context-stats dt {
+  color: var(--rm-muted);
+  font-size: 10px;
+}
+
+.rm-context-stats dd {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.rm-context-body details {
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  margin-top: 7px;
+  overflow: hidden;
+}
+
+.rm-context-body summary {
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rm-context-body pre {
+  max-height: 300px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border-top: 1px solid var(--rm-border);
+  white-space: pre-wrap;
+  font-size: 10px;
+}
+
+.rm-connection-checks {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 11px;
+}
+
+.rm-connection-checks .fail {
+  color: var(--rm-danger);
+}

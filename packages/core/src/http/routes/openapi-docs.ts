@@ -1,7 +1,16 @@
-import type { RomeoApi } from '../context'
+import { getApiDocsRoute, getOpenApiDocumentRoute } from "@romeo/contracts";
 
-export function registerOpenApiDocsRoute(app: RomeoApi): void {
-  app.get('/api/v1/docs', (context) => context.html(openApiDocsHtml))
+import { openApiJsonDocument } from "../openapi-document";
+import type { RomeoApi } from "../context";
+
+export function registerOpenApiDocsRoute(
+  app: RomeoApi,
+  options: { openWebUiCompatibilityEnabled?: boolean } = {},
+): void {
+  app.openapi(getApiDocsRoute, (context) => context.html(openApiDocsHtml, 200));
+  app.openapi(getOpenApiDocumentRoute, (context) =>
+    context.json(openApiJsonDocument(options), 200),
+  );
 }
 
 const openApiDocsHtml = `<!doctype html>
@@ -123,4 +132,4 @@ const openApiDocsHtml = `<!doctype html>
       });
     </script>
   </body>
-</html>`
+</html>`;

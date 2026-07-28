@@ -1,14 +1,19 @@
-import type { RetentionEnforcementResult } from "@romeo/api-client";
-
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
 import { workerSignalAborted } from "./worker-control";
 
 export interface RetentionEnforcementWorkerClient {
   governance: {
-    enforceRetention(): Promise<RetentionEnforcementResult>;
+    enforceRetention(): Promise<{
+      deletedAuditLogCount: number;
+      deletedBrowserAutomationArtifactCount: number | undefined;
+    }>;
   };
 }
+
+export type RetentionEnforcementWorkerResult = Awaited<
+  ReturnType<RetentionEnforcementWorkerClient["governance"]["enforceRetention"]>
+>;
 
 export interface RunRetentionEnforcementWorkerInput {
   client: RetentionEnforcementWorkerClient;

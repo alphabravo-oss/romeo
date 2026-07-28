@@ -8,6 +8,7 @@ import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { createSeedData } from "./repositories/seed-data";
 import { EnvironmentSecretResolver } from "./services/secret-resolver";
+import { qdrantSdkClientFactoryFromFetch } from "./test-support/qdrant-sdk-client.test-helper";
 
 describe("readiness API", () => {
   it("flags development defaults before production use", async () => {
@@ -417,22 +418,24 @@ describe("readiness API", () => {
       secretResolver: new EnvironmentSecretResolver({
         QDRANT_API_KEY: qdrantApiKey,
       }),
-      qdrantFetch: async (input, init) => {
-        qdrantCalls.push({
-          apiKey: new Headers(init?.headers).get("api-key"),
-          method: init?.method ?? "GET",
-          url: String(input),
-        });
-        return new Response(
-          JSON.stringify({
-            result: { status: "green", optimizer_status: "ok" },
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      },
+      qdrantClientFactory: qdrantSdkClientFactoryFromFetch(
+        async (input, init) => {
+          qdrantCalls.push({
+            apiKey: new Headers(init?.headers).get("api-key"),
+            method: init?.method ?? "GET",
+            url: String(input),
+          });
+          return new Response(
+            JSON.stringify({
+              result: { status: "green", optimizer_status: "ok" },
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        },
+      ),
     });
     const response = await api.request("/api/v1/admin/readiness");
     const body = await response.json();
@@ -491,7 +494,7 @@ describe("readiness API", () => {
       secretResolver: new EnvironmentSecretResolver({
         QDRANT_API_KEY: qdrantApiKey,
       }),
-      qdrantFetch: async (input) => {
+      qdrantClientFactory: qdrantSdkClientFactoryFromFetch(async (input) => {
         qdrantCalls.push(String(input));
         return new Response(
           JSON.stringify({
@@ -502,7 +505,7 @@ describe("readiness API", () => {
             headers: { "content-type": "application/json" },
           },
         );
-      },
+      }),
     });
     const response = await api.request("/api/v1/admin/readiness");
     const body = await response.json();
@@ -562,16 +565,19 @@ describe("readiness API", () => {
       secretResolver: new EnvironmentSecretResolver({
         QDRANT_API_KEY: qdrantApiKey,
       }),
-      qdrantFetch: async () =>
-        new Response(
-          JSON.stringify({
-            result: { status: "green", optimizer_status: "ok" },
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
+      qdrantClientFactory: qdrantSdkClientFactoryFromFetch(async () =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              result: { status: "green", optimizer_status: "ok" },
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          ),
         ),
+      ),
     });
     const response = await api.request("/api/v1/admin/readiness");
     const body = await response.json();
@@ -621,12 +627,15 @@ describe("readiness API", () => {
       secretResolver: new EnvironmentSecretResolver({
         QDRANT_API_KEY: qdrantApiKey,
       }),
-      qdrantFetch: async () =>
-        new Response(JSON.stringify({ status: "not_found" }), {
-          status: 404,
-          statusText: "not found",
-          headers: { "content-type": "application/json" },
-        }),
+      qdrantClientFactory: qdrantSdkClientFactoryFromFetch(async () =>
+        Promise.resolve(
+          new Response(JSON.stringify({ status: "not_found" }), {
+            status: 404,
+            statusText: "not found",
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+      ),
     });
     const response = await api.request("/api/v1/admin/readiness");
     const body = await response.json();

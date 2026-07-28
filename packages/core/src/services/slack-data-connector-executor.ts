@@ -1,3 +1,4 @@
+import { WebClient, type WebClientOptions } from "@slack/web-api";
 import { createHash } from "node:crypto";
 
 import type { DataConnector, LocalImportSyncItem } from "../domain/entities";
@@ -9,10 +10,6 @@ import {
   type WebsiteConnectorEgressPolicy,
   type WebsiteConnectorHostLookup,
 } from "./data-connector-executors";
-import {
-  retryConnectorResponse,
-  type DataConnectorRetryPolicy,
-} from "./data-connector-retry";
 import type { SecretResolver } from "./secret-resolver";
 
 interface SlackConnectorConfig {
@@ -38,7 +35,7 @@ export class SlackDataConnectorExecutor implements DataConnectorExecutor {
   private readonly hostLookup: WebsiteConnectorHostLookup | undefined;
   private readonly maxBytes: number;
   private readonly maxItemsPerChannel: number;
-  private readonly retryPolicy: DataConnectorRetryPolicy;
+  private readonly retryConfig: NonNullable<WebClientOptions["retryConfig"]>;
   private readonly secretResolver: SecretResolver | undefined;
   private readonly timeoutMs: number;
 
@@ -62,9 +59,13 @@ export class SlackDataConnectorExecutor implements DataConnectorExecutor {
     this.hostLookup = options.hostLookup;
     this.maxBytes = options.maxBytes ?? 2_000_000;
     this.maxItemsPerChannel = options.maxItemsPerChannel ?? 50;
-    this.retryPolicy = {
-      retryAttempts: options.retryAttempts ?? 1,
-      retryBackoffMs: options.retryBackoffMs ?? 250,
+    const retryBackoffMs = options.retryBackoffMs ?? 250;
+    this.retryConfig = {
+      retries: options.retryAttempts ?? 1,
+      factor: 2,
+      minTimeout: retryBackoffMs,
+      maxTimeout: retryBackoffMs * 4,
+      randomize: false,
     };
     this.secretResolver = options.secretResolver;
     this.timeoutMs = options.timeoutMs ?? 10_000;
@@ -84,7 +85,14 @@ export class SlackDataConnectorExecutor implements DataConnectorExecutor {
       egressPolicy: this.egressPolicy,
       ...(this.hostLookup === undefined ? {} : { hostLookup: this.hostLookup }),
     });
-    const authorization = await this.authorizationHeader(config.secretRef);
+    const token = await this.token(config.secretRef);
+    const client = new WebClient(token, {
+      slackApiUrl: slackApiBaseUrl(config.apiUrl),
+      allowAbsoluteUrls: false,
+      fetch: (url, init) => this.boundedFetch(url, init),
+      retryConfig: this.retryConfig,
+      timeout: this.timeoutMs,
+    });
     const maxItemsPerChannel = Math.min(
       config.maxItemsPerChannel,
       this.maxItemsPerChannel,
@@ -94,7 +102,7 @@ export class SlackDataConnectorExecutor implements DataConnectorExecutor {
     let totalBytes = 0;
     for (const channelId of config.channelIds) {
       const messages = await this.fetchChannelMessages({
-        authorization,
+        client,
         channelId,
         config,
         limit: maxItemsPerChannel,
@@ -105,6 +113,13 @@ export class SlackDataConnectorExecutor implements DataConnectorExecutor {
         ...messages.map(slackMessageMarkdown),
       ]);
       const sizeBytes = new TextEncoder().encode(content).length;
+      if (sizeBytes > this.maxBytes) {
+        throw new ApiError(
+          "connector_response_too_large",
+          "Slack connector response exceeds the configured size limit.",
+          413,
+        );
+      }
       totalBytes += sizeBytes;
       items.push({
         fileName: safeFileName(`slack-${stableHash(channelId)}.md`),
@@ -132,7 +147,7 @@ export class SlackDataConnectorExecutor implements DataConnectorExecutor {
     };
   }
 
-  private async authorizationHeader(secretRef: string): Promise<string> {
+  private async token(secretRef: string): Promise<string> {
     if (this.secretResolver?.resolveValue === undefined) {
       throw new ApiError(
         "connector_slack_secret_ref_unsupported",
@@ -154,77 +169,43 @@ export class SlackDataConnectorExecutor implements DataConnectorExecutor {
         },
       );
     }
-    return `Bearer ${slackToken(resolution.value)}`;
+    return slackToken(resolution.value);
   }
 
   private async fetchChannelMessages(input: {
-    authorization: string;
+    client: WebClient;
     channelId: string;
     config: SlackConnectorConfig;
     limit: number;
   }): Promise<Record<string, unknown>[]> {
-    const url = slackApiUrl(input.config.apiUrl, "/conversations.history");
-    url.searchParams.set("channel", input.channelId);
-    url.searchParams.set("limit", String(input.limit));
-    if (input.config.oldest !== undefined)
-      url.searchParams.set("oldest", input.config.oldest);
-    if (input.config.latest !== undefined)
-      url.searchParams.set("latest", input.config.latest);
-
-    const payload = await this.fetchJson(
-      url,
-      input.authorization,
-      "Slack connector channel history fetch failed.",
-    );
-    if (payload.ok !== true) {
+    try {
+      const payload = await input.client.conversations.history({
+        channel: input.channelId,
+        limit: input.limit,
+        ...(input.config.oldest === undefined
+          ? {}
+          : { oldest: input.config.oldest }),
+        ...(input.config.latest === undefined
+          ? {}
+          : { latest: input.config.latest }),
+      });
+      return (payload.messages ?? []).filter(isRecord).slice(0, input.limit);
+    } catch (caught) {
+      if (caught instanceof ApiError) throw caught;
       throw new ApiError(
         "connector_fetch_failed",
         "Slack connector channel history fetch failed.",
         502,
-        {
-          ...(typeof payload.error === "string"
-            ? { providerError: payload.error }
-            : {}),
-        },
+        slackErrorDetails(caught),
       );
     }
-    return arrayValue(payload, "messages")
-      .filter(isRecord)
-      .slice(0, input.limit);
   }
 
-  private async fetchJson(
-    url: URL,
-    authorization: string,
-    errorMessage: string,
-  ): Promise<Record<string, unknown>> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    let response: Response;
-    try {
-      response = await retryConnectorResponse(
-        () =>
-          this.fetchImpl(url.toString(), {
-            headers: {
-              accept: "application/json",
-              authorization,
-              "user-agent": "RomeoDataConnector/0.1",
-            },
-            method: "GET",
-            redirect: "manual",
-            signal: controller.signal,
-          }),
-        this.retryPolicy,
-      );
-    } catch {
-      throw new ApiError("connector_fetch_failed", errorMessage, 502);
-    } finally {
-      clearTimeout(timeout);
-    }
-    if (!response.ok)
-      throw new ApiError("connector_fetch_failed", errorMessage, 502, {
-        status: response.status,
-      });
+  private async boundedFetch(
+    url: string | URL,
+    init?: Parameters<NonNullable<WebClientOptions["fetch"]>>[1],
+  ) {
+    const response = await this.fetchImpl(url, init as RequestInit | undefined);
     const declaredLength = Number(response.headers.get("content-length"));
     if (Number.isFinite(declaredLength) && declaredLength > this.maxBytes) {
       throw new ApiError(
@@ -241,17 +222,11 @@ export class SlackDataConnectorExecutor implements DataConnectorExecutor {
         413,
       );
     }
-    try {
-      const parsed = JSON.parse(new TextDecoder().decode(responseBody));
-      if (!isRecord(parsed)) throw new Error("invalid");
-      return parsed;
-    } catch {
-      throw new ApiError(
-        "connector_fetch_failed",
-        "Slack connector response is invalid.",
-        502,
-      );
-    }
+    return new Response(responseBody, {
+      headers: response.headers,
+      status: response.status,
+      statusText: response.statusText,
+    });
   }
 }
 
@@ -270,13 +245,9 @@ function readSlackConfig(connector: DataConnector): SlackConnectorConfig {
   };
 }
 
-function slackApiUrl(baseUrl: URL, path: string): URL {
-  const url = new URL(baseUrl.toString());
-  const basePath = url.pathname.replace(/\/+$/u, "");
-  url.pathname = `${basePath}${path}`;
-  url.search = "";
-  url.hash = "";
-  return url;
+function slackApiBaseUrl(baseUrl: URL): string {
+  const value = baseUrl.toString().replace(/\/+$/u, "");
+  return `${value}/`;
 }
 
 function slackToken(value: string): string {
@@ -352,11 +323,6 @@ function numberConfig(
   return Number.isInteger(value) ? Number(value) : fallback;
 }
 
-function arrayValue(record: Record<string, unknown>, key: string): unknown[] {
-  const value = record[key];
-  return Array.isArray(value) ? value : [];
-}
-
 function labeledValue(
   label: string,
   value: string | undefined,
@@ -391,4 +357,13 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : undefined;
+}
+
+function slackErrorDetails(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return {};
+  const error = "data" in value ? (value as { data?: unknown }).data : value;
+  if (!isRecord(error)) return {};
+  return typeof error.error === "string"
+    ? { providerError: error.error.slice(0, 120) }
+    : {};
 }

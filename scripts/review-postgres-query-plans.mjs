@@ -74,8 +74,12 @@ if (dryRun) {
 
 const indexMetadata = readIndexMetadata(databaseUrl);
 const indexNames = new Set(indexMetadata.map((index) => index.name));
+const representativeVolume = reviewRepresentativeVolume(
+  databaseUrl,
+  target.representativeVolume,
+);
 const checks = QUERY_PLAN_REVIEW_CHECKS.map((check) =>
-  reviewCheck(check, databaseUrl, indexNames),
+  reviewCheck(check, databaseUrl, indexNames, target.representativeVolume),
 );
 const missingExpectedIndexes = checks.flatMap((check) =>
   check.expectedIndexes
@@ -88,10 +92,13 @@ const evidence = {
   generatedAt: new Date().toISOString(),
   database: redactedConnection(databaseUrl),
   status:
-    missingExpectedIndexes.length === 0 && failedChecks.length === 0
+    missingExpectedIndexes.length === 0 &&
+    failedChecks.length === 0 &&
+    representativeVolume.status !== "failed"
       ? "passed"
       : "failed",
   target,
+  representativeVolume,
   validation: validationRules(),
   coverage: {
     checkCount: checks.length,
@@ -111,6 +118,12 @@ if (evidence.status !== "passed") {
   const reasons = [
     ...missingExpectedIndexes.map((index) => `missing_index:${index}`),
     ...failedChecks.map((check) => `explain_failed:${check.id}`),
+    ...(representativeVolume.status === "failed"
+      ? representativeVolume.failures.map(
+          (failure) =>
+            `representative_volume:${failure.table}:${failure.observedRows}/${failure.minRows}`,
+        )
+      : []),
   ];
   console.error(`PostgreSQL query-plan review failed: ${reasons.join(", ")}`);
   process.exit(1);
@@ -146,10 +159,25 @@ function readIndexMetadata(databaseUrl) {
   }));
 }
 
-function reviewCheck(check, databaseUrl, indexNames) {
+function reviewCheck(
+  check,
+  databaseUrl,
+  indexNames,
+  representativeVolumeClaimed,
+) {
   try {
     const plan = readExplainPlan(check, databaseUrl);
     const usedIndexes = collectUsedIndexes(plan);
+    const missingObservedIndexes =
+      representativeVolumeClaimed === true &&
+      check.requireObservedIndexAtRepresentativeVolume === true
+        ? check.expectedIndexes.filter((name) => !usedIndexes.has(name))
+        : [];
+    if (missingObservedIndexes.length > 0) {
+      throw new Error(
+        `Representative plan did not use required index: ${missingObservedIndexes.join(", ")}.`,
+      );
+    }
     return {
       id: check.id,
       category: check.category,
@@ -160,6 +188,9 @@ function reviewCheck(check, databaseUrl, indexNames) {
         present: indexNames.has(name),
         usedInObservedPlan: usedIndexes.has(name),
       })),
+      representativeIndexUseRequired:
+        representativeVolumeClaimed === true &&
+        check.requireObservedIndexAtRepresentativeVolume === true,
       observedPlan: summarizePlan(plan),
     };
   } catch (error) {
@@ -173,9 +204,62 @@ function reviewCheck(check, databaseUrl, indexNames) {
         present: indexNames.has(name),
         usedInObservedPlan: false,
       })),
+      representativeIndexUseRequired:
+        representativeVolumeClaimed === true &&
+        check.requireObservedIndexAtRepresentativeVolume === true,
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+function reviewRepresentativeVolume(databaseUrl, claimed) {
+  const requirements = [
+    ...new Map(
+      QUERY_PLAN_REVIEW_CHECKS.flatMap(
+        (check) => check.representativeRowRequirements ?? [],
+      ).map((requirement) => [requirement.table, requirement]),
+    ).values(),
+  ];
+  if (!claimed) {
+    return {
+      claimed: false,
+      status: "not_claimed",
+      requirements: requirements.map((requirement) => ({
+        table: requirement.table,
+        minRows: requirement.minRows,
+      })),
+      failures: [],
+    };
+  }
+  const observed = requirements.map((requirement) => ({
+    table: requirement.table,
+    minRows: requirement.minRows,
+    observedRows: readTableRowCount(databaseUrl, requirement.table),
+  }));
+  const failures = observed.filter(
+    (requirement) => requirement.observedRows < requirement.minRows,
+  );
+  return {
+    claimed: true,
+    status: failures.length === 0 ? "passed" : "failed",
+    requirements: observed,
+    failures,
+  };
+}
+
+function readTableRowCount(databaseUrl, table) {
+  if (!/^[a-z][a-z0-9_]*$/u.test(table)) {
+    throw new Error(`Unsafe representative-volume table name: ${table}.`);
+  }
+  const output = runPsql(
+    databaseUrl,
+    `SELECT count(*)::bigint FROM ${table};`,
+  ).trim();
+  const count = Number.parseInt(output, 10);
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error(`Invalid row count returned for ${table}.`);
+  }
+  return count;
 }
 
 function readExplainPlan(check, databaseUrl) {
@@ -254,7 +338,9 @@ function validationRules() {
     rawSqlPersisted: false,
     rawRowContentPersisted: false,
     missingExpectedIndexesFail: true,
-    observedIndexUseIsAdvisory: true,
+    observedIndexUseIsAdvisoryUnlessRepresentativeVolume: true,
+    representativeVolumeRequiresMinimumRows: true,
+    representativeChatSearchRequiresObservedTrigramIndexes: true,
     smallTablePlannerChoicesCanUseSequentialScans: true,
   };
 }

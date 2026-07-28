@@ -5,6 +5,7 @@ import Library from "lucide-react/dist/esm/icons/library.mjs";
 import Mic from "lucide-react/dist/esm/icons/mic.mjs";
 import Users from "lucide-react/dist/esm/icons/users.mjs";
 import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
+import { Field, Select } from "@romeo/ui";
 import { useState } from "react";
 
 import { AgentStudioPanel } from "../components/AgentStudioPanel";
@@ -17,60 +18,80 @@ import { ToolPanel } from "../components/ToolPanel";
 import { useToolExecution } from "../components/useToolExecution";
 import { useWorkspaceData } from "../components/useWorkspaceData";
 import { VoicePanel } from "../components/VoicePanel";
+import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
+import {
+  localeNamespaceGroups,
+  type MessageKey,
+  useLocale,
+  useLocaleNamespaces,
+} from "../lib/i18n";
 
 export const Route = createFileRoute("/workspace")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { section?: string } =>
+  validateSearch: (search: Record<string, unknown>): { section?: string } =>
     typeof search.section === "string" ? { section: search.section } : {},
   component: WorkspacePage,
 });
 
 const GROUPS = [
   {
-    label: "Build",
+    labelKey: "workspaceBuild" as MessageKey,
     items: [
-      { key: "agents", label: "Agents", icon: Bot },
-      { key: "knowledge", label: "Knowledge", icon: Library },
-      { key: "tools", label: "Tools", icon: Wrench },
-      { key: "voice", label: "Voice", icon: Mic },
-      { key: "evals", label: "Evals", icon: FlaskConical },
+      { key: "agents", labelKey: "workspaceAgents" as MessageKey, icon: Bot },
+      {
+        key: "knowledge",
+        labelKey: "workspaceKnowledge" as MessageKey,
+        icon: Library,
+      },
+      { key: "tools", labelKey: "workspaceTools" as MessageKey, icon: Wrench },
+      { key: "voice", labelKey: "workspaceVoice" as MessageKey, icon: Mic },
+      { key: "evals", labelKey: "evals" as MessageKey, icon: FlaskConical },
     ],
   },
   {
-    label: "Share",
-    items: [{ key: "collaboration", label: "Collaboration", icon: Users }],
+    labelKey: "workspaceShare" as MessageKey,
+    items: [
+      {
+        key: "collaboration",
+        labelKey: "workspaceCollaboration" as MessageKey,
+        icon: Users,
+      },
+    ],
   },
 ];
 
-const META: Record<string, { title: string; description: string }> = {
+const META: Record<
+  string,
+  { titleKey: MessageKey; descriptionKey: MessageKey }
+> = {
   agents: {
-    title: "Agents",
-    description: "Configure assistant behavior, models, and guardrails.",
+    titleKey: "workspaceAgents",
+    descriptionKey: "workspaceAgentsDescription",
   },
   knowledge: {
-    title: "Knowledge",
-    description: "Sources this agent can retrieve and cite.",
+    titleKey: "workspaceKnowledge",
+    descriptionKey: "workspaceKnowledgeDescription",
   },
   tools: {
-    title: "Tools",
-    description: "Capabilities the agent can call, and their approvals.",
+    titleKey: "workspaceTools",
+    descriptionKey: "workspaceToolsDescription",
   },
   voice: {
-    title: "Voice",
-    description: "Speech input and synthesized voice for this agent.",
+    titleKey: "workspaceVoice",
+    descriptionKey: "workspaceVoiceDescription",
   },
   evals: {
-    title: "Evals",
-    description: "Test and compare agent responses across models.",
+    titleKey: "evals",
+    descriptionKey: "workspaceEvalsDescription",
   },
   collaboration: {
-    title: "Collaboration",
-    description: "Share agents and chats with your teammates.",
+    titleKey: "workspaceCollaboration",
+    descriptionKey: "workspaceCollaborationDescription",
   },
 };
 
 function WorkspacePage() {
+  useLocaleNamespaces(localeNamespaceGroups.workspace);
+  const { t } = useLocale();
   const { section: sectionParam } = Route.useSearch();
   const navigate = Route.useNavigate();
   const section = sectionParam ?? "agents";
@@ -83,32 +104,48 @@ function WorkspacePage() {
   const agentPicker =
     data.agents.length > 0 ? (
       <div className="rm-console-agentpicker">
-        <label htmlFor="ws-agent">Agent</label>
-        <select
-          id="ws-agent"
-          onChange={(event) => setAgentId(event.currentTarget.value)}
-          value={data.activeAgent?.id ?? ""}
-        >
-          {data.agents.map((agent) => (
-            <option key={agent.id} value={agent.id}>
-              {agent.name}
-            </option>
-          ))}
-        </select>
+        <Field label={t("workspaceAgent")}>
+          <Select
+            onValueChange={setAgentId}
+            options={data.agents.map((agent) => ({
+              label: agent.name,
+              value: agent.id,
+            }))}
+            value={data.activeAgent?.id ?? ""}
+          />
+        </Field>
       </div>
     ) : null;
 
   return (
     <ConsoleLayout
       active={section}
-      groups={GROUPS}
+      groups={GROUPS.map((group) => ({
+        label: t(group.labelKey),
+        items: group.items.map((item) => ({
+          key: item.key,
+          label: t(item.labelKey),
+          icon: item.icon,
+        })),
+      }))}
       onSelect={(key) => void navigate({ search: { section: key } })}
-      title="Workspace"
+      title={t("workspaceSettings")}
+      userMenu={
+        <WorkspaceUserMenu
+          isAdmin={data.subject?.isAdmin === true}
+          userLabel={
+            data.subject?.name ??
+            data.subject?.email ??
+            data.subject?.id ??
+            t("account")
+          }
+        />
+      }
     >
       <div className="rm-console-topline">
         <PageHeader
-          description={META[section]!.description}
-          title={META[section]!.title}
+          description={t(META[section]!.descriptionKey)}
+          title={t(META[section]!.titleKey)}
         />
         {section !== "collaboration" ? agentPicker : null}
       </div>
@@ -117,7 +154,9 @@ function WorkspacePage() {
         <div className="grid gap-4">
           <AgentStudioPanel
             activeAgent={data.activeAgent}
+            isAdmin={data.subject?.isAdmin === true}
             models={data.models}
+            onAgentCreated={setAgentId}
             providers={data.providers}
             workspaceId={workspaceId}
           />
@@ -125,7 +164,10 @@ function WorkspacePage() {
       ) : null}
 
       {section === "knowledge" ? (
-        <KnowledgePanel activeAgent={data.activeAgent} workspaceId={workspaceId} />
+        <KnowledgePanel
+          activeAgent={data.activeAgent}
+          workspaceId={workspaceId}
+        />
       ) : null}
 
       {section === "tools" ? (
@@ -148,7 +190,7 @@ function WorkspacePage() {
       ) : null}
 
       {section === "evals" ? (
-        <EvalPanel activeAgent={data.activeAgent} models={data.models} />
+        <EvalPanel activeAgent={data.activeAgent} />
       ) : null}
 
       {section === "collaboration" ? (

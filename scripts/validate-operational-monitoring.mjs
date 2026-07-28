@@ -127,6 +127,21 @@ function fixtureInput(sentinel) {
           severity: "critical",
         },
       ],
+      runtime: {
+        contextInputTokensAverage: 4096,
+        lookbackSeconds: 900,
+        objectStoreFailureCount: 2,
+        providerErrorCount: 5,
+        queueWaitP95Ms: 32000,
+        recoveryCount: 2,
+        sseDisconnectCount: 3,
+        sseReconnectCount: 4,
+        timeToFirstTokenAverageMs: 1200,
+        timeToFirstTokenP95Ms: 11000,
+        uploadPipelineAverageMs: 230,
+        webRetrievalAverageMs: 420,
+        outputThroughputAverage: 32,
+      },
     },
     jobSummary: {
       generatedAt: "2026-06-30T00:00:00.000Z",
@@ -153,6 +168,16 @@ function fixtureInput(sentinel) {
         recentFailed: 1,
       },
       byType: [
+        {
+          type: "temporary_chat.cleanup",
+          total: 1,
+          queued: 0,
+          running: 0,
+          completed: 0,
+          failed: 1,
+          deadLettered: 0,
+          recentFailed: 1,
+        },
         {
           type: "webhook.retry_due",
           total: 3,
@@ -222,6 +247,7 @@ function assertMetricNames(metricNames) {
     "romeo_operational_exporter_up",
     "romeo_operational_source_up",
     "romeo_operational_summary_status",
+    "romeo_object_store_error_total",
     "romeo_provider_alert",
     "romeo_provider_circuit_consecutive_failures",
     "romeo_provider_circuit_state",
@@ -231,6 +257,16 @@ function assertMetricNames(metricNames) {
     "romeo_provider_kill_switch_active",
     "romeo_provider_model_count",
     "romeo_provider_status",
+    "romeo_provider_error_total",
+    "romeo_run_context_input_tokens",
+    "romeo_run_output_tokens_per_second",
+    "romeo_run_queue_wait_milliseconds",
+    "romeo_run_recovery_total",
+    "romeo_run_time_to_first_token_milliseconds",
+    "romeo_sse_disconnect_total",
+    "romeo_sse_reconnect_total",
+    "romeo_web_retrieval_milliseconds",
+    "romeo_file_upload_pipeline_milliseconds",
   ];
   const missing = required.filter((name) => !metricNames.includes(name));
   if (missing.length > 0) {

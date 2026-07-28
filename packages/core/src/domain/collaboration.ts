@@ -2,7 +2,7 @@ import type { ResourceType } from "@romeo/auth";
 
 export type FavoritableResourceType = Extract<
   ResourceType,
-  "agent" | "chat" | "knowledge_base"
+  "agent" | "chat" | "knowledge_base" | "model"
 >;
 export type FolderItemResourceType = Extract<
   ResourceType,

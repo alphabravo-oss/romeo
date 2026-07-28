@@ -2,6 +2,7 @@ export * from "./api";
 export * from "./domain/data-connectors";
 export * from "./domain/delegated-oauth";
 export * from "./domain/entities";
+export * from "./domain/file-tombstone";
 export * from "./domain/repository";
 export * from "./domain/repository-contract-inventory";
 export * from "./errors";

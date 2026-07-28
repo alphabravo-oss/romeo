@@ -1,113 +1,119 @@
 import type { RomeoApi } from "../context";
-import { dispatchWaitFromToolOutput } from "../../services/run-service";
 import {
-  cancelToolOperationDispatchRequestSchema,
-  claimToolOperationDispatchRequestSchema,
-  createMcpToolSchema,
-  completeToolOperationDispatchRequestSchema,
-  createWebhookToolSchema,
-  executeRunToolSchema,
-  executeToolSchema,
-  dispatchToolOperationSchema,
-  enqueueToolOperationDispatchSchema,
-  expireToolOperationDispatchRequestsSchema,
-  failToolOperationDispatchRequestSchema,
-  importOpenApiToolSchema,
-  testToolOperationSchema,
-  updateAgentToolBindingSchema,
-  updateToolConnectorAuthSchema,
-  updateToolConnectorNetworkPolicySchema,
-  updateToolConnectorSchema,
-  updateToolOperationSchema,
-} from "../schemas";
+  approveToolApprovalRoute,
+  cancelToolApprovalRoute,
+  checkToolConnectorAuthRoute,
+  createMcpToolRoute,
+  createWebhookToolRoute,
+  dispatchToolOperationRoute,
+  executeRunToolRoute,
+  executeToolRoute,
+  getToolConnectorCatalogRoute,
+  importOpenApiToolRoute,
+  listAgentToolsRoute,
+  listToolApprovalsRoute,
+  listToolCallsRoute,
+  listToolConnectorsRoute,
+  listToolOperationsRoute,
+  listToolsRoute,
+  rejectToolApprovalRoute,
+  testToolOperationRoute,
+  updateAgentToolBindingRoute,
+  updateToolConnectorAuthRoute,
+  updateToolConnectorNetworkPolicyRoute,
+  updateToolConnectorRoute,
+  updateToolOperationRoute,
+} from "@romeo/contracts";
+import { dispatchWaitFromToolOutput } from "../../services/run-tool-service";
+import { registerToolDispatchRoutes } from "./tool-dispatch";
 
 export function registerToolRoutes(app: RomeoApi): void {
-  app.get("/api/v1/tools", (context) => {
+  registerToolDispatchRoutes(app);
+  app.openapi(listToolsRoute, (context) => {
     const subject = context.get("subject");
     const data = context.get("services").tools.list(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/tool-calls", async (context) => {
+  app.openapi(listToolCallsRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
-      .tools.listCalls(subject, context.req.query("agentId"));
-    return context.json({ data });
+      .tools.listCalls(subject, context.req.valid("query").agentId);
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/tool-approvals", async (context) => {
+  app.openapi(listToolApprovalsRoute, async (context) => {
     const subject = context.get("subject");
-    const agentId = context.req.query("agentId");
-    const runId = context.req.query("runId");
+    const { agentId, runId } = context.req.valid("query");
     const input: { agentId?: string; runId?: string } = {};
     if (agentId !== undefined) input.agentId = agentId;
     if (runId !== undefined) input.runId = runId;
     const data = await context
       .get("services")
       .tools.listPendingApprovals(subject, input);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post(
-    "/api/v1/tool-approvals/:approvalRequestId/approve",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context
-        .get("services")
-        .tools.approveApproval(subject, context.req.param("approvalRequestId"));
-      return context.json({ data });
-    },
-  );
+  app.openapi(approveToolApprovalRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context
+      .get("services")
+      .tools.approveApproval(
+        subject,
+        context.req.valid("param").approvalRequestId,
+      );
+    return context.json({ data }, 200);
+  });
 
-  app.post(
-    "/api/v1/tool-approvals/:approvalRequestId/cancel",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context
-        .get("services")
-        .tools.cancelApproval(subject, context.req.param("approvalRequestId"));
-      return context.json({ data });
-    },
-  );
+  app.openapi(cancelToolApprovalRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context
+      .get("services")
+      .tools.cancelApproval(
+        subject,
+        context.req.valid("param").approvalRequestId,
+      );
+    return context.json({ data }, 200);
+  });
 
-  app.post(
-    "/api/v1/tool-approvals/:approvalRequestId/reject",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context
-        .get("services")
-        .tools.rejectApproval(subject, context.req.param("approvalRequestId"));
-      return context.json({ data });
-    },
-  );
+  app.openapi(rejectToolApprovalRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context
+      .get("services")
+      .tools.rejectApproval(
+        subject,
+        context.req.valid("param").approvalRequestId,
+      );
+    return context.json({ data }, 200);
+  });
 
-  app.get("/api/v1/tool-connectors", async (context) => {
+  app.openapi(listToolConnectorsRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").toolConnectors.list(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/tool-connectors/catalog", async (context) => {
+  app.openapi(getToolConnectorCatalogRoute, async (context) => {
     const subject = context.get("subject");
     const data = context.get("services").toolConnectors.catalog(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.patch("/api/v1/tool-connectors/:connectorId", async (context) => {
+  app.openapi(updateToolConnectorRoute, async (context) => {
     const subject = context.get("subject");
-    const body = updateToolConnectorSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").toolConnectors.updateConnector({
       subject,
-      connectorId: context.req.param("connectorId"),
+      connectorId: context.req.valid("param").connectorId,
       enabled: body.enabled,
     });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/tools/openapi", async (context) => {
+  app.openapi(importOpenApiToolRoute, async (context) => {
     const subject = context.get("subject");
-    const body = importOpenApiToolSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const input: {
       subject: typeof subject;
       name: string;
@@ -131,9 +137,9 @@ export function registerToolRoutes(app: RomeoApi): void {
     return context.json({ data }, 201);
   });
 
-  app.post("/api/v1/tools/webhook", async (context) => {
+  app.openapi(createWebhookToolRoute, async (context) => {
     const subject = context.get("subject");
-    const body = createWebhookToolSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const input: {
       subject: typeof subject;
       name: string;
@@ -162,9 +168,9 @@ export function registerToolRoutes(app: RomeoApi): void {
     return context.json({ data }, 201);
   });
 
-  app.post("/api/v1/tools/mcp", async (context) => {
+  app.openapi(createMcpToolRoute, async (context) => {
     const subject = context.get("subject");
-    const body = createMcpToolSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const input: {
       subject: typeof subject;
       name: string;
@@ -214,9 +220,9 @@ export function registerToolRoutes(app: RomeoApi): void {
     return context.json({ data }, 201);
   });
 
-  app.patch("/api/v1/tool-connectors/:connectorId/auth", async (context) => {
+  app.openapi(updateToolConnectorAuthRoute, async (context) => {
     const subject = context.get("subject");
-    const body = updateToolConnectorAuthSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const input: {
       subject: typeof subject;
       connectorId: string;
@@ -229,7 +235,7 @@ export function registerToolRoutes(app: RomeoApi): void {
       oauthTokenUrl?: string;
     } = {
       subject,
-      connectorId: context.req.param("connectorId"),
+      connectorId: context.req.valid("param").connectorId,
       type: body.type,
     };
     if (body.secretRef !== undefined) input.secretRef = body.secretRef;
@@ -241,327 +247,123 @@ export function registerToolRoutes(app: RomeoApi): void {
     if (body.oauthTokenUrl !== undefined)
       input.oauthTokenUrl = body.oauthTokenUrl;
     const data = await context.get("services").toolConnectors.updateAuth(input);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post(
-    "/api/v1/tool-connectors/:connectorId/auth/check",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context
-        .get("services")
-        .toolConnectors.checkAuth(subject, context.req.param("connectorId"));
-      return context.json({ data });
-    },
-  );
-
-  app.patch(
-    "/api/v1/tool-connectors/:connectorId/network-policy",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = updateToolConnectorNetworkPolicySchema.parse(
-        await context.req.json(),
-      );
-      const data = await context
-        .get("services")
-        .toolConnectors.updateNetworkPolicy({
-          subject,
-          connectorId: context.req.param("connectorId"),
-          policy: body,
-        });
-      return context.json({ data });
-    },
-  );
-
-  app.get(
-    "/api/v1/tool-connectors/:connectorId/operations",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context
-        .get("services")
-        .toolConnectors.listOperations(
-          subject,
-          context.req.param("connectorId"),
-        );
-      return context.json({ data });
-    },
-  );
-
-  app.patch(
-    "/api/v1/tool-connectors/:connectorId/operations/:operationId",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = updateToolOperationSchema.parse(await context.req.json());
-      const data = await context
-        .get("services")
-        .toolConnectors.updateOperation({
-          subject,
-          connectorId: context.req.param("connectorId"),
-          operationId: context.req.param("operationId"),
-          enabled: body.enabled,
-        });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/tool-connectors/:connectorId/operations/:operationId/test",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = testToolOperationSchema.parse(await context.req.json());
-      const input: {
-        subject: typeof subject;
-        connectorId: string;
-        operationId: string;
-        parameters?: Record<string, unknown>;
-        body?: Record<string, unknown>;
-      } = {
-        subject,
-        connectorId: context.req.param("connectorId"),
-        operationId: context.req.param("operationId"),
-      };
-      if (body.parameters !== undefined) input.parameters = body.parameters;
-      if (body.body !== undefined) input.body = body.body;
-      const data = await context
-        .get("services")
-        .toolConnectors.testOperation(input);
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/tool-connectors/:connectorId/operations/:operationId/dispatch",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = enqueueToolOperationDispatchSchema.parse(
-        await context.req.json(),
-      );
-      const input: {
-        approvalRequestId?: string;
-        approved?: boolean;
-        idempotencyKey?: string;
-        subject: typeof subject;
-        connectorId: string;
-        operationId: string;
-        parameters?: Record<string, unknown>;
-        body?: Record<string, unknown>;
-      } = {
-        subject,
-        connectorId: context.req.param("connectorId"),
-        operationId: context.req.param("operationId"),
-      };
-      if (body.approved !== undefined) input.approved = body.approved;
-      if (body.approvalRequestId !== undefined)
-        input.approvalRequestId = body.approvalRequestId;
-      if (body.idempotencyKey !== undefined)
-        input.idempotencyKey = body.idempotencyKey;
-      if (body.parameters !== undefined) input.parameters = body.parameters;
-      if (body.body !== undefined) input.body = body.body;
-      const data = await context
-        .get("services")
-        .toolConnectors.dispatchOperation(input);
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/tool-connectors/:connectorId/operations/:operationId/dispatch-requests",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = enqueueToolOperationDispatchSchema.parse(
-        await context.req.json(),
-      );
-      const input: {
-        approvalRequestId?: string;
-        approved?: boolean;
-        idempotencyKey?: string;
-        subject: typeof subject;
-        connectorId: string;
-        operationId: string;
-        parameters?: Record<string, unknown>;
-        body?: Record<string, unknown>;
-      } = {
-        subject,
-        connectorId: context.req.param("connectorId"),
-        operationId: context.req.param("operationId"),
-      };
-      if (body.approved !== undefined) input.approved = body.approved;
-      if (body.approvalRequestId !== undefined)
-        input.approvalRequestId = body.approvalRequestId;
-      if (body.idempotencyKey !== undefined)
-        input.idempotencyKey = body.idempotencyKey;
-      if (body.parameters !== undefined) input.parameters = body.parameters;
-      if (body.body !== undefined) input.body = body.body;
-      const data = await context
-        .get("services")
-        .toolConnectors.enqueueDispatchOperation(input);
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/tool-operation-dispatch-requests/claim",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = claimToolOperationDispatchRequestSchema.parse(
-        await context.req.json(),
-      );
-      const data = await context
-        .get("services")
-        .toolConnectors.claimDispatchRequest({
-          subject,
-          leaseSeconds: body.leaseSeconds,
-          ...(body.payloadStorage === undefined
-            ? {}
-            : { payloadStorage: body.payloadStorage }),
-        });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/tool-operation-dispatch-requests/:jobId/payload",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context
-        .get("services")
-        .toolConnectors.readDispatchRequestPayload({
-          subject,
-          jobId: context.req.param("jobId"),
-        });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/tool-operation-dispatch-requests/expire",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = expireToolOperationDispatchRequestsSchema.parse(
-        await context.req.json(),
-      );
-      const data = await context
-        .get("services")
-        .toolConnectors.expireDispatchRequests({
-          subject,
-          queuedTimeoutSeconds: body.queuedTimeoutSeconds,
-          runningTimeoutSeconds: body.runningTimeoutSeconds,
-          limit: body.limit,
-        });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/tool-operation-dispatch-requests/:jobId/renew-lease",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = claimToolOperationDispatchRequestSchema.parse(
-        await context.req.json(),
-      );
-      const data = await context
-        .get("services")
-        .toolConnectors.renewDispatchRequestLease({
-          subject,
-          jobId: context.req.param("jobId"),
-          leaseSeconds: body.leaseSeconds,
-        });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/tool-operation-dispatch-requests/:jobId/complete",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = completeToolOperationDispatchRequestSchema.parse(
-        await context.req.json(),
-      );
-      const response = {
-        ok: body.response.ok,
-        status: body.response.status,
-        ...(body.response.contentType === undefined
-          ? {}
-          : { contentType: body.response.contentType }),
-        bodyBytes: body.response.bodyBytes,
-        truncated: body.response.truncated,
-        schemaValidation: {
-          status: body.response.schemaValidation.status,
-          ...(body.response.schemaValidation.errorCode === undefined
-            ? {}
-            : { errorCode: body.response.schemaValidation.errorCode }),
-        },
-      };
-      const data = await context
-        .get("services")
-        .toolConnectors.completeDispatchRequest({
-          subject,
-          jobId: context.req.param("jobId"),
-          response,
-        });
-      await context.get("services").runs.resumeAfterDispatchRequestReadback({
-        subject,
-        jobId: context.req.param("jobId"),
-        response,
-      });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/tool-operation-dispatch-requests/:jobId/fail",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = failToolOperationDispatchRequestSchema.parse(
-        await context.req.json(),
-      );
-      const data = await context
-        .get("services")
-        .toolConnectors.failDispatchRequest({
-          subject,
-          jobId: context.req.param("jobId"),
-          errorCode: body.errorCode,
-        });
-      await context.get("services").runs.resumeAfterDispatchRequestReadback({
-        subject,
-        jobId: context.req.param("jobId"),
-        errorCode: body.errorCode,
-      });
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/tool-operation-dispatch-requests/:jobId/cancel",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = cancelToolOperationDispatchRequestSchema.parse(
-        await context.req.json(),
-      );
-      const data = await context
-        .get("services")
-        .toolConnectors.cancelDispatchRequest({
-          subject,
-          jobId: context.req.param("jobId"),
-          ...(body.reasonCode === undefined
-            ? {}
-            : { reasonCode: body.reasonCode }),
-        });
-      return context.json({ data });
-    },
-  );
-
-  app.get("/api/v1/agents/:agentId/tools", async (context) => {
+  app.openapi(checkToolConnectorAuthRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
-      .tools.listForAgent(subject, context.req.param("agentId"));
-    return context.json({ data });
+      .toolConnectors.checkAuth(
+        subject,
+        context.req.valid("param").connectorId,
+      );
+    return context.json({ data }, 200);
   });
 
-  app.patch("/api/v1/agents/:agentId/tools/:toolId", async (context) => {
+  app.openapi(updateToolConnectorNetworkPolicyRoute, async (context) => {
     const subject = context.get("subject");
-    const body = updateAgentToolBindingSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
+    const data = await context
+      .get("services")
+      .toolConnectors.updateNetworkPolicy({
+        subject,
+        connectorId: context.req.valid("param").connectorId,
+        policy: body,
+      });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listToolOperationsRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context
+      .get("services")
+      .toolConnectors.listOperations(
+        subject,
+        context.req.valid("param").connectorId,
+      );
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(updateToolOperationRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const { connectorId, operationId } = context.req.valid("param");
+    const data = await context.get("services").toolConnectors.updateOperation({
+      subject,
+      connectorId,
+      operationId,
+      enabled: body.enabled,
+    });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(testToolOperationRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const { connectorId, operationId } = context.req.valid("param");
+    const input: {
+      subject: typeof subject;
+      connectorId: string;
+      operationId: string;
+      parameters?: Record<string, unknown>;
+      body?: Record<string, unknown>;
+    } = {
+      subject,
+      connectorId,
+      operationId,
+    };
+    if (body.parameters !== undefined) input.parameters = body.parameters;
+    if (body.body !== undefined) input.body = body.body;
+    const data = await context
+      .get("services")
+      .toolConnectors.testOperation(input);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(dispatchToolOperationRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const { connectorId, operationId } = context.req.valid("param");
+    const input: {
+      approvalRequestId?: string;
+      approved?: boolean;
+      idempotencyKey?: string;
+      subject: typeof subject;
+      connectorId: string;
+      operationId: string;
+      parameters?: Record<string, unknown>;
+      body?: Record<string, unknown>;
+    } = {
+      subject,
+      connectorId,
+      operationId,
+    };
+    if (body.approved !== undefined) input.approved = body.approved;
+    if (body.approvalRequestId !== undefined)
+      input.approvalRequestId = body.approvalRequestId;
+    if (body.idempotencyKey !== undefined)
+      input.idempotencyKey = body.idempotencyKey;
+    if (body.parameters !== undefined) input.parameters = body.parameters;
+    if (body.body !== undefined) input.body = body.body;
+    const data = await context
+      .get("services")
+      .toolConnectors.dispatchOperation(input);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listAgentToolsRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context
+      .get("services")
+      .tools.listForAgent(subject, context.req.valid("param").agentId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(updateAgentToolBindingRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const { agentId, toolId } = context.req.valid("param");
     const input: {
       subject: typeof subject;
       agentId: string;
@@ -570,20 +372,20 @@ export function registerToolRoutes(app: RomeoApi): void {
       approvalRequired?: boolean;
     } = {
       subject,
-      agentId: context.req.param("agentId"),
-      toolId: context.req.param("toolId"),
+      agentId,
+      toolId,
     };
     if (body.enabled !== undefined) input.enabled = body.enabled;
     if (body.approvalRequired !== undefined)
       input.approvalRequired = body.approvalRequired;
 
     const data = await context.get("services").tools.updateBinding(input);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/tools/:toolId/execute", async (context) => {
+  app.openapi(executeToolRoute, async (context) => {
     const subject = context.get("subject");
-    const body = executeToolSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const options: {
       agentId: string;
       approved?: boolean;
@@ -601,13 +403,18 @@ export function registerToolRoutes(app: RomeoApi): void {
     if (body.runId !== undefined) options.runId = body.runId;
     const data = await context
       .get("services")
-      .tools.execute(subject, context.req.param("toolId"), body.input, options);
-    return context.json({ data });
+      .tools.execute(
+        subject,
+        context.req.valid("param").toolId,
+        body.input,
+        options,
+      );
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/runs/:runId/tools/:toolId/execute", async (context) => {
+  app.openapi(executeRunToolRoute, async (context) => {
     const subject = context.get("subject");
-    const body = executeRunToolSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const options: {
       approved?: boolean;
       approvalRequestId?: string;
@@ -626,8 +433,7 @@ export function registerToolRoutes(app: RomeoApi): void {
       options.modelToolCallId = body.approvalRequestId;
     }
     const services = context.get("services");
-    const runId = context.req.param("runId");
-    const toolId = context.req.param("toolId");
+    const { runId, toolId } = context.req.valid("param");
     const data = await services.tools.executeForRun(
       subject,
       runId,
@@ -657,6 +463,6 @@ export function registerToolRoutes(app: RomeoApi): void {
         });
       }
     }
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 }

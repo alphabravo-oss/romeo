@@ -74,7 +74,12 @@ export async function syncExternalGroupMemberships(
 
 async function assertEmailDoesNotRequireAccountLinking(
   repository: RomeoRepository,
-  input: { email: string; orgId: string; providerLabel: string; userId: string },
+  input: {
+    email: string;
+    orgId: string;
+    providerLabel: string;
+    userId: string;
+  },
 ): Promise<void> {
   const normalizedEmail = normalizeEmail(input.email);
   const existingUsers = await repository.listUsers(input.orgId);

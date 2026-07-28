@@ -1,9 +1,3 @@
-import type {
-  BrowserAutomationCompletionResult,
-  BrowserAutomationTaskClaimResult,
-  BrowserAutomationTaskReadbackResult,
-} from "@romeo/api-client";
-
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
 import { workerSignalAborted } from "./worker-control";
@@ -16,12 +10,53 @@ export interface BrowserAutomationWorkerClient {
     completeBrowserTask(input: {
       jobId: string;
       result: BrowserAutomationCompletionResult;
-    }): Promise<BrowserAutomationTaskReadbackResult>;
+    }): Promise<unknown>;
     failBrowserTask(input: {
       errorCode: string;
       jobId: string;
-    }): Promise<BrowserAutomationTaskReadbackResult>;
+    }): Promise<unknown>;
   };
+}
+
+export interface BrowserAutomationTaskClaimResult {
+  claimed: boolean;
+  job?:
+    | {
+        id: string;
+        status: string;
+        type: string;
+      }
+    | undefined;
+  request?:
+    | {
+        targetHost: string;
+        targetOrigin: string;
+        targetUrl: string;
+        task: string;
+        taskHash: string;
+        taskLength: number;
+      }
+    | undefined;
+  sandboxPolicy?: unknown;
+  workflow?:
+    | {
+        stepId: string;
+        workflowId: string;
+        workflowRunId: string;
+        workspaceId: string;
+      }
+    | undefined;
+}
+
+export interface BrowserAutomationCompletionResult {
+  artifactCount?: number | undefined;
+  capturedBytes?: number | undefined;
+  durationMs?: number | undefined;
+  finalOrigin?: string | undefined;
+  navigationCount?: number | undefined;
+  networkDeniedCount?: number | undefined;
+  outputKeys?: string[] | undefined;
+  redactionApplied?: boolean | undefined;
 }
 
 export interface RunBrowserAutomationWorkerInput {
@@ -174,7 +209,9 @@ async function callBrowserRunner(
   }
 }
 
-function sanitizeRunnerResult(value: unknown): BrowserAutomationCompletionResult {
+function sanitizeRunnerResult(
+  value: unknown,
+): BrowserAutomationCompletionResult {
   const record = asRecord(value);
   if (record === undefined) throw new Error("browser_runner_response_invalid");
   const outputKeys = stringArray(record.outputKeys);

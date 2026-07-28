@@ -9,6 +9,7 @@ import type {
 } from "@romeo/providers";
 
 import type { RomeoRepository } from "../domain/repository";
+import type { UsageEvent } from "../domain/entities";
 import type { RunServiceOptions } from "./run-service";
 import type { ProviderRoutingPolicy } from "./provider-routing";
 
@@ -43,7 +44,12 @@ export interface ProviderOperationalAlert {
     | "provider_circuit_open"
     | "provider_disabled"
     | "provider_kill_switch"
-    | "provider_without_enabled_models";
+    | "provider_without_enabled_models"
+    | "object_store_failures_recent"
+    | "provider_errors_recent"
+    | "queue_wait_high"
+    | "sse_disconnects_recent"
+    | "time_to_first_token_high";
   id: string;
   modelId?: string;
   providerId?: string;
@@ -68,7 +74,24 @@ export interface ProviderOperationalSummary {
   generatedAt: string;
   policy: ProviderOperationalPolicy;
   providers: ProviderOperationalProviderSummary[];
+  runtime: ProviderRuntimeOperationalSummary;
   status: ProviderOperationalStatus;
+}
+
+export interface ProviderRuntimeOperationalSummary {
+  contextInputTokensAverage: number;
+  lookbackSeconds: number;
+  objectStoreFailureCount: number;
+  providerErrorCount: number;
+  queueWaitP95Ms: number;
+  recoveryCount: number;
+  sseDisconnectCount: number;
+  sseReconnectCount: number;
+  timeToFirstTokenAverageMs: number;
+  timeToFirstTokenP95Ms: number;
+  uploadPipelineAverageMs: number;
+  webRetrievalAverageMs: number;
+  outputThroughputAverage: number;
 }
 
 export async function summarizeProviderOperations(input: {
@@ -80,13 +103,18 @@ export async function summarizeProviderOperations(input: {
   routingPolicy: ProviderRoutingPolicy;
 }): Promise<ProviderOperationalSummary> {
   const generatedAt = input.now ?? new Date().toISOString();
-  const providers = (await input.repository.listProviders(input.orgId)).sort(
-    (left, right) => left.id.localeCompare(right.id),
+  const [providerRows, models, usageEvents] = await Promise.all([
+    input.repository.listProviders(input.orgId),
+    input.repository.listModels(input.orgId),
+    input.repository.listUsageEvents(input.orgId),
+  ]);
+  const providers = providerRows.sort((left, right) =>
+    left.id.localeCompare(right.id),
   );
-  const models = await input.repository.listModels(input.orgId);
   const modelsByProvider = groupModelsByProvider(models);
   const fallback = fallbackState(models, providers, input.routingPolicy);
   const policy = policySummary(input.routingPolicy, input.options);
+  const runtime = runtimeSummary(usageEvents, generatedAt);
 
   const providerSummaries = providers.map((provider) => {
     const providerModels = modelsByProvider.get(provider.id) ?? [];
@@ -122,6 +150,7 @@ export async function summarizeProviderOperations(input: {
       providerAlerts(summary, fallback),
     ),
   ];
+  alerts.push(...runtimeAlerts(runtime));
 
   const availableProviders = providerSummaries.filter(
     (summary) => summary.status === "available",
@@ -141,12 +170,119 @@ export async function summarizeProviderOperations(input: {
     generatedAt,
     policy,
     providers: providerSummaries,
+    runtime,
     status: alerts.some((alert) => alert.severity === "critical")
       ? "critical"
       : alerts.length > 0
         ? "degraded"
         : "healthy",
   };
+}
+
+function runtimeSummary(
+  events: UsageEvent[],
+  generatedAt: string,
+): ProviderRuntimeOperationalSummary {
+  const lookbackSeconds = 15 * 60;
+  const cutoff = Date.parse(generatedAt) - lookbackSeconds * 1000;
+  const recent = events.filter(
+    (event) => Date.parse(event.createdAt) >= cutoff,
+  );
+  const quantities = (metric: string) =>
+    recent
+      .filter((event) => event.metric === metric)
+      .map((event) => event.quantity)
+      .filter(Number.isFinite);
+  const metadataLatencies = (metric: string) =>
+    recent
+      .filter((event) => event.metric === metric)
+      .map((event) => event.metadata.latencyMs)
+      .filter(
+        (value): value is number =>
+          typeof value === "number" && Number.isFinite(value),
+      );
+  const ttft = quantities("run.time_to_first_token");
+  const objectStoreFailureCount = recent.filter(
+    (event) =>
+      event.metric === "trace.span" &&
+      event.metadata.boundary === "object_store" &&
+      event.metadata.outcome === "failure",
+  ).length;
+  return {
+    contextInputTokensAverage: average(quantities("llm.input_token.estimated")),
+    lookbackSeconds,
+    objectStoreFailureCount,
+    providerErrorCount: sum(quantities("provider.error")),
+    queueWaitP95Ms: percentile(quantities("queue.wait"), 0.95),
+    recoveryCount: sum(quantities("run.recovery")),
+    sseDisconnectCount: sum(quantities("sse.disconnect")),
+    sseReconnectCount: sum(quantities("sse.reconnect")),
+    timeToFirstTokenAverageMs: average(ttft),
+    timeToFirstTokenP95Ms: percentile(ttft, 0.95),
+    uploadPipelineAverageMs: average(
+      quantities("file.upload.pipeline_duration"),
+    ),
+    webRetrievalAverageMs: average([
+      ...metadataLatencies("web.search.request"),
+      ...metadataLatencies("web.url.fetch"),
+    ]),
+    outputThroughputAverage: average(quantities("run.output_throughput")),
+  };
+}
+
+function runtimeAlerts(
+  runtime: ProviderRuntimeOperationalSummary,
+): ProviderOperationalAlert[] {
+  const alerts: ProviderOperationalAlert[] = [];
+  if (runtime.objectStoreFailureCount >= 1)
+    alerts.push({
+      code: "object_store_failures_recent",
+      id: "runtime_object_store_failures_recent",
+      severity: "critical",
+    });
+  if (runtime.providerErrorCount >= 5)
+    alerts.push({
+      code: "provider_errors_recent",
+      id: "runtime_provider_errors_recent",
+      severity: "critical",
+    });
+  if (runtime.sseDisconnectCount >= 3)
+    alerts.push({
+      code: "sse_disconnects_recent",
+      id: "runtime_sse_disconnects_recent",
+      severity: "warning",
+    });
+  if (runtime.queueWaitP95Ms >= 30_000)
+    alerts.push({
+      code: "queue_wait_high",
+      id: "runtime_queue_wait_high",
+      severity: "warning",
+    });
+  if (runtime.timeToFirstTokenP95Ms >= 10_000)
+    alerts.push({
+      code: "time_to_first_token_high",
+      id: "runtime_time_to_first_token_high",
+      severity: "warning",
+    });
+  return alerts;
+}
+
+function average(values: number[]): number {
+  return values.length === 0 ? 0 : sum(values) / values.length;
+}
+
+function sum(values: number[]): number {
+  return values.reduce((total, value) => total + value, 0);
+}
+
+function percentile(values: number[], fraction: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  return (
+    sorted[
+      Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)
+    ] ?? 0
+  );
 }
 
 function policySummary(

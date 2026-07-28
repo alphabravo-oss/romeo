@@ -1,254 +1,263 @@
-import type { RomeoApi } from "../context";
 import {
-  createFavoriteSchema,
-  createFolderItemSchema,
-  createFolderSchema,
-  shareResourceSchema,
-  updateFolderSchema,
-} from "../schemas";
+  addFolderItemRoute,
+  createFavoriteRoute,
+  createFolderRoute,
+  deleteFavoriteRoute,
+  deleteFolderItemRoute,
+  deleteFolderRoute,
+  getFolderRoute,
+  listChatSharesRoute,
+  listFavoritesRoute,
+  listFileSharesRoute,
+  listFolderItemsRoute,
+  listFolderSharesRoute,
+  listFoldersRoute,
+  listKnowledgeBaseSharesRoute,
+  listManagedModelGalleryRoute,
+  listManagedModelGrantsRoute,
+  listShareTargetsRoute,
+  revokeChatShareRoute,
+  shareChatRoute,
+  shareFileRoute,
+  shareFolderRoute,
+  shareKnowledgeBaseRoute,
+  shareManagedModelRoute,
+  updateFolderRoute,
+} from "@romeo/contracts";
+
+import type { RomeoApi } from "../context";
 
 export function registerCollaborationRoutes(app: RomeoApi): void {
-  app.get("/api/v1/share-targets", async (context) => {
-    const subject = context.get("subject");
-    const limit = context.req.query("limit");
+  app.openapi(listShareTargetsRoute, async (context) => {
+    const { query, limit } = context.req.valid("query");
     const data = await context
       .get("services")
-      .collaboration.shareTargets(
-        subject,
-        context.req.query("query") ?? "",
-        limit === undefined ? undefined : Number(limit),
-      );
-    return context.json({ data });
+      .collaboration.shareTargets(context.get("subject"), query ?? "", limit);
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/agents/:agentId/shares", async (context) => {
-    const subject = context.get("subject");
+  app.openapi(listManagedModelGrantsRoute, async (context) => {
+    const { agentId } = context.req.valid("param");
     const data = await context
       .get("services")
-      .collaboration.listAgentShares(subject, context.req.param("agentId"));
-    return context.json({ data });
+      .collaboration.listAgentShares(context.get("subject"), agentId);
+    return context.json({ data: toManagedModelGrants(data) }, 200);
   });
 
-  app.post("/api/v1/agents/:agentId/shares", async (context) => {
-    const subject = context.get("subject");
-    const body = shareResourceSchema.parse(await context.req.json());
+  app.openapi(shareManagedModelRoute, async (context) => {
+    const { agentId } = context.req.valid("param");
     const data = await context.get("services").collaboration.shareAgent({
-      subject,
-      agentId: context.req.param("agentId"),
-      share: body,
+      subject: context.get("subject"),
+      agentId,
+      share: context.req.valid("json"),
     });
-    return context.json({ data }, 201);
+    return context.json({ data: toManagedModelGrants(data) }, 201);
   });
 
-  app.get(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/shares",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context
-        .get("services")
-        .collaboration.listKnowledgeBaseShares(
-          subject,
-          context.req.param("knowledgeBaseId"),
-        );
-      return context.json({ data });
-    },
-  );
-
-  app.post(
-    "/api/v1/knowledge-bases/:knowledgeBaseId/shares",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = shareResourceSchema.parse(await context.req.json());
-      const data = await context
-        .get("services")
-        .collaboration.shareKnowledgeBase({
-          subject,
-          knowledgeBaseId: context.req.param("knowledgeBaseId"),
-          share: body,
-        });
-      return context.json({ data }, 201);
-    },
-  );
-
-  app.get("/api/v1/chats/:chatId/shares", async (context) => {
-    const subject = context.get("subject");
+  app.openapi(listKnowledgeBaseSharesRoute, async (context) => {
+    const { knowledgeBaseId } = context.req.valid("param");
     const data = await context
       .get("services")
-      .collaboration.listChatShares(subject, context.req.param("chatId"));
-    return context.json({ data });
-  });
-
-  app.post("/api/v1/chats/:chatId/shares", async (context) => {
-    const subject = context.get("subject");
-    const body = shareResourceSchema.parse(await context.req.json());
-    const data = await context.get("services").collaboration.shareChat({
-      subject,
-      chatId: context.req.param("chatId"),
-      share: body,
-    });
-    return context.json({ data }, 201);
-  });
-
-  app.get("/api/v1/files/:fileId/shares", async (context) => {
-    const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .collaboration.listFileShares(subject, context.req.param("fileId"));
-    return context.json({ data });
-  });
-
-  app.post("/api/v1/files/:fileId/shares", async (context) => {
-    const subject = context.get("subject");
-    const body = shareResourceSchema.parse(await context.req.json());
-    const data = await context.get("services").collaboration.shareFile({
-      subject,
-      fileId: context.req.param("fileId"),
-      share: body,
-    });
-    return context.json({ data }, 201);
-  });
-
-  app.get("/api/v1/agent-gallery", async (context) => {
-    const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .collaboration.agentGallery(subject, context.req.query("workspaceId"));
-    return context.json({ data });
-  });
-
-  app.get("/api/v1/favorites", async (context) => {
-    const subject = context.get("subject");
-    const data = await context.get("services").collaboration.favorites(subject);
-    return context.json({ data });
-  });
-
-  app.post("/api/v1/favorites", async (context) => {
-    const subject = context.get("subject");
-    const body = createFavoriteSchema.parse(await context.req.json());
-    const data = await context
-      .get("services")
-      .collaboration.favorite({
-        subject,
-        resourceType: body.resourceType,
-        resourceId: body.resourceId,
-      });
-    return context.json({ data }, 201);
-  });
-
-  app.delete("/api/v1/favorites/:favoriteId", async (context) => {
-    const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .collaboration.deleteFavorite(subject, context.req.param("favoriteId"));
-    return context.json({ data });
-  });
-
-  app.get("/api/v1/folders", async (context) => {
-    const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .collaboration.folders(subject, context.req.query("workspaceId") ?? "");
-    return context.json({ data });
-  });
-
-  app.post("/api/v1/folders", async (context) => {
-    const subject = context.get("subject");
-    const body = createFolderSchema.parse(await context.req.json());
-    const data = await context
-      .get("services")
-      .collaboration.createFolder({
-        subject,
-        workspaceId: body.workspaceId,
-        name: body.name,
-        parentId: body.parentId,
-        meta: body.meta,
-        data: body.data,
-        isExpanded: body.isExpanded,
-      });
-    return context.json({ data }, 201);
-  });
-
-  app.get("/api/v1/folders/:folderId", async (context) => {
-    const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .collaboration.folder(subject, context.req.param("folderId"));
-    return context.json({ data });
-  });
-
-  app.patch("/api/v1/folders/:folderId", async (context) => {
-    const subject = context.get("subject");
-    const body = updateFolderSchema.parse(await context.req.json());
-    const data = await context.get("services").collaboration.updateFolder({
-      subject,
-      folderId: context.req.param("folderId"),
-      name: body.name,
-      parentId: body.parentId,
-      meta: body.meta,
-      data: body.data,
-      isExpanded: body.isExpanded,
-    });
-    return context.json({ data });
-  });
-
-  app.delete("/api/v1/folders/:folderId", async (context) => {
-    const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .collaboration.deleteFolder(subject, context.req.param("folderId"));
-    return context.json({ data });
-  });
-
-  app.get("/api/v1/folders/:folderId/shares", async (context) => {
-    const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .collaboration.listFolderShares(subject, context.req.param("folderId"));
-    return context.json({ data });
-  });
-
-  app.post("/api/v1/folders/:folderId/shares", async (context) => {
-    const subject = context.get("subject");
-    const body = shareResourceSchema.parse(await context.req.json());
-    const data = await context
-      .get("services")
-      .collaboration.shareFolder({
-        subject,
-        folderId: context.req.param("folderId"),
-        share: body,
-      });
-    return context.json({ data }, 201);
-  });
-
-  app.get("/api/v1/folders/:folderId/items", async (context) => {
-    const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .collaboration.folderItems(subject, context.req.param("folderId"));
-    return context.json({ data });
-  });
-
-  app.post("/api/v1/folders/:folderId/items", async (context) => {
-    const subject = context.get("subject");
-    const body = createFolderItemSchema.parse(await context.req.json());
-    const data = await context.get("services").collaboration.addFolderItem({
-      subject,
-      folderId: context.req.param("folderId"),
-      resourceType: body.resourceType,
-      resourceId: body.resourceId,
-    });
-    return context.json({ data }, 201);
-  });
-
-  app.delete("/api/v1/folders/:folderId/items/:itemId", async (context) => {
-    const subject = context.get("subject");
-    const data = await context
-      .get("services")
-      .collaboration.deleteFolderItem(
-        subject,
-        context.req.param("folderId"),
-        context.req.param("itemId"),
+      .collaboration.listKnowledgeBaseShares(
+        context.get("subject"),
+        knowledgeBaseId,
       );
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
+
+  app.openapi(shareKnowledgeBaseRoute, async (context) => {
+    const { knowledgeBaseId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.shareKnowledgeBase({
+        subject: context.get("subject"),
+        knowledgeBaseId,
+        share: context.req.valid("json"),
+      });
+    return context.json({ data }, 201);
+  });
+
+  app.openapi(listChatSharesRoute, async (context) => {
+    const { chatId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.listChatShares(context.get("subject"), chatId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(shareChatRoute, async (context) => {
+    const { chatId } = context.req.valid("param");
+    const data = await context.get("services").collaboration.shareChat({
+      subject: context.get("subject"),
+      chatId,
+      share: context.req.valid("json"),
+    });
+    return context.json({ data }, 201);
+  });
+
+  app.openapi(revokeChatShareRoute, async (context) => {
+    const { chatId, grantId } = context.req.valid("param");
+    const data = await context.get("services").collaboration.revokeChatShare({
+      subject: context.get("subject"),
+      chatId,
+      grantId,
+    });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listFileSharesRoute, async (context) => {
+    const { fileId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.listFileShares(context.get("subject"), fileId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(shareFileRoute, async (context) => {
+    const { fileId } = context.req.valid("param");
+    const data = await context.get("services").collaboration.shareFile({
+      subject: context.get("subject"),
+      fileId,
+      share: context.req.valid("json"),
+    });
+    return context.json({ data }, 201);
+  });
+
+  app.openapi(listManagedModelGalleryRoute, async (context) => {
+    const { workspaceId } = context.req.valid("query");
+    const data = await context
+      .get("services")
+      .collaboration.agentGallery(context.get("subject"), workspaceId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listFavoritesRoute, async (context) => {
+    const data = await context
+      .get("services")
+      .collaboration.favorites(context.get("subject"));
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(createFavoriteRoute, async (context) => {
+    const body = context.req.valid("json");
+    const data = await context.get("services").collaboration.favorite({
+      subject: context.get("subject"),
+      ...body,
+    });
+    return context.json({ data }, 201);
+  });
+
+  app.openapi(deleteFavoriteRoute, async (context) => {
+    const { favoriteId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.deleteFavorite(context.get("subject"), favoriteId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listFoldersRoute, async (context) => {
+    const { workspaceId } = context.req.valid("query");
+    const data = await context
+      .get("services")
+      .collaboration.folders(context.get("subject"), workspaceId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(createFolderRoute, async (context) => {
+    const data = await context.get("services").collaboration.createFolder({
+      subject: context.get("subject"),
+      ...context.req.valid("json"),
+    });
+    return context.json({ data }, 201);
+  });
+
+  app.openapi(getFolderRoute, async (context) => {
+    const { folderId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.folder(context.get("subject"), folderId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(updateFolderRoute, async (context) => {
+    const { folderId } = context.req.valid("param");
+    const data = await context.get("services").collaboration.updateFolder({
+      subject: context.get("subject"),
+      folderId,
+      ...context.req.valid("json"),
+    });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(deleteFolderRoute, async (context) => {
+    const { folderId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.deleteFolder(context.get("subject"), folderId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listFolderSharesRoute, async (context) => {
+    const { folderId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.listFolderShares(context.get("subject"), folderId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(shareFolderRoute, async (context) => {
+    const { folderId } = context.req.valid("param");
+    const data = await context.get("services").collaboration.shareFolder({
+      subject: context.get("subject"),
+      folderId,
+      share: context.req.valid("json"),
+    });
+    return context.json({ data }, 201);
+  });
+
+  app.openapi(listFolderItemsRoute, async (context) => {
+    const { folderId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.folderItems(context.get("subject"), folderId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(addFolderItemRoute, async (context) => {
+    const { folderId } = context.req.valid("param");
+    const data = await context.get("services").collaboration.addFolderItem({
+      subject: context.get("subject"),
+      folderId,
+      ...context.req.valid("json"),
+    });
+    return context.json({ data }, 201);
+  });
+
+  app.openapi(deleteFolderItemRoute, async (context) => {
+    const { folderId, itemId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.deleteFolderItem(context.get("subject"), folderId, itemId);
+    return context.json({ data }, 200);
+  });
+}
+
+function toManagedModelGrants(
+  grants: Array<{
+    id: string;
+    principalId: string;
+    principalType: "group" | "service_account" | "user";
+    permission: "read" | "run" | "use" | "write";
+    resourceId: string;
+    resourceType: string;
+  }>,
+) {
+  return grants
+    .filter(
+      (
+        grant,
+      ): grant is typeof grant & { permission: "read" | "run" | "write" } =>
+        grant.permission !== "use",
+    )
+    .map((grant) => ({ ...grant, resourceType: "agent" as const }));
 }

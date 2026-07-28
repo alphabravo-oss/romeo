@@ -1933,6 +1933,7 @@ describe("durable transaction boundaries", () => {
       type: "openai-compatible",
       name: "Sync rollback provider",
       baseUrl: "https://provider.example.com/v1",
+      modelIds: ["sync-model"],
       enabled: true,
       capabilities: defaultProviderCapabilities("openai-compatible"),
     });
@@ -1944,7 +1945,7 @@ describe("durable transaction boundaries", () => {
     ).rejects.toThrow("Injected audit failure: provider.models.sync");
 
     expect(
-      await repository.getModel("model_provider_sync_rollback_default"),
+      await repository.getModel("model_provider_sync_rollback_sync_model"),
     ).toBeUndefined();
   });
 
@@ -3021,6 +3022,38 @@ describe("durable transaction boundaries", () => {
     expect(await objectStore.getObject(file.objectKey)).toBeDefined();
   });
 
+  it("requires file write ownership or a grant before retrying extraction", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const objectStore = new MemoryObjectStore();
+    const service = new FileService(repository, objectStore);
+    const owner: AuthSubject = {
+      ...fileWriteSubject(),
+      id: "user_file_owner",
+      groupIds: [],
+      isAdmin: false,
+    };
+    const outsider: AuthSubject = {
+      ...owner,
+      id: "user_file_outsider",
+    };
+    const created = await service.create(owner, {
+      workspaceId: "workspace_default",
+      fileName: "owner-only.txt",
+      mimeType: "text/plain",
+      sizeBytes: 5,
+      dataBase64: Buffer.from("hello").toString("base64"),
+    });
+
+    await expect(service.retryExtraction(outsider, created.id)).rejects.toThrow(
+      `Missing write permission for file:${created.id}`,
+    );
+    await expect(
+      service.retryExtraction(owner, created.id),
+    ).resolves.toMatchObject({
+      extraction: { status: "succeeded", attempts: 2 },
+    });
+  });
+
   it("rolls back local password credential creation when audit fails", async () => {
     const repository = new InMemoryRomeoRepository();
     const failingRepository = failAuditRepository(
@@ -3652,6 +3685,9 @@ describe("durable transaction boundaries", () => {
       service.updateRetentionPolicy({
         subject: governanceAdminSubject(),
         auditLogRetentionDays: 730,
+        fileRetentionDays: null,
+        workspaceFileRetentionDays: {},
+        userFileRetentionDays: {},
       }),
     ).rejects.toThrow("Injected audit failure: governance.retention.update");
 
@@ -3670,6 +3706,9 @@ describe("durable transaction boundaries", () => {
     await repository.upsertRetentionPolicy({
       orgId: "org_default",
       auditLogRetentionDays: 30,
+      fileRetentionDays: null,
+      workspaceFileRetentionDays: {},
+      userFileRetentionDays: {},
       updatedBy: "user_dev_admin",
       updatedAt: "2026-07-07T12:00:00.000Z",
     });

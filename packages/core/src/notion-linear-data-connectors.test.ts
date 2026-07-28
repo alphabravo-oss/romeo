@@ -188,7 +188,7 @@ describe("Notion and Linear data connector API", () => {
           expect(headerValue(init?.headers, "authorization")).toBe(
             linearApiKey,
           );
-          expect(body.query).toContain("RomeoLinearIssues");
+          expect(body.query).toContain("query issues");
           expect(body.variables?.first).toBe(10);
           return jsonResponse({
             data: {
@@ -208,14 +208,34 @@ describe("Notion and Linear data connector API", () => {
                     team: { key: "OPS", name: "Operations" },
                     assignee: { name: "SRE" },
                     labels: { nodes: [{ name: "Incident" }] },
+                    reactions: [],
+                    sharedAccess: {
+                      disallowedIssueFields: [],
+                      isShared: false,
+                      sharedWithCount: 0,
+                      sharedWithUsers: [],
+                      viewerHasOnlySharedAccess: false,
+                    },
                   },
                   {
                     id: "issue-2",
                     identifier: "OPS-2",
                     title: "Unrelated",
                     description: "This issue should be filtered out.",
+                    reactions: [],
+                    sharedAccess: {
+                      disallowedIssueFields: [],
+                      isShared: false,
+                      sharedWithCount: 0,
+                      sharedWithUsers: [],
+                      viewerHasOnlySharedAccess: false,
+                    },
                   },
                 ],
+                pageInfo: {
+                  hasNextPage: false,
+                  hasPreviousPage: false,
+                },
               },
             },
           });
@@ -450,12 +470,5 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function headerValue(headers: HeadersInit | undefined, key: string): string {
-  if (headers === undefined) return "";
-  if (headers instanceof Headers) return headers.get(key) ?? "";
-  if (Array.isArray(headers)) {
-    return (
-      headers.find(([candidate]) => candidate.toLowerCase() === key)?.[1] ?? ""
-    );
-  }
-  return headers[key] ?? "";
+  return new Headers(headers).get(key) ?? "";
 }

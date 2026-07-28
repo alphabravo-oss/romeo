@@ -1,98 +1,223 @@
+import { NativeSelect } from "@romeo/ui";
 import Bot from "lucide-react/dist/esm/icons/bot.mjs";
+import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid.mjs";
 import SquarePen from "lucide-react/dist/esm/icons/square-pen.mjs";
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 import { type AppCommand, useRegisterCommands } from "../lib/commands";
+import { useLocale } from "../lib/i18n";
 import { ChatPanel } from "./ChatPanel";
 import { ModelSelector } from "./ModelSelector";
 import { useWorkspaceController } from "./useWorkspaceController";
 import { useWorkspace } from "./WorkspaceContext";
 import { WorkspaceNav } from "./WorkspaceNav";
+import { WorkspaceUserMenu } from "./WorkspaceUserMenu";
+import { ThemeToggle } from "./ThemeToggle";
+import { ManagedModelPersonalization } from "./ManagedModelPersonalization";
+
+const subscribeToHydration = () => () => {};
 
 export function WorkspaceShell() {
+  const { t } = useLocale();
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false,
+  );
   const workspace = useWorkspaceController();
-  const {
-    workspaceId,
-    workspaces,
-    setWorkspaceId,
-  } = useWorkspace();
+  const { workspaceId, workspaces, setWorkspaceId } = useWorkspace();
 
   // Publish chat actions to the ⌘K command registry while this screen is mounted.
   const commands = useMemo<AppCommand[]>(
     () => [
       {
         id: "action-new-chat",
-        group: "Actions",
-        label: "New chat",
+        group: t("shellActions"),
+        label: t("newChat"),
         icon: SquarePen,
         run: workspace.handleNewChat,
       },
       ...workspace.agents.map((agent) => ({
         id: `switch-agent-${agent.id}`,
-        group: "Switch agent",
+        group: t("shellSwitchAgent"),
         label: agent.name,
         icon: Bot,
         run: () => workspace.setActiveAgentId(agent.id),
       })),
     ],
-    [workspace.agents, workspace.handleNewChat, workspace.setActiveAgentId],
+    [t, workspace.agents, workspace.handleNewChat, workspace.setActiveAgentId],
   );
   useRegisterCommands(commands);
 
+  if (!hydrated) {
+    return (
+      <main className="rm-workspace-loading">
+        <a className="rm-skip-link" href="#main-content">
+          {t("shellSkipToChat")}
+        </a>
+        <section id="main-content" tabIndex={-1}>
+          <div className="rm-empty" role="status">
+            {t("loading")}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="rm-workspace">
+      <a className="rm-skip-link" href="#main-content">
+        {t("shellSkipToChat")}
+      </a>
       <WorkspaceNav
         activeChatId={workspace.activeChatId}
         chats={workspace.chats}
-        isAdmin={workspace.subject?.isAdmin === true}
+        chatsTotal={workspace.chatsTotal}
+        hasMoreChats={workspace.hasMoreChats}
+        isAdmin={hydrated && workspace.subject?.isAdmin === true}
+        isLoadingMoreChats={workspace.isLoadingMoreChats}
+        onLoadMoreChats={() => void workspace.loadMoreChats()}
         onDeleteChat={(chatId) => void workspace.deleteChat(chatId)}
         onNewChat={workspace.handleNewChat}
-        onRenameChat={(chatId, title) => void workspace.renameChat(chatId, title)}
+        onNewTemporaryChat={workspace.handleNewTemporaryChat}
+        onRenameChat={(chatId, title) =>
+          void workspace.renameChat(chatId, title)
+        }
         onSelectChat={(chatId) => void workspace.handleSelectChat(chatId)}
-        onSelectWorkspace={setWorkspaceId}
-        userLabel={workspace.subject?.id ?? "Account"}
         workspaceId={workspaceId}
-        workspaceName={workspace.workspace?.name ?? "Loading"}
-        workspaces={workspaces}
       />
 
-      <section className="rm-main">
+      <section className="rm-main" id="main-content" tabIndex={-1}>
         <header className="rm-topbar">
-          <ModelSelector
-            activeAgentId={workspace.activeAgentId ?? workspace.activeAgent?.id}
-            activeAgentName={workspace.activeAgent?.name ?? "Romeo Assistant"}
-            agents={workspace.agents}
-            isCloning={workspace.isCloningAgent}
-            onCloneAgent={() => void workspace.handleCloneAgent()}
-            onSelectAgent={workspace.setActiveAgentId}
-            workspaceName={workspace.workspace?.name ?? "Default workspace"}
-          />
+          <div className="rm-main-context">
+            <ModelSelector
+              activeAgentId={
+                workspace.activeAgentId ?? workspace.activeAgent?.id
+              }
+              activeAgentName={
+                workspace.activeAgent?.name ?? t("shellRomeoAssistant")
+              }
+              agents={workspace.agents}
+              canClone={workspace.subject?.isAdmin === true}
+              isCloning={workspace.isCloningAgent}
+              onCloneAgent={() => void workspace.handleCloneAgent()}
+              onSelectAgent={workspace.setActiveAgentId}
+            />
+            <ManagedModelPersonalization agentId={workspace.activeAgent?.id} />
+            <span className="rm-main-context-divider" aria-hidden="true" />
+            <label className="rm-main-workspace">
+              <LayoutGrid aria-hidden="true" size={14} />
+              <span className="sr-only">{t("switchWorkspace")}</span>
+              {workspaces.length > 1 ? (
+                <NativeSelect
+                  aria-label={t("switchWorkspace")}
+                  onChange={(event) =>
+                    setWorkspaceId(event.currentTarget.value)
+                  }
+                  value={workspaceId ?? ""}
+                >
+                  {workspaces.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+              ) : (
+                <span>{workspace.workspace?.name ?? t("loading")}</span>
+              )}
+            </label>
+          </div>
+          <div className="rm-topbar-actions">
+            <ThemeToggle />
+            <WorkspaceUserMenu
+              isAdmin={workspace.subject?.isAdmin === true}
+              userLabel={
+                workspace.subject?.name ??
+                workspace.subject?.email ??
+                workspace.subject?.id ??
+                t("account")
+              }
+            />
+          </div>
         </header>
 
         <ChatPanel
-          activeVoiceProfileId={workspace.activeAgent?.voiceProfileId}
-          agentName={workspace.activeAgent?.name ?? "Romeo Assistant"}
+          activeVoiceProfileId={workspace.activeVoiceProfileId}
+          agentName={workspace.activeAgent?.name ?? t("shellRomeoAssistant")}
+          canOverrideModel={workspace.subject?.isAdmin === true}
+          attachedUrls={workspace.attachedUrls}
+          citations={workspace.citations}
+          contextPreview={workspace.contextPreview}
+          contextPreviewError={workspace.contextPreviewError}
+          canInspectContext={workspace.activeChatId !== undefined}
           models={workspace.models}
+          providers={workspace.providers}
           selectedModelId={workspace.selectedModelId}
           onSelectModel={workspace.handleSelectModel}
           draft={workspace.draft}
+          documentAttachments={workspace.documentAttachments}
           error={workspace.error}
           imageAttachments={workspace.imageAttachments}
           isGeneratingSpeech={workspace.isGeneratingSpeech}
+          isInspectingContext={workspace.isInspectingContext}
           isStreaming={workspace.isStreaming}
+          isTemporaryChat={
+            workspace.temporaryNextChat ||
+            workspace.chats.find((chat) => chat.id === workspace.activeChatId)
+              ?.temporary === true
+          }
+          queuedTurns={workspace.queuedTurns}
           isTranscribingVoice={workspace.isTranscribingVoice}
           messages={workspace.messages}
+          messageFeedback={workspace.messageFeedback}
+          webSearchEnabled={workspace.webSearchEnabled}
+          workspaceId={workspace.workspace?.id}
+          onBranch={(messageId) =>
+            void workspace.handleBranchFromMessage(messageId)
+          }
           onCancel={workspace.handleCancel}
-          onAttachImage={(file) => void workspace.handleAttachImage(file)}
+          onCancelQueuedTurn={(turnId) =>
+            void workspace.handleCancelQueuedTurn(turnId)
+          }
+          onContinue={() => void workspace.handleContinueResponse()}
+          onDeleteMessage={(messageId) =>
+            void workspace.handleDeleteMessage(messageId)
+          }
+          onAttachmentRetention={(messageId, attachmentId, retained) =>
+            void workspace.handleAttachmentRetention(
+              messageId,
+              attachmentId,
+              retained,
+            )
+          }
+          onAttachFiles={(files) => void workspace.handleAttachFiles(files)}
+          onAttachExistingFile={(file) =>
+            void workspace.handleAttachExistingFile(file)
+          }
+          onAddUrl={workspace.handleAddUrl}
           onDraftChange={workspace.setDraft}
           onGenerateSpeech={(messageId) =>
             void workspace.handleGenerateSpeech(messageId)
           }
+          onGenerateImages={(input) =>
+            void workspace.handleGenerateImages(input)
+          }
+          onInspectContext={() => void workspace.handleInspectContext()}
+          onEditAndResend={(messageId, content) =>
+            void workspace.handleEditAndResend(messageId, content)
+          }
+          onRateMessage={(messageId, rating) =>
+            void workspace.handleRateMessage(messageId, rating)
+          }
           onRegenerate={() => void workspace.regenerateLast()}
           onRemoveImageAttachment={workspace.handleRemoveImageAttachment}
+          onRemoveDocumentAttachment={workspace.handleRemoveDocumentAttachment}
+          onRemoveUrl={workspace.handleRemoveUrl}
+          onToggleWebSearch={workspace.setWebSearchEnabled}
           onTranscribeAudio={(blob) => workspace.handleTranscribeAudio(blob)}
           onTranscriptionError={workspace.handleTranscriptionError}
           onSubmit={workspace.handleSubmit}
+          runActivities={workspace.runActivities}
           speechArtifacts={workspace.speechArtifacts}
           speechMessageId={workspace.speechMessageId}
         />

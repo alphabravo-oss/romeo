@@ -1,57 +1,68 @@
-import { useForm } from '@tanstack/react-form'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Input, Button } from "@romeo/ui";
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { updateMyProfile } from '../api/bootstrap-client'
-import { toast } from '../lib/toast'
+import { updateMyProfile } from "../features/identity";
+import { toast } from "../lib/toast";
+import { useLocale } from "../lib/i18n";
 
-const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/u
+const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/u;
 
-export function ProfileEditPanel({ currentName, currentEmail }: { currentName?: string | undefined; currentEmail?: string | undefined }) {
-  const queryClient = useQueryClient()
-  const mutation = useMutation({ mutationFn: updateMyProfile })
+export function ProfileEditPanel({
+  currentName,
+  currentEmail,
+}: {
+  currentName?: string | undefined;
+  currentEmail?: string | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const { t } = useLocale();
+  const mutation = useMutation({ mutationFn: updateMyProfile });
 
   const form = useForm({
-    defaultValues: { name: currentName ?? '', email: currentEmail ?? '' },
+    defaultValues: { name: currentName ?? "", email: currentEmail ?? "" },
     onSubmit: async ({ value }) => {
-      const input: { name?: string; email?: string } = {}
-      if (value.name.trim()) input.name = value.name.trim()
-      if (value.email.trim()) input.email = value.email.trim()
+      const input: { name?: string; email?: string } = {};
+      if (value.name.trim()) input.name = value.name.trim();
+      if (value.email.trim()) input.email = value.email.trim();
       if (Object.keys(input).length === 0) {
-        toast('Enter a name or email to update', 'error')
-        return
+        toast(t("enterNameOrEmail"), "error");
+        return;
       }
       try {
-        await mutation.mutateAsync(input)
-        await queryClient.invalidateQueries({ queryKey: ['bootstrap'] })
-        toast('Profile updated', 'success')
-        form.reset()
+        await mutation.mutateAsync(input);
+        await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+        toast(t("profileUpdated"), "success");
+        form.reset();
       } catch {
-        toast('Could not update profile', 'error')
+        toast(t("couldNotUpdateProfile"), "error");
       }
-    }
-  })
+    },
+  });
 
   return (
     <section className="rm-panel p-4">
-      <div className="rm-card-title">Profile</div>
-      <p className="mt-1 text-xs text-muted">Update your display name or email.</p>
+      <div className="rm-card-title">{t("profile")}</div>
+      <p className="mt-1 text-xs text-muted">{t("profileEditDescription")}</p>
       <form
         className="mt-3 grid gap-3"
         onSubmit={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          void form.handleSubmit()
+          event.preventDefault();
+          event.stopPropagation();
+          void form.handleSubmit();
         }}
       >
         <form.Field name="name">
           {(field) => (
             <label className="grid gap-1 text-sm">
-              <span className="text-muted">Display name</span>
-              <input
-                className="rm-input"
+              <span className="text-muted">{t("displayName")}</span>
+              <Input
+                name="name"
                 onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.currentTarget.value)}
-                placeholder="New display name"
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
+                placeholder={t("nameOrEmailPlaceholder")}
                 value={field.state.value}
               />
             </label>
@@ -60,33 +71,51 @@ export function ProfileEditPanel({ currentName, currentEmail }: { currentName?: 
         <form.Field
           name="email"
           validators={{
-            onChange: ({ value }: { value: string }) => (value && !emailPattern.test(value) ? 'Enter a valid email' : undefined)
+            onChange: ({ value }: { value: string }) =>
+              value && !emailPattern.test(value)
+                ? t("enterValidEmail")
+                : undefined,
           }}
         >
           {(field) => (
             <label className="grid gap-1 text-sm">
-              <span className="text-muted">Email</span>
-              <input
+              <span className="text-muted">{t("email")}</span>
+              <Input
+                name="email"
                 autoComplete="email"
-                className="rm-input"
                 onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.currentTarget.value)}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
                 placeholder="new@email.com"
                 type="email"
                 value={field.state.value}
               />
-              {field.state.meta.errors.length ? <div className="rm-composer-error">{field.state.meta.errors.join(', ')}</div> : null}
+              {field.state.meta.errors.length ? (
+                <div className="rm-composer-error">
+                  {field.state.meta.errors.join(", ")}
+                </div>
+              ) : null}
             </label>
           )}
         </form.Field>
-        <form.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
+        <form.Subscribe
+          selector={(state) => ({
+            canSubmit: state.canSubmit,
+            isSubmitting: state.isSubmitting,
+          })}
+        >
           {({ canSubmit, isSubmitting }) => (
-            <button className="rm-button primary" disabled={!canSubmit || isSubmitting || mutation.isPending} type="submit">
-              {mutation.isPending ? 'Saving' : 'Save profile'}
-            </button>
+            <Button
+              variant="primary"
+              disabled={!canSubmit || isSubmitting || mutation.isPending}
+              type="submit"
+            >
+              {mutation.isPending ? t("saving") : t("saveProfile")}
+            </Button>
           )}
         </form.Subscribe>
       </form>
     </section>
-  )
+  );
 }

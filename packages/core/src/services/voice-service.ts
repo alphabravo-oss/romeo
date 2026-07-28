@@ -11,10 +11,7 @@ import {
 import { memoryObjectStore, type ObjectStore } from "@romeo/storage";
 import {
   disabledVoiceProvider,
-  type SpeechArtifact,
-  type SpeechSynthesisArtifact,
   type TranscriptionResult,
-  type VoiceProfile as ProviderVoiceProfile,
   type VoiceProvider,
 } from "@romeo/voices";
 
@@ -35,6 +32,25 @@ import {
   redactVoiceArtifactStorageMetadata,
   sha256Text,
 } from "./voice-artifact-metadata";
+import {
+  auditVoiceProfile,
+  boundedVoiceText,
+  createVoiceUseGrant,
+  decodeBoundedBase64Audio,
+  findActiveVoiceArtifactEvent,
+  persistVoiceArtifact,
+  publicVoiceArtifact,
+  safeAudioContentType,
+  safeTranscriptionContentType,
+  voiceCatalogKey,
+  voiceProfileFromProvider,
+} from "./voice-service-helpers";
+
+export type {
+  PublicSpeechArtifact,
+  VoiceArtifactDeleteResult,
+  VoiceCatalogSyncResult,
+} from "./voice-service-helpers";
 
 export class VoiceService {
   constructor(
@@ -48,7 +64,7 @@ export class VoiceService {
     return this.repository.listVoiceProfiles(subject.orgId);
   }
 
-  async syncCatalog(subject: AuthSubject): Promise<VoiceCatalogSyncResult> {
+  async syncCatalog(subject: AuthSubject) {
     assertScope(subject, "voices:manage");
     await assertAbuseControlsAllow(this.repository, subject, {
       action: "voice.request",
@@ -81,12 +97,12 @@ export class VoiceService {
         );
         if (existingKeys.has(key)) continue;
         const created = await repository.createVoiceProfile(candidate);
-        await this.createUseGrant(repository, subject, created.id);
+        await createVoiceUseGrant(repository, subject, created.id);
         existingKeys.add(key);
         imported.push(created);
       }
 
-      await this.auditVoiceProfile(
+      await auditVoiceProfile(
         repository,
         subject,
         "voice.catalog_sync",
@@ -97,7 +113,7 @@ export class VoiceService {
           existingCount: catalog.length - imported.length,
           providerIds: [
             ...new Set(
-              catalog.map((voice) => boundedText(voice.providerId, 120)),
+              catalog.map((voice) => boundedVoiceText(voice.providerId, 120)),
             ),
           ].sort(),
         },
@@ -136,8 +152,8 @@ export class VoiceService {
         createdAt: now,
         updatedAt: now,
       });
-      await this.createUseGrant(repository, input.subject, voiceProfile.id);
-      await this.auditVoiceProfile(
+      await createVoiceUseGrant(repository, input.subject, voiceProfile.id);
+      await auditVoiceProfile(
         repository,
         input.subject,
         "voice.profile.create",
@@ -260,12 +276,13 @@ export class VoiceService {
     subject: AuthSubject;
     artifactId: string;
   }): Promise<{ bytes: Uint8Array; contentType: string }> {
-    const event = await this.findActiveArtifactEvent(
+    const event = await findActiveVoiceArtifactEvent(
+      this.repository,
       input.subject,
       input.artifactId,
     );
     if (event === undefined) throw notFound("Voice artifact");
-    await this.authorizeArtifactEvent(input.subject, event);
+    await this.authorizeArtifact(input.subject, event);
     const artifact = readActiveVoiceArtifactUsageMetadata(event);
     const storageKey = artifact?.storageKey;
     const contentType = safeAudioContentType(
@@ -278,16 +295,14 @@ export class VoiceService {
     return { bytes, contentType };
   }
 
-  async deleteArtifact(input: {
-    subject: AuthSubject;
-    artifactId: string;
-  }): Promise<VoiceArtifactDeleteResult> {
-    const event = await this.findActiveArtifactEvent(
+  async deleteArtifact(input: { subject: AuthSubject; artifactId: string }) {
+    const event = await findActiveVoiceArtifactEvent(
+      this.repository,
       input.subject,
       input.artifactId,
     );
     if (event === undefined) throw notFound("Voice artifact");
-    await this.authorizeArtifactEvent(input.subject, event);
+    await this.authorizeArtifact(input.subject, event);
     if (
       event.actorId !== input.subject.id &&
       !hasScope(input.subject, "admin:write")
@@ -335,7 +350,7 @@ export class VoiceService {
       artifactId: artifact.artifactId,
       deleted: existing !== undefined,
       deletedAt,
-      redaction: { rawStorageKeyReturned: false },
+      redaction: { rawStorageKeyReturned: false as const },
       storageKeyHash: sha256Text(artifact.storageKey),
     };
   }
@@ -440,7 +455,8 @@ export class VoiceService {
         text: input.text,
         format: "wav",
       });
-      const persistedArtifact = await this.persistArtifact(
+      const persistedArtifact = await persistVoiceArtifact(
+        this.objectStore,
         input.subject.orgId,
         artifact,
       );
@@ -459,7 +475,7 @@ export class VoiceService {
           durationMs: persistedArtifact.durationMs ?? null,
         },
       });
-      return publicArtifact(persistedArtifact);
+      return publicVoiceArtifact(persistedArtifact);
     } catch (error) {
       throw new ApiError(
         "voice_not_configured",
@@ -471,221 +487,10 @@ export class VoiceService {
     }
   }
 
-  private async persistArtifact(
-    orgId: string,
-    artifact: SpeechSynthesisArtifact,
-  ): Promise<SpeechArtifact> {
-    const storageKey =
-      artifact.body === undefined
-        ? artifact.storageKey
-        : `voice/${orgId}/${artifact.id}/speech.${extensionForContentType(artifact.contentType)}`;
-    if (artifact.body !== undefined) {
-      await this.objectStore.putObject({
-        key: storageKey,
-        body: artifact.body,
-        contentType: artifact.contentType,
-      });
-    }
-    return { ...artifact, storageKey };
-  }
-
-  private async authorizeArtifactEvent(
-    subject: AuthSubject,
-    event: UsageEvent,
-  ): Promise<void> {
+  private async authorizeArtifact(subject: AuthSubject, event: UsageEvent) {
     await this.getAuthorizedVoice(event.sourceId, subject, "use");
     const messageId = metadataString(event.metadata, "messageId");
     if (messageId !== undefined)
       await this.getAuthorizedAssistantMessage(subject, messageId);
   }
-
-  private async createUseGrant(
-    repository: RomeoRepository,
-    subject: AuthSubject,
-    voiceProfileId: string,
-  ): Promise<void> {
-    await repository.createResourceGrant({
-      id: createId("grant"),
-      resourceType: "voice_profile",
-      resourceId: voiceProfileId,
-      principalType: subject.type,
-      principalId: subject.id,
-      permission: "use",
-    });
-  }
-
-  private async findActiveArtifactEvent(
-    subject: AuthSubject,
-    artifactId: string,
-  ): Promise<UsageEvent | undefined> {
-    return (await this.repository.listUsageEvents(subject.orgId)).find(
-      (candidate) =>
-        readActiveVoiceArtifactUsageMetadata(candidate)?.artifactId ===
-        artifactId,
-    );
-  }
-
-  private async auditVoiceProfile(
-    repository: RomeoRepository,
-    subject: AuthSubject,
-    action: string,
-    resourceId: string,
-    metadata: Record<string, unknown>,
-  ): Promise<void> {
-    await repository.createAuditLog({
-      id: createId("audit"),
-      orgId: subject.orgId,
-      actorId: subject.id,
-      action,
-      resourceType: "voice_profile",
-      resourceId,
-      outcome: "success",
-      metadata,
-      createdAt: new Date().toISOString(),
-    });
-  }
-}
-
-export interface VoiceCatalogSyncResult {
-  imported: number;
-  existing: number;
-  providerVoiceCount: number;
-  profiles: VoiceProfile[];
-}
-
-export interface PublicSpeechArtifact {
-  id: string;
-  contentType: string;
-  durationMs?: number;
-  playbackUrl: string;
-  deleteUrl: string;
-  redaction: { rawStorageKeyReturned: false };
-}
-
-export interface VoiceArtifactDeleteResult {
-  artifactId: string;
-  deleted: boolean;
-  deletedAt: string;
-  storageKeyHash: string;
-  redaction: { rawStorageKeyReturned: false };
-}
-
-function publicArtifact(artifact: SpeechArtifact): PublicSpeechArtifact {
-  return {
-    id: artifact.id,
-    contentType: artifact.contentType,
-    ...(artifact.durationMs === undefined
-      ? {}
-      : { durationMs: artifact.durationMs }),
-    playbackUrl: `/api/v1/voice-artifacts/${encodeURIComponent(artifact.id)}`,
-    deleteUrl: `/api/v1/voice-artifacts/${encodeURIComponent(artifact.id)}`,
-    redaction: { rawStorageKeyReturned: false },
-  };
-}
-
-function safeAudioContentType(value: string | undefined): string | undefined {
-  if (
-    value === "audio/mpeg" ||
-    value === "audio/ogg" ||
-    value === "audio/wav" ||
-    value === "audio/wave" ||
-    value === "audio/x-wav"
-  )
-    return value;
-  return undefined;
-}
-
-function safeTranscriptionContentType(value: string): string | undefined {
-  const contentType = value.split(";")[0]?.trim().toLowerCase();
-  if (
-    contentType === "audio/mpeg" ||
-    contentType === "audio/ogg" ||
-    contentType === "audio/wav" ||
-    contentType === "audio/wave" ||
-    contentType === "audio/x-wav" ||
-    contentType === "audio/webm" ||
-    contentType === "audio/mp4" ||
-    contentType === "audio/flac" ||
-    contentType === "video/mp4"
-  ) {
-    return contentType;
-  }
-  return undefined;
-}
-
-function decodeBoundedBase64Audio(value: string): Uint8Array {
-  const normalized = value.trim();
-  if (
-    normalized.length === 0 ||
-    normalized.length % 4 === 1 ||
-    !/^[A-Za-z0-9+/]*={0,2}$/u.test(normalized)
-  ) {
-    throw new ApiError(
-      "voice_transcription_audio_invalid",
-      "Audio must be valid base64.",
-      400,
-    );
-  }
-  const bytes = new Uint8Array(Buffer.from(normalized, "base64"));
-  if (bytes.byteLength === 0)
-    throw new ApiError(
-      "voice_transcription_audio_invalid",
-      "Audio must not be empty.",
-      400,
-    );
-  if (bytes.byteLength > 10_000_000)
-    throw new ApiError(
-      "voice_transcription_audio_too_large",
-      "Audio transcription input is limited to 10 MB.",
-      413,
-    );
-  return bytes;
-}
-
-function extensionForContentType(contentType: string): string {
-  if (contentType === "audio/mpeg") return "mp3";
-  if (contentType === "audio/ogg") return "ogg";
-  return "wav";
-}
-
-function voiceProfileFromProvider(
-  orgId: string,
-  providerVoice: ProviderVoiceProfile,
-): VoiceProfile {
-  const now = new Date().toISOString();
-  return {
-    id: createId("voice"),
-    orgId,
-    providerId: boundedToken(providerVoice.providerId, "voice_provider"),
-    providerVoiceId: boundedToken(
-      providerVoice.providerVoiceId ?? providerVoice.id,
-      "voice",
-    ),
-    name: boundedText(providerVoice.name, 120),
-    language: boundedToken(providerVoice.language, "und"),
-    styleTags: providerVoice.styleTags
-      .map((tag) => boundedToken(tag, "tag"))
-      .slice(0, 12),
-    cloningAllowed: providerVoice.cloningAllowed,
-    enabled: true,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-function voiceCatalogKey(providerId: string, providerVoiceId: string): string {
-  return `${providerId}\0${providerVoiceId}`;
-}
-
-function boundedText(value: string, maxLength: number): string {
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? "Untitled voice" : trimmed.slice(0, maxLength);
-}
-
-function boundedToken(value: string, fallback: string): string {
-  const token = value
-    .trim()
-    .replace(/[^A-Za-z0-9_.:-]/gu, "_")
-    .slice(0, 120);
-  return token.length === 0 ? fallback : token;
 }

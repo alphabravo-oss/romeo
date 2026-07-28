@@ -6,6 +6,7 @@ export const principalType = pgEnum("principal_type", [
   "service_account",
 ]);
 export const providerKind = pgEnum("provider_kind", [
+  "anthropic",
   "openai-compatible",
   "openai-responses-compatible",
   "ollama",
@@ -23,6 +24,13 @@ export const runStatus = pgEnum("run_status", [
   "cancelled",
   "completed",
   "failed",
+]);
+export const queuedChatTurnStatus = pgEnum("queued_chat_turn_status", [
+  "queued",
+  "leased",
+  "failed",
+  "cancelled",
+  "completed",
 ]);
 export const resourcePermission = pgEnum("resource_permission", [
   "read",
