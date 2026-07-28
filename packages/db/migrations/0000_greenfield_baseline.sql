@@ -816,7 +816,7 @@ CREATE TABLE "usage_events" (
 	"source_type" text NOT NULL,
 	"source_id" text NOT NULL,
 	"metric" text NOT NULL,
-	"quantity" integer NOT NULL,
+	"quantity" double precision NOT NULL,
 	"unit" text NOT NULL,
 	"metadata" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL

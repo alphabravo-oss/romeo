@@ -52,7 +52,6 @@ try {
   ]);
 
   adminToken = await createAdminApiKey(harness);
-  await enableAttachmentSmokeModel(harness, adminToken);
   writeComposeEnv(harness, { devSeededLogin: false });
   compose(harness, ["up", "-d", "--force-recreate", "app"]);
   await waitForHealth(harness);
@@ -147,30 +146,6 @@ try {
       `Keeping Compose project ${projectName} and env file ${harness.envPath} for inspection.\n`,
     );
   }
-}
-
-async function enableAttachmentSmokeModel(harness, token) {
-  const models = await apiJson(harness, "/api/v1/models", { token });
-  const model = models.data?.find(
-    (candidate) => candidate.id === "model_openai_compatible_default",
-  );
-  if (model?.capabilities === undefined) {
-    throw new Error("Default model capabilities were not available.");
-  }
-  await apiJson(harness, `/api/v1/models/${model.id}/capabilities`, {
-    method: "PATCH",
-    token,
-    body: {
-      capabilities: {
-        ...model.capabilities,
-        vision: true,
-        modalities: [
-          ...new Set([...(model.capabilities.modalities ?? []), "vision"]),
-        ],
-      },
-      contextWindow: model.contextWindow,
-    },
-  });
 }
 
 async function restartAndAssertService(service, state, options = {}) {

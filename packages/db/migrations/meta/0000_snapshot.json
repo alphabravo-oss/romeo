@@ -9076,7 +9076,7 @@
         },
         "quantity": {
           "name": "quantity",
-          "type": "integer",
+          "type": "double precision",
           "primaryKey": false,
           "notNull": true
         },

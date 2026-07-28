@@ -11,6 +11,7 @@ import {
   compose,
   createAdminApiKey,
   createComposeHarness,
+  enableAttachmentSmokeModel,
   expectUnauthorizedMe,
   parsePositiveInteger,
   randomProjectName,
@@ -53,6 +54,7 @@ try {
   ]);
 
   adminToken = await createAdminApiKey(harness);
+  await enableAttachmentSmokeModel(harness, adminToken);
   writeComposeEnv(harness, {
     devSeededLogin: false,
     toolOperationExecutionDriver: "http-fetch",

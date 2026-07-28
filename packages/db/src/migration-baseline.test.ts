@@ -27,6 +27,7 @@ describe("database migrations", () => {
     );
     expect(sql).toContain('CREATE TABLE "object_records"');
     expect(sql).toContain('CREATE TABLE "retention_policies"');
+    expect(sql).toContain('"quantity" double precision NOT NULL');
     expect(sql).toContain('CREATE TABLE "delegated_oauth_connections"');
     expect(sql).toContain(
       'CREATE UNIQUE INDEX "delegated_oauth_connections_provider_account_idx"',

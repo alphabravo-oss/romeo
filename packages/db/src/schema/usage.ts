@@ -1,6 +1,6 @@
 import {
+  doublePrecision,
   index,
-  integer,
   jsonb,
   pgTable,
   text,
@@ -24,7 +24,7 @@ export const usageEvents = pgTable(
     sourceType: text("source_type").notNull(),
     sourceId: text("source_id").notNull(),
     metric: text("metric").notNull(),
-    quantity: integer("quantity").notNull(),
+    quantity: doublePrecision("quantity").notNull(),
     unit: text("unit").notNull(),
     metadata: jsonb("metadata").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })

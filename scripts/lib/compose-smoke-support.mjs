@@ -430,9 +430,16 @@ export async function createDurableSmokeRecords(harness, token, options = {}) {
     },
   );
 
-  const attachment = options.createAttachment
-    ? await createRunAttachment(harness, token, chat.data.id, titlePrefix)
-    : undefined;
+  let attachment;
+  if (options.createAttachment) {
+    await enableAttachmentSmokeModel(harness, token);
+    attachment = await createRunAttachment(
+      harness,
+      token,
+      chat.data.id,
+      titlePrefix,
+    );
+  }
 
   return {
     chatId: chat.data.id,
@@ -689,9 +696,7 @@ function sleep(ms) {
 }
 
 async function createRunAttachment(harness, token, chatId, titlePrefix) {
-  const dataBase64 =
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
-  const bytes = Buffer.from(dataBase64, "base64");
+  const pngAttachment = createSmokePngAttachment();
   await apiJson(harness, "/api/v1/runs", {
     method: "POST",
     token,
@@ -702,9 +707,9 @@ async function createRunAttachment(harness, token, chatId, titlePrefix) {
       attachments: [
         {
           fileName: "../compose-artifact.png",
-          mimeType: "image/png",
-          sizeBytes: bytes.byteLength,
-          dataBase64,
+          mimeType: pngAttachment.mimeType,
+          sizeBytes: pngAttachment.sizeBytes,
+          dataBase64: pngAttachment.dataBase64,
         },
       ],
     },
@@ -724,11 +729,45 @@ async function createRunAttachment(harness, token, chatId, titlePrefix) {
     fileName: attachment.fileName,
     id: attachment.id,
     messageId: attachment.messageId,
-    mimeType: "image/png",
+    mimeType: pngAttachment.mimeType,
     previewUrl: attachment.previewUrl,
-    sizeBytes: bytes.byteLength,
-    dataBase64,
+    sizeBytes: pngAttachment.sizeBytes,
+    dataBase64: pngAttachment.dataBase64,
   };
+}
+
+export function createSmokePngAttachment() {
+  const dataBase64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+  return {
+    dataBase64,
+    mimeType: "image/png",
+    sizeBytes: Buffer.from(dataBase64, "base64").byteLength,
+  };
+}
+
+export async function enableAttachmentSmokeModel(harness, token) {
+  const models = await apiJson(harness, "/api/v1/models", { token });
+  const model = models.data?.find(
+    (candidate) => candidate.id === "model_openai_compatible_default",
+  );
+  if (model?.capabilities === undefined) {
+    throw new Error("Default model capabilities were not available.");
+  }
+  await apiJson(harness, `/api/v1/models/${model.id}/capabilities`, {
+    method: "PATCH",
+    token,
+    body: {
+      capabilities: {
+        ...model.capabilities,
+        vision: true,
+        modalities: [
+          ...new Set([...(model.capabilities.modalities ?? []), "vision"]),
+        ],
+      },
+      contextWindow: model.contextWindow,
+    },
+  });
 }
 
 function removeProjectVolumes(projectName) {

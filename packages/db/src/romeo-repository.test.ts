@@ -2747,45 +2747,46 @@ describe("RomeoRepository conformance", () => {
           ).toBe(true);
 
           await repository.createUsageEvent({
-            id: "usage_storage",
+            id: "usage_throughput",
             orgId: "org_default",
             workspaceId: "workspace_default",
             actorId: "user_dev_admin",
-            sourceType: "storage",
-            sourceId: "artifact_1",
-            metric: "storage.byte",
-            quantity: 256,
-            unit: "byte",
-            metadata: { artifactKind: "knowledge_source" },
+            sourceType: "run",
+            sourceId: "run_1",
+            metric: "run.output_throughput",
+            quantity: 256.5,
+            unit: "token_per_second",
+            metadata: { providerId: "provider_1" },
             createdAt: "2026-06-30T12:02:00.000Z",
           });
           expect(
             await repository.listUsageEvents("org_default"),
           ).toContainEqual(
             expect.objectContaining({
-              id: "usage_storage",
-              metadata: { artifactKind: "knowledge_source" },
+              id: "usage_throughput",
+              metadata: { providerId: "provider_1" },
+              quantity: 256.5,
               workspaceId: "workspace_default",
             }),
           );
           expect(
             await repository.updateUsageEvent({
-              id: "usage_storage",
+              id: "usage_throughput",
               orgId: "org_default",
               workspaceId: "workspace_default",
               actorId: "user_dev_admin",
-              sourceType: "storage",
-              sourceId: "artifact_1",
-              metric: "storage.byte",
-              quantity: 512,
-              unit: "byte",
-              metadata: { artifactKind: "knowledge_source", redacted: true },
+              sourceType: "run",
+              sourceId: "run_1",
+              metric: "run.output_throughput",
+              quantity: 512.25,
+              unit: "token_per_second",
+              metadata: { providerId: "provider_1", redacted: true },
               createdAt: "2026-06-30T12:02:00.000Z",
             }),
           ).toMatchObject({
-            id: "usage_storage",
-            quantity: 512,
-            metadata: { artifactKind: "knowledge_source", redacted: true },
+            id: "usage_throughput",
+            quantity: 512.25,
+            metadata: { providerId: "provider_1", redacted: true },
           });
 
           const job = await repository.createBackgroundJob({

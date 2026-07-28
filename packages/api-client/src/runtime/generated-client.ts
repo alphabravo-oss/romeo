@@ -9,7 +9,7 @@ export function createGeneratedClient(options: RomeoClientOptions): Client {
     auth: options.apiKey,
     baseUrl: apiBaseUrl(options.baseUrl),
     fetch: adaptFetch(options.fetchImpl ?? globalThis.fetch),
-    responseStyle: "data",
+    responseStyle: "fields",
     throwOnError: true,
   });
 
