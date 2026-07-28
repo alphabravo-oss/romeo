@@ -15,6 +15,7 @@ import {
   createAdminApiKey,
   createComposeHarness,
   createDurableSmokeRecords,
+  createSmokePngAttachment,
   expectUnauthorizedMe,
   parsePositiveInteger,
   randomProjectName,
@@ -30,7 +31,7 @@ const projectName =
 const timeoutMs = parsePositiveInteger("--timeout-ms", 180000);
 const harness = await createComposeHarness({ projectName, timeoutMs });
 const rawContentSentinel = `object_store_outage_raw_${randomBytes(18).toString("hex")}`;
-const outageAttachment = createOutageAttachment();
+const outageAttachment = createSmokePngAttachment();
 let adminToken;
 let records;
 
@@ -164,7 +165,7 @@ async function assertAttachmentWriteFailsDuringOutage(chatId) {
       attachments: [
         {
           fileName: "../outage-object-store-artifact.png",
-          mimeType: "image/png",
+          mimeType: outageAttachment.mimeType,
           sizeBytes: outageAttachment.sizeBytes,
           dataBase64: outageAttachment.dataBase64,
         },
@@ -200,7 +201,7 @@ async function createAttachmentRun(chatId, input) {
       attachments: [
         {
           fileName: input.fileName,
-          mimeType: "image/png",
+          mimeType: outageAttachment.mimeType,
           sizeBytes: outageAttachment.sizeBytes,
           dataBase64: input.dataBase64,
         },
@@ -221,7 +222,7 @@ async function createAttachmentRun(chatId, input) {
     fileName: attachment.fileName,
     id: attachment.id,
     messageId: attachment.messageId,
-    mimeType: "image/png",
+    mimeType: outageAttachment.mimeType,
     previewUrl: attachment.previewUrl,
     sizeBytes: outageAttachment.sizeBytes,
     dataBase64: input.dataBase64,
@@ -236,14 +237,6 @@ async function listChatMessages(chatId) {
     throw new Error("Chat messages response was not an array.");
   }
   return response.data;
-}
-
-function createOutageAttachment() {
-  const dataBase64 = randomBytes(48).toString("base64");
-  return {
-    dataBase64,
-    sizeBytes: Buffer.from(dataBase64, "base64").byteLength,
-  };
 }
 
 function assertTextRedacted(text, label) {

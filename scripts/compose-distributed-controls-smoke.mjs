@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  apiJson,
   argValue,
   assertComposeLogsRedacted,
   cleanupComposeHarness,
@@ -61,6 +62,11 @@ try {
     "--confirm-development-seed",
   ]);
   adminToken = await createAdminApiKey(harness);
+  await apiJson(harness, "/api/v1/agents/agent_default/tools/tool_calculator", {
+    method: "PATCH",
+    token: adminToken,
+    body: { approvalRequired: false, enabled: true },
+  });
 
   rateLimitEvidence = await runRateLimitPhase();
   quotaEvidence = await runQuotaPhase();
@@ -93,6 +99,7 @@ try {
     checks: [
       "compose_build_and_start",
       "explicit_development_seed",
+      "explicit_calculator_tool_enablement",
       "secure_multi_instance_rate_limit_recreate",
       "two_app_instances_healthy_for_rate_limit",
       "valkey_backed_http_rate_limit_shared_across_instances",
