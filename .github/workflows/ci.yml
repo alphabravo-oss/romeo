@@ -90,8 +90,8 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Install Chromium for browser quality
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Install browser quality engines
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Run browser quality gate
         run: pnpm quality:browser
