@@ -118,6 +118,10 @@ async function proveInlineToolContinuation(): Promise<{
     },
     secretResolver: providerSecretResolver(),
   });
+  await patchJson(api, "/api/v1/agents/agent_default/tools/tool_calculator", {
+    approvalRequired: false,
+    enabled: true,
+  });
 
   const chat = await createChat(api, "Model Tool Inline Contract");
   const run = await startRun(api, chat.data.id, "Calculate the value.");
@@ -479,6 +483,10 @@ async function proveApprovalRejectRedaction(): Promise<{
       );
     },
     secretResolver: providerSecretResolver(),
+  });
+  await patchJson(api, "/api/v1/agents/agent_default/tools/tool_datetime", {
+    approvalRequired: true,
+    enabled: true,
   });
 
   const chat = await createChat(api, "Model Tool Approval Contract");
