@@ -35,7 +35,9 @@ assertTarball(apiClientTarball, {
   required: [
     "package/package.json",
     "package/src/index.ts",
-    "package/src/client.ts",
+    "package/src/generated/query/index.ts",
+    "package/src/generated/sdk/index.ts",
+    "package/src/runtime/generated-client.ts",
   ],
   forbidden: [".test.ts"],
 });
