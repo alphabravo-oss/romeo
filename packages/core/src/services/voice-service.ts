@@ -261,12 +261,10 @@ export class VoiceService {
         },
       });
       return result;
-    } catch (error) {
+    } catch {
       throw new ApiError(
         "voice_not_configured",
-        error instanceof Error
-          ? error.message
-          : "Voice transcription is not configured.",
+        "Voice transcription is not configured.",
         409,
       );
     }
@@ -476,12 +474,10 @@ export class VoiceService {
         },
       });
       return publicVoiceArtifact(persistedArtifact);
-    } catch (error) {
+    } catch {
       throw new ApiError(
         "voice_not_configured",
-        error instanceof Error
-          ? error.message
-          : "Voice synthesis is not configured.",
+        "Voice synthesis is not configured.",
         409,
       );
     }
