@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 import { parseAllDocuments } from "yaml";
 
@@ -264,7 +265,10 @@ const evidence = {
 };
 
 const serialized = `${JSON.stringify(evidence, null, 2)}\n`;
-if (outputPath !== undefined) writeFileSync(outputPath, serialized);
+if (outputPath !== undefined) {
+  mkdirSync(dirname(outputPath), { recursive: true });
+  writeFileSync(outputPath, serialized);
+}
 process.stdout.write(serialized);
 
 function checkVariant(variant) {
