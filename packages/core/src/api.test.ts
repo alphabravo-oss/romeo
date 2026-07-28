@@ -146,6 +146,16 @@ function browserAutomationLiveEvidence(
 }
 
 describe("Open WebUI-class governed chat extensions", () => {
+  it("can construct request-only API instances without background workers", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const listOrganizations = vi.spyOn(repository, "listAllOrganizations");
+
+    createRomeoApi(repository, { startBackgroundWorkers: false });
+    await Promise.resolve();
+
+    expect(listOrganizations).not.toHaveBeenCalled();
+  });
+
   it("returns bounded chat catalog pages with stable totals", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
     for (const title of ["Paged A", "Paged B", "Paged C"]) {
