@@ -415,7 +415,7 @@ describe("collaboration API", () => {
 
   it("creates shared folders and filters items by underlying resource access", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
-    const folderResponse = await api.request("/api/v1/folders", {
+    const folderResponse = await api.request("/api/v1/collaboration/folders", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -425,7 +425,7 @@ describe("collaboration API", () => {
     });
     const folder = await folderResponse.json();
     const agentItemResponse = await api.request(
-      `/api/v1/folders/${folder.data.id}/items`,
+      `/api/v1/collaboration/folders/${folder.data.id}/items`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -436,7 +436,7 @@ describe("collaboration API", () => {
       },
     );
     const chatItemResponse = await api.request(
-      `/api/v1/folders/${folder.data.id}/items`,
+      `/api/v1/collaboration/folders/${folder.data.id}/items`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -472,7 +472,7 @@ describe("collaboration API", () => {
     );
     const key = await keyResponse.json();
     const folderShareResponse = await api.request(
-      `/api/v1/folders/${folder.data.id}/shares`,
+      `/api/v1/collaboration/folders/${folder.data.id}/shares`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -484,7 +484,7 @@ describe("collaboration API", () => {
       },
     );
     const emptyItemsResponse = await api.request(
-      `/api/v1/folders/${folder.data.id}/items`,
+      `/api/v1/collaboration/folders/${folder.data.id}/items`,
       {
         headers: { authorization: `Bearer ${key.data.token}` },
       },
@@ -501,21 +501,21 @@ describe("collaboration API", () => {
       }),
     });
     const foldersResponse = await api.request(
-      "/api/v1/folders?workspaceId=workspace_default",
+      "/api/v1/collaboration/folders?workspaceId=workspace_default",
       {
         headers: { authorization: `Bearer ${key.data.token}` },
       },
     );
     const folders = await foldersResponse.json();
     const visibleItemsResponse = await api.request(
-      `/api/v1/folders/${folder.data.id}/items`,
+      `/api/v1/collaboration/folders/${folder.data.id}/items`,
       {
         headers: { authorization: `Bearer ${key.data.token}` },
       },
     );
     const visibleItems = await visibleItemsResponse.json();
     const deleteItemResponse = await api.request(
-      `/api/v1/folders/${folder.data.id}/items/${chatItem.data.id}`,
+      `/api/v1/collaboration/folders/${folder.data.id}/items/${chatItem.data.id}`,
       { method: "DELETE" },
     );
     const auditResponse = await api.request(
@@ -1143,24 +1143,33 @@ describe("collaboration API", () => {
   });
 
   it("sends mention notifications through the opt-in Resend email delivery adapter without comment bodies", async () => {
-    const deliveries: Array<{ url: string; init?: RequestInit }> = [];
+    const deliveries: Array<{
+      apiKey: string;
+      clientOptions: { baseUrl: string; userAgent: string };
+      message: Record<string, unknown>;
+    }> = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       env: readEnv({
         NOTIFICATION_DELIVERY_DRIVER: "resend-email",
         NOTIFICATION_EMAIL_FROM: "notify@romeo.example",
         NOTIFICATION_RESEND_API_KEY: "resend-test-key",
       }),
-      webhookFetch: async (input, init) => {
-        const delivery: { url: string; init?: RequestInit } = {
-          url: String(input),
-        };
-        if (init !== undefined) delivery.init = init;
-        deliveries.push(delivery);
-        return new Response(JSON.stringify({ id: "email_1" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      },
+      notificationResendClientFactory: (apiKey, clientOptions) => ({
+        emails: {
+          send: async (message) => {
+            deliveries.push({
+              apiKey,
+              clientOptions,
+              message: message as unknown as Record<string, unknown>,
+            });
+            return {
+              data: { id: "email_1" },
+              error: null,
+              headers: {},
+            };
+          },
+        },
+      }),
     });
     const serviceAccountResponse = await api.request(
       "/api/v1/service-accounts",
@@ -1224,7 +1233,7 @@ describe("collaboration API", () => {
       "/api/v1/notification-deliveries",
     );
     const deliveryList = await deliveriesResponse.json();
-    const sentBody = JSON.parse(String(deliveries[0]?.init?.body));
+    const sentBody = deliveries[0]?.message;
 
     expect(channelResponse.status).toBe(201);
     expect(channel.data.config).toMatchObject({
@@ -1236,18 +1245,20 @@ describe("collaboration API", () => {
     );
     expect(commentResponse.status).toBe(201);
     expect(deliveries).toHaveLength(1);
-    expect(deliveries[0]?.url).toBe("https://api.resend.com/emails");
-    expect(deliveries[0]?.init?.headers).toMatchObject({
-      authorization: "Bearer resend-test-key",
-      "content-type": "application/json",
+    expect(deliveries[0]).toMatchObject({
+      apiKey: "resend-test-key",
+      clientOptions: {
+        baseUrl: "https://api.resend.com/",
+        userAgent: "Romeo-Notifications/0.1",
+      },
     });
     expect(sentBody).toMatchObject({
       from: "notify@romeo.example",
       to: ["target@example.com"],
       subject: "Romeo notification: chat_mention",
     });
-    expect(String(sentBody.text)).toContain(notifications.data[0].id);
-    expect(String(sentBody.text)).toContain("chat_welcome");
+    expect(String(sentBody?.text)).toContain(notifications.data[0].id);
+    expect(String(sentBody?.text)).toContain("chat_welcome");
     expect(JSON.stringify(sentBody)).not.toContain(
       "without leaking this email sentence",
     );
@@ -1349,9 +1360,9 @@ describe("collaboration API", () => {
     expect(commentResponse.status).toBe(201);
     expect(deliveries).toHaveLength(1);
     expect(deliveries[0]?.url).toBe("https://hooks.slack.com/services/T/B/C");
-    expect(deliveries[0]?.init?.headers).toMatchObject({
-      "content-type": "application/json",
-    });
+    expect(new Headers(deliveries[0]?.init?.headers).get("content-type")).toBe(
+      "application/json",
+    );
     expect(String(sentBody.text)).toContain(notifications.data[0].id);
     expect(String(sentBody.text)).toContain("chat_welcome");
     expect(JSON.stringify(sentBody)).not.toContain(
@@ -1459,6 +1470,6 @@ describe("collaboration API", () => {
     const body = await response.json();
 
     expect(response.status).toBe(400);
-    expect(body.error.code).toBe("invalid_share_permission");
+    expect(body.error.code).toBe("invalid_request");
   });
 });

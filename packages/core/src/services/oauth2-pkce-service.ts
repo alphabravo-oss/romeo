@@ -1,6 +1,6 @@
 import { type AuthSubject, type Scope } from "@romeo/auth";
 import type { RomeoEnv } from "@romeo/config";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import * as oauth from "oauth4webapi";
 
 import type { AuthProviderId } from "../domain/auth-providers";
@@ -16,10 +16,22 @@ import {
   provisionExternalUser,
   syncExternalGroupMemberships,
 } from "./external-user-provisioning";
+import { fetchGitHubOAuth2Identity } from "./github-oauth2-auth-provider";
 import {
-  fetchGitHubOAuth2Identity,
-  type GitHubOAuth2IdentityPolicy,
-} from "./github-oauth2-auth-provider";
+  authorizationEndpoint,
+  base64Url,
+  githubPolicy,
+  hashProviderAccountId,
+  isOAuth2PkceState,
+  normalizeAppOrigin,
+  normalizeOrgId,
+  parseJsonState,
+  sanitizeReturnTo,
+  type OAuth2PkceState,
+} from "./oauth2-pkce-helpers";
+import { oauth2UserId } from "./oauth2-user-id";
+
+export { oauth2UserId } from "./oauth2-user-id";
 import type { SecretResolver } from "./secret-resolver";
 import type { CreatedUserSession, SessionService } from "./session-service";
 
@@ -34,21 +46,8 @@ export interface OAuth2PkceCallbackResult extends CreatedUserSession {
   returnTo: string;
 }
 
-interface OAuth2PkceState {
-  clientId: string;
-  codeVerifier: string;
-  expiresAt: string;
-  orgId: string;
-  providerId: AuthProviderId;
-  redirectUri: string;
-  returnTo: string;
-  state: string;
-  v: 1;
-}
-
 const pkceCookieTtlMs = 10 * 60 * 1000;
 const defaultSessionTtlHours = 12;
-const githubAuthorizationEndpoint = "https://github.com/login/oauth/authorize";
 const githubTokenEndpoint = "https://github.com/login/oauth/access_token";
 
 export class OAuth2PkceService {
@@ -257,7 +256,7 @@ export class OAuth2PkceService {
   }): Promise<string> {
     const as: oauth.AuthorizationServer = {
       issuer: "https://github.com",
-      authorization_endpoint: githubAuthorizationEndpoint,
+      authorization_endpoint: authorizationEndpoint("github"),
       token_endpoint: githubTokenEndpoint,
     };
     const client: oauth.Client = { client_id: input.clientId };
@@ -404,116 +403,3 @@ const defaultOAuth2Scopes: Scope[] = [
   "organizations:read",
   "workspaces:read",
 ];
-
-export function oauth2UserId(
-  providerId: AuthProviderId,
-  providerAccountId: string,
-): string {
-  return `user_oauth2_${providerId}_${createHash("sha256")
-    .update(`${providerId}\0${providerAccountId}`)
-    .digest("hex")
-    .slice(0, 24)}`;
-}
-
-function githubPolicy(
-  config: OAuth2ProviderLoginConfig,
-): GitHubOAuth2IdentityPolicy {
-  return {
-    adminTeams: config.adminTeams,
-    allowedEmailDomains: config.allowedEmailDomains,
-    groupMap: config.groupMap,
-    requiredOrganizations: config.requiredOrganizations,
-    requiredTeams: config.requiredTeams,
-    workspaceTeamMap: config.workspaceTeamMap,
-    workspaceTeamPrefix: config.workspaceTeamPrefix,
-  };
-}
-
-function authorizationEndpoint(providerId: AuthProviderId): string {
-  if (providerId === "github") return githubAuthorizationEndpoint;
-  throw new ApiError(
-    "oauth2_login_not_configured",
-    "OAuth2 login is not configured for this authentication provider.",
-    409,
-    { providerId },
-  );
-}
-
-function normalizeAppOrigin(value: string): string {
-  const url = new URL(value);
-  return `${url.protocol}//${url.host}`;
-}
-
-function normalizeOrgId(value: string | undefined): string {
-  const normalized = value?.trim();
-  if (normalized === undefined || normalized.length === 0) return "org_default";
-  if (normalized.length > 120) {
-    throw new ApiError(
-      "invalid_oauth2_org_id",
-      "OAuth2 login organization ID is too long.",
-      400,
-    );
-  }
-  return normalized;
-}
-
-function sanitizeReturnTo(value: string | undefined): string {
-  if (value === undefined || value.length === 0) return "/";
-  if (
-    value.length > 500 ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    /[\r\n]/u.test(value)
-  ) {
-    throw new ApiError(
-      "invalid_oauth2_return_to",
-      "OAuth2 return path must be a relative application path.",
-      400,
-    );
-  }
-  return value;
-}
-
-function hashProviderAccountId(
-  providerId: AuthProviderId,
-  providerAccountId: string,
-): string {
-  return createHash("sha256")
-    .update(`${providerId}\0${providerAccountId}`)
-    .digest("hex");
-}
-
-function base64Url(value: string): string {
-  return Buffer.from(value, "utf8").toString("base64url");
-}
-
-function parseJsonState(payload: string): unknown {
-  try {
-    return JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8"),
-    ) as unknown;
-  } catch {
-    throw new ApiError(
-      "oauth2_state_invalid",
-      "OAuth2 login state is invalid.",
-      400,
-    );
-  }
-}
-
-function isOAuth2PkceState(value: unknown): value is OAuth2PkceState {
-  const candidate = value as Partial<OAuth2PkceState>;
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    candidate.v === 1 &&
-    typeof candidate.clientId === "string" &&
-    typeof candidate.codeVerifier === "string" &&
-    typeof candidate.orgId === "string" &&
-    candidate.providerId === "github" &&
-    typeof candidate.redirectUri === "string" &&
-    typeof candidate.returnTo === "string" &&
-    typeof candidate.state === "string" &&
-    typeof candidate.expiresAt === "string"
-  );
-}

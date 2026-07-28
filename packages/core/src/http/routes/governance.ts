@@ -1,208 +1,224 @@
-import type { RomeoApi } from "../context";
-import type { DataExportRequest } from "../../domain/entities";
 import {
-  dataExportSchema,
-  deleteDataExportPackageSchema,
-  executeDataDeletionSchema,
-  previewDataDeletionSchema,
-  updateRetentionPolicySchema,
-} from "../schemas";
+  createDataExportPackageRoute,
+  deleteDataExportPackageRoute,
+  enforceRetentionRoute,
+  executeDataDeletionRoute,
+  executeDataExportRoute,
+  exportAccessReviewCsvRoute,
+  exportAccessReviewReportCsvRoute,
+  exportComplianceReportCsvRoute,
+  getAccessReviewReportRoute,
+  getComplianceReportRoute,
+  getDataRightsCoverageRoute,
+  getIdentityLifecyclePolicyRoute,
+  getRetentionPolicyRoute,
+  listAccessReviewGrantsRoute,
+  listDataExportPackagesRoute,
+  previewDataDeletionRoute,
+  previewDataExportRoute,
+  readDataExportPackageRoute,
+  updateRetentionPolicyRoute,
+} from "@romeo/contracts";
+
+import type { DataExportRequest } from "../../domain/entities";
+import type { RomeoApi } from "../context";
 
 export function registerGovernanceRoutes(app: RomeoApi): void {
-  app.get("/api/v1/governance/retention", async (context) => {
+  app.openapi(getRetentionPolicyRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
       .governance.retentionPolicy(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.patch("/api/v1/governance/retention", async (context) => {
+  app.openapi(updateRetentionPolicyRoute, async (context) => {
     const subject = context.get("subject");
-    const body = updateRetentionPolicySchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .governance.updateRetentionPolicy({
         subject,
         auditLogRetentionDays: body.auditLogRetentionDays,
+        ...(body.fileRetentionDays === undefined
+          ? {}
+          : { fileRetentionDays: body.fileRetentionDays }),
+        ...(body.workspaceFileRetentionDays === undefined
+          ? {}
+          : { workspaceFileRetentionDays: body.workspaceFileRetentionDays }),
+        ...(body.userFileRetentionDays === undefined
+          ? {}
+          : { userFileRetentionDays: body.userFileRetentionDays }),
       });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/governance/retention/enforce", async (context) => {
+  app.openapi(enforceRetentionRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
       .governance.enforceRetention(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/governance/data-deletions/preview", async (context) => {
+  app.openapi(previewDataDeletionRoute, async (context) => {
     const subject = context.get("subject");
-    const body = previewDataDeletionSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").governance.previewDataDeletion({
       subject,
       resourceType: body.resourceType,
       resourceId: body.resourceId,
     });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/governance/data-deletions/execute", async (context) => {
+  app.openapi(executeDataDeletionRoute, async (context) => {
     const subject = context.get("subject");
-    const body = executeDataDeletionSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").governance.executeDataDeletion({
       subject,
       resourceType: body.resourceType,
       resourceId: body.resourceId,
       confirmResourceId: body.confirmResourceId,
     });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/governance/data-rights/coverage", async (context) => {
+  app.openapi(getDataRightsCoverageRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
       .governance.dataRightsCoverage(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/governance/data-exports/preview", async (context) => {
+  app.openapi(previewDataExportRoute, async (context) => {
     const subject = context.get("subject");
-    const body = dataExportSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").governance.previewDataExport({
       subject,
       request: dataExportRequest(body),
     });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/governance/data-exports/execute", async (context) => {
+  app.openapi(executeDataExportRoute, async (context) => {
     const subject = context.get("subject");
-    const body = dataExportSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context.get("services").governance.executeDataExport({
       subject,
       request: dataExportRequest(body),
     });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/governance/data-exports/packages", async (context) => {
+  app.openapi(listDataExportPackagesRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
       .governance.listDataExportPackages(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/governance/data-exports/packages", async (context) => {
+  app.openapi(createDataExportPackageRoute, async (context) => {
     const subject = context.get("subject");
-    const body = dataExportSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = await context
       .get("services")
       .governance.createDataExportPackage({
         subject,
         request: dataExportRequest(body),
       });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.delete(
-    "/api/v1/governance/data-exports/packages/:packageId",
-    async (context) => {
-      const subject = context.get("subject");
-      const body = deleteDataExportPackageSchema.parse(
-        await context.req.json(),
-      );
-      const data = await context
-        .get("services")
-        .governance.deleteDataExportPackage({
-          subject,
-          packageId: context.req.param("packageId"),
-          confirmPackageId: body.confirmPackageId,
-        });
-      return context.json({ data });
-    },
-  );
-
-  app.get(
-    "/api/v1/governance/data-exports/packages/:packageId/content",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context
-        .get("services")
-        .governance.readDataExportPackage({
-          subject,
-          packageId: context.req.param("packageId"),
-        });
-      return new Response(toArrayBuffer(data.bytes), {
-        headers: {
-          "cache-control": "private, max-age=300",
-          "content-disposition": `attachment; filename="${data.fileName.replace(/"/gu, "")}"`,
-          "content-length": String(data.bytes.byteLength),
-          "content-type": `${data.contentType}; charset=utf-8`,
-          "x-content-type-options": "nosniff",
-        },
+  app.openapi(deleteDataExportPackageRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const data = await context
+      .get("services")
+      .governance.deleteDataExportPackage({
+        subject,
+        packageId: context.req.valid("param").packageId,
+        confirmPackageId: body.confirmPackageId,
       });
-    },
-  );
+    return context.json({ data }, 200);
+  });
 
-  app.get("/api/v1/governance/compliance-report", async (context) => {
+  app.openapi(readDataExportPackageRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context
+      .get("services")
+      .governance.readDataExportPackage({
+        subject,
+        packageId: context.req.valid("param").packageId,
+      });
+    context.header("cache-control", "private, max-age=300");
+    context.header(
+      "content-disposition",
+      `attachment; filename="${data.fileName.replace(/"/gu, "")}"`,
+    );
+    context.header("content-length", String(data.bytes.byteLength));
+    context.header("content-type", `${data.contentType}; charset=utf-8`);
+    context.header("x-content-type-options", "nosniff");
+    return context.body(new TextDecoder().decode(data.bytes), 200);
+  });
+
+  app.openapi(getComplianceReportRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
       .governance.complianceReport(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/governance/compliance-report.csv", async (context) => {
+  app.openapi(exportComplianceReportCsvRoute, async (context) => {
     const subject = context.get("subject");
     const csv = await context
       .get("services")
       .governance.complianceReportCsv(subject);
     context.header("content-type", "text/csv; charset=utf-8");
-    return context.body(csv);
+    return context.body(csv, 200);
   });
 
-  app.get("/api/v1/access-review", async (context) => {
+  app.openapi(listAccessReviewGrantsRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").governance.accessReview(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/access-review.csv", async (context) => {
+  app.openapi(exportAccessReviewCsvRoute, async (context) => {
     const subject = context.get("subject");
     const csv = await context
       .get("services")
       .governance.accessReviewCsv(subject);
     context.header("content-type", "text/csv; charset=utf-8");
-    return context.body(csv);
+    return context.body(csv, 200);
   });
 
-  app.get("/api/v1/access-review/report", async (context) => {
+  app.openapi(getAccessReviewReportRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
       .governance.accessReviewReport(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/access-review/report.csv", async (context) => {
+  app.openapi(exportAccessReviewReportCsvRoute, async (context) => {
     const subject = context.get("subject");
     const csv = await context
       .get("services")
       .governance.accessReviewReportCsv(subject);
     context.header("content-type", "text/csv; charset=utf-8");
-    return context.body(csv);
+    return context.body(csv, 200);
   });
 
-  app.get("/api/v1/governance/identity-lifecycle-policy", async (context) => {
+  app.openapi(getIdentityLifecyclePolicyRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
       .governance.identityLifecyclePolicy(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 }
 
@@ -228,10 +244,4 @@ function dataExportRequest(input: {
       ? {}
       : { maxObjectBytes: input.maxObjectBytes }),
   };
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const buffer = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(buffer).set(bytes);
-  return buffer;
 }

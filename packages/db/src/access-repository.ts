@@ -101,6 +101,16 @@ export class PgAccessRepository {
     return existing === undefined ? grant : toResourceGrantRecord(existing);
   }
 
+  async deleteResourceGrant(
+    grantId: string,
+  ): Promise<ResourceGrantRecord | undefined> {
+    const [row] = await this.db
+      .delete(resourceGrants)
+      .where(eq(resourceGrants.id, grantId))
+      .returning();
+    return row === undefined ? undefined : toResourceGrantRecord(row);
+  }
+
   async deleteResourceGrantsForPrincipal(
     orgId: string,
     principalType: PrincipalTypeRecord,

@@ -1,9 +1,11 @@
-import { useMemo } from 'react'
+import { Button } from "@romeo/ui";
+import { useMemo } from "react";
 
-import type { KnowledgeSource } from '../api/types'
-import { type ColumnDef, DataTable, createColumnHelper } from './DataTable'
+import type { KnowledgeSource } from "../features/types";
+import { useLocale } from "../lib/i18n";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 
-const col = createColumnHelper<KnowledgeSource>()
+const col = createColumnHelper<KnowledgeSource>();
 
 export function KnowledgeSourceList({
   isDeleting,
@@ -12,63 +14,95 @@ export function KnowledgeSourceList({
   onDelete,
   onExtract,
   onReindex,
-  sources
+  sources,
 }: {
-  isDeleting: boolean
-  isExtracting: boolean
-  isReindexing: boolean
-  onDelete: (sourceId: string) => void
-  onExtract: (sourceId: string) => void
-  onReindex: (sourceId: string) => void
-  sources: KnowledgeSource[]
+  isDeleting: boolean;
+  isExtracting: boolean;
+  isReindexing: boolean;
+  onDelete: (sourceId: string) => void;
+  onExtract: (sourceId: string) => void;
+  onReindex: (sourceId: string) => void;
+  sources: KnowledgeSource[];
 }) {
+  const { t } = useLocale();
   const columns = useMemo<ColumnDef<KnowledgeSource, any>[]>(
     () => [
-      col.accessor('fileName', {
-        header: 'Name',
-        cell: (c) => <span className="font-medium">{c.getValue()}</span>
+      col.accessor("fileName", {
+        header: t("knowledgeName"),
+        cell: (c) => <span className="font-medium">{c.getValue()}</span>,
       }),
-      col.accessor('mimeType', {
-        header: 'Type',
-        cell: (c) => <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
-      }),
-      col.accessor('status', {
-        header: 'Status',
+      col.accessor("mimeType", {
+        header: t("knowledgeType"),
         cell: (c) => (
-          <span className={`rm-status ${c.getValue() === 'indexed' ? 'pass' : c.getValue() === 'failed' ? 'fail' : 'warn'}`}>
-            {c.getValue()}
+          <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+        ),
+      }),
+      col.accessor("status", {
+        header: t("knowledgeStatus"),
+        cell: (c) => (
+          <span
+            className={`rm-status ${c.getValue() === "indexed" ? "pass" : c.getValue() === "failed" ? "fail" : "warn"}`}
+          >
+            {t(knowledgeSourceStatusKey(c.getValue()))}
           </span>
-        )
+        ),
       }),
       col.accessor((row) => row.chunkCount ?? 0, {
-        id: 'chunks',
-        header: 'Chunks',
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>
+        id: "chunks",
+        header: t("knowledgeChunks"),
+        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
       }),
       col.display({
-        id: 'actions',
-        header: '',
+        id: "actions",
+        header: "",
         cell: (c) => (
           <div className="flex gap-2">
-            <button className="rm-button" disabled={isReindexing} onClick={() => onReindex(c.row.original.id)} type="button">
-              Reindex
-            </button>
-            <button className="rm-button" disabled={isExtracting || c.row.original.status !== 'pending'} onClick={() => onExtract(c.row.original.id)} type="button">
-              Extract
-            </button>
-            <button className="rm-button" disabled={isDeleting} onClick={() => onDelete(c.row.original.id)} type="button">
-              Delete
-            </button>
+            <Button
+              disabled={isReindexing}
+              onClick={() => onReindex(c.row.original.id)}
+              type="button"
+            >
+              {t("knowledgeReindex")}
+            </Button>
+            <Button
+              disabled={isExtracting || c.row.original.status !== "pending"}
+              onClick={() => onExtract(c.row.original.id)}
+              type="button"
+            >
+              {t("knowledgeExtract")}
+            </Button>
+            <Button
+              disabled={isDeleting}
+              onClick={() => onDelete(c.row.original.id)}
+              type="button"
+            >
+              {t("knowledgeDelete")}
+            </Button>
           </div>
-        )
-      })
+        ),
+      }),
     ],
-    [isDeleting, isExtracting, isReindexing, onDelete, onExtract, onReindex]
-  )
+    [isDeleting, isExtracting, isReindexing, onDelete, onExtract, onReindex, t],
+  );
 
   return (
     <div className="mt-3">
-      <DataTable columns={columns} data={sources} empty="No knowledge sources yet." />
+      <DataTable
+        columns={columns}
+        data={sources}
+        empty={t("knowledgeNoSources")}
+      />
     </div>
-  )
+  );
+}
+
+function knowledgeSourceStatusKey(
+  status: KnowledgeSource["status"],
+):
+  | "knowledgeStatusFailed"
+  | "knowledgeStatusIndexed"
+  | "knowledgeStatusPending" {
+  if (status === "indexed") return "knowledgeStatusIndexed";
+  if (status === "failed") return "knowledgeStatusFailed";
+  return "knowledgeStatusPending";
 }

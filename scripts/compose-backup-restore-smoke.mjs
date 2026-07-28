@@ -25,8 +25,7 @@ import {
 const keep = process.argv.includes("--keep");
 const timeoutMs = parsePositiveInteger("--timeout-ms", 240000);
 const sourceProjectName =
-  argValue("--source-project-name") ??
-  randomProjectName("romeo_backup_source");
+  argValue("--source-project-name") ?? randomProjectName("romeo_backup_source");
 const restoreProjectName =
   argValue("--restore-project-name") ??
   randomProjectName("romeo_backup_restore");

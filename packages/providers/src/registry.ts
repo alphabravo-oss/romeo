@@ -4,6 +4,7 @@ import { openAiResponsesCompatibleAdapter } from "./adapters/openai-responses-co
 import type { ModelProviderAdapter, ProviderKind } from "./types";
 
 export function getProviderAdapter(kind: ProviderKind): ModelProviderAdapter {
+  if (kind === "anthropic") return anthropicAdapter;
   if (kind === "openai-compatible") {
     return openAiCompatibleAdapter;
   }
@@ -13,3 +14,4 @@ export function getProviderAdapter(kind: ProviderKind): ModelProviderAdapter {
 
   return ollamaAdapter;
 }
+import { anthropicAdapter } from "./adapters/anthropic";

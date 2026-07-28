@@ -5,6 +5,29 @@ import {
   retryConnectorResponse,
   type DataConnectorRetryPolicy,
 } from "./data-connector-retry";
+import { dnsPinnedFetch, type DnsPinnedFetch } from "./dns-pinned-fetch";
+import {
+  assertConnectorHostAllowed,
+  hostMatchesDomainRule,
+  isRedirectResponse,
+  normalizeHost,
+  normalizeAllowedHosts,
+  type WebsiteConnectorEgressPolicy,
+  type WebsiteConnectorHostAddress,
+  type WebsiteConnectorHostLookup,
+} from "./data-connector-network-policy";
+import {
+  mimeTypeFromKey,
+  normalizeFeedMimeType,
+  normalizeTextMimeType,
+  readConnectorUrl,
+  readS3Config,
+  rssFileName,
+  s3FileName,
+  websiteFileName,
+} from "./data-connector-content";
+
+export * from "./data-connector-network-policy";
 
 export interface DataConnectorExecutionResult {
   items: LocalImportSyncItem[];
@@ -14,15 +37,6 @@ export interface DataConnectorExecutionResult {
 export interface DataConnectorExecutor {
   sync(connector: DataConnector): Promise<DataConnectorExecutionResult>;
 }
-
-export type WebsiteConnectorEgressPolicy = "allow_public" | "require_allowlist";
-export interface WebsiteConnectorHostAddress {
-  address: string;
-  family: 4 | 6;
-}
-export type WebsiteConnectorHostLookup = (
-  hostname: string,
-) => Promise<WebsiteConnectorHostAddress[]>;
 
 export interface S3ConnectorObject {
   key: string;
@@ -161,16 +175,20 @@ export class WebsiteDataConnectorExecutor implements DataConnectorExecutor {
   private readonly maxBytes: number;
   private readonly timeoutMs: number;
   private readonly allowedHosts: string[];
+  private readonly blockedHosts: string[];
   private readonly egressPolicy: WebsiteConnectorEgressPolicy;
   private readonly hostLookup: WebsiteConnectorHostLookup | undefined;
+  private readonly pinnedFetchImpl: DnsPinnedFetch | undefined;
   private readonly retryPolicy: DataConnectorRetryPolicy;
 
   constructor(
     options: {
       allowedHosts?: string[];
+      blockedHosts?: string[];
       egressPolicy?: WebsiteConnectorEgressPolicy;
       fetchImpl?: typeof fetch;
       hostLookup?: WebsiteConnectorHostLookup;
+      pinnedFetchImpl?: DnsPinnedFetch;
       maxBytes?: number;
       retryAttempts?: number;
       retryBackoffMs?: number;
@@ -181,8 +199,12 @@ export class WebsiteDataConnectorExecutor implements DataConnectorExecutor {
     this.maxBytes = options.maxBytes ?? 2_000_000;
     this.timeoutMs = options.timeoutMs ?? 10_000;
     this.allowedHosts = normalizeAllowedHosts(options.allowedHosts);
+    this.blockedHosts = normalizeAllowedHosts(options.blockedHosts);
     this.egressPolicy = options.egressPolicy ?? "allow_public";
     this.hostLookup = options.hostLookup;
+    this.pinnedFetchImpl =
+      options.pinnedFetchImpl ??
+      (options.fetchImpl === undefined ? dnsPinnedFetch : undefined);
     this.retryPolicy = {
       retryAttempts: options.retryAttempts ?? 1,
       retryBackoffMs: options.retryBackoffMs ?? 250,
@@ -217,6 +239,38 @@ export class WebsiteDataConnectorExecutor implements DataConnectorExecutor {
         pageCount: 1,
       },
     };
+  }
+
+  /** Governed single-page fetch used by interactive URL attachments. */
+  async fetchUrl(urlValue: string): Promise<{
+    content: string;
+    finalUrl: string;
+    mimeType: string;
+    sizeBytes: number;
+  }> {
+    let url: URL;
+    try {
+      url = new URL(urlValue);
+    } catch {
+      throw new ApiError(
+        "connector_url_invalid",
+        "Website URL is invalid.",
+        400,
+      );
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      throw new ApiError(
+        "connector_url_protocol_invalid",
+        "Website URL must use HTTP or HTTPS.",
+        400,
+      );
+    }
+    return this.fetchText(url, {
+      accept: "text/html,text/plain,text/markdown;q=0.9,*/*;q=0.1",
+      normalizeMimeType: normalizeTextMimeType,
+      unsupportedMessage:
+        "Website response must be a supported text content type.",
+    });
   }
 
   private async syncRss(
@@ -261,15 +315,50 @@ export class WebsiteDataConnectorExecutor implements DataConnectorExecutor {
       ) => string;
       unsupportedMessage: string;
     },
-  ): Promise<{ content: string; mimeType: string; sizeBytes: number }> {
-    await this.assertHostAllowed(url);
+  ): Promise<{
+    content: string;
+    finalUrl: string;
+    mimeType: string;
+    sizeBytes: number;
+  }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     let response: Response;
+    let currentUrl = url;
     try {
-      const request = () =>
-        this.fetchWithTimeout(url, options.accept, controller.signal);
-      response = await retryConnectorResponse(request, this.retryPolicy);
+      for (let redirectCount = 0; ; redirectCount += 1) {
+        const approvedAddresses = await this.assertHostAllowed(currentUrl);
+        const request = () =>
+          this.fetchWithTimeout(
+            currentUrl,
+            options.accept,
+            controller.signal,
+            approvedAddresses,
+          );
+        response = await retryConnectorResponse(request, this.retryPolicy);
+        if (!isRedirectResponse(response)) break;
+        const location = response.headers.get("location");
+        if (location === null) break;
+        if (redirectCount >= 5) {
+          throw new ApiError(
+            "connector_redirect_limit_exceeded",
+            "Website connector exceeded the redirect limit.",
+            502,
+          );
+        }
+        const redirected = new URL(location, currentUrl);
+        if (
+          redirected.protocol !== "https:" &&
+          redirected.protocol !== "http:"
+        ) {
+          throw new ApiError(
+            "connector_url_protocol_invalid",
+            "Website URL must use HTTP or HTTPS.",
+            400,
+          );
+        }
+        currentUrl = redirected;
+      }
     } finally {
       clearTimeout(timeout);
     }
@@ -303,6 +392,7 @@ export class WebsiteDataConnectorExecutor implements DataConnectorExecutor {
     }
     return {
       content: new TextDecoder().decode(body),
+      finalUrl: currentUrl.toString(),
       mimeType,
       sizeBytes: body.byteLength,
     };
@@ -312,16 +402,21 @@ export class WebsiteDataConnectorExecutor implements DataConnectorExecutor {
     url: URL,
     accept: string,
     signal: AbortSignal,
+    approvedAddresses: WebsiteConnectorHostAddress[],
   ): Promise<Response> {
     try {
-      return await this.fetchImpl(url.toString(), {
+      const init: RequestInit = {
         headers: {
           accept,
           "user-agent": "RomeoDataConnector/0.1",
         },
         redirect: "manual",
         signal,
-      });
+      };
+      return this.pinnedFetchImpl === undefined ||
+        approvedAddresses.length === 0
+        ? await this.fetchImpl(url.toString(), init)
+        : await this.pinnedFetchImpl(url, init, approvedAddresses);
     } catch {
       throw new ApiError(
         "connector_fetch_failed",
@@ -331,266 +426,22 @@ export class WebsiteDataConnectorExecutor implements DataConnectorExecutor {
     }
   }
 
-  private async assertHostAllowed(url: URL): Promise<void> {
-    await assertConnectorHostAllowed(url, {
+  private async assertHostAllowed(
+    url: URL,
+  ): Promise<WebsiteConnectorHostAddress[]> {
+    const host = normalizeHost(url.hostname);
+    if (this.blockedHosts.some((rule) => hostMatchesDomainRule(host, rule))) {
+      throw new ApiError(
+        "connector_egress_host_blocked",
+        "Connector host is blocked by the configured egress policy.",
+        403,
+        { host },
+      );
+    }
+    return await assertConnectorHostAllowed(url, {
       allowedHosts: this.allowedHosts,
       egressPolicy: this.egressPolicy,
       ...(this.hostLookup === undefined ? {} : { hostLookup: this.hostLookup }),
     });
   }
-}
-
-export async function assertConnectorHostAllowed(
-  url: URL,
-  options: {
-    allowedHosts?: string[];
-    egressPolicy?: WebsiteConnectorEgressPolicy;
-    hostLookup?: WebsiteConnectorHostLookup;
-  } = {},
-): Promise<void> {
-  const allowedHosts = normalizeAllowedHosts(options.allowedHosts);
-  const egressPolicy = options.egressPolicy ?? "allow_public";
-  const hostLookup = options.hostLookup;
-  const host = normalizeHost(url.hostname);
-  if (isBlockedConnectorHost(host)) {
-    throw new ApiError(
-      "connector_private_network_host_blocked",
-      "Connector host resolves to a private or local network.",
-      403,
-      { host },
-    );
-  }
-  if (allowedHosts.length === 0) {
-    if (egressPolicy === "require_allowlist") {
-      throw new ApiError(
-        "connector_egress_allowlist_required",
-        "Connector egress policy requires a host allowlist.",
-        403,
-      );
-    }
-  } else if (!allowedHosts.some((rule) => hostMatchesRule(host, rule))) {
-    throw new ApiError(
-      "connector_egress_host_blocked",
-      "Connector host is not in the configured egress allowlist.",
-      403,
-      { host },
-    );
-  }
-  if (hostLookup === undefined || isIpAddress(host)) return;
-  let addresses: WebsiteConnectorHostAddress[];
-  try {
-    addresses = await hostLookup(host);
-  } catch {
-    throw new ApiError(
-      "connector_dns_lookup_failed",
-      "Connector host DNS lookup failed.",
-      502,
-    );
-  }
-  if (addresses.length === 0)
-    throw new ApiError(
-      "connector_dns_lookup_failed",
-      "Connector host DNS lookup failed.",
-      502,
-    );
-  if (addresses.some((address) => isBlockedIpAddress(address.address))) {
-    throw new ApiError(
-      "connector_private_network_host_blocked",
-      "Connector host resolves to a private or local network.",
-      403,
-      { host },
-    );
-  }
-}
-
-export function normalizeAllowedHosts(hosts: string[] | undefined): string[] {
-  return [
-    ...new Set(
-      (hosts ?? [])
-        .map((host) => host.trim().toLowerCase())
-        .filter((host) => host.length > 0),
-    ),
-  ];
-}
-
-function hostMatchesRule(host: string, rule: string): boolean {
-  if (rule.startsWith("*."))
-    return host.endsWith(rule.slice(1)) && host !== rule.slice(2);
-  return host === rule;
-}
-
-function normalizeHost(host: string): string {
-  return host.toLowerCase().replace(/^\[(.*)\]$/u, "$1");
-}
-
-function isBlockedConnectorHost(host: string): boolean {
-  if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host.endsWith(".local") ||
-    host.endsWith(".internal")
-  )
-    return true;
-  return isBlockedIpAddress(host);
-}
-
-function isIpAddress(value: string): boolean {
-  return isIPv4(value) || value.includes(":");
-}
-
-function isBlockedIpAddress(value: string): boolean {
-  if (isIPv4(value)) return isBlockedIPv4(value);
-  if (value.includes(":")) return isBlockedIPv6(value);
-  return false;
-}
-
-function isIPv4(value: string): boolean {
-  return (
-    /^(\d{1,3}\.){3}\d{1,3}$/u.test(value) &&
-    value.split(".").every((part) => {
-      const parsed = Number(part);
-      return Number.isInteger(parsed) && parsed >= 0 && parsed <= 255;
-    })
-  );
-}
-
-function isBlockedIPv4(value: string): boolean {
-  const [first = 0, second = 0] = value.split(".").map((part) => Number(part));
-  if (first === 0 || first === 10 || first === 127 || first >= 224) return true;
-  if (first === 100 && second >= 64 && second <= 127) return true;
-  if (first === 169 && second === 254) return true;
-  if (first === 172 && second >= 16 && second <= 31) return true;
-  if (first === 192 && (second === 0 || second === 168)) return true;
-  if (first === 198 && (second === 18 || second === 19 || second === 51))
-    return true;
-  if (first === 203 && second === 0) return true;
-  return false;
-}
-
-function isBlockedIPv6(value: string): boolean {
-  const normalized = value.toLowerCase();
-  return (
-    normalized === "::" ||
-    normalized === "::1" ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd") ||
-    normalized.startsWith("fe80:") ||
-    normalized.startsWith("::ffff:10.") ||
-    normalized.startsWith("::ffff:127.") ||
-    normalized.startsWith("::ffff:192.168.")
-  );
-}
-
-function readConnectorUrl(connector: DataConnector): URL {
-  const value = connector.config.url;
-  if (typeof value !== "string")
-    throw new ApiError(
-      "invalid_connector_config",
-      "Website connector requires a URL.",
-      400,
-    );
-  return new URL(value);
-}
-
-interface S3ConnectorConfig {
-  bucket: string;
-  maxItems: number;
-  prefix: string;
-  region: string;
-  secretRef?: string;
-}
-
-function readS3Config(connector: DataConnector): S3ConnectorConfig {
-  const bucket = connector.config.bucket;
-  const prefix = connector.config.prefix;
-  const region = connector.config.region;
-  const maxItems = connector.config.maxItems;
-  const secretRef = connector.config.secretRef;
-  if (
-    typeof bucket !== "string" ||
-    typeof prefix !== "string" ||
-    typeof region !== "string"
-  ) {
-    throw new ApiError(
-      "invalid_connector_config",
-      "S3 connector requires bucket, prefix, and region.",
-      400,
-    );
-  }
-  return {
-    bucket,
-    prefix,
-    region,
-    maxItems:
-      typeof maxItems === "number" && Number.isInteger(maxItems)
-        ? maxItems
-        : 50,
-    ...(typeof secretRef === "string" ? { secretRef } : {}),
-  };
-}
-
-function normalizeTextMimeType(
-  contentType: string | null,
-  message: string,
-): string {
-  const mimeType =
-    contentType?.split(";")[0]?.trim().toLowerCase() || "text/plain";
-  if (
-    mimeType === "text/html" ||
-    mimeType === "text/plain" ||
-    mimeType === "text/markdown" ||
-    mimeType === "text/csv"
-  )
-    return mimeType;
-  throw new ApiError("connector_response_unsupported", message, 415);
-}
-
-function normalizeFeedMimeType(
-  contentType: string | null,
-  message: string,
-): string {
-  const mimeType =
-    contentType?.split(";")[0]?.trim().toLowerCase() || "application/rss+xml";
-  if (
-    mimeType === "application/rss+xml" ||
-    mimeType === "application/atom+xml" ||
-    mimeType === "application/xml" ||
-    mimeType === "text/xml"
-  )
-    return mimeType;
-  throw new ApiError("connector_response_unsupported", message, 415);
-}
-
-function mimeTypeFromKey(key: string): string {
-  if (key.endsWith(".md") || key.endsWith(".markdown")) return "text/markdown";
-  if (key.endsWith(".html") || key.endsWith(".htm")) return "text/html";
-  if (key.endsWith(".csv")) return "text/csv";
-  if (key.endsWith(".txt")) return "text/plain";
-  return "application/octet-stream";
-}
-
-function websiteFileName(url: URL, mimeType: string): string {
-  const rawName = url.pathname.split("/").filter(Boolean).at(-1) ?? "index";
-  const safeBase =
-    rawName.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80) || "index";
-  if (safeBase.includes(".")) return safeBase;
-  if (mimeType === "text/html") return `${safeBase}.html`;
-  if (mimeType === "text/markdown") return `${safeBase}.md`;
-  return `${safeBase}.txt`;
-}
-
-function s3FileName(key: string, prefix: string): string {
-  const relative = key.slice(prefix.length).replace(/^\/+/u, "");
-  const rawName =
-    relative.split("/").filter(Boolean).join("__") ||
-    key.split("/").filter(Boolean).at(-1) ||
-    "object.txt";
-  return rawName.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120) || "object.txt";
-}
-
-function rssFileName(url: URL): string {
-  const rawName = url.pathname.split("/").filter(Boolean).at(-1) ?? "feed";
-  const safeBase =
-    rawName.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80) || "feed";
-  return `${safeBase}.md`;
 }

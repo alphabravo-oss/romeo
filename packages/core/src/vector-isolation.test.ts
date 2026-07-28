@@ -4,6 +4,7 @@ import { readEnv } from "@romeo/config";
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { EnvironmentSecretResolver } from "./services/secret-resolver";
+import { qdrantSdkClientFactoryFromFetch } from "./test-support/qdrant-sdk-client.test-helper";
 
 describe("external vector isolation", () => {
   it("post-filters Qdrant hits against authorized Postgres chunks", async () => {
@@ -41,51 +42,55 @@ describe("external vector isolation", () => {
           },
         );
       },
-      qdrantFetch: async (input, init) => {
-        const url = String(input);
-        const body =
-          init?.body === undefined ? undefined : JSON.parse(String(init.body));
-        if (url.endsWith("/points?wait=true")) {
-          const request = body as {
-            points?: Array<{ payload: Record<string, unknown> }>;
-          };
-          authorizedPayload = request.points?.[0]?.payload;
-          return jsonResponse({ status: "ok" });
-        }
-        if (url.endsWith("/points/query")) {
-          qdrantQueryBodies.push(body);
-          return jsonResponse({
-            result: {
-              points: [
-                {
-                  id: "stale-cross-tenant-point",
-                  score: 0.999,
-                  payload: {
-                    chunkId: "kb_chunk_cross_org_guess",
-                    dimensions: 1536,
-                    embeddingModel: "nomic-embed-text",
-                    embeddingProvider: "provider_ollama",
-                    knowledgeBaseId: "kb_other_tenant",
-                    orgId: "org_other_tenant",
-                    romeoNamespace:
-                      "knowledge_base:org_other_tenant:workspace_other:kb_other_tenant",
-                    romeoPartition: "org:org_other_tenant",
-                    sourceId: "source_other_tenant",
-                    workspaceId: "workspace_other",
+      qdrantClientFactory: qdrantSdkClientFactoryFromFetch(
+        async (input, init) => {
+          const url = String(input);
+          const body =
+            init?.body === undefined
+              ? undefined
+              : JSON.parse(String(init.body));
+          if (url.endsWith("/points?wait=true")) {
+            const request = body as {
+              points?: Array<{ payload: Record<string, unknown> }>;
+            };
+            authorizedPayload = request.points?.[0]?.payload;
+            return jsonResponse({ status: "ok" });
+          }
+          if (url.endsWith("/points/query")) {
+            qdrantQueryBodies.push(body);
+            return jsonResponse({
+              result: {
+                points: [
+                  {
+                    id: "stale-cross-tenant-point",
+                    score: 0.999,
+                    payload: {
+                      chunkId: "kb_chunk_cross_org_guess",
+                      dimensions: 1536,
+                      embeddingModel: "nomic-embed-text",
+                      embeddingProvider: "provider_ollama",
+                      knowledgeBaseId: "kb_other_tenant",
+                      orgId: "org_other_tenant",
+                      romeoNamespace:
+                        "knowledge_base:org_other_tenant:workspace_other:kb_other_tenant",
+                      romeoPartition: "org:org_other_tenant",
+                      sourceId: "source_other_tenant",
+                      workspaceId: "workspace_other",
+                    },
                   },
-                },
-                {
-                  id: "authorized-point",
-                  score: 0.7,
-                  payload: authorizedPayload,
-                },
-              ],
-            },
-            status: "ok",
-          });
-        }
-        return jsonResponse({ status: "unexpected" }, 404);
-      },
+                  {
+                    id: "authorized-point",
+                    score: 0.7,
+                    payload: authorizedPayload,
+                  },
+                ],
+              },
+              status: "ok",
+            });
+          }
+          return jsonResponse({ status: "unexpected" }, 404);
+        },
+      ),
     });
 
     const sourceResponse = await api.request(

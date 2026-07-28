@@ -1,3 +1,4 @@
+import { Client as NotionClient } from "@notionhq/client";
 import { createHash } from "node:crypto";
 
 import type { DataConnector, LocalImportSyncItem } from "../domain/entities";
@@ -9,10 +10,6 @@ import {
   type WebsiteConnectorEgressPolicy,
   type WebsiteConnectorHostLookup,
 } from "./data-connector-executors";
-import {
-  retryConnectorResponse,
-  type DataConnectorRetryPolicy,
-} from "./data-connector-retry";
 import type { SecretResolver } from "./secret-resolver";
 
 interface NotionConnectorConfig {
@@ -38,7 +35,11 @@ export class NotionDataConnectorExecutor implements DataConnectorExecutor {
   private readonly maxBlocksPerPage: number;
   private readonly maxBytes: number;
   private readonly maxItems: number;
-  private readonly retryPolicy: DataConnectorRetryPolicy;
+  private readonly retry: {
+    maxRetries: number;
+    initialRetryDelayMs: number;
+    maxRetryDelayMs: number;
+  };
   private readonly secretResolver: SecretResolver | undefined;
   private readonly timeoutMs: number;
 
@@ -64,9 +65,11 @@ export class NotionDataConnectorExecutor implements DataConnectorExecutor {
     this.maxBlocksPerPage = options.maxBlocksPerPage ?? 25;
     this.maxBytes = options.maxBytes ?? 2_000_000;
     this.maxItems = options.maxItems ?? 50;
-    this.retryPolicy = {
-      retryAttempts: options.retryAttempts ?? 1,
-      retryBackoffMs: options.retryBackoffMs ?? 250,
+    const retryBackoffMs = options.retryBackoffMs ?? 250;
+    this.retry = {
+      maxRetries: options.retryAttempts ?? 1,
+      initialRetryDelayMs: retryBackoffMs,
+      maxRetryDelayMs: retryBackoffMs * 4,
     };
     this.secretResolver = options.secretResolver;
     this.timeoutMs = options.timeoutMs ?? 10_000;
@@ -86,38 +89,52 @@ export class NotionDataConnectorExecutor implements DataConnectorExecutor {
       egressPolicy: this.egressPolicy,
       ...(this.hostLookup === undefined ? {} : { hostLookup: this.hostLookup }),
     });
-    const authorization = await this.authorizationHeader(config.secretRef);
+    const token = await this.token(config.secretRef);
+    const client = new NotionClient({
+      auth: token,
+      baseUrl: config.apiUrl.toString().replace(/\/+$/u, ""),
+      notionVersion: config.apiVersion,
+      timeoutMs: this.timeoutMs,
+      retry: this.retry,
+      fetch: (url, init) => this.boundedFetch(url, init),
+    });
     const maxItems = Math.min(config.maxItems, this.maxItems);
-    const searchPayload = await this.fetchJson(
-      notionApiUrl(config.apiUrl, "/v1/search"),
-      authorization,
-      config.apiVersion,
-      "POST",
-      {
-        filter: { property: "object", value: "page" },
-        page_size: maxItems,
-        query: config.query,
-      },
+    const searchPayload = await this.notionRequest(
+      () =>
+        client.search({
+          filter: { property: "object", value: "page" },
+          page_size: maxItems,
+          query: config.query,
+        }),
       "Notion connector search failed.",
     );
-    const pages = arrayValue(searchPayload, "results").slice(0, maxItems);
+    const pages = searchPayload.results.slice(0, maxItems);
     const items: LocalImportSyncItem[] = [];
     let totalBytes = 0;
     let blockCount = 0;
     for (const page of pages) {
       if (!isRecord(page)) continue;
-      const id = stringValue(page.id) ?? stableHash(JSON.stringify(page));
-      const title = notionPageTitle(page) ?? `Notion page ${id}`;
-      const blocks = await this.fetchPageBlocks(config, authorization, id);
+      const pageRecord = page as unknown as Record<string, unknown>;
+      const id =
+        stringValue(pageRecord.id) ?? stableHash(JSON.stringify(pageRecord));
+      const title = notionPageTitle(pageRecord) ?? `Notion page ${id}`;
+      const blocks = await this.fetchPageBlocks(client, config, id);
       blockCount += blocks.length;
       const content = markdownDocument([
         `# ${title}`,
-        labeledValue("URL", stringValue(page.url)),
-        labeledValue("Created", stringValue(page.created_time)),
-        labeledValue("Updated", stringValue(page.last_edited_time)),
+        labeledValue("URL", stringValue(pageRecord.url)),
+        labeledValue("Created", stringValue(pageRecord.created_time)),
+        labeledValue("Updated", stringValue(pageRecord.last_edited_time)),
         ...blocks,
       ]);
       const sizeBytes = new TextEncoder().encode(content).length;
+      if (sizeBytes > this.maxBytes) {
+        throw new ApiError(
+          "connector_response_too_large",
+          "Notion connector response exceeds the configured size limit.",
+          413,
+        );
+      }
       totalBytes += sizeBytes;
       items.push({
         fileName: safeFileName(`notion-${id}-${title}.md`),
@@ -141,35 +158,22 @@ export class NotionDataConnectorExecutor implements DataConnectorExecutor {
   }
 
   private async fetchPageBlocks(
+    client: NotionClient,
     config: NotionConnectorConfig,
-    authorization: string,
     pageId: string,
   ): Promise<string[]> {
-    const url = notionApiUrl(
-      config.apiUrl,
-      `/v1/blocks/${encodeURIComponent(pageId)}/children`,
-    );
-    url.searchParams.set(
-      "page_size",
-      String(Math.min(config.maxBlocksPerPage, this.maxBlocksPerPage)),
-    );
-    const payload = await this.fetchJson(
-      url,
-      authorization,
-      config.apiVersion,
-      "GET",
-      undefined,
+    const limit = Math.min(config.maxBlocksPerPage, this.maxBlocksPerPage);
+    const payload = await this.notionRequest(
+      () => client.blocks.children.list({ block_id: pageId, page_size: limit }),
       "Notion connector block fetch failed.",
     );
-    return arrayValue(payload, "results")
-      .slice(0, Math.min(config.maxBlocksPerPage, this.maxBlocksPerPage))
-      .flatMap((block) => {
-        const text = notionBlockMarkdown(block);
-        return text === undefined ? [] : [text];
-      });
+    return payload.results.slice(0, limit).flatMap((block) => {
+      const text = notionBlockMarkdown(block);
+      return text === undefined ? [] : [text];
+    });
   }
 
-  private async authorizationHeader(secretRef: string): Promise<string> {
+  private async token(secretRef: string): Promise<string> {
     if (this.secretResolver?.resolveValue === undefined) {
       throw new ApiError(
         "connector_notion_secret_ref_unsupported",
@@ -191,48 +195,26 @@ export class NotionDataConnectorExecutor implements DataConnectorExecutor {
         },
       );
     }
-    return `Bearer ${notionToken(resolution.value)}`;
+    return notionToken(resolution.value);
   }
 
-  private async fetchJson(
-    url: URL,
-    authorization: string,
-    apiVersion: string,
-    method: "GET" | "POST",
-    body: unknown,
+  private async notionRequest<T>(
+    request: () => Promise<T>,
     errorMessage: string,
-  ): Promise<Record<string, unknown>> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    let response: Response;
+  ): Promise<T> {
     try {
-      response = await retryConnectorResponse(() => {
-        const init: RequestInit = {
-          headers: {
-            accept: "application/json",
-            authorization,
-            ...(body === undefined
-              ? {}
-              : { "content-type": "application/json" }),
-            "notion-version": apiVersion,
-            "user-agent": "RomeoDataConnector/0.1",
-          },
-          method,
-          redirect: "manual",
-          signal: controller.signal,
-        };
-        if (body !== undefined) init.body = JSON.stringify(body);
-        return this.fetchImpl(url.toString(), init);
-      }, this.retryPolicy);
-    } catch {
+      return await request();
+    } catch (caught) {
+      if (caught instanceof ApiError) throw caught;
       throw new ApiError("connector_fetch_failed", errorMessage, 502);
-    } finally {
-      clearTimeout(timeout);
     }
-    if (!response.ok)
-      throw new ApiError("connector_fetch_failed", errorMessage, 502, {
-        status: response.status,
-      });
+  }
+
+  private async boundedFetch(
+    url: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const response = await this.fetchImpl(url, init);
     const declaredLength = Number(response.headers.get("content-length"));
     if (Number.isFinite(declaredLength) && declaredLength > this.maxBytes) {
       throw new ApiError(
@@ -249,17 +231,11 @@ export class NotionDataConnectorExecutor implements DataConnectorExecutor {
         413,
       );
     }
-    try {
-      const parsed = JSON.parse(new TextDecoder().decode(responseBody));
-      if (!isRecord(parsed)) throw new Error("invalid");
-      return parsed;
-    } catch {
-      throw new ApiError(
-        "connector_fetch_failed",
-        "Notion connector response is invalid.",
-        502,
-      );
-    }
+    return new Response(responseBody, {
+      headers: response.headers,
+      status: response.status,
+      statusText: response.statusText,
+    });
   }
 }
 
@@ -272,15 +248,6 @@ function readNotionConfig(connector: DataConnector): NotionConnectorConfig {
     query: stringConfig(connector, "query"),
     secretRef: stringConfig(connector, "secretRef"),
   };
-}
-
-function notionApiUrl(baseUrl: URL, path: string): URL {
-  const url = new URL(baseUrl.toString());
-  const basePath = url.pathname.replace(/\/+$/u, "");
-  url.pathname = `${basePath}${path}`;
-  url.search = "";
-  url.hash = "";
-  return url;
 }
 
 function notionToken(value: string): string {
@@ -370,11 +337,6 @@ function numberConfig(
 ): number {
   const value = connector.config[key];
   return Number.isInteger(value) ? Number(value) : fallback;
-}
-
-function arrayValue(record: Record<string, unknown>, key: string): unknown[] {
-  const value = record[key];
-  return Array.isArray(value) ? value : [];
 }
 
 function labeledValue(

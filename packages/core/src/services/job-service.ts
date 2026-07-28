@@ -3,6 +3,7 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { BackgroundJob } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { createId } from "../ids";
+import { telemetryJobPayload } from "./telemetry-context";
 
 export interface JobLagThresholds {
   deadLetterCriticalCount: number;
@@ -108,7 +109,7 @@ export async function startBackgroundJob(
       : { workspaceId: input.workspaceId }),
     type: input.type,
     status: "running",
-    payload: input.payload,
+    payload: telemetryJobPayload(input.payload),
     createdAt: now,
     updatedAt: now,
   });
@@ -133,7 +134,7 @@ export async function queueBackgroundJob(
       : { workspaceId: input.workspaceId }),
     type: input.type,
     status: "queued",
-    payload: input.payload,
+    payload: telemetryJobPayload(input.payload),
     createdAt: now,
     updatedAt: now,
   });

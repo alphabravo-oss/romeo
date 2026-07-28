@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "viewports": [
+    { "name": "mobile", "width": 375, "height": 812 },
+    { "name": "desktop", "width": 1280, "height": 900 },
+    { "name": "wide", "width": 1920, "height": 1080 }
+  ],
+  "themes": ["light", "dark"],
+  "routes": [
+    { "name": "chat", "path": "/", "requiredSelector": "#main-content" },
+    {
+      "name": "login",
+      "path": "/login",
+      "requiredSelector": ".rm-login-shell"
+    },
+    {
+      "name": "admin-providers",
+      "path": "/admin?section=providers",
+      "requiredSelector": "#console-content"
+    },
+    { "name": "ui-gallery", "path": "/ui", "requiredSelector": "main" }
+  ],
+  "maxHorizontalOverflowPx": 0,
+  "reducedMotion": "reduce"
+}

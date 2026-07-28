@@ -1,10 +1,13 @@
 import {
   ROMEO_REPOSITORY_METHOD_NAMES,
   InMemoryRomeoRepository,
+  createServices,
   createRomeoApi,
+  type RomeoServices,
   type RomeoRepository,
 } from "@romeo/core";
 import { readEnv } from "@romeo/config";
+import { MemoryObjectStore } from "@romeo/storage";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -92,6 +95,403 @@ describe("RomeoRepository conformance", () => {
           expect(
             await repository.getCurrentUser("user_transaction_rollback"),
           ).toBeUndefined();
+        });
+      });
+
+      it("allows only one concurrent live queue lease per chat", async () => {
+        await withRepository(subject, async (repository) => {
+          await repository.createQueuedChatTurn({
+            id: "queued_turn_concurrency_1",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            chatId: "chat_welcome",
+            agentId: "agent_default",
+            content: "First concurrent prompt",
+            createdBy: "user_dev_admin",
+            principalId: "user_dev_admin",
+            principalType: "user",
+            scopeSnapshot: ["chats:write" as const, "runs:create" as const],
+            idempotencyKey: "concurrency_1",
+            status: "queued",
+            attemptCount: 0,
+            createdAt: "2026-07-16T12:00:00.000Z",
+            updatedAt: "2026-07-16T12:00:00.000Z",
+          });
+          await repository.createQueuedChatTurn({
+            id: "queued_turn_concurrency_2",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            chatId: "chat_welcome",
+            agentId: "agent_default",
+            content: "Second concurrent prompt",
+            createdBy: "user_dev_admin",
+            principalId: "user_dev_admin",
+            principalType: "user",
+            scopeSnapshot: ["chats:write", "runs:create"],
+            idempotencyKey: "concurrency_2",
+            status: "queued",
+            attemptCount: 0,
+            createdAt: "2026-07-16T12:00:01.000Z",
+            updatedAt: "2026-07-16T12:00:01.000Z",
+          });
+
+          const claims = await Promise.all([
+            repository.claimNextQueuedChatTurn({
+              chatId: "chat_welcome",
+              leaseOwner: "worker_1",
+              leaseToken: "lease_1",
+              now: "2026-07-16T12:01:00.000Z",
+              leaseExpiresAt: "2026-07-16T12:02:00.000Z",
+            }),
+            repository.claimNextQueuedChatTurn({
+              chatId: "chat_welcome",
+              leaseOwner: "worker_2",
+              leaseToken: "lease_2",
+              now: "2026-07-16T12:01:00.000Z",
+              leaseExpiresAt: "2026-07-16T12:02:00.000Z",
+            }),
+          ]);
+
+          expect(claims.filter((claim) => claim !== undefined)).toHaveLength(1);
+          expect(claims.find((claim) => claim !== undefined)?.id).toBe(
+            "queued_turn_concurrency_1",
+          );
+        });
+      });
+
+      it("preserves queued-turn lookup, update, lease, finish, and cancellation semantics", async () => {
+        await withRepository(subject, async (repository) => {
+          const baseTurn = {
+            id: "queued_turn_lifecycle",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            chatId: "chat_welcome",
+            agentId: "agent_default",
+            content: "Lifecycle prompt",
+            createdBy: "user_dev_admin",
+            principalId: "user_dev_admin",
+            principalType: "user" as const,
+            scopeSnapshot: ["chats:write" as const, "runs:create" as const],
+            idempotencyKey: "queue_lifecycle",
+            status: "queued" as const,
+            attemptCount: 0,
+            createdAt: "2026-07-16T13:00:00.000Z",
+            updatedAt: "2026-07-16T13:00:00.000Z",
+          };
+          await repository.createQueuedChatTurn(baseTurn);
+          expect(
+            (await repository.listQueuedChatTurns(baseTurn.chatId)).map(
+              (turn) => turn.id,
+            ),
+          ).toContain(baseTurn.id);
+          expect(await repository.getQueuedChatTurn(baseTurn.id)).toEqual(
+            baseTurn,
+          );
+          expect(
+            await repository.getQueuedChatTurnByIdempotency(
+              baseTurn.orgId,
+              baseTurn.chatId,
+              baseTurn.idempotencyKey,
+            ),
+          ).toEqual(baseTurn);
+          expect(
+            await repository.updateQueuedChatTurn({
+              ...baseTurn,
+              content: "Updated lifecycle prompt",
+              updatedAt: "2026-07-16T13:00:01.000Z",
+            }),
+          ).toMatchObject({ content: "Updated lifecycle prompt" });
+
+          const claimed = await repository.claimNextQueuedChatTurn({
+            chatId: baseTurn.chatId,
+            leaseOwner: "queue_worker",
+            leaseToken: "queue_lease",
+            now: "2026-07-16T13:01:00.000Z",
+            leaseExpiresAt: "2026-07-16T13:02:00.000Z",
+          });
+          expect(claimed).toMatchObject({
+            id: baseTurn.id,
+            leaseOwner: "queue_worker",
+            leaseToken: "queue_lease",
+            status: "leased",
+          });
+          expect(
+            await repository.renewQueuedChatTurnLease({
+              turnId: baseTurn.id,
+              leaseOwner: "queue_worker",
+              leaseToken: "queue_lease",
+              now: "2026-07-16T13:01:30.000Z",
+              leaseExpiresAt: "2026-07-16T13:03:00.000Z",
+            }),
+          ).toMatchObject({ leaseExpiresAt: "2026-07-16T13:03:00.000Z" });
+          expect(
+            await repository.finishQueuedChatTurnLease({
+              turnId: baseTurn.id,
+              leaseOwner: "queue_worker",
+              leaseToken: "queue_lease",
+              status: "completed",
+              now: "2026-07-16T13:02:00.000Z",
+            }),
+          ).toMatchObject({ status: "completed" });
+
+          const cancelledTurn = await repository.createQueuedChatTurn({
+            ...baseTurn,
+            id: "queued_turn_cancelled",
+            idempotencyKey: "queue_cancelled",
+            createdAt: "2026-07-16T13:03:00.000Z",
+            updatedAt: "2026-07-16T13:03:00.000Z",
+          });
+          expect(
+            await repository.cancelQueuedChatTurn({
+              turnId: cancelledTurn.id,
+              chatId: cancelledTurn.chatId,
+              now: "2026-07-16T13:04:00.000Z",
+            }),
+          ).toMatchObject({ status: "cancelled" });
+        });
+      });
+
+      it("allows only one concurrent run-execution job lease", async () => {
+        await withRepository(subject, async (repository) => {
+          await repository.createBackgroundJob({
+            id: "job_run_execution_concurrency",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            type: "run.execution:run_concurrency",
+            status: "queued",
+            payload: { runId: "run_concurrency" },
+            createdAt: "2026-07-16T12:00:00.000Z",
+            updatedAt: "2026-07-16T12:00:00.000Z",
+          });
+
+          const claims = await Promise.all([
+            repository.claimBackgroundJob({
+              orgId: "org_default",
+              type: "run.execution:run_concurrency",
+              workerId: "run_worker_1",
+              leaseSeconds: 60,
+              now: "2026-07-16T12:01:00.000Z",
+            }),
+            repository.claimBackgroundJob({
+              orgId: "org_default",
+              type: "run.execution:run_concurrency",
+              workerId: "run_worker_2",
+              leaseSeconds: 60,
+              now: "2026-07-16T12:01:00.000Z",
+            }),
+          ]);
+
+          expect(claims.filter((claim) => claim !== undefined)).toHaveLength(1);
+          expect(claims.find((claim) => claim !== undefined)).toMatchObject({
+            id: "job_run_execution_concurrency",
+            status: "running",
+          });
+        });
+      });
+
+      it("isolates queued payloads, runs, files, search, shares, memories, and web sources by tenant", async () => {
+        await withRepository(subject, async (repository) => {
+          type ServiceSubject = Parameters<RomeoServices["files"]["get"]>[0];
+          const tenantA: ServiceSubject = {
+            id: "user_dev_admin",
+            type: "user",
+            orgId: "org_default",
+            workspaceIds: ["workspace_default"],
+            groupIds: ["group_admins"],
+            scopes: ["chats:read", "files:read", "files:write", "runs:read"],
+            isAdmin: true,
+            adminRole: "global_admin",
+          };
+          const tenantB: ServiceSubject = {
+            id: "user_tenant_isolation_b",
+            type: "user",
+            orgId: "org_tenant_isolation_b",
+            workspaceIds: ["workspace_tenant_isolation_b"],
+            groupIds: [],
+            scopes: ["chats:read", "files:read", "runs:read"],
+            isAdmin: false,
+          };
+          const sentinels = {
+            file: "PG_TENANT_A_FILE_SECRET_7391",
+            memory: "PG_TENANT_A_MEMORY_SECRET_4207",
+            queue: "PG_TENANT_A_QUEUE_SECRET_8813",
+            run: "PG_TENANT_A_RUN_SECRET_1649",
+            search: "PG_TENANT_A_SEARCH_SECRET_5521",
+            share: "PG_TENANT_A_SHARE_SECRET_9064",
+            webSource: "PG_TENANT_A_WEB_SOURCE_SECRET_3178",
+          } as const;
+          const now = new Date().toISOString();
+          const objectStore = new MemoryObjectStore();
+          const services = createServices(repository, { objectStore });
+          const runtime = await seedRuntimeGraph(
+            repository,
+            "tenant_isolation",
+          );
+
+          await repository.createOrganization({
+            id: tenantB.orgId,
+            name: "Tenant isolation B",
+            slug: "tenant-isolation-b",
+          });
+          await repository.createWorkspace({
+            id: tenantB.workspaceIds[0]!,
+            orgId: tenantB.orgId,
+            name: "Tenant isolation B workspace",
+            slug: "tenant-isolation-b",
+          });
+          await repository.createUser({
+            id: tenantB.id,
+            orgId: tenantB.orgId,
+            email: "tenant-isolation-b@romeo.local",
+            name: "Tenant isolation B user",
+          });
+          await repository.createMessage({
+            id: "message_tenant_isolation_search",
+            chatId: "chat_welcome",
+            role: "user",
+            content: sentinels.search,
+            createdAt: now,
+          });
+          await repository.createQueuedChatTurn({
+            id: "queued_turn_tenant_isolation",
+            orgId: tenantA.orgId,
+            workspaceId: "workspace_default",
+            chatId: "chat_welcome",
+            agentId: runtime.agentId,
+            content: sentinels.queue,
+            createdBy: tenantA.id,
+            principalId: tenantA.id,
+            principalType: tenantA.type,
+            scopeSnapshot: ["chats:write", "runs:create"],
+            idempotencyKey: "postgres-tenant-isolation",
+            status: "queued",
+            attemptCount: 0,
+            createdAt: now,
+            updatedAt: now,
+          });
+          await repository.createRun({
+            id: sentinels.run,
+            orgId: tenantA.orgId,
+            workspaceId: "workspace_default",
+            chatId: "chat_welcome",
+            agentId: runtime.agentId,
+            agentVersionId: runtime.agentVersionId,
+            modelId: runtime.modelId,
+            providerId: runtime.providerId,
+            status: "completed",
+            createdBy: tenantA.id,
+            createdAt: now,
+            completedAt: now,
+          });
+
+          const privateFile = await services.files.create(tenantA, {
+            workspaceId: "workspace_default",
+            fileName: `${sentinels.file}.txt`,
+            mimeType: "text/plain",
+            sizeBytes: sentinels.file.length,
+            dataBase64: Buffer.from(sentinels.file).toString("base64"),
+            purpose: "general",
+          });
+          const memory = await services.workspaceContent.create(
+            tenantA,
+            "memory",
+            {
+              workspaceId: "workspace_default",
+              scope: "workspace",
+              title: sentinels.memory,
+              body: sentinels.memory,
+            },
+          );
+          const webSource = await services.files.create(tenantA, {
+            workspaceId: "workspace_default",
+            fileName: `${sentinels.webSource}.html`,
+            mimeType: "text/html",
+            sizeBytes: sentinels.webSource.length,
+            dataBase64: Buffer.from(sentinels.webSource).toString("base64"),
+            purpose: "web_source",
+            metadata: { sourceUrl: "https://tenant-a.invalid/private" },
+          });
+          await repository.createResourceGrant({
+            id: "grant_tenant_isolation_share",
+            resourceType: "chat",
+            resourceId: "chat_welcome",
+            principalType: "group",
+            principalId: sentinels.share,
+            permission: "read",
+          });
+
+          const rejected: unknown[] = [];
+          for (const operation of [
+            () => services.runs.queuedForChat("chat_welcome", tenantB),
+            () => services.runs.get(sentinels.run, tenantB),
+            () => services.files.get(tenantB, privateFile.id),
+            () => services.files.get(tenantB, webSource.id),
+            () =>
+              services.chats.search({
+                workspaceId: "workspace_default",
+                query: sentinels.search,
+                subject: tenantB,
+              }),
+            () =>
+              services.collaboration.listChatShares(tenantB, "chat_welcome"),
+            () =>
+              services.workspaceContent.list(
+                tenantB,
+                "memory",
+                "workspace_default",
+              ),
+          ]) {
+            try {
+              await operation();
+              throw new Error("Expected cross-tenant operation to fail.");
+            } catch (error) {
+              rejected.push(error);
+              expect(error).toMatchObject({
+                code: expect.stringMatching(/forbidden|not_found/),
+              });
+            }
+          }
+
+          const [tenantBChats, tenantBFiles, tenantBMemories] =
+            await Promise.all([
+              services.chats.search({
+                workspaceId: tenantB.workspaceIds[0]!,
+                query: "PG_TENANT_A_",
+                subject: tenantB,
+              }),
+              services.files.listPage(tenantB, {
+                workspaceId: tenantB.workspaceIds[0]!,
+                query: "PG_TENANT_A_",
+                limit: 100,
+                offset: 0,
+              }),
+              services.workspaceContent.list(
+                tenantB,
+                "memory",
+                tenantB.workspaceIds[0]!,
+              ),
+            ]);
+          expect(tenantBChats).toEqual([]);
+          expect(tenantBFiles).toMatchObject({ items: [], total: 0 });
+          expect(tenantBMemories).toEqual([]);
+          expect(memory.body).toBe(sentinels.memory);
+          await expect(
+            services.collaboration.listChatShares(tenantA, "chat_welcome"),
+          ).resolves.toContainEqual(
+            expect.objectContaining({ principalId: sentinels.share }),
+          );
+
+          const tenantBVisibleOutput = JSON.stringify({
+            rejected: rejected.map((error) =>
+              error instanceof Error ? error.message : String(error),
+            ),
+            tenantBChats,
+            tenantBFiles,
+            tenantBMemories,
+          });
+          for (const sentinel of Object.values(sentinels)) {
+            expect(tenantBVisibleOutput).not.toContain(sentinel);
+          }
         });
       });
 
@@ -379,6 +779,12 @@ describe("RomeoRepository conformance", () => {
             "provider_zed",
           ]);
           expect(JSON.stringify(createdProviders)).not.toContain("secret");
+          expect(
+            await repository.updateProvider({
+              ...createdProviders[0]!,
+              name: "Ada Updated",
+            }),
+          ).toMatchObject({ name: "Ada Updated" });
 
           await repository.upsertModels([
             model("model_zed", "provider_zed", "zed-model", "Zed Model"),
@@ -418,6 +824,17 @@ describe("RomeoRepository conformance", () => {
               name: "zed-model",
             },
           ]);
+          expect(
+            await repository.listModelsPage("org_default", {
+              limit: 10,
+              offset: 0,
+              providerId: "provider_ada",
+              query: "updated",
+            }),
+          ).toMatchObject({
+            items: [expect.objectContaining({ id: "model_ada" })],
+            total: 1,
+          });
         });
       });
 
@@ -806,6 +1223,66 @@ describe("RomeoRepository conformance", () => {
           expect(
             await repository.listEvalResultHumanRatings(evalRun.id),
           ).toEqual([rating]);
+
+          const policy = await repository.upsertManagedModelCustomizationPolicy(
+            {
+              orgId: "org_default",
+              agentId: agent.id,
+              allowCommunicationStyle: true,
+              allowResponseLength: true,
+              allowLanguage: false,
+              allowCustomInstructions: false,
+              allowPersonalMemory: true,
+              allowVoiceSelection: false,
+              createdAt: "2026-06-30T11:21:00.000Z",
+              updatedAt: "2026-06-30T11:21:00.000Z",
+            },
+          );
+          expect(
+            await repository.getManagedModelCustomizationPolicy(
+              "org_default",
+              agent.id,
+            ),
+          ).toEqual(policy);
+          const preference = await repository.upsertManagedModelPreference({
+            orgId: "org_default",
+            agentId: agent.id,
+            principalType: "user",
+            principalId: "user_dev_admin",
+            communicationStyle: "concise",
+            personalMemoryEnabled: true,
+            createdAt: "2026-06-30T11:22:00.000Z",
+            updatedAt: "2026-06-30T11:22:00.000Z",
+          });
+          expect(
+            await repository.getManagedModelPreference(
+              "org_default",
+              agent.id,
+              "user",
+              "user_dev_admin",
+            ),
+          ).toEqual(preference);
+          expect(
+            await repository.listManagedModelPreferences(
+              "org_default",
+              agent.id,
+            ),
+          ).toEqual([preference]);
+          await repository.deleteManagedModelPreference(
+            "org_default",
+            agent.id,
+            "user",
+            "user_dev_admin",
+          );
+          expect(
+            await repository.listManagedModelPreferences(
+              "org_default",
+              agent.id,
+            ),
+          ).toEqual([]);
+          expect(
+            await repository.archiveAgent(agent.id, "2026-06-30T11:23:00.000Z"),
+          ).toMatchObject({ archivedAt: "2026-06-30T11:23:00.000Z" });
         });
       });
 
@@ -855,6 +1332,32 @@ describe("RomeoRepository conformance", () => {
           expect(await repository.getMessage(firstMessage.id)).toEqual(
             firstMessage,
           );
+          expect(
+            await repository.listAuthorizedChatsPage({
+              archived: "active",
+              groupIds: [],
+              isAdmin: true,
+              limit: 10,
+              now: "2026-06-30T11:03:30.000Z",
+              offset: 0,
+              orgId: "org_default",
+              principalId: "user_dev_admin",
+              principalType: "user",
+              workspaceId: "workspace_default",
+            }),
+          ).toMatchObject({
+            items: expect.arrayContaining([
+              expect.objectContaining({ id: chat.id }),
+            ]),
+          });
+          expect(
+            await repository.searchChatContent("workspace_default", "first"),
+          ).toContainEqual(
+            expect.objectContaining({
+              chatId: chat.id,
+              messageId: firstMessage.id,
+            }),
+          );
 
           await repository.createMessageParts([
             {
@@ -880,20 +1383,27 @@ describe("RomeoRepository conformance", () => {
           expect(await repository.getMessagePart("part_one")).toMatchObject({
             id: "part_one",
           });
+          expect(
+            await repository.updateMessagePart({
+              id: "part_one",
+              messageId: firstMessage.id,
+              type: "attachment",
+              content: "s3://bucket/one-updated",
+              metadata: { fileName: "one-updated.txt" },
+            }),
+          ).toMatchObject({ content: "s3://bucket/one-updated" });
 
           await repository.deleteMessage("message_second");
           expect(
             (await repository.listMessages(chat.id)).map((item) => item.id),
           ).toEqual(["message_first"]);
-          expect(
-            await repository.getMessage("message_second"),
-          ).toBeUndefined();
+          expect(await repository.getMessage("message_second")).toBeUndefined();
 
           await repository.deleteMessage(firstMessage.id);
           expect(await repository.getMessage(firstMessage.id)).toBeUndefined();
-          expect(
-            await repository.listMessageParts(firstMessage.id),
-          ).toEqual([]);
+          expect(await repository.listMessageParts(firstMessage.id)).toEqual(
+            [],
+          );
 
           const comment = await repository.createChatComment({
             id: "comment_one",
@@ -939,6 +1449,23 @@ describe("RomeoRepository conformance", () => {
               )
             ).map((item) => item.id),
           ).toContain(file.id);
+          expect(
+            await repository.listAuthorizedFileObjectsPage({
+              accessMode: "workspace_content",
+              groupIds: [],
+              isAdmin: true,
+              limit: 10,
+              offset: 0,
+              orgId: "org_default",
+              principalId: "user_dev_admin",
+              principalType: "user",
+              query: "notes",
+              workspaceId: "workspace_default",
+            }),
+          ).toMatchObject({
+            items: [expect.objectContaining({ id: file.id })],
+            total: 1,
+          });
           await repository.updateFileObject({
             ...file,
             status: "uploading",
@@ -1562,9 +2089,13 @@ describe("RomeoRepository conformance", () => {
             createdAt: "2026-06-30T12:10:00.000Z",
           });
           expect(await repository.getRun(run.id)).toEqual(run);
+          expect(await repository.listRuns(runtime.chatId)).toContainEqual(run);
           expect(
-            await repository.updateRun({
-              ...run,
+            await repository.updateRun({ ...run, status: "running" }),
+          ).toMatchObject({ status: "running" });
+          expect(
+            await repository.finalizeRun({
+              runId: run.id,
               status: "completed",
               completedAt: "2026-06-30T12:11:00.000Z",
             }),
@@ -1572,6 +2103,13 @@ describe("RomeoRepository conformance", () => {
             completedAt: "2026-06-30T12:11:00.000Z",
             status: "completed",
           });
+          expect(
+            await repository.finalizeRun({
+              runId: run.id,
+              status: "failed",
+              completedAt: "2026-06-30T12:12:00.000Z",
+            }),
+          ).toBeUndefined();
 
           await repository.appendRunEvents([
             {
@@ -1783,6 +2321,14 @@ describe("RomeoRepository conformance", () => {
           expect(
             await repository.listResourceGrants("org_default"),
           ).toContainEqual(grant);
+          const singleGrant = await repository.createResourceGrant({
+            ...grant,
+            id: "resource_grant_single_delete_conformance",
+            principalId: "group_single_delete_conformance",
+          });
+          expect(await repository.deleteResourceGrant(singleGrant.id)).toEqual(
+            singleGrant,
+          );
           expect(
             await repository.deleteResourceGrantsForPrincipal(
               "org_default",
@@ -1816,6 +2362,19 @@ describe("RomeoRepository conformance", () => {
               "workspace_default",
             ),
           ).toEqual([template]);
+          expect(
+            await repository.listAuthorizedPromptTemplatesPage({
+              groupIds: [],
+              isAdmin: true,
+              limit: 10,
+              offset: 0,
+              orgId: "org_default",
+              principalId: "user_dev_admin",
+              principalType: "user",
+              query: "Summarize",
+              workspaceId: "workspace_default",
+            }),
+          ).toMatchObject({ items: [template], total: 1 });
           expect(
             await repository.updatePromptTemplate({
               ...template,
@@ -1971,6 +2530,9 @@ describe("RomeoRepository conformance", () => {
             {
               id: deletionFile.id,
               status: "deleted",
+              fileName: "deleted",
+              sizeBytes: 0,
+              metadata: { contentPurged: true },
             },
           );
 
@@ -2238,6 +2800,13 @@ describe("RomeoRepository conformance", () => {
           expect(await repository.listBackgroundJobs("org_default")).toEqual([
             job,
           ]);
+          expect(
+            await repository.updateBackgroundJob({
+              ...job,
+              payload: { ...job.payload, reviewed: true },
+              updatedAt: "2026-06-30T12:03:30.000Z",
+            }),
+          ).toMatchObject({ payload: { reviewed: true } });
           const claimed = await repository.claimBackgroundJob({
             orgId: "org_default",
             type: "data_connector.sync",
@@ -2289,11 +2858,27 @@ describe("RomeoRepository conformance", () => {
             },
           });
           expect(
-            await repository.updateBackgroundJob({
-              ...(renewed ?? job),
-              status: "completed",
-              updatedAt: "2026-06-30T12:06:00.000Z",
-              completedAt: "2026-06-30T12:06:00.000Z",
+            await repository.updateBackgroundJobWithLease({
+              workerId: "svc_other",
+              now: "2026-06-30T12:06:00.000Z",
+              job: {
+                ...(renewed ?? job),
+                status: "completed",
+                updatedAt: "2026-06-30T12:06:00.000Z",
+                completedAt: "2026-06-30T12:06:00.000Z",
+              },
+            }),
+          ).toBeUndefined();
+          expect(
+            await repository.updateBackgroundJobWithLease({
+              workerId: "svc_worker",
+              now: "2026-06-30T12:06:00.000Z",
+              job: {
+                ...(renewed ?? job),
+                status: "completed",
+                updatedAt: "2026-06-30T12:06:00.000Z",
+                completedAt: "2026-06-30T12:06:00.000Z",
+              },
             }),
           ).toMatchObject({
             completedAt: "2026-06-30T12:06:00.000Z",
@@ -2375,6 +2960,12 @@ describe("RomeoRepository conformance", () => {
             updatedAt: "2026-06-30T13:02:00.000Z",
           });
           expect(
+            await repository.createWebhookDelivery({
+              ...delivery,
+              payload: { runId: "must_not_replace_existing_delivery" },
+            }),
+          ).toEqual(delivery);
+          expect(
             await repository.updateWebhookDelivery({
               ...delivery,
               attemptCount: 1,
@@ -2405,6 +2996,9 @@ describe("RomeoRepository conformance", () => {
             await repository.upsertRetentionPolicy({
               orgId: "org_default",
               auditLogRetentionDays: 365,
+              fileRetentionDays: null,
+              workspaceFileRetentionDays: {},
+              userFileRetentionDays: {},
               updatedBy: "user_dev_admin",
               updatedAt: "2026-06-30T14:00:00.000Z",
             }),
@@ -2413,6 +3007,9 @@ describe("RomeoRepository conformance", () => {
             await repository.upsertRetentionPolicy({
               orgId: "org_default",
               auditLogRetentionDays: 180,
+              fileRetentionDays: 90,
+              workspaceFileRetentionDays: { workspace_default: 30 },
+              userFileRetentionDays: { user_dev_admin: null },
               updatedBy: "user_dev_admin",
               updatedAt: "2026-06-30T14:01:00.000Z",
             }),
@@ -2529,6 +3126,8 @@ describe("live Postgres API readiness smoke", () => {
           env: readEnv({
             DATABASE_URL: fixture.databaseUrl,
             DEV_SEEDED_LOGIN: "false",
+            LOCAL_AUTH_SECRET_ENCRYPTION_KEY:
+              "prod-local-auth-secret-key-32-bytes",
             OBJECT_STORE_DRIVER: "s3",
             REPOSITORY_DRIVER: "postgres",
             SESSION_SECRET: "prod-session-secret-32-bytes-long",
@@ -2542,6 +3141,12 @@ describe("live Postgres API readiness smoke", () => {
 
         expect(keyResponse.status).toBe(201);
         expect(response.status).toBe(200);
+        expect(
+          body.data.checks.filter(
+            (check: { status: string }) => check.status !== "pass",
+          ),
+          JSON.stringify(body.data.checks),
+        ).toEqual([]);
         expect(body.data.status).toBe("ready");
         expect(
           body.data.checks.every(
@@ -2550,6 +3155,206 @@ describe("live Postgres API readiness smoke", () => {
         ).toBe(true);
       } finally {
         await fixture.close();
+      }
+    });
+  }
+});
+
+describe("live Postgres queued-turn API concurrency", () => {
+  if (livePostgresUrl === undefined) {
+    it.skip(`runs when ${POSTGRES_CONFORMANCE_DATABASE_URL_ENV} is set`, () =>
+      undefined);
+  } else {
+    it("preserves API queue races and expired-lease recovery across workers", async () => {
+      const fixture =
+        await createLivePostgresRepositoryFixture(livePostgresUrl);
+      try {
+        const graph = await seedRuntimeGraph(fixture.repository, "queue_api");
+        await fixture.repository.createRun({
+          id: "run_queue_api_blocker",
+          orgId: "org_default",
+          workspaceId: "workspace_default",
+          chatId: graph.chatId,
+          agentId: graph.agentId,
+          agentVersionId: graph.agentVersionId,
+          modelId: graph.modelId,
+          providerId: graph.providerId,
+          status: "running",
+          createdBy: "user_dev_admin",
+          createdAt: new Date().toISOString(),
+        });
+        const firstApi = createRomeoApi(fixture.repository);
+        const secondApi = createRomeoApi(fixture.repository);
+        const enqueue = (
+          api: ReturnType<typeof createRomeoApi>,
+          suffix: string,
+        ) =>
+          api.request(`/api/v1/chats/${graph.chatId}/queue`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              agentId: graph.agentId,
+              content: `Postgres queue ${suffix}`,
+              idempotencyKey: `postgres-queue-${suffix}`,
+            }),
+          });
+        const [firstResponse, secondResponse] = await Promise.all([
+          enqueue(firstApi, "first"),
+          enqueue(secondApi, "second"),
+        ]);
+        const [first, second] = await Promise.all([
+          firstResponse.json(),
+          secondResponse.json(),
+        ]);
+
+        expect(firstResponse.status).toBe(202);
+        expect(secondResponse.status).toBe(202);
+        const claims = await Promise.all([
+          fixture.repository.claimNextQueuedChatTurn({
+            chatId: graph.chatId,
+            leaseOwner: "postgres_api_worker_1",
+            leaseToken: "postgres_api_lease_1",
+            now: "2099-07-16T12:01:00.000Z",
+            leaseExpiresAt: "2099-07-16T12:02:00.000Z",
+          }),
+          fixture.repository.claimNextQueuedChatTurn({
+            chatId: graph.chatId,
+            leaseOwner: "postgres_api_worker_2",
+            leaseToken: "postgres_api_lease_2",
+            now: "2099-07-16T12:01:00.000Z",
+            leaseExpiresAt: "2099-07-16T12:02:00.000Z",
+          }),
+        ]);
+        const claimed = claims.find((claim) => claim !== undefined);
+        expect(claims.filter((claim) => claim !== undefined)).toHaveLength(1);
+        expect([first.data.id, second.data.id]).toContain(claimed?.id);
+
+        const blockedCancellation = await secondApi.request(
+          `/api/v1/chats/${graph.chatId}/queue/${claimed!.id}`,
+          { method: "DELETE" },
+        );
+        expect(blockedCancellation.status).toBe(409);
+
+        const reclaimed = await fixture.repository.claimNextQueuedChatTurn({
+          chatId: graph.chatId,
+          leaseOwner: "postgres_api_recovery_worker",
+          leaseToken: "postgres_api_recovery_lease",
+          now: "2099-07-16T12:02:01.000Z",
+          leaseExpiresAt: "2099-07-16T12:03:01.000Z",
+        });
+        expect(reclaimed).toMatchObject({
+          id: claimed!.id,
+          attemptCount: 2,
+          leaseOwner: "postgres_api_recovery_worker",
+        });
+      } finally {
+        await fixture.close();
+      }
+    });
+  }
+});
+
+describe("live Postgres portable chat deployment transfer", () => {
+  if (livePostgresUrl === undefined) {
+    it.skip(`runs when ${POSTGRES_CONFORMANCE_DATABASE_URL_ENV} is set`, () =>
+      undefined);
+  } else {
+    it("round-trips citations and attachment bytes across two clean databases", async () => {
+      const [source, target] = await Promise.all([
+        createLivePostgresRepositoryFixture(livePostgresUrl),
+        createLivePostgresRepositoryFixture(livePostgresUrl),
+      ]);
+      try {
+        const sourceApi = createRomeoApi(source.repository, {
+          objectStore: new MemoryObjectStore(),
+        });
+        const targetApi = createRomeoApi(target.repository, {
+          objectStore: new MemoryObjectStore(),
+        });
+        const attachmentText = "portable deployment attachment sentinel";
+        const importedResponse = await sourceApi.request(
+          "/api/v1/chats/import",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              workspaceId: "workspace_default",
+              title: "Portable deployment source",
+              messages: [
+                {
+                  role: "assistant",
+                  content: "Portable cited response",
+                  citations: [
+                    {
+                      chunkId: "portable-chunk",
+                      documentId: "portable-document",
+                      title: "Portable source",
+                      sourceUri: "https://docs.example.invalid/portable",
+                      sourceType: "web_search",
+                      provider: "controlled-fixture",
+                      retrievedAt: "2026-07-17T00:00:00.000Z",
+                    },
+                  ],
+                  attachments: [
+                    {
+                      fileName: "portable.txt",
+                      mimeType: "text/plain",
+                      sizeBytes: Buffer.byteLength(attachmentText),
+                      dataBase64:
+                        Buffer.from(attachmentText).toString("base64"),
+                      retainedInContext: true,
+                    },
+                  ],
+                },
+              ],
+            }),
+          },
+        );
+        const imported = await importedResponse.json();
+        const sourceExportResponse = await sourceApi.request(
+          `/api/v1/chats/${imported.data.id}/export`,
+        );
+        const sourceExport = await sourceExportResponse.json();
+        const targetImportResponse = await targetApi.request(
+          "/api/v1/chats/import",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              workspaceId: "workspace_default",
+              title: "Portable deployment target",
+              messages: sourceExport.data.messages,
+            }),
+          },
+        );
+        const targetImport = await targetImportResponse.json();
+        const targetExportResponse = await targetApi.request(
+          `/api/v1/chats/${targetImport.data.id}/export`,
+        );
+        const targetExport = await targetExportResponse.json();
+
+        expect(importedResponse.status).toBe(201);
+        expect(sourceExportResponse.status).toBe(200);
+        expect(targetImportResponse.status).toBe(201);
+        expect(targetExportResponse.status).toBe(200);
+        expect(targetExport.data.schema).toBe("romeo.chat-export.v1");
+        expect(targetExport.data.messages[0].citations[0]).toMatchObject({
+          chunkId: "portable-chunk",
+          documentId: "portable-document",
+          sourceType: "web_search",
+          provider: "controlled-fixture",
+        });
+        expect(
+          Buffer.from(
+            targetExport.data.messages[0].attachments[0].dataBase64,
+            "base64",
+          ).toString(),
+        ).toBe(attachmentText);
+        expect(
+          targetExport.data.messages[0].attachments[0].retainedInContext,
+        ).toBe(true);
+      } finally {
+        await Promise.all([source.close(), target.close()]);
       }
     });
   }
@@ -2679,6 +3484,9 @@ async function seedReadinessData(repository: RomeoRepository): Promise<void> {
   await repository.upsertRetentionPolicy({
     orgId: "org_default",
     auditLogRetentionDays: 365,
+    fileRetentionDays: null,
+    workspaceFileRetentionDays: {},
+    userFileRetentionDays: {},
     updatedBy: "user_dev_admin",
     updatedAt: "2026-06-30T15:00:00.000Z",
   });

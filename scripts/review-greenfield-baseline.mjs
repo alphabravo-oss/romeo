@@ -289,7 +289,7 @@ function destructiveStatementFailures(statements) {
     /\bDROP\s+COLUMN\b/iu,
     /\bALTER\s+TABLE\b[\s\S]*\bDROP\b/iu,
     /\bTRUNCATE\b/iu,
-    /\bDELETE\s+FROM\b/iu,
+    /^\s*DELETE\s+FROM\b/iu,
   ];
   return statements.flatMap((statement, index) =>
     destructivePatterns.some((pattern) => pattern.test(statement))

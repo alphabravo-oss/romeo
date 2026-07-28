@@ -1,21 +1,16 @@
-import type {
-  BillingEntitlementReconciliationResult,
-  BillingLifecycleEnforcementResult,
-} from "@romeo/api-client";
-
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
 import { workerSignalAborted } from "./worker-control";
 
 export interface BillingEntitlementReconciliationWorkerClient {
   admin: {
-    reconcileBillingEntitlements(): Promise<BillingEntitlementReconciliationResult>;
+    reconcileBillingEntitlements(): Promise<BillingReconciliationResult>;
   };
 }
 
 export interface BillingLifecycleEnforcementWorkerClient {
   admin: {
-    enforceBillingLifecycle(): Promise<BillingLifecycleEnforcementResult>;
+    enforceBillingLifecycle(): Promise<BillingLifecycleResult>;
   };
 }
 
@@ -80,7 +75,7 @@ export async function runBillingLifecycleEnforcementWorker(
 function writeReconciliationResult(
   io: CliIo,
   iteration: number,
-  result: BillingEntitlementReconciliationResult,
+  result: BillingReconciliationResult,
 ): void {
   writeJson(io, {
     iteration,
@@ -98,7 +93,7 @@ function writeReconciliationResult(
 function writeLifecycleEnforcementResult(
   io: CliIo,
   iteration: number,
-  result: BillingLifecycleEnforcementResult,
+  result: BillingLifecycleResult,
 ): void {
   writeJson(io, {
     iteration,
@@ -110,6 +105,27 @@ function writeLifecycleEnforcementResult(
     afterWarnings: result.after.warnings,
     result,
   });
+}
+
+interface BillingStateSummary {
+  status: string;
+  warnings: string[];
+}
+
+interface BillingReconciliationResult {
+  actions: {
+    createdQuotaIds: string[];
+    updatedQuotaIds: string[];
+    unchangedQuotaIds: string[];
+  };
+  after: BillingStateSummary;
+  before: BillingStateSummary;
+}
+
+interface BillingLifecycleResult {
+  action: { statusChanged: boolean; type: string };
+  after: BillingStateSummary;
+  before: BillingStateSummary;
 }
 
 function sleepMs(ms: number): Promise<void> {

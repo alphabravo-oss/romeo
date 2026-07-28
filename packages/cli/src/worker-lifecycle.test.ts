@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ToolOperationDispatchRequestClaimResult } from "@romeo/api-client";
+import type { ToolOperationDispatchRequestClaimResult } from "./api-types";
 
 import {
   runBillingEntitlementReconciliationWorker,
@@ -767,8 +767,8 @@ describe("worker lifecycle controls", () => {
         url: "https://auth.example.com/oauth/token",
         method: "POST",
         redirect: "error",
-        auth: `Basic ${Buffer.from(`${clientId}:${clientSecret}`, "utf8").toString("base64")}`,
-        body: "grant_type=client_credentials&scope=issues%3Aread",
+        auth: `Basic ${Buffer.from("tool%2Dworker%2Doauth%2Dclient%2Did:tool%2Dworker%2Doauth%2Dclient%2Dsecret", "utf8").toString("base64")}`,
+        body: "scope=issues%3Aread&grant_type=client_credentials",
       },
       {
         kind: "api",

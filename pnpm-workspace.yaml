@@ -2,4 +2,13 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
+  "@firebase/util": true
+  "@scarf/scarf": false
   esbuild: true
+  protobufjs: true
+minimumReleaseAgeExclude:
+  - "@anthropic-ai/sdk@0.112.3"
+  - openai@6.48.0
+  - "@aws-sdk/client-s3@3.1090.0"
+  - "@aws-sdk/s3-request-presigner@3.1090.0"
+  - "@aws-sdk/client-secrets-manager@3.1090.0"

@@ -66,18 +66,18 @@ const allowedExternalHostCount = nonNegativeInteger(
   argValue("--allowed-external-host-count"),
   { fallback: "1", label: "--allowed-external-host-count" },
 );
-const workerExecutionVerified = booleanArg(
-  "--worker-execution-verified",
-  true,
-);
+const workerExecutionVerified = booleanArg("--worker-execution-verified", true);
 const crashRetryOrRequeueVerified = booleanArg(
   "--crash-retry-or-requeue-verified",
   true,
 );
-const requeuedSyncCount = nonNegativeInteger(argValue("--requeued-sync-count"), {
-  fallback: "1",
-  label: "--requeued-sync-count",
-});
+const requeuedSyncCount = nonNegativeInteger(
+  argValue("--requeued-sync-count"),
+  {
+    fallback: "1",
+    label: "--requeued-sync-count",
+  },
+);
 const completedAfterRetry = booleanArg("--completed-after-retry", true);
 const secretRefResolutionVerified = booleanArg(
   "--secret-ref-resolution-verified",
@@ -128,7 +128,10 @@ const syncHistoryReadbackVerified = booleanArg(
   "--sync-history-readback-verified",
   true,
 );
-const rawAllowedHostsReturned = booleanArg("--raw-allowed-hosts-returned", false);
+const rawAllowedHostsReturned = booleanArg(
+  "--raw-allowed-hosts-returned",
+  false,
+);
 const rawConnectorConfigReturned = booleanArg(
   "--raw-connector-config-returned",
   false,

@@ -33,12 +33,14 @@ describe("Slack data connector API", () => {
           const url = new URL(String(input));
           fetches.push({ headers: init?.headers, url });
           expect(url.pathname).toBe("/api/conversations.history");
-          expect(url.searchParams.get("channel")).toBe(slackChannelId);
-          expect(url.searchParams.get("limit")).toBe("2");
-          expect(url.searchParams.get("oldest")).toBe("1719500000.000100");
-          expect(headerValue(init?.headers, "authorization")).toBe(
-            `Bearer ${slackToken}`,
-          );
+          expect(init?.method).toBe("POST");
+          const body = new URLSearchParams(String(init?.body));
+          expect(body.get("channel")).toBe(slackChannelId);
+          expect(body.get("limit")).toBe("2");
+          expect(body.get("oldest")).toBe("1719500000.000100");
+          expect(
+            new Headers(init?.headers as HeadersInit).get("authorization"),
+          ).toBe(`Bearer ${slackToken}`);
           return jsonResponse({
             ok: true,
             messages: [
@@ -258,15 +260,4 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: { "content-type": "application/json" },
     status,
   });
-}
-
-function headerValue(headers: HeadersInit | undefined, key: string): string {
-  if (headers === undefined) return "";
-  if (headers instanceof Headers) return headers.get(key) ?? "";
-  if (Array.isArray(headers)) {
-    return (
-      headers.find(([candidate]) => candidate.toLowerCase() === key)?.[1] ?? ""
-    );
-  }
-  return headers[key] ?? "";
 }

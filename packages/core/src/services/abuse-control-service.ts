@@ -1,7 +1,6 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
 
 import type {
-  AbuseControlAction,
   AbuseControlBlockReason,
   AbuseControlEntitlements,
   AbuseControlKillSwitches,
@@ -13,29 +12,26 @@ import type { BillingPlan } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { writeAuditLog } from "./audit-log";
+import {
+  cloneKillSwitches,
+  defaultBlockReasonsFor,
+  isEmptyPatch,
+  isRecord,
+  policyAuditMetadata,
+  settingKey,
+  uniqueReasons,
+} from "./abuse-control-policy-helpers";
+import type {
+  AbuseControlEnforcementInput,
+  StoredAbuseControlPolicy,
+} from "./abuse-control-types";
 
-const settingKeyPrefix = "abuse_controls.org.v1:";
+export type {
+  AbuseControlEnforcementInput,
+  StoredAbuseControlPolicy,
+} from "./abuse-control-types";
+
 const idPattern = /^[A-Za-z0-9_.:/@-]+$/u;
-
-interface StoredAbuseControlPolicy {
-  version: 1;
-  orgId: string;
-  suspension: AbuseControlSuspension;
-  entitlements: AbuseControlEntitlements;
-  killSwitches: AbuseControlKillSwitches;
-  updatedAt?: string;
-  updatedBy?: string;
-}
-
-export interface AbuseControlEnforcementInput {
-  action: AbuseControlAction;
-  agentId?: string;
-  connectorId?: string;
-  providerId?: string;
-  toolId?: string;
-  workerClass?: string;
-  workspaceId?: string;
-}
 
 export class AbuseControlService {
   constructor(private readonly repository: RomeoRepository) {}
@@ -237,29 +233,6 @@ async function toReport(
     ...(policy.updatedAt === undefined ? {} : { updatedAt: policy.updatedAt }),
     ...(policy.updatedBy === undefined ? {} : { updatedBy: policy.updatedBy }),
   };
-}
-
-function defaultBlockReasonsFor(
-  policy: StoredAbuseControlPolicy,
-  billingPlan: BillingPlan | undefined,
-): AbuseControlBlockReason[] {
-  const reasons: AbuseControlBlockReason[] = [];
-  if (policy.suspension.suspended) reasons.push("org_suspended");
-  if (policy.entitlements.enforceBillingStatus) {
-    if (
-      billingPlan === undefined &&
-      policy.entitlements.denyWhenBillingPlanMissing
-    ) {
-      reasons.push("billing_plan_missing");
-    }
-    if (
-      billingPlan !== undefined &&
-      !policy.entitlements.allowedBillingStatuses.includes(billingPlan.status)
-    ) {
-      reasons.push("billing_status_blocked");
-    }
-  }
-  return reasons;
 }
 
 async function readStoredPolicy(
@@ -512,62 +485,4 @@ function uniqueBillingStatuses(values: unknown[]): BillingPlan["status"][] {
 function isSafeValue(value: string): boolean {
   const trimmed = value.trim();
   return trimmed.length > 0 && trimmed.length <= 200 && idPattern.test(trimmed);
-}
-
-function isEmptyPatch(policy: UpdateAbuseControlPolicyRequest): boolean {
-  return (
-    policy.suspension === undefined &&
-    policy.entitlements === undefined &&
-    policy.killSwitches === undefined
-  );
-}
-
-function cloneKillSwitches(
-  killSwitches: AbuseControlKillSwitches,
-): AbuseControlKillSwitches {
-  return {
-    connectorIds: [...killSwitches.connectorIds],
-    providerIds: [...killSwitches.providerIds],
-    toolIds: [...killSwitches.toolIds],
-    workerClasses: [...killSwitches.workerClasses],
-  };
-}
-
-function uniqueReasons(
-  reasons: AbuseControlBlockReason[],
-): AbuseControlBlockReason[] {
-  return [...new Set(reasons)];
-}
-
-function policyAuditMetadata(
-  previous: AbuseControlPolicyReport,
-  next: AbuseControlPolicyReport,
-): Record<string, unknown> {
-  return {
-    suspended: next.suspension.suspended,
-    suspensionChanged:
-      previous.suspension.suspended !== next.suspension.suspended,
-    reasonCodeChanged:
-      (previous.suspension.reasonCode ?? null) !==
-      (next.suspension.reasonCode ?? null),
-    enforceBillingStatus: next.entitlements.enforceBillingStatus,
-    denyWhenBillingPlanMissing: next.entitlements.denyWhenBillingPlanMissing,
-    allowedBillingStatuses: next.entitlements.allowedBillingStatuses,
-    killSwitchCounts: {
-      connectorIds: next.killSwitches.connectorIds.length,
-      providerIds: next.killSwitches.providerIds.length,
-      toolIds: next.killSwitches.toolIds.length,
-      workerClasses: next.killSwitches.workerClasses.length,
-    },
-    costWorkBlocked: next.enforcement.costWorkBlocked,
-    defaultBlockReasons: next.enforcement.defaultBlockReasons,
-  };
-}
-
-function settingKey(orgId: string): string {
-  return `${settingKeyPrefix}${orgId}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -1,8 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { useState } from "react";
 
-import { WorkspaceProvider } from '../components/WorkspaceContext'
+import { WorkspaceProvider } from "../components/WorkspaceContext";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -11,15 +11,15 @@ export function AppProviders({ children }: { children: ReactNode }) {
         defaultOptions: {
           queries: {
             staleTime: 10_000,
-            refetchOnWindowFocus: false
-          }
-        }
-      })
-  )
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
 
   return (
     <QueryClientProvider client={queryClient}>
       <WorkspaceProvider>{children}</WorkspaceProvider>
     </QueryClientProvider>
-  )
+  );
 }

@@ -1,4 +1,14 @@
-import { openAiCompatibleCapabilities } from "../capabilities";
+import type {
+  ChatCompletionContentPart,
+  ChatCompletionMessageFunctionToolCall,
+  ChatCompletionMessageParam,
+  ChatCompletionTool,
+} from "openai/resources/chat/completions";
+
+import {
+  detectsImageGenerationModel,
+  openAiCompatibleCapabilities,
+} from "../capabilities";
 import {
   normalizeProviderToolCall,
   type ProviderToolCallRequest,
@@ -12,30 +22,29 @@ import type {
 } from "../types";
 import { usageFromOpenAiPayload } from "../usage";
 import { devEchoStream } from "./dev-echo";
-import { readSseJson } from "./sse-json";
+import { createOpenAiClient, normalizeProviderSdkError } from "./provider-sdk";
 
 export const openAiCompatibleAdapter: ModelProviderAdapter = {
   kind: "openai-compatible",
-  async health(provider) {
-    return {
-      ok: provider.enabled,
-      message: provider.enabled
-        ? "Provider is configured."
-        : "Provider is disabled.",
-    };
+  async health(provider, options) {
+    const models = await discoverCompatibleModels(
+      { ...provider, modelIds: [] },
+      openAiCompatibleCapabilities,
+      options,
+    );
+    return models.length > 0
+      ? {
+          ok: true,
+          message: `Connection available (${models.length} model${models.length === 1 ? "" : "s"}).`,
+        }
+      : { ok: false, message: "The endpoint returned no discoverable models." };
   },
-  async listModels(provider): Promise<BaseModel[]> {
-    return [
-      {
-        id: `model_${provider.id}_default`,
-        providerId: provider.id,
-        name: "gpt-compatible",
-        displayName: "OpenAI-compatible default",
-        enabled: true,
-        capabilities: openAiCompatibleCapabilities,
-        contextWindow: 128000,
-      },
-    ];
+  async listModels(provider, options): Promise<BaseModel[]> {
+    return discoverCompatibleModels(
+      provider,
+      openAiCompatibleCapabilities,
+      options,
+    );
   },
   streamChat(input) {
     if (input.apiKey === undefined) {
@@ -48,6 +57,97 @@ export const openAiCompatibleAdapter: ModelProviderAdapter = {
   },
 };
 
+export async function discoverCompatibleModels(
+  provider: Parameters<ModelProviderAdapter["listModels"]>[0],
+  capabilities: typeof openAiCompatibleCapabilities,
+  options?: { apiKey?: string; fetchImpl?: typeof fetch },
+): Promise<BaseModel[]> {
+  let ids = provider.modelIds?.map((id) => id.trim()).filter(Boolean) ?? [];
+  const metadataById = new Map<string, Record<string, unknown>>();
+  if (ids.length === 0) {
+    try {
+      const client = createOpenAiClient(
+        provider,
+        options?.apiKey,
+        options?.fetchImpl,
+      );
+      ids = [];
+      for await (const model of client.models.list()) {
+        const id = model.id.trim();
+        if (!id) continue;
+        ids.push(id);
+        metadataById.set(id, asRecord(model) ?? {});
+        if (ids.length >= 100) break;
+      }
+    } catch {
+      return [];
+    }
+  }
+  return [...new Set(ids)]
+    .slice(0, 100)
+    .sort()
+    .map((name) => ({
+      id: `model_${provider.id}_${modelIdPart(name)}`,
+      providerId: provider.id,
+      name,
+      displayName: name,
+      enabled: true,
+      capabilities: {
+        ...capabilities,
+        imageGeneration:
+          imageGenerationFromMetadata(metadataById.get(name)) ??
+          detectsImageGenerationModel(name),
+      },
+      contextWindow: 128000,
+    }));
+}
+
+function imageGenerationFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): boolean | undefined {
+  if (metadata === undefined) return undefined;
+  const capabilities = asRecord(metadata.capabilities);
+  for (const value of [
+    capabilities?.image_generation,
+    capabilities?.imageGeneration,
+    metadata.image_generation,
+    metadata.imageGeneration,
+  ]) {
+    if (typeof value === "boolean") return value;
+  }
+  const outputModalities = arrayOfStrings(
+    metadata.output_modalities ?? capabilities?.output_modalities,
+  );
+  if (outputModalities !== undefined) return outputModalities.includes("image");
+  const methods = arrayOfStrings(
+    metadata.supported_generation_methods ??
+      capabilities?.supported_generation_methods,
+  );
+  if (methods !== undefined) {
+    return methods.some(
+      (method) =>
+        method === "image" ||
+        method === "image_generation" ||
+        method === "generate_image",
+    );
+  }
+  return undefined;
+}
+
+function arrayOfStrings(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.every((item) => typeof item === "string")
+    ? value.map((item) => item.toLowerCase())
+    : undefined;
+}
+
+function modelIdPart(name: string): string {
+  const normalized = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "_")
+    .replace(/^_+|_+$/gu, "");
+  return normalized.length > 0 ? normalized.slice(0, 80) : "model";
+}
+
 async function* providerCredentialUnavailableStream(): AsyncIterable<StreamChatChunk> {
   throw { errorCode: "provider_credential_unavailable" };
 }
@@ -55,71 +155,62 @@ async function* providerCredentialUnavailableStream(): AsyncIterable<StreamChatC
 async function* streamOpenAiCompatibleChat(
   input: StreamChatInput,
 ): AsyncIterable<StreamChatChunk> {
-  const request: RequestInit = {
-    method: "POST",
-    headers: {
-      accept: "text/event-stream",
-      authorization: `Bearer ${input.apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: input.model.name,
-      messages: input.messages.map(toOpenAiMessage),
-      stream: true,
-      stream_options: { include_usage: true },
-      ...(input.tools === undefined || input.tools.length === 0
-        ? {}
-        : {
-            tool_choice: "auto",
-            tools: input.tools.map((tool) => ({
-              type: "function",
-              function: {
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.parameters,
-              },
-            })),
-          }),
-    }),
-    ...(input.signal === undefined ? {} : { signal: input.signal }),
-  };
-  const response = await (input.fetchImpl ?? fetch)(
-    chatCompletionsUrl(input),
-    request,
+  const client = createOpenAiClient(
+    input.provider,
+    input.apiKey,
+    input.fetchImpl,
   );
+  try {
+    const stream = await client.chat.completions.create(
+      {
+        model: input.model.name,
+        messages: input.messages.map(toOpenAiMessage),
+        stream: true,
+        stream_options: { include_usage: true },
+        ...(input.tools === undefined || input.tools.length === 0
+          ? {}
+          : {
+              tool_choice: "auto",
+              tools: input.tools.map(
+                (tool): ChatCompletionTool => ({
+                  type: "function",
+                  function: {
+                    name: tool.name,
+                    description: tool.description,
+                    parameters: tool.parameters,
+                  },
+                }),
+              ),
+            }),
+      },
+      input.signal === undefined ? undefined : { signal: input.signal },
+    );
 
-  if (!response.ok) {
-    throw {
-      errorCode: "provider_http_error",
-      errorType: `http_${response.status}`,
-    };
-  }
-  if (response.body === null) {
-    throw { errorCode: "provider_stream_error", errorType: "empty_body" };
-  }
+    const toolCalls = new ToolCallAccumulator();
+    for await (const chunk of stream) {
+      const usage = usageFromOpenAiPayload(chunk);
+      if (usage !== undefined) yield { type: "usage", usage };
 
-  const toolCalls = new ToolCallAccumulator();
-  for await (const payload of readSseJson(response.body)) {
-    const usage = usageFromOpenAiPayload(payload);
-    if (usage !== undefined) yield { type: "usage", usage };
-
-    for (const token of textDeltas(payload)) yield token;
-    toolCalls.merge(payload);
-    if (hasToolCallFinish(payload)) {
-      const flushed = toolCalls.flush();
-      if (flushed.length === 1)
-        yield { type: "tool_call", toolCall: flushed[0]! };
-      if (flushed.length > 1)
-        yield {
-          type: "tool_call",
-          toolCall: flushed[0]!,
-          toolCalls: flushed,
-        };
+      for (const token of textDeltas(chunk)) yield token;
+      toolCalls.merge(chunk);
+      if (hasToolCallFinish(chunk)) {
+        const flushed = toolCalls.flush();
+        if (flushed.length === 1)
+          yield { type: "tool_call", toolCall: flushed[0]! };
+        if (flushed.length > 1)
+          yield {
+            type: "tool_call",
+            toolCall: flushed[0]!,
+            toolCalls: flushed,
+          };
+      }
     }
+  } catch (caught) {
+    throw normalizeProviderSdkError(caught, "openai-compatible");
   }
 }
 
-function toOpenAiMessage(message: ChatMessage): Record<string, unknown> {
+function toOpenAiMessage(message: ChatMessage): ChatCompletionMessageParam {
   if (message.role === "assistant" && message.toolCalls !== undefined) {
     return {
       role: "assistant",
@@ -133,18 +224,35 @@ function toOpenAiMessage(message: ChatMessage): Record<string, unknown> {
       role: "tool",
       content: message.content,
       ...(message.name === undefined ? {} : { name: message.name }),
-      ...(message.toolCallId === undefined
-        ? {}
-        : { tool_call_id: message.toolCallId }),
+      tool_call_id: message.toolCallId ?? "",
     };
   }
 
+  if (message.role === "user" && message.images?.length) {
+    const content: ChatCompletionContentPart[] = [
+      { type: "text", text: message.content },
+      ...message.images.map((image) => ({
+        type: "image_url" as const,
+        image_url: {
+          url: `data:${image.mimeType};base64,${stripDataUrl(image.dataBase64)}`,
+        },
+      })),
+    ];
+    return {
+      role: "user",
+      content,
+    };
+  }
   return { role: message.role, content: message.content };
+}
+
+function stripDataUrl(value: string): string {
+  return value.includes(",") ? value.slice(value.indexOf(",") + 1) : value;
 }
 
 function toOpenAiToolCall(
   toolCall: ProviderToolCallRequest,
-): Record<string, unknown> {
+): ChatCompletionMessageFunctionToolCall {
   return {
     id: toolCall.providerCallId,
     type: "function",
@@ -153,15 +261,6 @@ function toOpenAiToolCall(
       arguments: JSON.stringify(toolCall.arguments),
     },
   };
-}
-
-function chatCompletionsUrl(input: StreamChatInput): string {
-  return new URL(
-    "chat/completions",
-    input.provider.baseUrl.endsWith("/")
-      ? input.provider.baseUrl
-      : `${input.provider.baseUrl}/`,
-  ).toString();
 }
 
 function textDeltas(payload: unknown): string[] {

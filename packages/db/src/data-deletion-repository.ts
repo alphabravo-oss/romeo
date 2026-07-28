@@ -1,4 +1,5 @@
 import { and, count, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { fileTombstoneFields } from "@romeo/core";
 
 import type { RomeoDatabase } from "./client";
 import {
@@ -21,48 +22,16 @@ import {
   userNotifications,
   workspaceFolderItems,
 } from "./schema";
-import { optionalIsoString, toIsoString } from "./repository-mapping";
+import {
+  emptyDataDeletionCounts,
+  fileObjectStorageObjectCount,
+  type DataDeletionPlanRecord,
+  type DataDeletionResourceTypeRecord,
+} from "./data-deletion-records";
+import { activeChatLegalHold } from "./data-deletion-legal-hold";
 
-export type DataDeletionResourceTypeRecord =
-  | "chat"
-  | "file_object"
-  | "knowledge_source";
-
-export interface DataDeletionCountsRecord {
-  chats: number;
-  messages: number;
-  messageParts: number;
-  runs: number;
-  runSteps: number;
-  runEvents: number;
-  chatComments: number;
-  userNotifications: number;
-  notificationDeliveries: number;
-  runLinkedToolCalls: number;
-  usageEvents: number;
-  resourceGrants: number;
-  resourceFavorites: number;
-  workspaceFolderItems: number;
-  fileObjects: number;
-  knowledgeSources: number;
-  knowledgeChunks: number;
-  knowledgeEmbeddings: number;
-  objectStoreObjects: number;
-  objectStoreBytes: number;
-}
-
-export interface DataDeletionPlanRecord {
-  orgId: string;
-  workspaceId: string;
-  resourceType: DataDeletionResourceTypeRecord;
-  resourceId: string;
-  knowledgeBaseId?: string;
-  legalHold?: {
-    until: string;
-    reason?: string;
-  };
-  counts: DataDeletionCountsRecord;
-}
+export type * from "./data-deletion-records";
+export { activeChatLegalHold };
 
 type DataDeletionDatabase = Pick<RomeoDatabase, "delete" | "select" | "update">;
 
@@ -338,6 +307,7 @@ async function deleteFileObjectData(
   orgId: string,
   fileId: string,
 ): Promise<void> {
+  const deletedAt = new Date();
   await db
     .delete(resourceGrants)
     .where(
@@ -350,9 +320,9 @@ async function deleteFileObjectData(
   await db
     .update(objectRecords)
     .set({
-      status: "deleted",
-      deletedAt: new Date(),
-      updatedAt: new Date(),
+      ...fileTombstoneFields(fileId, deletedAt.toISOString()),
+      deletedAt,
+      updatedAt: deletedAt,
     })
     .where(and(eq(objectRecords.orgId, orgId), eq(objectRecords.id, fileId)));
 }
@@ -479,19 +449,6 @@ async function deleteChatData(
     .where(and(eq(chats.orgId, orgId), eq(chats.id, chatId)));
 }
 
-export function activeChatLegalHold(
-  chat: Pick<typeof chats.$inferSelect, "legalHoldReason" | "legalHoldUntil">,
-): DataDeletionPlanRecord["legalHold"] | undefined {
-  if (chat.legalHoldUntil === null) return undefined;
-  const until = toIsoString(chat.legalHoldUntil);
-  if (new Date(until).getTime() <= Date.now()) return undefined;
-  const reason = optionalIsoString(chat.legalHoldReason);
-  return {
-    until,
-    ...(reason === undefined ? {} : { reason }),
-  };
-}
-
 function chatUsageEventWhere(
   orgId: string,
   chatId: string,
@@ -534,44 +491,4 @@ async function countRows(
 ): Promise<number> {
   const [row] = await rowsPromise;
   return row === undefined ? 0 : Number(row.value);
-}
-
-function emptyDataDeletionCounts(): DataDeletionCountsRecord {
-  return {
-    chats: 0,
-    messages: 0,
-    messageParts: 0,
-    runs: 0,
-    runSteps: 0,
-    runEvents: 0,
-    chatComments: 0,
-    userNotifications: 0,
-    notificationDeliveries: 0,
-    runLinkedToolCalls: 0,
-    usageEvents: 0,
-    resourceGrants: 0,
-    resourceFavorites: 0,
-    workspaceFolderItems: 0,
-    fileObjects: 0,
-    knowledgeSources: 0,
-    knowledgeChunks: 0,
-    knowledgeEmbeddings: 0,
-    objectStoreObjects: 0,
-    objectStoreBytes: 0,
-  };
-}
-
-function fileObjectStorageObjectCount(metadata: unknown): number {
-  if (!isJsonObject(metadata)) return 1;
-  if (metadata.uploadMode !== "resumable_backend_composed") return 1;
-  const partCount = metadata.partCount;
-  return typeof partCount === "number" &&
-    Number.isInteger(partCount) &&
-    partCount > 0
-    ? partCount + 1
-    : 1;
-}
-
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

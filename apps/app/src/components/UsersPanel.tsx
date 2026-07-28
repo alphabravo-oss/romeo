@@ -1,110 +1,142 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { Input, NativeSelect, Button } from "@romeo/ui";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
-import { disableUser, listUsers, setUserPassword, updateUserRole } from '../api/users-client'
-import type { User, UserRole } from '../api/users-types'
-import { PanelState } from '../lib/panel-state'
-import { toast } from '../lib/toast'
-import { useConfirm } from './ConfirmDialog'
-import { type ColumnDef, DataTable, createColumnHelper } from './DataTable'
-import { FormDialog } from './FormDialog'
-import { PanelStats } from './PanelStats'
+import {
+  disableUser,
+  listUsers,
+  setUserPassword,
+  updateUserRole,
+} from "../features/administration";
+import type { User, UserRole } from "../features/administration";
+import { PanelState } from "../lib/panel-state";
+import { useLocale } from "../lib/i18n";
+import { toast } from "../lib/toast";
+import { useConfirm } from "./ConfirmDialog";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { FormDialog } from "./FormDialog";
+import { PanelStats } from "./PanelStats";
 
-const userCol = createColumnHelper<User>()
+const userCol = createColumnHelper<User>();
 
-const roleOptions: { value: UserRole; label: string }[] = [
-  { value: 'user', label: 'User' },
-  { value: 'org_admin', label: 'Org admin' },
-  { value: 'global_admin', label: 'Global admin' }
-]
-
-function roleLabel(role: UserRole): string {
-  return roleOptions.find((option) => option.value === role)?.label ?? role
-}
+const roleOptions: UserRole[] = ["user", "org_admin", "global_admin"];
 
 export function UsersPanel() {
-  const queryClient = useQueryClient()
-  const { ask, dialog } = useConfirm()
-  const usersQuery = useQuery({ queryKey: ['users'], queryFn: listUsers })
-  const disableMutation = useMutation({ mutationFn: disableUser })
-  const [managing, setManaging] = useState<User>()
+  const { t } = useLocale();
+  const queryClient = useQueryClient();
+  const { ask, dialog } = useConfirm();
+  const usersQuery = useQuery({ queryKey: ["users"], queryFn: listUsers });
+  const disableMutation = useMutation({ mutationFn: disableUser });
+  const [managing, setManaging] = useState<User>();
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['users'] })
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["users"] });
 
   async function handleDisable(userId: string) {
-    if (!(await ask({ title: 'Disable user?', body: 'They lose access immediately.', confirmLabel: 'Disable', tone: 'danger' }))) return
+    if (
+      !(await ask({
+        title: t("userDisableTitle"),
+        body: t("userDisableImmediate"),
+        confirmLabel: t("userDisable"),
+        tone: "danger",
+      }))
+    )
+      return;
     try {
-      await disableMutation.mutateAsync(userId)
-      await refresh()
-      toast('User disabled', 'success')
+      await disableMutation.mutateAsync(userId);
+      await refresh();
+      toast(t("userDisabledNotice"), "success");
     } catch {
-      toast('Could not disable user', 'error')
+      toast(t("userCouldNotDisable"), "error");
     }
   }
 
   const columns = useMemo<ColumnDef<User, any>[]>(
     () => [
-      userCol.accessor('name', {
-        header: 'Name',
-        cell: (c) => <span className="font-medium">{c.getValue()}</span>
+      userCol.accessor("name", {
+        header: t("userName"),
+        cell: (c) => <span className="font-medium">{c.getValue()}</span>,
       }),
-      userCol.accessor('email', {
-        header: 'Email',
-        cell: (c) => <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+      userCol.accessor("email", {
+        header: t("userEmail"),
+        cell: (c) => (
+          <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+        ),
       }),
-      userCol.accessor('role', {
-        header: 'Role',
-        cell: (c) => <span className="rm-cell-muted">{roleLabel(c.getValue())}</span>
+      userCol.accessor("role", {
+        header: t("userRole"),
+        cell: (c) => (
+          <span className="rm-cell-muted">{t(roleKey(c.getValue()))}</span>
+        ),
       }),
-      userCol.accessor((row) => (row.disabledAt ? 'disabled' : 'active'), {
-        id: 'status',
-        header: 'Status',
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>
-      }),
+      userCol.accessor(
+        (row) => (row.disabledAt ? t("userDisabled") : t("userActive")),
+        {
+          id: "status",
+          header: t("userStatus"),
+          cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+        },
+      ),
       userCol.display({
-        id: 'actions',
-        header: '',
+        id: "actions",
+        header: "",
         cell: (c) => (
           <div className="flex justify-end gap-2">
-            <button className="rm-button" onClick={() => setManaging(c.row.original)} type="button">
-              Manage
-            </button>
-            <button
-              className="rm-button danger"
-              disabled={disableMutation.isPending || c.row.original.disabledAt !== undefined}
+            <Button onClick={() => setManaging(c.row.original)} type="button">
+              {t("userManage")}
+            </Button>
+            <Button
+              variant="danger"
+              disabled={
+                disableMutation.isPending ||
+                c.row.original.disabledAt !== undefined
+              }
               onClick={() => void handleDisable(c.row.original.id)}
               type="button"
             >
-              Disable
-            </button>
+              {t("userDisable")}
+            </Button>
           </div>
-        )
-      })
+        ),
+      }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [disableMutation.isPending]
-  )
+    [disableMutation.isPending, t],
+  );
 
   return (
     <section className="rm-panel p-4">
       <div className="rm-card-header">
-        <div className="rm-card-title">Users</div>
-        <button className="rm-button" disabled={usersQuery.isFetching} onClick={() => void usersQuery.refetch()} type="button">
-          {usersQuery.isFetching ? 'Refreshing' : 'Refresh'}
-        </button>
+        <div className="rm-card-title">{t("userUsers")}</div>
+        <Button
+          disabled={usersQuery.isFetching}
+          onClick={() => void usersQuery.refetch()}
+          type="button"
+        >
+          {usersQuery.isFetching ? t("refreshing") : t("refresh")}
+        </Button>
       </div>
       <div className="mt-4">
-        <PanelState query={usersQuery} empty="No users yet.">
+        <PanelState query={usersQuery} empty={t("userNoUsers")}>
           {(users) => (
             <div className="grid gap-4">
               <PanelStats
                 items={[
-                  { label: 'Total users', value: users.length },
-                  { label: 'Admins', value: users.filter((u) => u.role !== 'user').length },
-                  { label: 'Disabled', value: users.filter((u) => u.disabledAt).length },
+                  { label: t("userTotalUsers"), value: users.length },
+                  {
+                    label: t("userAdmins"),
+                    value: users.filter((u) => u.role !== "user").length,
+                  },
+                  {
+                    label: t("userDisabled"),
+                    value: users.filter((u) => u.disabledAt).length,
+                  },
                 ]}
               />
-              <DataTable columns={columns} data={users} empty="No users yet." />
+              <DataTable
+                columns={columns}
+                data={users}
+                empty={t("userNoUsers")}
+              />
             </div>
           )}
         </PanelState>
@@ -119,109 +151,129 @@ export function UsersPanel() {
       ) : null}
       {dialog}
     </section>
-  )
+  );
 }
 
 function UserManageDialog({
   user,
   onClose,
-  onChanged
+  onChanged,
 }: {
-  user: User
-  onClose: () => void
-  onChanged: () => void
+  user: User;
+  onClose: () => void;
+  onChanged: () => void;
 }) {
-  const [role, setRole] = useState<UserRole>(user.role)
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const roleMutation = useMutation({ mutationFn: updateUserRole })
-  const passwordMutation = useMutation({ mutationFn: setUserPassword })
+  const { t } = useLocale();
+  const [role, setRole] = useState<UserRole>(user.role);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const roleMutation = useMutation({ mutationFn: updateUserRole });
+  const passwordMutation = useMutation({ mutationFn: setUserPassword });
 
   async function saveRole() {
     try {
-      await roleMutation.mutateAsync({ userId: user.id, role })
-      onChanged()
-      toast('Role updated', 'success')
+      await roleMutation.mutateAsync({ userId: user.id, role });
+      onChanged();
+      toast(t("userRoleUpdated"), "success");
     } catch {
-      toast('Could not update role', 'error')
+      toast(t("userCouldNotUpdateRole"), "error");
     }
   }
 
   async function savePassword() {
     if (newPassword.length < 12) {
-      toast('Password must be at least 12 characters', 'error')
-      return
+      toast(t("userPasswordMinimum"), "error");
+      return;
     }
     if (newPassword !== confirmPassword) {
-      toast('Passwords do not match', 'error')
-      return
+      toast(t("userPasswordsDoNotMatch"), "error");
+      return;
     }
     try {
-      await passwordMutation.mutateAsync({ userId: user.id, newPassword })
-      toast('Password set', 'success')
-      setNewPassword('')
-      setConfirmPassword('')
+      await passwordMutation.mutateAsync({ userId: user.id, newPassword });
+      toast(t("userPasswordSet"), "success");
+      setNewPassword("");
+      setConfirmPassword("");
     } catch {
-      toast('Could not set password', 'error')
+      toast(t("userCouldNotSetPassword"), "error");
     }
   }
 
   return (
-    <FormDialog description={user.email} onClose={onClose} open title="Manage user">
+    <FormDialog
+      description={user.email}
+      onClose={onClose}
+      open
+      title={t("userManageTitle")}
+    >
       <div className="grid gap-4">
         <div className="grid gap-2">
           <label className="grid gap-1 text-sm">
-            <span className="text-muted">Role</span>
-            <select className="rm-input" onChange={(event) => setRole(event.currentTarget.value as UserRole)} value={role}>
+            <span className="text-muted">{t("userRole")}</span>
+            <NativeSelect
+              onChange={(event) =>
+                setRole(event.currentTarget.value as UserRole)
+              }
+              value={role}
+            >
               {roleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+                <option key={option} value={option}>
+                  {t(roleKey(option))}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
-          <button
-            className="rm-button primary"
+          <Button
+            variant="primary"
             disabled={role === user.role || roleMutation.isPending}
             onClick={() => void saveRole()}
             type="button"
           >
-            {roleMutation.isPending ? 'Saving' : 'Update role'}
-          </button>
+            {roleMutation.isPending ? t("saving") : t("userUpdateRole")}
+          </Button>
         </div>
         <div className="grid gap-2 border-t border-border pt-4">
-          <div className="text-sm font-medium">Set local password</div>
-          <div className="text-xs text-muted">At least 12 characters. The user can sign in locally with this password.</div>
+          <div className="text-sm font-medium">{t("userSetLocalPassword")}</div>
+          <div className="text-xs text-muted">
+            {t("userLocalPasswordGuidance")}
+          </div>
           <label className="grid gap-1 text-sm">
-            <span className="text-muted">New password</span>
-            <input
+            <span className="text-muted">{t("userNewPassword")}</span>
+            <Input
               autoComplete="new-password"
-              className="rm-input"
               onChange={(event) => setNewPassword(event.currentTarget.value)}
               type="password"
               value={newPassword}
             />
           </label>
           <label className="grid gap-1 text-sm">
-            <span className="text-muted">Confirm password</span>
-            <input
+            <span className="text-muted">{t("userConfirmPassword")}</span>
+            <Input
               autoComplete="new-password"
-              className="rm-input"
-              onChange={(event) => setConfirmPassword(event.currentTarget.value)}
+              onChange={(event) =>
+                setConfirmPassword(event.currentTarget.value)
+              }
               type="password"
               value={confirmPassword}
             />
           </label>
-          <button
-            className="rm-button"
+          <Button
             disabled={passwordMutation.isPending || newPassword.length < 12}
             onClick={() => void savePassword()}
             type="button"
           >
-            {passwordMutation.isPending ? 'Saving' : 'Set password'}
-          </button>
+            {passwordMutation.isPending ? t("saving") : t("userSetPassword")}
+          </Button>
         </div>
       </div>
     </FormDialog>
-  )
+  );
+}
+
+function roleKey(
+  role: UserRole,
+): "userGlobalAdmin" | "userOrgAdmin" | "userUser" {
+  if (role === "global_admin") return "userGlobalAdmin";
+  if (role === "org_admin") return "userOrgAdmin";
+  return "userUser";
 }

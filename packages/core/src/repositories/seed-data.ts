@@ -33,6 +33,8 @@ import type {
   KnowledgeSource,
   LocalMfaFactor,
   LocalPasswordCredential,
+  ManagedModelCustomizationPolicyRecord,
+  ManagedModelPreferenceRecord,
   Message,
   MessagePart,
   NotificationDelivery,
@@ -42,6 +44,7 @@ import type {
   Organization,
   PromptTemplate,
   QuotaBucket,
+  QueuedChatTurn,
   ResourceFavorite,
   RetentionPolicy,
   RunRecord,
@@ -85,12 +88,15 @@ export interface SeedData {
   agentKnowledgeBindings: AgentKnowledgeBinding[];
   agentToolBindings: AgentToolBinding[];
   agentVersions: AgentVersion[];
+  managedModelCustomizationPolicies: ManagedModelCustomizationPolicyRecord[];
+  managedModelPreferences: ManagedModelPreferenceRecord[];
   evalSuites: EvalSuite[];
   evalCases: EvalCase[];
   evalRuns: EvalRun[];
   evalRunResults: EvalRunResult[];
   evalResultHumanRatings: EvalResultHumanRating[];
   chats: Chat[];
+  queuedChatTurns: QueuedChatTurn[];
   messages: Message[];
   messageParts: MessagePart[];
   fileObjects: FileObject[];
@@ -297,6 +303,8 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
       ),
     ],
     agentVersions: [defaultAgentVersion],
+    managedModelCustomizationPolicies: [],
+    managedModelPreferences: [],
     evalSuites: [],
     evalCases: [],
     evalRuns: [],
@@ -312,6 +320,7 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
         updatedAt: now,
       },
     ],
+    queuedChatTurns: [],
     messages: [],
     messageParts: [],
     fileObjects: [],
@@ -369,6 +378,9 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
       {
         orgId: "org_default",
         auditLogRetentionDays: 365,
+        fileRetentionDays: null,
+        workspaceFileRetentionDays: {},
+        userFileRetentionDays: {},
         updatedBy: "user_dev_admin",
         updatedAt: now,
       },

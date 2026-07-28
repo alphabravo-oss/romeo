@@ -8,7 +8,13 @@
 
     Glyph: bot-message-square from Lucide (https://lucide.dev), ISC licensed.
   -->
-  <rect width="88" height="88" rx="22" fill="#5e6ad2"/>
+  <defs>
+    <linearGradient id="romeo-gradient" x1="0" y1="0" x2="88" y2="88" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="88" height="88" rx="22" fill="url(#romeo-gradient)"/>
   <g transform="translate(19.25 19.25) scale(2.0625)"
      fill="none"
      stroke="#ffffff"

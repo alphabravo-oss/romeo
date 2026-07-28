@@ -8,13 +8,7 @@ import {
 } from "@romeo/auth";
 import { listBuiltInTools } from "@romeo/tools";
 
-import type {
-  Agent,
-  AgentMemoryPolicy,
-  AgentParameters,
-  AgentSafetySettings,
-  VoiceProfile,
-} from "../domain/entities";
+import type { Agent, VoiceProfile } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
@@ -22,54 +16,20 @@ import { getAuthorizedKnowledgeBase } from "./knowledge-access";
 import { normalizeAgentMemoryPolicy } from "./agent-memory";
 import { normalizeAgentSafetySettings } from "./agent-safety";
 import { filterVisibleServiceAccounts } from "./service-account-access";
+import {
+  groupPortableAccessGrants,
+  isPortableAgentPermission,
+} from "./agent-portability-access";
+import type {
+  AgentBindingSnapshot,
+  AgentExportDocument,
+  PortableAgentAccessGrant,
+  PortableAgentKnowledgeBinding,
+  PortableAgentToolBinding,
+  ResolvedAgentImportBindings,
+} from "./agent-portability-types";
 
-export interface PortableAgentKnowledgeBinding {
-  knowledgeBaseId: string;
-  enabled: boolean;
-}
-
-export interface PortableAgentToolBinding {
-  toolId: string;
-  enabled: boolean;
-  approvalRequired: boolean;
-}
-
-export interface PortableAgentAccessGrant {
-  principalType: ResourceGrant["principalType"];
-  principalId: string;
-  permissions: Array<
-    Extract<ResourceGrant["permission"], "read" | "run" | "write">
-  >;
-}
-
-export interface AgentExportDocument {
-  schemaVersion: 1;
-  exportedAt: string;
-  agent: {
-    name: string;
-    baseModelId: string;
-    systemPrompt: string;
-    parameters: AgentParameters;
-    memoryPolicy: AgentMemoryPolicy;
-    safetySettings: AgentSafetySettings;
-    voiceProfileId?: string;
-    accessGrants?: PortableAgentAccessGrant[];
-    knowledgeBaseBindings?: PortableAgentKnowledgeBinding[];
-    toolBindings?: PortableAgentToolBinding[];
-  };
-}
-
-export interface ResolvedAgentImportBindings {
-  voiceProfileId?: string;
-  accessGrants: PortableAgentAccessGrant[];
-  knowledgeBaseBindings: PortableAgentKnowledgeBinding[];
-  toolBindings: PortableAgentToolBinding[];
-}
-
-export interface AgentBindingSnapshot {
-  knowledgeBaseBindings: PortableAgentKnowledgeBinding[];
-  toolBindings: PortableAgentToolBinding[];
-}
+export type * from "./agent-portability-types";
 
 const builtInToolIds = new Set(listBuiltInTools().map((tool) => tool.id));
 
@@ -509,42 +469,4 @@ async function assertPortableAccessPrincipals(
     )
       throw notFound("Access grant principal");
   }
-}
-
-function groupPortableAccessGrants(
-  grants: ResourceGrant[],
-): PortableAgentAccessGrant[] {
-  const grouped = new Map<string, PortableAgentAccessGrant>();
-  for (const grant of grants) {
-    if (!isPortableAgentPermission(grant.permission)) continue;
-    const key = `${grant.principalType}:${grant.principalId}`;
-    const current = grouped.get(key) ?? {
-      principalType: grant.principalType,
-      principalId: grant.principalId,
-      permissions: [],
-    };
-    current.permissions.push(grant.permission);
-    grouped.set(key, current);
-  }
-  return [...grouped.values()]
-    .map((grant) => ({
-      ...grant,
-      permissions: [...new Set(grant.permissions)].sort(),
-    }))
-    .sort(
-      (left, right) =>
-        left.principalType.localeCompare(right.principalType) ||
-        left.principalId.localeCompare(right.principalId),
-    );
-}
-
-function isPortableAgentPermission(
-  permission: ResourceGrant["permission"],
-): permission is Extract<
-  ResourceGrant["permission"],
-  "read" | "run" | "write"
-> {
-  return (
-    permission === "read" || permission === "run" || permission === "write"
-  );
 }

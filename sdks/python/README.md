@@ -8,7 +8,7 @@ This SDK is generated from Romeo API 0.1.0. It uses only the Python standard lib
 node scripts/generate-python-sdk.mjs --openapi-url http://127.0.0.1:3000/api/v1/openapi.json
 ```
 
-Generated operations: 397
+Generated operations: 478
 
 ## Example
 

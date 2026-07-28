@@ -186,9 +186,7 @@ function assertCluster(cluster, options) {
   if (options.expectInitDb) {
     const initdb = cluster.spec?.bootstrap?.initdb;
     if (initdb?.database !== "romeo" || initdb?.owner !== "romeo") {
-      throw new Error(
-        `${options.name} initdb must create Romeo app DB/user.`,
-      );
+      throw new Error(`${options.name} initdb must create Romeo app DB/user.`);
     }
     const statements = initdb.postInitApplicationSQL ?? [];
     if (

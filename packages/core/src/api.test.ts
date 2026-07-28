@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { deflateRawSync } from "node:zlib";
 
 import { describe, expect, it, vi } from "vitest";
 import { createSessionToken, hashApiKey, scopeValues } from "@romeo/auth";
@@ -34,6 +35,52 @@ function openWebUiBridgeEnv(overrides: Record<string, string> = {}) {
     OPENWEBUI_COMPATIBILITY_ENABLED: "true",
     ...overrides,
   });
+}
+
+function createOoxmlTestZip(
+  entries: Array<{ name: string; content: string }>,
+): Uint8Array {
+  const localFiles: Buffer[] = [];
+  const centralDirectory: Buffer[] = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name, "utf8");
+    const content = Buffer.from(entry.content, "utf8");
+    const compressed = deflateRawSync(content);
+    const localHeader = Buffer.alloc(30 + name.byteLength);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(8, 8);
+    localHeader.writeUInt32LE(compressed.byteLength, 18);
+    localHeader.writeUInt32LE(content.byteLength, 22);
+    localHeader.writeUInt16LE(name.byteLength, 26);
+    name.copy(localHeader, 30);
+    localFiles.push(localHeader, compressed);
+
+    const centralHeader = Buffer.alloc(46 + name.byteLength);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(8, 10);
+    centralHeader.writeUInt32LE(compressed.byteLength, 20);
+    centralHeader.writeUInt32LE(content.byteLength, 24);
+    centralHeader.writeUInt16LE(name.byteLength, 28);
+    centralHeader.writeUInt32LE(offset, 42);
+    name.copy(centralHeader, 46);
+    centralDirectory.push(centralHeader);
+    offset += localHeader.byteLength + compressed.byteLength;
+  }
+  const centralDirectorySize = centralDirectory.reduce(
+    (total, item) => total + item.byteLength,
+    0,
+  );
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralDirectorySize, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...localFiles, ...centralDirectory, end]);
 }
 
 const browserAutomationLiveRequiredChecks = [
@@ -97,6 +144,1410 @@ function browserAutomationLiveEvidence(
     ...overrides,
   };
 }
+
+describe("Open WebUI-class governed chat extensions", () => {
+  it("returns bounded chat catalog pages with stable totals", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    for (const title of ["Paged A", "Paged B", "Paged C"]) {
+      const response = await api.request("/api/v1/chats", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId: "workspace_default", title }),
+      });
+      expect(response.status).toBe(201);
+    }
+
+    const firstResponse = await api.request(
+      "/api/v1/chats?workspaceId=workspace_default&limit=2&offset=0",
+    );
+    const first = await firstResponse.json();
+    const secondResponse = await api.request(
+      "/api/v1/chats?workspaceId=workspace_default&limit=2&offset=2",
+    );
+    const second = await secondResponse.json();
+    const invalidResponse = await api.request(
+      "/api/v1/chats?workspaceId=workspace_default&limit=0",
+    );
+
+    expect(firstResponse.status).toBe(200);
+    expect(first.data).toHaveLength(2);
+    expect(first.meta).toEqual({
+      hasMore: true,
+      limit: 2,
+      offset: 0,
+      total: 4,
+    });
+    expect(secondResponse.status).toBe(200);
+    expect(second.data).toHaveLength(2);
+    expect(second.meta).toEqual({
+      hasMore: false,
+      limit: 2,
+      offset: 2,
+      total: 4,
+    });
+    expect(
+      new Set([...first.data, ...second.data].map((chat) => chat.id)).size,
+    ).toBe(4);
+    expect(invalidResponse.status).toBe(400);
+  });
+
+  it("creates, controls, and exposes retained memory in context inspection", async () => {
+    const objectStore = new MemoryObjectStore();
+    const api = createRomeoApi(new InMemoryRomeoRepository(), { objectStore });
+    const createdResponse = await api.request("/api/v1/memories", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        scope: "personal",
+        title: "Writing preference",
+        body: "Prefer concise release notes.",
+      }),
+    });
+    const created = await createdResponse.json();
+    await api.request("/api/v1/agents/agent_default/customization-policy", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ allowPersonalMemory: true }),
+    });
+    await api.request("/api/v1/agents/agent_default/preferences", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personalMemoryEnabled: true }),
+    });
+    const previewResponse = await api.request("/api/v1/runs/context-preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: "chat_welcome",
+        agentId: "agent_default",
+        content: "Draft release notes",
+        imageCount: 0,
+      }),
+    });
+    const preview = await previewResponse.json();
+    const disabledResponse = await api.request(
+      `/api/v1/memories/${created.data.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      },
+    );
+    const listedResponse = await api.request(
+      "/api/v1/memories?workspaceId=workspace_default",
+    );
+    const listed = await listedResponse.json();
+
+    expect(createdResponse.status).toBe(201);
+    expect(previewResponse.status).toBe(200);
+    expect(preview.data.memories).toEqual([
+      expect.objectContaining({
+        title: "Writing preference",
+        scope: "personal",
+      }),
+    ]);
+    expect(preview.data.messages[0].content).toContain(
+      "Prefer concise release notes.",
+    );
+    expect(disabledResponse.status).toBe(200);
+    expect(listed.data[0].enabled).toBe(false);
+  });
+
+  it("purges file-backed note content through the governed tombstone path", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const objectStore = new MemoryObjectStore();
+    const api = createRomeoApi(repository, { objectStore });
+    const createdResponse = await api.request("/api/v1/notes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        scope: "personal",
+        title: "Sensitive note title",
+        body: "sensitive note body sentinel",
+      }),
+    });
+    const created = await createdResponse.json();
+    const stored = await repository.getFileObject(created.data.id);
+    if (stored === undefined) throw new Error("Missing note fixture");
+
+    const deletedResponse = await api.request(
+      `/api/v1/notes/${created.data.id}`,
+      { method: "DELETE" },
+    );
+    const tombstone = await repository.getFileObject(created.data.id);
+
+    expect(deletedResponse.status).toBe(200);
+    expect(await objectStore.getObject(stored.objectKey)).toBeUndefined();
+    expect(tombstone).toMatchObject({
+      status: "deleted",
+      fileName: "deleted",
+      sizeBytes: 0,
+      objectKey: `deleted/${created.data.id}`,
+      metadata: { contentPurged: true },
+    });
+    expect(JSON.stringify(tombstone)).not.toContain("Sensitive note title");
+    expect(JSON.stringify(tombstone)).not.toContain(
+      "sensitive note body sentinel",
+    );
+  });
+
+  it("applies governed search settings and normalizes cited provider results", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      providerFetch: async () =>
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                title: "Romeo documentation",
+                url: "https://docs.example.com/romeo",
+                content: "Governed enterprise chat documentation.",
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    });
+    const configResponse = await api.request("/api/v1/admin/web-search", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        enabled: true,
+        provider: "searxng",
+        endpointUrl: "https://93.184.216.34/search",
+        maxResults: 3,
+      }),
+    });
+    const searchResponse = await api.request("/api/v1/web-search", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: "Romeo governance" }),
+    });
+    const search = await searchResponse.json();
+
+    expect(configResponse.status).toBe(200);
+    expect(searchResponse.status).toBe(200);
+    expect(search.data).toEqual([
+      expect.objectContaining({
+        title: "Romeo documentation",
+        url: "https://docs.example.com/romeo",
+        sourceType: "web_search",
+      }),
+    ]);
+  });
+
+  it("stores OpenAI-compatible image generations as reusable governed files", async () => {
+    const objectStore = new MemoryObjectStore();
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlJkAAAAASUVORK5CYII=";
+    const repository = new InMemoryRomeoRepository();
+    const model = (await repository.getModel(
+      "model_openai_compatible_default",
+    ))!;
+    await repository.updateModel({
+      ...model,
+      capabilities: { ...model.capabilities, imageGeneration: true },
+      capabilitiesSource: "override",
+      pricing: {
+        inputTokenUsd: 0,
+        outputTokenUsd: 0,
+        imageGenerationUsd: {
+          "1024x1024": 0.04,
+          "1024x1536": 0.08,
+          "1536x1024": 0.08,
+        },
+      },
+    });
+    const api = createRomeoApi(repository, {
+      objectStore,
+      providerFetch: async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              { b64_json: png, revised_prompt: "A secure abstract workspace" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    });
+    const response = await api.request("/api/v1/images/generations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        modelId: "model_openai_compatible_default",
+        prompt: "A secure abstract workspace",
+      }),
+    });
+    const body = await response.json();
+    const filesResponse = await api.request(
+      "/api/v1/files?workspaceId=workspace_default",
+    );
+    const files = await filesResponse.json();
+    const usage = await repository.listUsageEvents("org_default");
+    const usageSummaryResponse = await api.request("/api/v1/usage/summary");
+    const usageSummary = await usageSummaryResponse.json();
+
+    expect(response.status).toBe(201);
+    expect(body.data[0].file.purpose).toBe("generated_image");
+    expect(
+      files.data.some(
+        (file: { id: string }) => file.id === body.data[0].file.id,
+      ),
+    ).toBe(true);
+    expect(usage).toContainEqual(
+      expect.objectContaining({
+        sourceId: body.data[0].file.id,
+        metric: "image.generated",
+        quantity: 1,
+        unit: "image",
+        metadata: expect.objectContaining({
+          unitPriceUsd: 0.04,
+          estimatedCostUsd: 0.04,
+          estimatedCostMicroUsd: 40000,
+        }),
+      }),
+    );
+    expect(usage).toContainEqual(
+      expect.objectContaining({
+        sourceId: body.data[0].file.id,
+        metric: "image.cost.estimated",
+        quantity: 40000,
+        unit: "micro_usd",
+      }),
+    );
+    expect(
+      usageSummary.data.totals.find(
+        (metric: { metric: string }) => metric.metric === "image.generated",
+      ),
+    ).toMatchObject({ estimatedCostUsd: 0.04, quantity: 1, unit: "image" });
+  });
+
+  it("enforces independent image count and estimated-cost quotas before provider dispatch", async () => {
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlJkAAAAASUVORK5CYII=";
+    const repository = new InMemoryRomeoRepository();
+    const model = (await repository.getModel(
+      "model_openai_compatible_default",
+    ))!;
+    await repository.updateModel({
+      ...model,
+      capabilities: { ...model.capabilities, imageGeneration: true },
+      capabilitiesSource: "override",
+      pricing: {
+        inputTokenUsd: 0,
+        outputTokenUsd: 0,
+        imageGenerationUsd: {
+          "1024x1024": 0.04,
+          "1024x1536": 0.08,
+          "1536x1024": 0.08,
+        },
+      },
+    });
+    const now = new Date().toISOString();
+    await repository.createQuotaBucket({
+      id: "quota_image_count",
+      orgId: "org_default",
+      scopeType: "org",
+      scopeId: "org_default",
+      metric: "image.generated",
+      limit: 10,
+      used: 0,
+      resetInterval: "none",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await repository.createQuotaBucket({
+      id: "quota_image_cost",
+      orgId: "org_default",
+      scopeType: "org",
+      scopeId: "org_default",
+      metric: "image.cost.micro_usd",
+      limit: 39_999,
+      used: 0,
+      resetInterval: "none",
+      createdAt: now,
+      updatedAt: now,
+    });
+    let providerCalls = 0;
+    const api = createRomeoApi(repository, {
+      objectStore: new MemoryObjectStore(),
+      providerFetch: async () => {
+        providerCalls += 1;
+        return Response.json({ data: [{ b64_json: png }] });
+      },
+    });
+
+    const costDenied = await api.request("/api/v1/images/generations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        modelId: model.id,
+        prompt: "Cost quota sentinel",
+      }),
+    });
+    const costDeniedBody = await costDenied.json();
+    const afterCostDenial = await repository.listQuotaBuckets("org_default");
+    await repository.updateQuotaBucket({
+      ...afterCostDenial.find((bucket) => bucket.id === "quota_image_cost")!,
+      limit: 100_000,
+    });
+    await repository.updateQuotaBucket({
+      ...afterCostDenial.find((bucket) => bucket.id === "quota_image_count")!,
+      limit: 0,
+    });
+    const countDenied = await api.request("/api/v1/images/generations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        modelId: model.id,
+        prompt: "Count quota sentinel",
+      }),
+    });
+    const countDeniedBody = await countDenied.json();
+    const currentModel = (await repository.getModel(model.id))!;
+    const unpricedModel = { ...currentModel };
+    delete unpricedModel.pricing;
+    await repository.updateModel(unpricedModel);
+    const unpriced = await api.request("/api/v1/images/generations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        modelId: model.id,
+        prompt: "Unpriced cost quota sentinel",
+      }),
+    });
+    const unpricedBody = await unpriced.json();
+    const finalBuckets = await repository.listQuotaBuckets("org_default");
+
+    expect(costDenied.status).toBe(429);
+    expect(costDeniedBody.error.details.metric).toBe("image.cost.micro_usd");
+    expect(countDenied.status).toBe(429);
+    expect(countDeniedBody.error.details.metric).toBe("image.generated");
+    expect(unpriced.status).toBe(409);
+    expect(unpricedBody.error.code).toBe("image_pricing_required");
+    expect(providerCalls).toBe(0);
+    expect(finalBuckets.map((bucket) => bucket.used)).toEqual([0, 0]);
+  });
+
+  it("rejects generated image payloads whose dimensions cannot be validated", async () => {
+    const objectStore = new MemoryObjectStore();
+    const repository = new InMemoryRomeoRepository();
+    const model = (await repository.getModel(
+      "model_openai_compatible_default",
+    ))!;
+    await repository.updateModel({
+      ...model,
+      capabilities: { ...model.capabilities, imageGeneration: true },
+      capabilitiesSource: "override",
+    });
+    const signatureOnly = Buffer.from([
+      137, 80, 78, 71, 13, 10, 26, 10,
+    ]).toString("base64");
+    const api = createRomeoApi(repository, {
+      objectStore,
+      providerFetch: async () =>
+        new Response(
+          JSON.stringify({
+            data: [{ b64_json: signatureOnly }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    });
+
+    const response = await api.request("/api/v1/images/generations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        modelId: "model_openai_compatible_default",
+        prompt: "Malformed generated image sentinel",
+      }),
+    });
+    const body = await response.json();
+    const files = await repository.listFileObjects(
+      "org_default",
+      "workspace_default",
+    );
+
+    expect(response.status).toBe(415);
+    expect(body.error.code).toBe("file_image_dimensions_invalid");
+    expect(files.filter((file) => file.purpose === "generated_image")).toEqual(
+      [],
+    );
+    expect(JSON.stringify(body)).not.toContain(signatureOnly);
+  });
+
+  it("cleans up partial generated-image artifacts when a later payload is invalid", async () => {
+    const objectStore = new MemoryObjectStore();
+    const repository = new InMemoryRomeoRepository();
+    const model = (await repository.getModel(
+      "model_openai_compatible_default",
+    ))!;
+    await repository.updateModel({
+      ...model,
+      capabilities: { ...model.capabilities, imageGeneration: true },
+      capabilitiesSource: "override",
+    });
+    const validPng =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlJkAAAAASUVORK5CYII=";
+    const invalidPng = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString(
+      "base64",
+    );
+    const api = createRomeoApi(repository, {
+      objectStore,
+      providerFetch: async () =>
+        Response.json({
+          data: [{ b64_json: validPng }, { b64_json: invalidPng }],
+        }),
+    });
+
+    const response = await api.request("/api/v1/images/generations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        modelId: "model_openai_compatible_default",
+        prompt: "Partial cleanup sentinel",
+        count: 2,
+      }),
+    });
+    const body = await response.json();
+    const generatedFiles = (
+      await repository.listFileObjects("org_default", "workspace_default")
+    ).filter((file) => file.purpose === "generated_image");
+
+    expect(response.status).toBe(415);
+    expect(body.error.code).toBe("file_image_dimensions_invalid");
+    expect(generatedFiles).toHaveLength(1);
+    expect(generatedFiles[0]).toMatchObject({ status: "deleted" });
+    expect(
+      await objectStore.getObject(generatedFiles[0]!.objectKey),
+    ).toBeUndefined();
+    expect(
+      (await repository.listUsageEvents("org_default")).filter(
+        (event) => event.metric === "image.generated",
+      ),
+    ).toEqual([]);
+  });
+
+  it("supports temporary chats, full-text search, import, and portable export", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository);
+    const temporaryResponse = await api.request("/api/v1/chats", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Temporary investigation",
+        temporary: true,
+      }),
+    });
+    const temporary = await temporaryResponse.json();
+    const importResponse = await api.request("/api/v1/chats/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Imported incident",
+        modelId: "model_ollama_default",
+        messages: [
+          { role: "user", content: "Unique audit sentinel" },
+          { role: "assistant", content: "Acknowledged" },
+        ],
+      }),
+    });
+    const imported = await importResponse.json();
+    const searchResponse = await api.request(
+      "/api/v1/chats/query?workspaceId=workspace_default&q=audit%20sentinel",
+    );
+    const search = await searchResponse.json();
+    const exportResponse = await api.request(
+      `/api/v1/chats/${imported.data.id}/export`,
+    );
+    const exported = await exportResponse.json();
+
+    expect(temporaryResponse.status).toBe(201);
+    expect(temporary.data.temporary).toBe(true);
+    expect(temporary.data.expiresAt).toBeTruthy();
+    expect(importResponse.status).toBe(201);
+    expect(search.data[0]).toEqual(
+      expect.objectContaining({
+        id: imported.data.id,
+        match: expect.objectContaining({
+          snippet: expect.stringContaining("audit sentinel"),
+        }),
+      }),
+    );
+    expect(exported.data.schema).toBe("romeo.chat-export.v1");
+    expect(exported.data.chat.modelId).toBe("model_ollama_default");
+    expect(exported.data.messages).toHaveLength(2);
+
+    await repository.updateChat({
+      ...temporary.data,
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    await api.request("/api/v1/chats?workspaceId=workspace_default");
+    expect(await repository.getChat(temporary.data.id)).toBeUndefined();
+  });
+
+  it("round-trips citations and attachment bytes through portable archives", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      objectStore: new MemoryObjectStore(),
+    });
+    const text = "portable attachment sentinel";
+    const importedResponse = await api.request("/api/v1/chats/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Portable source chat",
+        messages: [
+          {
+            role: "assistant",
+            content: "Cited response",
+            citations: [
+              {
+                chunkId: "chunk-1",
+                documentId: "doc-1",
+                title: "Source one",
+                sourceUri: "https://docs.example.com/source",
+                sourceType: "web_search",
+                provider: "brave",
+                retrievedAt: "2026-07-16T12:00:00.000Z",
+                accessedAt: "2026-07-16T12:00:00.000Z",
+                publishedAt: "2026-07-15T12:00:00.000Z",
+              },
+            ],
+            attachments: [
+              {
+                fileName: "source.txt",
+                mimeType: "text/plain",
+                sizeBytes: Buffer.byteLength(text),
+                dataBase64: Buffer.from(text).toString("base64"),
+                retainedInContext: true,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const imported = await importedResponse.json();
+    const exported = await (
+      await api.request(`/api/v1/chats/${imported.data.id}/export`)
+    ).json();
+    const secondImport = await api.request("/api/v1/chats/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Portable source copy",
+        messages: exported.data.messages,
+      }),
+    });
+    const second = await secondImport.json();
+    const secondExport = await (
+      await api.request(`/api/v1/chats/${second.data.id}/export`)
+    ).json();
+
+    expect(importedResponse.status).toBe(201);
+    expect(secondImport.status).toBe(201);
+    expect(secondExport.data.messages[0].citations[0].sourceUri).toBe(
+      "https://docs.example.com/source",
+    );
+    expect(secondExport.data.messages[0].citations[0]).toMatchObject({
+      sourceType: "web_search",
+      provider: "brave",
+      retrievedAt: "2026-07-16T12:00:00.000Z",
+      accessedAt: "2026-07-16T12:00:00.000Z",
+      publishedAt: "2026-07-15T12:00:00.000Z",
+    });
+    expect(
+      Buffer.from(
+        secondExport.data.messages[0].attachments[0].dataBase64,
+        "base64",
+      ).toString(),
+    ).toBe(text);
+  });
+
+  it("syncs interface preferences and supports revoking chat shares", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const preferencesResponse = await api.request(
+      "/api/v1/me/interface-preferences",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          locale: "fr",
+          density: "compact",
+          reducedMotion: true,
+        }),
+      },
+    );
+    const preferences = await preferencesResponse.json();
+    const invalidPreferencesResponse = await api.request(
+      "/api/v1/me/interface-preferences",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ uncontracted: true }),
+      },
+    );
+    const invalidPreferences = await invalidPreferencesResponse.json();
+    const imported = await (
+      await api.request("/api/v1/chats/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "workspace_default",
+          title: "Share lifecycle",
+          messages: [],
+        }),
+      })
+    ).json();
+    const shared = await (
+      await api.request(`/api/v1/chats/${imported.data.id}/shares`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          principalType: "group",
+          principalId: "group_admins",
+          permissions: ["read"],
+        }),
+      })
+    ).json();
+    const revokedResponse = await api.request(
+      `/api/v1/chats/${imported.data.id}/shares/${shared.data[0].id}`,
+      { method: "DELETE" },
+    );
+    const remaining = await (
+      await api.request(`/api/v1/chats/${imported.data.id}/shares`)
+    ).json();
+
+    expect(invalidPreferencesResponse.status).toBe(400);
+    expect(invalidPreferences).toMatchObject({
+      error: {
+        code: "invalid_request",
+        message: expect.any(String),
+        request_id: expect.any(String),
+        details: { issues: expect.any(Array) },
+      },
+    });
+
+    expect(preferencesResponse.status).toBe(200);
+    expect(preferences.data).toEqual(
+      expect.objectContaining({
+        locale: "fr",
+        density: "compact",
+        reducedMotion: true,
+      }),
+    );
+    expect(revokedResponse.status).toBe(200);
+    expect(remaining.data).toEqual([]);
+  });
+
+  it("persists and drains queued turns on the server", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const queuedResponse = await api.request(
+      "/api/v1/chats/chat_welcome/queue",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agentId: "agent_default",
+          content: "Server queue sentinel",
+        }),
+      },
+    );
+    const queued = await queuedResponse.json();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const messages = await (
+      await api.request("/api/v1/chats/chat_welcome/messages")
+    ).json();
+
+    expect(queuedResponse.status).toBe(202);
+    expect(queued.data.content).toBe("Server queue sentinel");
+    expect(
+      messages.data.some(
+        (message: { role: string; content: string }) =>
+          message.role === "user" &&
+          message.content === "Server queue sentinel",
+      ),
+    ).toBe(true);
+  });
+
+  it("deduplicates queued turns by a client idempotency key", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository);
+    const request = {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agentId: "agent_default",
+        content: "Idempotent queue sentinel",
+        idempotencyKey: "queue-request-1",
+      }),
+    };
+    const firstResponse = await api.request(
+      "/api/v1/chats/chat_welcome/queue",
+      request,
+    );
+    const first = await firstResponse.json();
+    const replayResponse = await api.request(
+      "/api/v1/chats/chat_welcome/queue",
+      request,
+    );
+    const replay = await replayResponse.json();
+
+    expect(firstResponse.status).toBe(202);
+    expect(replayResponse.status).toBe(202);
+    expect(replay.data.id).toBe(first.data.id);
+    expect(replay.data.idempotencyKey).toBe("queue-request-1");
+    expect(
+      (await repository.listQueuedChatTurns("chat_welcome")).filter(
+        (turn) => turn.idempotencyKey === "queue-request-1",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("lists queued turns in stable order and makes lease/cancellation races explicit", async () => {
+    const repository = new InMemoryRomeoRepository();
+    await repository.createRun({
+      id: "run_queue_blocker",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      chatId: "chat_welcome",
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: "model_openai_compatible_default",
+      providerId: "provider_openai_compatible",
+      status: "running",
+      createdBy: "user_dev_admin",
+      createdAt: new Date().toISOString(),
+    });
+    const api = createRomeoApi(repository);
+    const enqueue = async (content: string, idempotencyKey: string) => {
+      const response = await api.request("/api/v1/chats/chat_welcome/queue", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agentId: "agent_default",
+          content,
+          idempotencyKey,
+        }),
+      });
+      return { response, body: await response.json() };
+    };
+    const first = await enqueue("First ordered turn", "queue-order-1");
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const second = await enqueue("Second ordered turn", "queue-order-2");
+    const listedResponse = await api.request(
+      "/api/v1/chats/chat_welcome/queue",
+    );
+    const listed = await listedResponse.json();
+
+    expect(first.response.status).toBe(202);
+    expect(second.response.status).toBe(202);
+    expect(listedResponse.status).toBe(200);
+    expect(listed.data.map((turn: { id: string }) => turn.id)).toEqual([
+      first.body.data.id,
+      second.body.data.id,
+    ]);
+
+    const claimed = await repository.claimNextQueuedChatTurn({
+      chatId: "chat_welcome",
+      leaseOwner: "queue_api_worker",
+      leaseToken: "queue_api_lease",
+      now: "2026-07-16T12:00:00.000Z",
+      leaseExpiresAt: "2099-07-16T12:01:00.000Z",
+    });
+    expect(claimed?.id).toBe(first.body.data.id);
+    const leasedCancellationResponse = await api.request(
+      `/api/v1/chats/chat_welcome/queue/${first.body.data.id}`,
+      { method: "DELETE" },
+    );
+    const leasedCancellation = await leasedCancellationResponse.json();
+    expect(leasedCancellationResponse.status).toBe(409);
+    expect(leasedCancellation.error.code).toBe("queued_turn_already_leased");
+
+    await repository.finishQueuedChatTurnLease({
+      turnId: first.body.data.id,
+      leaseOwner: "queue_api_worker",
+      leaseToken: "queue_api_lease",
+      status: "failed",
+      now: "2026-07-16T12:00:30.000Z",
+      lastErrorCode: "provider_unavailable",
+      lastErrorMessage: "The queued turn could not be started.",
+    });
+    const cancellationResponse = await api.request(
+      `/api/v1/chats/chat_welcome/queue/${first.body.data.id}`,
+      { method: "DELETE" },
+    );
+    const cancellation = await cancellationResponse.json();
+    expect(cancellationResponse.status).toBe(200);
+    expect(cancellation.data).toMatchObject({
+      id: first.body.data.id,
+      status: "cancelled",
+    });
+    expect(JSON.stringify(cancellation.data)).not.toContain(
+      "provider_unavailable",
+    );
+  });
+
+  it("enforces the per-chat queue bound with a stable sanitized API failure", async () => {
+    const repository = new InMemoryRomeoRepository();
+    await repository.createRun({
+      id: "run_queue_limit_blocker",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      chatId: "chat_welcome",
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: "model_openai_compatible_default",
+      providerId: "provider_openai_compatible",
+      status: "running",
+      createdBy: "user_dev_admin",
+      createdAt: new Date().toISOString(),
+    });
+    for (let index = 0; index < 20; index += 1) {
+      await repository.createQueuedChatTurn({
+        id: `queued_turn_limit_${index}`,
+        orgId: "org_default",
+        workspaceId: "workspace_default",
+        chatId: "chat_welcome",
+        agentId: "agent_default",
+        content: `queued content ${index}`,
+        createdBy: "user_dev_admin",
+        principalId: "user_dev_admin",
+        principalType: "user",
+        scopeSnapshot: [...scopeValues],
+        idempotencyKey: `queue-limit-${index}`,
+        status: "queued",
+        attemptCount: 0,
+        createdAt: `2026-07-16T12:00:${String(index).padStart(2, "0")}.000Z`,
+        updatedAt: `2026-07-16T12:00:${String(index).padStart(2, "0")}.000Z`,
+      });
+    }
+    const api = createRomeoApi(repository);
+
+    const response = await api.request("/api/v1/chats/chat_welcome/queue", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agentId: "agent_default",
+        content: "raw queue overflow sentinel",
+        idempotencyKey: "queue-limit-overflow",
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error).toMatchObject({
+      code: "chat_queue_full",
+      message: "A chat can queue at most 20 turns.",
+    });
+    expect(JSON.stringify(body)).not.toContain("raw queue overflow sentinel");
+  });
+
+  it("recovers an interrupted persistent run instead of leaving the chat blocked", async () => {
+    const repository = new InMemoryRomeoRepository();
+    await repository.createRun({
+      id: "run_interrupted",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      chatId: "chat_welcome",
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: "model_openai_compatible_default",
+      providerId: "provider_openai_compatible",
+      status: "running",
+      createdBy: "user_dev_admin",
+      createdAt: "2020-01-01T00:00:00.000Z",
+    });
+    const api = createRomeoApi(repository);
+    const response = await api.request(
+      "/api/v1/chats/chat_welcome/runs/active",
+    );
+    const body = await response.json();
+    const recovered = await repository.getRun("run_interrupted");
+    const events = await repository.listRunEvents("run_interrupted");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const [usage, audits, jobs] = await Promise.all([
+      repository.listUsageEvents("org_default"),
+      repository.listAuditLogs("org_default"),
+      repository.listBackgroundJobs("org_default"),
+    ]);
+
+    expect(response.status).toBe(200);
+    expect(body.data).toBeNull();
+    expect(recovered?.status).toBe("failed");
+    expect(events.at(-1)).toEqual(
+      expect.objectContaining({
+        type: "run.failed",
+        data: expect.objectContaining({
+          errorCode: "run_execution_interrupted",
+          recoverable: true,
+        }),
+      }),
+    );
+    expect(
+      usage.filter(
+        (event) =>
+          event.sourceId === "run_interrupted" && event.metric === "run.failed",
+      ),
+    ).toHaveLength(1);
+    expect(
+      audits.filter(
+        (audit) =>
+          audit.resourceId === "run_interrupted" &&
+          audit.action === "run.failed",
+      ),
+    ).toHaveLength(1);
+    expect(jobs).toContainEqual(
+      expect.objectContaining({
+        id: "job_run_terminal_run_interrupted",
+        status: "completed",
+      }),
+    );
+  });
+
+  it("retries a leased run checkpoint when provider output has not started", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const objectStore = new MemoryObjectStore();
+    const checkpointKey =
+      "run-execution-checkpoints/org_default/workspace_default/run_retryable_checkpoint.json";
+    await repository.createRun({
+      id: "run_retryable_checkpoint",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      chatId: "chat_welcome",
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: "model_openai_compatible_default",
+      providerId: "provider_openai_compatible",
+      status: "running",
+      createdBy: "user_dev_admin",
+      createdAt: "2020-01-01T00:00:00.000Z",
+    });
+    await repository.createBackgroundJob({
+      id: "job_run_retryable_checkpoint",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      type: "run.execution:run_retryable_checkpoint",
+      status: "queued",
+      payload: {
+        runId: "run_retryable_checkpoint",
+        checkpointKey,
+        assistantOutputStarted: false,
+        lastEventSequence: 0,
+      },
+      createdAt: "2020-01-01T00:00:00.000Z",
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    });
+    await objectStore.putObject({
+      key: checkpointKey,
+      contentType: "application/vnd.romeo.run-execution-checkpoint+json",
+      body: Buffer.from(
+        JSON.stringify({
+          messages: [
+            { role: "user", content: "Recover this provider request" },
+          ],
+          citations: [],
+          providerTools: [],
+          principalId: "user_dev_admin",
+          principalType: "user",
+          scopeSnapshot: scopeValues,
+          assistantContent: "",
+          emitRunStarted: false,
+        }),
+      ),
+    });
+    const api = createRomeoApi(repository, { objectStore });
+    const beforeUserMessages = (
+      await repository.listMessages("chat_welcome")
+    ).filter((message) => message.role === "user").length;
+
+    const response = await api.request(
+      "/api/v1/chats/chat_welcome/runs/active",
+    );
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (
+        (await repository.getRun("run_retryable_checkpoint"))?.status ===
+        "completed"
+      )
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    expect(response.status).toBe(200);
+    expect((await repository.getRun("run_retryable_checkpoint"))?.status).toBe(
+      "completed",
+    );
+    expect(
+      (await repository.listMessages("chat_welcome")).filter(
+        (message) => message.role === "user",
+      ),
+    ).toHaveLength(beforeUserMessages);
+    expect(await repository.listBackgroundJobs("org_default")).toContainEqual(
+      expect.objectContaining({
+        id: "job_run_retryable_checkpoint",
+        status: "completed",
+        payload: expect.objectContaining({ outcome: "completed" }),
+      }),
+    );
+    expect(await objectStore.getObject(checkpointKey)).toBeUndefined();
+  });
+
+  it("lets only one service instance recover a shared retryable run", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const objectStore = new MemoryObjectStore();
+    const runId = "run_shared_recovery";
+    const checkpointKey = `run-execution-checkpoints/org_default/workspace_default/${runId}.0.json`;
+    await repository.createRun({
+      id: runId,
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      chatId: "chat_welcome",
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: "model_openai_compatible_default",
+      providerId: "provider_openai_compatible",
+      status: "running",
+      createdBy: "user_dev_admin",
+      createdAt: "2020-01-01T00:00:00.000Z",
+    });
+    await repository.createBackgroundJob({
+      id: "job_run_shared_recovery",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      type: `run.execution:${runId}`,
+      status: "queued",
+      payload: {
+        runId,
+        checkpointKey,
+        assistantOutputStarted: false,
+        lastEventSequence: 0,
+      },
+      createdAt: "2020-01-01T00:00:00.000Z",
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    });
+    await objectStore.putObject({
+      key: checkpointKey,
+      contentType: "application/vnd.romeo.run-execution-checkpoint+json",
+      body: Buffer.from(
+        JSON.stringify({
+          messages: [{ role: "user", content: "Recover once across replicas" }],
+          citations: [],
+          providerTools: [],
+          principalId: "user_dev_admin",
+          principalType: "user",
+          scopeSnapshot: scopeValues,
+          assistantContent: "",
+          emitRunStarted: false,
+        }),
+      ),
+    });
+    const firstApi = createRomeoApi(repository, { objectStore });
+    const secondApi = createRomeoApi(repository, { objectStore });
+    const assistantMessageCountBefore = (
+      await repository.listMessages("chat_welcome")
+    ).filter((message) => message.role === "assistant").length;
+
+    const responses = await Promise.all([
+      firstApi.request("/api/v1/chats/chat_welcome/runs/active"),
+      secondApi.request("/api/v1/chats/chat_welcome/runs/active"),
+    ]);
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if ((await repository.getRun(runId))?.status === "completed") break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect(
+      (await repository.listRunEvents(runId)).filter(
+        (event) => event.type === "run.completed",
+      ),
+    ).toHaveLength(1);
+    expect(
+      (await repository.listMessages("chat_welcome")).filter(
+        (message) => message.role === "assistant",
+      ),
+    ).toHaveLength(assistantMessageCountBefore + 1);
+    expect(await repository.listBackgroundJobs("org_default")).toContainEqual(
+      expect.objectContaining({
+        id: "job_run_shared_recovery",
+        status: "completed",
+      }),
+    );
+    expect(await objectStore.getObject(checkpointKey)).toBeUndefined();
+  });
+
+  it("reconciles a crash after terminal run persistence without duplicating side effects", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const objectStore = new MemoryObjectStore();
+    const runId = "run_terminal_checkpoint";
+    const checkpointKey = `run-execution-checkpoints/org_default/workspace_default/${runId}.4.json`;
+    await repository.createRun({
+      id: runId,
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      chatId: "chat_welcome",
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: "model_openai_compatible_default",
+      providerId: "provider_openai_compatible",
+      status: "completed",
+      createdBy: "user_dev_admin",
+      createdAt: "2020-01-01T00:00:00.000Z",
+      completedAt: "2020-01-01T00:00:04.000Z",
+    });
+    await repository.appendRunEvents([
+      {
+        id: "event_terminal_checkpoint_completed",
+        runId,
+        sequence: 4,
+        type: "run.completed",
+        data: {},
+        createdAt: "2020-01-01T00:00:04.000Z",
+      },
+    ]);
+    await repository.createBackgroundJob({
+      id: "job_run_terminal_checkpoint",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      type: `run.execution:${runId}`,
+      status: "queued",
+      payload: {
+        runId,
+        checkpointKey,
+        assistantOutputStarted: true,
+        lastEventSequence: 4,
+      },
+      createdAt: "2020-01-01T00:00:00.000Z",
+      updatedAt: "2020-01-01T00:00:04.000Z",
+    });
+    await objectStore.putObject({
+      key: checkpointKey,
+      contentType: "application/vnd.romeo.run-execution-checkpoint+json",
+      body: Buffer.from("{}"),
+    });
+    const messageCountBefore = (await repository.listMessages("chat_welcome"))
+      .length;
+    const usageCountBefore = (await repository.listUsageEvents("org_default"))
+      .length;
+    const api = createRomeoApi(repository, { objectStore });
+
+    const response = await api.request(
+      "/api/v1/chats/chat_welcome/runs/active",
+    );
+
+    expect(response.status).toBe(200);
+    expect(await repository.listMessages("chat_welcome")).toHaveLength(
+      messageCountBefore,
+    );
+    expect(await repository.listUsageEvents("org_default")).toHaveLength(
+      usageCountBefore,
+    );
+    expect(
+      (await repository.listRunEvents(runId)).filter(
+        (event) => event.type === "run.completed",
+      ),
+    ).toHaveLength(1);
+    expect(await repository.listBackgroundJobs("org_default")).toContainEqual(
+      expect.objectContaining({
+        id: "job_run_terminal_checkpoint",
+        status: "completed",
+        payload: expect.objectContaining({ outcome: "completed" }),
+      }),
+    );
+    expect(await objectStore.getObject(checkpointKey)).toBeUndefined();
+  });
+
+  it("reconciles execution checkpoints after crashes in durable tool wait states", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const objectStore = new MemoryObjectStore();
+    const cases = [
+      {
+        runId: "run_waiting_approval_checkpoint",
+        status: "waiting_tool_approval" as const,
+        eventType: "run.waiting_tool_approval" as const,
+        outcome: "waiting_tool_approval",
+      },
+      {
+        runId: "run_waiting_dispatch_checkpoint",
+        status: "queued" as const,
+        eventType: "run.waiting_tool_dispatch" as const,
+        outcome: "waiting_tool_dispatch",
+      },
+    ];
+    for (const [index, item] of cases.entries()) {
+      const checkpointKey = `run-execution-checkpoints/org_default/workspace_default/${item.runId}.2.json`;
+      await repository.createRun({
+        id: item.runId,
+        orgId: "org_default",
+        workspaceId: "workspace_default",
+        chatId: "chat_welcome",
+        agentId: "agent_default",
+        agentVersionId: "agent_version_default_v1",
+        modelId: "model_openai_compatible_default",
+        providerId: "provider_openai_compatible",
+        status: item.status,
+        createdBy: "user_dev_admin",
+        createdAt: `2020-01-01T00:00:0${index}.000Z`,
+      });
+      await repository.appendRunEvents([
+        {
+          id: `event_${item.runId}`,
+          runId: item.runId,
+          sequence: 2,
+          type: item.eventType,
+          data: {},
+          createdAt: `2020-01-01T00:00:0${index + 1}.000Z`,
+        },
+      ]);
+      await repository.createBackgroundJob({
+        id: `job_${item.runId}`,
+        orgId: "org_default",
+        workspaceId: "workspace_default",
+        type: `run.execution:${item.runId}`,
+        status: "queued",
+        payload: {
+          runId: item.runId,
+          checkpointKey,
+          assistantOutputStarted: true,
+          lastEventSequence: 2,
+        },
+        createdAt: `2020-01-01T00:00:0${index}.000Z`,
+        updatedAt: `2020-01-01T00:00:0${index + 1}.000Z`,
+      });
+      await objectStore.putObject({
+        key: checkpointKey,
+        contentType: "application/vnd.romeo.run-execution-checkpoint+json",
+        body: Buffer.from("{}"),
+      });
+    }
+    const api = createRomeoApi(repository, { objectStore });
+
+    const response = await api.request(
+      "/api/v1/chats/chat_welcome/runs/active",
+    );
+
+    expect(response.status).toBe(200);
+    const jobs = await repository.listBackgroundJobs("org_default");
+    for (const item of cases) {
+      expect(await repository.getRun(item.runId)).toMatchObject({
+        status: item.status,
+      });
+      expect(jobs).toContainEqual(
+        expect.objectContaining({
+          id: `job_${item.runId}`,
+          status: "completed",
+          payload: expect.objectContaining({ outcome: item.outcome }),
+        }),
+      );
+      expect(
+        await objectStore.getObject(
+          `run-execution-checkpoints/org_default/workspace_default/${item.runId}.2.json`,
+        ),
+      ).toBeUndefined();
+    }
+  });
+
+  it("never retries a stale run after assistant output has started", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const objectStore = new MemoryObjectStore();
+    const checkpointKey =
+      "run-execution-checkpoints/org_default/workspace_default/run_output_interrupted.json";
+    await repository.createRun({
+      id: "run_output_interrupted",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      chatId: "chat_welcome",
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: "model_openai_compatible_default",
+      providerId: "provider_openai_compatible",
+      status: "running",
+      createdBy: "user_dev_admin",
+      createdAt: "2020-01-01T00:00:00.000Z",
+    });
+    await repository.appendRunEvents([
+      {
+        id: "event_output_started",
+        runId: "run_output_interrupted",
+        sequence: 1,
+        type: "message.started",
+        data: {},
+        createdAt: "2020-01-01T00:00:01.000Z",
+      },
+    ]);
+    await repository.createBackgroundJob({
+      id: "job_run_output_interrupted",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      type: "run.execution:run_output_interrupted",
+      status: "queued",
+      payload: {
+        runId: "run_output_interrupted",
+        checkpointKey,
+        assistantOutputStarted: true,
+        lastEventSequence: 1,
+      },
+      createdAt: "2020-01-01T00:00:00.000Z",
+      updatedAt: "2020-01-01T00:00:01.000Z",
+    });
+    await objectStore.putObject({
+      key: checkpointKey,
+      contentType: "application/vnd.romeo.run-execution-checkpoint+json",
+      body: Buffer.from(
+        JSON.stringify({
+          messages: [
+            { role: "user", content: "Do not duplicate this request" },
+          ],
+          citations: [],
+          providerTools: [],
+          principalId: "user_dev_admin",
+          principalType: "user",
+          scopeSnapshot: scopeValues,
+          assistantContent: "partial",
+          emitRunStarted: false,
+        }),
+      ),
+    });
+    const api = createRomeoApi(repository, { objectStore });
+
+    const response = await api.request(
+      "/api/v1/chats/chat_welcome/runs/active",
+    );
+
+    expect(response.status).toBe(200);
+    expect((await repository.getRun("run_output_interrupted"))?.status).toBe(
+      "failed",
+    );
+    expect(await repository.listBackgroundJobs("org_default")).toContainEqual(
+      expect.objectContaining({
+        id: "job_run_output_interrupted",
+        status: "failed",
+        payload: expect.objectContaining({ outcome: "output_interrupted" }),
+      }),
+    );
+    expect(
+      (await repository.listRunEvents("run_output_interrupted")).at(-1),
+    ).toEqual(
+      expect.objectContaining({
+        type: "run.failed",
+        data: expect.objectContaining({
+          errorCode: "run_execution_interrupted",
+        }),
+      }),
+    );
+    expect(await objectStore.getObject(checkpointKey)).toBeUndefined();
+  });
+});
 
 const liveEdgeRequiredChecks = [
   "security_headers_present",
@@ -251,6 +1702,33 @@ describe("Romeo API thin slice", () => {
     const specResponse = await api.request("/api/v1/openapi.json");
     const spec = await specResponse.json();
     expect(specResponse.status).toBe(200);
+    expect(spec.paths["/health"].get).toMatchObject({
+      operationId: "system.getHealth",
+      tags: ["System"],
+      security: [],
+    });
+    expect(spec.paths["/me/interface-preferences"].get).toMatchObject({
+      operationId: "interfacePreferences.getCurrent",
+      tags: ["Interface Preferences"],
+    });
+    expect(spec.paths["/me/interface-preferences"].patch).toMatchObject({
+      operationId: "interfacePreferences.updateCurrent",
+      tags: ["Interface Preferences"],
+    });
+    expect(spec.paths["/me"].get).toMatchObject({
+      operationId: "identity.getCurrentPrincipal",
+      tags: ["Identity"],
+    });
+    expect(spec.paths["/me"].patch).toMatchObject({
+      operationId: "identity.updateCurrentProfile",
+      tags: ["Identity"],
+    });
+    expect(spec.components.securitySchemes).toEqual(
+      expect.objectContaining({
+        bearerAuth: expect.objectContaining({ type: "http" }),
+        sessionCookie: expect.objectContaining({ type: "apiKey" }),
+      }),
+    );
     expect(spec.paths["/me"].patch).toBeDefined();
     expect(spec.components.schemas.BootstrapResponse).toBeDefined();
     expect(spec.components.schemas.User).toBeDefined();
@@ -382,7 +1860,7 @@ describe("Romeo API thin slice", () => {
       spec.paths["/agents/{agentId}"].get.responses[200].content[
         "application/json"
       ].schema.properties.data.$ref,
-    ).toBe("#/components/schemas/Agent");
+    ).toBe("#/components/schemas/ManagedModel");
     expect(Object.keys(spec.paths)).toContain("/agents/{agentId}/clone");
     expect(Object.keys(spec.paths)).toContain("/agents/{agentId}/export");
     expect(Object.keys(spec.paths)).toContain("/agents/import");
@@ -404,7 +1882,7 @@ describe("Romeo API thin slice", () => {
     );
     expect(spec.components.schemas.EvalReleaseCandidateEvidence).toBeDefined();
     expect(Object.keys(spec.paths)).toContain("/eval-suites/{suiteId}/runs");
-    expect(Object.keys(spec.paths)).toContain(
+    expect(Object.keys(spec.paths)).not.toContain(
       "/eval-suites/{suiteId}/model-comparisons",
     );
     expect(Object.keys(spec.paths)).toContain("/eval-runs/{runId}/results");
@@ -513,12 +1991,18 @@ describe("Romeo API thin slice", () => {
     expect(Object.keys(spec.paths)).toContain("/agent-gallery");
     expect(Object.keys(spec.paths)).toContain("/favorites");
     expect(Object.keys(spec.paths)).toContain("/favorites/{favoriteId}");
-    expect(Object.keys(spec.paths)).toContain("/folders");
-    expect(Object.keys(spec.paths)).toContain("/folders/{folderId}");
-    expect(Object.keys(spec.paths)).toContain("/folders/{folderId}/shares");
-    expect(Object.keys(spec.paths)).toContain("/folders/{folderId}/items");
+    expect(Object.keys(spec.paths)).toContain("/collaboration/folders");
     expect(Object.keys(spec.paths)).toContain(
-      "/folders/{folderId}/items/{itemId}",
+      "/collaboration/folders/{folderId}",
+    );
+    expect(Object.keys(spec.paths)).toContain(
+      "/collaboration/folders/{folderId}/shares",
+    );
+    expect(Object.keys(spec.paths)).toContain(
+      "/collaboration/folders/{folderId}/items",
+    );
+    expect(Object.keys(spec.paths)).toContain(
+      "/collaboration/folders/{folderId}/items/{itemId}",
     );
     expect(spec.components.schemas.WorkspaceFolder).toBeDefined();
     expect(spec.components.schemas.UpdateFolderRequest).toBeDefined();
@@ -614,17 +2098,13 @@ describe("Romeo API thin slice", () => {
       "/tool-operation-dispatch-requests/{jobId}/cancel",
     );
     expect(spec.components.schemas.ToolOperationDispatchResult).toBeDefined();
+    expect(spec.components.schemas.ToolDispatchRequestResult).toBeDefined();
+    expect(spec.components.schemas.EnqueueToolDispatchRequest).toBeDefined();
     expect(
-      spec.components.schemas.ToolOperationDispatchRequestResult,
+      spec.components.schemas.ToolDispatchRequestReadbackResult,
     ).toBeDefined();
     expect(
-      spec.components.schemas.EnqueueToolOperationDispatchRequest,
-    ).toBeDefined();
-    expect(
-      spec.components.schemas.ToolOperationDispatchRequestReadbackResult,
-    ).toBeDefined();
-    expect(
-      spec.components.schemas.ToolOperationDispatchRequestExpiryResult,
+      spec.components.schemas.ToolDispatchRequestExpiryResult,
     ).toBeDefined();
     expect(spec.components.schemas.ToolApprovalRequest).toBeDefined();
     expect(
@@ -814,7 +2294,7 @@ describe("Romeo API thin slice", () => {
     expect(Object.keys(spec.paths)).toContain("/auth/oauth2/start");
     expect(Object.keys(spec.paths)).toContain("/auth/oauth2/callback");
     expect(Object.keys(spec.paths)).toContain("/auth/ldap/login");
-    expect(spec.components.schemas.OAuth2PkceStartResult).toBeDefined();
+    expect(spec.components.schemas.OAuth2LoginStart).toBeDefined();
     expect(spec.components.schemas.LdapLoginRequest).toBeDefined();
     expect(spec.components.schemas.LdapLoginResult).toBeDefined();
     expect(
@@ -879,9 +2359,7 @@ describe("Romeo API thin slice", () => {
       ],
     ).toBeDefined();
     expect(
-      spec.paths["/voices/{voiceProfileId}/preview"].post.responses[200]
-        .content["application/json"].schema.properties.data.properties
-        .storageKey,
+      spec.components.schemas.PublicSpeechArtifact.properties.storageKey,
     ).toBeUndefined();
     expect(
       spec.components.schemas.RetentionEnforcementResult.properties
@@ -1044,7 +2522,7 @@ describe("Romeo API thin slice", () => {
     );
     expect(Object.keys(spec.paths)).toContain("/users/{userId}/role");
     expect(Object.keys(spec.paths)).toContain("/users/{userId}/local-password");
-    expect(spec.components.schemas.SamlStartResult).toBeDefined();
+    expect(spec.components.schemas.SamlLoginStart).toBeDefined();
     expect(
       spec.components.schemas.AuthProviderSamlConnectionPatch,
     ).toBeDefined();
@@ -6717,6 +8195,176 @@ describe("Romeo API thin slice", () => {
     expect(JSON.stringify(audit.data)).not.toContain("Romeo Assistant copy");
   });
 
+  it("archives a managed model without deleting immutable history", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const createdResponse = await api.request("/api/v1/agents", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        name: "Temporary governed model",
+        baseModelId: "model_openai_compatible_default",
+        systemPrompt: "Answer using governed context.",
+      }),
+    });
+    const created = await createdResponse.json();
+    const deleteResponse = await api.request(
+      `/api/v1/agents/${created.data.id}`,
+      { method: "DELETE" },
+    );
+    const deleted = await deleteResponse.json();
+    const listResponse = await api.request(
+      "/api/v1/agents?workspaceId=workspace_default",
+    );
+    const listed = await listResponse.json();
+    const detailResponse = await api.request(
+      `/api/v1/agents/${created.data.id}`,
+    );
+    const auditResponse = await api.request("/api/v1/audit-logs");
+    const audit = await auditResponse.json();
+
+    expect(createdResponse.status).toBe(201);
+    expect(deleteResponse.status).toBe(200);
+    expect(deleted.data.archivedAt).toEqual(expect.any(String));
+    expect(listed.data).not.toContainEqual(
+      expect.objectContaining({ id: created.data.id }),
+    );
+    expect(detailResponse.status).toBe(404);
+    expect(audit.data).toContainEqual(
+      expect.objectContaining({
+        action: "agent.archive",
+        resourceId: created.data.id,
+      }),
+    );
+  });
+
+  it("governs managed-model personalization and applies it to run context", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const defaultPolicyResponse = await api.request(
+      "/api/v1/agents/agent_default/customization-policy",
+    );
+    expect((await defaultPolicyResponse.json()).data).toEqual({
+      allowCommunicationStyle: false,
+      allowResponseLength: false,
+      allowLanguage: false,
+      allowCustomInstructions: false,
+      allowPersonalMemory: false,
+      allowVoiceSelection: false,
+    });
+
+    const policyResponse = await api.request(
+      "/api/v1/agents/agent_default/customization-policy",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          allowCommunicationStyle: true,
+          allowCustomInstructions: true,
+        }),
+      },
+    );
+    expect(policyResponse.status).toBe(200);
+
+    const preferenceResponse = await api.request(
+      "/api/v1/agents/agent_default/preferences",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          communicationStyle: "concise",
+          customInstructions: "Use direct recommendations.",
+          personalMemoryEnabled: true,
+        }),
+      },
+    );
+    expect(await preferenceResponse.json()).toMatchObject({
+      data: {
+        communicationStyle: "concise",
+        customInstructions: "Use direct recommendations.",
+      },
+    });
+
+    const previewResponse = await api.request("/api/v1/runs/context-preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: "chat_welcome",
+        agentId: "agent_default",
+        content: "Give a recommendation.",
+      }),
+    });
+    const preview = await previewResponse.json();
+    expect(previewResponse.status).toBe(200);
+    expect(preview.data.messages[0].content).toContain(
+      "Communication style: concise.",
+    );
+    expect(preview.data.messages[0].content).toContain(
+      "User custom instructions: Use direct recommendations.",
+    );
+  });
+
+  it("sends the exact message context shown by the context inspector", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const provider = await repository.getProvider("provider_openai_compatible");
+    if (!provider) throw new Error("Expected seeded provider");
+    provider.baseUrl = "https://api.example.test/v1";
+    provider.credentialRef = "env://ROMEO_PROVIDER_API_KEY";
+    const providerBodies: Array<Record<string, unknown>> = [];
+    const api = createRomeoApi(repository, {
+      providerFetch: async (_input, init) => {
+        providerBodies.push(JSON.parse(String(init?.body)));
+        return new Response(
+          providerSse([{ choices: [{ delta: { content: "Accepted." } }] }]),
+          { status: 200 },
+        );
+      },
+      secretResolver: new EnvironmentSecretResolver({
+        ROMEO_PROVIDER_API_KEY: "provider-api-key",
+      }),
+    });
+    const chatResponse = await api.request("/api/v1/chats", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Context agreement",
+      }),
+    });
+    const chat = await chatResponse.json();
+    const input = {
+      chatId: chat.data.id,
+      agentId: "agent_default",
+      content: "Explain the governed release path.",
+    };
+    const previewResponse = await api.request("/api/v1/runs/context-preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const preview = await previewResponse.json();
+    const runResponse = await api.request("/api/v1/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    await waitForAssistantMessage(api, chat.data.id);
+    const sentMessages = providerBodies[0]?.messages as Array<{
+      content: string;
+      role: string;
+    }>;
+
+    expect(previewResponse.status).toBe(200);
+    expect(runResponse.status).toBe(202);
+    expect(sentMessages).toEqual(
+      preview.data.messages.map(
+        (message: { content: string; role: string }) => ({
+          content: message.content,
+          role: message.role,
+        }),
+      ),
+    );
+  });
+
   it("exports and imports an agent draft JSON document", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
     // Enable the bindings this test round-trips through export/import, rather
@@ -7451,6 +9099,7 @@ describe("Romeo API thin slice", () => {
         name: "Lab Responses",
         baseUrl: "https://api.example.com/v1",
         credentialRef: "env://LAB_RESPONSES_KEY",
+        modelIds: ["gpt-compatible"],
       }),
     });
     const created = await response.json();
@@ -7472,7 +9121,7 @@ describe("Romeo API thin slice", () => {
     expect(syncResponse.status).toBe(200);
     expect(synced.data[0]).toMatchObject({
       providerId: created.data.id,
-      displayName: "OpenAI Responses-compatible default",
+      displayName: "gpt-compatible",
       capabilities: { reasoning: true, toolCalling: true },
     });
     expect(
@@ -7488,6 +9137,120 @@ describe("Romeo API thin slice", () => {
       ),
     ).toBe(true);
     expect(JSON.stringify(audit.data)).not.toContain("LAB_RESPONSES_KEY");
+  });
+
+  it("updates provider model IDs and preserves model admin overrides across sync", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const createdResponse = await api.request("/api/v1/providers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        type: "openai-compatible",
+        name: "Override provider",
+        baseUrl: "https://gateway.example/v1",
+        modelIds: ["chat-one"],
+      }),
+    });
+    const created = await createdResponse.json();
+    const providerPatch = await api.request(
+      `/api/v1/providers/${created.data.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          modelIds: ["chat-one", "chat-two"],
+          enabled: false,
+        }),
+      },
+    );
+    const patchedProvider = await providerPatch.json();
+    const verificationResponse = await api.request(
+      `/api/v1/providers/${created.data.id}/verify`,
+      { method: "POST" },
+    );
+    const verification = await verificationResponse.json();
+    const firstSync = await api.request(
+      `/api/v1/providers/${created.data.id}/sync`,
+      { method: "POST" },
+    );
+    const synced = await firstSync.json();
+    const model = synced.data.find(
+      (item: { name: string }) => item.name === "chat-one",
+    );
+    const overridden = {
+      ...model.capabilities,
+      toolCalling: false,
+      vision: true,
+      modalities: ["text", "vision"],
+    };
+    const capabilitiesPatch = await api.request(
+      `/api/v1/models/${model.id}/capabilities`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          capabilities: overridden,
+          contextWindow: 64000,
+        }),
+      },
+    );
+    const enabledPatch = await api.request(
+      `/api/v1/models/${model.id}/enabled`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      },
+    );
+    await api.request(`/api/v1/providers/${created.data.id}/sync`, {
+      method: "POST",
+    });
+    const modelsResponse = await api.request("/api/v1/models");
+    const models = await modelsResponse.json();
+    const persisted = models.data.find(
+      (item: { id: string }) => item.id === model.id,
+    );
+    const filteredPageResponse = await api.request(
+      `/api/v1/models?limit=1&offset=0&providerId=${created.data.id}&enabled=false&q=chat-one`,
+    );
+    const filteredPage = await filteredPageResponse.json();
+    const invalidEnabledResponse = await api.request(
+      "/api/v1/models?limit=10&enabled=maybe",
+    );
+
+    expect(createdResponse.status).toBe(201);
+    expect(providerPatch.status).toBe(200);
+    expect(patchedProvider.data).toMatchObject({
+      enabled: false,
+      modelIds: ["chat-one", "chat-two"],
+    });
+    expect(verificationResponse.status).toBe(200);
+    expect(verification.data).toMatchObject({
+      ok: false,
+      message: "The endpoint returned no discoverable models.",
+      checks: expect.arrayContaining([
+        expect.objectContaining({
+          label: "Model discovery",
+          status: "fail",
+          detail: "The configured model allowlist could not be verified.",
+        }),
+      ]),
+    });
+    expect(firstSync.status).toBe(200);
+    expect(capabilitiesPatch.status).toBe(200);
+    expect(enabledPatch.status).toBe(200);
+    expect(persisted).toMatchObject({
+      enabled: false,
+      contextWindow: 64000,
+      capabilitiesSource: "override",
+      capabilities: { toolCalling: false, vision: true },
+    });
+    expect(filteredPageResponse.status).toBe(200);
+    expect(filteredPage).toMatchObject({
+      data: [{ id: model.id, enabled: false }],
+      meta: { limit: 1, offset: 0, total: 1, hasMore: false },
+    });
+    expect(invalidEnabledResponse.status).toBe(400);
   });
 
   it("serves raw OpenAI-compatible model discovery without provider secrets", async () => {
@@ -8634,10 +10397,12 @@ describe("Romeo API thin slice", () => {
     expect(providerRequests[0]?.body).toEqual({
       model: "text-embedding-3-small",
       input: ["Romeo", "quotas"],
+      encoding_format: "float",
     });
     expect(providerRequests[1]?.body).toEqual({
       model: "text-embedding-3-small",
       input: ["single text"],
+      encoding_format: "float",
     });
     expect(JSON.stringify(body)).not.toContain("provider-api-key");
     expect(JSON.stringify(body)).not.toContain("ROMEO_PROVIDER_API_KEY");
@@ -8954,11 +10719,10 @@ describe("Romeo API thin slice", () => {
   it("syncs provider models into the base model registry", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        async () =>
-          new Response("Ollama unavailable in deterministic API test.", {
-            status: 503,
-          }),
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).endsWith("/api/tags")
+          ? Response.json({ models: [{ name: "llama3.2:latest" }] })
+          : Response.json({ capabilities: ["completion", "tools"] }),
       ),
     );
     const api = createRomeoApi(new InMemoryRomeoRepository());
@@ -8975,13 +10739,18 @@ describe("Romeo API thin slice", () => {
       const audit = await auditResponse.json();
 
       expect(response.status).toBe(200);
-      expect(synced.data[0].id).toBe("model_provider_ollama_default");
+      expect(synced.data[0].id).toBe("model_provider_ollama_llama3_2_latest");
       expect(
         models.data.some(
           (model: { id: string }) =>
-            model.id === "model_provider_ollama_default",
+            model.id === "model_provider_ollama_llama3_2_latest",
         ),
       ).toBe(true);
+      expect(
+        models.data.find(
+          (model: { id: string }) => model.id === "model_ollama_default",
+        ).enabled,
+      ).toBe(false);
       expect(
         audit.data.some(
           (event: {
@@ -9009,6 +10778,11 @@ describe("Romeo API thin slice", () => {
         body: JSON.stringify({
           inputTokenUsd: 0.000001,
           outputTokenUsd: 0.000002,
+          imageGenerationUsd: {
+            "1024x1024": 0.04,
+            "1024x1536": 0.08,
+            "1536x1024": 0.08,
+          },
         }),
       },
     );
@@ -9023,6 +10797,11 @@ describe("Romeo API thin slice", () => {
     expect(updated.data.pricing).toEqual({
       inputTokenUsd: 0.000001,
       outputTokenUsd: 0.000002,
+      imageGenerationUsd: {
+        "1024x1024": 0.04,
+        "1024x1536": 0.08,
+        "1536x1024": 0.08,
+      },
     });
     expect(
       models.data.find(
@@ -9040,6 +10819,12 @@ describe("Romeo API thin slice", () => {
           event.action === "model.pricing.update" &&
           event.resourceId === "model_openai_compatible_default" &&
           event.metadata.priceFields?.includes("inputTokenUsd") === true,
+      ),
+    ).toBe(true);
+    expect(
+      audit.data.some(
+        (event: { metadata: { priceFields?: string[] } }) =>
+          event.metadata.priceFields?.includes("imageGenerationUsd") === true,
       ),
     ).toBe(true);
     expect(JSON.stringify(audit.data)).not.toContain("0.000001");
@@ -9139,7 +10924,8 @@ describe("Romeo API thin slice", () => {
 
   it("uploads, reads, lists, and deletes file objects through object storage", async () => {
     const objectStore = new MemoryObjectStore();
-    const api = createRomeoApi(new InMemoryRomeoRepository(), { objectStore });
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, { objectStore });
     const uploadResponse = await api.request("/api/v1/files", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -9182,6 +10968,14 @@ describe("Romeo API thin slice", () => {
     expect(uploaded.data.sha256).toBe(
       "6e5bc8df28cfac06658769974f895070db24676563ebc1ae17fb961f5da4d5e9",
     );
+    expect(uploaded.data.extraction).toMatchObject({
+      status: "succeeded",
+      quality: "high",
+      method: "utf8-text",
+      attempts: 1,
+      characterCount: 11,
+      failureCode: null,
+    });
     expect(JSON.stringify(uploaded.data)).not.toContain("objectKey");
     expect(listed.data.map((file: { id: string }) => file.id)).toContain(
       uploaded.data.id,
@@ -9195,7 +10989,148 @@ describe("Romeo API thin slice", () => {
     expect(deleteResponse.status).toBe(200);
     expect(deleted.data.status).toBe("deleted");
     expect(deleted.data.contentUrl).toBeNull();
+    expect(deleted.data).toMatchObject({
+      fileName: "deleted",
+      mimeType: "application/octet-stream",
+      sizeBytes: 0,
+      metadata: { contentPurged: true },
+    });
+    expect(await repository.getFileObject(uploaded.data.id)).toMatchObject({
+      objectKey: `deleted/${uploaded.data.id}`,
+      metadata: { contentPurged: true },
+    });
+    expect(
+      JSON.stringify(await repository.getFileObject(uploaded.data.id)),
+    ).not.toContain("Quarterly_Notes.txt");
+    expect(
+      JSON.stringify(await repository.getFileObject(uploaded.data.id)),
+    ).not.toContain("hello files");
     expect(missingContentResponse.status).toBe(404);
+  });
+
+  it("persists sanitized extraction failures and supports authorized retries", async () => {
+    const objectStore = new MemoryObjectStore();
+    let shouldFail = true;
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      objectStore,
+      knowledgeExtractor: {
+        extract: async () => {
+          if (shouldFail)
+            throw new Error("private extractor host and stack must not leak");
+          return {
+            content: "Recovered PDF text",
+            metadata: { extractor: "test-pdf-text" },
+          };
+        },
+      },
+    });
+    const bytes = new TextEncoder().encode("%PDF-1.4\nsynthetic test PDF");
+    const uploadResponse = await api.request("/api/v1/files", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        fileName: "retry.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: bytes.byteLength,
+        dataBase64: Buffer.from(bytes).toString("base64"),
+      }),
+    });
+    const uploaded = await uploadResponse.json();
+
+    expect(uploadResponse.status).toBe(201);
+    expect(uploaded.data.status).toBe("available");
+    expect(uploaded.data.extraction).toMatchObject({
+      status: "failed",
+      quality: "unknown",
+      method: "pdftotext",
+      attempts: 1,
+      failureCode: "file_extraction_failed",
+    });
+    expect(JSON.stringify(uploaded)).not.toContain("private extractor host");
+
+    shouldFail = false;
+    const retryResponse = await api.request(
+      `/api/v1/files/${uploaded.data.id}/extraction/retry`,
+      { method: "POST" },
+    );
+    const retried = await retryResponse.json();
+
+    expect(retryResponse.status).toBe(200);
+    expect(retried.data.extraction).toMatchObject({
+      status: "succeeded",
+      quality: "medium",
+      method: "test-pdf-text",
+      attempts: 2,
+      characterCount: 18,
+      failureCode: null,
+    });
+  });
+
+  it("records OCR provenance for scanned images and PDF fallback", async () => {
+    const objectStore = new MemoryObjectStore();
+    const recognize = vi.fn(async (input: { mimeType: string }) => ({
+      content:
+        input.mimeType === "application/pdf"
+          ? "Scanned PDF text"
+          : "Scanned image text",
+      provider: "acceptance-ocr",
+      pageCount: input.mimeType === "application/pdf" ? 2 : 1,
+      confidence: 0.94,
+    }));
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      objectStore,
+      fileOcrProvider: { recognize },
+      knowledgeExtractor: {
+        extract: async () => {
+          throw new Error("no embedded PDF text");
+        },
+      },
+    });
+    const imageBytes = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlJkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
+    const pdfBytes = new TextEncoder().encode("%PDF-1.4\nscanned fixture");
+    const upload = (fileName: string, mimeType: string, bytes: Uint8Array) =>
+      api.request("/api/v1/files", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "workspace_default",
+          fileName,
+          mimeType,
+          sizeBytes: bytes.byteLength,
+          dataBase64: Buffer.from(bytes).toString("base64"),
+        }),
+      });
+
+    const imageResponse = await upload("scan.png", "image/png", imageBytes);
+    const pdfResponse = await upload("scan.pdf", "application/pdf", pdfBytes);
+    const image = await imageResponse.json();
+    const pdf = await pdfResponse.json();
+
+    expect(imageResponse.status).toBe(201);
+    expect(pdfResponse.status).toBe(201);
+    expect(image.data.extraction).toMatchObject({
+      status: "succeeded",
+      method: "ocr",
+      provider: "acceptance-ocr",
+      pageCount: 1,
+      confidence: 0.94,
+      quality: "high",
+      characterCount: 18,
+    });
+    expect(pdf.data.extraction).toMatchObject({
+      status: "succeeded",
+      method: "ocr",
+      provider: "acceptance-ocr",
+      pageCount: 2,
+      confidence: 0.94,
+    });
+    expect(recognize).toHaveBeenCalledTimes(2);
   });
 
   it("rejects native file uploads when bytes do not match the declared MIME type", async () => {
@@ -9219,6 +11154,135 @@ describe("Romeo API thin slice", () => {
     expect(response.status).toBe(415);
     expect(body.error.code).toBe("file_mime_mismatch");
     expect(body.error.details).toEqual({ mimeType: "image/png" });
+  });
+
+  it("rejects image uploads with unsafe dimensions before object persistence", async () => {
+    const objectStore = new MemoryObjectStore();
+    const repository = new InMemoryRomeoRepository();
+    const bytes = new Uint8Array(24);
+    bytes.set([137, 80, 78, 71, 13, 10, 26, 10], 0);
+    bytes.set([0, 0, 0, 13, 73, 72, 68, 82], 8);
+    bytes.set([0, 0, 78, 32, 0, 0, 78, 32], 16); // 20,000 x 20,000
+    const api = createRomeoApi(repository, { objectStore });
+
+    const response = await api.request("/api/v1/files", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        fileName: "decompression-bomb.png",
+        mimeType: "image/png",
+        sizeBytes: bytes.byteLength,
+        dataBase64: Buffer.from(bytes).toString("base64"),
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(413);
+    expect(body.error.code).toBe("file_image_dimensions_exceeded");
+    expect(body.error.details).toEqual({
+      maxDimension: 16_384,
+      maxPixels: 100_000_000,
+    });
+    expect(
+      await repository.listFileObjects("org_default", "workspace_default"),
+    ).toEqual([]);
+  });
+
+  it("fails closed when required malware scanning is unavailable", async () => {
+    const objectStore = new MemoryObjectStore();
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, {
+      env: readEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
+      objectStore,
+    });
+    const bytes = new TextEncoder().encode("unscanned content sentinel");
+
+    const response = await api.request("/api/v1/files", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        fileName: "unscanned.txt",
+        mimeType: "text/plain",
+        sizeBytes: bytes.byteLength,
+        dataBase64: Buffer.from(bytes).toString("base64"),
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error.code).toBe("file_malware_scan_unavailable");
+    expect(JSON.stringify(body)).not.toContain("unscanned content sentinel");
+    expect(
+      await repository.listFileObjects("org_default", "workspace_default"),
+    ).toEqual([]);
+  });
+
+  it("rejects malicious inline files before governed object persistence", async () => {
+    const objectStore = new MemoryObjectStore();
+    const repository = new InMemoryRomeoRepository();
+    const scan = vi.fn(async () => ({ verdict: "malicious" as const }));
+    const api = createRomeoApi(repository, {
+      env: readEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
+      fileMalwareScanner: { scan },
+      objectStore,
+    });
+    const bytes = new TextEncoder().encode("malware test sentinel");
+
+    const response = await api.request("/api/v1/files", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        fileName: "malicious.txt",
+        mimeType: "text/plain",
+        sizeBytes: bytes.byteLength,
+        dataBase64: Buffer.from(bytes).toString("base64"),
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error.code).toBe("file_malware_detected");
+    expect(scan).toHaveBeenCalledOnce();
+    expect(
+      await repository.listFileObjects("org_default", "workspace_default"),
+    ).toEqual([]);
+  });
+
+  it("marks same-owner reusable files with duplicate content provenance", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, {
+      objectStore: new MemoryObjectStore(),
+    });
+    const bytes = new TextEncoder().encode("duplicate file content sentinel");
+    const request = (fileName: string) =>
+      api.request("/api/v1/files", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "workspace_default",
+          fileName,
+          mimeType: "text/plain",
+          sizeBytes: bytes.byteLength,
+          dataBase64: Buffer.from(bytes).toString("base64"),
+        }),
+      });
+
+    const firstResponse = await request("first.txt");
+    const first = await firstResponse.json();
+    const secondResponse = await request("second.txt");
+    const second = await secondResponse.json();
+
+    expect(firstResponse.status).toBe(201);
+    expect(secondResponse.status).toBe(201);
+    expect(first.data.metadata).not.toHaveProperty("duplicateContentDetected");
+    expect(second.data.metadata).toMatchObject({
+      duplicateContentDetected: true,
+      duplicateOfFileId: first.data.id,
+    });
+    expect(second.data.sha256).toBe(first.data.sha256);
   });
 
   it("enforces configured native file upload size limits", async () => {
@@ -9329,6 +11393,10 @@ describe("Romeo API thin slice", () => {
 
     expect(createResponse.status).toBe(201);
     expect(created.data.file.status).toBe("uploading");
+    expect(created.data.file.extraction).toMatchObject({
+      status: "pending",
+      attempts: 0,
+    });
     expect(created.data.file.contentUrl).toBeNull();
     expect(created.data.file.fileName).toBe("Direct_Upload.txt");
     expect(created.data.upload.method).toBe("PUT");
@@ -9338,6 +11406,11 @@ describe("Romeo API thin slice", () => {
     expect(beforeCompleteContentResponse.status).toBe(409);
     expect(completeResponse.status).toBe(200);
     expect(completed.data.status).toBe("available");
+    expect(completed.data.extraction).toMatchObject({
+      status: "succeeded",
+      method: "utf8-text",
+      attempts: 1,
+    });
     expect(completed.data.contentUrl).toBe(
       `/api/v1/files/${encodeURIComponent(created.data.file.id)}/content`,
     );
@@ -9346,6 +11419,53 @@ describe("Romeo API thin slice", () => {
     expect(cancelledResponse.status).toBe(200);
     expect(cancelled.data.status).toBe("deleted");
     expect(cancelled.data.contentUrl).toBeNull();
+  });
+
+  it("deletes a direct-upload object when required scanning detects malware", async () => {
+    const objectStore = new MemoryObjectStore();
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, {
+      env: readEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
+      fileMalwareScanner: {
+        scan: async () => ({ verdict: "malicious" }),
+      },
+      objectStore,
+    });
+    const bytes = new TextEncoder().encode("malicious direct upload sentinel");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const createResponse = await api.request("/api/v1/files/uploads", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        fileName: "malicious-direct.txt",
+        mimeType: "text/plain",
+        sizeBytes: bytes.byteLength,
+        sha256,
+      }),
+    });
+    const created = await createResponse.json();
+    const objectKey = `files/org_default/workspace_default/${created.data.file.id}/malicious-direct.txt`;
+    await objectStore.putObject({
+      key: objectKey,
+      body: bytes,
+      contentType: "text/plain",
+    });
+
+    const completeResponse = await api.request(
+      `/api/v1/files/uploads/${created.data.file.id}/complete`,
+      { method: "POST" },
+    );
+    const completed = await completeResponse.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(completeResponse.status).toBe(422);
+    expect(completed.error.code).toBe("file_malware_detected");
+    expect(await objectStore.getObject(objectKey)).toBeUndefined();
+    expect(await repository.getFileObject(created.data.file.id)).toMatchObject({
+      status: "deleted",
+      deletedAt: expect.any(String),
+    });
   });
 
   it("creates, refreshes, completes, and cancels resumable file upload sessions", async () => {
@@ -9436,7 +11556,7 @@ describe("Romeo API thin slice", () => {
     expect(created.data.file.status).toBe("uploading");
     expect(created.data.file.fileName).toBe("Resumable_Upload.txt");
     expect(created.data.file.contentUrl).toBeNull();
-    expect(created.data.file.metadata).toEqual({
+    expect(created.data.file.metadata).toMatchObject({
       clientHint: "native",
       partCount: 4,
       partSizeBytes: 6,
@@ -9456,6 +11576,11 @@ describe("Romeo API thin slice", () => {
     expect(refreshed.data.upload.parts).toHaveLength(4);
     expect(completeResponse.status).toBe(200);
     expect(completed.data.status).toBe("available");
+    expect(completed.data.extraction).toMatchObject({
+      status: "succeeded",
+      method: "utf8-text",
+      attempts: 1,
+    });
     expect(contentResponse.status).toBe(200);
     expect(content).toBe("hello resumable upload");
     expect(
@@ -12448,8 +14573,8 @@ describe("Romeo API thin slice", () => {
       {
         kind: "token",
         url: "https://auth.example.com/oauth/token",
-        auth: `Basic ${Buffer.from("client-id-secret:client-secret-value", "utf8").toString("base64")}`,
-        body: "grant_type=client_credentials&scope=issues%3Aread",
+        auth: `Basic ${Buffer.from("client%2Did%2Dsecret:client%2Dsecret%2Dvalue", "utf8").toString("base64")}`,
+        body: "scope=issues%3Aread&grant_type=client_credentials",
       },
       {
         kind: "api",
@@ -13229,7 +15354,7 @@ describe("Romeo API thin slice", () => {
       }),
     });
     const chat = await chatResponse.json();
-    const rootResponse = await api.request("/api/v1/folders", {
+    const rootResponse = await api.request("/api/v1/collaboration/folders", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -13239,7 +15364,7 @@ describe("Romeo API thin slice", () => {
       }),
     });
     const root = await rootResponse.json();
-    const childResponse = await api.request("/api/v1/folders", {
+    const childResponse = await api.request("/api/v1/collaboration/folders", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -13252,25 +15377,31 @@ describe("Romeo API thin slice", () => {
     });
     const child = await childResponse.json();
     const fetchedChildResponse = await api.request(
-      `/api/v1/folders/${child.data.id}`,
+      `/api/v1/collaboration/folders/${child.data.id}`,
     );
     const fetchedChild = await fetchedChildResponse.json();
-    const duplicateResponse = await api.request("/api/v1/folders", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        workspaceId: "workspace_default",
-        name: "sensitive root folder",
-      }),
-    });
-    const cycleResponse = await api.request(`/api/v1/folders/${root.data.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ parentId: child.data.id }),
-    });
+    const duplicateResponse = await api.request(
+      "/api/v1/collaboration/folders",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "workspace_default",
+          name: "sensitive root folder",
+        }),
+      },
+    );
+    const cycleResponse = await api.request(
+      `/api/v1/collaboration/folders/${root.data.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ parentId: child.data.id }),
+      },
+    );
     const cycle = await cycleResponse.json();
     const updatedChildResponse = await api.request(
-      `/api/v1/folders/${child.data.id}`,
+      `/api/v1/collaboration/folders/${child.data.id}`,
       {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -13285,7 +15416,7 @@ describe("Romeo API thin slice", () => {
     );
     const updatedChild = await updatedChildResponse.json();
     const addItemResponse = await api.request(
-      `/api/v1/folders/${child.data.id}/items`,
+      `/api/v1/collaboration/folders/${child.data.id}/items`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -13297,12 +15428,12 @@ describe("Romeo API thin slice", () => {
     );
     const addedItem = await addItemResponse.json();
     const deleteChildResponse = await api.request(
-      `/api/v1/folders/${child.data.id}`,
+      `/api/v1/collaboration/folders/${child.data.id}`,
       { method: "DELETE" },
     );
     const deletedChild = await deleteChildResponse.json();
     const foldersAfterDeleteResponse = await api.request(
-      "/api/v1/folders?workspaceId=workspace_default",
+      "/api/v1/collaboration/folders?workspaceId=workspace_default",
     );
     const foldersAfterDelete = await foldersAfterDeleteResponse.json();
     const auditResponse = await api.request(
@@ -13585,7 +15716,11 @@ describe("Romeo API thin slice", () => {
       listed.data.map((workspace: { id: string }) => workspace.id),
     ).toContain("workspace_rag_team");
     expect(knowledgeResponse.status).toBe(201);
-    expect(audit.data[0].metadata).toEqual({ slug: "rag_team" });
+    expect(audit.data[0].metadata).toMatchObject({
+      slug: "rag_team",
+      requestId: expect.any(String),
+      traceId: expect.stringMatching(/^[0-9a-f]{32}$/u),
+    });
     expect(serializedAudit).not.toContain("RAG Team Workspace");
   });
 
@@ -13911,7 +16046,8 @@ describe("Romeo API thin slice", () => {
         id: "msg_part_delete_image",
         messageId: "msg_delete_user",
         type: "attachment",
-        content: "chat-attachments/msg_delete_user/msg_part_delete_image/raw.png",
+        content:
+          "chat-attachments/msg_delete_user/msg_part_delete_image/raw.png",
         metadata: {
           fileName: "raw.png",
           kind: "image",
@@ -13953,9 +16089,9 @@ describe("Romeo API thin slice", () => {
       role: "user",
     });
     expect(messagesResponse.status).toBe(200);
-    expect(
-      messages.data.map((message: { id: string }) => message.id),
-    ).toEqual(["msg_delete_survivor"]);
+    expect(messages.data.map((message: { id: string }) => message.id)).toEqual([
+      "msg_delete_survivor",
+    ]);
     expect(await repository.listMessageParts("msg_delete_user")).toEqual([]);
     expect(audit.data[0].metadata).toMatchObject({
       workspaceId: "workspace_default",
@@ -14015,9 +16151,9 @@ describe("Romeo API thin slice", () => {
     expect(blocked.error.code).toBe("chat_delete_legal_hold");
     expect(blocked.error.details.legalHoldUntil).toBe(legalHoldUntil);
     expect(messagesResponse.status).toBe(200);
-    expect(
-      messages.data.map((message: { id: string }) => message.id),
-    ).toEqual(["msg_hold_delete"]);
+    expect(messages.data.map((message: { id: string }) => message.id)).toEqual([
+      "msg_hold_delete",
+    ]);
     expect(await repository.getMessage("msg_hold_delete")).toBeDefined();
   });
 
@@ -15419,7 +17555,12 @@ describe("Romeo API thin slice", () => {
       }),
     });
     const chat = await chatResponse.json();
-    const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    const bytes = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlJkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
     const dataBase64 = Buffer.from(bytes).toString("base64");
 
     const runResponse = await api.request("/api/v1/runs", {
@@ -15470,6 +17611,75 @@ describe("Romeo API thin slice", () => {
     expect(serializedMessages).not.toContain("chat-attachments/");
   });
 
+  it("serves inert text previews for authorized Office attachments", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const objectStore = new MemoryObjectStore();
+    const objectKey =
+      "chat-attachments/msg_office_preview/msg_part_office_preview/policy.docx";
+    const bytes = createOoxmlTestZip([
+      {
+        name: "word/document.xml",
+        content:
+          "<w:document><w:body><w:p><w:r><w:t>Safe policy preview text.</w:t></w:r></w:p></w:body></w:document>",
+      },
+      {
+        name: "word/_rels/document.xml.rels",
+        content:
+          '<Relationships><Relationship Target="https://private.example/active-sentinel" /></Relationships>',
+      },
+      {
+        name: "word/vbaProject.bin",
+        content: "ACTIVE-MACRO-SENTINEL",
+      },
+    ]);
+    await objectStore.putObject({
+      key: objectKey,
+      body: bytes,
+      contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    await repository.createMessage({
+      id: "msg_office_preview",
+      chatId: "chat_welcome",
+      role: "user",
+      content: "Preview the attached policy.",
+      createdAt: new Date().toISOString(),
+    });
+    await repository.createMessageParts([
+      {
+        id: "msg_part_office_preview",
+        messageId: "msg_office_preview",
+        type: "attachment",
+        content: objectKey,
+        metadata: {
+          fileName: "policy.docx",
+          kind: "document",
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          sizeBytes: bytes.byteLength,
+        },
+      },
+    ]);
+    const api = createRomeoApi(repository, { objectStore });
+
+    const response = await api.request(
+      "/api/v1/chats/chat_welcome/messages/msg_office_preview/attachments/msg_part_office_preview/preview",
+    );
+    const preview = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe(
+      "text/plain; charset=utf-8",
+    );
+    expect(response.headers.get("content-security-policy")).toContain(
+      "default-src 'none'",
+    );
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(preview).toContain("Safe policy preview text.");
+    expect(preview).not.toContain("ACTIVE-MACRO-SENTINEL");
+    expect(preview).not.toContain("private.example");
+  });
+
   it("rejects chat image attachments when bytes do not match the declared MIME type", async () => {
     const objectStore = new MemoryObjectStore();
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
@@ -15507,6 +17717,59 @@ describe("Romeo API thin slice", () => {
     expect(chatResponse.status).toBe(201);
     expect(response.status).toBe(415);
     expect(body.error.code).toBe("message_attachment_mime_mismatch");
+  });
+
+  it("applies required malware scanning to chat attachments before message persistence", async () => {
+    const objectStore = new MemoryObjectStore();
+    const repository = new InMemoryRomeoRepository();
+    const scan = vi.fn(async () => ({ verdict: "malicious" as const }));
+    const api = createRomeoApi(repository, {
+      env: readEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
+      fileMalwareScanner: { scan },
+      objectStore,
+    });
+    const chatResponse = await api.request("/api/v1/chats", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Malware-scanned attachment check",
+      }),
+    });
+    const chat = await chatResponse.json();
+    const bytes = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlJkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
+
+    const response = await api.request("/api/v1/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: chat.data.id,
+        agentId: "agent_default",
+        content: "Reject this malicious attachment.",
+        attachments: [
+          {
+            fileName: "malicious.png",
+            mimeType: "image/png",
+            sizeBytes: bytes.byteLength,
+            dataBase64: Buffer.from(bytes).toString("base64"),
+          },
+        ],
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(422);
+    expect(body.error.code).toBe("file_malware_detected");
+    expect(scan).toHaveBeenCalledOnce();
+    expect(await repository.listMessages(chat.data.id)).toEqual([]);
+    expect(JSON.stringify(body)).not.toContain(
+      Buffer.from(bytes).toString("base64"),
+    );
   });
 
   it("enforces configured chat image attachment size limits", async () => {
@@ -15554,6 +17817,109 @@ describe("Romeo API thin slice", () => {
     expect(serialized).not.toContain("iVBORw0");
   });
 
+  it("uses governed text files as run context and persists document attachments", async () => {
+    const objectStore = new MemoryObjectStore();
+    const api = createRomeoApi(new InMemoryRomeoRepository(), { objectStore });
+    const text = "Release approval requires security and quota review.";
+    const fileResponse = await api.request("/api/v1/files", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        fileName: "release-policy.txt",
+        mimeType: "text/plain",
+        sizeBytes: new TextEncoder().encode(text).byteLength,
+        dataBase64: Buffer.from(text).toString("base64"),
+        purpose: "chat_attachment",
+      }),
+    });
+    const file = await fileResponse.json();
+    const chatResponse = await api.request("/api/v1/chats", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Document attachment check",
+      }),
+    });
+    const chat = await chatResponse.json();
+    const runResponse = await api.request("/api/v1/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: chat.data.id,
+        agentId: "agent_default",
+        content: "Summarize the policy.",
+        fileIds: [file.data.id],
+      }),
+    });
+    const messages = await waitForAssistantMessage(api, chat.data.id);
+    const user = messages.find((message) => message.role === "user") as
+      | {
+          id: string;
+          attachments?: Array<{
+            id: string;
+            fileName: string;
+            kind: string;
+            mimeType: string;
+            retainedInContext: boolean;
+          }>;
+        }
+      | undefined;
+
+    expect(fileResponse.status).toBe(201);
+    expect(runResponse.status).toBe(202);
+    expect(user?.attachments?.[0]).toMatchObject({
+      fileName: "release-policy.txt",
+      kind: "document",
+      mimeType: "text/plain",
+      retainedInContext: true,
+    });
+
+    const previewResponse = await api.request("/api/v1/runs/context-preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: chat.data.id,
+        agentId: "agent_default",
+        content: "What did the attachment require?",
+      }),
+    });
+    const preview = await previewResponse.json();
+    expect(previewResponse.status).toBe(200);
+    expect(preview.data.attachments.retainedDocuments).toContain(
+      "release-policy.txt",
+    );
+    expect(
+      preview.data.messages.some((message: { content: string }) =>
+        message.content.includes(text),
+      ),
+    ).toBe(true);
+
+    const attachment = user?.attachments?.[0];
+    const retentionResponse = await api.request(
+      `/api/v1/chats/${chat.data.id}/messages/${user?.id}/attachments/${attachment?.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ retainedInContext: false }),
+      },
+    );
+    expect(retentionResponse.status).toBe(200);
+    const secondPreview = await api.request("/api/v1/runs/context-preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: chat.data.id,
+        agentId: "agent_default",
+        content: "What remains?",
+      }),
+    });
+    expect(
+      (await secondPreview.json()).data.attachments.retainedDocuments,
+    ).toEqual([]);
+  });
+
   it("retrieves enabled agent knowledge during runs and persists citations", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
     const content =
@@ -15596,20 +17962,15 @@ describe("Romeo API thin slice", () => {
       `/api/v1/runs/${run.data.id}/events`,
     );
     const eventStream = await eventsResponse.text();
-    const messagesResponse = await api.request(
-      `/api/v1/chats/${chat.data.id}/messages`,
-    );
-    const messages = await messagesResponse.json();
-    const assistant = messages.data.find(
-      (message: { role: string }) => message.role === "assistant",
-    );
+    const messages = await waitForAssistantMessage(api, chat.data.id);
+    const assistant = messages.find((message) => message.role === "assistant");
 
     expect(sourceResponse.status).toBe(202);
     expect(runResponse.status).toBe(202);
     expect(eventStream).toContain("event: retrieval.completed");
     expect(eventStream).toContain("release-gates.md");
-    expect(assistant.content).toContain("Citations:");
-    expect(assistant.content).toContain("release-gates.md");
+    expect(assistant?.content).toContain("Citations:");
+    expect(assistant?.content).toContain("release-gates.md");
   });
 
   it("uses persisted provider embeddings for agent run retrieval context", async () => {
@@ -15708,6 +18069,7 @@ describe("Romeo API thin slice", () => {
       headers: {
         "content-type": "application/json",
         "x-request-id": "req_validation_test",
+        traceparent: "00-0123456789abcdef0123456789abcdef-bbbbbbbbbbbbbbbb-01",
       },
       body: JSON.stringify({ workspaceId: "", title: "" }),
     });
@@ -15715,6 +18077,9 @@ describe("Romeo API thin slice", () => {
 
     expect(response.status).toBe(400);
     expect(response.headers.get("x-request-id")).toBe("req_validation_test");
+    expect(response.headers.get("x-romeo-trace-id")).toBe(
+      "0123456789abcdef0123456789abcdef",
+    );
     expect(body.error.code).toBe("invalid_request");
     expect(body.error.request_id).toBe("req_validation_test");
   });
@@ -15806,18 +18171,24 @@ describe("Romeo chat history", () => {
   ) {
     const messages = await waitForAssistantMessage(api, chatId);
     const user = messages.find((message) => message.role === "user");
-    if (user === undefined) throw new Error("Expected a persisted user message");
+    if (user === undefined)
+      throw new Error("Expected a persisted user message");
     return user.id;
   }
 
   it("sends prior turns to the model as turn-structured history", async () => {
     const bodies: ProviderBody[] = [];
     const repository = new InMemoryRomeoRepository();
-    const api = await historyApi({ repository, bodies, reply: "First answer." });
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
     const chatId = await createChat(api, "History");
 
     await runTurn(api, chatId, "First question.");
     await runTurn(api, chatId, "Second question.");
+    await waitForBodies(bodies, 2);
 
     // The original bug sent only [system, user] on every turn, so the model re-greeted each time.
     expect(bodies[1]?.messages.map((message) => message.role)).toEqual([
@@ -15851,11 +18222,14 @@ describe("Romeo chat history", () => {
 
     await runTurn(api, chatId, "What do scoped grants cover?");
     await runTurn(api, chatId, "And who grants them?");
+    await waitForBodies(bodies, 2);
 
     const first = bodies[0]?.messages[0];
     const second = bodies[1]?.messages[0];
     // A per-turn-varying messages[0] busts provider prompt caching on every single turn.
-    expect(first?.content).toBe("You are Romeo, a secure AI workspace assistant.");
+    expect(first?.content).toBe(
+      "You are Romeo, a secure AI workspace assistant.",
+    );
     expect(second?.content).toBe(first?.content);
     expect(second?.content).not.toContain("Romeo chat memory:");
     expect(second?.content).not.toContain("Romeo knowledge context:");
@@ -16014,7 +18388,11 @@ describe("Romeo chat history", () => {
   it("excludes the pair being replaced when regenerate supplies a history boundary", async () => {
     const bodies: ProviderBody[] = [];
     const repository = new InMemoryRomeoRepository();
-    const api = await historyApi({ repository, bodies, reply: "First answer." });
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
     const chatId = await createChat(api, "Regenerate");
 
     await runTurn(api, chatId, "First question.");
@@ -16046,7 +18424,11 @@ describe("Romeo chat history", () => {
   it("sends the full history when no boundary is supplied", async () => {
     const bodies: ProviderBody[] = [];
     const repository = new InMemoryRomeoRepository();
-    const api = await historyApi({ repository, bodies, reply: "First answer." });
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
     const chatId = await createChat(api, "No boundary");
 
     await runTurn(api, chatId, "First question.");
@@ -16068,7 +18450,11 @@ describe("Romeo chat history", () => {
   it("sends no history and does not throw for a boundary id from another chat", async () => {
     const bodies: ProviderBody[] = [];
     const repository = new InMemoryRomeoRepository();
-    const api = await historyApi({ repository, bodies, reply: "First answer." });
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
     const otherChatId = await createChat(api, "Other chat");
     const chatId = await createChat(api, "Target chat");
 

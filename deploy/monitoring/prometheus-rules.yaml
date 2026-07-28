@@ -54,6 +54,51 @@ spec:
             summary: Romeo provider kill switch is active
             description: A configured provider kill switch is active and should be tracked as an incident or planned maintenance item.
 
+        - alert: RomeoProviderErrorsElevated
+          expr: romeo_provider_error_total >= 5
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Romeo provider failures are elevated
+            description: Five or more sanitized provider failures occurred during the operational lookback window.
+
+        - alert: RomeoObjectStoreFailures
+          expr: romeo_object_store_error_total >= 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Romeo object-store operations are failing
+            description: Metadata-only object-store spans recorded a failure during the operational lookback window.
+
+        - alert: RomeoSseDisconnectsElevated
+          expr: romeo_sse_disconnect_total >= 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo streaming disconnects are elevated
+            description: Multiple run streams disconnected before a terminal event during the operational lookback window.
+
+        - alert: RomeoRunQueueWaitHigh
+          expr: romeo_run_queue_wait_milliseconds{statistic="p95"} >= 30000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo queued-turn wait time is high
+            description: The recent p95 queued-turn wait has exceeded thirty seconds.
+
+        - alert: RomeoRunTimeToFirstTokenHigh
+          expr: romeo_run_time_to_first_token_milliseconds{statistic="p95"} >= 10000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo time to first token is high
+            description: The recent p95 time to first token has exceeded ten seconds.
+
         - alert: RomeoBackgroundJobQueuedLag
           expr: romeo_background_job_alert{metric="queued_lag_seconds"} > 0
           for: 5m
@@ -80,6 +125,15 @@ spec:
           annotations:
             summary: Romeo background jobs are failing
             description: A background job type has recent failures inside the configured lookback window.
+
+        - alert: RomeoRetentionWorkerFailures
+          expr: romeo_background_job_recent_failed_jobs{type="temporary_chat.cleanup"} > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Romeo temporary-chat retention cleanup is failing
+            description: The retention worker has a recent failed cleanup job; inspect sanitized job evidence and object-store health.
 
         - alert: RomeoBackgroundJobDeadLetters
           expr: romeo_background_job_alert{metric="dead_letter_jobs"} > 0

@@ -8,15 +8,15 @@ import type {
   QuotaReservationInput,
   QuotaReservationResult,
 } from "./quota-coordination";
-import { ValkeyRespClient, type RespValue } from "./valkey-resp-client";
+import { ValkeyGlideClient, type ValkeyValue } from "./valkey-glide-client";
 
 const reserveScript = `
-local quantity = tonumber(ARGV[1])
 for index = 1, #KEYS do
-  local base = 2 + ((index - 1) * 4)
+  local base = 1 + ((index - 1) * 5)
   local bucket_id = ARGV[base]
   local seed = tonumber(ARGV[base + 1])
   local limit = tonumber(ARGV[base + 2])
+  local quantity = tonumber(ARGV[base + 4])
   local current = redis.call("GET", KEYS[index])
   if current == false then
     current = seed
@@ -30,10 +30,11 @@ end
 
 local result = {1}
 for index = 1, #KEYS do
-  local base = 2 + ((index - 1) * 4)
+  local base = 1 + ((index - 1) * 5)
   local bucket_id = ARGV[base]
   local seed = tonumber(ARGV[base + 1])
   local ttl_ms = tonumber(ARGV[base + 3])
+  local quantity = tonumber(ARGV[base + 4])
   local current = redis.call("GET", KEYS[index])
   if current == false then
     current = seed
@@ -53,7 +54,7 @@ return result
 `;
 
 export class ValkeyQuotaCoordinator implements QuotaCoordinator {
-  private readonly client: ValkeyRespClient;
+  private readonly client: ValkeyGlideClient;
 
   constructor(
     private readonly options: {
@@ -62,15 +63,13 @@ export class ValkeyQuotaCoordinator implements QuotaCoordinator {
       url: string;
     },
   ) {
-    this.client = new ValkeyRespClient({
+    this.client = new ValkeyGlideClient({
       timeoutMs: options.timeoutMs,
       url: options.url,
     });
   }
 
-  async reserve(
-    input: QuotaReservationInput,
-  ): Promise<QuotaReservationResult> {
+  async reserve(input: QuotaReservationInput): Promise<QuotaReservationResult> {
     if (input.buckets.length === 0) {
       return { allowed: true, reservations: [] };
     }
@@ -82,12 +81,12 @@ export class ValkeyQuotaCoordinator implements QuotaCoordinator {
         reserveScript,
         String(keys.length),
         ...keys,
-        String(input.quantity),
         ...input.buckets.flatMap((bucket) => [
           bucket.id,
           String(bucket.used),
           String(bucket.limit),
           String(ttlMsFor(bucket)),
+          String(input.quantities?.[bucket.id] ?? input.quantity),
         ]),
       ];
       const response = await this.client.command(args);
@@ -149,7 +148,13 @@ export class ValkeyQuotaCoordinator implements QuotaCoordinator {
       const ttlMs = ttlMsFor(bucket);
       const command =
         ttlMs > 0
-          ? ["SET", this.keyFor(bucket), String(bucket.used), "PX", String(ttlMs)]
+          ? [
+              "SET",
+              this.keyFor(bucket),
+              String(bucket.used),
+              "PX",
+              String(ttlMs),
+            ]
           : ["SET", this.keyFor(bucket), String(bucket.used)];
       await this.client.command(command);
     } catch (error) {
@@ -189,7 +194,7 @@ export class ValkeyQuotaCoordinator implements QuotaCoordinator {
   }
 }
 
-function parseReservationResult(response: RespValue): QuotaReservationResult {
+function parseReservationResult(response: ValkeyValue): QuotaReservationResult {
   if (!Array.isArray(response)) throw new Error("quota_reservation_invalid");
   const allowed = Number(response[0]) === 1;
   if (!allowed) {

@@ -12,6 +12,7 @@ import {
 export type WebhookEventTypeRecord =
   | "knowledge.source.indexed"
   | "quota.alert"
+  | "run.cancelled"
   | "run.completed"
   | "run.failed"
   | "tool.call.failed"
@@ -124,8 +125,17 @@ export class PgWebhookRepository {
     const [row] = await this.db
       .insert(webhookDeliveries)
       .values(toWebhookDeliveryInsert(delivery))
+      .onConflictDoNothing({ target: webhookDeliveries.id })
       .returning();
-    return row === undefined ? delivery : toWebhookDeliveryRecord(row);
+    if (row !== undefined) return toWebhookDeliveryRecord(row);
+    const [existing] = await this.db
+      .select()
+      .from(webhookDeliveries)
+      .where(eq(webhookDeliveries.id, delivery.id))
+      .limit(1);
+    return existing === undefined
+      ? delivery
+      : toWebhookDeliveryRecord(existing);
   }
 
   async updateWebhookDelivery(
@@ -227,6 +237,7 @@ function asWebhookEventTypes(value: unknown): WebhookEventTypeRecord[] {
     (eventType): eventType is WebhookEventTypeRecord =>
       eventType === "knowledge.source.indexed" ||
       eventType === "quota.alert" ||
+      eventType === "run.cancelled" ||
       eventType === "run.completed" ||
       eventType === "run.failed" ||
       eventType === "tool.call.failed" ||

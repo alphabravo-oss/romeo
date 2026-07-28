@@ -1,98 +1,121 @@
-import { useForm } from '@tanstack/react-form'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { Input, Button } from "@romeo/ui";
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import {
   confirmTotpEnrollment,
   disableTotpFactor,
   getLocalAuthStatus,
   setLocalPassword,
-  startTotpEnrollment
-} from '../api/auth-client'
-import type { TotpEnrollment } from '../api/auth-types'
-import { PanelState } from '../lib/panel-state'
-import { toast } from '../lib/toast'
-import { useConfirm } from './ConfirmDialog'
-import { FormDialog } from './FormDialog'
+  startTotpEnrollment,
+} from "../features/auth";
+import type { TotpEnrollment } from "@romeo/api-client/generated/sdk";
+import { PanelState } from "../lib/panel-state";
+import { LocalizedDate } from "../lib/locale-format";
+import { toast } from "../lib/toast";
+import { useLocale } from "../lib/i18n";
+import { useConfirm } from "./ConfirmDialog";
+import { FormDialog } from "./FormDialog";
 
 export function AccountSecurityPanel() {
-  const queryClient = useQueryClient()
-  const { ask, dialog } = useConfirm()
-  const statusQuery = useQuery({ queryKey: ['localAuthStatus'], queryFn: getLocalAuthStatus })
+  const queryClient = useQueryClient();
+  const { t } = useLocale();
+  const { ask, dialog } = useConfirm();
+  const statusQuery = useQuery({
+    queryKey: ["localAuthStatus"],
+    queryFn: getLocalAuthStatus,
+  });
 
-  const [pwOpen, setPwOpen] = useState(false)
-  const [enrollment, setEnrollment] = useState<TotpEnrollment>()
-  const [totpCode, setTotpCode] = useState('')
+  const [pwOpen, setPwOpen] = useState(false);
+  const [enrollment, setEnrollment] = useState<TotpEnrollment>();
+  const [totpCode, setTotpCode] = useState("");
 
-  const passwordMutation = useMutation({ mutationFn: setLocalPassword })
-  const enrollMutation = useMutation({ mutationFn: startTotpEnrollment })
-  const confirmMutation = useMutation({ mutationFn: confirmTotpEnrollment })
-  const disableMutation = useMutation({ mutationFn: disableTotpFactor })
+  const passwordMutation = useMutation({ mutationFn: setLocalPassword });
+  const enrollMutation = useMutation({ mutationFn: startTotpEnrollment });
+  const confirmMutation = useMutation({ mutationFn: confirmTotpEnrollment });
+  const disableMutation = useMutation({ mutationFn: disableTotpFactor });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['localAuthStatus'] })
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: ["localAuthStatus"] });
 
   const passwordForm = useForm({
-    defaultValues: { currentPassword: '', newPassword: '', confirmPassword: '' },
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
     onSubmit: async ({ value }) => {
       if (value.newPassword !== value.confirmPassword) {
-        toast('Passwords do not match', 'error')
-        return
+        toast(t("passwordsDoNotMatch"), "error");
+        return;
       }
       try {
         await passwordMutation.mutateAsync({
           newPassword: value.newPassword,
-          ...(hasPassword ? { currentPassword: value.currentPassword } : {})
-        })
-        await refresh()
-        toast(hasPassword ? 'Password changed' : 'Password set', 'success')
-        passwordForm.reset()
-        setPwOpen(false)
+          ...(hasPassword ? { currentPassword: value.currentPassword } : {}),
+        });
+        await refresh();
+        toast(hasPassword ? t("passwordChanged") : t("passwordSet"), "success");
+        passwordForm.reset();
+        setPwOpen(false);
       } catch {
-        toast('Could not update password', 'error')
+        toast(t("passwordUpdateFailed"), "error");
       }
-    }
-  })
+    },
+  });
 
   async function handleStartEnrollment() {
     try {
-      const result = await enrollMutation.mutateAsync({})
-      setEnrollment(result)
-      setTotpCode('')
+      const result = await enrollMutation.mutateAsync({});
+      setEnrollment(result);
+      setTotpCode("");
     } catch {
-      toast('Could not start enrollment', 'error')
+      toast(t("enrollmentStartFailed"), "error");
     }
   }
 
   async function handleConfirmEnrollment() {
-    if (enrollment === undefined || !/^\d{6}$/u.test(totpCode)) return
+    if (enrollment === undefined || !/^\d{6}$/u.test(totpCode)) return;
     try {
-      await confirmMutation.mutateAsync({ factorId: enrollment.factor.id, code: totpCode })
-      await refresh()
-      toast('Authenticator app enabled', 'success')
-      setEnrollment(undefined)
-      setTotpCode('')
+      await confirmMutation.mutateAsync({
+        factorId: enrollment.factor.id,
+        code: totpCode,
+      });
+      await refresh();
+      toast(t("authenticatorEnabled"), "success");
+      setEnrollment(undefined);
+      setTotpCode("");
     } catch {
-      toast('Could not verify code', 'error')
+      toast(t("verifyFailed"), "error");
     }
   }
 
   async function handleDisableFactor(factorId: string) {
-    if (!(await ask({ title: 'Remove this authenticator?', body: 'You will no longer be prompted for a code from this device.', confirmLabel: 'Remove', tone: 'danger' }))) return
+    if (
+      !(await ask({
+        title: t("removeAuthenticatorTitle"),
+        body: t("removeAuthenticatorBody"),
+        confirmLabel: t("remove"),
+        tone: "danger",
+      }))
+    )
+      return;
     try {
-      await disableMutation.mutateAsync({ factorId })
-      await refresh()
-      toast('Authenticator removed', 'success')
+      await disableMutation.mutateAsync({ factorId });
+      await refresh();
+      toast(t("authenticatorRemoved"), "success");
     } catch {
-      toast('Could not remove authenticator', 'error')
+      toast(t("removeAuthenticatorFailed"), "error");
     }
   }
 
   // Read once for the render + the password-form branch above (safe: query drives it).
-  const hasPassword = statusQuery.data?.hasPassword ?? false
+  const hasPassword = statusQuery.data?.hasPassword ?? false;
 
   return (
     <section className="rm-panel p-4">
-      <div className="rm-card-title">Security</div>
+      <div className="rm-card-title">{t("security")}</div>
       <PanelState query={statusQuery} isEmpty={() => false} empty="">
         {(status) => (
           <div className="grid gap-5">
@@ -100,14 +123,18 @@ export function AccountSecurityPanel() {
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-medium">Password</div>
+                  <div className="text-sm font-medium">
+                    {t("localPassword")}
+                  </div>
                   <div className="text-xs text-muted">
-                    {status.hasPassword ? 'A password is set for local sign-in.' : 'No password set — you sign in with SSO only.'}
+                    {status.hasPassword
+                      ? t("passwordIsSet")
+                      : t("noPasswordSso")}
                   </div>
                 </div>
-                <button className="rm-button" onClick={() => setPwOpen(true)} type="button">
-                  {status.hasPassword ? 'Change password' : 'Set password'}
-                </button>
+                <Button onClick={() => setPwOpen(true)} type="button">
+                  {status.hasPassword ? t("changePassword") : t("setPassword")}
+                </Button>
               </div>
             </div>
 
@@ -115,35 +142,58 @@ export function AccountSecurityPanel() {
             <div className="grid gap-2 border-t border-border pt-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-medium">Two-factor authentication</div>
+                  <div className="text-sm font-medium">{t("twoFactor")}</div>
                   <div className="text-xs text-muted">
-                    {status.mfaEnabled ? 'An authenticator app is protecting your account.' : 'Add an authenticator app for a second sign-in factor.'}
+                    {status.mfaEnabled
+                      ? t("authenticatorProtecting")
+                      : t("addAuthenticatorDescription")}
                   </div>
                 </div>
-                <button
-                  className="rm-button primary"
+                <Button
+                  variant="primary"
                   disabled={enrollMutation.isPending}
                   onClick={() => void handleStartEnrollment()}
                   type="button"
                 >
-                  {enrollMutation.isPending ? 'Starting' : 'Add authenticator app'}
-                </button>
+                  {enrollMutation.isPending
+                    ? t("starting")
+                    : t("addAuthenticator")}
+                </Button>
               </div>
               <div className="grid gap-2">
-                {status.factors.filter((factor) => factor.disabledAt === undefined).map((factor) => (
-                  <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3" key={factor.id}>
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{factor.name || 'Authenticator app'}</div>
-                      <div className="text-xs text-muted">
-                        {factor.status}
-                        {factor.lastUsedAt !== undefined ? ` · last used ${new Date(factor.lastUsedAt).toLocaleDateString()}` : ''}
+                {status.factors
+                  .filter((factor) => factor.disabledAt === undefined)
+                  .map((factor) => (
+                    <div
+                      className="flex items-center justify-between gap-3 rounded-md border border-border p-3"
+                      key={factor.id}
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">
+                          {factor.name || t("authenticatorApp")}
+                        </div>
+                        <div className="text-xs text-muted">
+                          {factor.status}
+                          {factor.lastUsedAt !== undefined ? (
+                            <>
+                              {" "}
+                              · {t("lastUsed")}{" "}
+                              <LocalizedDate value={factor.lastUsedAt} />
+                            </>
+                          ) : (
+                            ""
+                          )}
+                        </div>
                       </div>
+                      <Button
+                        variant="danger"
+                        onClick={() => void handleDisableFactor(factor.id)}
+                        type="button"
+                      >
+                        {t("remove")}
+                      </Button>
                     </div>
-                    <button className="rm-button danger" onClick={() => void handleDisableFactor(factor.id)} type="button">
-                      Remove
-                    </button>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           </div>
@@ -153,81 +203,112 @@ export function AccountSecurityPanel() {
       {/* Password dialog */}
       <FormDialog
         open={pwOpen}
-        title={hasPassword ? 'Change password' : 'Set password'}
-        description="Use at least 12 characters."
+        title={hasPassword ? t("changePassword") : t("setPassword")}
+        description={t("useAtLeast12")}
         onClose={() => {
-          passwordForm.reset()
-          setPwOpen(false)
+          passwordForm.reset();
+          setPwOpen(false);
         }}
       >
         <form
           className="grid gap-3"
           onSubmit={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void passwordForm.handleSubmit()
+            event.preventDefault();
+            event.stopPropagation();
+            void passwordForm.handleSubmit();
           }}
         >
           {hasPassword ? (
             <passwordForm.Field
               name="currentPassword"
-              validators={{ onChange: ({ value }: { value: string }) => (!value ? 'Current password is required' : undefined) }}
+              validators={{
+                onChange: ({ value }: { value: string }) =>
+                  !value ? t("currentPasswordRequired") : undefined,
+              }}
             >
               {(field) => (
                 <label className="grid gap-1 text-sm">
-                  <span className="text-muted">Current password</span>
-                  <input
+                  <span className="text-muted">{t("currentPassword")}</span>
+                  <Input
+                    name="currentPassword"
                     autoComplete="current-password"
-                    className="rm-input"
                     onBlur={field.handleBlur}
-                    onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    onChange={(event) =>
+                      field.handleChange(event.currentTarget.value)
+                    }
                     type="password"
                     value={field.state.value}
                   />
-                  {field.state.meta.errors.length ? <div className="rm-composer-error">{field.state.meta.errors.join(', ')}</div> : null}
+                  {field.state.meta.errors.length ? (
+                    <div className="rm-composer-error">
+                      {field.state.meta.errors.join(", ")}
+                    </div>
+                  ) : null}
                 </label>
               )}
             </passwordForm.Field>
           ) : null}
           <passwordForm.Field
             name="newPassword"
-            validators={{ onChange: ({ value }: { value: string }) => (value.length < 12 ? 'At least 12 characters' : undefined) }}
+            validators={{
+              onChange: ({ value }: { value: string }) =>
+                value.length < 12 ? t("atLeast12") : undefined,
+            }}
           >
             {(field) => (
               <label className="grid gap-1 text-sm">
-                <span className="text-muted">New password</span>
-                <input
+                <span className="text-muted">{t("newPassword")}</span>
+                <Input
+                  name="newPassword"
                   autoComplete="new-password"
-                  className="rm-input"
                   onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onChange={(event) =>
+                    field.handleChange(event.currentTarget.value)
+                  }
                   type="password"
                   value={field.state.value}
                 />
-                {field.state.meta.errors.length ? <div className="rm-composer-error">{field.state.meta.errors.join(', ')}</div> : null}
+                {field.state.meta.errors.length ? (
+                  <div className="rm-composer-error">
+                    {field.state.meta.errors.join(", ")}
+                  </div>
+                ) : null}
               </label>
             )}
           </passwordForm.Field>
           <passwordForm.Field name="confirmPassword">
             {(field) => (
               <label className="grid gap-1 text-sm">
-                <span className="text-muted">Confirm new password</span>
-                <input
+                <span className="text-muted">{t("confirmNewPassword")}</span>
+                <Input
+                  name="confirmPassword"
                   autoComplete="new-password"
-                  className="rm-input"
                   onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  onChange={(event) =>
+                    field.handleChange(event.currentTarget.value)
+                  }
                   type="password"
                   value={field.state.value}
                 />
               </label>
             )}
           </passwordForm.Field>
-          <passwordForm.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
+          <passwordForm.Subscribe
+            selector={(state) => ({
+              canSubmit: state.canSubmit,
+              isSubmitting: state.isSubmitting,
+            })}
+          >
             {({ canSubmit, isSubmitting }) => (
-              <button className="rm-button primary" disabled={!canSubmit || isSubmitting || passwordMutation.isPending} type="submit">
-                {passwordMutation.isPending ? 'Saving' : 'Save password'}
-              </button>
+              <Button
+                variant="primary"
+                disabled={
+                  !canSubmit || isSubmitting || passwordMutation.isPending
+                }
+                type="submit"
+              >
+                {passwordMutation.isPending ? t("saving") : t("savePassword")}
+              </Button>
             )}
           </passwordForm.Subscribe>
         </form>
@@ -236,49 +317,54 @@ export function AccountSecurityPanel() {
       {/* TOTP enrollment dialog */}
       <FormDialog
         open={enrollment !== undefined}
-        title="Set up authenticator app"
-        description="Scan the key in your authenticator app, then enter the 6-digit code."
+        title={t("setupAuthenticator")}
+        description={t("scanAuthenticator")}
         onClose={() => {
-          setEnrollment(undefined)
-          setTotpCode('')
+          setEnrollment(undefined);
+          setTotpCode("");
         }}
       >
         {enrollment !== undefined ? (
           <div className="grid gap-3">
             <div className="grid gap-1 text-sm">
-              <span className="text-muted">Setup key</span>
-              <code className="rm-input break-all font-mono text-sm">{enrollment.secret}</code>
-              <span className="text-xs text-muted">Enter this key manually, or use the URI below in an app that supports it.</span>
+              <span className="text-muted">{t("setupKey")}</span>
+              <code className="break-all font-mono text-sm">
+                {enrollment.secret}
+              </code>
+              <span className="text-xs text-muted">{t("manualSetupKey")}</span>
             </div>
             <details className="text-xs text-muted">
-              <summary className="cursor-pointer">otpauth URI</summary>
-              <code className="mt-1 block break-all font-mono">{enrollment.otpauthUri}</code>
+              <summary className="cursor-pointer">{t("otpUri")}</summary>
+              <code className="mt-1 block break-all font-mono">
+                {enrollment.otpauthUri}
+              </code>
             </details>
             <label className="grid gap-1 text-sm">
-              <span className="text-muted">6-digit code</span>
-              <input
+              <span className="text-muted">{t("sixDigitCode")}</span>
+              <Input
                 autoComplete="one-time-code"
-                className="rm-input"
                 inputMode="numeric"
                 maxLength={6}
-                onChange={(event) => setTotpCode(event.currentTarget.value.replace(/\D/gu, ''))}
+                onChange={(event) =>
+                  setTotpCode(event.currentTarget.value.replace(/\D/gu, ""))
+                }
                 placeholder="000000"
                 value={totpCode}
               />
             </label>
-            <button
-              className="rm-button primary"
+            <Button
+              variant="primary"
               disabled={!/^\d{6}$/u.test(totpCode) || confirmMutation.isPending}
               onClick={() => void handleConfirmEnrollment()}
               type="button"
             >
-              {confirmMutation.isPending ? 'Verifying' : 'Verify & enable'}
-            </button>
+              {confirmMutation.isPending ? t("verifying") : t("verifyEnable")}
+            </Button>
           </div>
         ) : null}
       </FormDialog>
 
       {dialog}
     </section>
-  )
+  );
 }

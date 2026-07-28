@@ -8,7 +8,10 @@ export function securityHeaders(env: RomeoEnv): MiddlewareHandler {
     context.header("x-frame-options", "DENY");
     context.header("referrer-policy", "no-referrer");
     context.header("cross-origin-opener-policy", "same-origin");
-    context.header("permissions-policy", "camera=(), microphone=(), geolocation=()");
+    context.header(
+      "permissions-policy",
+      "camera=(), microphone=(), geolocation=()",
+    );
     if (env.EDGE_HSTS_ENABLED && env.EDGE_HSTS_MAX_AGE_SECONDS > 0) {
       context.header("strict-transport-security", hstsHeader(env));
     }

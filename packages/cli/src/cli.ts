@@ -2,8 +2,9 @@ import { lookup } from "node:dns/promises";
 import { readFile } from "node:fs/promises";
 
 import { parseArgs } from "./args";
-import { executeCommand, CliUsageError } from "./commands";
-import { createClient, resolveConfig } from "./config";
+import { CliUsageError } from "./cli-errors";
+import { executeCommand } from "./commands";
+import { createGeneratedApiClient, resolveConfig } from "./config";
 import { processIo, type CliIo } from "./io";
 
 export interface RunCliInput {
@@ -23,9 +24,9 @@ export async function runCli(input: RunCliInput = {}): Promise<number> {
 
   try {
     const config = resolveConfig(parsed, input.env ?? process.env);
-    const client = createClient(config);
+    const generatedClient = createGeneratedApiClient(config);
     return await executeCommand({
-      client,
+      generatedClient,
       dnsLookup: input.dnsLookup ?? nodeDnsLookup,
       fetchImpl: input.fetchImpl ?? fetch,
       io,

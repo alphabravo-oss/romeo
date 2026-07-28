@@ -6,9 +6,9 @@ import type { Context, MiddlewareHandler } from "hono";
 
 import { ApiError } from "../errors";
 import {
-  ValkeyRespClient,
-  type RespValue,
-} from "../services/valkey-resp-client";
+  ValkeyGlideClient,
+  type ValkeyValue,
+} from "../services/valkey-glide-client";
 import type { AppBindings } from "./context";
 import { readCookie, sessionCookieName } from "./session-cookie";
 
@@ -232,10 +232,10 @@ class MemoryRateLimitStore implements RateLimitStore {
 }
 
 class ValkeyRateLimitStore implements RateLimitStore {
-  private readonly client: ValkeyRespClient;
+  private readonly client: ValkeyGlideClient;
 
   constructor(private readonly env: RomeoEnv) {
-    this.client = new ValkeyRespClient({
+    this.client = new ValkeyGlideClient({
       timeoutMs: env.QUOTA_COORDINATION_TIMEOUT_MS,
       url: env.VALKEY_URL,
     });
@@ -268,7 +268,7 @@ class ValkeyRateLimitStore implements RateLimitStore {
   }
 }
 
-function parseValkeyRateLimitResponse(response: RespValue): {
+function parseValkeyRateLimitResponse(response: ValkeyValue): {
   count: number;
   ttlMs: number;
 } {

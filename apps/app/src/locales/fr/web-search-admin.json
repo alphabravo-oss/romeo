@@ -1,0 +1,22 @@
+{
+  "allow": "Autoriser",
+  "allowedDomainsPerLine": "Domaines autorisés (un par ligne)",
+  "blockedDomainsPerLine": "Domaines bloqués (un par ligne)",
+  "checked": "vérifié",
+  "credentialConfiguredReplace": "Identifiant configuré — saisissez-en un pour le remplacer",
+  "endpointUrl": "URL du point de terminaison",
+  "exclude": "Exclure",
+  "failRequest": "Faire échouer la requête",
+  "governedWebSearch": "Recherche web gouvernée",
+  "managedCredentialReference": "Référence d’identifiant géré",
+  "maximumResults": "Nombre maximal de résultats",
+  "maximumSourceAge": "Âge maximal de la source (jours ; vide désactive)",
+  "providerHealth": "État du fournisseur",
+  "providerPreset": "Fournisseur prédéfini",
+  "saveConfiguration": "Enregistrer la configuration",
+  "searchGovernanceDescription": "La recherche et l’ingestion d’URL utilisent les mêmes contrôles de domaines, secrets, audit et citations que les autres contextes gouvernés.",
+  "searchSettingsSaved": "Configuration de recherche web enregistrée",
+  "skipUnreachable": "Ignorer uniquement les inaccessibles",
+  "unknownPublicationDates": "Dates de publication inconnues",
+  "unreachableUrls": "URL inaccessibles"
+}

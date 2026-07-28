@@ -267,6 +267,88 @@ function providerMetrics(summary) {
     );
   }
 
+  const runtime = summary?.runtime;
+  metrics.push(
+    metric(
+      "romeo_run_time_to_first_token_milliseconds",
+      "Recent Romeo run time to first token.",
+      "gauge",
+      runtime?.timeToFirstTokenAverageMs,
+      { statistic: "average" },
+    ),
+    metric(
+      "romeo_run_time_to_first_token_milliseconds",
+      "Recent Romeo run time to first token.",
+      "gauge",
+      runtime?.timeToFirstTokenP95Ms,
+      { statistic: "p95" },
+    ),
+    metric(
+      "romeo_run_output_tokens_per_second",
+      "Recent Romeo estimated output-token throughput.",
+      "gauge",
+      runtime?.outputThroughputAverage,
+    ),
+    metric(
+      "romeo_run_context_input_tokens",
+      "Recent Romeo estimated input context size.",
+      "gauge",
+      runtime?.contextInputTokensAverage,
+      { statistic: "average" },
+    ),
+    metric(
+      "romeo_run_queue_wait_milliseconds",
+      "Recent Romeo queued-turn wait time.",
+      "gauge",
+      runtime?.queueWaitP95Ms,
+      { statistic: "p95" },
+    ),
+    metric(
+      "romeo_run_recovery_total",
+      "Recent Romeo run recovery count.",
+      "gauge",
+      runtime?.recoveryCount,
+    ),
+    metric(
+      "romeo_sse_reconnect_total",
+      "Recent Romeo SSE reconnect count.",
+      "gauge",
+      runtime?.sseReconnectCount,
+    ),
+    metric(
+      "romeo_sse_disconnect_total",
+      "Recent Romeo SSE disconnect count.",
+      "gauge",
+      runtime?.sseDisconnectCount,
+    ),
+    metric(
+      "romeo_provider_error_total",
+      "Recent sanitized Romeo provider error count.",
+      "gauge",
+      runtime?.providerErrorCount,
+    ),
+    metric(
+      "romeo_object_store_error_total",
+      "Recent metadata-only Romeo object-store failure count.",
+      "gauge",
+      runtime?.objectStoreFailureCount,
+    ),
+    metric(
+      "romeo_web_retrieval_milliseconds",
+      "Recent Romeo governed web retrieval latency.",
+      "gauge",
+      runtime?.webRetrievalAverageMs,
+      { statistic: "average" },
+    ),
+    metric(
+      "romeo_file_upload_pipeline_milliseconds",
+      "Recent Romeo file upload pipeline latency.",
+      "gauge",
+      runtime?.uploadPipelineAverageMs,
+      { statistic: "average" },
+    ),
+  );
+
   return metrics;
 }
 

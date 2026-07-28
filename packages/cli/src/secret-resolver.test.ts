@@ -56,24 +56,19 @@ describe("secret value resolvers", () => {
     expect(JSON.stringify(result)).not.toContain("vault-token");
   });
 
-  it("resolves AWS Secrets Manager refs with SigV4 request metadata", async () => {
-    const calls: Array<{ body: string; headers: Headers; url: string }> = [];
+  it("resolves AWS Secrets Manager refs through the official SDK boundary", async () => {
+    const calls: string[] = [];
     const resolver = new AwsSecretValueResolver({
       accessKeyId: "AKIATEST",
       secretAccessKey: "aws-secret-access-key",
       region: "us-east-1",
-      now: () => new Date("2026-01-02T03:04:05.000Z"),
-      fetchImpl: async (input, init) => {
-        calls.push({
-          url: String(input),
-          body: String(init?.body),
-          headers: new Headers(init?.headers),
-        });
-        return new Response(JSON.stringify({ SecretString: "aws-secret" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      },
+      clientFactory: () => ({
+        async describeSecret() {},
+        async getSecretValue(secretId) {
+          calls.push(secretId);
+          return "aws-secret";
+        },
+      }),
     });
 
     const result = await resolver.resolveValue("aws-sm://prod/tools/api-key");
@@ -83,36 +78,22 @@ describe("secret value resolvers", () => {
       scheme: "aws-sm",
       value: "aws-secret",
     });
-    expect(calls[0]?.url).toBe(
-      "https://secretsmanager.us-east-1.amazonaws.com/",
-    );
-    expect(calls[0]?.body).toBe('{"SecretId":"prod/tools/api-key"}');
-    expect(calls[0]?.headers.get("x-amz-date")).toBe("20260102T030405Z");
-    expect(calls[0]?.headers.get("x-amz-target")).toBe(
-      "secretsmanager.GetSecretValue",
-    );
-    expect(calls[0]?.headers.get("authorization")).toContain(
-      "Credential=AKIATEST/20260102/us-east-1/secretsmanager/aws4_request",
-    );
+    expect(calls).toEqual(["prod/tools/api-key"]);
     expect(JSON.stringify(calls)).not.toContain("aws-secret-access-key");
   });
 
-  it("resolves GCP Secret Manager refs from base64 payload data", async () => {
-    const calls: Array<{ headers: Headers; url: string }> = [];
+  it("resolves GCP Secret Manager refs through the official SDK boundary", async () => {
+    const calls: string[] = [];
     const resolver = new GcpSecretValueResolver({
       accessToken: "gcp-access-token",
       projectId: "romeo-prod",
-      fetchImpl: async (input, init) => {
-        calls.push({ url: String(input), headers: new Headers(init?.headers) });
-        return new Response(
-          JSON.stringify({
-            payload: {
-              data: Buffer.from("gcp-secret", "utf8").toString("base64"),
-            },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      },
+      clientFactory: () => ({
+        async checkSecret() {},
+        async accessSecretValue(secretVersionName) {
+          calls.push(secretVersionName);
+          return "gcp-secret";
+        },
+      }),
     });
 
     const result = await resolver.resolveValue("gcp-sm://tool-api-key");
@@ -122,26 +103,23 @@ describe("secret value resolvers", () => {
       scheme: "gcp-sm",
       value: "gcp-secret",
     });
-    expect(calls[0]?.url).toBe(
-      "https://secretmanager.googleapis.com/v1/projects/romeo-prod/secrets/tool-api-key/versions/latest:access",
-    );
-    expect(calls[0]?.headers.get("authorization")).toBe(
-      "Bearer gcp-access-token",
-    );
+    expect(calls).toEqual([
+      "projects/romeo-prod/secrets/tool-api-key/versions/latest",
+    ]);
   });
 
-  it("resolves Azure Key Vault refs from value payloads", async () => {
-    const calls: Array<{ headers: Headers; url: string }> = [];
+  it("resolves Azure Key Vault refs through the official SDK boundary", async () => {
+    const calls: string[] = [];
     const resolver = new AzureSecretValueResolver({
       accessToken: "azure-access-token",
       vaultUrl: "https://romeo.vault.azure.net",
-      fetchImpl: async (input, init) => {
-        calls.push({ url: String(input), headers: new Headers(init?.headers) });
-        return new Response(JSON.stringify({ value: "azure-secret" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      },
+      clientFactory: () => ({
+        async checkSecret() {},
+        async getSecretValue(secretName) {
+          calls.push(secretName);
+          return "azure-secret";
+        },
+      }),
     });
 
     const result = await resolver.resolveValue("azure-kv://tool-api-key");
@@ -151,12 +129,7 @@ describe("secret value resolvers", () => {
       scheme: "azure-kv",
       value: "azure-secret",
     });
-    expect(calls[0]?.url).toBe(
-      "https://romeo.vault.azure.net/secrets/tool-api-key?api-version=7.5",
-    );
-    expect(calls[0]?.headers.get("authorization")).toBe(
-      "Bearer azure-access-token",
-    );
+    expect(calls).toEqual(["tool-api-key"]);
   });
 
   it("routes cloud refs through the selected cloud provider resolver", async () => {
@@ -170,30 +143,24 @@ describe("secret value resolvers", () => {
         AZURE_ACCESS_TOKEN: "azure-access-token",
         AZURE_KEY_VAULT_URL: "https://romeo.vault.azure.net",
       },
-      now: () => new Date("2026-01-02T03:04:05.000Z"),
-      fetchImpl: async (input) => {
-        const url = String(input);
-        if (url.includes("secretsmanager")) {
-          return new Response(JSON.stringify({ SecretString: "aws-secret" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          });
-        }
-        if (url.includes("secretmanager.googleapis.com")) {
-          return new Response(
-            JSON.stringify({
-              payload: {
-                data: Buffer.from("gcp-secret", "utf8").toString("base64"),
-              },
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          );
-        }
-        return new Response(JSON.stringify({ value: "azure-secret" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      },
+      awsClientFactory: () => ({
+        async describeSecret() {},
+        async getSecretValue() {
+          return "aws-secret";
+        },
+      }),
+      azureClientFactory: () => ({
+        async checkSecret() {},
+        async getSecretValue() {
+          return "azure-secret";
+        },
+      }),
+      gcpClientFactory: () => ({
+        async checkSecret() {},
+        async accessSecretValue() {
+          return "gcp-secret";
+        },
+      }),
     });
 
     await expect(

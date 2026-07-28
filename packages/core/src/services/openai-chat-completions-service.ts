@@ -5,6 +5,14 @@ import {
   hasGrant,
   type AuthSubject,
 } from "@romeo/auth";
+import type {
+  OpenAiChatCompletionRequest,
+  OpenAiChatCompletionResponse,
+  OpenAiChatMessageInput,
+  OpenAiChatToolInput,
+  OpenAiCompletionUsage,
+  OpenAiToolCall,
+} from "@romeo/contracts";
 import {
   getProviderAdapter,
   normalizeProviderToolCall,
@@ -25,71 +33,16 @@ import { consumeQuota } from "./consume-quota";
 import type { QuotaCoordinator } from "./quota-coordination";
 import type { SecretResolver } from "./secret-resolver";
 import type { WebhookEmitter } from "./webhook-service";
+import { providerApiError } from "./provider-api-error";
+import {
+  chatCompletionChunk,
+  createdSeconds,
+} from "./openai-chat-completion-protocol";
 
-export interface OpenAiChatCompletionRequest {
-  messages: OpenAiChatMessageInput[];
-  model: string;
-  stream?: boolean;
-  streamOptions?: { includeUsage?: boolean };
-  tools?: OpenAiChatToolInput[];
-}
-
-export type OpenAiChatMessageInput =
-  | { role: "system" | "user"; content: string }
-  | {
-      role: "assistant";
-      content: string;
-      toolCalls?: unknown[];
-    }
-  | {
-      role: "tool";
-      content: string;
-      name?: string;
-      toolCallId?: string;
-    };
-
-export interface OpenAiChatToolInput {
-  type: "function";
-  function: {
-    description?: string | undefined;
-    name: string;
-    parameters?: Record<string, unknown> | undefined;
-  };
-}
-
-export interface OpenAiChatCompletionResponse {
-  choices: OpenAiChatCompletionChoice[];
-  created: number;
-  id: string;
-  model: string;
-  object: "chat.completion";
-  usage: OpenAiCompletionUsage | null;
-}
-
-export interface OpenAiChatCompletionChoice {
-  finish_reason: "stop" | "tool_calls";
-  index: number;
-  message: {
-    content: string | null;
-    role: "assistant";
-    tool_calls?: OpenAiToolCall[];
-  };
-}
-
-export interface OpenAiCompletionUsage {
-  completion_tokens?: number;
-  prompt_tokens?: number;
-  total_tokens?: number;
-}
-
-export interface OpenAiToolCall {
-  function: {
-    arguments: string;
-    name: string;
-  };
-  id: string;
-  type: "function";
-}
+export type {
+  OpenAiChatCompletionRequest,
+  OpenAiChatCompletionResponse,
+} from "@romeo/contracts";
 
 export class OpenAiChatCompletionsService {
   constructor(
@@ -513,22 +466,6 @@ function toOpenAiUsage(usage: ProviderTokenUsage): OpenAiCompletionUsage {
   };
 }
 
-function chatCompletionChunk(
-  id: string,
-  created: number,
-  model: string,
-  delta: Record<string, unknown>,
-  finishReason: "stop" | "tool_calls" | null = null,
-) {
-  return {
-    id,
-    object: "chat.completion.chunk",
-    created,
-    model,
-    choices: [{ index: 0, delta, finish_reason: finishReason }],
-  };
-}
-
 function toolCallsFromChunk(
   chunk: Extract<StreamChatChunk, { type: "tool_call" }>,
 ): ProviderToolCallRequest[] {
@@ -555,31 +492,4 @@ function isToolCallChunk(
   chunk: Exclude<StreamChatChunk, string>,
 ): chunk is Extract<StreamChatChunk, { type: "tool_call" }> {
   return chunk.type === "tool_call";
-}
-
-function createdSeconds(): number {
-  return Math.floor(Date.now() / 1000);
-}
-
-function providerApiError(error: unknown): ApiError {
-  if (error instanceof ApiError) return error;
-  const record = asRecord(error);
-  const errorCode =
-    typeof record?.errorCode === "string"
-      ? record.errorCode
-      : "provider_generation_failed";
-  const errorType =
-    typeof record?.errorType === "string" ? record.errorType : undefined;
-  return new ApiError(
-    errorCode,
-    "The model provider failed to complete the chat request.",
-    errorCode === "provider_credential_unavailable" ? 503 : 502,
-    errorType === undefined ? {} : { errorType },
-  );
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }

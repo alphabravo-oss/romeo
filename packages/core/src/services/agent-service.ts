@@ -1,8 +1,6 @@
 import {
   AuthorizationError,
   assertScope,
-  canAccessOrg,
-  hasGrant,
   hasWorkspaceAccess,
   type AuthSubject,
 } from "@romeo/auth";
@@ -13,12 +11,9 @@ import type {
   AgentParameters,
   AgentSafetySettings,
   AgentVersion,
-  AgentVersionEvalSummary,
-  EvalRun,
-  EvalSuite,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
-import { ApiError, notFound } from "../errors";
+import { notFound } from "../errors";
 import { createId } from "../ids";
 import { createAgentOwnerGrants, getAuthorizedAgent } from "./agent-access";
 import {
@@ -31,40 +26,27 @@ import {
 } from "./agent-portability";
 import { normalizeAgentMemoryPolicy } from "./agent-memory";
 import { normalizeAgentSafetySettings } from "./agent-safety";
+import {
+  getManagedModelCustomizationPolicy,
+  setManagedModelCustomizationPolicy,
+} from "./managed-model-customization";
+import { AgentReadService } from "./agent-read-service";
+import {
+  assertAgentEvalGate,
+  assertUsableAgentModel,
+  attachAgentEvalSummaries,
+  bindingCounts,
+  changedAgentFields,
+  getAgentVersionForAgent,
+  hasSafetySettings,
+  parameterKeys,
+} from "./agent-service-support";
 import { diffAgentVersions, type AgentVersionDiff } from "./agent-version-diff";
 import { writeAuditLog } from "./audit-log";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
 import { assertWorkspaceActive } from "./workspace-guard";
 
-export class AgentService {
-  constructor(private readonly repository: RomeoRepository) {}
-
-  async list(workspaceId: string, subject: AuthSubject): Promise<Agent[]> {
-    assertScope(subject, "agents:read");
-    if (!hasWorkspaceAccess(subject, workspaceId)) {
-      throw new AuthorizationError(
-        "The workspace is outside the caller access.",
-      );
-    }
-
-    const agents = (await this.repository.listAgents(workspaceId)).filter(
-      (agent) => canAccessOrg(subject, agent.orgId),
-    );
-    if (subject.isAdmin === true) return agents;
-    const grants = await this.repository.listResourceGrants(subject.orgId);
-    return agents.filter((agent) =>
-      hasGrant(subject, grants, "agent", agent.id, "read"),
-    );
-  }
-
-  async get(agentId: string, subject: AuthSubject): Promise<Agent> {
-    return getAuthorizedAgent(this.repository, {
-      agentId,
-      subject,
-      scope: "agents:read",
-    });
-  }
-
+export class AgentService extends AgentReadService {
   async create(input: {
     subject: AuthSubject;
     workspaceId: string;
@@ -85,7 +67,11 @@ export class AgentService {
       orgId: input.subject.orgId,
       workspaceId: input.workspaceId,
     });
-    await this.assertUsableModel(input.subject, input.baseModelId);
+    await assertUsableAgentModel(
+      this.repository,
+      input.subject,
+      input.baseModelId,
+    );
 
     const createdBy = await persistedSubjectActorId(
       this.repository,
@@ -119,6 +105,23 @@ export class AgentService {
     return agent;
   }
 
+  async archive(agentId: string, subject: AuthSubject): Promise<Agent> {
+    const agent = await getAuthorizedAgent(this.repository, {
+      agentId,
+      subject,
+      scope: "agents:write",
+    });
+    const archived = await this.repository.archiveAgent(
+      agent.id,
+      new Date().toISOString(),
+    );
+    if (!archived) throw notFound("Agent");
+    await this.audit(subject, "agent.archive", "agent", agent.id, {
+      workspaceId: agent.workspaceId,
+    });
+    return archived;
+  }
+
   async update(input: {
     subject: AuthSubject;
     agentId: string;
@@ -139,7 +142,7 @@ export class AgentService {
       workspaceId: agent.workspaceId,
     });
     const baseModelId = input.baseModelId ?? agent.baseModelId;
-    await this.assertUsableModel(input.subject, baseModelId);
+    await assertUsableAgentModel(this.repository, input.subject, baseModelId);
 
     const updated = await this.repository.updateAgent({
       ...agent,
@@ -185,7 +188,11 @@ export class AgentService {
       orgId: input.subject.orgId,
       workspaceId: source.workspaceId,
     });
-    await this.assertUsableModel(input.subject, source.baseModelId);
+    await assertUsableAgentModel(
+      this.repository,
+      input.subject,
+      source.baseModelId,
+    );
     const { publishedVersionId: _publishedVersionId, ...draft } = source;
 
     const createdBy = await persistedSubjectActorId(
@@ -204,6 +211,17 @@ export class AgentService {
       systemPrompt: input.systemPrompt ?? source.systemPrompt,
       updatedAt: new Date().toISOString(),
     });
+    const sourceCustomizationPolicy = await getManagedModelCustomizationPolicy(
+      this.repository,
+      source.orgId,
+      source.id,
+    );
+    await setManagedModelCustomizationPolicy(
+      this.repository,
+      cloned.orgId,
+      cloned.id,
+      sourceCustomizationPolicy,
+    );
     await this.audit(input.subject, "agent.clone", "agent", cloned.id, {
       workspaceId: cloned.workspaceId,
       sourceAgentId: source.id,
@@ -276,7 +294,7 @@ export class AgentService {
       scope: "agents:read",
     });
     const versions = await this.repository.listAgentVersions(agentId);
-    return this.attachEvalSummaries(agentId, versions);
+    return attachAgentEvalSummaries(this.repository, agentId, versions);
   }
 
   async publish(agentId: string, subject: AuthSubject): Promise<AgentVersion> {
@@ -289,8 +307,8 @@ export class AgentService {
       orgId: subject.orgId,
       workspaceId: agent.workspaceId,
     });
-    await this.assertUsableModel(subject, agent.baseModelId);
-    await this.assertEvalGate(agent.id);
+    await assertUsableAgentModel(this.repository, subject, agent.baseModelId);
+    await assertAgentEvalGate(this.repository, agent.id);
 
     const publishedAt = new Date().toISOString();
     const published = await this.repository.transaction(async (repository) => {
@@ -342,9 +360,11 @@ export class AgentService {
       );
       return created;
     });
-    const [versionWithSummary] = await this.attachEvalSummaries(agent.id, [
-      published,
-    ]);
+    const [versionWithSummary] = await attachAgentEvalSummaries(
+      this.repository,
+      agent.id,
+      [published],
+    );
     return versionWithSummary ?? published;
   }
 
@@ -362,11 +382,16 @@ export class AgentService {
       orgId: input.subject.orgId,
       workspaceId: agent.workspaceId,
     });
-    const version = await this.getVersionForAgent(
+    const version = await getAgentVersionForAgent(
+      this.repository,
       input.agentId,
       input.versionId,
     );
-    await this.assertUsableModel(input.subject, version.baseModelId);
+    await assertUsableAgentModel(
+      this.repository,
+      input.subject,
+      version.baseModelId,
+    );
     const { voiceProfileId: _voiceProfileId, ...agentDraft } = agent;
 
     const rolledBack = await this.repository.updateAgent({
@@ -417,87 +442,19 @@ export class AgentService {
       scope: "agents:read",
     });
     const [left, right] = await Promise.all([
-      this.getVersionForAgent(input.agentId, input.leftVersionId),
-      this.getVersionForAgent(input.agentId, input.rightVersionId),
+      getAgentVersionForAgent(
+        this.repository,
+        input.agentId,
+        input.leftVersionId,
+      ),
+      getAgentVersionForAgent(
+        this.repository,
+        input.agentId,
+        input.rightVersionId,
+      ),
     ]);
 
     return diffAgentVersions(left, right);
-  }
-
-  private async getVersionForAgent(
-    agentId: string,
-    versionId: string,
-  ): Promise<AgentVersion> {
-    const version = await this.repository.getAgentVersion(versionId);
-    if (!version || version.agentId !== agentId)
-      throw notFound("Agent version");
-    return version;
-  }
-
-  private async assertUsableModel(
-    subject: AuthSubject,
-    modelId: string,
-  ): Promise<void> {
-    assertScope(subject, "models:use");
-    const model = await this.repository.getModel(modelId);
-    if (!model) throw notFound("Model");
-
-    const provider = await this.repository.getProvider(model.providerId);
-    if (!provider) throw notFound("Provider");
-
-    if (!canAccessOrg(subject, provider.orgId)) {
-      throw new AuthorizationError(
-        "The model provider is outside the caller organization.",
-      );
-    }
-
-    const grants = await this.repository.listResourceGrants(subject.orgId);
-    if (!hasGrant(subject, grants, "model", model.id, "use")) {
-      throw new AuthorizationError(
-        `Missing use permission for model:${model.id}`,
-      );
-    }
-    if (!hasGrant(subject, grants, "provider", provider.id, "use")) {
-      throw new AuthorizationError(
-        `Missing use permission for provider:${provider.id}`,
-      );
-    }
-  }
-
-  private async assertEvalGate(agentId: string): Promise<void> {
-    const suites = await this.repository.listEvalSuites(agentId);
-    if (suites.length === 0) return;
-
-    const runs = await this.repository.listEvalRuns(agentId);
-    const failingSuites = suites.filter(
-      (suite) =>
-        runs.find((run) => run.suiteId === suite.id)?.status !== "passed",
-    );
-    if (failingSuites.length > 0) {
-      throw new ApiError(
-        "eval_gate_failed",
-        "Agent cannot be published until eval suites pass.",
-        409,
-        {
-          suiteIds: failingSuites.map((suite) => suite.id),
-        },
-      );
-    }
-  }
-
-  private async attachEvalSummaries(
-    agentId: string,
-    versions: AgentVersion[],
-  ): Promise<AgentVersion[]> {
-    if (versions.length === 0) return [];
-    const [suites, runs] = await Promise.all([
-      this.repository.listEvalSuites(agentId),
-      this.repository.listEvalRuns(agentId),
-    ]);
-    return versions.map((version) => ({
-      ...version,
-      evalSummary: buildVersionEvalSummary(version.publishedAt, suites, runs),
-    }));
   }
 
   private audit(
@@ -516,131 +473,4 @@ export class AgentService {
       metadata,
     });
   }
-}
-
-function changedAgentFields(previous: Agent, next: Agent): string[] {
-  return (
-    [
-      "name",
-      "baseModelId",
-      "systemPrompt",
-      "parameters",
-      "memoryPolicy",
-      "safetySettings",
-    ] as const
-  ).filter(
-    (field) => JSON.stringify(previous[field]) !== JSON.stringify(next[field]),
-  );
-}
-
-function parameterKeys(parameters: AgentParameters): string[] {
-  return Object.keys(parameters).sort();
-}
-
-function bindingCounts(
-  agent: AgentExportDocument["agent"],
-): Record<string, number | boolean | string> {
-  return {
-    accessGrants: agent.accessGrants?.length ?? 0,
-    knowledgeBaseBindings: agent.knowledgeBaseBindings?.length ?? 0,
-    memoryMode: agent.memoryPolicy.mode,
-    toolBindings: agent.toolBindings?.length ?? 0,
-    safetyConfigured: hasSafetySettings(agent.safetySettings ?? {}),
-    voiceBound: agent.voiceProfileId !== undefined,
-  };
-}
-
-function hasSafetySettings(settings: AgentSafetySettings): boolean {
-  return (
-    settings.maxUserInputLength !== undefined ||
-    (settings.blockedTerms?.length ?? 0) > 0 ||
-    settings.promptInjectionGuard !== undefined
-  );
-}
-
-function buildVersionEvalSummary(
-  publishedAt: string,
-  suites: EvalSuite[],
-  runs: EvalRun[],
-): AgentVersionEvalSummary {
-  if (suites.length === 0) {
-    return {
-      status: "not_required",
-      suiteCount: 0,
-      passedSuiteCount: 0,
-      failedSuiteCount: 0,
-      missingSuiteCount: 0,
-      averageScore: null,
-      evaluatedAt: null,
-      suites: [],
-    };
-  }
-
-  const suiteSummaries: AgentVersionEvalSummary["suites"] = suites.map(
-    (suite) => {
-      const latestRun = latestRunForSuiteAtOrBefore(
-        suite.id,
-        runs,
-        publishedAt,
-      );
-      return {
-        suiteId: suite.id,
-        runId: latestRun?.id ?? null,
-        status: latestRun?.status ?? "missing",
-        score: latestRun?.score ?? null,
-        completedAt: latestRun?.completedAt ?? null,
-      };
-    },
-  );
-  const completedSummaries = suiteSummaries.filter(
-    (suite) => suite.score !== null,
-  );
-  const passedSuiteCount = suiteSummaries.filter(
-    (suite) => suite.status === "passed",
-  ).length;
-  const failedSuiteCount = suiteSummaries.filter(
-    (suite) => suite.status === "failed",
-  ).length;
-  const missingSuiteCount = suiteSummaries.filter(
-    (suite) => suite.status === "missing",
-  ).length;
-  const evaluatedAt = suiteSummaries
-    .map((suite) => suite.completedAt)
-    .filter((completedAt): completedAt is string => completedAt !== null)
-    .sort()
-    .at(-1);
-
-  return {
-    status:
-      missingSuiteCount > 0
-        ? "missing"
-        : failedSuiteCount > 0
-          ? "failed"
-          : "passed",
-    suiteCount: suites.length,
-    passedSuiteCount,
-    failedSuiteCount,
-    missingSuiteCount,
-    averageScore:
-      completedSummaries.length === 0
-        ? null
-        : completedSummaries.reduce(
-            (total, suite) => total + (suite.score ?? 0),
-            0,
-          ) / completedSummaries.length,
-    evaluatedAt: evaluatedAt ?? null,
-    suites: suiteSummaries,
-  };
-}
-
-function latestRunForSuiteAtOrBefore(
-  suiteId: string,
-  runs: EvalRun[],
-  publishedAt: string,
-): EvalRun | undefined {
-  return runs
-    .filter((run) => run.suiteId === suiteId && run.completedAt <= publishedAt)
-    .sort((left, right) =>
-      right.completedAt.localeCompare(left.completedAt),
-    )[0];
 }

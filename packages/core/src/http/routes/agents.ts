@@ -1,89 +1,225 @@
-import type { AgentMemoryPolicy, AgentSafetySettings } from '../../domain/entities'
-import type { RomeoApi } from '../context'
-import { cloneAgentSchema, createAgentSchema, importAgentSchema, updateAgentSchema } from '../schemas'
+import type {
+  AgentMemoryPolicy,
+  AgentSafetySettings,
+} from "../../domain/entities";
+import {
+  clearManagedModelPreferencesRoute,
+  cloneManagedModelRoute,
+  createManagedModelRoute,
+  deleteManagedModelRoute,
+  diffManagedModelVersionRoute,
+  exportManagedModelRoute,
+  getManagedModelCustomizationPolicyRoute,
+  getManagedModelPreferencesRoute,
+  getManagedModelRoute,
+  importManagedModelRoute,
+  listManagedModelsRoute,
+  listManagedModelVersionsRoute,
+  publishManagedModelRoute,
+  rollbackManagedModelVersionRoute,
+  updateManagedModelCustomizationPolicyRoute,
+  updateManagedModelPreferencesRoute,
+  updateManagedModelRoute,
+} from "@romeo/contracts";
+import type { RomeoApi } from "../context";
 
 export function registerAgentRoutes(app: RomeoApi): void {
-  app.get('/api/v1/agents', async (context) => {
-    const subject = context.get('subject')
-    const workspaceId = context.req.query('workspaceId') ?? subject.workspaceIds[0]
-    const data = workspaceId ? await context.get('services').agents.list(workspaceId, subject) : []
-    return context.json({ data })
-  })
+  app.openapi(listManagedModelsRoute, async (context) => {
+    const subject = context.get("subject");
+    const workspaceId =
+      context.req.valid("query").workspaceId ?? subject.workspaceIds[0];
+    const data = workspaceId
+      ? await context.get("services").agents.list(workspaceId, subject)
+      : [];
+    return context.json({ data }, 200);
+  });
 
-  app.post('/api/v1/agents', async (context) => {
-    const subject = context.get('subject')
-    const body = createAgentSchema.parse(await context.req.json())
+  app.openapi(createManagedModelRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
     const input: {
-      subject: typeof subject
-      workspaceId: string
-      name: string
-      baseModelId: string
-      systemPrompt: string
-      parameters?: Record<string, unknown>
-      memoryPolicy?: AgentMemoryPolicy
-      safetySettings?: AgentSafetySettings
-    } = { subject, workspaceId: body.workspaceId, name: body.name, baseModelId: body.baseModelId, systemPrompt: body.systemPrompt }
-    if (body.parameters !== undefined) input.parameters = body.parameters
-    if (body.memoryPolicy !== undefined) input.memoryPolicy = compactMemoryPolicy(body.memoryPolicy)
-    if (body.safetySettings !== undefined) input.safetySettings = compactSafetySettings(body.safetySettings)
-
-    const data = await context.get('services').agents.create(input)
-    return context.json({ data }, 201)
-  })
-
-  app.get('/api/v1/agents/:agentId', async (context) => {
-    const subject = context.get('subject')
-    const data = await context.get('services').agents.get(context.req.param('agentId'), subject)
-    return context.json({ data })
-  })
-
-  app.patch('/api/v1/agents/:agentId', async (context) => {
-    const subject = context.get('subject')
-    const body = updateAgentSchema.parse(await context.req.json())
-    const input: {
-      subject: typeof subject
-      agentId: string
-      name?: string
-      baseModelId?: string
-      systemPrompt?: string
-      parameters?: Record<string, unknown>
-      memoryPolicy?: AgentMemoryPolicy
-      safetySettings?: AgentSafetySettings
-    } = { subject, agentId: context.req.param('agentId') }
-    if (body.name !== undefined) input.name = body.name
-    if (body.baseModelId !== undefined) input.baseModelId = body.baseModelId
-    if (body.systemPrompt !== undefined) input.systemPrompt = body.systemPrompt
-    if (body.parameters !== undefined) input.parameters = body.parameters
-    if (body.memoryPolicy !== undefined) input.memoryPolicy = compactMemoryPolicy(body.memoryPolicy)
-    if (body.safetySettings !== undefined) input.safetySettings = compactSafetySettings(body.safetySettings)
-
-    const data = await context.get('services').agents.update(input)
-    return context.json({ data })
-  })
-
-  app.post('/api/v1/agents/:agentId/clone', async (context) => {
-    const subject = context.get('subject')
-    const body = cloneAgentSchema.parse(await context.req.json())
-    const input: { subject: typeof subject; agentId: string; name?: string; systemPrompt?: string } = {
+      subject: typeof subject;
+      workspaceId: string;
+      name: string;
+      baseModelId: string;
+      systemPrompt: string;
+      parameters?: Record<string, unknown>;
+      memoryPolicy?: AgentMemoryPolicy;
+      safetySettings?: AgentSafetySettings;
+    } = {
       subject,
-      agentId: context.req.param('agentId')
-    }
-    if (body.name !== undefined) input.name = body.name
-    if (body.systemPrompt !== undefined) input.systemPrompt = body.systemPrompt
+      workspaceId: body.workspaceId,
+      name: body.name,
+      baseModelId: body.baseModelId,
+      systemPrompt: body.systemPrompt,
+    };
+    if (body.parameters !== undefined) input.parameters = body.parameters;
+    if (body.memoryPolicy !== undefined)
+      input.memoryPolicy = compactMemoryPolicy(body.memoryPolicy);
+    if (body.safetySettings !== undefined)
+      input.safetySettings = compactSafetySettings(body.safetySettings);
 
-    const data = await context.get('services').agents.clone(input)
-    return context.json({ data }, 201)
-  })
+    const data = await context.get("services").agents.create(input);
+    return context.json({ data }, 201);
+  });
 
-  app.get('/api/v1/agents/:agentId/export', async (context) => {
-    const subject = context.get('subject')
-    const data = await context.get('services').agents.exportAgent(context.req.param('agentId'), subject)
-    return context.json({ data })
-  })
+  app.openapi(getManagedModelRoute, async (context) => {
+    const subject = context.get("subject");
+    const { agentId } = context.req.valid("param");
+    const data = await context.get("services").agents.get(agentId, subject);
+    return context.json({ data }, 200);
+  });
 
-  app.post('/api/v1/agents/import', async (context) => {
-    const subject = context.get('subject')
-    const body = importAgentSchema.parse(await context.req.json())
+  app.openapi(updateManagedModelRoute, async (context) => {
+    const subject = context.get("subject");
+    const { agentId } = context.req.valid("param");
+    const body = context.req.valid("json");
+    const input: {
+      subject: typeof subject;
+      agentId: string;
+      name?: string;
+      baseModelId?: string;
+      systemPrompt?: string;
+      parameters?: Record<string, unknown>;
+      memoryPolicy?: AgentMemoryPolicy;
+      safetySettings?: AgentSafetySettings;
+    } = { subject, agentId };
+    if (body.name !== undefined) input.name = body.name;
+    if (body.baseModelId !== undefined) input.baseModelId = body.baseModelId;
+    if (body.systemPrompt !== undefined) input.systemPrompt = body.systemPrompt;
+    if (body.parameters !== undefined) input.parameters = body.parameters;
+    if (body.memoryPolicy !== undefined)
+      input.memoryPolicy = compactMemoryPolicy(body.memoryPolicy);
+    if (body.safetySettings !== undefined)
+      input.safetySettings = compactSafetySettings(body.safetySettings);
+
+    const data = await context.get("services").agents.update(input);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(deleteManagedModelRoute, async (context) => {
+    const subject = context.get("subject");
+    const { agentId } = context.req.valid("param");
+    const data = await context.get("services").agents.archive(agentId, subject);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(cloneManagedModelRoute, async (context) => {
+    const subject = context.get("subject");
+    const { agentId } = context.req.valid("param");
+    const body = context.req.valid("json");
+    const input: {
+      subject: typeof subject;
+      agentId: string;
+      name?: string;
+      systemPrompt?: string;
+    } = {
+      subject,
+      agentId,
+    };
+    if (body.name !== undefined) input.name = body.name;
+    if (body.systemPrompt !== undefined) input.systemPrompt = body.systemPrompt;
+
+    const data = await context.get("services").agents.clone(input);
+    return context.json({ data }, 201);
+  });
+
+  app.openapi(getManagedModelCustomizationPolicyRoute, async (context) => {
+    const { agentId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .agents.getCustomizationPolicy(agentId, context.get("subject"));
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(updateManagedModelCustomizationPolicyRoute, async (context) => {
+    const { agentId } = context.req.valid("param");
+    const body = context.req.valid("json");
+    const data = await context
+      .get("services")
+      .agents.updateCustomizationPolicy({
+        agentId,
+        subject: context.get("subject"),
+        policy: {
+          ...(body.allowCommunicationStyle === undefined
+            ? {}
+            : { allowCommunicationStyle: body.allowCommunicationStyle }),
+          ...(body.allowResponseLength === undefined
+            ? {}
+            : { allowResponseLength: body.allowResponseLength }),
+          ...(body.allowLanguage === undefined
+            ? {}
+            : { allowLanguage: body.allowLanguage }),
+          ...(body.allowCustomInstructions === undefined
+            ? {}
+            : { allowCustomInstructions: body.allowCustomInstructions }),
+          ...(body.allowPersonalMemory === undefined
+            ? {}
+            : { allowPersonalMemory: body.allowPersonalMemory }),
+          ...(body.allowVoiceSelection === undefined
+            ? {}
+            : { allowVoiceSelection: body.allowVoiceSelection }),
+        },
+      });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(getManagedModelPreferencesRoute, async (context) => {
+    const { agentId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .agents.getPreferences(agentId, context.get("subject"));
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(updateManagedModelPreferencesRoute, async (context) => {
+    const { agentId } = context.req.valid("param");
+    const body = context.req.valid("json");
+    const data = await context.get("services").agents.updatePreferences({
+      agentId,
+      subject: context.get("subject"),
+      preferences: {
+        ...(body.communicationStyle === undefined
+          ? {}
+          : { communicationStyle: body.communicationStyle }),
+        ...(body.responseLength === undefined
+          ? {}
+          : { responseLength: body.responseLength }),
+        ...(body.language === undefined ? {} : { language: body.language }),
+        ...(body.customInstructions === undefined
+          ? {}
+          : { customInstructions: body.customInstructions }),
+        ...(body.personalMemoryEnabled === undefined
+          ? {}
+          : { personalMemoryEnabled: body.personalMemoryEnabled }),
+        ...(body.voiceProfileId === undefined
+          ? {}
+          : { voiceProfileId: body.voiceProfileId }),
+      },
+    });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(clearManagedModelPreferencesRoute, async (context) => {
+    const { agentId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .agents.clearPreferences(agentId, context.get("subject"));
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(exportManagedModelRoute, async (context) => {
+    const subject = context.get("subject");
+    const { agentId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .agents.exportAgent(agentId, subject);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(importManagedModelRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
     const agent = {
       name: body.document.agent.name,
       baseModelId: body.document.agent.baseModelId,
@@ -91,75 +227,107 @@ export function registerAgentRoutes(app: RomeoApi): void {
       parameters: body.document.agent.parameters,
       memoryPolicy: compactMemoryPolicy(body.document.agent.memoryPolicy),
       safetySettings: compactSafetySettings(body.document.agent.safetySettings),
-      accessGrants: body.document.agent.accessGrants,
-      knowledgeBaseBindings: body.document.agent.knowledgeBaseBindings,
-      toolBindings: body.document.agent.toolBindings,
-      ...(body.document.agent.voiceProfileId === undefined ? {} : { voiceProfileId: body.document.agent.voiceProfileId })
-    }
-    const data = await context.get('services').agents.importAgent({
+      ...(body.document.agent.accessGrants === undefined
+        ? {}
+        : { accessGrants: body.document.agent.accessGrants }),
+      ...(body.document.agent.knowledgeBaseBindings === undefined
+        ? {}
+        : {
+            knowledgeBaseBindings: body.document.agent.knowledgeBaseBindings,
+          }),
+      ...(body.document.agent.toolBindings === undefined
+        ? {}
+        : { toolBindings: body.document.agent.toolBindings }),
+      ...(body.document.agent.voiceProfileId === undefined
+        ? {}
+        : { voiceProfileId: body.document.agent.voiceProfileId }),
+    };
+    const data = await context.get("services").agents.importAgent({
       subject,
       workspaceId: body.workspaceId,
-      agent
-    })
-    return context.json({ data }, 201)
-  })
+      agent,
+    });
+    return context.json({ data }, 201);
+  });
 
-  app.get('/api/v1/agents/:agentId/versions', async (context) => {
-    const subject = context.get('subject')
-    const data = await context.get('services').agents.listVersions(context.req.param('agentId'), subject)
-    return context.json({ data })
-  })
+  app.openapi(listManagedModelVersionsRoute, async (context) => {
+    const subject = context.get("subject");
+    const { agentId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .agents.listVersions(agentId, subject);
+    return context.json({ data }, 200);
+  });
 
-  app.post('/api/v1/agents/:agentId/versions', async (context) => {
-    const subject = context.get('subject')
-    const data = await context.get('services').agents.publish(context.req.param('agentId'), subject)
-    return context.json({ data }, 201)
-  })
+  app.openapi(publishManagedModelRoute, async (context) => {
+    const subject = context.get("subject");
+    const { agentId } = context.req.valid("param");
+    const data = await context.get("services").agents.publish(agentId, subject);
+    return context.json({ data }, 201);
+  });
 
-  app.get('/api/v1/agents/:agentId/versions/:versionId/diff', async (context) => {
-    const subject = context.get('subject')
-    const rightVersionId = context.req.query('compareTo') ?? ''
-    const data = await context.get('services').agents.diff({
+  app.openapi(diffManagedModelVersionRoute, async (context) => {
+    const subject = context.get("subject");
+    const { agentId, versionId } = context.req.valid("param");
+    const { compareTo } = context.req.valid("query");
+    const data = await context.get("services").agents.diff({
       subject,
-      agentId: context.req.param('agentId'),
-      leftVersionId: context.req.param('versionId'),
-      rightVersionId
-    })
-    return context.json({ data })
-  })
+      agentId,
+      leftVersionId: versionId,
+      rightVersionId: compareTo,
+    });
+    return context.json({ data }, 200);
+  });
 
-  app.post('/api/v1/agents/:agentId/versions/:versionId/rollback', async (context) => {
-    const subject = context.get('subject')
-    const data = await context.get('services').agents.rollback({
+  app.openapi(rollbackManagedModelVersionRoute, async (context) => {
+    const subject = context.get("subject");
+    const { agentId, versionId } = context.req.valid("param");
+    const data = await context.get("services").agents.rollback({
       subject,
-      agentId: context.req.param('agentId'),
-      versionId: context.req.param('versionId')
-    })
-    return context.json({ data })
-  })
+      agentId,
+      versionId,
+    });
+    return context.json({ data }, 200);
+  });
 }
 
 function compactSafetySettings(input: {
-  maxUserInputLength?: number | undefined
-  blockedTerms?: string[] | undefined
-  promptInjectionGuard?: { mode: 'disabled' | 'block'; scanUserInput?: boolean | undefined; scanRetrievedContext?: boolean | undefined } | undefined
+  maxUserInputLength?: number | undefined;
+  blockedTerms?: string[] | undefined;
+  promptInjectionGuard?:
+    | {
+        mode: "disabled" | "block";
+        scanUserInput?: boolean | undefined;
+        scanRetrievedContext?: boolean | undefined;
+      }
+    | undefined;
 }): AgentSafetySettings {
-  const settings: AgentSafetySettings = {}
-  if (input.maxUserInputLength !== undefined) settings.maxUserInputLength = input.maxUserInputLength
-  if (input.blockedTerms !== undefined) settings.blockedTerms = input.blockedTerms
-  if (input.promptInjectionGuard !== undefined && input.promptInjectionGuard.mode === 'block') {
+  const settings: AgentSafetySettings = {};
+  if (input.maxUserInputLength !== undefined)
+    settings.maxUserInputLength = input.maxUserInputLength;
+  if (input.blockedTerms !== undefined)
+    settings.blockedTerms = input.blockedTerms;
+  if (
+    input.promptInjectionGuard !== undefined &&
+    input.promptInjectionGuard.mode === "block"
+  ) {
     settings.promptInjectionGuard = {
-      mode: 'block',
+      mode: "block",
       scanUserInput: input.promptInjectionGuard.scanUserInput ?? true,
-      scanRetrievedContext: input.promptInjectionGuard.scanRetrievedContext ?? true
-    }
+      scanRetrievedContext:
+        input.promptInjectionGuard.scanRetrievedContext ?? true,
+    };
   }
-  return settings
+  return settings;
 }
 
-function compactMemoryPolicy(input: { mode: 'disabled' } | { mode: 'recent_messages'; maxMessages?: number | undefined }): AgentMemoryPolicy {
-  if (input.mode === 'disabled') return { mode: 'disabled' }
-  const policy: AgentMemoryPolicy = { mode: 'recent_messages' }
-  if (input.maxMessages !== undefined) policy.maxMessages = input.maxMessages
-  return policy
+function compactMemoryPolicy(
+  input:
+    | { mode: "disabled" }
+    | { mode: "recent_messages"; maxMessages?: number | undefined },
+): AgentMemoryPolicy {
+  if (input.mode === "disabled") return { mode: "disabled" };
+  const policy: AgentMemoryPolicy = { mode: "recent_messages" };
+  if (input.maxMessages !== undefined) policy.maxMessages = input.maxMessages;
+  return policy;
 }

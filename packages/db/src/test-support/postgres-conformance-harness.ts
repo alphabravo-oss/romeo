@@ -7,7 +7,14 @@ import postgres from "postgres";
 
 import { createDatabaseConnection, type RomeoDatabase } from "../client";
 import { createPostgresRomeoRepositoryFromDatabase } from "../romeo-repository";
-import { groups, organizations, users, workspaces } from "../schema";
+import {
+  chats,
+  groups,
+  knowledgeBases,
+  organizations,
+  users,
+  workspaces,
+} from "../schema";
 
 export const POSTGRES_CONFORMANCE_DATABASE_URL_ENV =
   "ROMEO_POSTGRES_CONFORMANCE_DATABASE_URL";
@@ -112,6 +119,21 @@ async function seedConformanceFixtures(db: RomeoDatabase): Promise<void> {
     orgId: "org_default",
     name: "Admins",
     slug: "admins",
+  });
+  await db.insert(chats).values({
+    id: "chat_welcome",
+    orgId: "org_default",
+    workspaceId: "workspace_default",
+    title: "Welcome",
+    createdBy: "user_dev_admin",
+  });
+  await db.insert(knowledgeBases).values({
+    id: "kb_default",
+    orgId: "org_default",
+    workspaceId: "workspace_default",
+    name: "Default knowledge",
+    description: "PostgreSQL conformance fixture",
+    createdBy: "user_dev_admin",
   });
 }
 

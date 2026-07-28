@@ -3,12 +3,16 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type {
-  ToolOperationDispatchPayload,
-  ToolOperationDispatchReadbackResponse,
-  ToolOperationDispatchRequestClaimResult,
-  ToolOperationDispatchRequestPayloadResult,
-  ToolOperationDispatchRequestReadbackResult,
-} from "@romeo/api-client";
+  ToolDispatchRequestClaimResult as ToolOperationDispatchRequestClaimResult,
+  ToolDispatchRequestPayloadResult as ToolOperationDispatchRequestPayloadResult,
+  ToolDispatchRequestReadbackResult as ToolOperationDispatchRequestReadbackResult,
+} from "@romeo/api-client/generated/sdk";
+
+type ToolOperationDispatchPayload =
+  ToolOperationDispatchRequestPayloadResult["payload"];
+type ToolOperationDispatchReadbackResponse = NonNullable<
+  ToolOperationDispatchRequestReadbackResult["response"]
+>;
 
 import {
   runToolDispatchWorker,

@@ -1,191 +1,255 @@
 import { AuthorizationError } from "@romeo/auth";
+import {
+  createScimGroupRoute,
+  createScimUserRoute,
+  deleteScimGroupRoute,
+  deleteScimUserRoute,
+  getScimGroupRoute,
+  getScimServiceProviderConfigRoute,
+  getScimUserRoute,
+  listScimGroupsRoute,
+  listScimResourceTypesRoute,
+  listScimSchemasRoute,
+  listScimUsersRoute,
+  patchScimGroupRoute,
+  patchScimUserRoute,
+  replaceScimGroupRoute,
+  replaceScimUserRoute,
+} from "@romeo/contracts";
 import type { Context } from "hono";
 import { ZodError } from "zod";
 
 import { ApiError } from "../../errors";
 import { scimErrorSchema } from "../../services/scim-resource";
 import type { AppBindings, RomeoApi } from "../context";
-import {
-  scimGroupBodySchema,
-  scimListQuerySchema,
-  scimPatchBodySchema,
-  scimUserBodySchema,
-} from "../scim-schemas";
 
 export function registerScimRoutes(app: RomeoApi): void {
-  app.get("/api/v1/scim/v2/ServiceProviderConfig", async (context) =>
-    scimRoute(context, async () =>
-      context
-        .get("services")
-        .scim.serviceProviderConfig(context.get("subject"), baseUrl(context)),
-    ),
+  app.openapi(
+    getScimServiceProviderConfigRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context
+          .get("services")
+          .scim.serviceProviderConfig(context.get("subject"), baseUrl(context)),
+      ),
+    scimValidationHook,
   );
 
-  app.get("/api/v1/scim/v2/Schemas", async (context) =>
-    scimRoute(context, async () =>
-      context
-        .get("services")
-        .scim.schemas(context.get("subject"), baseUrl(context)),
-    ),
+  app.openapi(
+    listScimSchemasRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context
+          .get("services")
+          .scim.schemas(context.get("subject"), baseUrl(context)),
+      ),
+    scimValidationHook,
   );
 
-  app.get("/api/v1/scim/v2/ResourceTypes", async (context) =>
-    scimRoute(context, async () =>
-      context
-        .get("services")
-        .scim.resourceTypes(context.get("subject"), baseUrl(context)),
-    ),
+  app.openapi(
+    listScimResourceTypesRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context
+          .get("services")
+          .scim.resourceTypes(context.get("subject"), baseUrl(context)),
+      ),
+    scimValidationHook,
   );
 
-  app.get("/api/v1/scim/v2/Users", async (context) =>
-    scimRoute(context, async () =>
-      context.get("services").scim.listUsers({
-        subject: context.get("subject"),
-        query: scimListQuerySchema.parse(context.req.query()),
-        baseUrl: baseUrl(context),
-      }),
-    ),
-  );
-
-  app.post("/api/v1/scim/v2/Users", async (context) =>
-    scimRoute(
-      context,
-      async () =>
-        context.get("services").scim.createUser({
+  app.openapi(
+    listScimUsersRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context.get("services").scim.listUsers({
           subject: context.get("subject"),
-          body: scimUserBodySchema.parse(await context.req.json()),
+          query: context.req.valid("query"),
           baseUrl: baseUrl(context),
         }),
-      201,
-    ),
+      ),
+    scimValidationHook,
   );
 
-  app.get("/api/v1/scim/v2/Users/:userId", async (context) =>
-    scimRoute(context, async () =>
-      context.get("services").scim.getUser({
-        subject: context.get("subject"),
-        userId: context.req.param("userId"),
-        baseUrl: baseUrl(context),
-      }),
-    ),
+  app.openapi(
+    createScimUserRoute,
+    async (context) =>
+      scimRoute(
+        context,
+        async () =>
+          context.get("services").scim.createUser({
+            subject: context.get("subject"),
+            body: context.req.valid("json"),
+            baseUrl: baseUrl(context),
+          }),
+        201,
+      ),
+    scimValidationHook,
   );
 
-  app.put("/api/v1/scim/v2/Users/:userId", async (context) =>
-    scimRoute(context, async () =>
-      context.get("services").scim.replaceUser({
-        subject: context.get("subject"),
-        userId: context.req.param("userId"),
-        body: scimUserBodySchema.parse(await context.req.json()),
-        baseUrl: baseUrl(context),
-      }),
-    ),
-  );
-
-  app.patch("/api/v1/scim/v2/Users/:userId", async (context) =>
-    scimRoute(context, async () =>
-      context.get("services").scim.patchUser({
-        subject: context.get("subject"),
-        userId: context.req.param("userId"),
-        body: scimPatchBodySchema.parse(await context.req.json()),
-        baseUrl: baseUrl(context),
-      }),
-    ),
-  );
-
-  app.delete("/api/v1/scim/v2/Users/:userId", async (context) =>
-    scimRoute(context, async () => {
-      await context.get("services").scim.deleteUser({
-        subject: context.get("subject"),
-        userId: context.req.param("userId"),
-      });
-      return undefined;
-    }),
-  );
-
-  app.get("/api/v1/scim/v2/Groups", async (context) =>
-    scimRoute(context, async () =>
-      context.get("services").scim.listGroups({
-        subject: context.get("subject"),
-        query: scimListQuerySchema.parse(context.req.query()),
-        baseUrl: baseUrl(context),
-      }),
-    ),
-  );
-
-  app.post("/api/v1/scim/v2/Groups", async (context) =>
-    scimRoute(
-      context,
-      async () =>
-        context.get("services").scim.createGroup({
+  app.openapi(
+    getScimUserRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context.get("services").scim.getUser({
           subject: context.get("subject"),
-          body: scimGroupBodySchema.parse(await context.req.json()),
+          userId: context.req.valid("param").userId,
           baseUrl: baseUrl(context),
         }),
-      201,
-    ),
+      ),
+    scimValidationHook,
   );
 
-  app.get("/api/v1/scim/v2/Groups/:groupId", async (context) =>
-    scimRoute(context, async () =>
-      context.get("services").scim.getGroup({
-        subject: context.get("subject"),
-        groupId: context.req.param("groupId"),
-        baseUrl: baseUrl(context),
+  app.openapi(
+    replaceScimUserRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context.get("services").scim.replaceUser({
+          subject: context.get("subject"),
+          userId: context.req.valid("param").userId,
+          body: context.req.valid("json"),
+          baseUrl: baseUrl(context),
+        }),
+      ),
+    scimValidationHook,
+  );
+
+  app.openapi(
+    patchScimUserRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context.get("services").scim.patchUser({
+          subject: context.get("subject"),
+          userId: context.req.valid("param").userId,
+          body: context.req.valid("json"),
+          baseUrl: baseUrl(context),
+        }),
+      ),
+    scimValidationHook,
+  );
+
+  app.openapi(
+    deleteScimUserRoute,
+    async (context) =>
+      scimRoute(context, async () => {
+        await context.get("services").scim.deleteUser({
+          subject: context.get("subject"),
+          userId: context.req.valid("param").userId,
+        });
+        return undefined;
       }),
-    ),
+    scimValidationHook,
   );
 
-  app.put("/api/v1/scim/v2/Groups/:groupId", async (context) =>
-    scimRoute(context, async () =>
-      context.get("services").scim.replaceGroup({
-        subject: context.get("subject"),
-        groupId: context.req.param("groupId"),
-        body: scimGroupBodySchema.parse(await context.req.json()),
-        baseUrl: baseUrl(context),
+  app.openapi(
+    listScimGroupsRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context.get("services").scim.listGroups({
+          subject: context.get("subject"),
+          query: context.req.valid("query"),
+          baseUrl: baseUrl(context),
+        }),
+      ),
+    scimValidationHook,
+  );
+
+  app.openapi(
+    createScimGroupRoute,
+    async (context) =>
+      scimRoute(
+        context,
+        async () =>
+          context.get("services").scim.createGroup({
+            subject: context.get("subject"),
+            body: context.req.valid("json"),
+            baseUrl: baseUrl(context),
+          }),
+        201,
+      ),
+    scimValidationHook,
+  );
+
+  app.openapi(
+    getScimGroupRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context.get("services").scim.getGroup({
+          subject: context.get("subject"),
+          groupId: context.req.valid("param").groupId,
+          baseUrl: baseUrl(context),
+        }),
+      ),
+    scimValidationHook,
+  );
+
+  app.openapi(
+    replaceScimGroupRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context.get("services").scim.replaceGroup({
+          subject: context.get("subject"),
+          groupId: context.req.valid("param").groupId,
+          body: context.req.valid("json"),
+          baseUrl: baseUrl(context),
+        }),
+      ),
+    scimValidationHook,
+  );
+
+  app.openapi(
+    patchScimGroupRoute,
+    async (context) =>
+      scimRoute(context, async () =>
+        context.get("services").scim.patchGroup({
+          subject: context.get("subject"),
+          groupId: context.req.valid("param").groupId,
+          body: context.req.valid("json"),
+          baseUrl: baseUrl(context),
+        }),
+      ),
+    scimValidationHook,
+  );
+
+  app.openapi(
+    deleteScimGroupRoute,
+    async (context) =>
+      scimRoute(context, async () => {
+        await context.get("services").scim.deleteGroup({
+          subject: context.get("subject"),
+          groupId: context.req.valid("param").groupId,
+        });
+        return undefined;
       }),
-    ),
+    scimValidationHook,
   );
+}
 
-  app.patch("/api/v1/scim/v2/Groups/:groupId", async (context) =>
-    scimRoute(context, async () =>
-      context.get("services").scim.patchGroup({
-        subject: context.get("subject"),
-        groupId: context.req.param("groupId"),
-        body: scimPatchBodySchema.parse(await context.req.json()),
-        baseUrl: baseUrl(context),
-      }),
-    ),
-  );
-
-  app.delete("/api/v1/scim/v2/Groups/:groupId", async (context) =>
-    scimRoute(context, async () => {
-      await context.get("services").scim.deleteGroup({
-        subject: context.get("subject"),
-        groupId: context.req.param("groupId"),
-      });
-      return undefined;
-    }),
-  );
+function scimValidationHook(result: { success: boolean }): never | undefined {
+  if (result.success) return undefined;
+  return scimJson(
+    scimErrorBody("The SCIM request payload is invalid.", 400, "invalidSyntax"),
+    400,
+  ) as never;
 }
 
 async function scimRoute(
   context: Context<AppBindings>,
   work: () => Promise<unknown> | unknown,
   status = 200,
-): Promise<Response> {
+): Promise<never> {
   try {
     const body = await work();
-    if (body === undefined) return new Response(null, { status: 204 });
-    return scimJson(body, status);
+    if (body === undefined) return new Response(null, { status: 204 }) as never;
+    return scimJson(body, status) as never;
   } catch (error) {
     if (error instanceof ApiError) {
       return scimJson(
         scimErrorBody(error.message, error.status, error.details.scimType),
         error.status,
-      );
+      ) as never;
     }
     if (error instanceof AuthorizationError) {
-      return scimJson(scimErrorBody(error.message, 403), 403);
+      return scimJson(scimErrorBody(error.message, 403), 403) as never;
     }
     if (error instanceof ZodError) {
       return scimJson(
@@ -195,7 +259,7 @@ async function scimRoute(
           "invalidSyntax",
         ),
         400,
-      );
+      ) as never;
     }
     throw error;
   }

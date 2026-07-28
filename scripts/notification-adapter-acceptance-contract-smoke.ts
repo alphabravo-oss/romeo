@@ -1,4 +1,3 @@
-import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -37,8 +36,7 @@ const rawSentinels = {
   providerFailureBody: `RAW_NOTIFICATION_PROVIDER_FAILURE_${pid}`,
 };
 
-const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const fcmPrivateKey = privateKey.export({ format: "pem", type: "pkcs8" });
+const fcmPrivateKey = `-----BEGIN PRIVATE KEY-----\nRAW_FCM_PRIVATE_KEY_${pid}\n-----END PRIVATE KEY-----`;
 const fcmServiceAccountJson = JSON.stringify({
   client_email: "firebase-adminsdk@romeo-acceptance.iam.gserviceaccount.com",
   private_key: fcmPrivateKey,
@@ -107,6 +105,21 @@ const configuredApi = createApi(
         response: rawSentinels.providerFailureBody,
       };
     },
+    notificationFcmClientFactory: ({ projectId, serviceAccount }) => ({
+      send: async (message) => {
+        configuredState.requestTypes.push("fcm_send");
+        configuredState.fcmAccessTokenSeen =
+          projectId === "romeo-acceptance" &&
+          serviceAccount.clientEmail ===
+            "firebase-adminsdk@romeo-acceptance.iam.gserviceaccount.com";
+        configuredState.fcmDeviceTokenSeen =
+          "token" in message && message.token === rawSentinels.fcmDeviceToken;
+        if (JSON.stringify(message).includes(rawSentinels.commentBody)) {
+          configuredState.commentBodyInProviderPayloads = true;
+        }
+        return "projects/romeo-acceptance/messages/redacted";
+      },
+    }),
     secretResolver: secretResolver((secretRef) => {
       configuredState.secretResolveCount += 1;
       if (secretRef === "env://ROMEO_ACCEPTANCE_PAGERDUTY_ROUTING_KEY") {
@@ -508,24 +521,6 @@ function configuredFetch(
   const body = String(init?.body ?? "");
   if (body.includes(rawSentinels.commentBody)) {
     state.commentBodyInProviderPayloads = true;
-  }
-  if (url === "https://oauth2.googleapis.com/token") {
-    state.requestTypes.push("fcm_token");
-    return jsonResponse({
-      access_token: rawSentinels.fcmAccessToken,
-      expires_in: 3600,
-    });
-  }
-  if (
-    url ===
-    "https://fcm.googleapis.com/v1/projects/romeo-acceptance/messages:send"
-  ) {
-    state.requestTypes.push("fcm_send");
-    state.fcmAccessTokenSeen =
-      headerValue(init?.headers, "authorization") ===
-      `Bearer ${rawSentinels.fcmAccessToken}`;
-    state.fcmDeviceTokenSeen = body.includes(rawSentinels.fcmDeviceToken);
-    return jsonResponse({ name: "projects/redacted/messages/redacted" });
   }
   if (url === "https://events.pagerduty.com/v2/enqueue") {
     state.requestTypes.push("pagerduty");

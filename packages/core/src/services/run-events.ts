@@ -25,6 +25,10 @@ export class ActiveRunControllers {
     this.controllers.get(runId)?.abort();
   }
 
+  has(runId: string): boolean {
+    return this.controllers.has(runId);
+  }
+
   delete(runId: string): void {
     this.controllers.delete(runId);
   }
@@ -33,15 +37,16 @@ export class ActiveRunControllers {
 export async function* replayRunEvents(
   repository: RomeoRepository,
   runId: string,
+  afterSequence = 0,
 ): AsyncIterable<RunEvent> {
-  let yielded = 0;
+  let cursor = afterSequence;
 
   while (true) {
     const events = await repository.listRunEvents(runId);
-    const pending = events.slice(yielded);
+    const pending = events.filter((event) => event.sequence > cursor);
 
     for (const event of pending) {
-      yielded += 1;
+      cursor = Math.max(cursor, event.sequence);
       yield event;
     }
 

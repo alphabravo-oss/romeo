@@ -1,10 +1,110 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { openAiCompatibleCapabilities } from "./capabilities";
 import { openAiCompatibleAdapter } from "./adapters/openai-compatible";
 import type { BaseModel, ProviderInstance, StreamChatChunk } from "./types";
 
 describe("OpenAI-compatible adapter", () => {
+  it("verifies an endpoint through model discovery", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({ data: [{ id: "gpt-4.1-mini" }] }),
+    );
+
+    await expect(
+      openAiCompatibleAdapter.health(provider, {
+        apiKey: "secret",
+        fetchImpl,
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      message: "Connection available (1 model).",
+    });
+  });
+
+  it("reports a connection with no discoverable models as unavailable", async () => {
+    await expect(
+      openAiCompatibleAdapter.health(provider, {
+        fetchImpl: async () => new Response(null, { status: 401 }),
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      message: "The endpoint returned no discoverable models.",
+    });
+  });
+
+  it("discovers endpoint models with bearer authentication", async () => {
+    const fetchImpl = vi.fn(
+      async (_input: string | URL | Request, _init?: RequestInit) =>
+        Response.json({ data: [{ id: "gpt-4.1-mini" }, { id: "gpt-4.1" }] }),
+    );
+    const models = await openAiCompatibleAdapter.listModels(provider, {
+      apiKey: "secret",
+      fetchImpl,
+    });
+    expect(models.map((item) => item.name)).toEqual([
+      "gpt-4.1",
+      "gpt-4.1-mini",
+    ]);
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(String(url)).toBe("https://api.example/v1/models");
+    expect(new Headers(init?.headers).get("authorization")).toBe(
+      "Bearer secret",
+    );
+    expect(models[0]?.capabilities).toEqual(openAiCompatibleCapabilities);
+  });
+
+  it("uses an explicit model allowlist without requesting /models", async () => {
+    const fetchImpl = vi.fn();
+    const models = await openAiCompatibleAdapter.listModels(
+      { ...provider, modelIds: ["gateway-chat", "other-chat"] },
+      { fetchImpl },
+    );
+    expect(models.map((item) => item.name)).toEqual([
+      "gateway-chat",
+      "other-chat",
+    ]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("does not let a model allowlist bypass endpoint health verification", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 503 }));
+
+    await expect(
+      openAiCompatibleAdapter.health(
+        { ...provider, modelIds: ["configured-model"] },
+        { fetchImpl },
+      ),
+    ).resolves.toMatchObject({ ok: false });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("prefers explicit provider image-generation metadata over name inference", async () => {
+    const models = await openAiCompatibleAdapter.listModels(provider, {
+      fetchImpl: async () =>
+        Response.json({
+          data: [
+            { id: "acme-render-v2", capabilities: { image_generation: true } },
+            { id: "gpt-image-1", capabilities: { image_generation: false } },
+          ],
+        }),
+    });
+
+    expect(
+      models.find((item) => item.name === "acme-render-v2")?.capabilities
+        .imageGeneration,
+    ).toBe(true);
+    expect(
+      models.find((item) => item.name === "gpt-image-1")?.capabilities
+        .imageGeneration,
+    ).toBe(false);
+  });
+
+  it("returns no synthetic model when discovery fails", async () => {
+    const models = await openAiCompatibleAdapter.listModels(provider, {
+      fetchImpl: async () => new Response(null, { status: 401 }),
+    });
+    expect(models).toEqual([]);
+  });
   it("streams text and usage from chat completion SSE", async () => {
     const calls: Array<{ body?: string; headers: HeadersInit; url: string }> =
       [];
@@ -84,9 +184,44 @@ describe("OpenAI-compatible adapter", () => {
         },
       ],
     });
-    expect(JSON.stringify(calls[0]?.headers)).toContain(
+    expect(new Headers(calls[0]?.headers).get("authorization")).toBe(
       "Bearer provider-api-key",
     );
+  });
+
+  it("sends vision inputs as OpenAI image content parts", async () => {
+    let body: Record<string, unknown> | undefined;
+    await collect(
+      openAiCompatibleAdapter.streamChat({
+        apiKey: "provider-api-key",
+        fetchImpl: async (_input, init) => {
+          body = JSON.parse(String(init?.body));
+          return new Response(sse([]), { status: 200 });
+        },
+        messages: [
+          {
+            role: "user",
+            content: "What is shown?",
+            images: [{ dataBase64: "aGVsbG8=", mimeType: "image/png" }],
+          },
+        ],
+        model,
+        provider,
+      }),
+    );
+
+    expect(body?.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What is shown?" },
+          {
+            type: "image_url",
+            image_url: { url: "data:image/png;base64,aGVsbG8=" },
+          },
+        ],
+      },
+    ]);
   });
 
   it("normalizes fragmented streamed tool calls", async () => {

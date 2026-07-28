@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
 
+import {
+  QdrantClient,
+  QdrantClientResourceExhaustedError,
+  QdrantClientTimeoutError,
+  QdrantClientUnexpectedResponseError,
+} from "@qdrant/js-client-rest";
 import type { RomeoEnv } from "@romeo/config";
 
 import type {
@@ -39,30 +45,49 @@ interface QdrantPoint {
 
 type QdrantOperation = "delete" | "health" | "query" | "upsert";
 
+export type QdrantSdkClient = Pick<
+  QdrantClient,
+  "delete" | "getCollection" | "query" | "upsert"
+>;
+export interface QdrantSdkClientOptions {
+  apiKey: string;
+  timeoutMs: number;
+  url: string;
+}
+export type QdrantSdkClientFactory = (
+  options: QdrantSdkClientOptions,
+) => QdrantSdkClient;
+
+const defaultQdrantSdkClientFactory: QdrantSdkClientFactory = (options) =>
+  new QdrantClient({
+    apiKey: options.apiKey,
+    checkCompatibility: false,
+    timeout: options.timeoutMs,
+    url: options.url,
+  });
+
 export class QdrantKnowledgeVectorStore
   implements KnowledgeVectorStore, KnowledgeVectorStoreReadinessProbe
 {
   private readonly collection: string;
-  private readonly fetchImpl: typeof fetch;
+  private readonly clientFactory: QdrantSdkClientFactory;
   private readonly namespacePolicy: VectorNamespacePolicy;
   private readonly partitioningPolicy: VectorNamespacePolicy;
   private readonly timeoutMs: number;
   private readonly url: string;
 
-  constructor(
-    options: {
-      apiKeyRef: string;
-      collection: string;
-      fetchImpl?: typeof fetch;
-      namespacePolicy: VectorNamespacePolicy;
-      partitioningPolicy: VectorNamespacePolicy;
-      secretResolver: SecretResolver;
-      timeoutMs: number;
-      url: string;
-    },
-  ) {
+  constructor(options: {
+    apiKeyRef: string;
+    clientFactory?: QdrantSdkClientFactory;
+    collection: string;
+    namespacePolicy: VectorNamespacePolicy;
+    partitioningPolicy: VectorNamespacePolicy;
+    secretResolver: SecretResolver;
+    timeoutMs: number;
+    url: string;
+  }) {
     this.collection = options.collection;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.clientFactory = options.clientFactory ?? defaultQdrantSdkClientFactory;
     this.namespacePolicy = options.namespacePolicy;
     this.partitioningPolicy = options.partitioningPolicy;
     this.timeoutMs = options.timeoutMs;
@@ -76,34 +101,41 @@ export class QdrantKnowledgeVectorStore
 
   async upsertEmbeddings(embeddings: KnowledgeChunkEmbedding[]): Promise<void> {
     if (embeddings.length === 0) return;
-    await this.request("upsert", `points?wait=true`, {
-      points: embeddings.map((embedding): QdrantPoint => ({
-        id: qdrantPointIdForChunkId(embedding.chunkId),
-        vector: embedding.embedding,
-        payload: qdrantPayload(
-          embedding,
-          this.namespacePolicy,
-          this.partitioningPolicy,
+    await this.withClient("upsert", (client) =>
+      client.upsert(this.collection, {
+        wait: true,
+        points: embeddings.map(
+          (embedding): QdrantPoint => ({
+            id: qdrantPointIdForChunkId(embedding.chunkId),
+            vector: embedding.embedding,
+            payload: qdrantPayload(
+              embedding,
+              this.namespacePolicy,
+              this.partitioningPolicy,
+            ),
+          }),
         ),
-      })),
-    });
+      }),
+    );
   }
 
   async search(
     input: KnowledgeVectorStoreSearchInput,
   ): Promise<KnowledgeChunkEmbeddingSearchHit[]> {
     if (input.sourceIds.length === 0) return [];
-    const response = await this.request("query", "points/query", {
-      query: input.queryEmbedding,
-      filter: qdrantSearchFilter(
-        input,
-        this.namespacePolicy,
-        this.partitioningPolicy,
-      ),
-      limit: boundedLimit(input.maxResults),
-      with_payload: true,
-      with_vector: false,
-    });
+    const response = await this.withClient("query", (client) =>
+      client.query(this.collection, {
+        query: input.queryEmbedding,
+        filter: qdrantSearchFilter(
+          input,
+          this.namespacePolicy,
+          this.partitioningPolicy,
+        ),
+        limit: boundedLimit(input.maxResults),
+        with_payload: true,
+        with_vector: false,
+      }),
+    );
     return qdrantSearchHits(response);
   }
 
@@ -113,27 +145,31 @@ export class QdrantKnowledgeVectorStore
     sourceId: string;
     workspaceId: string;
   }): Promise<void> {
-    await this.request("delete", "points/delete?wait=true", {
-      filter: {
-        must: [
-          ...qdrantScopeConditions(
-            input,
-            this.namespacePolicy,
-            this.partitioningPolicy,
-          ),
-          fieldCondition("orgId", input.orgId),
-          fieldCondition("workspaceId", input.workspaceId),
-          fieldCondition("knowledgeBaseId", input.knowledgeBaseId),
-          fieldCondition("sourceId", input.sourceId),
-        ],
-      },
-    });
+    await this.withClient("delete", (client) =>
+      client.delete(this.collection, {
+        wait: true,
+        filter: {
+          must: [
+            ...qdrantScopeConditions(
+              input,
+              this.namespacePolicy,
+              this.partitioningPolicy,
+            ),
+            fieldCondition("orgId", input.orgId),
+            fieldCondition("workspaceId", input.workspaceId),
+            fieldCondition("knowledgeBaseId", input.knowledgeBaseId),
+            fieldCondition("sourceId", input.sourceId),
+          ],
+        },
+      }),
+    );
   }
 
   async checkReadiness(): Promise<KnowledgeVectorStoreReadinessReport> {
     try {
-      const response = await this.request("health", "", undefined);
-      const result = asRecord(response)?.result;
+      const result = await this.withClient("health", (client) =>
+        client.getCollection(this.collection),
+      );
       return {
         status: "available",
         ...stringDetail(result, "status", "collectionStatus"),
@@ -144,48 +180,22 @@ export class QdrantKnowledgeVectorStore
     }
   }
 
-  private async request(
+  private async withClient<T>(
     operation: QdrantOperation,
-    path: string,
-    body: unknown | undefined,
-  ): Promise<unknown> {
+    execute: (client: QdrantSdkClient) => Promise<T>,
+  ): Promise<T> {
     const apiKey = await this.resolveApiKey(operation);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const headers: Record<string, string> = { "api-key": apiKey };
-      if (body !== undefined) headers["content-type"] = "application/json";
-      const response = await this.fetchImpl(
-        qdrantUrl(this.url, this.collection, path),
-        {
-          method: qdrantMethod(operation),
-          headers,
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-          signal: controller.signal,
-        },
+      return await execute(
+        this.clientFactory({
+          apiKey,
+          timeoutMs: this.timeoutMs,
+          url: this.url,
+        }),
       );
-      if (!response.ok) {
-        throw qdrantUnavailable(operation, {
-          status: response.status,
-          statusText: response.statusText,
-        });
-      }
-      const text = await response.text();
-      if (text.length === 0) return {};
-      try {
-        return JSON.parse(text);
-      } catch {
-        throw qdrantUnavailable(operation, { failureCode: "invalid_json" });
-      }
     } catch (caught) {
       if (caught instanceof ApiError) throw caught;
-      const failureCode =
-        caught instanceof Error && caught.name === "AbortError"
-          ? "timeout"
-          : "request_failed";
-      throw qdrantUnavailable(operation, { failureCode });
-    } finally {
-      clearTimeout(timeout);
+      throw qdrantUnavailable(operation, qdrantSdkFailureDetails(caught));
     }
   }
 
@@ -209,19 +219,19 @@ export class QdrantKnowledgeVectorStore
 export function createQdrantKnowledgeVectorStore(
   env: RomeoEnv,
   secretResolver: SecretResolver,
-  fetchImpl?: typeof fetch,
+  clientFactory?: QdrantSdkClientFactory,
 ): (KnowledgeVectorStore & KnowledgeVectorStoreReadinessProbe) | undefined {
   const deployment = vectorStoreDeploymentFromEnv(env);
   if (!deployment.externalVectorStore.configured) return undefined;
   return new QdrantKnowledgeVectorStore({
     apiKeyRef: env.QDRANT_API_KEY_REF,
+    ...(clientFactory === undefined ? {} : { clientFactory }),
     collection: env.QDRANT_COLLECTION,
     namespacePolicy: deployment.externalVectorStore.namespacePolicy,
     partitioningPolicy: deployment.externalVectorStore.partitioningPolicy,
     secretResolver,
     timeoutMs: env.QDRANT_TIMEOUT_MS,
     url: env.QDRANT_URL,
-    ...(fetchImpl === undefined ? {} : { fetchImpl }),
   });
 }
 
@@ -309,8 +319,7 @@ function fieldCondition(key: string, value: QdrantValue): QdrantFieldCondition {
 function qdrantSearchHits(
   response: unknown,
 ): KnowledgeChunkEmbeddingSearchHit[] {
-  const result = asRecord(response)?.result;
-  const rawPoints = asRecord(result)?.points;
+  const rawPoints = asRecord(response)?.points;
   const points: unknown[] = Array.isArray(rawPoints) ? rawPoints : [];
   return points.flatMap((point): KnowledgeChunkEmbeddingSearchHit[] => {
     const record = asRecord(point);
@@ -359,21 +368,6 @@ function qdrantSearchHits(
       },
     ];
   });
-}
-
-function qdrantUrl(baseUrl: string, collection: string, path: string): string {
-  const suffix = path.length === 0 ? "" : `/${path}`;
-  const url = new URL(
-    `/collections/${encodeURIComponent(collection)}${suffix}`,
-    baseUrl,
-  );
-  return url.toString();
-}
-
-function qdrantMethod(operation: QdrantOperation): "GET" | "POST" | "PUT" {
-  if (operation === "health") return "GET";
-  if (operation === "upsert") return "PUT";
-  return "POST";
 }
 
 function boundedLimit(limit: number): number {
@@ -462,4 +456,36 @@ function qdrantUnavailable(
       ...details,
     },
   );
+}
+
+function qdrantSdkFailureDetails(caught: unknown): Record<string, unknown> {
+  if (caught instanceof QdrantClientTimeoutError) {
+    return { failureCode: "timeout", sdkError: caught.name };
+  }
+  if (caught instanceof QdrantClientResourceExhaustedError) {
+    return {
+      failureCode: "resource_exhausted",
+      retryAfterSeconds: caught.retry_after,
+      sdkError: caught.name,
+    };
+  }
+  if (caught instanceof QdrantClientUnexpectedResponseError) {
+    const status = qdrantStatusFromSdkError(caught.message);
+    return {
+      failureCode: qdrantFailureCodeFromStatus(status),
+      ...(status === undefined ? {} : { status }),
+      sdkError: caught.name,
+    };
+  }
+  return {
+    failureCode: "request_failed",
+    ...(caught instanceof Error ? { sdkError: caught.name } : {}),
+  };
+}
+
+function qdrantStatusFromSdkError(message: string): number | undefined {
+  const match = /Unexpected Response:\s+(\d{3})\b/u.exec(message);
+  if (match === null) return undefined;
+  const status = Number(match[1]);
+  return Number.isInteger(status) ? status : undefined;
 }

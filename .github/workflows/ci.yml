@@ -23,7 +23,7 @@ jobs:
   quality:
     name: Quality Gates
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,6 +60,18 @@ jobs:
           fi
           xargs -0 pnpm exec prettier --check --ignore-unknown < /tmp/romeo-prettier-files
 
+      - name: Check architecture ratchets
+        run: pnpm check:architecture
+
+      - name: Lint OpenAPI contracts
+        run: pnpm contract:lint
+
+      - name: Check OpenAPI breaking changes
+        run: pnpm contract:breaking
+
+      - name: Check generated SDK drift
+        run: pnpm check:sdk-typescript-drift
+
       - name: Check OpenAPI and Python SDK drift
         run: pnpm check:sdk-drift
 
@@ -77,6 +89,12 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Install Chromium for browser quality
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run browser quality gate
+        run: pnpm quality:browser
 
       - name: Review greenfield baseline
         run: pnpm review:baseline -- --strict --output dist/ci/greenfield-baseline-review.json

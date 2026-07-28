@@ -22,188 +22,302 @@ import Users from "lucide-react/dist/esm/icons/users.mjs";
 import UsersRound from "lucide-react/dist/esm/icons/users-round.mjs";
 import Webhook from "lucide-react/dist/esm/icons/webhook.mjs";
 import Workflow from "lucide-react/dist/esm/icons/workflow.mjs";
+import Search from "lucide-react/dist/esm/icons/search.mjs";
+import { Suspense, lazy } from "react";
+import { Button } from "@romeo/ui";
 
-import { AdminOverview } from "../components/AdminOverview";
-import { AbuseControlsPanel } from "../components/AbuseControlsPanel";
-import { AnalyticsPanel } from "../components/AnalyticsPanel";
-import { ApiKeyPanel } from "../components/ApiKeyPanel";
-import { AuditPanel } from "../components/AuditPanel";
-import { BillingPanel } from "../components/BillingPanel";
 import { ConsoleLayout } from "../components/ConsoleLayout";
 import { PageHeader } from "../components/PageHeader";
-import { ConnectedAppsPanel } from "../components/ConnectedAppsPanel";
-import { DataConnectorPanel } from "../components/DataConnectorPanel";
-import { AuthProvidersPanel } from "../components/AuthProvidersPanel";
-import { DeviceTokensPanel } from "../components/DeviceTokensPanel";
-import { GovernancePanel } from "../components/GovernancePanel";
-import { GroupsPanel } from "../components/GroupsPanel";
-import { ImpersonationPanel } from "../components/ImpersonationPanel";
-import { ModelPricingPanel } from "../components/ModelPricingPanel";
-import { NotificationChannelPanel } from "../components/NotificationChannelPanel";
-import { OperationsPosturePanel } from "../components/OperationsPosturePanel";
-import { OrganizationsPanel } from "../components/OrganizationsPanel";
-import { PromptTemplatePanel } from "../components/PromptTemplatePanel";
-import { RagGovernancePanel } from "../components/RagGovernancePanel";
-import { ProviderPanel } from "../components/ProviderPanel";
-import { QuotaPanel } from "../components/QuotaPanel";
-import { ServiceAccountPanel } from "../components/ServiceAccountPanel";
-import { ToolConnectorPanel } from "../components/ToolConnectorPanel";
+import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
 import { useAdminController } from "../components/useAdminController";
-import { UsagePanel } from "../components/UsagePanel";
-import { UsersPanel } from "../components/UsersPanel";
-import { WebhooksPanel } from "../components/WebhooksPanel";
-import { WorkflowsPanel } from "../components/WorkflowsPanel";
+import {
+  localeNamespaceGroups,
+  type MessageKey,
+  useLocale,
+  useLocaleNamespaces,
+} from "../lib/i18n";
+
+function lazyNamed<
+  T extends Record<K, React.ComponentType<any>>,
+  K extends keyof T,
+>(loader: () => Promise<T>, name: K) {
+  return lazy(async () => ({ default: (await loader())[name] }));
+}
+
+const AdminOverview = lazyNamed(
+  () => import("../components/AdminOverview"),
+  "AdminOverview",
+);
+const AbuseControlsPanel = lazyNamed(
+  () => import("../components/AbuseControlsPanel"),
+  "AbuseControlsPanel",
+);
+const AnalyticsPanel = lazyNamed(
+  () => import("../components/AnalyticsPanel"),
+  "AnalyticsPanel",
+);
+const ApiKeyPanel = lazyNamed(
+  () => import("../components/ApiKeyPanel"),
+  "ApiKeyPanel",
+);
+const AuditPanel = lazyNamed(
+  () => import("../components/AuditPanel"),
+  "AuditPanel",
+);
+const BillingPanel = lazyNamed(
+  () => import("../components/BillingPanel"),
+  "BillingPanel",
+);
+const ConnectedAppsPanel = lazyNamed(
+  () => import("../components/ConnectedAppsPanel"),
+  "ConnectedAppsPanel",
+);
+const DataConnectorPanel = lazyNamed(
+  () => import("../components/DataConnectorPanel"),
+  "DataConnectorPanel",
+);
+const AuthProvidersPanel = lazyNamed(
+  () => import("../components/AuthProvidersPanel"),
+  "AuthProvidersPanel",
+);
+const DeviceTokensPanel = lazyNamed(
+  () => import("../components/DeviceTokensPanel"),
+  "DeviceTokensPanel",
+);
+const GovernancePanel = lazyNamed(
+  () => import("../components/GovernancePanel"),
+  "GovernancePanel",
+);
+const GroupsPanel = lazyNamed(
+  () => import("../components/GroupsPanel"),
+  "GroupsPanel",
+);
+const ImpersonationPanel = lazyNamed(
+  () => import("../components/ImpersonationPanel"),
+  "ImpersonationPanel",
+);
+const ModelCatalogPanel = lazyNamed(
+  () => import("../components/ModelCatalogPanel"),
+  "ModelCatalogPanel",
+);
+const NotificationChannelPanel = lazyNamed(
+  () => import("../components/NotificationChannelPanel"),
+  "NotificationChannelPanel",
+);
+const OperationsPosturePanel = lazyNamed(
+  () => import("../components/OperationsPosturePanel"),
+  "OperationsPosturePanel",
+);
+const OrganizationsPanel = lazyNamed(
+  () => import("../components/OrganizationsPanel"),
+  "OrganizationsPanel",
+);
+const PromptTemplatePanel = lazyNamed(
+  () => import("../components/PromptTemplatePanel"),
+  "PromptTemplatePanel",
+);
+const RagGovernancePanel = lazyNamed(
+  () => import("../components/RagGovernancePanel"),
+  "RagGovernancePanel",
+);
+const ProviderPanel = lazyNamed(
+  () => import("../components/ProviderPanel"),
+  "ProviderPanel",
+);
+const QuotaPanel = lazyNamed(
+  () => import("../components/QuotaPanel"),
+  "QuotaPanel",
+);
+const ServiceAccountPanel = lazyNamed(
+  () => import("../components/ServiceAccountPanel"),
+  "ServiceAccountPanel",
+);
+const ToolConnectorPanel = lazyNamed(
+  () => import("../components/ToolConnectorPanel"),
+  "ToolConnectorPanel",
+);
+const UsagePanel = lazyNamed(
+  () => import("../components/UsagePanel"),
+  "UsagePanel",
+);
+const UsersPanel = lazyNamed(
+  () => import("../components/UsersPanel"),
+  "UsersPanel",
+);
+const WebhooksPanel = lazyNamed(
+  () => import("../components/WebhooksPanel"),
+  "WebhooksPanel",
+);
+const WorkflowsPanel = lazyNamed(
+  () => import("../components/WorkflowsPanel"),
+  "WorkflowsPanel",
+);
+const WebSearchPanel = lazyNamed(
+  () => import("../components/WebSearchPanel"),
+  "WebSearchPanel",
+);
 
 export const Route = createFileRoute("/admin")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { section?: string } =>
+  validateSearch: (search: Record<string, unknown>): { section?: string } =>
     typeof search.section === "string" ? { section: search.section } : {},
   component: AdminPage,
 });
 
-const GROUPS = [
+const GROUPS: Array<{
+  labelKey: MessageKey;
+  items: Array<{
+    key: string;
+    labelKey: MessageKey;
+    icon: React.ComponentType<any>;
+  }>;
+}> = [
   {
-    label: "Operations",
+    labelKey: "navOperations",
     items: [
-      { key: "overview", label: "Overview", icon: LayoutDashboard },
-      { key: "usage", label: "Usage & quotas", icon: BarChart3 },
-      { key: "analytics", label: "Analytics", icon: LineChart },
-      { key: "audit", label: "Audit log", icon: ScrollText },
-      { key: "posture", label: "System posture", icon: Activity },
+      { key: "overview", labelKey: "navOverview", icon: LayoutDashboard },
+      { key: "usage", labelKey: "navUsageQuotas", icon: BarChart3 },
+      { key: "analytics", labelKey: "navAnalytics", icon: LineChart },
+      { key: "audit", labelKey: "navAuditLog", icon: ScrollText },
+      { key: "posture", labelKey: "navSystemPosture", icon: Activity },
     ],
   },
   {
-    label: "Configuration",
+    labelKey: "navConfiguration",
     items: [
-      { key: "providers", label: "Providers", icon: Server },
-      { key: "connections", label: "Connections", icon: Plug },
-      { key: "governance", label: "Governance", icon: ShieldCheck },
-      { key: "rag", label: "RAG governance", icon: Database },
-      { key: "abuse", label: "Abuse & security", icon: ShieldAlert },
-      { key: "billing", label: "Billing", icon: CreditCard },
-      { key: "prompt-templates", label: "Prompt templates", icon: FileText },
+      { key: "providers", labelKey: "navProviders", icon: Server },
+      { key: "connections", labelKey: "navConnections", icon: Plug },
+      { key: "governance", labelKey: "navGovernance", icon: ShieldCheck },
+      { key: "rag", labelKey: "navRagGovernance", icon: Database },
+      { key: "abuse", labelKey: "navAbuseSecurity", icon: ShieldAlert },
+      { key: "billing", labelKey: "navBilling", icon: CreditCard },
+      {
+        key: "prompt-templates",
+        labelKey: "navPromptTemplates",
+        icon: FileText,
+      },
+      { key: "web-search", labelKey: "navWebSearch", icon: Search },
     ],
   },
   {
-    label: "Access & identity",
+    labelKey: "navAccessIdentity",
     items: [
-      { key: "access", label: "Access & keys", icon: KeyRound },
-      { key: "users", label: "Users", icon: Users },
-      { key: "groups", label: "Groups", icon: UsersRound },
-      { key: "organizations", label: "Organizations", icon: Building2 },
-      { key: "impersonation", label: "Impersonation", icon: UserCog },
-      { key: "device-tokens", label: "Device tokens", icon: Smartphone },
-      { key: "auth-providers", label: "Authentication", icon: KeySquare },
+      { key: "access", labelKey: "navAccessKeys", icon: KeyRound },
+      { key: "users", labelKey: "navUsers", icon: Users },
+      { key: "groups", labelKey: "navGroups", icon: UsersRound },
+      { key: "organizations", labelKey: "navOrganizations", icon: Building2 },
+      { key: "impersonation", labelKey: "navImpersonation", icon: UserCog },
+      { key: "device-tokens", labelKey: "navDeviceTokens", icon: Smartphone },
+      { key: "auth-providers", labelKey: "navAuthentication", icon: KeySquare },
     ],
   },
   {
-    label: "Automation",
+    labelKey: "navAutomation",
     items: [
-      { key: "workflows", label: "Workflows", icon: Workflow },
-      { key: "webhooks", label: "Webhooks", icon: Webhook },
-      { key: "notification-channels", label: "Notifications", icon: Bell },
-      { key: "connected-apps", label: "Connected apps", icon: Link2 },
+      { key: "workflows", labelKey: "navWorkflows", icon: Workflow },
+      { key: "webhooks", labelKey: "navWebhooks", icon: Webhook },
+      {
+        key: "notification-channels",
+        labelKey: "navNotifications",
+        icon: Bell,
+      },
+      { key: "connected-apps", labelKey: "navConnectedApps", icon: Link2 },
     ],
   },
 ];
 
-const META: Record<string, { title: string; description: string }> = {
+const META: Record<
+  string,
+  { titleKey: MessageKey; descriptionKey: MessageKey }
+> = {
   overview: {
-    title: "Overview",
-    description: "Organization health, providers, jobs, and agents at a glance.",
+    titleKey: "navOverview",
+    descriptionKey: "adminOverviewDescription",
   },
   usage: {
-    title: "Usage & quotas",
-    description: "Consumption across the organization and per-workspace limits.",
+    titleKey: "navUsageQuotas",
+    descriptionKey: "adminUsageDescription",
   },
   analytics: {
-    title: "Analytics",
-    description: "Cross-organization rollup of usage, evals, providers, and tools.",
+    titleKey: "navAnalytics",
+    descriptionKey: "adminAnalyticsDescription",
   },
-  audit: {
-    title: "Audit log",
-    description: "A record of security-relevant actions across the organization.",
-  },
+  audit: { titleKey: "navAuditLog", descriptionKey: "adminAuditDescription" },
   posture: {
-    title: "System posture",
-    description: "Release-readiness, Postgres, job queue, and quota coordination health.",
+    titleKey: "navSystemPosture",
+    descriptionKey: "adminPostureDescription",
   },
   providers: {
-    title: "Providers",
-    description: "Model providers, connections, and per-model pricing.",
+    titleKey: "navProviders",
+    descriptionKey: "adminProvidersDescription",
   },
   connections: {
-    title: "Connections",
-    description: "Data sources and external tool integrations.",
+    titleKey: "navConnections",
+    descriptionKey: "adminConnectionsDescription",
   },
   governance: {
-    title: "Governance",
-    description: "Retention, lifecycle, data-deletion, and data-export controls.",
+    titleKey: "navGovernance",
+    descriptionKey: "adminGovernanceDescription",
   },
-  rag: {
-    title: "RAG governance",
-    description: "Retrieval policy, posture, change requests, and replay evaluation.",
-  },
+  rag: { titleKey: "navRagGovernance", descriptionKey: "adminRagDescription" },
   abuse: {
-    title: "Abuse & security",
-    description: "Abuse controls and edge-security posture.",
+    titleKey: "navAbuseSecurity",
+    descriptionKey: "adminAbuseDescription",
   },
   access: {
-    title: "Access & keys",
-    description: "API keys and service accounts. Configure sign-on under Authentication.",
+    titleKey: "navAccessKeys",
+    descriptionKey: "adminAccessDescription",
   },
   billing: {
-    title: "Billing",
-    description: "Plan, quota templates, and external billing events.",
+    titleKey: "navBilling",
+    descriptionKey: "adminBillingDescription",
   },
   "prompt-templates": {
-    title: "Prompt templates",
-    description: "Reusable prompt templates and the shared marketplace.",
+    titleKey: "navPromptTemplates",
+    descriptionKey: "adminPromptTemplatesDescription",
   },
-  users: {
-    title: "Users",
-    description: "Members of the organization and their account status.",
+  "web-search": {
+    titleKey: "navWebSearch",
+    descriptionKey: "adminWebSearchDescription",
   },
-  groups: {
-    title: "Groups",
-    description: "Access groups and their membership.",
-  },
+  users: { titleKey: "navUsers", descriptionKey: "adminUsersDescription" },
+  groups: { titleKey: "navGroups", descriptionKey: "adminGroupsDescription" },
   organizations: {
-    title: "Organizations",
-    description: "Organizations visible to your account.",
+    titleKey: "navOrganizations",
+    descriptionKey: "adminOrganizationsDescription",
   },
   impersonation: {
-    title: "Impersonation",
-    description: "Review and act on support impersonation requests.",
+    titleKey: "navImpersonation",
+    descriptionKey: "adminImpersonationDescription",
   },
   workflows: {
-    title: "Workflows",
-    description: "Workflow templates, runs, and approval gates.",
+    titleKey: "navWorkflows",
+    descriptionKey: "adminWorkflowsDescription",
   },
   webhooks: {
-    title: "Webhooks",
-    description: "Outbound webhook subscriptions and delivery history.",
+    titleKey: "navWebhooks",
+    descriptionKey: "adminWebhooksDescription",
   },
   "notification-channels": {
-    title: "Notifications",
-    description: "Delivery channels and notification history.",
+    titleKey: "navNotifications",
+    descriptionKey: "adminNotificationsDescription",
   },
   "device-tokens": {
-    title: "Device tokens",
-    description: "Long-lived device credentials and their scopes.",
+    titleKey: "navDeviceTokens",
+    descriptionKey: "adminDeviceTokensDescription",
   },
   "auth-providers": {
-    title: "Authentication",
-    description: "Enable and configure single sign-on providers.",
+    titleKey: "navAuthentication",
+    descriptionKey: "adminAuthenticationDescription",
   },
   "connected-apps": {
-    title: "Connected apps",
-    description: "Delegated OAuth providers and active connections.",
+    titleKey: "navConnectedApps",
+    descriptionKey: "adminConnectedAppsDescription",
   },
 };
 
 function AdminPage() {
+  useLocaleNamespaces(localeNamespaceGroups.admin);
+  const { t } = useLocale();
   const admin = useAdminController();
   const { section: sectionParam } = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -212,16 +326,16 @@ function AdminPage() {
   // Client-side gate is UX only — the API enforces real authz on every
   // admin endpoint. ponytail: no beforeLoad/router-context plumbing needed.
   if (admin.subject === undefined) {
-    return <div className="rm-empty">Loading…</div>;
+    return <div className="rm-empty">{t("loading")}</div>;
   }
   if (admin.subject.isAdmin !== true) {
     return (
       <div className="rm-admin-denied">
-        <h1>Admins only</h1>
-        <p>You don’t have access to the admin console.</p>
-        <Link className="rm-button" to="/">
-          Back to workspace
-        </Link>
+        <h1>{t("adminsOnly")}</h1>
+        <p>{t("adminAccessDenied")}</p>
+        <Button asChild>
+          <Link to="/">{t("backToWorkspace")}</Link>
+        </Button>
       </div>
     );
   }
@@ -229,113 +343,147 @@ function AdminPage() {
   return (
     <ConsoleLayout
       active={section}
-      groups={GROUPS}
+      groups={GROUPS.map((group) => ({
+        label: t(group.labelKey),
+        items: group.items.map((item) => ({
+          key: item.key,
+          label: t(item.labelKey),
+          icon: item.icon,
+        })),
+      }))}
       onSelect={(key) => void navigate({ search: { section: key } })}
-      title="Admin"
+      title={t("admin")}
+      userMenu={
+        <WorkspaceUserMenu
+          isAdmin
+          userLabel={
+            admin.subject.name ??
+            admin.subject.email ??
+            admin.subject.id ??
+            t("account")
+          }
+        />
+      }
     >
       <PageHeader
-        description={META[section]!.description}
-        title={META[section]!.title}
+        description={t(META[section]!.descriptionKey)}
+        title={t(META[section]!.titleKey)}
       />
       {admin.error ? (
         <div className="rm-composer-error">{admin.error}</div>
       ) : null}
 
-      {section === "overview" ? (
-        <AdminOverview
-          agentCount={admin.agents.length}
-          providerSummary={admin.providerOperationalSummary}
-        />
-      ) : null}
-
-      {section === "usage" ? (
-        <div className="grid gap-4">
-          <UsagePanel />
-          <QuotaPanel />
-        </div>
-      ) : null}
-
-      {section === "analytics" ? <AnalyticsPanel /> : null}
-
-      {section === "audit" ? <AuditPanel /> : null}
-
-      {section === "posture" ? <OperationsPosturePanel /> : null}
-
-      {section === "providers" ? (
-        <div className="grid gap-4">
-          <ProviderPanel
-            isCreating={admin.isCreatingProvider}
-            onCreateProvider={(input) => void admin.handleCreateProvider(input)}
-            onSyncProvider={(providerId) =>
-              void admin.handleSyncProvider(providerId)
-            }
-            operationalSummary={admin.providerOperationalSummary}
-            providers={admin.providers}
-            syncingProviderId={admin.syncingProviderId}
+      <Suspense
+        fallback={
+          <div className="rm-empty" role="status">
+            {t("loadingSection")}
+          </div>
+        }
+      >
+        {section === "overview" ? (
+          <AdminOverview
+            agentCount={admin.agents.length}
+            providerSummary={admin.providerOperationalSummary}
           />
-          <ModelPricingPanel
-            isUpdating={admin.isUpdatingModelPricing}
-            models={admin.models}
-            onUpdatePricing={(input) =>
-              void admin.handleUpdateModelPricing(input)
-            }
+        ) : null}
+
+        {section === "usage" ? (
+          <div className="grid gap-4">
+            <UsagePanel />
+            <QuotaPanel />
+          </div>
+        ) : null}
+
+        {section === "analytics" ? <AnalyticsPanel /> : null}
+
+        {section === "audit" ? <AuditPanel /> : null}
+
+        {section === "posture" ? <OperationsPosturePanel /> : null}
+
+        {section === "providers" ? (
+          <div className="grid gap-4">
+            <ProviderPanel
+              isCreating={admin.isCreatingProvider}
+              isUpdating={admin.isUpdatingProvider}
+              pullingProviderId={admin.pullingProviderId}
+              deletingModelId={admin.deletingModelId}
+              onCreateProvider={admin.handleCreateProvider}
+              onPullProviderModel={admin.handlePullProviderModel}
+              onDeleteProviderModel={admin.handleDeleteProviderModel}
+              onSyncProvider={admin.handleSyncProvider}
+              onUpdateProvider={admin.handleUpdateProvider}
+              onVerifyProvider={admin.handleVerifyProvider}
+              operationalSummary={admin.providerOperationalSummary}
+              models={admin.models}
+              providers={admin.providers}
+              syncingProviderId={admin.syncingProviderId}
+              verifyingProviderId={admin.verifyingProviderId}
+            />
+            <ModelCatalogPanel
+              isUpdating={admin.isUpdatingModelPricing || admin.isUpdatingModel}
+              models={admin.models}
+              providers={admin.providers}
+              onUpdateModel={admin.handleUpdateModel}
+              onUpdatePricing={admin.handleUpdateModelPricing}
+            />
+          </div>
+        ) : null}
+
+        {section === "connections" ? (
+          <div className="grid gap-4">
+            <DataConnectorPanel workspaceId={admin.workspace?.id} />
+            <ToolConnectorPanel />
+          </div>
+        ) : null}
+
+        {section === "governance" ? (
+          <GovernancePanel
+            activeChatId={undefined}
+            onChatArchived={admin.handleChatArchived}
+            onChatDeleted={admin.handleChatDeleted}
+            onWorkspaceArchived={admin.handleWorkspaceArchived}
+            workspace={admin.workspace}
           />
-        </div>
-      ) : null}
+        ) : null}
 
-      {section === "connections" ? (
-        <div className="grid gap-4">
-          <DataConnectorPanel workspaceId={admin.workspace?.id} />
-          <ToolConnectorPanel />
-        </div>
-      ) : null}
+        {section === "access" ? (
+          <div className="grid gap-4">
+            <ApiKeyPanel />
+            <ServiceAccountPanel />
+          </div>
+        ) : null}
 
-      {section === "governance" ? (
-        <GovernancePanel
-          activeChatId={undefined}
-          onChatArchived={admin.handleChatArchived}
-          onChatDeleted={admin.handleChatDeleted}
-          onWorkspaceArchived={admin.handleWorkspaceArchived}
-          workspace={admin.workspace}
-        />
-      ) : null}
+        {section === "rag" ? <RagGovernancePanel /> : null}
 
-      {section === "access" ? (
-        <div className="grid gap-4">
-          <ApiKeyPanel />
-          <ServiceAccountPanel />
-        </div>
-      ) : null}
+        {section === "abuse" ? <AbuseControlsPanel /> : null}
 
-      {section === "rag" ? <RagGovernancePanel /> : null}
+        {section === "billing" ? <BillingPanel /> : null}
 
-      {section === "abuse" ? <AbuseControlsPanel /> : null}
+        {section === "prompt-templates" ? <PromptTemplatePanel /> : null}
+        {section === "web-search" ? <WebSearchPanel /> : null}
 
-      {section === "billing" ? <BillingPanel /> : null}
+        {section === "users" ? <UsersPanel /> : null}
 
-      {section === "prompt-templates" ? <PromptTemplatePanel /> : null}
+        {section === "groups" ? <GroupsPanel /> : null}
 
-      {section === "users" ? <UsersPanel /> : null}
+        {section === "organizations" ? <OrganizationsPanel /> : null}
 
-      {section === "groups" ? <GroupsPanel /> : null}
+        {section === "impersonation" ? <ImpersonationPanel /> : null}
 
-      {section === "organizations" ? <OrganizationsPanel /> : null}
+        {section === "device-tokens" ? <DeviceTokensPanel /> : null}
 
-      {section === "impersonation" ? <ImpersonationPanel /> : null}
+        {section === "auth-providers" ? <AuthProvidersPanel /> : null}
 
-      {section === "device-tokens" ? <DeviceTokensPanel /> : null}
+        {section === "connected-apps" ? <ConnectedAppsPanel /> : null}
 
-      {section === "auth-providers" ? <AuthProvidersPanel /> : null}
+        {section === "workflows" ? <WorkflowsPanel /> : null}
 
-      {section === "connected-apps" ? <ConnectedAppsPanel /> : null}
+        {section === "webhooks" ? <WebhooksPanel /> : null}
 
-      {section === "workflows" ? <WorkflowsPanel /> : null}
-
-      {section === "webhooks" ? <WebhooksPanel /> : null}
-
-      {section === "notification-channels" ? (
-        <NotificationChannelPanel />
-      ) : null}
+        {section === "notification-channels" ? (
+          <NotificationChannelPanel />
+        ) : null}
+      </Suspense>
     </ConsoleLayout>
   );
 }

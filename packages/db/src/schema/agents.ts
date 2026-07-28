@@ -1,9 +1,11 @@
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -47,6 +49,7 @@ export const agentModels = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
   },
   (table) => ({
     agentModelsWorkspaceIdx: index("agent_models_workspace_idx").on(
@@ -101,6 +104,94 @@ export const agentVersions = pgTable(
       "agent_versions_agent_version_idx",
     ).on(table.agentId, table.version),
   }),
+);
+
+export const managedModelCustomizationPolicies = pgTable(
+  "managed_model_customization_policies",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    agentId: text("agent_id").notNull(),
+    allowCommunicationStyle: boolean("allow_communication_style")
+      .notNull()
+      .default(false),
+    allowResponseLength: boolean("allow_response_length")
+      .notNull()
+      .default(false),
+    allowLanguage: boolean("allow_language").notNull().default(false),
+    allowCustomInstructions: boolean("allow_custom_instructions")
+      .notNull()
+      .default(false),
+    allowPersonalMemory: boolean("allow_personal_memory")
+      .notNull()
+      .default(false),
+    allowVoiceSelection: boolean("allow_voice_selection")
+      .notNull()
+      .default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "managed_model_policy_agent_fk",
+      columns: [table.agentId],
+      foreignColumns: [agentModels.id],
+    }).onDelete("cascade"),
+    primaryKey({
+      name: "managed_model_customization_policies_org_agent_pk",
+      columns: [table.orgId, table.agentId],
+    }),
+  ],
+);
+
+export const managedModelPreferences = pgTable(
+  "managed_model_preferences",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agentModels.id, { onDelete: "cascade" }),
+    principalType: text("principal_type").notNull(),
+    principalId: text("principal_id").notNull(),
+    communicationStyle: text("communication_style"),
+    responseLength: text("response_length"),
+    language: text("language"),
+    encodedCustomInstructions: text("encrypted_custom_instructions"),
+    personalMemoryEnabled: boolean("personal_memory_enabled"),
+    voiceProfileId: text("voice_profile_id").references(
+      () => voiceProfiles.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "managed_model_preferences_tenant_principal_pk",
+      columns: [
+        table.orgId,
+        table.agentId,
+        table.principalType,
+        table.principalId,
+      ],
+    }),
+    index("managed_model_preferences_agent_idx").on(
+      table.orgId,
+      table.agentId,
+      table.updatedAt,
+    ),
+  ],
 );
 
 export const agentToolBindings = pgTable(

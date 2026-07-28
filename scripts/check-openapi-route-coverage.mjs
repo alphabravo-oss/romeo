@@ -71,7 +71,7 @@ try {
     configuration: {
       openWebUiCompatibilityEnabled,
     },
-    scannedRouteFiles: routeFiles().map((file) => ({
+    scannedRouteFiles: scannedRouteFiles().map((file) => ({
       path: relative(root, file),
       bytes: statSync(file).size,
     })),
@@ -120,11 +120,48 @@ function discoverRoutes() {
     }
   }
 
+  const contractRoutePattern =
+    /createRoute\(\{[\s\S]*?method:\s*["'](get|post|patch|put|delete)["'][\s\S]*?path:\s*["']([^"']+)["'][\s\S]*?\}\);/gmu;
+  for (const file of contractRouteFiles()) {
+    const source = readFileSync(file, "utf8");
+    let match;
+    while ((match = contractRoutePattern.exec(source)) !== null) {
+      const routePath = match[2];
+      if (!routePath.startsWith("/api/v1/")) continue;
+      routes.push({
+        file,
+        method: match[1],
+        path: toOpenApiPath(routePath),
+        routePath,
+      });
+    }
+  }
+
   return routes.sort((left, right) =>
     operationKey(left.method, left.path).localeCompare(
       operationKey(right.method, right.path),
     ),
   );
+}
+
+function contractRouteFiles() {
+  const directory = resolve(root, "packages/contracts/src");
+  return readdirSync(directory)
+    .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
+    .map((file) => join(directory, file))
+    .filter((file) => existsSync(file))
+    .filter(
+      (file) =>
+        openWebUiCompatibilityEnabled ||
+        !file.match(
+          /\/openwebui-(?:system|chat-schemas|chats|channel-schemas|channels)\.ts$/u,
+        ),
+    )
+    .sort();
+}
+
+function scannedRouteFiles() {
+  return [...routeFiles(), ...contractRouteFiles()].sort();
 }
 
 function routeFiles() {
@@ -135,15 +172,24 @@ function routeFiles() {
     .filter((file) => existsSync(file))
     .filter(
       (file) =>
-        openWebUiCompatibilityEnabled || !file.endsWith("/openwebui.ts"),
+        openWebUiCompatibilityEnabled ||
+        !file.match(/\/openwebui(?:-chats|-channels)?\.ts$/u),
     )
     .sort();
 }
 
 function skippedRouteFiles() {
   if (openWebUiCompatibilityEnabled) return [];
-  const file = resolve(root, "packages/core/src/http/routes/openwebui.ts");
-  return existsSync(file) ? [file] : [];
+  return [
+    resolve(root, "packages/core/src/http/routes/openwebui.ts"),
+    resolve(root, "packages/core/src/http/routes/openwebui-chats.ts"),
+    resolve(root, "packages/core/src/http/routes/openwebui-channels.ts"),
+    resolve(root, "packages/contracts/src/openwebui-system.ts"),
+    resolve(root, "packages/contracts/src/openwebui-chat-schemas.ts"),
+    resolve(root, "packages/contracts/src/openwebui-chats.ts"),
+    resolve(root, "packages/contracts/src/openwebui-channel-schemas.ts"),
+    resolve(root, "packages/contracts/src/openwebui-channels.ts"),
+  ].filter((file) => existsSync(file));
 }
 
 function openApiOperations(paths) {

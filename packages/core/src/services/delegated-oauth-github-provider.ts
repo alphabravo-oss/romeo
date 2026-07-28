@@ -1,3 +1,5 @@
+import { Octokit, OAuthApp, RequestError } from "octokit";
+
 import { ApiError } from "../errors";
 
 export interface DelegatedOAuthProviderExchangeInput {
@@ -26,8 +28,6 @@ export type DelegatedOAuthProviderRefreshedToken = Omit<
   "providerAccountId" | "providerAccountLogin"
 >;
 
-const githubAccountUrl = "https://api.github.com/user";
-const githubApiVersion = "2022-11-28";
 const providerTimeoutMs = 10_000;
 const maxProviderResponseBytes = 64 * 1024;
 
@@ -93,32 +93,26 @@ export async function revokeGitHubDelegatedOAuth(
   },
   fetchImpl: typeof fetch,
 ): Promise<void> {
-  const response = await fetchProvider(
-    `https://api.github.com/applications/${encodeURIComponent(
-      input.clientId,
-    )}/grant`,
-    fetchImpl,
-    {
-      method: "DELETE",
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Basic ${Buffer.from(
-          `${input.clientId}:${input.clientSecret}`,
-        ).toString("base64")}`,
-        "content-type": "application/json",
-        "user-agent": "Romeo",
-        "x-github-api-version": githubApiVersion,
+  const SdkOctokit = githubOctokitClass(fetchImpl);
+  const app = new OAuthApp({
+    clientId: input.clientId,
+    clientSecret: input.clientSecret,
+    Octokit: SdkOctokit,
+  });
+  try {
+    await app.deleteAuthorization({ token: input.accessToken });
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(
+      "delegated_oauth_provider_revoke_failed",
+      "Delegated OAuth provider revocation failed.",
+      502,
+      {
+        provider: "github",
+        ...(error instanceof RequestError ? { status: error.status } : {}),
       },
-      body: JSON.stringify({ access_token: input.accessToken }),
-    },
-  );
-  if (response.status === 204) return;
-  throw new ApiError(
-    "delegated_oauth_provider_revoke_failed",
-    "Delegated OAuth provider revocation failed.",
-    502,
-    { provider: "github", status: response.status },
-  );
+    );
+  }
 }
 
 async function exchangeCode(
@@ -206,44 +200,61 @@ async function fetchGitHubAccount(
   accessToken: string,
   fetchImpl: typeof fetch,
 ): Promise<{ id: string; login?: string }> {
-  const response = await fetchProvider(githubAccountUrl, fetchImpl, {
-    method: "GET",
-    headers: {
-      accept: "application/vnd.github+json",
-      authorization: `Bearer ${accessToken}`,
-      "user-agent": "Romeo",
-      "x-github-api-version": githubApiVersion,
-    },
-  });
-  if (!response.ok) {
+  const client = new (githubOctokitClass(fetchImpl))({ auth: accessToken });
+  try {
+    const { data } = await client.rest.users.getAuthenticated();
+    return { id: String(data.id), login: data.login };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(
       "delegated_oauth_account_lookup_failed",
       "Delegated OAuth provider account lookup failed.",
       401,
-      { provider: "github", status: response.status },
+      {
+        provider: "github",
+        ...(error instanceof RequestError ? { status: error.status } : {}),
+      },
     );
   }
-  const payload = await readProviderPayload(response);
-  const rawId = payload.id;
-  if (
-    (typeof rawId !== "number" && typeof rawId !== "string") ||
-    String(rawId).length === 0
-  ) {
+}
+
+function githubOctokitClass(fetchImpl: typeof fetch) {
+  return Octokit.defaults({
+    request: {
+      fetch: (input: string | URL | Request, init?: RequestInit) =>
+        boundedSdkFetch(input, init, fetchImpl),
+      retries: 0,
+    },
+    userAgent: "Romeo",
+  });
+}
+
+async function boundedSdkFetch(
+  input: string | URL | Request,
+  init: RequestInit | undefined,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  const response = await fetchProvider(input, fetchImpl, init ?? {});
+  const payload = await response.arrayBuffer();
+  if (payload.byteLength > maxProviderResponseBytes) {
     throw new ApiError(
-      "delegated_oauth_account_lookup_failed",
-      "Delegated OAuth provider account lookup did not return an account id.",
-      401,
+      "delegated_oauth_provider_response_too_large",
+      "Delegated OAuth provider response exceeded the size limit.",
+      502,
     );
   }
-  const login = stringField(payload, "login");
-  return {
-    id: String(rawId),
-    ...(login === undefined || login.length === 0 ? {} : { login }),
-  };
+  return new Response(
+    response.status === 204 || response.status === 205 ? null : payload,
+    {
+      headers: response.headers,
+      status: response.status,
+      statusText: response.statusText,
+    },
+  );
 }
 
 async function fetchProvider(
-  url: string,
+  url: string | URL | Request,
   fetchImpl: typeof fetch,
   init: RequestInit,
 ): Promise<Response> {

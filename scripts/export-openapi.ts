@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-import { openApiDocument } from "../packages/core/src/http/openapi/document";
+import { openApiDocument } from "../packages/core/src/http/openapi-document";
 
 const output = argValue("--output") ?? "dist/ci/openapi.json";
 const outputPath = resolve(process.cwd(), output);
@@ -12,7 +12,8 @@ writeFileSync(
   `${JSON.stringify(
     openApiDocument({
       openWebUiCompatibilityEnabled:
-        process.env.OPENWEBUI_COMPATIBILITY_ENABLED === "true",
+        process.env.OPENWEBUI_COMPATIBILITY_ENABLED === "true" ||
+        process.argv.includes("--include-openwebui"),
     }),
     null,
     2,

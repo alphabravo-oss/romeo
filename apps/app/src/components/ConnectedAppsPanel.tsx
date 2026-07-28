@@ -1,209 +1,264 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { Button } from "@romeo/ui";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 import {
   getDelegatedOauthPosture,
+  type DelegatedOAuthConnectionSummary,
+  type DelegatedOAuthProvider,
   listDelegatedOAuthConnections,
   listDelegatedOAuthProviders,
   revokeDelegatedOAuthConnection,
-  startDelegatedOAuth
-} from '../api/delegated-oauth-client'
-import type {
-  DelegatedOAuthConnectionSummary,
-  DelegatedOAuthProvider
-} from '../api/delegated-oauth-types'
-import { PanelState } from '../lib/panel-state'
-import { toast } from '../lib/toast'
-import { useConfirm } from './ConfirmDialog'
-import { type ColumnDef, DataTable, createColumnHelper } from './DataTable'
-import { PanelStats } from './PanelStats'
-import { useWorkspace } from './WorkspaceContext'
+  startDelegatedOAuth,
+} from "../features/delegated-oauth";
+import { useLocale, type MessageKey } from "../lib/i18n";
+import { PanelState } from "../lib/panel-state";
+import { LocalizedDateTime } from "../lib/locale-format";
+import { toast } from "../lib/toast";
+import { useConfirm } from "./ConfirmDialog";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { PanelStats } from "./PanelStats";
+import { useWorkspace } from "./WorkspaceContext";
 
-const connectionCol = createColumnHelper<DelegatedOAuthConnectionSummary>()
+const connectionCol = createColumnHelper<DelegatedOAuthConnectionSummary>();
 
 export function ConnectedAppsPanel() {
-  const queryClient = useQueryClient()
-  const { workspaceId } = useWorkspace()
-  const { ask, dialog } = useConfirm()
+  const queryClient = useQueryClient();
+  const { t } = useLocale();
+  const { workspaceId } = useWorkspace();
+  const { ask, dialog } = useConfirm();
 
   const providersQuery = useQuery({
-    queryKey: ['delegatedOAuthProviders'],
-    queryFn: listDelegatedOAuthProviders
-  })
+    queryKey: ["delegatedOAuthProviders"],
+    queryFn: listDelegatedOAuthProviders,
+  });
   const connectionsQuery = useQuery({
-    queryKey: ['delegatedOAuthConnections', workspaceId ?? null],
-    queryFn: () => listDelegatedOAuthConnections(workspaceId)
-  })
+    queryKey: ["delegatedOAuthConnections", workspaceId ?? null],
+    queryFn: () => listDelegatedOAuthConnections(workspaceId),
+  });
   const postureQuery = useQuery({
-    queryKey: ['delegatedOAuthPosture'],
-    queryFn: getDelegatedOauthPosture
-  })
-  const startMutation = useMutation({ mutationFn: startDelegatedOAuth })
-  const revokeMutation = useMutation({ mutationFn: revokeDelegatedOAuthConnection })
+    queryKey: ["delegatedOAuthPosture"],
+    queryFn: getDelegatedOauthPosture,
+  });
+  const startMutation = useMutation({ mutationFn: startDelegatedOAuth });
+  const revokeMutation = useMutation({
+    mutationFn: revokeDelegatedOAuthConnection,
+  });
 
   async function handleConnect(provider: DelegatedOAuthProvider) {
     if (workspaceId === undefined) {
-      toast('Select a workspace first', 'error')
-      return
+      toast(t("connectedAppsSelectWorkspace"), "error");
+      return;
     }
-    const connectorType = provider.connectorTypes[0]
+    const connectorType = provider.connectorTypes[0];
     if (connectorType === undefined) {
-      toast('Provider has no connector types', 'error')
-      return
+      toast(t("connectedAppsNoConnectorTypes"), "error");
+      return;
     }
     try {
       const result = await startMutation.mutateAsync({
         providerId: provider.id,
         workspaceId,
-        connectorType
-      })
-      window.open(result.authorizationUrl, '_blank', 'noopener,noreferrer')
-      toast('Authorization link opened', 'success')
+        connectorType,
+      });
+      window.open(result.authorizationUrl, "_blank", "noopener,noreferrer");
+      toast(t("connectedAppsAuthorizationOpened"), "success");
     } catch {
-      toast('Could not start connection', 'error')
+      toast(t("connectedAppsCouldNotStart"), "error");
     }
   }
 
   async function handleRevoke(connectionId: string) {
     if (
       !(await ask({
-        title: 'Revoke connection?',
-        body: 'The connected app will lose access until re-authorized.',
-        confirmLabel: 'Revoke',
-        tone: 'danger'
+        title: t("connectedAppsRevokeTitle"),
+        body: t("connectedAppsRevokeBody"),
+        confirmLabel: t("connectedAppsRevoke"),
+        tone: "danger",
       }))
     )
-      return
+      return;
     try {
-      await revokeMutation.mutateAsync(connectionId)
-      await queryClient.invalidateQueries({ queryKey: ['delegatedOAuthConnections'] })
-      toast('Connection revoked', 'success')
+      await revokeMutation.mutateAsync(connectionId);
+      await queryClient.invalidateQueries({
+        queryKey: ["delegatedOAuthConnections"],
+      });
+      toast(t("connectedAppsRevoked"), "success");
     } catch {
-      toast('Could not revoke connection', 'error')
+      toast(t("connectedAppsCouldNotRevoke"), "error");
     }
   }
 
   const columns = useMemo<ColumnDef<DelegatedOAuthConnectionSummary, any>[]>(
     () => [
-      connectionCol.accessor('providerId', {
-        header: 'Provider',
-        cell: (c) => <span className="font-medium">{c.getValue()}</span>
+      connectionCol.accessor("providerId", {
+        header: t("connectedAppsProvider"),
+        cell: (c) => <span className="font-medium">{c.getValue()}</span>,
       }),
-      connectionCol.accessor((row) => row.providerAccountLogin ?? row.providerAccountId, {
-        id: 'account',
-        header: 'Account',
-        cell: (c) => <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+      connectionCol.accessor(
+        (row) => row.providerAccountLoginHash ?? row.providerAccountHash,
+        {
+          id: "account",
+          header: t("connectedAppsAccount"),
+          cell: (c) => (
+            <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+          ),
+        },
+      ),
+      connectionCol.accessor("connectorType", {
+        header: t("connectedAppsConnector"),
+        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
       }),
-      connectionCol.accessor('connectorType', {
-        header: 'Connector',
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>
+      connectionCol.accessor("status", {
+        header: t("connectedAppsStatus"),
+        cell: (c) => (
+          <span className="rm-cell-muted">
+            {t(connectedAppStatusMessageKey(c.getValue()))}
+          </span>
+        ),
       }),
-      connectionCol.accessor('status', {
-        header: 'Status',
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>
-      }),
-      connectionCol.accessor((row) => new Date(row.createdAt).toLocaleString(), {
-        id: 'createdAt',
-        header: 'Connected',
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>
+      connectionCol.accessor((row) => row.createdAt, {
+        id: "createdAt",
+        header: t("connectedAppsConnected"),
+        cell: (c) => (
+          <span className="rm-cell-muted">
+            <LocalizedDateTime value={c.getValue()} />
+          </span>
+        ),
       }),
       connectionCol.display({
-        id: 'actions',
-        header: '',
+        id: "actions",
+        header: "",
         cell: (c) =>
-          c.row.original.status === 'revoked' ? null : (
-            <button
-              className="rm-button"
+          c.row.original.status === "revoked" ? null : (
+            <Button
               disabled={revokeMutation.isPending}
               onClick={() => void handleRevoke(c.row.original.id)}
               type="button"
             >
-              Revoke
-            </button>
-          )
-      })
+              {t("connectedAppsRevoke")}
+            </Button>
+          ),
+      }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [revokeMutation.isPending]
-  )
+    [revokeMutation.isPending, t],
+  );
 
   return (
     <section className="rm-panel p-4">
       <div className="rm-card-header">
-        <div className="rm-card-title">Connected apps</div>
-        <button
-          className="rm-button"
+        <div className="rm-card-title">{t("connectedAppsTitle")}</div>
+        <Button
           disabled={connectionsQuery.isFetching}
           onClick={() => void connectionsQuery.refetch()}
           type="button"
         >
-          {connectionsQuery.isFetching ? 'Refreshing' : 'Refresh'}
-        </button>
+          {connectionsQuery.isFetching ? t("refreshing") : t("refresh")}
+        </Button>
       </div>
 
       <div className="mt-3">
-        <div className="text-sm text-muted">Posture</div>
+        <div className="text-sm text-muted">{t("connectedAppsPosture")}</div>
         <div className="mt-2">
-          <PanelState query={postureQuery} empty="No posture data.">
+          <PanelState query={postureQuery} empty={t("connectedAppsNoPosture")}>
             {(posture) => {
               const totals = posture.providers.reduce(
                 (acc, provider) => ({
                   active: acc.active + provider.connectionCounts.active,
                   expiringAccessToken:
-                    acc.expiringAccessToken + provider.connectionCounts.expiringAccessToken,
+                    acc.expiringAccessToken +
+                    provider.connectionCounts.expiringAccessToken,
                   reauthorizationRequired:
-                    acc.reauthorizationRequired + provider.connectionCounts.reauthorizationRequired,
+                    acc.reauthorizationRequired +
+                    provider.connectionCounts.reauthorizationRequired,
                   revoked: acc.revoked + provider.connectionCounts.revoked,
-                  total: acc.total + provider.connectionCounts.total
+                  total: acc.total + provider.connectionCounts.total,
                 }),
                 {
                   active: 0,
                   expiringAccessToken: 0,
                   reauthorizationRequired: 0,
                   revoked: 0,
-                  total: 0
-                }
-              )
+                  total: 0,
+                },
+              );
               return (
                 <PanelStats
                   items={[
-                    { label: 'Status', value: posture.status.replace('_', ' ') },
-                    { label: 'Providers', value: posture.providers.length },
-                    { label: 'Connections', value: totals.total },
-                    { label: 'Active', value: totals.active },
-                    { label: 'Reauth required', value: totals.reauthorizationRequired },
-                    { label: 'Expiring tokens', value: totals.expiringAccessToken },
-                    { label: 'Revoked', value: totals.revoked },
-                    { label: 'Warnings', value: posture.warnings.length }
+                    {
+                      label: t("connectedAppsStatus"),
+                      value:
+                        posture.status === "healthy"
+                          ? t("connectedAppsHealthy")
+                          : t("connectedAppsAttention"),
+                    },
+                    {
+                      label: t("connectedAppsProviders"),
+                      value: posture.providers.length,
+                    },
+                    {
+                      label: t("connectedAppsConnections"),
+                      value: totals.total,
+                    },
+                    { label: t("connectedAppsActive"), value: totals.active },
+                    {
+                      label: t("connectedAppsReauthRequired"),
+                      value: totals.reauthorizationRequired,
+                    },
+                    {
+                      label: t("connectedAppsExpiringTokens"),
+                      value: totals.expiringAccessToken,
+                    },
+                    {
+                      label: t("connectedAppsStatusRevoked"),
+                      value: totals.revoked,
+                    },
+                    {
+                      label: t("connectedAppsWarnings"),
+                      value: posture.warnings.length,
+                    },
                   ]}
                 />
-              )
+              );
             }}
           </PanelState>
         </div>
       </div>
 
       <div className="mt-4">
-        <div className="text-sm text-muted">Available providers</div>
+        <div className="text-sm text-muted">
+          {t("connectedAppsAvailableProviders")}
+        </div>
         <div className="mt-2">
-          <PanelState query={providersQuery} empty="No providers available.">
+          <PanelState
+            query={providersQuery}
+            empty={t("connectedAppsNoProviders")}
+          >
             {(providers) => (
               <div className="grid gap-2 text-sm">
                 {providers.map((provider) => (
-                  <div className="rounded-md border border-border p-3" key={provider.id}>
+                  <div
+                    className="rounded-md border border-border p-3"
+                    key={provider.id}
+                  >
                     <div className="font-medium">{provider.displayName}</div>
                     <div className="break-words text-muted">
                       {provider.authorizationHost}
-                      {provider.configured ? '' : ' - not configured'}
+                      {provider.configured
+                        ? ""
+                        : ` - ${t("connectedAppsNotConfigured")}`}
                     </div>
-                    <button
-                      className="rm-button mt-2"
+                    <Button
+                      className="mt-2"
                       disabled={!provider.configured || startMutation.isPending}
                       onClick={() => void handleConnect(provider)}
                       type="button"
                     >
-                      {startMutation.isPending ? 'Connecting' : 'Connect'}
-                    </button>
+                      {startMutation.isPending
+                        ? t("connectedAppsConnecting")
+                        : t("connectedAppsConnect")}
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -213,14 +268,27 @@ export function ConnectedAppsPanel() {
       </div>
 
       <div className="mt-4">
-        <div className="text-sm text-muted">Active connections</div>
+        <div className="text-sm text-muted">
+          {t("connectedAppsActiveConnections")}
+        </div>
         <div className="mt-2">
-          <PanelState query={connectionsQuery} empty="No connections yet.">
+          <PanelState
+            query={connectionsQuery}
+            empty={t("connectedAppsNoConnections")}
+          >
             {(rows) => <DataTable columns={columns} data={rows} />}
           </PanelState>
         </div>
       </div>
       {dialog}
     </section>
-  )
+  );
+}
+
+function connectedAppStatusMessageKey(
+  status: DelegatedOAuthConnectionSummary["status"],
+): MessageKey {
+  if (status === "active") return "connectedAppsStatusActive";
+  if (status === "reauthorization_required") return "connectedAppsStatusReauth";
+  return "connectedAppsStatusRevoked";
 }

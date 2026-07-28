@@ -9,6 +9,7 @@ const outputPath = resolve(
 );
 const testFiles = [
   "src/services/authorization.test.ts",
+  "src/tenant-feature-isolation.test.ts",
   "src/collaboration.test.ts",
   "src/groups.test.ts",
   "src/data-connectors.test.ts",
@@ -19,7 +20,15 @@ const testFiles = [
   "src/vector-isolation.test.ts",
   "src/api.test.ts",
 ];
-const command = ["pnpm", "--filter", "@romeo/core", "test", "--", ...testFiles];
+const command = [
+  "pnpm",
+  "--filter",
+  "@romeo/core",
+  "exec",
+  "vitest",
+  "run",
+  ...testFiles,
+];
 const startedAt = Date.now();
 const result = spawnSync(command[0], command.slice(1), {
   cwd: process.cwd(),
@@ -45,6 +54,14 @@ const evidence = {
     "service_account_scope_and_visibility_bounds",
     "external_vector_provider_model_allowlist_denial",
     "external_vector_hit_post_filtering",
+    "queued_turn_payload_isolation",
+    "run_metadata_isolation",
+    "file_object_isolation",
+    "chat_search_result_isolation",
+    "share_metadata_isolation",
+    "personal_and_workspace_memory_isolation",
+    "web_source_isolation",
+    "cross_tenant_denial_response_redaction",
   ],
   command: {
     executable: command[0],

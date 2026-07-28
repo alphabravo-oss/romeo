@@ -1,7 +1,7 @@
 import type {
   ToolOperationDispatchReadbackResponse,
   ToolOperationDispatchRequestClaimResult,
-} from "@romeo/api-client";
+} from "./api-types";
 
 type SchemaValidation =
   ToolOperationDispatchReadbackResponse["schemaValidation"];

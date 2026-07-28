@@ -6,6 +6,10 @@ import { scopeValues } from "../packages/auth/src/index";
 import { readEnv } from "../packages/config/src/index";
 import { createRomeoApi } from "../packages/core/src/api";
 import { InMemoryRomeoRepository } from "../packages/core/src/repositories/in-memory";
+import type {
+  QdrantSdkClient,
+  QdrantSdkClientFactory,
+} from "../packages/core/src/services/qdrant-knowledge-vector-store";
 import { EnvironmentSecretResolver } from "../packages/core/src/services/secret-resolver";
 
 type Api = ReturnType<typeof createRomeoApi>;
@@ -239,7 +243,7 @@ const qdrantApi = createRomeoApi(qdrantRepository, {
     VECTOR_NAMESPACE_POLICY: "knowledge_base",
     VECTOR_PARTITIONING_POLICY: "org",
   }),
-  qdrantFetch: qdrantFetch(qdrantState),
+  qdrantClientFactory: qdrantClientFactory(qdrantState),
   secretResolver: new EnvironmentSecretResolver({
     [envVarName(rawSentinels.qdrantSecretRef)]: rawSentinels.qdrantSecretValue,
   }),
@@ -740,34 +744,30 @@ function assertQdrantFilter(body: unknown): void {
   }
 }
 
-function qdrantFetch(state: {
+function qdrantClientFactory(state: {
   apiKeyHeaderSeen: number;
   queryBodies: unknown[];
   upsertBodies: unknown[];
   authorizedPayload?: Record<string, unknown>;
-}): typeof fetch {
-  return async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
-    const body =
-      init?.body === undefined ? undefined : JSON.parse(String(init.body));
-    if (
-      headerValue(init?.headers, "api-key") === rawSentinels.qdrantSecretValue
-    ) {
+}): QdrantSdkClientFactory {
+  return ({ apiKey }) => {
+    if (apiKey === rawSentinels.qdrantSecretValue) {
       state.apiKeyHeaderSeen += 1;
     }
-    if (url.endsWith("/points?wait=true")) {
-      state.upsertBodies.push(body);
-      const points = (body as { points?: Array<{ payload?: unknown }> }).points;
-      const payload = points?.[0]?.payload;
-      if (payload !== undefined && typeof payload === "object") {
-        state.authorizedPayload = payload as Record<string, unknown>;
-      }
-      return jsonResponse({ status: "ok" });
-    }
-    if (url.endsWith("/points/query")) {
-      state.queryBodies.push(body);
-      return jsonResponse({
-        result: {
+    return {
+      async upsert(_collection, body) {
+        state.upsertBodies.push(body);
+        const points = (body as { points?: Array<{ payload?: unknown }> })
+          .points;
+        const payload = points?.[0]?.payload;
+        if (payload !== undefined && typeof payload === "object") {
+          state.authorizedPayload = payload as Record<string, unknown>;
+        }
+        return { operation_id: 1, status: "completed" };
+      },
+      async query(_collection, body) {
+        state.queryBodies.push(body);
+        return {
           points: [
             {
               id: "cross-tenant-point",
@@ -789,11 +789,15 @@ function qdrantFetch(state: {
               payload: state.authorizedPayload,
             },
           ],
-        },
-        status: "ok",
-      });
-    }
-    return jsonResponse({ result: { status: "green" }, status: "ok" });
+        };
+      },
+      async delete() {
+        return { operation_id: 2, status: "completed" };
+      },
+      async getCollection() {
+        return { optimizer_status: "ok", status: "green" };
+      },
+    } as QdrantSdkClient;
   };
 }
 
@@ -890,21 +894,6 @@ function assertNoSensitive(
 
 function assertNotContains(value: string, raw: string, label: string): void {
   if (value.includes(raw)) throw new Error(`${label} leaked raw content.`);
-}
-
-function headerValue(
-  headers: HeadersInit | undefined,
-  key: string,
-): string | undefined {
-  if (headers === undefined) return undefined;
-  if (headers instanceof Headers) return headers.get(key) ?? undefined;
-  if (Array.isArray(headers)) {
-    const match = headers.find(
-      ([name]) => name.toLowerCase() === key.toLowerCase(),
-    );
-    return match?.[1];
-  }
-  return headers[key];
 }
 
 function countBy(values: string[]): Record<string, number> {

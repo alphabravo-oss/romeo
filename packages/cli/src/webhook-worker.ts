@@ -1,4 +1,4 @@
-import type { WebhookRetryResult } from "@romeo/api-client";
+import type { WebhookRetryResult } from "./api-types";
 
 import type { CliIo } from "./io";
 import { writeJson } from "./io";

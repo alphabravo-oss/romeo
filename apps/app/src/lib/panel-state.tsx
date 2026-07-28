@@ -1,3 +1,4 @@
+import { Button } from "@romeo/ui";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 /**
@@ -23,7 +24,13 @@ export function PanelState<T>(props: {
   isEmpty?: (data: T) => boolean;
   children: (data: T) => React.ReactNode;
 }): React.ReactNode {
-  const { query, empty = "Nothing here yet.", emptyAction, isEmpty, children } = props;
+  const {
+    query,
+    empty = "Nothing here yet.",
+    emptyAction,
+    isEmpty,
+    children,
+  } = props;
 
   if (query.isPending) {
     return (
@@ -37,20 +44,17 @@ export function PanelState<T>(props: {
 
   if (query.isError) {
     const message =
-      query.error instanceof Error
-        ? query.error.message
-        : String(query.error);
+      query.error instanceof Error ? query.error.message : String(query.error);
     return (
       <div className="rm-composer-error" role="alert">
         <span>{message}</span>
-        <button
-          className="rm-button"
+        <Button
           onClick={() => void query.refetch()}
           style={{ marginLeft: 8 }}
           type="button"
         >
           Retry
-        </button>
+        </Button>
       </div>
     );
   }

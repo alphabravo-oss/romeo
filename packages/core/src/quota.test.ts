@@ -1,13 +1,80 @@
 import { describe, expect, it } from "vitest";
 import { createHmac } from "node:crypto";
 import { readEnv } from "@romeo/config";
+import { seededSubject } from "@romeo/auth";
 
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import type { QuotaCoordinator } from "./services/quota-coordination";
+import { consumeQuotas } from "./services/consume-quota";
 import { enableDefaultAgentTool } from "./test-support/agent-tools";
 
 describe("Romeo quota controls", () => {
+  it("reserves image count and cost buckets atomically with per-bucket quantities", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const now = new Date().toISOString();
+    for (const bucket of [
+      {
+        id: "quota_image_count_batch",
+        metric: "image.generated" as const,
+        limit: 10,
+      },
+      {
+        id: "quota_image_cost_batch",
+        metric: "image.cost.micro_usd" as const,
+        limit: 1_000_000,
+      },
+    ]) {
+      await repository.createQuotaBucket({
+        ...bucket,
+        orgId: "org_default",
+        scopeType: "org",
+        scopeId: "org_default",
+        used: 0,
+        resetInterval: "none",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    let capturedQuantities: Record<string, number> | undefined;
+    const base = createTestQuotaCoordinator();
+    const coordinator: QuotaCoordinator = {
+      ...base,
+      async reserve(input) {
+        capturedQuantities = input.quantities;
+        return {
+          allowed: true,
+          reservations: input.buckets.map((bucket) => ({
+            bucketId: bucket.id,
+            used: input.quantities?.[bucket.id] ?? input.quantity,
+          })),
+        };
+      },
+    };
+
+    await consumeQuotas(
+      repository,
+      seededSubject,
+      [
+        { metric: "image.generated", quantity: 2 },
+        { metric: "image.cost.micro_usd", quantity: 80_000 },
+      ],
+      { quotaCoordinator: coordinator },
+    );
+    const buckets = await repository.listQuotaBuckets("org_default");
+
+    expect(capturedQuantities).toEqual({
+      quota_image_count_batch: 2,
+      quota_image_cost_batch: 80_000,
+    });
+    expect(
+      Object.fromEntries(buckets.map((bucket) => [bucket.metric, bucket.used])),
+    ).toEqual({
+      "image.generated": 2,
+      "image.cost.micro_usd": 80_000,
+    });
+  });
+
   it("creates and lists quota buckets without storing duplicates", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
     const createResponse = await createQuota(api, "tool.call", 2);
@@ -302,6 +369,31 @@ describe("Romeo quota controls", () => {
     const body = await response.json();
 
     expect(response.status).toBe(429);
+    expect(body.error.details.metric).toBe("storage.byte");
+  });
+
+  it("blocks file uploads through a user-scoped storage quota", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    await createQuota(api, "storage.byte", 4, {
+      scopeType: "user",
+      scopeId: "user_dev_admin",
+    });
+
+    const response = await api.request("/api/v1/files", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        fileName: "user-quota.txt",
+        mimeType: "text/plain",
+        sizeBytes: 5,
+        dataBase64: Buffer.from("12345").toString("base64"),
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(body.error.code).toBe("quota_exceeded");
     expect(body.error.details.metric).toBe("storage.byte");
   });
 
@@ -1437,6 +1529,33 @@ function createQuota(
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function createTestQuotaCoordinator(): QuotaCoordinator {
+  return {
+    async reserve(input) {
+      return {
+        allowed: true,
+        reservations: input.buckets.map((bucket) => ({
+          bucketId: bucket.id,
+          used: bucket.used + input.quantity,
+        })),
+      };
+    },
+    async status() {
+      return {
+        driver: "disabled",
+        enabled: false,
+        configured: false,
+        healthy: null,
+        keyPrefix: "romeo:quota:test",
+        checkedAt: new Date().toISOString(),
+        details: { failClosed: false, statusCode: "disabled" },
+      };
+    },
+    async syncBucket() {},
+    async deleteBucket() {},
+  };
 }
 
 function stripeSignature(payload: string, secret: string): string {

@@ -51,11 +51,9 @@ describe("Romeo config", () => {
       NOTIFICATION_DELIVERY_DRIVER: "configured",
       NOTIFICATION_EMAIL_DELIVERY_DRIVER: "smtp",
       NOTIFICATION_EMAIL_FROM: "notify@romeo.example",
-      NOTIFICATION_FCM_BASE_URL: "https://fcm.example.com",
       NOTIFICATION_FCM_PROJECT_ID: "romeo-prod",
       NOTIFICATION_FCM_SERVICE_ACCOUNT_REF: "vault://romeo/fcm",
       NOTIFICATION_FCM_TIMEOUT_MS: "8500",
-      NOTIFICATION_FCM_TOKEN_URL: "https://oauth2.example.com/token",
       NOTIFICATION_PAGERDUTY_EVENTS_URL:
         "https://events.example.com/v2/enqueue",
       NOTIFICATION_PAGERDUTY_TIMEOUT_MS: "6500",
@@ -120,6 +118,7 @@ describe("Romeo config", () => {
         "/etc/romeo/data-connector-live-evidence.json",
       DATA_CONNECTOR_WORKER_ENABLED: "true",
       DATA_CONNECTOR_NETWORK_POLICY_ENABLED: "true",
+      WEB_SEARCH_TIMEOUT_MS: "45000",
       TOOL_DISPATCH_WORKER_ENABLED: "true",
       TOOL_DISPATCH_NETWORK_POLICY_ENABLED: "true",
       POSTGRES_POOL_MAX: "7",
@@ -136,6 +135,8 @@ describe("Romeo config", () => {
       HTTP_RATE_LIMIT_AUTHENTICATED_MAX: "5000",
       HTTP_RATE_LIMIT_WEBHOOK_MAX: "750",
       MODEL_PROVIDER_STREAM_TIMEOUT_MS: "45000",
+      RUN_EXECUTION_LEASE_SECONDS: "45",
+      RUN_RECOVERY_STALE_MS: "90000",
       MODEL_PROVIDER_RETRY_ATTEMPTS: "2",
       MODEL_PROVIDER_RETRY_BACKOFF_MS: "500",
       MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD: "3",
@@ -170,6 +171,7 @@ describe("Romeo config", () => {
     expect(env.OIDC_GROUP_MAP).toBe("/romeo/users=group_users");
     expect(env.OIDC_WORKSPACE_GROUP_PREFIX).toBe("workspace:");
     expect(env.DATA_CONNECTOR_EXECUTION_DRIVER).toBe("s3-fetch");
+    expect(env.WEB_SEARCH_TIMEOUT_MS).toBe(45_000);
     expect(env.OPENWEBUI_COMPATIBILITY_ENABLED).toBe(true);
     expect(env.DATA_CONNECTOR_EGRESS_POLICY).toBe("require_allowlist");
     expect(env.DATA_CONNECTOR_FETCH_ALLOWED_HOSTS).toBe(
@@ -208,13 +210,9 @@ describe("Romeo config", () => {
     expect(env.NOTIFICATION_DELIVERY_DRIVER).toBe("configured");
     expect(env.NOTIFICATION_EMAIL_DELIVERY_DRIVER).toBe("smtp");
     expect(env.NOTIFICATION_EMAIL_FROM).toBe("notify@romeo.example");
-    expect(env.NOTIFICATION_FCM_BASE_URL).toBe("https://fcm.example.com");
     expect(env.NOTIFICATION_FCM_PROJECT_ID).toBe("romeo-prod");
     expect(env.NOTIFICATION_FCM_SERVICE_ACCOUNT_REF).toBe("vault://romeo/fcm");
     expect(env.NOTIFICATION_FCM_TIMEOUT_MS).toBe(8500);
-    expect(env.NOTIFICATION_FCM_TOKEN_URL).toBe(
-      "https://oauth2.example.com/token",
-    );
     expect(env.NOTIFICATION_PAGERDUTY_EVENTS_URL).toBe(
       "https://events.example.com/v2/enqueue",
     );
@@ -330,6 +328,8 @@ describe("Romeo config", () => {
     expect(env.HTTP_RATE_LIMIT_AUTHENTICATED_MAX).toBe(5000);
     expect(env.HTTP_RATE_LIMIT_WEBHOOK_MAX).toBe(750);
     expect(env.MODEL_PROVIDER_STREAM_TIMEOUT_MS).toBe(45000);
+    expect(env.RUN_EXECUTION_LEASE_SECONDS).toBe(45);
+    expect(env.RUN_RECOVERY_STALE_MS).toBe(90000);
     expect(env.MODEL_PROVIDER_RETRY_ATTEMPTS).toBe(2);
     expect(env.MODEL_PROVIDER_RETRY_BACKOFF_MS).toBe(500);
     expect(env.MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD).toBe(3);

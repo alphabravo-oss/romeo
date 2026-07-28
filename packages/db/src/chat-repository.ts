@@ -1,55 +1,59 @@
-import { asc, desc, eq } from "drizzle-orm";
-
-import type { RomeoDatabase } from "./client";
-import { chatComments, chats, messageParts, messages } from "./schema";
+import type {
+  AuthorizedChatCatalogQuery,
+  CancelQueuedChatTurnInput,
+  ClaimQueuedChatTurnInput,
+  FinishQueuedChatTurnLeaseInput,
+  RenewQueuedChatTurnLeaseInput,
+} from "@romeo/core";
 import {
-  asStringArray,
-  optionalDate,
-  optionalIsoString,
-  toIsoString,
-} from "./repository-mapping";
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  gt,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
+import type { RomeoDatabase } from "./client";
+import {
+  chatComments,
+  chats,
+  messageParts,
+  messages,
+  resourceGrants,
+} from "./schema";
+import { optionalDate } from "./repository-mapping";
+import { PgQueuedChatTurnRepository } from "./queued-chat-turn-repository";
+import {
+  toChatCommentInsert,
+  toChatCommentRecord,
+  toChatInsert,
+  toChatRecord,
+  toMessageInsert,
+  toMessagePartInsert,
+  toMessagePartRecord,
+  toMessageRecord,
+  type ChatCommentRecord,
+  type ChatRecord,
+  type MessagePartRecord,
+  type MessageRecord,
+  type QueuedChatTurnRecord,
+} from "./chat-repository-records";
 
-export interface ChatRecord {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  title: string;
-  createdBy: string;
-  archivedAt?: string;
-  legalHoldUntil?: string;
-  legalHoldReason?: string;
-  updatedAt: string;
-}
-
-export interface MessageRecord {
-  id: string;
-  chatId: string;
-  role: "assistant" | "system" | "tool" | "user";
-  content: string;
-  createdAt: string;
-}
-
-export interface MessagePartRecord {
-  id: string;
-  messageId: string;
-  type: "attachment" | "collaboration_channel_metadata";
-  content: string;
-  metadata: Record<string, unknown>;
-}
-
-export interface ChatCommentRecord {
-  id: string;
-  orgId: string;
-  chatId: string;
-  authorId: string;
-  body: string;
-  mentionedUserIds: string[];
-  createdAt: string;
-}
+export * from "./chat-repository-records";
 
 export class PgChatRepository {
-  constructor(private readonly db: RomeoDatabase) {}
+  private readonly queuedTurns: PgQueuedChatTurnRepository;
 
+  constructor(private readonly db: RomeoDatabase) {
+    this.queuedTurns = new PgQueuedChatTurnRepository(db);
+  }
   async listChats(workspaceId: string): Promise<ChatRecord[]> {
     const rows = await this.db
       .select()
@@ -57,6 +61,125 @@ export class PgChatRepository {
       .where(eq(chats.workspaceId, workspaceId))
       .orderBy(desc(chats.updatedAt), asc(chats.id));
     return rows.map(toChatRecord);
+  }
+
+  async listAuthorizedChatsPage(
+    input: AuthorizedChatCatalogQuery,
+  ): Promise<{ items: ChatRecord[]; total: number }> {
+    const principalMatch = or(
+      and(
+        eq(resourceGrants.principalType, input.principalType),
+        eq(resourceGrants.principalId, input.principalId),
+      ),
+      input.groupIds.length === 0
+        ? undefined
+        : and(
+            eq(resourceGrants.principalType, "group"),
+            inArray(resourceGrants.principalId, input.groupIds),
+          ),
+    );
+    const grantMatch = exists(
+      this.db
+        .select({ value: sql`1` })
+        .from(resourceGrants)
+        .where(
+          and(
+            eq(resourceGrants.orgId, input.orgId),
+            eq(resourceGrants.resourceType, "chat"),
+            eq(resourceGrants.resourceId, chats.id),
+            inArray(resourceGrants.permission, ["read", "write"]),
+            principalMatch,
+          ),
+        ),
+    );
+    const predicate = and(
+      eq(chats.orgId, input.orgId),
+      eq(chats.workspaceId, input.workspaceId),
+      or(isNull(chats.expiresAt), gt(chats.expiresAt, new Date(input.now))),
+      input.archived === "all"
+        ? undefined
+        : input.archived === "archived"
+          ? isNotNull(chats.archivedAt)
+          : isNull(chats.archivedAt),
+      input.isAdmin
+        ? undefined
+        : or(eq(chats.createdBy, input.principalId), grantMatch),
+    );
+    const [rows, totals] = await Promise.all([
+      this.db
+        .select()
+        .from(chats)
+        .where(predicate)
+        .orderBy(desc(chats.updatedAt), asc(chats.id))
+        .limit(input.limit)
+        .offset(input.offset),
+      this.db.select({ value: count() }).from(chats).where(predicate),
+    ]);
+    return {
+      items: rows.map(toChatRecord),
+      total: Number(totals[0]?.value ?? 0),
+    };
+  }
+
+  async searchChatContent(
+    workspaceId: string,
+    query: string,
+  ): Promise<Array<{ chatId: string; messageId?: string; snippet: string }>> {
+    const pattern = `%${query.replace(/[\\%_]/gu, (value) => `\\${value}`)}%`;
+    const [titleRows, messageRows, attachmentRows] = await Promise.all([
+      this.db
+        .select({ chatId: chats.id, snippet: chats.title })
+        .from(chats)
+        .where(
+          and(eq(chats.workspaceId, workspaceId), ilike(chats.title, pattern)),
+        ),
+      this.db
+        .select({
+          chatId: chats.id,
+          messageId: messages.id,
+          snippet: messages.content,
+        })
+        .from(messages)
+        .innerJoin(chats, eq(messages.chatId, chats.id))
+        .where(
+          and(
+            eq(chats.workspaceId, workspaceId),
+            ilike(messages.content, pattern),
+          ),
+        ),
+      this.db
+        .select({
+          chatId: chats.id,
+          messageId: messages.id,
+          snippet: sql<string>`${messageParts.metadata}->>'fileName'`,
+        })
+        .from(messageParts)
+        .innerJoin(messages, eq(messageParts.messageId, messages.id))
+        .innerJoin(chats, eq(messages.chatId, chats.id))
+        .where(
+          and(
+            eq(chats.workspaceId, workspaceId),
+            sql`${messageParts.metadata}->>'fileName' ILIKE ${pattern} ESCAPE '\\'`,
+          ),
+        ),
+    ]);
+    const byChat = new Map<
+      string,
+      { chatId: string; messageId?: string; snippet: string }
+    >();
+    for (const row of [...titleRows, ...messageRows, ...attachmentRows]) {
+      if (byChat.has(row.chatId)) continue;
+      const messageId =
+        "messageId" in row && typeof row.messageId === "string"
+          ? row.messageId
+          : undefined;
+      byChat.set(row.chatId, {
+        chatId: row.chatId,
+        snippet: row.snippet.slice(0, 220),
+        ...(messageId === undefined ? {} : { messageId }),
+      });
+    }
+    return [...byChat.values()];
   }
 
   async createChat(chat: ChatRecord): Promise<ChatRecord> {
@@ -75,6 +198,9 @@ export class PgChatRepository {
         legalHoldReason: chat.legalHoldReason ?? null,
         legalHoldUntil: optionalDate(chat.legalHoldUntil),
         title: chat.title,
+        modelId: chat.modelId ?? null,
+        temporary: chat.temporary === true,
+        expiresAt: optionalDate(chat.expiresAt),
         updatedAt: new Date(chat.updatedAt),
       })
       .where(eq(chats.id, chat.id))
@@ -89,6 +215,62 @@ export class PgChatRepository {
       .where(eq(chats.id, chatId))
       .limit(1);
     return row === undefined ? undefined : toChatRecord(row);
+  }
+
+  listQueuedChatTurns(chatId: string): Promise<QueuedChatTurnRecord[]> {
+    return this.queuedTurns.listQueuedChatTurns(chatId);
+  }
+
+  getQueuedChatTurn(turnId: string): Promise<QueuedChatTurnRecord | undefined> {
+    return this.queuedTurns.getQueuedChatTurn(turnId);
+  }
+
+  getQueuedChatTurnByIdempotency(
+    orgId: string,
+    chatId: string,
+    idempotencyKey: string,
+  ): Promise<QueuedChatTurnRecord | undefined> {
+    return this.queuedTurns.getQueuedChatTurnByIdempotency(
+      orgId,
+      chatId,
+      idempotencyKey,
+    );
+  }
+
+  createQueuedChatTurn(
+    turn: QueuedChatTurnRecord,
+  ): Promise<QueuedChatTurnRecord> {
+    return this.queuedTurns.createQueuedChatTurn(turn);
+  }
+
+  claimNextQueuedChatTurn(
+    input: ClaimQueuedChatTurnInput,
+  ): Promise<QueuedChatTurnRecord | undefined> {
+    return this.queuedTurns.claimNextQueuedChatTurn(input);
+  }
+
+  renewQueuedChatTurnLease(
+    input: RenewQueuedChatTurnLeaseInput,
+  ): Promise<QueuedChatTurnRecord | undefined> {
+    return this.queuedTurns.renewQueuedChatTurnLease(input);
+  }
+
+  cancelQueuedChatTurn(
+    input: CancelQueuedChatTurnInput,
+  ): Promise<QueuedChatTurnRecord | undefined> {
+    return this.queuedTurns.cancelQueuedChatTurn(input);
+  }
+
+  finishQueuedChatTurnLease(
+    input: FinishQueuedChatTurnLeaseInput,
+  ): Promise<QueuedChatTurnRecord | undefined> {
+    return this.queuedTurns.finishQueuedChatTurnLease(input);
+  }
+
+  updateQueuedChatTurn(
+    turn: QueuedChatTurnRecord,
+  ): Promise<QueuedChatTurnRecord> {
+    return this.queuedTurns.updateQueuedChatTurn(turn);
   }
 
   async listMessages(chatId: string): Promise<MessageRecord[]> {
@@ -154,6 +336,15 @@ export class PgChatRepository {
     return rows.map(toMessagePartRecord);
   }
 
+  async updateMessagePart(part: MessagePartRecord): Promise<MessagePartRecord> {
+    const [row] = await this.db
+      .update(messageParts)
+      .set({ content: part.content, metadata: part.metadata, type: part.type })
+      .where(eq(messageParts.id, part.id))
+      .returning();
+    return row === undefined ? part : toMessagePartRecord(row);
+  }
+
   async listChatComments(chatId: string): Promise<ChatCommentRecord[]> {
     const rows = await this.db
       .select()
@@ -172,121 +363,4 @@ export class PgChatRepository {
       .returning();
     return row === undefined ? comment : toChatCommentRecord(row);
   }
-}
-
-export function toChatRecord(row: typeof chats.$inferSelect): ChatRecord {
-  const chat: ChatRecord = {
-    id: row.id,
-    orgId: row.orgId,
-    workspaceId: row.workspaceId,
-    title: row.title,
-    createdBy: row.createdBy,
-    updatedAt: toIsoString(row.updatedAt),
-  };
-  const archivedAt = optionalIsoString(row.archivedAt);
-  if (archivedAt !== undefined) chat.archivedAt = archivedAt;
-  const legalHoldUntil = optionalIsoString(row.legalHoldUntil);
-  if (legalHoldUntil !== undefined) chat.legalHoldUntil = legalHoldUntil;
-  const legalHoldReason = optionalIsoString(row.legalHoldReason);
-  if (legalHoldReason !== undefined) chat.legalHoldReason = legalHoldReason;
-  return chat;
-}
-
-export function toMessageRecord(
-  row: typeof messages.$inferSelect,
-): MessageRecord {
-  return {
-    id: row.id,
-    chatId: row.chatId,
-    role: row.role,
-    content: row.content,
-    createdAt: toIsoString(row.createdAt),
-  };
-}
-
-export function toMessagePartRecord(
-  row: typeof messageParts.$inferSelect,
-): MessagePartRecord {
-  return {
-    id: row.id,
-    messageId: row.messageId,
-    type:
-      row.type === "collaboration_channel_metadata"
-        ? "collaboration_channel_metadata"
-        : "attachment",
-    content: row.content,
-    metadata: asJsonRecord(row.metadata),
-  };
-}
-
-export function toChatCommentRecord(
-  row: typeof chatComments.$inferSelect,
-): ChatCommentRecord {
-  return {
-    id: row.id,
-    orgId: row.orgId,
-    chatId: row.chatId,
-    authorId: row.authorId,
-    body: row.body,
-    mentionedUserIds: asStringArray(row.mentionedUserIds),
-    createdAt: toIsoString(row.createdAt),
-  };
-}
-
-function toChatInsert(record: ChatRecord): typeof chats.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    workspaceId: record.workspaceId,
-    title: record.title,
-    createdBy: record.createdBy,
-    archivedAt: optionalDate(record.archivedAt),
-    legalHoldUntil: optionalDate(record.legalHoldUntil),
-    legalHoldReason: record.legalHoldReason ?? null,
-    updatedAt: new Date(record.updatedAt),
-  };
-}
-
-function toMessageInsert(record: MessageRecord): typeof messages.$inferInsert {
-  return {
-    id: record.id,
-    chatId: record.chatId,
-    role: record.role,
-    content: record.content,
-    createdAt: new Date(record.createdAt),
-  };
-}
-
-function toMessagePartInsert(
-  record: MessagePartRecord,
-  position: number,
-): typeof messageParts.$inferInsert {
-  return {
-    id: record.id,
-    messageId: record.messageId,
-    position,
-    type: record.type,
-    content: record.content,
-    metadata: record.metadata,
-  };
-}
-
-function toChatCommentInsert(
-  record: ChatCommentRecord,
-): typeof chatComments.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    chatId: record.chatId,
-    authorId: record.authorId,
-    body: record.body,
-    mentionedUserIds: record.mentionedUserIds,
-    createdAt: new Date(record.createdAt),
-  };
-}
-
-function asJsonRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return {};
-  return value as Record<string, unknown>;
 }

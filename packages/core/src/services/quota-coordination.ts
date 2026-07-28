@@ -17,6 +17,7 @@ export interface QuotaReservationBucket {
 export interface QuotaReservationInput {
   buckets: QuotaReservationBucket[];
   quantity: number;
+  quantities?: Record<string, number>;
 }
 
 export type QuotaReservationResult =
@@ -40,11 +41,7 @@ export interface QuotaCoordinationStatus {
   checkedAt: string;
   details: {
     failClosed: boolean;
-    statusCode:
-      | "disabled"
-      | "healthy"
-      | "unconfigured"
-      | "unreachable";
+    statusCode: "disabled" | "healthy" | "unconfigured" | "unreachable";
   };
 }
 
@@ -64,7 +61,7 @@ export function createDisabledQuotaCoordinator(
         allowed: true,
         reservations: input.buckets.map((bucket) => ({
           bucketId: bucket.id,
-          used: bucket.used + input.quantity,
+          used: bucket.used + (input.quantities?.[bucket.id] ?? input.quantity),
         })),
       };
     },

@@ -26,6 +26,8 @@ import {
   knowledgeSources,
   localMfaFactors,
   localPasswordCredentials,
+  managedModelCustomizationPolicies,
+  managedModelPreferences,
   messageParts,
   messages,
   notificationDeliveries,
@@ -428,6 +430,51 @@ describe("durable baseline schema contract", () => {
       "voice_profiles_provider_voice_idx",
     );
   });
+
+  it("stores managed-model controls as tenant-scoped relational records", () => {
+    expect(columnNames(managedModelCustomizationPolicies)).toEqual([
+      "org_id",
+      "agent_id",
+      "allow_communication_style",
+      "allow_response_length",
+      "allow_language",
+      "allow_custom_instructions",
+      "allow_personal_memory",
+      "allow_voice_selection",
+      "created_at",
+      "updated_at",
+    ]);
+    expect(columnNames(managedModelPreferences)).toEqual([
+      "org_id",
+      "agent_id",
+      "principal_type",
+      "principal_id",
+      "communication_style",
+      "response_length",
+      "language",
+      "encrypted_custom_instructions",
+      "personal_memory_enabled",
+      "voice_profile_id",
+      "created_at",
+      "updated_at",
+    ]);
+    expect(primaryKeyNames(managedModelCustomizationPolicies)).toEqual([
+      "managed_model_customization_policies_org_agent_pk",
+    ]);
+    expect(primaryKeyNames(managedModelPreferences)).toEqual([
+      "managed_model_preferences_tenant_principal_pk",
+    ]);
+    expect(indexNames(managedModelPreferences)).toContain(
+      "managed_model_preferences_agent_idx",
+    );
+    expect(foreignKeyNames(managedModelPreferences)).toEqual(
+      expect.arrayContaining([
+        "managed_model_preferences_org_id_organizations_id_fk",
+        "managed_model_preferences_agent_id_agent_models_id_fk",
+        "managed_model_preferences_voice_profile_id_voice_profiles_id_fk",
+      ]),
+    );
+  });
 });
 
 function columnNames(table: Parameters<typeof getTableConfig>[0]): string[] {
@@ -447,4 +494,16 @@ function indexNames(table: Parameters<typeof getTableConfig>[0]): string[] {
   return getTableConfig(table)
     .indexes.map((index) => index.config.name)
     .filter((name): name is string => name !== undefined);
+}
+
+function primaryKeyNames(
+  table: Parameters<typeof getTableConfig>[0],
+): string[] {
+  return getTableConfig(table).primaryKeys.map((key) => key.getName());
+}
+
+function foreignKeyNames(
+  table: Parameters<typeof getTableConfig>[0],
+): string[] {
+  return getTableConfig(table).foreignKeys.map((key) => key.getName());
 }

@@ -1,12 +1,15 @@
-import type { VoiceCatalogSyncResult } from "@romeo/api-client";
-
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
 import { workerSignalAborted } from "./worker-control";
 
 export interface VoiceCatalogSyncWorkerClient {
   voice: {
-    sync(): Promise<VoiceCatalogSyncResult>;
+    sync(): Promise<{
+      existing: number;
+      imported: number;
+      profiles: unknown[];
+      providerVoiceCount: number;
+    }>;
   };
 }
 

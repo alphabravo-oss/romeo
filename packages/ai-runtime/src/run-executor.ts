@@ -1,140 +1,39 @@
 import type {
   ChatMessage,
-  ModelProviderAdapter,
   ProviderToolCallRequest,
   ProviderTokenUsage,
   StreamChatChunk,
-  StreamChatInput,
 } from "@romeo/providers";
-import { providerToolCallRedactionHash } from "@romeo/providers";
 
 import { createRunEvent, type RunEvent } from "./events";
-
-export interface ExecuteRunInput extends StreamChatInput {
-  adapter: ModelProviderAdapter;
-  emitRunStarted?: boolean;
-  maxModelToolCalls?: number;
-  modelToolExecutor?: (
-    toolCall: ProviderToolCallRequest,
-  ) => Promise<ModelToolExecutionResult>;
-  providerDisabled?: boolean;
-  providerApiKeys?: Record<string, string>;
-  providerCircuitBreaker?: ProviderCircuitBreaker;
-  providerFallback?: ProviderFallbackTarget;
-  providerRetryPolicy?: Partial<ProviderRetryPolicy>;
-  providerTimeoutMs?: number;
-  runId: string;
-}
-
-export interface ModelToolExecutionResult {
-  content: string;
-  suspend?: {
-    type: "tool_dispatch";
-    bodyKeys?: string[];
-    connectorId: string;
-    jobId: string;
-    operationId: string;
-    parameterKeys?: string[];
-    payloadStorage?:
-      | "external_worker_secret_store_required"
-      | "managed_encrypted_object_store";
-    workerQueue: "external_tool_operations";
-  };
-}
-
-export interface ExecuteRunResult {
-  content: string;
-  events: RunEvent[];
-}
-
-export interface ProviderRetryPolicy {
-  maxRetries: number;
-  backoffMs: number;
-}
-
-export interface ProviderCircuitBreakerPolicy {
-  failureThreshold: number;
-  cooldownMs: number;
-}
-
-export interface ProviderCircuitBreakerSnapshot {
-  consecutiveFailures: number;
-  state: "closed" | "half_open" | "open";
-}
-
-export interface ProviderFallbackTarget {
-  adapter: ModelProviderAdapter;
-  model: StreamChatInput["model"];
-  provider: StreamChatInput["provider"];
-}
-
-export interface ProviderFallbackSnapshot {
-  fromModelId: string;
-  fromProviderId: string;
-  reason: string;
-  toModelId: string;
-  toProviderId: string;
-}
-
-type CircuitRecord = ProviderCircuitBreakerSnapshot & { openedAtMs?: number };
-
-export class ProviderCircuitBreaker {
-  private readonly records = new Map<string, CircuitRecord>();
-
-  constructor(
-    private readonly policy: ProviderCircuitBreakerPolicy = {
-      failureThreshold: 5,
-      cooldownMs: 60_000,
-    },
-  ) {}
-
-  beforeAttempt(providerId: string): ProviderCircuitBreakerSnapshot {
-    const record = this.records.get(providerId);
-    if (record === undefined) return closedCircuit();
-    if (record.state !== "open") return snapshot(record);
-    if (
-      this.policy.cooldownMs > 0 &&
-      record.openedAtMs !== undefined &&
-      Date.now() - record.openedAtMs < this.policy.cooldownMs
-    ) {
-      return snapshot(record);
-    }
-    const halfOpen: CircuitRecord = {
-      state: "half_open",
-      consecutiveFailures: record.consecutiveFailures,
-    };
-    this.records.set(providerId, halfOpen);
-    return snapshot(halfOpen);
-  }
-
-  recordSuccess(providerId: string): ProviderCircuitBreakerSnapshot {
-    const next = closedCircuit();
-    this.records.set(providerId, next);
-    return snapshot(next);
-  }
-
-  snapshot(providerId: string): ProviderCircuitBreakerSnapshot {
-    return snapshot(this.records.get(providerId) ?? closedCircuit());
-  }
-
-  recordFailure(providerId: string): ProviderCircuitBreakerSnapshot {
-    if (this.policy.failureThreshold <= 0) return closedCircuit();
-    const current = this.records.get(providerId) ?? closedCircuit();
-    const consecutiveFailures =
-      current.state === "half_open"
-        ? this.policy.failureThreshold
-        : current.consecutiveFailures + 1;
-    const state =
-      consecutiveFailures >= this.policy.failureThreshold ? "open" : "closed";
-    const next: CircuitRecord = {
-      state,
-      consecutiveFailures,
-      ...(state === "open" ? { openedAtMs: Date.now() } : {}),
-    };
-    this.records.set(providerId, next);
-    return snapshot(next);
-  }
-}
+import {
+  ProviderStreamAborted,
+  ProviderStreamFailure,
+  createProviderStreamRuntime,
+} from "./provider-stream-runtime";
+import {
+  isToolCallChunk,
+  isUsageChunk,
+  providerApiKeyFor,
+  providerToolCallRequestedData,
+  providerToolsForTarget,
+  sanitizeUsage,
+  toolCallsFromChunk,
+} from "./run-executor-chunks";
+import {
+  completionData,
+  modelToolExecutionFailureData,
+  providerFailureData,
+} from "./run-executor-failures";
+import type {
+  ExecuteRunInput,
+  ExecuteRunResult,
+  ProviderFallbackSnapshot,
+  ProviderFallbackTarget,
+  ProviderRetryPolicy,
+} from "./run-executor-types";
+export * from "./provider-circuit-breaker";
+export * from "./run-executor-types";
 
 export async function* streamRunEvents(
   input: ExecuteRunInput,
@@ -294,9 +193,8 @@ export async function* streamRunEvents(
             requestedToolCall,
           ] of requestedToolCalls.entries()) {
             try {
-              const execution = await input.modelToolExecutor(
-                requestedToolCall,
-              );
+              const execution =
+                await input.modelToolExecutor(requestedToolCall);
               if (execution.suspend?.type === "tool_dispatch") {
                 yield event("run.waiting_tool_dispatch", {
                   connectorId: execution.suspend.connectorId,
@@ -312,8 +210,8 @@ export async function* streamRunEvents(
                   ...(execution.suspend.payloadStorage === undefined
                     ? {}
                     : { payloadStorage: execution.suspend.payloadStorage }),
-                  providerCallIdHash: toolRequestEvents[index]!
-                    .providerCallIdHash,
+                  providerCallIdHash:
+                    toolRequestEvents[index]!.providerCallIdHash,
                   toolName: toolRequestEvents[index]!.name,
                   workerQueue: execution.suspend.workerQueue,
                 });
@@ -447,152 +345,6 @@ export async function* streamRunEvents(
   }
 }
 
-function providerApiKeyFor(
-  input: ExecuteRunInput,
-  providerId: string,
-): string | undefined {
-  const scopedApiKey = input.providerApiKeys?.[providerId];
-  if (scopedApiKey !== undefined) return scopedApiKey;
-  return providerId === input.provider.id ? input.apiKey : undefined;
-}
-
-function providerToolsForTarget(
-  target: ProviderFallbackTarget,
-  tools: StreamChatInput["tools"],
-): StreamChatInput["tools"] | undefined {
-  if (tools === undefined || tools.length === 0) return undefined;
-  if (
-    target.provider.capabilities.toolCalling !== true ||
-    target.model.capabilities.toolCalling !== true
-  ) {
-    return undefined;
-  }
-  return tools;
-}
-
-function providerFailureData(
-  error: unknown,
-  metadata: {
-    circuit?: ProviderCircuitBreakerSnapshot | undefined;
-    fallback?: ProviderFallbackSnapshot | undefined;
-    retryAttempts?: number | undefined;
-  } = {},
-): {
-  errorCode: string;
-  errorType?: string;
-  providerCircuit?: ProviderCircuitBreakerSnapshot;
-  providerFallback?: ProviderFallbackSnapshot;
-  retryAttempts?: number;
-} {
-  const result: {
-    errorCode: string;
-    errorType?: string;
-    providerCircuit?: ProviderCircuitBreakerSnapshot;
-    providerFallback?: ProviderFallbackSnapshot;
-    retryAttempts?: number;
-  } = isProviderFailureRecord(error)
-    ? {
-        errorCode: error.errorCode,
-        ...(typeof error.errorType === "string"
-          ? { errorType: error.errorType }
-          : {}),
-      }
-    : error instanceof Error && error.name === "AbortError"
-      ? { errorCode: "provider_stream_aborted", errorType: "AbortError" }
-      : { errorCode: "provider_stream_error" };
-  if (metadata.retryAttempts !== undefined && metadata.retryAttempts > 0) {
-    result.retryAttempts = metadata.retryAttempts;
-  }
-  if (metadata.circuit !== undefined && metadata.circuit.state !== "closed") {
-    result.providerCircuit = metadata.circuit;
-  }
-  if (metadata.fallback !== undefined) {
-    result.providerFallback = metadata.fallback;
-  }
-  return result;
-}
-
-function modelToolExecutionFailureData(
-  error: unknown,
-  toolCall: ReturnType<typeof providerToolCallRequestedData>,
-): {
-  approvalRequestId?: string;
-  errorCode: string;
-  providerCallIdHash: string;
-  toolName: string;
-} {
-  const approvalRequestId = approvalRequestIdField(error);
-  return {
-    ...(approvalRequestId === undefined ? {} : { approvalRequestId }),
-    errorCode: modelToolExecutionErrorCode(error),
-    providerCallIdHash: toolCall.providerCallIdHash,
-    toolName: toolCall.name,
-  };
-}
-
-function modelToolExecutionErrorCode(error: unknown): string {
-  const code = errorCodeField(error);
-  return code === undefined || !knownModelToolErrorCodes.has(code)
-    ? "model_tool_execution_failed"
-    : code;
-}
-
-function errorCodeField(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const record = error as { code?: unknown; errorCode?: unknown };
-  if (typeof record.errorCode === "string") return record.errorCode;
-  if (typeof record.code === "string") return record.code;
-  return undefined;
-}
-
-function approvalRequestIdField(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const details = (error as { details?: unknown }).details;
-  if (typeof details !== "object" || details === null) return undefined;
-  const approvalRequestId = (details as { approvalRequestId?: unknown })
-    .approvalRequestId;
-  return typeof approvalRequestId === "string" &&
-    approvalRequestId.length > 0 &&
-    approvalRequestId.length <= 200
-    ? approvalRequestId
-    : undefined;
-}
-
-const knownModelToolErrorCodes = new Set([
-  "invalid_request",
-  "invalid_tool_approval_request",
-  "not_found",
-  "tool_approval_request_expired",
-  "tool_approval_request_required",
-  "tool_approval_required",
-  "tool_execution_error",
-  "tool_execution_replayed",
-  "tool_not_bound",
-]);
-
-function completionData(
-  usage: ProviderTokenUsage | undefined,
-  retryAttempts: number,
-  fallback: ProviderFallbackSnapshot | undefined,
-): Record<string, unknown> {
-  return {
-    ...(usage === undefined ? {} : { usage }),
-    ...(fallback === undefined ? {} : { providerFallback: fallback }),
-    ...(retryAttempts > 0 ? { providerRetryAttempts: retryAttempts } : {}),
-  };
-}
-
-function isProviderFailureRecord(
-  value: unknown,
-): value is { errorCode: string; errorType?: unknown } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "errorCode" in value &&
-    typeof value.errorCode === "string"
-  );
-}
-
 function normalizeProviderRetryPolicy(
   input: Partial<ProviderRetryPolicy> | undefined,
 ): ProviderRetryPolicy {
@@ -644,158 +396,6 @@ function retryDelay(
   });
 }
 
-function closedCircuit(): CircuitRecord {
-  return { state: "closed", consecutiveFailures: 0 };
-}
-
-function snapshot(record: CircuitRecord): ProviderCircuitBreakerSnapshot {
-  return {
-    state: record.state,
-    consecutiveFailures: record.consecutiveFailures,
-  };
-}
-
-class ProviderStreamFailure extends Error {
-  constructor(readonly errorCode: string) {
-    super(errorCode);
-  }
-}
-
-type ProviderStreamOutcome = "cancelled" | "timeout";
-
-class ProviderStreamAborted extends Error {
-  constructor() {
-    super("Provider stream aborted.");
-  }
-}
-
-function createProviderStreamRuntime(
-  parentSignal: AbortSignal | undefined,
-  timeoutMs: number | undefined,
-): {
-  clear(): void;
-  markActivity(): void;
-  next(
-    iterator: AsyncIterator<StreamChatChunk>,
-  ): Promise<IteratorResult<StreamChatChunk>>;
-  outcome: ProviderStreamOutcome | undefined;
-  signal: AbortSignal;
-} {
-  const controller = new AbortController();
-  let outcome: ProviderStreamOutcome | undefined;
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-
-  const armTimeout = () => {
-    if (timeoutMs === undefined) return;
-    if (timeout !== undefined) clearTimeout(timeout);
-    timeout = setTimeout(() => abort("timeout"), timeoutMs);
-  };
-  const abort = (nextOutcome: ProviderStreamOutcome) => {
-    outcome ??= nextOutcome;
-    if (!controller.signal.aborted) controller.abort();
-  };
-  const abortForParent = () => abort("cancelled");
-
-  if (parentSignal?.aborted === true) {
-    abortForParent();
-  } else {
-    parentSignal?.addEventListener("abort", abortForParent, { once: true });
-  }
-
-  if (timeoutMs !== undefined) {
-    armTimeout();
-  }
-
-  return {
-    clear() {
-      if (timeout !== undefined) clearTimeout(timeout);
-      parentSignal?.removeEventListener("abort", abortForParent);
-    },
-    markActivity() {
-      armTimeout();
-    },
-    next(iterator) {
-      if (controller.signal.aborted)
-        return Promise.reject(new ProviderStreamAborted());
-      return new Promise((resolve, reject) => {
-        const abortListener = () => reject(new ProviderStreamAborted());
-        controller.signal.addEventListener("abort", abortListener, {
-          once: true,
-        });
-        iterator
-          .next()
-          .then(resolve, reject)
-          .finally(() => {
-            controller.signal.removeEventListener("abort", abortListener);
-          });
-      });
-    },
-    get outcome() {
-      return outcome;
-    },
-    signal: controller.signal,
-  };
-}
-
-function isUsageChunk(
-  chunk: StreamChatChunk,
-): chunk is { type: "usage"; usage: ProviderTokenUsage } {
-  return typeof chunk === "object" && chunk !== null && chunk.type === "usage";
-}
-
-function isToolCallChunk(chunk: StreamChatChunk): chunk is {
-  type: "tool_call";
-  toolCall: ProviderToolCallRequest;
-  toolCalls?: ProviderToolCallRequest[];
-} {
-  return (
-    typeof chunk === "object" && chunk !== null && chunk.type === "tool_call"
-  );
-}
-
-function toolCallsFromChunk(chunk: {
-  toolCall: ProviderToolCallRequest;
-  toolCalls?: ProviderToolCallRequest[];
-}): ProviderToolCallRequest[] {
-  return chunk.toolCalls === undefined || chunk.toolCalls.length === 0
-    ? [chunk.toolCall]
-    : chunk.toolCalls;
-}
-
-function providerToolCallRequestedData(toolCall: ProviderToolCallRequest): {
-  argumentCount: number;
-  argumentKeys: string[];
-  name: string;
-  providerCallIdHash: string;
-} {
-  const argumentKeys = [...toolCall.argumentKeys].sort();
-  return {
-    argumentCount: argumentKeys.length,
-    argumentKeys,
-    name: toolCall.name,
-    providerCallIdHash: providerToolCallRedactionHash(
-      `provider.tool_call.event.v1\0${toolCall.providerCallId}`,
-    ),
-  };
-}
-
-function sanitizeUsage(usage: ProviderTokenUsage): ProviderTokenUsage {
-  const sanitized: ProviderTokenUsage = {};
-  if (isNonNegativeInteger(usage.inputTokens))
-    sanitized.inputTokens = usage.inputTokens;
-  if (isNonNegativeInteger(usage.outputTokens))
-    sanitized.outputTokens = usage.outputTokens;
-  if (isNonNegativeInteger(usage.totalTokens))
-    sanitized.totalTokens = usage.totalTokens;
-  if (typeof usage.source === "string" && usage.source.length > 0)
-    sanitized.source = usage.source.slice(0, 80);
-  return sanitized;
-}
-
-function isNonNegativeInteger(value: unknown): value is number {
-  return Number.isInteger(value) && typeof value === "number" && value >= 0;
-}
-
 export async function executeRun(
   input: ExecuteRunInput,
 ): Promise<ExecuteRunResult> {
@@ -811,4 +411,3 @@ export async function executeRun(
 
   return { content, events };
 }
-

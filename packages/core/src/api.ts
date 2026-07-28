@@ -36,12 +36,14 @@ import { registerGroupRoutes } from "./http/routes/groups";
 import { registerHealthRoutes } from "./http/routes/health";
 import { registerKnowledgeRoutes } from "./http/routes/knowledge";
 import { registerJobRoutes } from "./http/routes/jobs";
+import { registerImageRoutes } from "./http/routes/images";
 import { registerNotificationRoutes } from "./http/routes/notifications";
 import { registerOpenApiDocsRoute } from "./http/routes/openapi-docs";
 import { registerOpenWebUiRoutes } from "./http/routes/openwebui";
 import { registerOrganizationRoutes } from "./http/routes/organizations";
 import { registerPostgresOperationalPostureRoutes } from "./http/routes/postgres-operational-posture";
 import { registerProviderRoutes } from "./http/routes/providers";
+import { registerPreferenceRoutes } from "./http/routes/preferences";
 import { registerPromptTemplateRoutes } from "./http/routes/prompt-templates";
 import { registerQuotaRoutes } from "./http/routes/quotas";
 import { registerReadinessRoutes } from "./http/routes/readiness";
@@ -56,8 +58,9 @@ import { registerVoiceRoutes } from "./http/routes/voices";
 import { registerWebhookRoutes } from "./http/routes/webhooks";
 import { registerWorkflowRoutes } from "./http/routes/workflows";
 import { registerWorkspaceRoutes } from "./http/routes/workspaces";
+import { registerWorkspaceContentRoutes } from "./http/routes/workspace-content";
+import { registerWebSearchRoutes } from "./http/routes/web-search";
 import type { AppBindings } from "./http/context";
-import { openApiDocument } from "./http/openapi/document";
 import { createServices } from "./services";
 
 export function createRomeoApi(
@@ -66,8 +69,14 @@ export function createRomeoApi(
 ) {
   const env = serviceOptions?.env ?? readEnv();
   const services = createServices(repository, { ...serviceOptions, env });
+  services.temporaryChatCleanup.start();
+  services.runs.startTerminalOutboxWorker();
   const requestContextOptions = { devSeededLogin: env.DEV_SEEDED_LOGIN };
-  const app = new OpenAPIHono<AppBindings>();
+  const app = new OpenAPIHono<AppBindings>({
+    defaultHook: (result) => {
+      if (!result.success) throw result.error;
+    },
+  });
 
   app.use("*", securityHeaders(env));
   app.use("*", requestBodyLimit(env));
@@ -88,6 +97,7 @@ export function createRomeoApi(
   registerBrowserAutomationRoutes(app);
   registerCompatibilityRoutes(app);
   registerProviderRoutes(app);
+  registerPreferenceRoutes(app);
   registerPromptTemplateRoutes(app);
   registerAgentRoutes(app);
   registerAgentKnowledgeRoutes(app);
@@ -108,11 +118,14 @@ export function createRomeoApi(
   registerGaEvidencePostureRoutes(app);
   registerGovernanceRoutes(app);
   registerGroupRoutes(app);
+  registerImageRoutes(app);
   registerJobRoutes(app);
   registerKnowledgeRoutes(app);
   registerNotificationRoutes(app);
   registerOrganizationRoutes(app);
-  registerOpenApiDocsRoute(app);
+  registerOpenApiDocsRoute(app, {
+    openWebUiCompatibilityEnabled: env.OPENWEBUI_COMPATIBILITY_ENABLED,
+  });
   registerQuotaRoutes(app);
   registerReadinessRoutes(app);
   registerRunRoutes(app);
@@ -125,15 +138,9 @@ export function createRomeoApi(
   registerVoiceRoutes(app);
   registerWebhookRoutes(app);
   registerWorkflowRoutes(app);
+  registerWebSearchRoutes(app);
+  registerWorkspaceContentRoutes(app);
   registerWorkspaceRoutes(app);
-
-  app.get("/api/v1/openapi.json", (context) =>
-    context.json(
-      openApiDocument({
-        openWebUiCompatibilityEnabled: env.OPENWEBUI_COMPATIBILITY_ENABLED,
-      }),
-    ),
-  );
 
   return app;
 }

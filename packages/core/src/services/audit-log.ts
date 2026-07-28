@@ -3,6 +3,7 @@ import type { AuthSubject } from "@romeo/auth";
 import type { RomeoRepository } from "../domain/repository";
 import { createId } from "../ids";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
+import { currentTelemetryMetadata } from "./telemetry-context";
 
 export interface WriteAuditLogInput {
   subject: AuthSubject;
@@ -28,7 +29,10 @@ export async function writeAuditLog(
     resourceType: input.resourceType,
     resourceId: input.resourceId,
     outcome: input.outcome ?? "success",
-    metadata: input.metadata ?? {},
+    metadata: {
+      ...(input.metadata ?? {}),
+      ...currentTelemetryMetadata(),
+    },
     createdAt: new Date().toISOString(),
   });
 }

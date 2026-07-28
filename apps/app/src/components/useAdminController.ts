@@ -3,9 +3,16 @@ import { useState } from "react";
 
 import {
   createProvider,
+  deleteOllamaProviderModel,
+  pullOllamaProviderModel,
   syncProviderModels,
   updateModelPricing,
-} from "../api/client";
+  updateModelCapabilities,
+  updateModelEnabled,
+  updateProvider,
+  verifyProvider,
+} from "../features/providers/mutations";
+import { createManagedSecret } from "../features/auth-provider-administration";
 import { useWorkspaceData } from "./useWorkspaceData";
 
 /**
@@ -19,20 +26,61 @@ export function useAdminController() {
   const data = useWorkspaceData(undefined);
   const [error, setError] = useState<string>();
   const [syncingProviderId, setSyncingProviderId] = useState<string>();
+  const [pullingProviderId, setPullingProviderId] = useState<string>();
+  const [deletingModelId, setDeletingModelId] = useState<string>();
 
   const createProviderMutation = useMutation({ mutationFn: createProvider });
   const updateModelPricingMutation = useMutation({
     mutationFn: updateModelPricing,
   });
+  const updateModelMutation = useMutation({
+    mutationFn: async (
+      input:
+        | Parameters<typeof updateModelCapabilities>[0]
+        | Parameters<typeof updateModelEnabled>[0],
+    ) =>
+      "capabilities" in input
+        ? updateModelCapabilities(input)
+        : updateModelEnabled(input),
+  });
+  const updateProviderMutation = useMutation({ mutationFn: updateProvider });
+  const verifyProviderMutation = useMutation({ mutationFn: verifyProvider });
 
   async function handleCreateProvider(
     input: Parameters<typeof createProvider>[0],
   ) {
     setError(undefined);
     try {
-      await createProviderMutation.mutateAsync(input);
+      const { apiKey, ...providerInput } = input as typeof input & {
+        apiKey?: string;
+      };
+      let credentialRef = providerInput.credentialRef;
+      if (apiKey?.trim()) {
+        const secret = await createManagedSecret({
+          purpose: "model_provider_credential",
+          scope: "org",
+          value: apiKey.trim(),
+          name: `${providerInput.name} API key`,
+        });
+        credentialRef = secret.secretRef;
+      }
+      const provider = await createProviderMutation.mutateAsync({
+        ...providerInput,
+        ...(credentialRef === undefined ? {} : { credentialRef }),
+      });
+      setSyncingProviderId(provider.id);
+      try {
+        await syncProviderModels(provider.id);
+      } catch (caught) {
+        setError(
+          `Connection saved, but model refresh failed: ${caught instanceof Error ? caught.message : "Unable to reach the model endpoint."}`,
+        );
+      } finally {
+        setSyncingProviderId(undefined);
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["providers"] }),
+        queryClient.invalidateQueries({ queryKey: ["models"] }),
         queryClient.invalidateQueries({
           queryKey: ["providerOperationalSummary"],
         }),
@@ -41,6 +89,24 @@ export function useAdminController() {
       setError(
         caught instanceof Error ? caught.message : "Unable to create provider.",
       );
+      throw caught;
+    }
+  }
+
+  async function handleUpdateModel(
+    input:
+      | Parameters<typeof updateModelCapabilities>[0]
+      | Parameters<typeof updateModelEnabled>[0],
+  ) {
+    setError(undefined);
+    try {
+      await updateModelMutation.mutateAsync(input);
+      await queryClient.invalidateQueries({ queryKey: ["models"] });
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to update model.",
+      );
+      throw caught;
     }
   }
 
@@ -61,9 +127,114 @@ export function useAdminController() {
           ? caught.message
           : "Unable to sync provider models.",
       );
+      throw caught;
     } finally {
       setSyncingProviderId(undefined);
     }
+  }
+
+  async function handlePullProviderModel(providerId: string, model: string) {
+    setError(undefined);
+    setPullingProviderId(providerId);
+    try {
+      const result = await pullOllamaProviderModel({ providerId, model });
+      await syncProviderModels(providerId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["models"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["providerOperationalSummary"],
+        }),
+      ]);
+      return result;
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to pull the Ollama model.",
+      );
+      throw caught;
+    } finally {
+      setPullingProviderId(undefined);
+    }
+  }
+
+  async function handleDeleteProviderModel(
+    providerId: string,
+    modelId: string,
+    model: string,
+  ) {
+    setError(undefined);
+    setDeletingModelId(modelId);
+    try {
+      const result = await deleteOllamaProviderModel({ providerId, model });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["models"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["providerOperationalSummary"],
+        }),
+      ]);
+      return result;
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to delete the Ollama model.",
+      );
+      throw caught;
+    } finally {
+      setDeletingModelId(undefined);
+    }
+  }
+
+  async function handleUpdateProvider(
+    input: Parameters<typeof updateProvider>[0] & {
+      apiKey?: string;
+      refreshModels?: boolean;
+    },
+  ) {
+    setError(undefined);
+    const { apiKey, refreshModels = false, ...providerInput } = input;
+    let credentialRef = providerInput.credentialRef;
+    if (apiKey?.trim()) {
+      const provider = data.providers.find(
+        (item) => item.id === input.providerId,
+      );
+      const secret = await createManagedSecret({
+        purpose: "model_provider_credential",
+        scope: "org",
+        value: apiKey.trim(),
+        name: `${provider?.name ?? "Provider"} API key`,
+      });
+      credentialRef = secret.secretRef;
+    }
+    await updateProviderMutation.mutateAsync({
+      ...providerInput,
+      ...(credentialRef === undefined ? {} : { credentialRef }),
+    });
+    if (refreshModels) {
+      setSyncingProviderId(input.providerId);
+      try {
+        await syncProviderModels(input.providerId);
+      } catch (caught) {
+        setError(
+          `Connection saved, but model refresh failed: ${caught instanceof Error ? caught.message : "Unable to reach the model endpoint."}`,
+        );
+      } finally {
+        setSyncingProviderId(undefined);
+      }
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["providers"] }),
+      queryClient.invalidateQueries({ queryKey: ["models"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["providerOperationalSummary"],
+      }),
+    ]);
+  }
+
+  async function handleVerifyProvider(providerId: string) {
+    setError(undefined);
+    return verifyProviderMutation.mutateAsync(providerId);
   }
 
   async function handleUpdateModelPricing(
@@ -82,6 +253,7 @@ export function useAdminController() {
           ? caught.message
           : "Unable to update model pricing.",
       );
+      throw caught;
     }
   }
 
@@ -107,10 +279,20 @@ export function useAdminController() {
     providerOperationalSummary: data.providerOperationalSummary,
     isCreatingProvider: createProviderMutation.isPending,
     isUpdatingModelPricing: updateModelPricingMutation.isPending,
+    isUpdatingModel: updateModelMutation.isPending,
+    isUpdatingProvider: updateProviderMutation.isPending,
+    verifyingProviderId: verifyProviderMutation.variables,
     syncingProviderId,
+    pullingProviderId,
+    deletingModelId,
     handleCreateProvider,
     handleSyncProvider,
+    handlePullProviderModel,
+    handleDeleteProviderModel,
     handleUpdateModelPricing,
+    handleUpdateModel,
+    handleUpdateProvider,
+    handleVerifyProvider,
     handleChatArchived,
     handleChatDeleted,
     handleWorkspaceArchived,

@@ -31,7 +31,8 @@ function retryDelayMs(
   attempt: number,
 ): number {
   const retryAfter = response.headers.get("retry-after");
-  const retryAfterMs = retryAfter === null ? undefined : parseRetryAfterMs(retryAfter);
+  const retryAfterMs =
+    retryAfter === null ? undefined : parseRetryAfterMs(retryAfter);
   if (retryAfterMs !== undefined) return Math.min(retryAfterMs, 30_000);
   return retryBackoffMs * Math.max(1, attempt + 1);
 }

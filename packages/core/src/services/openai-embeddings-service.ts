@@ -5,6 +5,10 @@ import {
   hasGrant,
   type AuthSubject,
 } from "@romeo/auth";
+import type {
+  OpenAiEmbeddingRequest,
+  OpenAiEmbeddingResponse,
+} from "@romeo/contracts";
 import {
   getEmbeddingAdapter,
   type BaseModel,
@@ -20,24 +24,10 @@ import type { QuotaCoordinator } from "./quota-coordination";
 import type { SecretResolver } from "./secret-resolver";
 import type { WebhookEmitter } from "./webhook-service";
 
-export interface OpenAiEmbeddingRequest {
-  input: string[];
-  model: string;
-}
-
-export interface OpenAiEmbeddingResponse {
-  data: Array<{
-    embedding: number[];
-    index: number;
-    object: "embedding";
-  }>;
-  model: string;
-  object: "list";
-  usage: {
-    prompt_tokens?: number;
-    total_tokens?: number;
-  } | null;
-}
+export type {
+  OpenAiEmbeddingRequest,
+  OpenAiEmbeddingResponse,
+} from "@romeo/contracts";
 
 export class OpenAiEmbeddingsService {
   constructor(

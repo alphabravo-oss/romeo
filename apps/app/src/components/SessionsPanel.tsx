@@ -1,143 +1,183 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { Button } from "@romeo/ui";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 
-import { listSessions, revokeOtherSessions, revokeSession } from '../api/sessions-client'
-import type { Session } from '../api/sessions-types'
-import { PanelState } from '../lib/panel-state'
-import { toast } from '../lib/toast'
-import { useConfirm } from './ConfirmDialog'
-import { type ColumnDef, DataTable, createColumnHelper } from './DataTable'
+import {
+  listSessions,
+  revokeOtherSessions,
+  revokeSession,
+  type Session,
+} from "../features/sessions";
+import { PanelState } from "../lib/panel-state";
+import { LocalizedDateTime } from "../lib/locale-format";
+import { toast } from "../lib/toast";
+import { useLocale } from "../lib/i18n";
+import { useConfirm } from "./ConfirmDialog";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 
-const col = createColumnHelper<Session>()
+const col = createColumnHelper<Session>();
 
-function sessionStatus(session: Session): 'active' | 'expired' | 'revoked' {
-  if (session.revokedAt !== undefined) return 'revoked'
-  if (new Date(session.expiresAt).getTime() <= Date.now()) return 'expired'
-  return 'active'
+function sessionStatus(session: Session): "active" | "expired" | "revoked" {
+  if (session.revokedAt !== undefined) return "revoked";
+  if (new Date(session.expiresAt).getTime() <= Date.now()) return "expired";
+  return "active";
 }
 
 export function SessionsPanel() {
-  const queryClient = useQueryClient()
-  const { ask, dialog } = useConfirm()
-  const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: listSessions })
-  const revokeMutation = useMutation({ mutationFn: (sessionId: string) => revokeSession(sessionId) })
-  const revokeOthersMutation = useMutation({ mutationFn: revokeOtherSessions })
+  const queryClient = useQueryClient();
+  const { t } = useLocale();
+  const { ask, dialog } = useConfirm();
+  const sessionsQuery = useQuery({
+    queryKey: ["sessions"],
+    queryFn: listSessions,
+  });
+  const revokeMutation = useMutation({
+    mutationFn: (sessionId: string) => revokeSession(sessionId),
+  });
+  const revokeOthersMutation = useMutation({ mutationFn: revokeOtherSessions });
 
   async function handleRevoke(session: Session) {
     if (
       !(await ask({
-        title: 'Sign out this session?',
-        body: 'This immediately revokes the selected session.',
-        confirmLabel: 'Revoke',
-        tone: 'danger'
+        title: t("signOutSessionTitle"),
+        body: t("signOutSessionBody"),
+        confirmLabel: t("revoke"),
+        tone: "danger",
       }))
     )
-      return
+      return;
     try {
-      await revokeMutation.mutateAsync(session.id)
-      await queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      toast('Session revoked', 'success')
+      await revokeMutation.mutateAsync(session.id);
+      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      toast(t("sessionRevoked"), "success");
     } catch {
-      toast('Could not revoke session', 'error')
+      toast(t("revokeSessionFailed"), "error");
     }
   }
 
   async function handleRevokeOthers() {
     if (
       !(await ask({
-        title: 'Sign out everywhere else?',
-        body: 'This revokes all of your other sessions. Your current session stays signed in.',
-        confirmLabel: 'Sign out everywhere else',
-        tone: 'danger'
+        title: t("signOutOthersTitle"),
+        body: t("signOutOthersBody"),
+        confirmLabel: t("signOutEverywhereElse"),
+        tone: "danger",
       }))
     )
-      return
+      return;
     try {
-      const revoked = await revokeOthersMutation.mutateAsync()
-      await queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      toast(`Revoked ${revoked.length} other session${revoked.length === 1 ? '' : 's'}`, 'success')
+      const revoked = await revokeOthersMutation.mutateAsync();
+      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      toast(`${t("revokedStatus")}: ${revoked.length}`, "success");
     } catch {
-      toast('Could not revoke other sessions', 'error')
+      toast(t("revokeOthersFailed"), "error");
     }
   }
 
   const columns = useMemo<ColumnDef<Session, any>[]>(
     () => [
-      col.accessor('name', {
-        header: 'Device',
-        cell: (c) => <span className="font-medium">{c.getValue()}</span>
+      col.accessor("name", {
+        header: t("device"),
+        cell: (c) => <span className="font-medium">{c.getValue()}</span>,
       }),
-      col.accessor('createdAt', {
-        header: 'Created',
-        cell: (c) => <span className="rm-cell-muted">{new Date(c.getValue()).toLocaleString()}</span>
-      }),
-      col.accessor((row) => row.lastSeenAt ?? '', {
-        id: 'lastSeen',
-        header: 'Last seen',
+      col.accessor("createdAt", {
+        header: t("created"),
         cell: (c) => (
-          <span className="rm-cell-muted">{c.getValue() ? new Date(c.getValue()).toLocaleString() : '—'}</span>
-        )
+          <span className="rm-cell-muted">
+            <LocalizedDateTime value={c.getValue()} />
+          </span>
+        ),
+      }),
+      col.accessor((row) => row.lastSeenAt ?? "", {
+        id: "lastSeen",
+        header: t("lastSeen"),
+        cell: (c) => (
+          <span className="rm-cell-muted">
+            {c.getValue() ? <LocalizedDateTime value={c.getValue()!} /> : "—"}
+          </span>
+        ),
       }),
       col.accessor((row) => row.expiresAt, {
-        id: 'expires',
-        header: 'Expires',
-        cell: (c) => <span className="rm-cell-muted">{new Date(c.getValue()).toLocaleString()}</span>
+        id: "expires",
+        header: t("expires"),
+        cell: (c) => (
+          <span className="rm-cell-muted">
+            <LocalizedDateTime value={c.getValue()} />
+          </span>
+        ),
       }),
       col.accessor((row) => sessionStatus(row), {
-        id: 'status',
-        header: 'Status',
+        id: "status",
+        header: t("status"),
         cell: (c) => (
-          <span className={`rm-status ${c.getValue() === 'active' ? 'pass' : 'fail'}`}>{c.getValue()}</span>
-        )
+          <span
+            className={`rm-status ${c.getValue() === "active" ? "pass" : "fail"}`}
+          >
+            {c.getValue() === "active"
+              ? t("active")
+              : c.getValue() === "expired"
+                ? t("expiredStatus")
+                : t("revokedStatus")}
+          </span>
+        ),
       }),
       col.display({
-        id: 'actions',
-        header: '',
+        id: "actions",
+        header: "",
         cell: (c) => (
-          <button
-            className="rm-button"
-            disabled={sessionStatus(c.row.original) !== 'active' || revokeMutation.isPending}
+          <Button
+            disabled={
+              sessionStatus(c.row.original) !== "active" ||
+              revokeMutation.isPending
+            }
             onClick={() => void handleRevoke(c.row.original)}
             type="button"
           >
-            Revoke
-          </button>
-        )
-      })
+            {t("revoke")}
+          </Button>
+        ),
+      }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [revokeMutation.isPending]
-  )
+    [revokeMutation.isPending, t],
+  );
 
   return (
     <section className="rm-panel p-4">
       <div className="rm-card-header">
-        <div className="rm-card-title">Active sessions</div>
+        <div className="rm-card-title">{t("activeSessions")}</div>
         <div className="flex gap-2">
-          <button
-            className="rm-button danger"
+          <Button
+            variant="danger"
             disabled={revokeOthersMutation.isPending}
             onClick={() => void handleRevokeOthers()}
             type="button"
           >
-            {revokeOthersMutation.isPending ? 'Signing out' : 'Sign out everywhere else'}
-          </button>
-          <button
-            className="rm-button"
+            {revokeOthersMutation.isPending
+              ? t("signingOut")
+              : t("signOutEverywhereElse")}
+          </Button>
+          <Button
             disabled={sessionsQuery.isFetching}
             onClick={() => void sessionsQuery.refetch()}
             type="button"
           >
-            {sessionsQuery.isFetching ? 'Refreshing' : 'Refresh'}
-          </button>
+            {sessionsQuery.isFetching ? t("refreshing") : t("refresh")}
+          </Button>
         </div>
       </div>
       <div className="mt-4">
-        <PanelState query={sessionsQuery} empty="No active sessions.">
-          {(rows) => <DataTable columns={columns} data={rows} empty="No active sessions." />}
+        <PanelState query={sessionsQuery} empty={t("noActiveSessions")}>
+          {(rows) => (
+            <DataTable
+              columns={columns}
+              data={rows}
+              empty={t("noActiveSessions")}
+            />
+          )}
         </PanelState>
       </div>
       {dialog}
     </section>
-  )
+  );
 }

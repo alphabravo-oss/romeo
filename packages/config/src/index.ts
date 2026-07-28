@@ -1,84 +1,9 @@
 import { z } from "zod";
+import { platformEnvShape } from "./platform-env-shape";
 
 export const envSchema = z
   .object({
-    APP_ORIGIN: z.string().url().default("http://localhost:3000"),
-    REPOSITORY_DRIVER: z.enum(["memory", "postgres"]).default("memory"),
-    DATABASE_URL: z
-      .string()
-      .default("postgres://romeo:romeo@localhost:5432/romeo"),
-    OPENWEBUI_COMPATIBILITY_ENABLED: z
-      .enum(["true", "false"])
-      .default("false")
-      .transform((value) => value === "true"),
-    TENANCY_MODE: z.enum(["single", "multi"]).default("single"),
-    GA_CHECKLIST_PATH: z.string().default(""),
-    GA_TARGET_PREFLIGHT_PATH: z.string().default(""),
-    GA_TARGET_PLAN_PATH: z.string().default(""),
-    GA_TARGET_EXECUTION_PATH: z.string().default(""),
-    GA_EVIDENCE_BUNDLE_PATH: z.string().default(""),
-    RELEASE_PUBLISH_PLAN_PATH: z.string().default(""),
-    RELEASE_AIRGAP_VERIFICATION_PATH: z.string().default(""),
-    RELEASE_READBACK_PLAN_PATH: z.string().default(""),
-    RELEASE_READBACK_VALIDATION_PATH: z.string().default(""),
-    SUPPORT_BUNDLE_PATH: z.string().default(""),
-    CI_BRANCH_PROTECTION_PLAN_PATH: z.string().default(""),
-    CI_HOSTED_RUN_VERIFICATION_PATH: z.string().default(""),
-    CI_BRANCH_PROTECTION_VERIFICATION_PATH: z.string().default(""),
-    EDGE_ENFORCEMENT_EVIDENCE_PATH: z.string().default(""),
-    POSTGRES_QUERY_PLAN_EVIDENCE_PATH: z.string().default(""),
-    POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH: z.string().default(""),
-    POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH: z.string().default(""),
-    POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH: z.string().default(""),
-    PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH: z.string().default(""),
-    QDRANT_LIVE_EVIDENCE_PATH: z.string().default(""),
-    DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH: z.string().default(""),
-    DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH: z.string().default(""),
-    DATA_CONNECTOR_LIVE_EVIDENCE_PATH: z.string().default(""),
-    DATA_CONNECTOR_WORKER_ENABLED: z
-      .enum(["true", "false"])
-      .default("false")
-      .transform((value) => value === "true"),
-    DATA_CONNECTOR_NETWORK_POLICY_ENABLED: z
-      .enum(["true", "false"])
-      .default("false")
-      .transform((value) => value === "true"),
-    TOOL_DISPATCH_WORKER_ENABLED: z
-      .enum(["true", "false"])
-      .default("false")
-      .transform((value) => value === "true"),
-    TOOL_DISPATCH_NETWORK_POLICY_ENABLED: z
-      .enum(["true", "false"])
-      .default("false")
-      .transform((value) => value === "true"),
-    BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH: z.string().default(""),
-    BROWSER_AUTOMATION_WORKER_ENABLED: z
-      .enum(["true", "false"])
-      .default("false")
-      .transform((value) => value === "true"),
-    BROWSER_AUTOMATION_RUNNER_URL: z
-      .union([z.string().url(), z.literal("")])
-      .default(""),
-    BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED: z
-      .enum(["true", "false"])
-      .default("false")
-      .transform((value) => value === "true"),
-    BROWSER_AUTOMATION_MAX_JOBS: z.coerce.number().int().positive().default(5),
-    BROWSER_AUTOMATION_LEASE_SECONDS: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(300),
-    BROWSER_AUTOMATION_TIMEOUT_MS: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(30_000),
-    BROWSER_AUTOMATION_MAX_BYTES: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(20_000),
+    ...platformEnvShape,
     POSTGRES_POOL_MAX: z.coerce.number().int().min(1).max(1_000).default(10),
     REQUEST_BODY_MAX_BYTES: z.coerce
       .number()
@@ -104,12 +29,33 @@ export const envSchema = z
       .positive()
       .max(5_000_000_000)
       .default(500_000_000),
+    FILE_MALWARE_SCAN_POLICY: z.enum(["off", "required"]).default("off"),
     MESSAGE_ATTACHMENT_MAX_BYTES: z.coerce
       .number()
       .int()
       .positive()
       .max(100_000_000)
       .default(5_000_000),
+    TEMPORARY_CHAT_CLEANUP_ENABLED: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+    TEMPORARY_CHAT_CLEANUP_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(10_000)
+      .default(60_000),
+    TEMPORARY_CHAT_CLEANUP_BATCH_SIZE: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(10_000)
+      .default(100),
+    TEMPORARY_CHAT_CLEANUP_LEASE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(30)
+      .default(300),
     HTTP_RATE_LIMIT_DRIVER: z
       .enum(["disabled", "memory", "valkey"])
       .default("memory"),
@@ -154,6 +100,18 @@ export const envSchema = z
       .int()
       .positive()
       .default(60_000),
+    RUN_EXECUTION_LEASE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(3_600)
+      .default(60),
+    RUN_RECOVERY_STALE_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .max(3_600_000)
+      .default(120_000),
     MODEL_PROVIDER_RETRY_ATTEMPTS: z.coerce.number().int().min(0).default(1),
     MODEL_PROVIDER_RETRY_BACKOFF_MS: z.coerce
       .number()
@@ -257,6 +215,12 @@ export const envSchema = z
       .int()
       .positive()
       .default(10_000),
+    WEB_SEARCH_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(300_000)
+      .default(12_000),
     DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS: z.coerce
       .number()
       .int()
@@ -317,6 +281,18 @@ export const envSchema = z
       .positive()
       .default(15_000),
     PDFTOTEXT_PATH: z.string().min(1).default("pdftotext"),
+    FILE_OCR_DRIVER: z
+      .enum(["disabled", "local-tesseract"])
+      .default("disabled"),
+    FILE_OCR_TESSERACT_PATH: z.string().min(1).default("tesseract"),
+    FILE_OCR_PDFTOPPM_PATH: z.string().min(1).default("pdftoppm"),
+    FILE_OCR_LANGUAGE: z
+      .string()
+      .min(1)
+      .max(32)
+      .regex(/^[A-Za-z0-9_+.-]+$/u)
+      .default("eng"),
+    FILE_OCR_MAX_PAGES: z.coerce.number().int().positive().max(100).default(20),
     SECRET_RESOLVER_DRIVER: z
       .enum([
         "disabled",
@@ -373,10 +349,6 @@ export const envSchema = z
       .enum(["resend", "smtp"])
       .default("resend"),
     NOTIFICATION_EMAIL_FROM: z.string().default(""),
-    NOTIFICATION_FCM_BASE_URL: z
-      .string()
-      .url()
-      .default("https://fcm.googleapis.com"),
     NOTIFICATION_FCM_PROJECT_ID: z.string().default(""),
     NOTIFICATION_FCM_SERVICE_ACCOUNT_REF: z.string().default(""),
     NOTIFICATION_FCM_TIMEOUT_MS: z.coerce
@@ -384,10 +356,6 @@ export const envSchema = z
       .int()
       .positive()
       .default(10_000),
-    NOTIFICATION_FCM_TOKEN_URL: z
-      .string()
-      .url()
-      .default("https://oauth2.googleapis.com/token"),
     NOTIFICATION_PAGERDUTY_EVENTS_URL: z
       .string()
       .url()

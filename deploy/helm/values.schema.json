@@ -101,6 +101,12 @@
             { "type": "string", "pattern": "^[1-9][0-9]*$" }
           ]
         },
+        "WEB_SEARCH_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 300000 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
         "DATA_CONNECTOR_LIVE_EVIDENCE_PATH": {
           "type": "string"
         },
@@ -225,10 +231,6 @@
         "NOTIFICATION_EMAIL_FROM": {
           "type": "string"
         },
-        "NOTIFICATION_FCM_BASE_URL": {
-          "type": "string",
-          "pattern": "^https?://.+$"
-        },
         "NOTIFICATION_FCM_PROJECT_ID": {
           "type": "string"
         },
@@ -240,10 +242,6 @@
             { "type": "integer", "minimum": 1 },
             { "type": "string", "pattern": "^[1-9][0-9]*$" }
           ]
-        },
-        "NOTIFICATION_FCM_TOKEN_URL": {
-          "type": "string",
-          "pattern": "^https?://.+$"
         },
         "NOTIFICATION_PAGERDUTY_EVENTS_URL": {
           "type": "string",
@@ -420,6 +418,26 @@
             }
           ]
         },
+        "FILE_MALWARE_SCAN_POLICY": {
+          "type": "string",
+          "enum": ["off", "required"]
+        },
+        "FILE_OCR_DRIVER": {
+          "type": "string",
+          "enum": ["disabled", "local-tesseract"]
+        },
+        "FILE_OCR_TESSERACT_PATH": { "type": "string", "minLength": 1 },
+        "FILE_OCR_PDFTOPPM_PATH": { "type": "string", "minLength": 1 },
+        "FILE_OCR_LANGUAGE": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_+.-]+$"
+        },
+        "FILE_OCR_MAX_PAGES": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 100 },
+            { "type": "string", "pattern": "^([1-9]|[1-9][0-9]|100)$" }
+          ]
+        },
         "MESSAGE_ATTACHMENT_MAX_BYTES": {
           "oneOf": [
             { "type": "integer", "minimum": 1, "maximum": 100000000 },
@@ -427,6 +445,30 @@
               "type": "string",
               "pattern": "^([1-9][0-9]{0,7}|100000000)$"
             }
+          ]
+        },
+        "TEMPORARY_CHAT_CLEANUP_ENABLED": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "string", "enum": ["true", "false"] }
+          ]
+        },
+        "TEMPORARY_CHAT_CLEANUP_INTERVAL_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 10000 },
+            { "type": "string", "pattern": "^[1-9][0-9]{4,}$" }
+          ]
+        },
+        "TEMPORARY_CHAT_CLEANUP_BATCH_SIZE": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 10000 },
+            { "type": "string", "pattern": "^([1-9][0-9]{0,3}|10000)$" }
+          ]
+        },
+        "TEMPORARY_CHAT_CLEANUP_LEASE_SECONDS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 30 },
+            { "type": "string", "pattern": "^([3-9][0-9]|[1-9][0-9]{2,})$" }
           ]
         },
         "HTTP_RATE_LIMIT_DRIVER": {
@@ -480,6 +522,24 @@
           "oneOf": [
             { "type": "integer", "minimum": 1 },
             { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
+        "RUN_EXECUTION_LEASE_SECONDS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 3600 },
+            {
+              "type": "string",
+              "pattern": "^([1-9]|[1-9][0-9]{1,2}|[1-2][0-9]{3}|3[0-5][0-9]{2}|3600)$"
+            }
+          ]
+        },
+        "RUN_RECOVERY_STALE_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1000, "maximum": 3600000 },
+            {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{3,5}|[1-2][0-9]{6}|3[0-5][0-9]{5}|3600000)$"
+            }
           ]
         },
         "MODEL_PROVIDER_RETRY_ATTEMPTS": {

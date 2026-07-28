@@ -3,9 +3,15 @@ import {
   AzureSecretValueResolver,
   CloudSecretValueResolver,
   GcpSecretValueResolver,
+  type AwsSecretsManagerSdkClientFactory,
+  type AzureKeyVaultSdkClientFactory,
+  type GcpSecretManagerSdkClientFactory,
 } from "./cloud-secret-resolver";
 import { parseManagedSecretRef } from "./managed-secret-ref";
-import { VaultSecretValueResolver } from "./vault-secret-resolver";
+import {
+  VaultSecretValueResolver,
+  type VaultSdkClientFactory,
+} from "./vault-secret-resolver";
 
 export interface SecretValueResolution {
   available: boolean;
@@ -28,9 +34,12 @@ export type SecretValueResolverDriver =
   | "vault";
 
 export interface CreateSecretValueResolverOptions {
+  awsClientFactory?: AwsSecretsManagerSdkClientFactory;
+  azureClientFactory?: AzureKeyVaultSdkClientFactory;
+  gcpClientFactory?: GcpSecretManagerSdkClientFactory;
+  vaultClientFactory?: VaultSdkClientFactory;
   env?: Record<string, string | undefined>;
   fetchImpl?: typeof fetch;
-  now?: () => Date;
 }
 
 export const disabledSecretValueResolver: SecretValueResolver = {
@@ -111,6 +120,9 @@ function createVaultSecretResolver(
     ...(options.fetchImpl === undefined
       ? {}
       : { fetchImpl: options.fetchImpl }),
+    ...(options.vaultClientFactory === undefined
+      ? {}
+      : { clientFactory: options.vaultClientFactory }),
     ...(env.VAULT_NAMESPACE === undefined
       ? {}
       : { namespace: env.VAULT_NAMESPACE }),
@@ -126,10 +138,9 @@ function createAwsSecretResolver(
     region: env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? "",
     secretAccessKey: env.AWS_SECRET_ACCESS_KEY ?? "",
     timeoutMs: positiveIntegerEnv(env, "AWS_SECRET_MANAGER_TIMEOUT_MS", 5_000),
-    ...(options.fetchImpl === undefined
+    ...(options.awsClientFactory === undefined
       ? {}
-      : { fetchImpl: options.fetchImpl }),
-    ...(options.now === undefined ? {} : { now: options.now }),
+      : { clientFactory: options.awsClientFactory }),
     ...(env.AWS_SESSION_TOKEN === undefined
       ? {}
       : { sessionToken: env.AWS_SESSION_TOKEN }),
@@ -144,9 +155,9 @@ function createGcpSecretResolver(
     accessToken: env.GCP_ACCESS_TOKEN ?? "",
     projectId: env.GCP_SECRET_MANAGER_PROJECT ?? "",
     timeoutMs: positiveIntegerEnv(env, "GCP_SECRET_MANAGER_TIMEOUT_MS", 5_000),
-    ...(options.fetchImpl === undefined
+    ...(options.gcpClientFactory === undefined
       ? {}
-      : { fetchImpl: options.fetchImpl }),
+      : { clientFactory: options.gcpClientFactory }),
   });
 }
 
@@ -158,9 +169,9 @@ function createAzureSecretResolver(
     accessToken: env.AZURE_ACCESS_TOKEN ?? "",
     timeoutMs: positiveIntegerEnv(env, "AZURE_KEY_VAULT_TIMEOUT_MS", 5_000),
     vaultUrl: env.AZURE_KEY_VAULT_URL ?? "",
-    ...(options.fetchImpl === undefined
+    ...(options.azureClientFactory === undefined
       ? {}
-      : { fetchImpl: options.fetchImpl }),
+      : { clientFactory: options.azureClientFactory }),
   });
 }
 

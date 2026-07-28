@@ -590,66 +590,18 @@ describe("eval API", () => {
     ]);
   });
 
-  it("compares an eval suite across multiple models without returning raw outputs", async () => {
+  it("does not expose multi-model comparison workflows", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
-    const createResponse = await api.request("/api/v1/eval-suites", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        agentId: "agent_default",
-        name: "Model comparison prompt",
-        cases: [{ input: "Say Romeo model comparison" }],
-      }),
-    });
-    const created = await createResponse.json();
-
-    const compareResponse = await api.request(
-      `/api/v1/eval-suites/${created.data.suite.id}/model-comparisons`,
+    const response = await api.request(
+      "/api/v1/eval-suites/eval_suite_default/model-comparisons",
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          modelIds: ["model_openai_compatible_default", "model_ollama_default"],
-        }),
+        body: JSON.stringify({ modelIds: ["model_1", "model_2"] }),
       },
     );
-    const comparison = await compareResponse.json();
-    const runsResponse = await api.request(
-      "/api/v1/agents/agent_default/eval-runs",
-    );
-    const runs = await runsResponse.json();
-    const auditResponse = await api.request(
-      "/api/v1/audit-logs?action=eval.model_compare.complete",
-    );
-    const audit = await auditResponse.json();
 
-    expect(compareResponse.status).toBe(202);
-    expect(comparison.data.suiteId).toBe(created.data.suite.id);
-    expect(comparison.data.comparisons).toHaveLength(2);
-    expect(
-      comparison.data.comparisons.map(
-        (item: { modelId: string }) => item.modelId,
-      ),
-    ).toEqual(["model_openai_compatible_default", "model_ollama_default"]);
-    expect(comparison.data.comparisons[0]).toMatchObject({
-      status: "passed",
-      score: 1,
-      resultCount: 1,
-      passedResultCount: 1,
-      failedResultCount: 0,
-    });
-    expect(JSON.stringify(comparison.data)).not.toContain(
-      "Romeo OpenAI-compatible response:",
-    );
-    expect(JSON.stringify(comparison.data)).not.toContain(
-      "Romeo Ollama response:",
-    );
-    expect(runs.data).toHaveLength(2);
-    expect(audit.data[0].metadata).toMatchObject({
-      suiteId: created.data.suite.id,
-      modelCount: 2,
-      modelIds: ["model_openai_compatible_default", "model_ollama_default"],
-    });
+    expect(response.status).toBe(404);
   });
 
   it("records and updates human ratings for eval run results", async () => {

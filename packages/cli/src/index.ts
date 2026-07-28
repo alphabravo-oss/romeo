@@ -1,4 +1,4 @@
-import { runCli } from './cli'
+import { runCli } from "./cli";
 
-const exitCode = await runCli()
-process.exitCode = exitCode
+const exitCode = await runCli();
+process.exitCode = exitCode;

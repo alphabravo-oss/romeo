@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const migrationsDir = join(packageRoot, "migrations");
 
-describe("greenfield migration baseline", () => {
-  it("keeps one reviewed baseline migration with pgvector enabled", () => {
+describe("database migrations", () => {
+  it("keeps the reviewed greenfield baseline with pgvector enabled", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((file) => file.endsWith(".sql"))
       .sort();
@@ -33,6 +33,27 @@ describe("greenfield migration baseline", () => {
     );
     expect(sql).toContain(
       'CREATE INDEX "knowledge_chunk_embeddings_vector_hnsw_idx"',
+    );
+    expect(sql).toContain('"file_retention_days" integer');
+    expect(sql).toContain('"workspace_file_retention_days" jsonb');
+    expect(sql).toContain('"user_file_retention_days" jsonb');
+    expect(sql).toContain(
+      'CREATE TABLE "managed_model_customization_policies"',
+    );
+    expect(sql).toContain('CREATE TABLE "managed_model_preferences"');
+    expect(sql).toContain('"encrypted_custom_instructions" text');
+    expect(sql).toContain("ON DELETE cascade");
+    expect(sql).toContain(
+      'CREATE FUNCTION "cleanup_managed_model_preferences_for_principal"()',
+    );
+    expect(sql).toContain(
+      'CREATE TRIGGER "managed_model_preferences_user_cleanup"',
+    );
+    expect(sql).toContain(
+      'CREATE TRIGGER "managed_model_preferences_group_cleanup"',
+    );
+    expect(sql).toContain(
+      'CREATE TRIGGER "managed_model_preferences_service_account_cleanup"',
     );
   });
 

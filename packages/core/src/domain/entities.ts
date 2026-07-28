@@ -1,203 +1,17 @@
 import type { BaseModel, ProviderInstance } from "@romeo/providers";
-import type { Scope, UserRole } from "@romeo/auth";
+import type { Scope } from "@romeo/auth";
 
-export interface Organization {
-  id: string;
-  name: string;
-  slug: string;
-}
-
-export interface SystemSetting {
-  key: string;
-  value: Record<string, unknown>;
-  updatedAt: string;
-}
-
-export interface Workspace {
-  id: string;
-  orgId: string;
-  name: string;
-  slug: string;
-  archivedAt?: string;
-}
-
-export interface User {
-  id: string;
-  orgId: string;
-  email: string;
-  name: string;
-  role?: UserRole;
-  disabledAt?: string;
-}
-
-export interface Group {
-  id: string;
-  orgId: string;
-  name: string;
-  slug: string;
-  createdAt: string;
-}
-
-export interface GroupMembership {
-  groupId: string;
-  userId: string;
-  orgId: string;
-  createdAt: string;
-}
-
-export interface ApiKey {
-  id: string;
-  orgId: string;
-  userId?: string;
-  serviceAccountId?: string;
-  name: string;
-  hashedToken: string;
-  scopes: Scope[];
-  revokedAt?: string;
-  createdAt: string;
-}
-
-export interface ServiceAccount {
-  id: string;
-  orgId: string;
-  name: string;
-  scopes: Scope[];
-  createdBy: string;
-  disabledAt?: string;
-  createdAt: string;
-}
-
-export interface UserSession {
-  id: string;
-  orgId: string;
-  userId: string;
-  name: string;
-  hashedToken: string;
-  scopes: Scope[];
-  isAdmin: boolean;
-  expiresAt: string;
-  revokedAt?: string;
-  lastSeenAt?: string;
-  createdAt: string;
-}
-
-export interface LocalPasswordCredential {
-  id: string;
-  orgId: string;
-  userId: string;
-  emailNormalized: string;
-  passwordHash: string;
-  failedAttemptCount: number;
-  lockedUntil?: string;
-  passwordUpdatedAt: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface LocalMfaFactor {
-  id: string;
-  orgId: string;
-  userId: string;
-  type: "recovery_codes" | "totp";
-  name: string;
-  status: "pending" | "active" | "disabled";
-  secretEncrypted: string;
-  createdAt: string;
-  updatedAt: string;
-  confirmedAt?: string;
-  disabledAt?: string;
-  lastUsedAt?: string;
-}
-
-export interface AgentParameters {
-  temperature?: number;
-  topP?: number;
-  maxTokens?: number;
-  [key: string]: unknown;
-}
-
-export interface AgentSafetySettings {
-  maxUserInputLength?: number;
-  blockedTerms?: string[];
-  promptInjectionGuard?: AgentPromptInjectionGuard;
-}
-
-export interface AgentPromptInjectionGuard {
-  mode: "block";
-  scanUserInput: boolean;
-  scanRetrievedContext: boolean;
-}
-
-export interface AgentMemoryPolicy {
-  mode: "disabled" | "recent_messages";
-  maxMessages?: number;
-}
-
-export interface Agent {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  name: string;
-  createdBy: string;
-  baseModelId: string;
-  systemPrompt: string;
-  parameters: AgentParameters;
-  memoryPolicy: AgentMemoryPolicy;
-  safetySettings: AgentSafetySettings;
-  voiceProfileId?: string;
-  publishedVersionId?: string;
-  updatedAt: string;
-}
-
-export interface AgentVersion {
-  id: string;
-  agentId: string;
-  orgId: string;
-  workspaceId: string;
-  version: number;
-  status: "published";
-  baseModelId: string;
-  systemPrompt: string;
-  parameters: AgentParameters;
-  memoryPolicy: AgentMemoryPolicy;
-  safetySettings: AgentSafetySettings;
-  voiceProfileId?: string;
-  knowledgeBaseBindings?: Array<{ knowledgeBaseId: string; enabled: boolean }>;
-  toolBindings?: Array<{
-    toolId: string;
-    enabled: boolean;
-    approvalRequired: boolean;
-  }>;
-  createdBy: string;
-  createdAt: string;
-  publishedAt: string;
-  evalSummary?: AgentVersionEvalSummary;
-}
-
-export interface AgentVersionEvalSuiteSummary {
-  suiteId: string;
-  runId: string | null;
-  status: "failed" | "missing" | "passed";
-  score: number | null;
-  completedAt: string | null;
-}
-
-export interface AgentVersionEvalSummary {
-  status: "failed" | "missing" | "not_required" | "passed";
-  suiteCount: number;
-  passedSuiteCount: number;
-  failedSuiteCount: number;
-  missingSuiteCount: number;
-  averageScore: number | null;
-  evaluatedAt: string | null;
-  suites: AgentVersionEvalSuiteSummary[];
-}
+export type * from "./agent-entities";
+export type * from "./identity-entities";
 
 export interface Chat {
   id: string;
   orgId: string;
   workspaceId: string;
   title: string;
+  modelId?: string;
+  temporary?: boolean;
+  expiresAt?: string;
   createdBy: string;
   archivedAt?: string;
   legalHoldUntil?: string;
@@ -271,8 +85,21 @@ export interface Message {
   chatId: string;
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  citations?: MessageCitation[];
   attachments?: MessageAttachment[];
   createdAt: string;
+}
+
+export interface MessageCitation {
+  chunkId: string;
+  documentId: string;
+  title: string;
+  sourceUri?: string;
+  sourceType?: string;
+  provider?: string;
+  retrievedAt?: string;
+  accessedAt?: string;
+  publishedAt?: string;
 }
 
 export interface MessageAttachment {
@@ -281,7 +108,8 @@ export interface MessageAttachment {
   fileName: string;
   mimeType: string;
   sizeBytes: number;
-  kind: "image";
+  kind: "document" | "image";
+  retainedInContext: boolean;
   previewUrl?: string;
 }
 
@@ -319,6 +147,9 @@ export type FileObjectPurpose =
   | "general"
   | "generated_image"
   | "knowledge_source"
+  | "memory"
+  | "note"
+  | "web_source"
   | "voice_artifact";
 
 export type FileObjectStatus = "available" | "deleted" | "uploading";
@@ -373,7 +204,7 @@ export interface UsageEvent {
   orgId: string;
   workspaceId?: string;
   actorId: string;
-  sourceType: "chat" | "run" | "tool" | "storage" | "voice";
+  sourceType: "chat" | "retrieval" | "run" | "tool" | "storage" | "voice";
   sourceId: string;
   metric: string;
   quantity: number;
@@ -407,7 +238,14 @@ export interface UsageAlert {
   resetAt?: string;
 }
 
-export type QuotaMetric = "run.started" | "tool.call" | "storage.byte";
+export type QuotaMetric =
+  | "image.cost.micro_usd"
+  | "image.generated"
+  | "web.search.request"
+  | "web.url.fetch"
+  | "run.started"
+  | "tool.call"
+  | "storage.byte";
 
 export interface BillingPlanQuotaTemplate {
   metric: QuotaMetric;
@@ -477,6 +315,34 @@ export interface RunRecord {
   completedAt?: string;
 }
 
+export interface QueuedChatTurn {
+  id: string;
+  orgId: string;
+  workspaceId: string;
+  chatId: string;
+  agentId: string;
+  modelId?: string;
+  content: string;
+  webSearch?: boolean;
+  urls?: string[];
+  createdBy: string;
+  principalId: string;
+  principalType: "user" | "service_account";
+  scopeSnapshot: Scope[];
+  idempotencyKey: string;
+  status: "queued" | "leased" | "failed" | "cancelled" | "completed";
+  attemptCount: number;
+  leaseOwner?: string;
+  leaseToken?: string;
+  leaseExpiresAt?: string;
+  heartbeatAt?: string;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
 export type { BaseModel, ProviderInstance };
 export type {
   DataConnector,
@@ -492,8 +358,6 @@ export type {
   EvalDashboard,
   EvalDashboardRunPoint,
   EvalDashboardSuiteSummary,
-  EvalModelComparison,
-  EvalModelComparisonItem,
   EvalReleaseCandidateEvidence,
   EvalReleaseCandidateSuiteEvidence,
   EvalResultHumanRating,

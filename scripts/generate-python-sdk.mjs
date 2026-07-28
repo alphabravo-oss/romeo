@@ -49,15 +49,27 @@ function collectOperations(spec) {
     for (const method of Object.keys(spec.paths[path]).sort()) {
       if (!methods.has(method)) continue;
       const operation = spec.paths[path][method];
+      const serverUrl =
+        operation.servers?.[0]?.url ??
+        spec.paths[path].servers?.[0]?.url ??
+        spec.servers?.[0]?.url ??
+        "";
       operations.push({
         name: operationName(method, path),
         method: method.toUpperCase(),
-        path: `/api/v1${path}`,
+        path: joinServerPath(serverUrl, path),
         summary: operation.summary ?? "",
       });
     }
   }
   return operations;
+}
+
+function joinServerPath(serverUrl, path) {
+  const serverPath = String(serverUrl).replace(/^https?:\/\/[^/]+/i, "");
+  const left = serverPath.replace(/\/+$/g, "");
+  const right = path.startsWith("/") ? path : `/${path}`;
+  return `${left}${right}`.replace(/\/{2,}/g, "/") || "/";
 }
 
 function operationName(method, path) {

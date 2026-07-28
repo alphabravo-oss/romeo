@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { EnvironmentSecretResolver } from "./services/secret-resolver";
+import { qdrantSdkClientFactoryFromFetch } from "./test-support/qdrant-sdk-client.test-helper";
 
 describe("Romeo knowledge ingestion", () => {
   it("indexes inline text sources and returns cited retrieval hits", async () => {
@@ -1618,10 +1619,10 @@ describe("Romeo knowledge ingestion", () => {
         embeddingFetchCalls += 1;
         return new Response("{}", { status: 500 });
       },
-      qdrantFetch: async () => {
+      qdrantClientFactory: qdrantSdkClientFactoryFromFetch(async () => {
         qdrantFetchCalls += 1;
         return new Response("{}", { status: 500 });
-      },
+      }),
     });
 
     await api.request("/api/v1/admin/rag/policy", {
@@ -2083,65 +2084,69 @@ describe("Romeo knowledge ingestion", () => {
           },
         );
       },
-      qdrantFetch: async (input, init) => {
-        const url = String(input);
-        const body =
-          init?.body === undefined ? undefined : JSON.parse(String(init.body));
-        const headers = new Headers(init?.headers);
-        qdrantCalls.push({
-          apiKey: headers.get("api-key"),
-          body,
-          method: init?.method ?? "GET",
-          url,
-        });
-
-        if (url.endsWith("/points?wait=true")) {
-          const requestBody = body as {
-            points?: Array<{ payload: Record<string, unknown> }>;
-          };
-          qdrantPayload = requestBody.points?.[0]?.payload;
-          return new Response(JSON.stringify({ status: "ok" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
+      qdrantClientFactory: qdrantSdkClientFactoryFromFetch(
+        async (input, init) => {
+          const url = String(input);
+          const body =
+            init?.body === undefined
+              ? undefined
+              : JSON.parse(String(init.body));
+          const headers = new Headers(init?.headers);
+          qdrantCalls.push({
+            apiKey: headers.get("api-key"),
+            body,
+            method: init?.method ?? "GET",
+            url,
           });
-        }
 
-        if (url.endsWith("/points/query")) {
-          return new Response(
-            JSON.stringify({
-              result: {
-                points:
-                  qdrantPayload === undefined
-                    ? []
-                    : [
-                        {
-                          id: "qdrant-point",
-                          score: 0.98,
-                          payload: qdrantPayload,
-                        },
-                      ],
-              },
-              status: "ok",
-            }),
-            {
+          if (url.endsWith("/points?wait=true")) {
+            const requestBody = body as {
+              points?: Array<{ payload: Record<string, unknown> }>;
+            };
+            qdrantPayload = requestBody.points?.[0]?.payload;
+            return new Response(JSON.stringify({ status: "ok" }), {
               status: 200,
               headers: { "content-type": "application/json" },
-            },
-          );
-        }
+            });
+          }
 
-        if (url.endsWith("/points/delete?wait=true")) {
-          return new Response(JSON.stringify({ status: "ok" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
+          if (url.endsWith("/points/query")) {
+            return new Response(
+              JSON.stringify({
+                result: {
+                  points:
+                    qdrantPayload === undefined
+                      ? []
+                      : [
+                          {
+                            id: "qdrant-point",
+                            score: 0.98,
+                            payload: qdrantPayload,
+                          },
+                        ],
+                },
+                status: "ok",
+              }),
+              {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              },
+            );
+          }
+
+          if (url.endsWith("/points/delete?wait=true")) {
+            return new Response(JSON.stringify({ status: "ok" }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          }
+
+          return new Response(JSON.stringify({ status: "unexpected" }), {
+            status: 404,
+            statusText: "unexpected Qdrant path",
           });
-        }
-
-        return new Response(JSON.stringify({ status: "unexpected" }), {
-          status: 404,
-          statusText: "unexpected Qdrant path",
-        });
-      },
+        },
+      ),
     });
 
     const sourceResponse = await api.request(
@@ -2377,19 +2382,21 @@ describe("Romeo knowledge ingestion", () => {
           },
         );
       },
-      qdrantFetch: async (input, init) => {
-        qdrantCalls.push({
-          method: init?.method ?? "GET",
-          url: String(input),
-        });
-        return new Response(
-          JSON.stringify({ result: { points: [] }, status: "ok" }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      },
+      qdrantClientFactory: qdrantSdkClientFactoryFromFetch(
+        async (input, init) => {
+          qdrantCalls.push({
+            method: init?.method ?? "GET",
+            url: String(input),
+          });
+          return new Response(
+            JSON.stringify({ result: { points: [] }, status: "ok" }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        },
+      ),
     });
 
     await api.request("/api/v1/admin/rag/policy", {

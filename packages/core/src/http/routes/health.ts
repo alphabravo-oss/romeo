@@ -1,14 +1,19 @@
-import type { RomeoApi } from '../context'
+import { getHealthRoute } from "@romeo/contracts";
+
+import type { RomeoApi } from "../context";
 
 export function registerHealthRoutes(app: RomeoApi): void {
-  app.get('/api/v1/health', (context) => {
-    return context.json({
-      data: {
-        status: 'ok',
-        service: 'romeo-api',
-        version: '0.1.0',
-        requestId: context.get('requestId')
-      }
-    })
-  })
+  app.openapi(getHealthRoute, (context) =>
+    context.json(
+      {
+        data: {
+          status: "ok",
+          service: "romeo-api",
+          version: "0.1.0",
+          requestId: context.get("requestId"),
+        },
+      },
+      200,
+    ),
+  );
 }

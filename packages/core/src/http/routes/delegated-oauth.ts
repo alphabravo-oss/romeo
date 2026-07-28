@@ -1,3 +1,12 @@
+import {
+  completeDelegatedOAuthRoute,
+  getDelegatedOAuthPostureRoute,
+  listDelegatedOAuthConnectionsRoute,
+  listDelegatedOAuthProvidersRoute,
+  revokeDelegatedOAuthConnectionRoute,
+  startDelegatedOAuthRoute,
+} from "@romeo/contracts";
+
 import { ApiError } from "../../errors";
 import type { RomeoApi } from "../context";
 import { shouldSecureCookie } from "../cookie-security";
@@ -6,27 +15,26 @@ import {
   createDelegatedOAuthCookie,
   delegatedOAuthCookieName,
 } from "../delegated-oauth-cookie";
-import { startDelegatedOAuthSchema } from "../schemas";
 import { readCookie } from "../session-cookie";
 
 export function registerDelegatedOAuthRoutes(app: RomeoApi): void {
-  app.get("/api/v1/delegated-oauth/providers", async (context) => {
+  app.openapi(listDelegatedOAuthProvidersRoute, async (context) => {
     const subject = context.get("subject");
     const data = context.get("services").delegatedOAuth.listProviders(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/admin/delegated-oauth/posture", async (context) => {
+  app.openapi(getDelegatedOAuthPostureRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
       .get("services")
       .delegatedOAuth.adminPosture(subject);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/delegated-oauth/start", async (context) => {
+  app.openapi(startDelegatedOAuthRoute, async (context) => {
     const subject = context.get("subject");
-    const body = startDelegatedOAuthSchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const data = context.get("services").delegatedOAuth.start({
       subject,
       providerId: body.providerId,
@@ -44,34 +52,32 @@ export function registerDelegatedOAuthRoutes(app: RomeoApi): void {
       ),
     );
     const { stateCookie: _stateCookie, ...safeData } = data;
-    return context.json({ data: safeData });
+    return context.json({ data: safeData }, 200);
   });
 
-  app.get("/api/v1/delegated-oauth/connections", async (context) => {
+  app.openapi(listDelegatedOAuthConnectionsRoute, async (context) => {
     const subject = context.get("subject");
-    const workspaceId = context.req.query("workspaceId");
+    const { workspaceId } = context.req.valid("query");
     const data = await context
       .get("services")
       .delegatedOAuth.listConnections(subject, workspaceId);
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post(
-    "/api/v1/delegated-oauth/connections/:connectionId/revoke",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context.get("services").delegatedOAuth.revoke({
-        subject,
-        connectionId: context.req.param("connectionId"),
-      });
-      return context.json({ data });
-    },
-  );
+  app.openapi(revokeDelegatedOAuthConnectionRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context.get("services").delegatedOAuth.revoke({
+      subject,
+      connectionId: context.req.valid("param").connectionId,
+    });
+    return context.json({ data }, 200);
+  });
 
-  app.get("/api/v1/delegated-oauth/callback", async (context) => {
+  app.openapi(completeDelegatedOAuthRoute, async (context) => {
     const secure = shouldSecureCookie(context);
     context.header("set-cookie", clearDelegatedOAuthCookie(secure));
-    const providerError = context.req.query("error");
+    const query = context.req.valid("query");
+    const providerError = query.error;
     if (providerError !== undefined) {
       throw new ApiError(
         "delegated_oauth_authorization_error",
@@ -81,8 +87,8 @@ export function registerDelegatedOAuthRoutes(app: RomeoApi): void {
       );
     }
 
-    const code = context.req.query("code");
-    const state = context.req.query("state");
+    const code = query.code;
+    const state = query.state;
     if (code === undefined || state === undefined) {
       throw new ApiError(
         "delegated_oauth_callback_invalid",

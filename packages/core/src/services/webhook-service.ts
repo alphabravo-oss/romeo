@@ -1,27 +1,38 @@
 import { assertScope, AuthorizationError, type AuthSubject } from "@romeo/auth";
-
 import type { BackgroundJob } from "../domain/entities";
 import type {
   WebhookDelivery,
   WebhookEventType,
   WebhookSubscription,
 } from "../domain/webhooks";
-import { webhookEventTypes } from "../domain/webhooks";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
-import { writeAuditLog } from "./audit-log";
 import {
   completeBackgroundJob,
   failBackgroundJob,
   startBackgroundJob,
 } from "./job-service";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
+import {
+  auditWebhook,
+  auditWebhookBulkDisable,
+  encodeDeliveryCursor,
+  indexAfterDeliveryCursor,
+  maxWebhookAttempts,
+  nextRetryAt,
+  normalizeDeliveryLimit,
+  publicWebhookDelivery,
+  retryableWebhookPayload,
+  stableWebhookDeliveryId,
+  summarizeWebhookPayload,
+  validateEventTypes,
+  WEBHOOK_DELIVERY_PAGE_DEFAULT_LIMIT,
+  WEBHOOK_DELIVERY_PAGE_MAX_LIMIT,
+} from "./webhook-service-helpers";
 import { deriveWebhookSecret, signWebhookPayload } from "./webhook-signing";
 import { normalizeWebhookUrl } from "./webhook-url";
-
-const webhookEventTypeSet = new Set<string>(webhookEventTypes);
 
 export interface CreatedWebhookSubscription {
   subscription: WebhookSubscription;
@@ -33,6 +44,7 @@ export interface WebhookEmitter {
     orgId: string;
     eventType: WebhookEventType;
     payload: Record<string, unknown>;
+    idempotencyKey?: string;
   }): Promise<WebhookDelivery[]>;
 }
 
@@ -41,8 +53,10 @@ export interface WebhookRetryResult {
   deliveries: WebhookDelivery[];
 }
 
-export const WEBHOOK_DELIVERY_PAGE_DEFAULT_LIMIT = 50;
-export const WEBHOOK_DELIVERY_PAGE_MAX_LIMIT = 1000;
+export {
+  WEBHOOK_DELIVERY_PAGE_DEFAULT_LIMIT,
+  WEBHOOK_DELIVERY_PAGE_MAX_LIMIT,
+} from "./webhook-service-helpers";
 
 export interface WebhookDeliveryPageOptions {
   subscriptionId?: string;
@@ -104,7 +118,7 @@ export class WebhookService {
       };
       const createdSubscription =
         await repository.createWebhookSubscription(subscription);
-      await this.audit(
+      await auditWebhook(
         repository,
         input.subject,
         "webhook.create",
@@ -147,7 +161,7 @@ export class WebhookService {
         disabledAt,
         updatedAt: disabledAt,
       });
-      await this.audit(
+      await auditWebhook(
         repository,
         input.subject,
         "webhook.disable",
@@ -208,7 +222,7 @@ export class WebhookService {
       if (!subscription || subscription.orgId !== input.subject.orgId) {
         results.push({ webhookId, status: "not_found" });
         await this.repository.transaction((repository) =>
-          this.auditBulkDisable(
+          auditWebhookBulkDisable(
             repository,
             input.subject,
             webhookId,
@@ -228,7 +242,7 @@ export class WebhookService {
           !currentSubscription ||
           currentSubscription.orgId !== input.subject.orgId
         ) {
-          await this.auditBulkDisable(
+          await auditWebhookBulkDisable(
             repository,
             input.subject,
             webhookId,
@@ -243,7 +257,7 @@ export class WebhookService {
           disabledAt,
           updatedAt: disabledAt,
         });
-        await this.auditBulkDisable(
+        await auditWebhookBulkDisable(
           repository,
           input.subject,
           webhookId,
@@ -326,6 +340,7 @@ export class WebhookService {
     orgId: string;
     eventType: WebhookEventType;
     payload: Record<string, unknown>;
+    idempotencyKey?: string;
   }): Promise<WebhookDelivery[]> {
     const subscriptions = (
       await this.repository.listWebhookSubscriptions(input.orgId)
@@ -340,6 +355,14 @@ export class WebhookService {
       deliveries.push(
         await this.deliver(subscription, input.eventType, payload, {
           storedPayload: payload,
+          ...(input.idempotencyKey === undefined
+            ? {}
+            : {
+                deliveryId: stableWebhookDeliveryId(
+                  input.idempotencyKey,
+                  subscription.id,
+                ),
+              }),
         }),
       );
     return deliveries;
@@ -349,7 +372,10 @@ export class WebhookService {
     subscription: WebhookSubscription,
     eventType: WebhookEventType,
     payload: Record<string, unknown>,
-    options: { storedPayload?: Record<string, unknown> } = {},
+    options: {
+      deliveryId?: string;
+      storedPayload?: Record<string, unknown>;
+    } = {},
   ): Promise<WebhookDelivery> {
     if (subscription.disabledAt !== undefined)
       throw new ApiError(
@@ -362,7 +388,7 @@ export class WebhookService {
     const storedPayload =
       options.storedPayload ?? summarizeWebhookPayload(payload);
     const delivery = await this.repository.createWebhookDelivery({
-      id: createId("webhook_delivery"),
+      id: options.deliveryId ?? createId("webhook_delivery"),
       orgId: subscription.orgId,
       subscriptionId: subscription.id,
       eventType,
@@ -373,6 +399,7 @@ export class WebhookService {
       updatedAt: now,
     });
 
+    if (delivery.status !== "pending") return publicWebhookDelivery(delivery);
     return publicWebhookDelivery(
       await this.attemptDelivery(subscription, delivery, payload),
     );
@@ -462,224 +489,4 @@ export class WebhookService {
       );
     }
   }
-
-  private async auditBulkDisable(
-    repository: RomeoRepository,
-    subject: AuthSubject,
-    webhookId: string,
-    outcome: "success" | "failure",
-  ): Promise<void> {
-    await writeAuditLog(repository, {
-      subject,
-      action: "webhook.bulk_disable",
-      resourceType: "webhook",
-      resourceId: webhookId,
-      outcome,
-      metadata: {},
-    });
-  }
-
-  private async audit(
-    repository: RomeoRepository,
-    subject: AuthSubject,
-    action: string,
-    webhookId: string,
-  ): Promise<void> {
-    await writeAuditLog(repository, {
-      subject,
-      action,
-      resourceType: "webhook",
-      resourceId: webhookId,
-      metadata: {},
-    });
-  }
-}
-
-function validateEventTypes(
-  eventTypes: WebhookEventType[],
-): WebhookEventType[] {
-  const unique = [...new Set(eventTypes)];
-  if (unique.length === 0)
-    throw new ApiError(
-      "invalid_webhook_events",
-      "At least one webhook event type is required.",
-      400,
-    );
-  const invalid = unique.filter(
-    (eventType) => !webhookEventTypeSet.has(eventType),
-  );
-  if (invalid.length > 0)
-    throw new ApiError(
-      "invalid_webhook_events",
-      "Webhook event type is not supported.",
-      400,
-      { eventTypes: invalid },
-    );
-  return unique;
-}
-
-function nextRetryAt(attemptCount: number): string {
-  const delaySeconds = Math.min(3600, 60 * 2 ** Math.max(0, attemptCount - 1));
-  return new Date(Date.now() + delaySeconds * 1000).toISOString();
-}
-
-function summarizeWebhookPayload(
-  payload: Record<string, unknown>,
-): Record<string, unknown> {
-  return {
-    redacted: true,
-    keyCount: Object.keys(payload).length,
-    keys: Object.keys(payload).sort(),
-  };
-}
-
-function publicWebhookDelivery(delivery: WebhookDelivery): WebhookDelivery {
-  return {
-    ...delivery,
-    payload: publicWebhookPayload(delivery.payload),
-  };
-}
-
-function publicWebhookPayload(
-  payload: Record<string, unknown>,
-): Record<string, unknown> {
-  if (isWebhookPayloadSummary(payload)) return payload;
-  return summarizeWebhookPayload(payload);
-}
-
-function isWebhookPayloadSummary(payload: Record<string, unknown>): boolean {
-  return (
-    payload.redacted === true &&
-    typeof payload.keyCount === "number" &&
-    Array.isArray(payload.keys) &&
-    payload.keys.every((key) => typeof key === "string")
-  );
-}
-
-function retryableWebhookPayload(
-  eventType: WebhookEventType,
-  payload: Record<string, unknown>,
-): Record<string, unknown> {
-  if (eventType === "run.completed" || eventType === "run.failed") {
-    return cleanPayload(payload, [
-      "runId",
-      "chatId",
-      "workspaceId",
-      "agentId",
-      "agentVersionId",
-      "modelId",
-      "providerId",
-      "status",
-      "completedAt",
-    ]);
-  }
-  if (eventType === "tool.call.succeeded" || eventType === "tool.call.failed") {
-    return cleanPayload(payload, [
-      "toolCallId",
-      "workspaceId",
-      "agentId",
-      "actorId",
-      "toolId",
-      "runId",
-      "status",
-      "riskLevel",
-      "approvalRequired",
-      "inputKeys",
-      "outputKeys",
-      "errorCode",
-      "completedAt",
-    ]);
-  }
-  if (eventType === "knowledge.source.indexed") {
-    return cleanPayload(payload, [
-      "sourceId",
-      "knowledgeBaseId",
-      "workspaceId",
-      "actorId",
-      "fileName",
-      "mimeType",
-      "sizeBytes",
-      "status",
-      "chunkCount",
-      "indexedAt",
-    ]);
-  }
-  if (eventType === "quota.alert") {
-    return cleanPayload(payload, [
-      "quotaBucketId",
-      "actorId",
-      "scopeType",
-      "scopeId",
-      "metric",
-      "used",
-      "limit",
-      "percentUsed",
-      "severity",
-      "resetAt",
-    ]);
-  }
-  return summarizeWebhookPayload(payload);
-}
-
-function cleanPayload(
-  payload: Record<string, unknown>,
-  keys: string[],
-): Record<string, unknown> {
-  const clean: Record<string, unknown> = {};
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === "string" || typeof value === "boolean") {
-      clean[key] = value;
-      continue;
-    }
-    if (typeof value === "number" && Number.isFinite(value)) {
-      clean[key] = value;
-      continue;
-    }
-    if (
-      Array.isArray(value) &&
-      value.every((item) => typeof item === "string")
-    ) {
-      clean[key] = [...value];
-    }
-  }
-  return clean;
-}
-
-const maxWebhookAttempts = 5;
-
-function normalizeDeliveryLimit(limit: number | undefined): number {
-  if (limit === undefined || !Number.isFinite(limit))
-    return WEBHOOK_DELIVERY_PAGE_DEFAULT_LIMIT;
-  const truncated = Math.floor(limit);
-  if (truncated < 1) return 1;
-  if (truncated > WEBHOOK_DELIVERY_PAGE_MAX_LIMIT)
-    return WEBHOOK_DELIVERY_PAGE_MAX_LIMIT;
-  return truncated;
-}
-
-// Cursor is an opaque token identifying the last row of the previous page.
-// Deliveries come back newest-first; we page by (createdAt, id) so rows sharing
-// a createdAt still paginate deterministically.
-function encodeDeliveryCursor(delivery: WebhookDelivery): string {
-  return Buffer.from(`${delivery.createdAt}|${delivery.id}`, "utf8").toString(
-    "base64url",
-  );
-}
-
-function indexAfterDeliveryCursor(
-  deliveries: WebhookDelivery[],
-  cursor: string,
-): number {
-  let decoded: string;
-  try {
-    decoded = Buffer.from(cursor, "base64url").toString("utf8");
-  } catch {
-    return deliveries.length;
-  }
-  const separator = decoded.lastIndexOf("|");
-  if (separator === -1) return deliveries.length;
-  const id = decoded.slice(separator + 1);
-  const position = deliveries.findIndex((delivery) => delivery.id === id);
-  return position === -1 ? deliveries.length : position + 1;
 }

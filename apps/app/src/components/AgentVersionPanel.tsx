@@ -1,23 +1,26 @@
-import { useMemo } from 'react'
+import { useMemo } from "react";
+import { Button, Select, StatusBadge } from "@romeo/ui";
 
-import type { Agent, AgentVersion, AgentVersionDiff } from '../api/types'
-import { AgentVersionDiffSummary } from './AgentVersionDiffSummary'
-import { type ColumnDef, DataTable, createColumnHelper } from './DataTable'
+import type { Agent, AgentVersion, AgentVersionDiff } from "../features/types";
+import { useLocale, type MessageKey } from "../lib/i18n";
+import { formatNumber, LocalizedDateTime } from "../lib/locale-format";
+import { AgentVersionDiffSummary } from "./AgentVersionDiffSummary";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 
-const col = createColumnHelper<AgentVersion>()
+const col = createColumnHelper<AgentVersion>();
 
 interface AgentVersionPanelProps {
-  activeAgent: Agent | undefined
-  diff: AgentVersionDiff | undefined
-  isComparing: boolean
-  isRollingBack: boolean
-  leftVersionId: string
-  onCompare: () => void
-  onLeftVersionChange: (versionId: string) => void
-  onRightVersionChange: (versionId: string) => void
-  onRollback: (versionId: string) => void
-  rightVersionId: string
-  versions: AgentVersion[]
+  activeAgent: Agent | undefined;
+  diff: AgentVersionDiff | undefined;
+  isComparing: boolean;
+  isRollingBack: boolean;
+  leftVersionId: string;
+  onCompare: () => void;
+  onLeftVersionChange: (versionId: string) => void;
+  onRightVersionChange: (versionId: string) => void;
+  onRollback: (versionId: string) => void;
+  rightVersionId: string;
+  versions: AgentVersion[];
 }
 
 export function AgentVersionPanel({
@@ -31,78 +34,120 @@ export function AgentVersionPanel({
   onRightVersionChange,
   onRollback,
   rightVersionId,
-  versions
+  versions,
 }: AgentVersionPanelProps) {
+  const { locale, t } = useLocale();
   const columns = useMemo<ColumnDef<AgentVersion, any>[]>(
     () => [
-      col.accessor('version', {
-        header: 'Version',
-        cell: (c) => <span className="font-medium">Version {c.getValue()}</span>
+      col.accessor("version", {
+        header: t("agentVersion"),
+        cell: (c) => (
+          <span className="font-medium">
+            {t("agentVersion")} {formatNumber(c.getValue(), locale)}
+          </span>
+        ),
       }),
-      col.accessor('publishedAt', {
-        header: 'Published',
-        cell: (c) => <span className="rm-cell-muted">{new Date(c.getValue()).toLocaleString()}</span>
+      col.accessor("publishedAt", {
+        header: t("agentPublished"),
+        cell: (c) => (
+          <span className="rm-cell-muted">
+            <LocalizedDateTime value={c.getValue()} />
+          </span>
+        ),
       }),
-      col.accessor((row) => row.evalSummary?.status ?? '', {
-        id: 'evals',
-        header: 'Evals',
+      col.accessor((row) => row.evalSummary?.status ?? "", {
+        id: "evals",
+        header: t("agentEvals"),
         cell: (c) => {
-          const summary = c.row.original.evalSummary
-          if (!summary) return <span className="rm-cell-muted">-</span>
+          const summary = c.row.original.evalSummary;
+          if (!summary) return <span className="rm-cell-muted">-</span>;
           return (
-            <span className={`rm-status ${summary.status === 'passed' ? 'pass' : summary.status === 'failed' ? 'fail' : 'warn'}`}>
-              {summary.status} {summary.passedSuiteCount}/{summary.suiteCount}
-              {summary.averageScore === null ? '' : ` - ${Math.round(summary.averageScore * 100)}%`}
-            </span>
-          )
-        }
+            <StatusBadge
+              tone={
+                summary.status === "passed"
+                  ? "success"
+                  : summary.status === "failed"
+                    ? "danger"
+                    : "warning"
+              }
+            >
+              {t(evalStatusMessageKey(summary.status))}{" "}
+              {formatNumber(summary.passedSuiteCount, locale)}/
+              {formatNumber(summary.suiteCount, locale)}
+              {summary.averageScore === null
+                ? ""
+                : ` - ${formatNumber(summary.averageScore, locale, { style: "percent", maximumFractionDigits: 0 })}`}
+            </StatusBadge>
+          );
+        },
       }),
       col.display({
-        id: 'actions',
-        header: '',
+        id: "actions",
+        header: "",
         cell: (c) => (
-          <button
-            className="rm-button"
-            disabled={activeAgent?.publishedVersionId === c.row.original.id || isRollingBack}
+          <Button
+            disabled={
+              activeAgent?.publishedVersionId === c.row.original.id ||
+              isRollingBack
+            }
             onClick={() => onRollback(c.row.original.id)}
-            type="button"
+            pending={isRollingBack}
           >
-            {activeAgent?.publishedVersionId === c.row.original.id ? 'Current' : 'Rollback'}
-          </button>
-        )
-      })
+            {activeAgent?.publishedVersionId === c.row.original.id
+              ? t("agentCurrent")
+              : t("agentRollback")}
+          </Button>
+        ),
+      }),
     ],
-    [activeAgent?.publishedVersionId, isRollingBack, onRollback]
-  )
+    [activeAgent?.publishedVersionId, isRollingBack, locale, onRollback, t],
+  );
 
   return (
     <>
       <div className="mt-5">
-        <div className="mb-2 text-sm text-muted">Versions</div>
-        <DataTable columns={columns} data={versions} empty="No published versions." />
+        <div className="mb-2 text-sm text-muted">{t("agentVersions")}</div>
+        <DataTable
+          columns={columns}
+          data={versions}
+          empty={t("agentNoPublishedVersions")}
+        />
       </div>
 
       <div className="mt-5 grid gap-2">
-        <div className="text-sm text-muted">Diff</div>
-        <select className="rm-input" onChange={(event) => onLeftVersionChange(event.currentTarget.value)} value={leftVersionId}>
-          {versions.map((version) => (
-            <option key={version.id} value={version.id}>
-              Version {version.version}
-            </option>
-          ))}
-        </select>
-        <select className="rm-input" onChange={(event) => onRightVersionChange(event.currentTarget.value)} value={rightVersionId}>
-          {versions.map((version) => (
-            <option key={version.id} value={version.id}>
-              Version {version.version}
-            </option>
-          ))}
-        </select>
-        <button className="rm-button" disabled={versions.length < 2 || isComparing} onClick={onCompare} type="button">
-          {isComparing ? 'Comparing' : 'Compare'}
-        </button>
+        <div className="text-sm text-muted">{t("agentDiff")}</div>
+        <Select
+          onValueChange={onLeftVersionChange}
+          options={versions.map((version) => ({
+            label: `${t("agentVersion")} ${formatNumber(version.version, locale)}`,
+            value: version.id,
+          }))}
+          value={leftVersionId}
+        />
+        <Select
+          onValueChange={onRightVersionChange}
+          options={versions.map((version) => ({
+            label: `${t("agentVersion")} ${formatNumber(version.version, locale)}`,
+            value: version.id,
+          }))}
+          value={rightVersionId}
+        />
+        <Button
+          disabled={versions.length < 2 || isComparing}
+          onClick={onCompare}
+          pending={isComparing}
+        >
+          {t("agentCompare")}
+        </Button>
         {diff ? <AgentVersionDiffSummary diff={diff} /> : null}
       </div>
     </>
-  )
+  );
+}
+
+function evalStatusMessageKey(status: string): MessageKey {
+  if (status === "passed") return "evalStatusPassed";
+  if (status === "failed") return "evalStatusFailed";
+  if (status === "not_required") return "evalStatusNotRequired";
+  return "evalStatusMissing";
 }

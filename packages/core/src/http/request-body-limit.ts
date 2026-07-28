@@ -4,11 +4,14 @@ import { bodyLimit } from "hono/body-limit";
 
 import type { AppBindings } from "./context";
 
-export function requestBodyLimit(env: RomeoEnv): MiddlewareHandler<AppBindings> {
+export function requestBodyLimit(
+  env: RomeoEnv,
+): MiddlewareHandler<AppBindings> {
   const limit = bodyLimit({
     maxSize: env.REQUEST_BODY_MAX_BYTES,
     onError: (context) => {
-      const requestId = context.req.header("x-request-id") ?? crypto.randomUUID();
+      const requestId =
+        context.req.header("x-request-id") ?? crypto.randomUUID();
       context.header("x-request-id", requestId);
       return context.json(
         {

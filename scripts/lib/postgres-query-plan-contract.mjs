@@ -2,6 +2,56 @@ const planTimestamp = "TIMESTAMPTZ '2026-01-01T00:00:00Z'";
 
 export const QUERY_PLAN_REVIEW_CHECKS = [
   {
+    id: "chat_search_title_trigram",
+    category: "chat-search",
+    description: "Workspace chat-title substring search.",
+    expectedIndexes: ["chats_title_trgm_idx"],
+    representativeRowRequirements: [{ table: "chats", minRows: 100_000 }],
+    requireObservedIndexAtRepresentativeVolume: true,
+    sql: `
+      SELECT id
+      FROM chats
+      WHERE workspace_id = 'workspace_default'
+        AND title ILIKE '%romeo-search-marker%'
+      LIMIT 50
+    `,
+  },
+  {
+    id: "chat_search_message_trigram",
+    category: "chat-search",
+    description: "Workspace message-content substring search.",
+    expectedIndexes: ["messages_content_trgm_idx"],
+    representativeRowRequirements: [{ table: "messages", minRows: 100_000 }],
+    requireObservedIndexAtRepresentativeVolume: true,
+    sql: `
+      SELECT messages.id
+      FROM messages
+      INNER JOIN chats ON chats.id = messages.chat_id
+      WHERE chats.workspace_id = 'workspace_default'
+        AND messages.content ILIKE '%romeo-search-marker%'
+      LIMIT 50
+    `,
+  },
+  {
+    id: "chat_search_attachment_filename_trigram",
+    category: "chat-search",
+    description: "Workspace attachment-filename substring search.",
+    expectedIndexes: ["message_parts_filename_trgm_idx"],
+    representativeRowRequirements: [
+      { table: "message_parts", minRows: 100_000 },
+    ],
+    requireObservedIndexAtRepresentativeVolume: true,
+    sql: `
+      SELECT message_parts.id
+      FROM message_parts
+      INNER JOIN messages ON messages.id = message_parts.message_id
+      INNER JOIN chats ON chats.id = messages.chat_id
+      WHERE chats.workspace_id = 'workspace_default'
+        AND message_parts.metadata->>'fileName' ILIKE '%romeo-search-marker%'
+      LIMIT 50
+    `,
+  },
+  {
     id: "chats_workspace_recent",
     category: "chat-history",
     description: "Recent chat listing for a workspace.",

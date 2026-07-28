@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { WebhookService } from "./services/webhook-service";
+import { EnvironmentSecretResolver } from "./services/secret-resolver";
 import { enableDefaultAgentTool } from "./test-support/agent-tools";
 
 interface FetchCall {
@@ -301,9 +302,46 @@ describe("webhook API", () => {
     expect(retry.deliveries[0]?.payload).toEqual(initial?.payload);
   });
 
+  it("reuses a stable delivery identity for idempotent event emission", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const calls: FetchCall[] = [];
+    const service = new WebhookService(repository, {
+      signingKey: env.WEBHOOK_SIGNING_KEY,
+      fetchImpl: async (input, init) => {
+        pushCall(calls, input, init);
+        return new Response(null, { status: 204 });
+      },
+    });
+    await service.create({
+      subject: seededSubject,
+      url: "https://hooks.example/idempotent-run",
+      eventTypes: ["run.completed"],
+    });
+    const input = {
+      orgId: "org_default",
+      eventType: "run.completed" as const,
+      idempotencyKey: "job_run_terminal_run_idempotent",
+      payload: {
+        runId: "run_idempotent",
+        status: "completed",
+        completedAt: "2026-07-16T12:00:00.000Z",
+      },
+    };
+
+    const first = await service.emit(input);
+    const replay = await service.emit(input);
+    const stored = await repository.listWebhookDeliveries("org_default");
+
+    expect(calls).toHaveLength(1);
+    expect(stored).toHaveLength(1);
+    expect(replay[0]?.id).toBe(first[0]?.id);
+    expect(first[0]?.id).toMatch(/^webhook_delivery_[a-f0-9]{32}$/u);
+  });
+
   it("emits run completion events to subscribed webhooks", async () => {
     const calls: FetchCall[] = [];
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, {
       env,
       webhookFetch: async (input, init) => {
         pushCall(calls, input, init);
@@ -341,6 +379,11 @@ describe("webhook API", () => {
     const run = await runResponse.json();
 
     await waitFor(() => calls.length > 0);
+    const [usage, audits, jobs] = await Promise.all([
+      repository.listUsageEvents("org_default"),
+      repository.listAuditLogs("org_default"),
+      repository.listBackgroundJobs("org_default"),
+    ]);
 
     expect(runResponse.status).toBe(202);
     expect(calls[0]?.url).toBe("https://hooks.example/runs");
@@ -350,6 +393,128 @@ describe("webhook API", () => {
     expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
       type: "run.completed",
       data: { runId: run.data.id, status: "completed" },
+    });
+    expect(
+      usage.filter(
+        (event) =>
+          event.sourceId === run.data.id && event.metric === "run.completed",
+      ),
+    ).toHaveLength(1);
+    expect(
+      audits.filter(
+        (audit) =>
+          audit.resourceId === run.data.id && audit.action === "run.completed",
+      ),
+    ).toHaveLength(1);
+    expect(
+      jobs.filter(
+        (job) =>
+          job.id === `job_run_terminal_${run.data.id}` &&
+          job.status === "completed",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("records concurrent run cancellation terminal effects exactly once", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const provider = await repository.getProvider("provider_openai_compatible");
+    if (provider === undefined) throw new Error("Expected seeded provider.");
+    await repository.updateProvider({
+      ...provider,
+      baseUrl: "https://api.example/v1",
+      credentialRef: "env://ROMEO_PROVIDER_API_KEY",
+    });
+    const calls: FetchCall[] = [];
+    let providerStarted = false;
+    const api = createRomeoApi(repository, {
+      env,
+      secretResolver: new EnvironmentSecretResolver({
+        ROMEO_PROVIDER_API_KEY: "provider-api-key",
+      }),
+      providerFetch: async (_input, init) => {
+        providerStarted = true;
+        return new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          const abort = () =>
+            reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+          if (signal?.aborted === true) abort();
+          else signal?.addEventListener("abort", abort, { once: true });
+        });
+      },
+      webhookFetch: async (input, init) => {
+        pushCall(calls, input, init);
+        return new Response(null, { status: 204 });
+      },
+    });
+    await api.request("/api/v1/webhooks", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        url: "https://hooks.example/run-cancelled",
+        eventTypes: ["run.cancelled"],
+      }),
+    });
+    const chatResponse = await api.request("/api/v1/chats", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Concurrent cancellation",
+      }),
+    });
+    const chat = await chatResponse.json();
+    const runResponse = await api.request("/api/v1/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: chat.data.id,
+        agentId: "agent_default",
+        content: "Wait until cancelled.",
+      }),
+    });
+    const run = await runResponse.json();
+    await waitFor(() => providerStarted);
+
+    const cancellations = await Promise.all([
+      api.request(`/api/v1/runs/${run.data.id}/cancel`, { method: "POST" }),
+      api.request(`/api/v1/runs/${run.data.id}/cancel`, { method: "POST" }),
+    ]);
+    await waitFor(() => calls.length === 1);
+    const [usage, audits, jobs, events] = await Promise.all([
+      repository.listUsageEvents("org_default"),
+      repository.listAuditLogs("org_default"),
+      repository.listBackgroundJobs("org_default"),
+      repository.listRunEvents(run.data.id),
+    ]);
+
+    expect(cancellations.map((response) => response.status)).toEqual([
+      200, 200,
+    ]);
+    expect(
+      usage.filter(
+        (event) =>
+          event.sourceId === run.data.id && event.metric === "run.cancelled",
+      ),
+    ).toHaveLength(1);
+    expect(
+      audits.filter(
+        (audit) =>
+          audit.resourceId === run.data.id && audit.action === "run.cancelled",
+      ),
+    ).toHaveLength(1);
+    expect(
+      jobs.filter(
+        (job) =>
+          job.id === `job_run_terminal_${run.data.id}` &&
+          job.status === "completed",
+      ),
+    ).toHaveLength(1);
+    expect(
+      events.filter((event) => event.type === "run.cancelled"),
+    ).toHaveLength(1);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.init?.headers).toMatchObject({
+      "x-romeo-event": "run.cancelled",
     });
   });
 

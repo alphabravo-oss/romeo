@@ -1,92 +1,80 @@
 import Check from "lucide-react/dist/esm/icons/check.mjs";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
 import Plus from "lucide-react/dist/esm/icons/plus.mjs";
-import { useEffect, useRef, useState } from "react";
+import { Button, DropdownMenuPrimitive } from "@romeo/ui";
 
-import type { Agent } from "../api/types";
+import type { Agent } from "../features/managed-models";
+import { useLocale } from "../lib/i18n";
 
-/**
- * Open WebUI-style model selector: the trigger is the top-bar assistant name;
- * clicking it opens a dropdown listing agents to switch between. Agents are
- * Romeo's equivalent of OWUI's custom models.
- */
+/** Governed managed-model selector backed by Radix menu semantics. */
 export function ModelSelector({
   activeAgentId,
   activeAgentName,
   agents,
+  canClone,
   isCloning,
   onCloneAgent,
   onSelectAgent,
-  workspaceName,
 }: {
   activeAgentId: string | undefined;
   activeAgentName: string;
   agents: Agent[];
+  canClone: boolean;
   isCloning: boolean;
   onCloneAgent: () => void;
   onSelectAgent: (agentId: string) => void;
-  workspaceName: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-
+  const { t } = useLocale();
   return (
-    <div className="rm-model-selector" ref={ref}>
-      <button
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className="rm-model-select"
-        onClick={() => setOpen((o) => !o)}
-        type="button"
-      >
-        <span>
-          {activeAgentName}
+    <DropdownMenuPrimitive.Root>
+      <DropdownMenuPrimitive.Trigger asChild>
+        <Button className="rm-model-select" variant="ghost">
+          <span>{activeAgentName}</span>
           <ChevronDown aria-hidden="true" size={12} strokeWidth={2.5} />
-        </span>
-        <small>{workspaceName}</small>
-      </button>
-
-      {open ? (
-        <div className="rm-model-menu" role="listbox">
-          {agents.map((agent) => (
-            <button
-              aria-selected={agent.id === activeAgentId}
-              className="rm-model-option"
-              key={agent.id}
-              onClick={() => {
-                onSelectAgent(agent.id);
-                setOpen(false);
-              }}
-              role="option"
-              type="button"
-            >
-              <span className="truncate">{agent.name}</span>
-              {agent.id === activeAgentId ? (
-                <Check aria-hidden="true" size={16} />
-              ) : null}
-            </button>
-          ))}
-          <div className="rm-model-menu-divider" />
-          <button
-            className="rm-model-option"
-            disabled={agents.length === 0 || isCloning}
-            onClick={() => onCloneAgent()}
-            type="button"
+        </Button>
+      </DropdownMenuPrimitive.Trigger>
+      <DropdownMenuPrimitive.Portal>
+        <DropdownMenuPrimitive.Content
+          align="start"
+          aria-label={t("shellSwitchAgent")}
+          className="rm-ui-menu rm-model-menu"
+        >
+          <DropdownMenuPrimitive.RadioGroup
+            onValueChange={onSelectAgent}
+            {...(activeAgentId ? { value: activeAgentId } : {})}
           >
-            <Plus aria-hidden="true" size={16} />
-            <span>{isCloning ? "Cloning agent…" : "Clone current agent"}</span>
-          </button>
-        </div>
-      ) : null}
-    </div>
+            {agents.map((agent) => (
+              <DropdownMenuPrimitive.RadioItem
+                className="rm-ui-menu__item rm-model-option"
+                key={agent.id}
+                value={agent.id}
+              >
+                <span className="truncate">{agent.name}</span>
+                <DropdownMenuPrimitive.ItemIndicator>
+                  <Check aria-hidden="true" size={16} />
+                </DropdownMenuPrimitive.ItemIndicator>
+              </DropdownMenuPrimitive.RadioItem>
+            ))}
+          </DropdownMenuPrimitive.RadioGroup>
+          {canClone ? (
+            <>
+              <DropdownMenuPrimitive.Separator className="rm-ui-separator" />
+              <DropdownMenuPrimitive.Item
+                className="rm-ui-menu__item rm-model-option"
+                disabled={agents.length === 0 || isCloning}
+                onSelect={onCloneAgent}
+              >
+                <Plus aria-hidden="true" size={16} />
+                <span>
+                  {isCloning
+                    ? t("shellCloningAgent")
+                    : t("shellCloneCurrentAgent")}
+                </span>
+              </DropdownMenuPrimitive.Item>
+            </>
+          ) : null}
+        </DropdownMenuPrimitive.Content>
+      </DropdownMenuPrimitive.Portal>
+    </DropdownMenuPrimitive.Root>
   );
 }

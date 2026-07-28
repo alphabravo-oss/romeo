@@ -1,17 +1,21 @@
+import {
+  getAbuseControlsRoute,
+  UpdateAbuseControlPolicySchema,
+  updateAbuseControlsRoute,
+} from "@romeo/contracts";
 import type { RomeoApi } from "../context";
-import { updateAbuseControlPolicySchema } from "../schemas";
 import type { UpdateAbuseControlPolicyRequest } from "../../domain/abuse-controls";
 
 export function registerAbuseControlRoutes(app: RomeoApi): void {
-  app.get("/api/v1/admin/abuse-controls", async (context) => {
+  app.openapi(getAbuseControlsRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").abuseControls.report(subject);
     return context.json({ data });
   });
 
-  app.patch("/api/v1/admin/abuse-controls", async (context) => {
+  app.openapi(updateAbuseControlsRoute, async (context) => {
     const subject = context.get("subject");
-    const body = updateAbuseControlPolicySchema.parse(await context.req.json());
+    const body = context.req.valid("json");
     const policy = updatePolicyInput(body);
     const data = await context
       .get("services")
@@ -21,11 +25,13 @@ export function registerAbuseControlRoutes(app: RomeoApi): void {
 }
 
 function updatePolicyInput(
-  body: ReturnType<typeof updateAbuseControlPolicySchema.parse>,
+  body: ReturnType<typeof UpdateAbuseControlPolicySchema.parse>,
 ): UpdateAbuseControlPolicyRequest {
   const policy: UpdateAbuseControlPolicyRequest = {};
   if (body.suspension !== undefined) {
-    const suspension: NonNullable<UpdateAbuseControlPolicyRequest["suspension"]> = {};
+    const suspension: NonNullable<
+      UpdateAbuseControlPolicyRequest["suspension"]
+    > = {};
     if (body.suspension.suspended !== undefined)
       suspension.suspended = body.suspension.suspended;
     if (body.suspension.reasonCode !== undefined)
@@ -33,7 +39,9 @@ function updatePolicyInput(
     policy.suspension = suspension;
   }
   if (body.entitlements !== undefined) {
-    const entitlements: NonNullable<UpdateAbuseControlPolicyRequest["entitlements"]> = {};
+    const entitlements: NonNullable<
+      UpdateAbuseControlPolicyRequest["entitlements"]
+    > = {};
     if (body.entitlements.enforceBillingStatus !== undefined)
       entitlements.enforceBillingStatus =
         body.entitlements.enforceBillingStatus;
@@ -46,7 +54,9 @@ function updatePolicyInput(
     policy.entitlements = entitlements;
   }
   if (body.killSwitches !== undefined) {
-    const killSwitches: NonNullable<UpdateAbuseControlPolicyRequest["killSwitches"]> = {};
+    const killSwitches: NonNullable<
+      UpdateAbuseControlPolicyRequest["killSwitches"]
+    > = {};
     if (body.killSwitches.connectorIds !== undefined)
       killSwitches.connectorIds = body.killSwitches.connectorIds;
     if (body.killSwitches.providerIds !== undefined)

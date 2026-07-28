@@ -6,6 +6,10 @@ import { ApiError } from "../errors";
 import type { AppBindings } from "./context";
 import type { RomeoServices } from "../services";
 import { readCookie, sessionCookieName } from "./session-cookie";
+import {
+  runWithTelemetryContext,
+  telemetryTraceId,
+} from "../services/telemetry-context";
 
 export interface RequestContextOptions {
   devSeededLogin?: boolean;
@@ -45,8 +49,18 @@ export function requestContext(
 
   return async (context, next) => {
     const requestId = context.req.header("x-request-id") ?? crypto.randomUUID();
+    const incomingTraceparent = context.req.header("traceparent");
+    const incomingTraceId = context.req.header("x-romeo-trace-id");
+    const traceId = telemetryTraceId({
+      ...(incomingTraceparent === undefined
+        ? {}
+        : { traceparent: incomingTraceparent }),
+      ...(incomingTraceId === undefined ? {} : { traceId: incomingTraceId }),
+    });
     context.set("requestId", requestId);
+    context.set("traceId", traceId);
     context.header("x-request-id", requestId);
+    context.header("x-romeo-trace-id", traceId);
     const subject = await resolveSubject(
       context.req.header("authorization"),
       readCookie(context.req.header("cookie"), sessionCookieName),
@@ -58,20 +72,22 @@ export function requestContext(
     );
     if (subject !== undefined) context.set("subject", subject);
     context.set("services", services);
-    await next();
-    if (
-      subject?.supportSession !== undefined &&
-      subject.sessionId !== undefined
-    ) {
-      await auditSupportSessionRequest(
-        subject,
-        context.req.url,
-        context.req.method,
-        context.res.status,
-        requestId,
-        services,
-      );
-    }
+    await runWithTelemetryContext({ requestId, traceId }, async () => {
+      await next();
+      if (
+        subject?.supportSession !== undefined &&
+        subject.sessionId !== undefined
+      ) {
+        await auditSupportSessionRequest(
+          subject,
+          context.req.url,
+          context.req.method,
+          context.res.status,
+          requestId,
+          services,
+        );
+      }
+    });
   };
 }
 

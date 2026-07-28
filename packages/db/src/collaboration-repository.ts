@@ -1,71 +1,48 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import {
   promptTemplates,
+  resourceGrants,
   resourceFavorites,
   workspaceFolderItems,
   workspaceFolders,
 } from "./schema";
 import {
-  asStringArray,
-  optionalIsoString,
-  toIsoString,
-} from "./repository-mapping";
+  toPromptTemplateInsert,
+  toPromptTemplateRecord,
+  toResourceFavoriteInsert,
+  toResourceFavoriteRecord,
+  toWorkspaceFolderInsert,
+  toWorkspaceFolderItemInsert,
+  toWorkspaceFolderItemRecord,
+  toWorkspaceFolderRecord,
+  type FavoritableResourceTypeRecord,
+  type PromptTemplateRecord,
+  type PromptTemplateVisibilityRecord,
+  type ResourceFavoriteRecord,
+  type WorkspaceFolderItemRecord,
+  type WorkspaceFolderRecord,
+} from "./collaboration-record-mapping";
 
-export type FavoritableResourceTypeRecord = "agent" | "chat" | "knowledge_base";
-export type FolderItemResourceTypeRecord = "agent" | "chat" | "knowledge_base";
-export type PromptTemplateVisibilityRecord =
-  | "marketplace"
-  | "private"
-  | "workspace";
-
-export interface PromptTemplateRecord {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  name: string;
-  description?: string;
-  body: string;
-  tags: string[];
-  visibility: PromptTemplateVisibilityRecord;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface WorkspaceFolderRecord {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  name: string;
-  parentId?: string;
-  meta?: Record<string, unknown>;
-  data?: Record<string, unknown>;
-  isExpanded?: boolean;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface WorkspaceFolderItemRecord {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  folderId: string;
-  resourceType: FolderItemResourceTypeRecord;
-  resourceId: string;
-  createdAt: string;
-}
-
-export interface ResourceFavoriteRecord {
-  id: string;
-  orgId: string;
-  userId: string;
-  resourceType: FavoritableResourceTypeRecord;
-  resourceId: string;
-  createdAt: string;
-}
+export type * from "./collaboration-record-mapping";
+export {
+  toPromptTemplateRecord,
+  toResourceFavoriteRecord,
+  toWorkspaceFolderItemRecord,
+  toWorkspaceFolderRecord,
+};
 
 export class PgCollaborationRepository {
   constructor(private readonly db: RomeoDatabase) {}
@@ -87,6 +64,86 @@ export class PgCollaborationRepository {
       )
       .orderBy(desc(promptTemplates.updatedAt), asc(promptTemplates.id));
     return rows.map(toPromptTemplateRecord);
+  }
+
+  async listAuthorizedPromptTemplatesPage(input: {
+    groupIds: string[];
+    isAdmin: boolean;
+    limit: number;
+    offset: number;
+    orgId: string;
+    principalId: string;
+    principalType: "service_account" | "user";
+    query?: string;
+    visibility?: PromptTemplateVisibilityRecord;
+    workspaceId: string;
+  }): Promise<{ items: PromptTemplateRecord[]; total: number }> {
+    const query = input.query?.trim();
+    const directPrincipal = and(
+      eq(resourceGrants.principalType, input.principalType),
+      eq(resourceGrants.principalId, input.principalId),
+    );
+    const groupPrincipal =
+      input.groupIds.length === 0
+        ? undefined
+        : and(
+            eq(resourceGrants.principalType, "group"),
+            inArray(resourceGrants.principalId, input.groupIds),
+          );
+    const where = and(
+      eq(promptTemplates.orgId, input.orgId),
+      eq(promptTemplates.workspaceId, input.workspaceId),
+      input.visibility === undefined
+        ? undefined
+        : eq(promptTemplates.visibility, input.visibility),
+      input.isAdmin
+        ? undefined
+        : or(
+            eq(promptTemplates.createdBy, input.principalId),
+            inArray(promptTemplates.visibility, ["workspace", "marketplace"]),
+            exists(
+              this.db
+                .select({ value: sql`1` })
+                .from(resourceGrants)
+                .where(
+                  and(
+                    eq(resourceGrants.orgId, input.orgId),
+                    eq(resourceGrants.resourceType, "prompt_template"),
+                    eq(resourceGrants.resourceId, promptTemplates.id),
+                    inArray(resourceGrants.permission, [
+                      "read",
+                      "use",
+                      "write",
+                    ]),
+                    groupPrincipal === undefined
+                      ? directPrincipal
+                      : or(directPrincipal, groupPrincipal),
+                  ),
+                ),
+            ),
+          ),
+      query === undefined || query === ""
+        ? undefined
+        : or(
+            ilike(promptTemplates.name, `%${query}%`),
+            ilike(promptTemplates.description, `%${query}%`),
+            sql`array_to_string(${promptTemplates.tags}, ' ') ILIKE ${`%${query}%`}`,
+          ),
+    );
+    const [rows, totals] = await Promise.all([
+      this.db
+        .select()
+        .from(promptTemplates)
+        .where(where)
+        .orderBy(desc(promptTemplates.updatedAt), asc(promptTemplates.id))
+        .limit(input.limit)
+        .offset(input.offset),
+      this.db.select({ value: count() }).from(promptTemplates).where(where),
+    ]);
+    return {
+      items: rows.map(toPromptTemplateRecord),
+      total: totals[0]?.value ?? 0,
+    };
   }
 
   async getPromptTemplate(
@@ -279,7 +336,9 @@ export class PgCollaborationRepository {
     await this.db
       .delete(workspaceFolderItems)
       .where(eq(workspaceFolderItems.folderId, folderId));
-    await this.db.delete(workspaceFolders).where(eq(workspaceFolders.id, folderId));
+    await this.db
+      .delete(workspaceFolders)
+      .where(eq(workspaceFolders.id, folderId));
     return toWorkspaceFolderRecord(existing);
   }
 
@@ -342,155 +401,4 @@ export class PgCollaborationRepository {
       .where(eq(workspaceFolderItems.id, itemId));
     return toWorkspaceFolderItemRecord(existing);
   }
-}
-
-export function toPromptTemplateRecord(
-  row: typeof promptTemplates.$inferSelect,
-): PromptTemplateRecord {
-  const template: PromptTemplateRecord = {
-    id: row.id,
-    orgId: row.orgId,
-    workspaceId: row.workspaceId,
-    name: row.name,
-    body: row.body,
-    tags: row.tags,
-    visibility: asPromptTemplateVisibility(row.visibility),
-    createdBy: row.createdBy,
-    createdAt: toIsoString(row.createdAt),
-    updatedAt: toIsoString(row.updatedAt),
-  };
-  const description = optionalIsoString(row.description);
-  if (description !== undefined) template.description = description;
-  return template;
-}
-
-export function toResourceFavoriteRecord(
-  row: typeof resourceFavorites.$inferSelect,
-): ResourceFavoriteRecord {
-  return {
-    id: row.id,
-    orgId: row.orgId,
-    userId: row.userId,
-    resourceType: asFavoritableResourceType(row.resourceType),
-    resourceId: row.resourceId,
-    createdAt: toIsoString(row.createdAt),
-  };
-}
-
-export function toWorkspaceFolderRecord(
-  row: typeof workspaceFolders.$inferSelect,
-): WorkspaceFolderRecord {
-  return {
-    id: row.id,
-    orgId: row.orgId,
-    workspaceId: row.workspaceId,
-    name: row.name,
-    ...(row.parentId === null ? {} : { parentId: row.parentId }),
-    ...(row.meta === null ? {} : { meta: row.meta }),
-    ...(row.data === null ? {} : { data: row.data }),
-    isExpanded: row.isExpanded,
-    createdBy: row.createdBy,
-    createdAt: toIsoString(row.createdAt),
-    updatedAt: toIsoString(row.updatedAt),
-  };
-}
-
-export function toWorkspaceFolderItemRecord(
-  row: typeof workspaceFolderItems.$inferSelect,
-): WorkspaceFolderItemRecord {
-  return {
-    id: row.id,
-    orgId: row.orgId,
-    workspaceId: row.workspaceId,
-    folderId: row.folderId,
-    resourceType: asFolderItemResourceType(row.resourceType),
-    resourceId: row.resourceId,
-    createdAt: toIsoString(row.createdAt),
-  };
-}
-
-function toPromptTemplateInsert(
-  record: PromptTemplateRecord,
-): typeof promptTemplates.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    workspaceId: record.workspaceId,
-    name: record.name,
-    description: record.description ?? null,
-    body: record.body,
-    tags: record.tags,
-    visibility: record.visibility,
-    createdBy: record.createdBy,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
-  };
-}
-
-function toResourceFavoriteInsert(
-  record: ResourceFavoriteRecord,
-): typeof resourceFavorites.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    userId: record.userId,
-    resourceType: record.resourceType,
-    resourceId: record.resourceId,
-    createdAt: new Date(record.createdAt),
-  };
-}
-
-function toWorkspaceFolderInsert(
-  record: WorkspaceFolderRecord,
-): typeof workspaceFolders.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    workspaceId: record.workspaceId,
-    name: record.name,
-    parentId: record.parentId ?? null,
-    meta: record.meta ?? null,
-    data: record.data ?? null,
-    isExpanded: record.isExpanded ?? false,
-    createdBy: record.createdBy,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
-  };
-}
-
-function toWorkspaceFolderItemInsert(
-  record: WorkspaceFolderItemRecord,
-): typeof workspaceFolderItems.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    workspaceId: record.workspaceId,
-    folderId: record.folderId,
-    resourceType: record.resourceType,
-    resourceId: record.resourceId,
-    createdAt: new Date(record.createdAt),
-  };
-}
-
-function asPromptTemplateVisibility(
-  value: string,
-): PromptTemplateVisibilityRecord {
-  if (value === "marketplace" || value === "private" || value === "workspace") {
-    return value;
-  }
-  return "private";
-}
-
-function asFavoritableResourceType(
-  value: string,
-): FavoritableResourceTypeRecord {
-  if (value === "agent" || value === "chat" || value === "knowledge_base")
-    return value;
-  return "agent";
-}
-
-function asFolderItemResourceType(value: string): FolderItemResourceTypeRecord {
-  if (value === "agent" || value === "chat" || value === "knowledge_base")
-    return value;
-  return "agent";
 }

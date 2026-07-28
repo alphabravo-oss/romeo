@@ -63,6 +63,30 @@ export class PromptTemplateService {
       .filter((template) => promptMatches(template, normalizedQuery));
   }
 
+  async listPage(
+    subject: AuthSubject,
+    workspaceId: string,
+    input: { limit: number; offset: number; query?: string },
+  ) {
+    assertScope(subject, "agents:read");
+    if (!hasWorkspaceAccess(subject, workspaceId))
+      throw new AuthorizationError(
+        "The workspace is outside the caller access.",
+      );
+    const page = await this.repository.listAuthorizedPromptTemplatesPage({
+      groupIds: subject.groupIds,
+      isAdmin: subject.isAdmin === true,
+      limit: input.limit,
+      offset: input.offset,
+      orgId: subject.orgId,
+      principalId: subject.id,
+      principalType: subject.type,
+      workspaceId,
+      ...(input.query === undefined ? {} : { query: input.query }),
+    });
+    return { ...page, limit: input.limit, offset: input.offset };
+  }
+
   async marketplace(
     subject: AuthSubject,
     workspaceId: string,

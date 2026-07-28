@@ -4,6 +4,7 @@ import type {
 } from "./tool-calls";
 
 export type ProviderKind =
+  | "anthropic"
   | "openai-compatible"
   | "openai-responses-compatible"
   | "ollama";
@@ -29,6 +30,7 @@ export interface ProviderCapabilities {
   audioInput: boolean;
   structuredJson: boolean;
   reasoning: boolean;
+  imageGeneration?: boolean;
   modalities: ModelModality[];
   deployment: ProviderDeploymentConstraints;
 }
@@ -36,6 +38,11 @@ export interface ProviderCapabilities {
 export interface ModelPricing {
   inputTokenUsd: number;
   outputTokenUsd: number;
+  imageGenerationUsd?: {
+    "1024x1024": number;
+    "1024x1536": number;
+    "1536x1024": number;
+  };
 }
 
 export interface ProviderInstance {
@@ -45,6 +52,7 @@ export interface ProviderInstance {
   name: string;
   baseUrl: string;
   credentialRef?: string;
+  modelIds?: string[];
   enabled: boolean;
   capabilities: ProviderCapabilities;
 }
@@ -58,10 +66,20 @@ export interface BaseModel {
   capabilities: ProviderCapabilities;
   contextWindow: number;
   pricing?: ModelPricing;
+  capabilitiesSource?: "detected" | "override";
+}
+
+export interface ProviderImageInput {
+  dataBase64: string;
+  mimeType: "image/gif" | "image/jpeg" | "image/png" | "image/webp";
 }
 
 export type ChatMessage =
-  | { role: "system" | "user"; content: string }
+  | {
+      role: "system" | "user";
+      content: string;
+      images?: ProviderImageInput[];
+    }
   | {
       role: "assistant";
       content: string;
@@ -104,8 +122,14 @@ export type StreamChatChunk =
 
 export interface ModelProviderAdapter {
   kind: ProviderKind;
-  health(provider: ProviderInstance): Promise<{ ok: boolean; message: string }>;
-  listModels(provider: ProviderInstance): Promise<BaseModel[]>;
+  health(
+    provider: ProviderInstance,
+    options?: { apiKey?: string; fetchImpl?: typeof fetch },
+  ): Promise<{ ok: boolean; message: string }>;
+  listModels(
+    provider: ProviderInstance,
+    options?: { apiKey?: string; fetchImpl?: typeof fetch },
+  ): Promise<BaseModel[]>;
   streamChat(input: StreamChatInput): AsyncIterable<StreamChatChunk>;
 }
 

@@ -1,6 +1,6 @@
 export type Theme = "system" | "light" | "dark";
 
-const DARK_META = "#08090a";
+const DARK_META = "#09090b";
 const LIGHT_META = "#ffffff";
 
 export function getStoredTheme(): Theme {
@@ -25,6 +25,7 @@ export function applyTheme(theme: Theme): void {
 export function setTheme(theme: Theme): void {
   localStorage.theme = theme;
   applyTheme(theme);
+  window.dispatchEvent(new Event("romeo-theme-change"));
 }
 
 // Inlined into <head> before hydration to avoid a flash of the wrong theme.

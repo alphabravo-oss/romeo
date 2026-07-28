@@ -1,3 +1,4 @@
+import { IssuesQuery, type Issue, type LinearRequest } from "@linear/sdk";
 import { createHash } from "node:crypto";
 
 import type { DataConnector, LocalImportSyncItem } from "../domain/entities";
@@ -14,26 +15,6 @@ import {
   type DataConnectorRetryPolicy,
 } from "./data-connector-retry";
 import type { SecretResolver } from "./secret-resolver";
-
-const linearIssuesQuery = `query RomeoLinearIssues($first: Int!) {
-  issues(first: $first) {
-    nodes {
-      id
-      identifier
-      title
-      description
-      url
-      priority
-      createdAt
-      updatedAt
-      archivedAt
-      state { name }
-      team { key name }
-      assignee { name }
-      labels { nodes { name } }
-    }
-  }
-}`;
 
 interface LinearConnectorConfig {
   apiUrl: URL;
@@ -104,34 +85,37 @@ export class LinearDataConnectorExecutor implements DataConnectorExecutor {
     });
     const authorization = await this.authorizationHeader(config.secretRef);
     const maxItems = Math.min(config.maxItems, this.maxItems);
-    const payload = await this.fetchGraphql(config, authorization, maxItems);
-    const issues = arrayValue(asRecord(asRecord(payload.data)?.issues), "nodes")
-      .filter(isRecord)
+    const request: LinearRequest = (document, variables) =>
+      this.fetchGraphql(config, authorization, document, variables);
+    const connection = await new IssuesQuery(request).fetch({
+      first: maxItems,
+    });
+    const issues = connection.nodes
       .filter((issue) => linearIssueMatches(issue, config.query))
       .slice(0, maxItems);
     const items: LocalImportSyncItem[] = [];
     let totalBytes = 0;
     for (const issue of issues) {
-      const id = stringValue(issue.id) ?? stableHash(JSON.stringify(issue));
-      const identifier = stringValue(issue.identifier) ?? id;
-      const title = stringValue(issue.title) ?? `Linear issue ${identifier}`;
+      const id = issue.id || stableHash(JSON.stringify(issue));
+      const identifier = issue.identifier || id;
+      const title = issue.title || `Linear issue ${identifier}`;
       const content = markdownDocument([
         `# ${identifier}: ${title}`,
-        labeledValue("URL", stringValue(issue.url)),
-        labeledValue(
-          "Team",
-          nestedName(issue.team, "key") ?? nestedName(issue.team, "name"),
-        ),
-        labeledValue("State", nestedName(issue.state, "name")),
-        labeledValue("Assignee", nestedName(issue.assignee, "name")),
-        labeledValue("Priority", numberValue(issue.priority)),
-        labeledValue("Created", stringValue(issue.createdAt)),
-        labeledValue("Updated", stringValue(issue.updatedAt)),
-        labeledValue("Archived", stringValue(issue.archivedAt)),
-        labelsLine(issue.labels),
-        stringValue(issue.description),
+        labeledValue("URL", issue.url),
+        labeledValue("Priority", String(issue.priority)),
+        labeledValue("Created", issue.createdAt.toISOString()),
+        labeledValue("Updated", issue.updatedAt.toISOString()),
+        labeledValue("Archived", issue.archivedAt?.toISOString()),
+        issue.description ?? undefined,
       ]);
       const sizeBytes = new TextEncoder().encode(content).length;
+      if (sizeBytes > this.maxBytes) {
+        throw new ApiError(
+          "connector_response_too_large",
+          "Linear connector response exceeds the configured size limit.",
+          413,
+        );
+      }
       totalBytes += sizeBytes;
       items.push({
         fileName: safeFileName(`linear-${identifier}-${title}.md`),
@@ -179,21 +163,22 @@ export class LinearDataConnectorExecutor implements DataConnectorExecutor {
     return linearAuthorization(resolution.value);
   }
 
-  private async fetchGraphql(
+  private async fetchGraphql<Result, Variables extends Record<string, unknown>>(
     config: LinearConnectorConfig,
     authorization: string,
-    first: number,
-  ): Promise<Record<string, unknown>> {
+    document: string,
+    variables?: Variables,
+  ): Promise<Result> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    let response: Response;
+    let response: globalThis.Response;
     try {
       response = await retryConnectorResponse(
         () =>
           this.fetchImpl(config.apiUrl.toString(), {
             body: JSON.stringify({
-              query: linearIssuesQuery,
-              variables: { first },
+              query: document,
+              variables,
             }),
             headers: {
               accept: "application/json",
@@ -250,7 +235,7 @@ export class LinearDataConnectorExecutor implements DataConnectorExecutor {
           { errorCount: parsed.errors.length },
         );
       }
-      return parsed;
+      return parsed.data as Result;
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw new ApiError(
@@ -303,28 +288,12 @@ function linearAuthorization(value: string): string {
   return trimmed;
 }
 
-function linearIssueMatches(
-  issue: Record<string, unknown>,
-  query: string | undefined,
-): boolean {
+function linearIssueMatches(issue: Issue, query: string | undefined): boolean {
   if (query === undefined) return true;
   const needle = query.toLowerCase();
-  return [
-    stringValue(issue.identifier),
-    stringValue(issue.title),
-    stringValue(issue.description),
-  ].some((value) => value?.toLowerCase().includes(needle) ?? false);
-}
-
-function labelsLine(value: unknown): string | undefined {
-  const names = arrayValue(asRecord(value), "nodes")
-    .flatMap((label) => (isRecord(label) ? [stringValue(label.name)] : []))
-    .filter((name): name is string => name !== undefined);
-  return names.length === 0 ? undefined : `Labels: ${names.join(", ")}`;
-}
-
-function nestedName(value: unknown, key: string): string | undefined {
-  return isRecord(value) ? stringValue(value[key]) : undefined;
+  return [issue.identifier, issue.title, issue.description ?? undefined].some(
+    (value) => value?.toLowerCase().includes(needle) ?? false,
+  );
 }
 
 function stringConfig(connector: DataConnector, key: string): string {
@@ -347,14 +316,6 @@ function numberConfig(
   return Number.isInteger(value) ? Number(value) : fallback;
 }
 
-function arrayValue(
-  record: Record<string, unknown> | undefined,
-  key: string,
-): unknown[] {
-  const value = record?.[key];
-  return Array.isArray(value) ? value : [];
-}
-
 function labeledValue(
   label: string,
   value: string | undefined,
@@ -371,12 +332,6 @@ function markdownDocument(parts: Array<string | undefined>): string {
     .join("\n\n");
 }
 
-function numberValue(value: unknown): string | undefined {
-  return typeof value === "number" && Number.isFinite(value)
-    ? String(value)
-    : undefined;
-}
-
 function safeFileName(value: string): string {
   return (
     value.replace(/[^A-Za-z0-9._-]/gu, "_").slice(0, 140) || "linear-source.md"
@@ -385,12 +340,6 @@ function safeFileName(value: string): string {
 
 function stableHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 16);
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

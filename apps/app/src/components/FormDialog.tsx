@@ -1,6 +1,5 @@
-import X from "lucide-react/dist/esm/icons/x.mjs";
-
-import { useFocusTrap } from "../lib/use-focus-trap";
+import { Dialog } from "@romeo/ui";
+import { useLocale } from "../lib/i18n";
 
 /**
  * Centered modal for create/edit forms — the standard progressive-disclosure
@@ -9,7 +8,7 @@ import { useFocusTrap } from "../lib/use-focus-trap";
  * owns `open` and renders the form as `children`.
  *
  *   const [open, setOpen] = useState(false)
- *   <button className="rm-button primary" onClick={() => setOpen(true)}>+ Add key</button>
+ *   <Button variant="primary" onClick={() => setOpen(true)}>+ Add key</Button>
  *   <FormDialog open={open} title="New API key" onClose={() => setOpen(false)}>
  *     <form>…</form>
  *   </FormDialog>
@@ -21,46 +20,19 @@ export function FormDialog(props: {
   onClose: () => void;
   children: React.ReactNode;
 }): React.ReactNode {
+  const { t } = useLocale();
   const { open, title, description, onClose, children } = props;
-  const ref = useFocusTrap({ active: open, onEscape: onClose });
-  if (!open) return null;
-
   return (
-    <>
-      <button
-        aria-label="Close"
-        className="rm-modal-backdrop"
-        onClick={onClose}
-        tabIndex={-1}
-        type="button"
-      />
-      <div
-        aria-labelledby="rm-form-dialog-title"
-        aria-modal="true"
-        className="rm-form-dialog"
-        ref={ref}
-        role="dialog"
-      >
-        <header className="rm-form-dialog-head">
-          <div className="min-w-0">
-            <h2 className="rm-form-dialog-title" id="rm-form-dialog-title">
-              {title}
-            </h2>
-            {description !== undefined ? (
-              <p className="rm-form-dialog-desc">{description}</p>
-            ) : null}
-          </div>
-          <button
-            aria-label="Close"
-            className="rm-icon-button"
-            onClick={onClose}
-            type="button"
-          >
-            <X aria-hidden="true" size={16} />
-          </button>
-        </header>
-        <div className="rm-form-dialog-body">{children}</div>
-      </div>
-    </>
+    <Dialog
+      closeLabel={t("close")}
+      {...(description === undefined ? {} : { description })}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+      open={open}
+      title={title}
+    >
+      {children}
+    </Dialog>
   );
 }

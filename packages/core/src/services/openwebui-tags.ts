@@ -25,9 +25,7 @@ export function openWebUiTagsFromChat(
 
 function tagValues(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .map(tagValue)
-    .filter((tag): tag is string => tag !== undefined);
+  return value.map(tagValue).filter((tag): tag is string => tag !== undefined);
 }
 
 function tagValue(value: unknown): string | undefined {

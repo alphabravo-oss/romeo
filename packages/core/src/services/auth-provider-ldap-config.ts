@@ -65,7 +65,10 @@ export function applyLdapConnectionPatch(
   const url = normalizeOptionalLdapUrl(patch.url, existing?.url, startTls);
   assertLdapUrlTlsPolicy(url, startTls);
   const next = compactConnection({
-    adminGroups: normalizeOptionalList(patch.adminGroups, existing?.adminGroups),
+    adminGroups: normalizeOptionalList(
+      patch.adminGroups,
+      existing?.adminGroups,
+    ),
     baseDn: normalizeOptionalDn(patch.baseDn, existing?.baseDn),
     bindDn: normalizeOptionalDn(patch.bindDn, existing?.bindDn),
     emailAttribute: normalizeOptionalAttribute(
@@ -161,7 +164,8 @@ export function parseStoredLdapConnection(
     groupSearchFilter: optionalString(record.groupSearchFilter),
     nameAttribute: optionalString(record.nameAttribute),
     requiredGroups: stringArray(record.requiredGroups),
-    startTls: typeof record.startTls === "boolean" ? record.startTls : undefined,
+    startTls:
+      typeof record.startTls === "boolean" ? record.startTls : undefined,
     url: optionalString(record.url),
     userIdAttribute: optionalString(record.userIdAttribute),
     userSearchFilter: optionalString(record.userSearchFilter),
@@ -251,7 +255,9 @@ function normalizeOptionalLdapUrl(
   try {
     parsed = new URL(trimmed);
   } catch {
-    throw invalidLdapConfig("LDAP URL must be a valid ldap:// or ldaps:// URL.");
+    throw invalidLdapConfig(
+      "LDAP URL must be a valid ldap:// or ldaps:// URL.",
+    );
   }
   if (parsed.protocol !== "ldaps:" && parsed.protocol !== "ldap:") {
     throw invalidLdapConfig("LDAP URL must use ldap:// or ldaps://.");
@@ -284,7 +290,9 @@ function assertLdapUrlTlsPolicy(
     }
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    throw invalidLdapConfig("LDAP URL must be a valid ldap:// or ldaps:// URL.");
+    throw invalidLdapConfig(
+      "LDAP URL must be a valid ldap:// or ldaps:// URL.",
+    );
   }
 }
 
@@ -317,7 +325,9 @@ function normalizeOptionalFilter(
   if (!value.startsWith("(") || !value.endsWith(")")) {
     throw invalidLdapConfig("LDAP filters must be parenthesized.");
   }
-  if (requiredPlaceholders.every((placeholder) => !value.includes(placeholder))) {
+  if (
+    requiredPlaceholders.every((placeholder) => !value.includes(placeholder))
+  ) {
     throw invalidLdapConfig(
       `LDAP filters must include one of: ${requiredPlaceholders.join(", ")}.`,
     );
@@ -335,7 +345,10 @@ function normalizeOptionalText(
   if (patch === null) return undefined;
   const normalized = patch.trim();
   if (normalized.length === 0) return allowEmpty ? undefined : existing;
-  if (normalized.length > maxLength || /[\u0000-\u001f\u007f]/u.test(normalized)) {
+  if (
+    normalized.length > maxLength ||
+    /[\u0000-\u001f\u007f]/u.test(normalized)
+  ) {
     throw invalidLdapConfig("LDAP connection text fields must be bounded.");
   }
   return normalized;

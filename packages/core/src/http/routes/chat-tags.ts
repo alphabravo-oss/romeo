@@ -1,60 +1,59 @@
+import {
+  assignChatTagRoute,
+  listChatsForTagRoute,
+  listChatTagAssignmentsRoute,
+  listChatTagsRoute,
+  removeChatTagRoute,
+} from "@romeo/contracts";
+
 import type { RomeoApi } from "../context";
-import { assignChatTagSchema } from "../schemas";
 
 export function registerChatTagRoutes(app: RomeoApi): void {
-  app.get("/api/v1/chat-tags", async (context) => {
-    const subject = context.get("subject");
-    const data = await context.get("services").chatTags.list(subject);
-    return context.json({ data });
-  });
-
-  app.get("/api/v1/chat-tags/:tagSlug/chats", async (context) => {
-    const subject = context.get("subject");
+  app.openapi(listChatTagsRoute, async (context) => {
     const data = await context
       .get("services")
-      .chatTags.chatsForTag(subject, context.req.param("tagSlug"), {
-        archived: parseChatArchiveFilter(context.req.query("archived")),
+      .chatTags.list(context.get("subject"));
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listChatsForTagRoute, async (context) => {
+    const { tagSlug } = context.req.valid("param");
+    const { archived } = context.req.valid("query");
+    const data = await context
+      .get("services")
+      .chatTags.chatsForTag(context.get("subject"), tagSlug, {
+        ...(archived === undefined ? {} : { archived }),
       });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.get("/api/v1/chats/:chatId/tag-assignments", async (context) => {
-    const subject = context.get("subject");
+  app.openapi(listChatTagAssignmentsRoute, async (context) => {
+    const { chatId } = context.req.valid("param");
     const data = await context.get("services").chatTags.forChat({
-      subject,
-      chatId: context.req.param("chatId"),
+      subject: context.get("subject"),
+      chatId,
     });
-    return context.json({ data });
+    return context.json({ data }, 200);
   });
 
-  app.post("/api/v1/chats/:chatId/tag-assignments", async (context) => {
-    const subject = context.get("subject");
-    const body = assignChatTagSchema.parse(await context.req.json());
+  app.openapi(assignChatTagRoute, async (context) => {
+    const { chatId } = context.req.valid("param");
+    const { name } = context.req.valid("json");
     const data = await context.get("services").chatTags.assign({
-      subject,
-      chatId: context.req.param("chatId"),
-      name: body.name,
+      subject: context.get("subject"),
+      chatId,
+      name,
     });
     return context.json({ data }, 201);
   });
 
-  app.delete(
-    "/api/v1/chats/:chatId/tag-assignments/:tagSlug",
-    async (context) => {
-      const subject = context.get("subject");
-      const data = await context.get("services").chatTags.remove({
-        subject,
-        chatId: context.req.param("chatId"),
-        tagSlug: context.req.param("tagSlug"),
-      });
-      return context.json({ data });
-    },
-  );
-}
-
-function parseChatArchiveFilter(
-  value: string | undefined,
-): "active" | "all" | "archived" {
-  if (value === "all" || value === "archived") return value;
-  return "active";
+  app.openapi(removeChatTagRoute, async (context) => {
+    const { chatId, tagSlug } = context.req.valid("param");
+    const data = await context.get("services").chatTags.remove({
+      subject: context.get("subject"),
+      chatId,
+      tagSlug,
+    });
+    return context.json({ data }, 200);
+  });
 }

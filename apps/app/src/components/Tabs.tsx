@@ -1,45 +1,32 @@
-import { useState } from 'react'
+import { Tabs as PrimitiveTabs } from "@romeo/ui";
+import { useLocale } from "../lib/i18n";
 
 export interface TabItem {
-  id: string
-  label: string
-  content: React.ReactNode
+  id: string;
+  label: string;
+  content: React.ReactNode;
 }
 
-/**
- * Simple tab strip for dense panels — reveal one section at a time instead of
- * stacking everything vertically. Uncontrolled (tracks its own active tab);
- * defaults to the first tab.
- *
- *   <Tabs tabs={[
- *     { id: 'plan', label: 'Plan', content: <PlanForm /> },
- *     { id: 'quotas', label: 'Quota tiers', content: <QuotaTable /> },
- *   ]} />
- */
-export function Tabs(props: { tabs: TabItem[]; initialId?: string }): React.ReactNode {
-  const { tabs, initialId } = props
-  const [active, setActive] = useState(initialId ?? tabs[0]?.id ?? '')
-  const current = tabs.find((tab) => tab.id === active) ?? tabs[0]
-
+/** Compatibility adapter over the design-system tabs primitive. */
+export function Tabs({
+  tabs,
+  initialId,
+}: {
+  tabs: TabItem[];
+  initialId?: string;
+}): React.ReactNode {
+  const { t } = useLocale();
+  const defaultValue = initialId ?? tabs[0]?.id;
   return (
-    <div className="rm-tabs">
-      <div aria-label="Sections" className="rm-tablist" role="tablist">
-        {tabs.map((tab) => (
-          <button
-            aria-selected={tab.id === current?.id}
-            className={`rm-tab${tab.id === current?.id ? ' selected' : ''}`}
-            key={tab.id}
-            onClick={() => setActive(tab.id)}
-            role="tab"
-            type="button"
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      <div className="rm-tabpanel" role="tabpanel">
-        {current?.content}
-      </div>
-    </div>
-  )
+    <PrimitiveTabs
+      aria-label={t("sections")}
+      className="rm-tabs"
+      {...(defaultValue ? { defaultValue } : {})}
+      tabs={tabs.map((tab) => ({
+        content: tab.content,
+        label: tab.label,
+        value: tab.id,
+      }))}
+    />
+  );
 }
