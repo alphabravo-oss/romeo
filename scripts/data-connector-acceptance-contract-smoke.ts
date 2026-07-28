@@ -563,7 +563,7 @@ const linearApi = createRomeoApi(new InMemoryRomeoRepository(), {
       };
       if (
         url.pathname !== "/graphql" ||
-        !body.query?.includes("RomeoLinearIssues") ||
+        !body.query?.includes("query issues") ||
         body.variables?.first !== 25
       ) {
         throw new Error("Linear connector did not send bounded issue query.");
@@ -578,10 +578,26 @@ const linearApi = createRomeoApi(new InMemoryRomeoRepository(), {
                 identifier: `OPS-${pid}`,
                 title: `Acceptance Linear issue ${rawSentinels.linearQuery}`,
                 description: rawSentinels.linearContent,
+                url: `https://linear.app/acceptance/OPS-${pid}`,
+                priority: 1,
+                createdAt: "2026-07-27T12:00:00.000Z",
+                updatedAt: "2026-07-27T13:00:00.000Z",
                 state: { name: "Open" },
                 team: { key: "OPS" },
+                reactions: [],
+                sharedAccess: {
+                  disallowedIssueFields: [],
+                  isShared: false,
+                  sharedWithCount: 0,
+                  sharedWithUsers: [],
+                  viewerHasOnlySharedAccess: false,
+                },
               },
             ],
+            pageInfo: {
+              hasNextPage: false,
+              hasPreviousPage: false,
+            },
           },
         },
       });
@@ -641,10 +657,12 @@ const slackApi = createRomeoApi(new InMemoryRomeoRepository(), {
       if (authorization !== `Bearer ${rawSentinels.slackToken}`) {
         throw new Error("Slack connector did not send bearer auth.");
       }
+      const body = new URLSearchParams(String(init?.body));
       if (
         url.pathname !== "/api/conversations.history" ||
-        url.searchParams.get("channel") !== rawSentinels.slackChannelId ||
-        url.searchParams.get("limit") !== "25"
+        init?.method !== "POST" ||
+        body.get("channel") !== rawSentinels.slackChannelId ||
+        body.get("limit") !== "25"
       ) {
         throw new Error("Slack connector did not send bounded channel query.");
       }
@@ -1116,12 +1134,19 @@ function jsonResponse(body: unknown, status = 200): Response {
 function headerValue(headers: HeadersInit | undefined, key: string): string {
   if (headers === undefined) return "";
   if (headers instanceof Headers) return headers.get(key) ?? "";
+  const normalizedKey = key.toLowerCase();
   if (Array.isArray(headers)) {
     return (
-      headers.find(([candidate]) => candidate.toLowerCase() === key)?.[1] ?? ""
+      headers.find(
+        ([candidate]) => candidate.toLowerCase() === normalizedKey,
+      )?.[1] ?? ""
     );
   }
-  return headers[key] ?? "";
+  return (
+    Object.entries(headers).find(
+      ([candidate]) => candidate.toLowerCase() === normalizedKey,
+    )?.[1] ?? ""
+  );
 }
 
 function argValue(name: string): string | undefined {
