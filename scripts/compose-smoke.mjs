@@ -157,24 +157,20 @@ async function enableAttachmentSmokeModel(harness, token) {
   if (model?.capabilities === undefined) {
     throw new Error("Default model capabilities were not available.");
   }
-  await apiJson(
-    harness,
-    `/api/v1/models/${model.id}/capabilities`,
-    {
-      method: "PATCH",
-      token,
-      body: {
-        capabilities: {
-          ...model.capabilities,
-          vision: true,
-          modalities: [
-            ...new Set([...(model.capabilities.modalities ?? []), "vision"]),
-          ],
-        },
-        contextWindow: model.contextWindow,
+  await apiJson(harness, `/api/v1/models/${model.id}/capabilities`, {
+    method: "PATCH",
+    token,
+    body: {
+      capabilities: {
+        ...model.capabilities,
+        vision: true,
+        modalities: [
+          ...new Set([...(model.capabilities.modalities ?? []), "vision"]),
+        ],
       },
+      contextWindow: model.contextWindow,
     },
-  );
+  });
 }
 
 async function restartAndAssertService(service, state, options = {}) {

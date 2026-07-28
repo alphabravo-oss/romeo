@@ -27,10 +27,7 @@ export default defineConfig({
     },
   },
   ssr: {
-    external: [
-      ...serverRuntimeExternals,
-      "@valkey/valkey-glide-darwin-arm64",
-    ],
+    external: [...serverRuntimeExternals, "@valkey/valkey-glide-darwin-arm64"],
   },
   plugins: [
     tailwindcss(),
