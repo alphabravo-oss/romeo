@@ -3267,9 +3267,11 @@ describe("live Postgres portable chat deployment transfer", () => {
       try {
         const sourceApi = createRomeoApi(source.repository, {
           objectStore: new MemoryObjectStore(),
+          startBackgroundWorkers: false,
         });
         const targetApi = createRomeoApi(target.repository, {
           objectStore: new MemoryObjectStore(),
+          startBackgroundWorkers: false,
         });
         const attachmentText = "portable deployment attachment sentinel";
         const importedResponse = await sourceApi.request(

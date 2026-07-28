@@ -63,14 +63,22 @@ import { registerWebSearchRoutes } from "./http/routes/web-search";
 import type { AppBindings } from "./http/context";
 import { createServices } from "./services";
 
+export type CreateRomeoApiOptions = NonNullable<
+  Parameters<typeof createServices>[1]
+> & {
+  startBackgroundWorkers?: boolean;
+};
+
 export function createRomeoApi(
   repository: RomeoRepository = defaultRepository,
-  serviceOptions?: Parameters<typeof createServices>[1],
+  serviceOptions?: CreateRomeoApiOptions,
 ) {
   const env = serviceOptions?.env ?? readEnv();
   const services = createServices(repository, { ...serviceOptions, env });
-  services.temporaryChatCleanup.start();
-  services.runs.startTerminalOutboxWorker();
+  if (serviceOptions?.startBackgroundWorkers !== false) {
+    services.temporaryChatCleanup.start();
+    services.runs.startTerminalOutboxWorker();
+  }
   const requestContextOptions = { devSeededLogin: env.DEV_SEEDED_LOGIN };
   const app = new OpenAPIHono<AppBindings>({
     defaultHook: (result) => {
