@@ -13,7 +13,10 @@ type RomeoTestApi = ReturnType<typeof createRomeoApi>;
 const output = argValue("--output");
 const repository = new InMemoryRomeoRepository();
 const env = { ...readEnv(), DEV_SEEDED_LOGIN: true };
-const api = createRomeoApi(repository, { env });
+const api = createRomeoApi(repository, {
+  env,
+  startBackgroundWorkers: false,
+});
 const services = createServices(repository, { env });
 const rawSentinels = {
   evalInput: `RAW_ANALYTICS_EVAL_INPUT_${process.pid}`,
@@ -40,6 +43,7 @@ const nonAgentToken = await createApiKey("non-agent-read", ["me:read"]);
 
 const secureApi = createRomeoApi(repository, {
   env: { ...env, DEV_SEEDED_LOGIN: false },
+  startBackgroundWorkers: false,
 });
 const unauthenticatedAnalyticsStatus = await requestStatus(
   secureApi,
@@ -267,6 +271,7 @@ async function seedAnalyticsData(): Promise<void> {
   });
   await apiJson(`/api/v1/eval-suites/${suite.data.suite.id}/runs`, {
     method: "POST",
+    body: "{}",
   });
 }
 
