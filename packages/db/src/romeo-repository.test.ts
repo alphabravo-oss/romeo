@@ -3112,7 +3112,9 @@ describe("live Postgres API readiness smoke", () => {
         await createLivePostgresRepositoryFixture(livePostgresUrl);
       try {
         await seedReadinessData(fixture.repository);
-        const devApi = createRomeoApi(fixture.repository);
+        const devApi = createRomeoApi(fixture.repository, {
+          startBackgroundWorkers: false,
+        });
         const keyResponse = await devApi.request("/api/v1/api-keys", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -3133,6 +3135,7 @@ describe("live Postgres API readiness smoke", () => {
             SESSION_SECRET: "prod-session-secret-32-bytes-long",
             WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
           }),
+          startBackgroundWorkers: false,
         });
         const response = await api.request("/api/v1/admin/readiness", {
           headers: { authorization: `Bearer ${key.data.token}` },
@@ -3183,8 +3186,12 @@ describe("live Postgres queued-turn API concurrency", () => {
           createdBy: "user_dev_admin",
           createdAt: new Date().toISOString(),
         });
-        const firstApi = createRomeoApi(fixture.repository);
-        const secondApi = createRomeoApi(fixture.repository);
+        const firstApi = createRomeoApi(fixture.repository, {
+          startBackgroundWorkers: false,
+        });
+        const secondApi = createRomeoApi(fixture.repository, {
+          startBackgroundWorkers: false,
+        });
         const enqueue = (
           api: ReturnType<typeof createRomeoApi>,
           suffix: string,
