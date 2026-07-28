@@ -259,6 +259,28 @@ export function cleanupComposeHarness(harness, options = {}) {
   }
 }
 
+export function normalizeComposeBindMountPermissions(harness, path) {
+  compose(
+    harness,
+    [
+      "run",
+      "--rm",
+      "--no-deps",
+      "--user",
+      "0:0",
+      "-v",
+      `${resolve(path)}:/cleanup-target`,
+      "--entrypoint",
+      "/bin/chmod",
+      "app",
+      "-R",
+      "a+rwX",
+      "/cleanup-target",
+    ],
+    { allowFailure: true, stdio: "pipe" },
+  );
+}
+
 export function assertComposeLogsRedacted(
   harness,
   secrets,
