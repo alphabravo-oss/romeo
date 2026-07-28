@@ -11,6 +11,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@google-cloud/secret-manager": "6.2.0",
     "@node-rs/argon2": "^2.0.2",
     "@romeo/api-client": "workspace:*",
     "@romeo/config": "workspace:*",
@@ -30,6 +31,7 @@
     "@tanstack/store": "^0.11.0",
     "@valkey/valkey-glide": "2.5.0",
     "@vitejs/plugin-react": "^6.0.3",
+    "firebase-admin": "14.2.0",
     "i18next": "^25.10.10",
     "i18next-resources-to-backend": "1.2.1",
     "katex": "^0.17.0",

@@ -35,6 +35,9 @@ importers:
 
   apps/app:
     dependencies:
+      '@google-cloud/secret-manager':
+        specifier: 6.2.0
+        version: 6.2.0
       '@node-rs/argon2':
         specifier: ^2.0.2
         version: 2.0.2
@@ -92,6 +95,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.0.3
         version: 6.0.3(vite@8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0))
+      firebase-admin:
+        specifier: 14.2.0
+        version: 14.2.0
       i18next:
         specifier: ^25.10.10
         version: 25.10.10(typescript@6.0.3)

@@ -4,6 +4,15 @@ import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
 
+const serverRuntimeExternals = [
+  "@node-rs/argon2",
+  "@valkey/valkey-glide",
+  "@google-cloud/secret-manager",
+  "firebase-admin",
+  "firebase-admin/app",
+  "firebase-admin/messaging",
+];
+
 export default defineConfig({
   optimizeDeps: {
     exclude: ["@valkey/valkey-glide", "@valkey/valkey-glide-darwin-arm64"],
@@ -14,13 +23,12 @@ export default defineConfig({
   build: {
     manifest: true,
     rolldownOptions: {
-      external: ["@node-rs/argon2", "@valkey/valkey-glide"],
+      external: serverRuntimeExternals,
     },
   },
   ssr: {
     external: [
-      "@node-rs/argon2",
-      "@valkey/valkey-glide",
+      ...serverRuntimeExternals,
       "@valkey/valkey-glide-darwin-arm64",
     ],
   },
