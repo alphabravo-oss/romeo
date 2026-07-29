@@ -2,9 +2,12 @@ import {
   identityGetCurrentPrincipal,
   identityUpdateCurrentProfile,
   sessionsRevokeCurrent,
+  type AuthSubject,
   type BootstrapResponse,
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
+
+export type { AuthSubject };
 
 export async function getBootstrap(): Promise<BootstrapResponse> {
   configureBrowserApiClients();

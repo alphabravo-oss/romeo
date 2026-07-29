@@ -29,6 +29,13 @@ const appApiFiles = sourceFiles(
   productionExtensions,
 );
 const appTsxFiles = appFiles.filter((file) => extname(file) === ".tsx");
+const uiFiles = sourceFiles(
+  resolve(root, "packages/ui/src"),
+  productionExtensions,
+);
+const interfaceFiles = [...appFiles, ...uiFiles].filter(
+  (file) => !file.includes(`${join("src", "dev")}/`),
+);
 const openApiFiles = sourceFiles(
   resolve(root, "packages/core/src/http/openapi"),
   new Set([".ts"]),
@@ -118,12 +125,41 @@ const ratchetFailures = Object.entries(baseline.limits).flatMap(
   },
 );
 
-const forbiddenPatterns = [
+const interfaceGuidelinePatterns = [
+  {
+    id: "hardcoded_accessible_label",
+    files: interfaceFiles.filter((file) => extname(file) === ".tsx"),
+    pattern: /aria-label\s*=\s*["'][^"'{}]+["']/u,
+    sample: '<button aria-label="Delete">',
+  },
+  {
+    id: "disabled_page_zoom",
+    files: interfaceFiles,
+    pattern: /(?:user-scalable\s*=\s*no|maximum-scale\s*=\s*1)/iu,
+    sample: 'content="width=device-width,maximum-scale=1"',
+  },
+  {
+    id: "paste_prevention",
+    files: interfaceFiles.filter((file) => extname(file) === ".tsx"),
+    pattern: /onPaste\s*=\s*\{[^}]{0,500}preventDefault/u,
+    sample: "onPaste={(event) => event.preventDefault()}",
+  },
+  {
+    id: "nonsemantic_click_target",
+    files: interfaceFiles.filter((file) => extname(file) === ".tsx"),
+    pattern: /<(?:div|span)\b[^>]{0,500}\bonClick\s*=/u,
+    sample: "<div onClick={run}>Run</div>",
+  },
   {
     id: "lucide_barrel_import",
-    files: appFiles,
+    files: interfaceFiles,
     pattern: /from\s+["']lucide-react["']/u,
+    sample: 'import { Search } from "lucide-react"',
   },
+];
+
+const forbiddenPatterns = [
+  ...interfaceGuidelinePatterns,
   {
     id: "transition_all",
     files: styleFiles,
@@ -892,11 +928,18 @@ const requiredFailures = requiredPatterns.flatMap(({ id, files, pattern }) =>
     ? []
     : [{ id }],
 );
+const interfaceGuidelineSelfTests = Object.fromEntries(
+  interfaceGuidelinePatterns.map(({ id, pattern, sample }) => [
+    id,
+    pattern.test(sample),
+  ]),
+);
 
 const status =
   ratchetFailures.length === 0 &&
   forbiddenFailures.length === 0 &&
-  requiredFailures.length === 0
+  requiredFailures.length === 0 &&
+  Object.values(interfaceGuidelineSelfTests).every(Boolean)
     ? "passed"
     : "failed";
 const oversizedProductionFileInventory = productionFiles
@@ -921,6 +964,7 @@ const evidence = {
   ratchetFailures,
   forbiddenFailures,
   requiredFailures,
+  interfaceGuidelineSelfTests,
 };
 
 mkdirSync(dirname(outputPath), { recursive: true });
@@ -937,6 +981,9 @@ if (status !== "passed") {
   }
   for (const failure of requiredFailures) {
     console.error(`${failure.id}: required SDK integration is missing.`);
+  }
+  for (const [id, passed] of Object.entries(interfaceGuidelineSelfTests)) {
+    if (!passed) console.error(`${id}: interface guideline self-test failed.`);
   }
   process.exitCode = 1;
 }

@@ -6,6 +6,7 @@ const commands = [
   ["format:check"],
   ["check:architecture"],
   ["check:dependencies"],
+  ["check:test-contracts"],
   ["check:ui-form-contracts"],
   ["check:openapi-route-coverage"],
   ["contract:lint"],

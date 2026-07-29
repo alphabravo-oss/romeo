@@ -3,9 +3,13 @@ import { useEffect, useState } from "react";
 import { useLocale } from "../lib/i18n";
 import { OverlayHeader, OverlayShell } from "./OverlayShell";
 
-export function ShortcutsModal() {
+export function ShortcutsModal({
+  initialOpen = false,
+}: {
+  initialOpen?: boolean;
+}) {
   const { t } = useLocale();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
 
   useEffect(() => {
     const onOpen = () => setOpen(true);

@@ -78,7 +78,9 @@ async function captureScenario({ route, theme, viewport }) {
     await page.addInitScript((selectedTheme) => {
       localStorage.setItem("theme", selectedTheme);
     }, theme);
-    await page.goto(`${baseUrl}${route.path}`, { waitUntil: "networkidle" });
+    await page.goto(`${baseUrl}${route.path}`, {
+      waitUntil: "domcontentloaded",
+    });
     await page.locator(route.requiredSelector).first().waitFor();
     await page.evaluate(() => document.fonts.ready);
     await page.addStyleTag({

@@ -1,5 +1,6 @@
 import {
   type ColumnDef,
+  type PaginationState,
   type RowSelectionState,
   type SortingState,
   createColumnHelper,
@@ -12,28 +13,29 @@ import {
 } from "@tanstack/react-table";
 import type React from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import ArrowDown from "lucide-react/dist/esm/icons/arrow-down.mjs";
+import ArrowUp from "lucide-react/dist/esm/icons/arrow-up.mjs";
+import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down.mjs";
+import { Button } from "./button";
+import { Checkbox } from "./forms";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { DataTableControls } from "./data-table-controls";
+import { ClientTablePager, ServerTablePager } from "./data-table-pagination";
+import { downloadCsv, serializeTableCsv } from "./table-csv";
 import {
-  ArrowDown,
-  ArrowUp,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsUpDown,
-  Search,
-  SlidersHorizontal,
-} from "lucide-react";
-import { Button, IconButton } from "./button";
-import { Checkbox, Input } from "./forms";
-import { Popover } from "./overlays";
-import { useRef, useState } from "react";
+  defaultTablePreferences,
+  readTablePreferences,
+  removeTablePreferences,
+  tablePreferenceIdentity,
+  writeTablePreferences,
+} from "./table-preferences";
 
-// re-export so panels build columns without importing the lib directly
 export { createColumnHelper };
 export type { ColumnDef };
 
 /**
  * Server-driven pagination. When passed, the internal client-side paginator is
- * disabled and the pager is driven entirely by these callbacks — the parent is
- * responsible for fetching each page from the API. `hasNextPage` and the
+ * disabled and driven by parent callbacks. `hasNextPage` and the
  * optional `onPrevPage` control the nav buttons; `isFetching` disables them
  * mid-request. `pageSize` is used only for display sizing hints.
  */
@@ -50,19 +52,25 @@ export interface DataTableLabels {
   comfortable: string;
   compact: string;
   density: string;
+  exportCsv: string;
   loading: string;
   nextPage: string;
   noMatches: string;
   noRecords: string;
   of: string;
   options: string;
+  page: string;
   previousPage: string;
+  resetView: string;
+  results: string;
+  rowsPerPage: string;
   search: string;
   searchPlaceholder: string;
   selectAllRows: string;
   selected: string;
   selectRow: string;
   shown: string;
+  total: string;
 }
 
 export interface DataTableProps<T> {
@@ -74,12 +82,14 @@ export interface DataTableProps<T> {
   data: T[];
   empty?: string;
   enableRowSelection?: boolean;
+  exportFileName?: false | string;
   formatNumber?: (value: number) => React.ReactNode;
   getRowId?: (row: T, index: number) => string;
   labels: DataTableLabels;
   maxBodyHeight?: number;
   minTableWidth?: number;
   pageSize?: number;
+  preferenceKey?: string;
   serverPagination?: ServerPagination;
 }
 
@@ -100,9 +110,11 @@ export function DataTable<T>({
   columns,
   data,
   empty,
+  exportFileName = "romeo-table.csv",
   maxBodyHeight,
   minTableWidth,
   pageSize = 25,
+  preferenceKey,
   serverPagination,
   enableRowSelection = false,
   bulkActions,
@@ -111,20 +123,47 @@ export function DataTable<T>({
   labels,
 }: DataTableProps<T>) {
   const resolvedEmpty = empty ?? labels.noRecords;
+  const dataColumnIds = useMemo(
+    () => columnPreferenceIds(columns, false),
+    [columns],
+  );
+  const preferenceColumnIds = useMemo(
+    () => columnPreferenceIds(columns, true),
+    [columns],
+  );
+  const resolvedPreferenceKey =
+    preferenceKey ?? tablePreferenceIdentity(dataColumnIds);
+  const [initialPreferences] = useState(() =>
+    readTablePreferences(
+      resolvedPreferenceKey,
+      new Set(preferenceColumnIds),
+      pageSize,
+    ),
+  );
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
-  const [columnVisibility, setColumnVisibility] = useState<
-    Record<string, boolean>
-  >({});
-  const [density, setDensity] = useState<"comfortable" | "compact">(
-    "comfortable",
+  const [columnVisibility, setColumnVisibility] = useState(
+    initialPreferences.columnVisibility,
   );
+  const [density, setDensity] = useState(initialPreferences.density);
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: initialPreferences.pageSize,
+  });
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualize = maxBodyHeight !== undefined;
   // Server pagination is authoritative: the parent owns page state, so the
   // internal client paginator must be off.
   const clientPaginate = !virtualize && !serverPagination;
+
+  useEffect(() => {
+    writeTablePreferences(resolvedPreferenceKey, {
+      columnVisibility,
+      density,
+      pageSize: pagination.pageSize,
+    });
+  }, [columnVisibility, density, pagination.pageSize, resolvedPreferenceKey]);
 
   const selectionColumn: ColumnDef<T, any> = {
     id: "__select__",
@@ -165,12 +204,19 @@ export function DataTable<T>({
   const table = useReactTable({
     columns: resolvedColumns,
     data,
-    state: { sorting, globalFilter, columnVisibility, rowSelection },
+    state: {
+      sorting,
+      globalFilter,
+      columnVisibility,
+      rowSelection,
+      pagination,
+    },
     enableRowSelection,
     ...(getRowId ? { getRowId } : {}),
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
+    onPaginationChange: setPagination,
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -178,7 +224,6 @@ export function DataTable<T>({
     ...(clientPaginate
       ? { getPaginationRowModel: getPaginationRowModel() }
       : {}),
-    initialState: { pagination: { pageSize } },
   });
 
   const rows = table.getRowModel().rows;
@@ -214,80 +259,84 @@ export function DataTable<T>({
     </tr>
   );
 
-  const hideableColumns = table
-    .getAllLeafColumns()
-    .filter((c) => c.getCanHide() && typeof c.columnDef.header === "string");
+  const filteredRows = table.getFilteredRowModel().rows;
+  const exportableColumns = table
+    .getVisibleLeafColumns()
+    .filter(
+      (column) => column.id !== "__select__" && column.accessorFn !== undefined,
+    );
+  const canExport =
+    exportFileName !== false &&
+    exportableColumns.length > 0 &&
+    filteredRows.length > 0;
+
+  function exportRows() {
+    if (!canExport) return;
+    const exportRows = table.getPrePaginationRowModel().rows;
+    const csv = serializeTableCsv(
+      exportableColumns.map((column) => ({
+        header:
+          typeof column.columnDef.header === "string"
+            ? column.columnDef.header
+            : column.id,
+        value: (row: (typeof exportRows)[number]) => row.getValue(column.id),
+      })),
+      exportRows,
+    );
+    downloadCsv(csv, exportFileName);
+  }
+
+  function resetView() {
+    const defaults = defaultTablePreferences(pageSize);
+    removeTablePreferences(resolvedPreferenceKey);
+    setColumnVisibility(defaults.columnVisibility);
+    setDensity(defaults.density);
+    setPagination({ pageIndex: 0, pageSize: defaults.pageSize });
+    setSorting([]);
+    setGlobalFilter("");
+    setRowSelection({});
+  }
+
+  const summary = [
+    `${formatNumber(filteredRows.length)} ${labels.results}`,
+    filteredRows.length === data.length
+      ? undefined
+      : `${formatNumber(data.length)} ${labels.total}`,
+    clientPaginate
+      ? `${labels.page} ${formatNumber(pagination.pageIndex + 1)} ${labels.of} ${formatNumber(Math.max(table.getPageCount(), 1))}`
+      : undefined,
+    selectedIds.length > 0
+      ? `${formatNumber(selectedIds.length)} ${labels.selected}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div
       className="rm-table-block"
-      data-page-size={pageSize}
+      data-page-size={pagination.pageSize}
       data-row-count={data.length}
       data-server-paginated={serverPagination !== undefined}
       data-virtualized={virtualize}
     >
-      {showSearch ? (
-        <div className="rm-table-toolbar">
-          <div className="rm-table-search">
-            <Search aria-hidden size={14} />
-            <Input
-              aria-label={labels.search}
-              onChange={(e) => table.setGlobalFilter(e.currentTarget.value)}
-              placeholder={labels.searchPlaceholder}
-              value={globalFilter}
-            />
-          </div>
-          <div className="rm-table-view">
-            <Popover
-              align="end"
-              className="rm-table-view-menu"
-              trigger={
-                <IconButton
-                  aria-label={labels.options}
-                  className="rm-icon-button rm-table-view-btn"
-                  variant="ghost"
-                >
-                  <SlidersHorizontal aria-hidden size={15} />
-                </IconButton>
-              }
-            >
-              <div className="rm-table-view-label">{labels.density}</div>
-              <div className="rm-segmented rm-table-density">
-                <Button
-                  aria-pressed={density === "comfortable"}
-                  className={`rm-segmented-item ${density === "comfortable" ? "active" : ""}`}
-                  onClick={() => setDensity("comfortable")}
-                  size="sm"
-                  variant="ghost"
-                >
-                  {labels.comfortable}
-                </Button>
-                <Button
-                  aria-pressed={density === "compact"}
-                  className={`rm-segmented-item ${density === "compact" ? "active" : ""}`}
-                  onClick={() => setDensity("compact")}
-                  size="sm"
-                  variant="ghost"
-                >
-                  {labels.compact}
-                </Button>
-              </div>
-              <div className="rm-table-view-label">{labels.columns}</div>
-              {hideableColumns.map((c) => (
-                <label className="rm-table-view-col" key={c.id}>
-                  <Checkbox
-                    checked={c.getIsVisible()}
-                    onCheckedChange={(checked) =>
-                      c.toggleVisibility(checked === true)
-                    }
-                  />
-                  <span>{c.columnDef.header as string}</span>
-                </label>
-              ))}
-            </Popover>
-          </div>
-        </div>
-      ) : null}
+      <DataTableControls
+        canExport={canExport}
+        clientPaginate={clientPaginate}
+        density={density}
+        globalFilter={globalFilter}
+        labels={labels}
+        onExport={exportRows}
+        onReset={resetView}
+        pageSize={pagination.pageSize}
+        setDensity={setDensity}
+        showExport={exportFileName !== false}
+        showSearch={showSearch}
+        table={table}
+      />
+      <span aria-live="polite" className="sr-only" role="status">
+        {summary}
+      </span>
 
       {showBulkToolbar ? (
         <div className="rm-table-bulk" role="toolbar">
@@ -413,78 +462,38 @@ export function DataTable<T>({
       </div>
 
       {showPager ? (
-        <div className="rm-table-pager">
-          <span className="rm-table-pager-info">
-            {formatNumber(table.getState().pagination.pageIndex * pageSize + 1)}
-            –
-            {formatNumber(
-              Math.min(
-                (table.getState().pagination.pageIndex + 1) * pageSize,
-                table.getFilteredRowModel().rows.length,
-              ),
-            )}{" "}
-            {labels.of} {formatNumber(table.getFilteredRowModel().rows.length)}
-          </span>
-          <div className="rm-table-pager-nav">
-            <IconButton
-              aria-label={labels.previousPage}
-              className="rm-icon-button"
-              disabled={!table.getCanPreviousPage()}
-              onClick={() => table.previousPage()}
-              variant="ghost"
-            >
-              <ChevronLeft aria-hidden size={16} />
-            </IconButton>
-            <IconButton
-              aria-label={labels.nextPage}
-              className="rm-icon-button"
-              disabled={!table.getCanNextPage()}
-              onClick={() => table.nextPage()}
-              variant="ghost"
-            >
-              <ChevronRight aria-hidden size={16} />
-            </IconButton>
-          </div>
-        </div>
+        <ClientTablePager
+          formatNumber={formatNumber}
+          labels={labels}
+          table={table}
+        />
       ) : null}
 
       {serverPagination ? (
-        <div className="rm-table-pager">
-          <span className="rm-table-pager-info">
-            {serverPagination.isFetching ? (
-              labels.loading
-            ) : (
-              <>
-                {formatNumber(data.length)} {labels.shown}
-              </>
-            )}
-          </span>
-          <div className="rm-table-pager-nav">
-            <IconButton
-              aria-label={labels.previousPage}
-              className="rm-icon-button"
-              disabled={
-                !serverPagination.onPrevPage || serverPagination.isFetching
-              }
-              onClick={() => serverPagination.onPrevPage?.()}
-              variant="ghost"
-            >
-              <ChevronLeft aria-hidden size={16} />
-            </IconButton>
-            <IconButton
-              aria-label={labels.nextPage}
-              className="rm-icon-button"
-              disabled={
-                !serverPagination.hasNextPage || serverPagination.isFetching
-              }
-              onClick={() => serverPagination.onNextPage()}
-              variant="ghost"
-            >
-              <ChevronRight aria-hidden size={16} />
-            </IconButton>
-          </div>
-        </div>
+        <ServerTablePager
+          dataLength={data.length}
+          formatNumber={formatNumber}
+          labels={labels}
+          pagination={serverPagination}
+        />
       ) : null}
     </div>
   );
+}
+
+function columnPreferenceIds<T>(
+  columns: readonly ColumnDef<T, any>[],
+  includeDisplay: boolean,
+): string[] {
+  return columns.flatMap((column) => {
+    if ("columns" in column && Array.isArray(column.columns)) {
+      return columnPreferenceIds(column.columns, includeDisplay);
+    }
+    if ("accessorKey" in column && column.accessorKey !== undefined) {
+      return [String(column.accessorKey)];
+    }
+    return column.id !== undefined && (includeDisplay || "accessorFn" in column)
+      ? [column.id]
+      : [];
+  });
 }

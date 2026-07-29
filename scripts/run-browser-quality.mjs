@@ -28,10 +28,12 @@ const server = spawn(
 
 try {
   await waitForHealth(`${baseUrl}/api/v1/health`, 30_000);
+  await runBrowserScript("scripts/browser-chat-acceptance.mjs", baseUrl);
   await runBrowserScript("scripts/browser-engine-matrix.mjs", baseUrl, {
     ROMEO_BROWSER_ENGINES:
       process.env.ROMEO_BROWSER_ENGINES ?? "chromium,firefox,webkit",
   });
+  await runBrowserScript("scripts/admin-console-audit.mjs", baseUrl);
   await runBrowserScript("scripts/browser-visual-baselines.mjs", baseUrl);
 } finally {
   server.kill("SIGTERM");

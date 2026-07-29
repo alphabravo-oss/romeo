@@ -1,6 +1,8 @@
 import { Button } from "@romeo/ui";
 
+import { writeTextToClipboard } from "../lib/clipboard";
 import { useLocale } from "../lib/i18n";
+import { toast } from "../lib/toast";
 
 export function SecretRevealCard({
   label,
@@ -22,7 +24,14 @@ export function SecretRevealCard({
         <div className="text-muted">{label}</div>
         <div className="flex gap-2">
           <Button
-            onClick={() => void navigator.clipboard.writeText(secret)}
+            onClick={() => {
+              void writeTextToClipboard(secret).then((copied) =>
+                toast(
+                  t(copied ? "copied" : "copyFailed"),
+                  copied ? "success" : "error",
+                ),
+              );
+            }}
             type="button"
           >
             {t("copy")}

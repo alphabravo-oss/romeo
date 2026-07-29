@@ -4,6 +4,7 @@ packages:
 allowBuilds:
   "@firebase/util": true
   "@scarf/scarf": false
+  agent-browser: true
   esbuild: true
   protobufjs: true
 minimumReleaseAgeExclude:

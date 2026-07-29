@@ -827,12 +827,16 @@ select:focus-visible {
 
 .rm-table-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
 .rm-table-view {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   position: relative;
 }
 
@@ -847,9 +851,11 @@ select:focus-visible {
 }
 
 .rm-table-view-menu {
-  width: 220px;
   display: grid;
   gap: 4px;
+  width: 220px;
+  max-height: min(70vh, 32rem);
+  overflow-y: auto;
 }
 
 .rm-table-view-label {
@@ -885,6 +891,15 @@ select:focus-visible {
 
 .rm-table-view-col:hover {
   background: var(--rm-hover);
+}
+
+.rm-table-view-menu .rm-ui-native-select {
+  width: 100%;
+}
+
+.rm-table-reset {
+  width: 100%;
+  margin-top: 6px;
 }
 
 .rm-table-wrap.compact .rm-table thead th {

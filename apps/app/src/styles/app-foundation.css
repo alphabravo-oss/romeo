@@ -132,6 +132,40 @@ html.dark {
   --border: 240 3.7% 15.9%;
 }
 
+.rm-connectivity-banner {
+  position: fixed;
+  z-index: 120;
+  inset-block-start: max(8px, env(safe-area-inset-top, 0px));
+  inset-inline-start: 50%;
+  display: flex;
+  max-width: min(560px, calc(100vw - 24px));
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius-lg);
+  color: var(--rm-text);
+  background: var(--rm-surface);
+  box-shadow: var(--rm-shadow);
+  font-size: 13px;
+  line-height: 1.4;
+  text-wrap: pretty;
+  transform: translateX(-50%);
+}
+
+.rm-connectivity-banner.danger {
+  border-color: color-mix(in srgb, var(--rm-danger) 45%, var(--rm-border));
+}
+
+.rm-connectivity-banner.warning {
+  border-color: color-mix(in srgb, var(--rm-warning) 45%, var(--rm-border));
+}
+
+.rm-connectivity-banner svg {
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
 body {
   margin: 0;
   background: var(--rm-bg);

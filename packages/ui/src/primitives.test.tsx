@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { useState, type FormEvent } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Button } from "./button";
+import { Button, Spinner } from "./button";
 import { Field, Input, Select } from "./forms";
 import { Dialog, DropdownMenu } from "./overlays";
 
@@ -32,10 +32,17 @@ describe("Romeo UI primitives", () => {
     const input = screen.getByLabelText("Email *");
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(input.getAttribute("aria-describedby")).toContain("description");
+    const button = screen.getByRole("button", { name: "Save" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("gives standalone progress indicators an explicit accessible name", () => {
+    render(<Spinner aria-label="Loading records" />);
     expect(
-      (screen.getByRole("button", { name: /save/i }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+      screen.getByRole("status", { name: "Loading records" }),
+    ).toBeTruthy();
   });
 
   it("composes button styling onto a semantic link", () => {

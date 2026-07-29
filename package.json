@@ -11,6 +11,7 @@
     "check": "pnpm -r --sort check",
     "check:architecture": "node scripts/check-architecture-ratchet.mjs",
     "check:dependencies": "dependency-cruiser apps/app/src packages/*/src --config .dependency-cruiser.cjs --output-type err",
+    "check:test-contracts": "node scripts/check-test-contracts.mjs",
     "check:ui-form-contracts": "node scripts/check-ui-form-contracts.mjs",
     "test": "pnpm -r --sort test",
     "test:postgres-conformance": "pnpm --filter @romeo/db test:postgres-conformance",
@@ -154,6 +155,7 @@
   "devDependencies": {
     "@oasdiff-js/oasdiff-js": "1.0.0",
     "@stoplight/spectral-cli": "6.16.1",
+    "agent-browser": "0.31.1",
     "dependency-cruiser": "18.1.0",
     "playwright": "^1.61.1",
     "postcss": "8.5.15",

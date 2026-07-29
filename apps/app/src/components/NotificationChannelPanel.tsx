@@ -234,24 +234,25 @@ function ChannelsTab() {
         >
           <form.Field name="type">
             {(field) => (
-              <NativeSelect
-                name="type"
-                aria-label="Type"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(
-                    event.currentTarget
-                      .value as NotificationDeliveryChannelType,
-                  )
-                }
-                value={field.state.value}
-              >
-                {notificationChannelTypes.map((option) => (
-                  <option key={option} value={option}>
-                    {t(notificationChannelTypeKey(option))}
-                  </option>
-                ))}
-              </NativeSelect>
+              <Field label={t("channelType")}>
+                <NativeSelect
+                  name="type"
+                  onBlur={field.handleBlur}
+                  onChange={(event) =>
+                    field.handleChange(
+                      event.currentTarget
+                        .value as NotificationDeliveryChannelType,
+                    )
+                  }
+                  value={field.state.value}
+                >
+                  {notificationChannelTypes.map((option) => (
+                    <option key={option} value={option}>
+                      {t(notificationChannelTypeKey(option))}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </Field>
             )}
           </form.Field>
           <form.Field name="name" validators={{ onChange: required }}>
@@ -315,61 +316,64 @@ function ChannelsTab() {
                 <div className="grid grid-cols-2 gap-2">
                   <form.Field name="platform">
                     {(field) => (
-                      <NativeSelect
-                        name="platform"
-                        aria-label="Platform"
-                        onChange={(event) =>
-                          field.handleChange(
-                            event.currentTarget.value as
-                              | "android"
-                              | "ios"
-                              | "web",
-                          )
-                        }
-                        value={field.state.value}
-                      >
-                        <option value="android">Android</option>
-                        <option value="ios">iOS</option>
-                        <option value="web">Web</option>
-                      </NativeSelect>
+                      <Field label={t("platform")}>
+                        <NativeSelect
+                          name="platform"
+                          onChange={(event) =>
+                            field.handleChange(
+                              event.currentTarget.value as
+                                | "android"
+                                | "ios"
+                                | "web",
+                            )
+                          }
+                          value={field.state.value}
+                        >
+                          <option value="android">Android</option>
+                          <option value="ios">iOS</option>
+                          <option value="web">Web</option>
+                        </NativeSelect>
+                      </Field>
                     )}
                   </form.Field>
                   <form.Field name="collapseKey">
                     {(field) => (
-                      <Input
-                        name="collapseKey"
-                        aria-label="Collapse key (optional)"
-                        onChange={(event) =>
-                          field.handleChange(event.currentTarget.value)
-                        }
-                        placeholder="Collapse key (optional)"
-                        value={field.state.value}
-                      />
+                      <Field label={t("collapseKeyOptional")}>
+                        <Input
+                          name="collapseKey"
+                          onChange={(event) =>
+                            field.handleChange(event.currentTarget.value)
+                          }
+                          placeholder={t("collapseKeyExample")}
+                          value={field.state.value}
+                        />
+                      </Field>
                     )}
                   </form.Field>
                 </div>
               ) : type === "pagerduty" ? (
                 <form.Field name="severity">
                   {(field) => (
-                    <NativeSelect
-                      name="severity"
-                      aria-label="Severity"
-                      onChange={(event) =>
-                        field.handleChange(
-                          event.currentTarget.value as
-                            | "critical"
-                            | "error"
-                            | "info"
-                            | "warning",
-                        )
-                      }
-                      value={field.state.value}
-                    >
-                      <option value="critical">Critical</option>
-                      <option value="error">Error</option>
-                      <option value="warning">Warning</option>
-                      <option value="info">Info</option>
-                    </NativeSelect>
+                    <Field label={t("severity")}>
+                      <NativeSelect
+                        name="severity"
+                        onChange={(event) =>
+                          field.handleChange(
+                            event.currentTarget.value as
+                              | "critical"
+                              | "error"
+                              | "info"
+                              | "warning",
+                          )
+                        }
+                        value={field.state.value}
+                      >
+                        <option value="critical">{t("critical")}</option>
+                        <option value="error">{t("error")}</option>
+                        <option value="warning">{t("warning")}</option>
+                        <option value="info">{t("info")}</option>
+                      </NativeSelect>
+                    </Field>
                   )}
                 </form.Field>
               ) : null

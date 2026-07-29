@@ -18,9 +18,11 @@ import type {
   MessageFeedbackState,
   SpeechArtifact,
 } from "../features/types";
+import { writeTextToClipboard } from "../lib/clipboard";
 import { Markdown } from "../lib/markdown";
 import { useLocale } from "../lib/i18n";
 import { formatDateTime } from "../lib/locale-format";
+import { toast } from "../lib/toast";
 import type { ChatCitation, ChatRunActivity } from "./useWorkspaceController";
 import {
   CitationList,
@@ -85,8 +87,11 @@ export const ChatMessages = memo(function ChatMessages({
   const [previewAttachment, setPreviewAttachment] =
     useState<MessageAttachment>();
 
-  function copy(message: Message) {
-    void navigator.clipboard.writeText(message.content);
+  async function copy(message: Message) {
+    if (!(await writeTextToClipboard(message.content))) {
+      toast(t("copyFailed"), "error");
+      return;
+    }
     setCopiedId(message.id);
     window.setTimeout(() => setCopiedId(undefined), 1_500);
   }
@@ -171,7 +176,7 @@ export const ChatMessages = memo(function ChatMessages({
                         label={
                           copiedId === message.id ? t("copied") : t("copy")
                         }
-                        onClick={() => copy(message)}
+                        onClick={() => void copy(message)}
                       >
                         {copiedId === message.id ? (
                           <Check size={15} />

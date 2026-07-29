@@ -1,4 +1,4 @@
-import { Button, Field, Input, LinkButton } from "@romeo/ui";
+import { Button, Field, Input } from "@romeo/ui";
 import type { TotpEnrollment } from "@romeo/api-client/generated/sdk";
 
 import { useLocale } from "../lib/i18n";
@@ -19,12 +19,12 @@ export function AccountMfaDialogs({
   onCopyRecoveryCodes,
   onDisableCodeChange,
   onDisableFactor,
+  onDownloadRecoveryCodes,
   onGenerateRecoveryCodes,
   onRecoveryCodesSaved,
   onRecoveryTotpCodeChange,
   onTotpCodeChange,
   recoveryCodes,
-  recoveryDownloadUrl,
   recoveryStep,
   recoveryTotpCode,
   totpCode,
@@ -41,12 +41,12 @@ export function AccountMfaDialogs({
   onCopyRecoveryCodes: () => Promise<void>;
   onDisableCodeChange: (code: string) => void;
   onDisableFactor: () => Promise<void>;
+  onDownloadRecoveryCodes: () => void;
   onGenerateRecoveryCodes: () => Promise<void>;
   onRecoveryCodesSaved: () => void;
   onRecoveryTotpCodeChange: (code: string) => void;
   onTotpCodeChange: (code: string) => void;
   recoveryCodes: readonly string[];
-  recoveryDownloadUrl: string | undefined;
   recoveryStep: RecoveryStep | undefined;
   recoveryTotpCode: string;
   totpCode: string;
@@ -120,14 +120,9 @@ export function AccountMfaDialogs({
               <Button onClick={() => void onCopyRecoveryCodes()} type="button">
                 {t("recoveryCodesCopyAll")}
               </Button>
-              {recoveryDownloadUrl !== undefined ? (
-                <LinkButton
-                  download="romeo-recovery-codes.txt"
-                  href={recoveryDownloadUrl}
-                >
-                  {t("recoveryCodesDownload")}
-                </LinkButton>
-              ) : null}
+              <Button onClick={onDownloadRecoveryCodes} type="button">
+                {t("recoveryCodesDownload")}
+              </Button>
             </div>
             <Button
               variant="primary"

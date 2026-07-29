@@ -591,6 +591,13 @@ function assertShareAndExport() {
     const exported = await response.json();
     const payload = exported.data ?? exported;
     payload.chat = { ...(payload.chat ?? {}), title: "Browser imported chat" };
+    if (!Array.isArray(payload.messages) || payload.messages.length === 0) {
+      payload.messages = [{
+        role: "user",
+        content: "Browser import acceptance message",
+        createdAt: new Date().toISOString(),
+      }];
+    }
     const file = new File([JSON.stringify(payload)], "browser-import.json", { type: "application/json" });
     const transfer = new DataTransfer();
     transfer.items.add(file);

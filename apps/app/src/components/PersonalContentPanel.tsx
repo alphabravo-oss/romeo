@@ -265,7 +265,7 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
           className="grid gap-3"
           onSubmit={(event) => {
             event.preventDefault();
-            void save.mutateAsync();
+            save.mutate();
           }}
         >
           <label className="rm-field-name" htmlFor="content-title">

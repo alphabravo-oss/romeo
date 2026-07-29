@@ -20,7 +20,7 @@
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.generated.json --noEmit",
     "generate": "node ../../scripts/prepare-query-openapi.mjs && openapi-ts --file openapi-ts.config.ts && node ../../scripts/normalize-generated-typescript.mjs src/generated",
     "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.generated.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "0.99.0",

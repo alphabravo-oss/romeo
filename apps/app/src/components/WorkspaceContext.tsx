@@ -9,12 +9,27 @@ import {
   useState,
 } from "react";
 
-import { getBootstrap, subscribeToChatEvents } from "../features";
+import {
+  getBootstrap,
+  subscribeToChatEvents,
+  type AuthSubject,
+  type ChatEventStreamStatus,
+} from "../features";
 import type { Workspace } from "../features/tenancy";
+import { chatSyncFallbackInterval } from "../lib/chat-sync";
+import { useOnlineStatus } from "../lib/connectivity";
 
 const STORAGE_KEY = "hm.workspaceId";
 
 interface WorkspaceContextValue {
+  /** Current authenticated subject from the single bootstrap query. */
+  subject: AuthSubject | undefined;
+  /** Bootstrap request state for truthful root loading/error presentation. */
+  bootstrapStatus: "error" | "pending" | "success";
+  /** Retry the authoritative bootstrap query. */
+  retryBootstrap: () => void;
+  /** Health of the active workspace's live chat event stream. */
+  chatSyncStatus: ChatEventStreamStatus;
   /** The currently selected workspace, or undefined while the bootstrap query loads. */
   workspace: Workspace | undefined;
   /** Id of the selected workspace, or undefined while loading. */
@@ -54,6 +69,7 @@ function persistWorkspaceId(id: string): void {
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const online = useOnlineStatus();
   const bootstrapQuery = useQuery({
     queryKey: ["bootstrap"],
     queryFn: getBootstrap,
@@ -67,6 +83,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   // Explicit user selection (from click or restored-and-validated storage).
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  const [chatSyncStatus, setChatSyncStatus] =
+    useState<ChatEventStreamStatus>("connecting");
 
   // Once bootstrap resolves, reconcile the selection: keep a still-valid
   // selection, otherwise adopt a validated persisted id, otherwise fall back
@@ -102,18 +120,57 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (workspaceId === undefined) return;
+    if (workspaceId === undefined) {
+      setChatSyncStatus("connecting");
+      return;
+    }
     const reconcileChats = () => {
       void queryClient.invalidateQueries({
         queryKey: ["chats", workspaceId],
       });
     };
-    return subscribeToChatEvents(workspaceId, reconcileChats);
+    return subscribeToChatEvents(workspaceId, reconcileChats, {
+      onStatus: setChatSyncStatus,
+    });
   }, [queryClient, workspaceId]);
 
+  useEffect(() => {
+    const interval = chatSyncFallbackInterval(chatSyncStatus, online);
+    if (interval === undefined || workspaceId === undefined) return;
+    const reconcile = () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["chats", workspaceId],
+      });
+    };
+    reconcile();
+    const timer = window.setInterval(reconcile, interval);
+    return () => window.clearInterval(timer);
+  }, [chatSyncStatus, online, queryClient, workspaceId]);
+
+  const retryBootstrap = useCallback(() => {
+    void bootstrapQuery.refetch();
+  }, [bootstrapQuery]);
   const value = useMemo<WorkspaceContextValue>(
-    () => ({ workspace, workspaceId, workspaces, setWorkspaceId }),
-    [workspace, workspaceId, workspaces, setWorkspaceId],
+    () => ({
+      bootstrapStatus: bootstrapQuery.status,
+      chatSyncStatus,
+      retryBootstrap,
+      setWorkspaceId,
+      subject: bootstrapQuery.data?.subject,
+      workspace,
+      workspaceId,
+      workspaces,
+    }),
+    [
+      bootstrapQuery.data?.subject,
+      bootstrapQuery.status,
+      chatSyncStatus,
+      retryBootstrap,
+      setWorkspaceId,
+      workspace,
+      workspaceId,
+      workspaces,
+    ],
   );
 
   return (

@@ -68,12 +68,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         aria-busy={pending || undefined}
         className={classNames}
+        data-pending={pending || undefined}
         disabled={disabled || pending}
         ref={ref}
         type={type}
         {...props}
       >
-        {pending ? <Spinner aria-label="Loading" size="sm" /> : null}
+        {pending ? <Spinner aria-hidden="true" size="sm" /> : null}
         {children}
       </button>
     );

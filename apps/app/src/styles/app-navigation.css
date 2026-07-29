@@ -321,16 +321,6 @@ html.dark .rm-sidebar-item.active {
   text-transform: capitalize;
 }
 
-.rm-user-menu-divider {
-  height: 1px;
-  margin: 4px;
-  background: var(--rm-border);
-}
-
-.rm-model-selector {
-  position: relative;
-}
-
 /* inline-flex, not grid: the trigger renders <span>name</span><svg chevron>, and
    a grid put the chevron on its own row under the label. Flex also survives the
    child count changing again. */
@@ -403,12 +393,6 @@ html.dark .rm-model-select:hover {
 .rm-model-option:disabled {
   color: var(--rm-muted);
   cursor: default;
-}
-
-.rm-model-menu-divider {
-  height: 1px;
-  margin: 4px 0;
-  background: var(--rm-border);
 }
 
 .rm-model-select span {
@@ -970,15 +954,4 @@ html.dark .rm-message-tool:hover:not(:disabled) {
   border-top: 1px solid var(--rm-border);
   white-space: pre-wrap;
   font-size: 10px;
-}
-
-.rm-connection-checks {
-  grid-column: 1 / -1;
-  margin: 6px 0 0;
-  padding-left: 18px;
-  font-size: 11px;
-}
-
-.rm-connection-checks .fail {
-  color: var(--rm-danger);
 }

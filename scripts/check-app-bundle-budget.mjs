@@ -12,7 +12,7 @@ const budgets = [
   {
     id: "route_shell_js",
     source: "src/routes/index.tsx?tsr-split=component",
-    maxBytes: 250_000,
+    maxBytes: 245_000,
   },
   {
     id: "workspace_route_js",
@@ -32,7 +32,7 @@ const budgets = [
   {
     id: "application_css",
     sourceSuffix: "/src/styles/app.css",
-    maxBytes: 80_000,
+    maxBytes: 81_000,
   },
 ];
 

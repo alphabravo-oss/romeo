@@ -59,14 +59,14 @@ for (const [name, browserType] of engines) {
       }
     });
 
-    await page.goto(baseUrl, { waitUntil: "networkidle" });
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "New chat", exact: true }).waitFor();
     await assertCoreChat(page, name);
     result.routes.push(await auditRoute(page, "chat", "/"));
     assertNoRuntimeErrors(pageErrors, hydrationErrors, "chat");
 
     await page.goto(`${baseUrl}/settings?section=interface`, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
     });
     await page.getByText("Appearance", { exact: true }).first().waitFor();
     result.routes.push(
@@ -79,7 +79,7 @@ for (const [name, browserType] of engines) {
     assertNoRuntimeErrors(pageErrors, hydrationErrors, "settings-interface");
 
     await page.goto(`${baseUrl}/admin?section=providers`, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
     });
     await page.getByRole("heading", { name: "Providers" }).waitFor();
     result.routes.push(

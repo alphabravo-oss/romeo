@@ -8,6 +8,7 @@ import { archiveWorkspace, exportWorkspace } from "../features";
 import type { Workspace } from "../features/types";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
+import { downloadText } from "../lib/download";
 
 export function WorkspaceLifecyclePanel({
   workspace,
@@ -102,17 +103,9 @@ export function WorkspaceLifecyclePanel({
 }
 
 function downloadJson(fileName: string, document: unknown): void {
-  const blob = new Blob([JSON.stringify(document, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const anchor = documentGlobal().createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-function documentGlobal(): Document {
-  return globalThis.document;
+  downloadText(
+    JSON.stringify(document, null, 2),
+    fileName,
+    "application/json;charset=utf-8",
+  );
 }

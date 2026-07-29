@@ -15,7 +15,7 @@
     "db:push": "drizzle-kit push --config drizzle.config.ts",
     "db:seed": "tsx src/seed-cli.ts",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "test:postgres-conformance": "vitest run src/romeo-repository.test.ts"
   },
   "dependencies": {

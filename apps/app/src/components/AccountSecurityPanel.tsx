@@ -1,7 +1,7 @@
 import { Button, Input } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   confirmTotpEnrollment,
@@ -16,6 +16,8 @@ import { PanelState } from "../lib/panel-state";
 import { LocalizedDate } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
+import { downloadText } from "../lib/download";
+import { writeTextToClipboard } from "../lib/clipboard";
 import { FormDialog } from "./FormDialog";
 import { AccountMfaDialogs, type RecoveryStep } from "./AccountMfaDialogs";
 import { isLockoutRisk, recoveryCodesRemaining } from "./mfa-recovery";
@@ -34,7 +36,6 @@ export function AccountSecurityPanel() {
   const [recoveryStep, setRecoveryStep] = useState<RecoveryStep>();
   const [recoveryTotpCode, setRecoveryTotpCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<readonly string[]>([]);
-  const [recoveryDownloadUrl, setRecoveryDownloadUrl] = useState<string>();
   const [disableFactorId, setDisableFactorId] = useState<string>();
   const [disableCode, setDisableCode] = useState("");
 
@@ -43,15 +44,6 @@ export function AccountSecurityPanel() {
   const confirmMutation = useMutation({ mutationFn: confirmTotpEnrollment });
   const recoveryMutation = useMutation({ mutationFn: generateRecoveryCodes });
   const disableMutation = useMutation({ mutationFn: disableTotpFactor });
-
-  useEffect(
-    () => () => {
-      if (recoveryDownloadUrl !== undefined) {
-        URL.revokeObjectURL(recoveryDownloadUrl);
-      }
-    },
-    [recoveryDownloadUrl],
-  );
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ["localAuthStatus"] });
@@ -119,13 +111,6 @@ export function AccountSecurityPanel() {
       await refresh();
       setRecoveryCodes(result.codes);
       setRecoveryTotpCode("");
-      setRecoveryDownloadUrl(
-        URL.createObjectURL(
-          new Blob([`${result.codes.join("\n")}\n`], {
-            type: "text/plain;charset=utf-8",
-          }),
-        ),
-      );
       setRecoveryStep("showing-codes");
     } catch {
       toast(t("recoveryCodesFailed"), "error");
@@ -134,13 +119,16 @@ export function AccountSecurityPanel() {
 
   async function handleCopyRecoveryCodes() {
     if (recoveryCodes.length === 0) return;
-    try {
-      // Recovery codes are security-sensitive; use the modern Clipboard API
-      // only and do not fall back to the deprecated document.execCommand API.
-      await navigator.clipboard.writeText(recoveryCodes.join("\n"));
-    } catch {
+    if (await writeTextToClipboard(recoveryCodes.join("\n"))) {
+      toast(t("copied"), "success");
+    } else {
       toast(t("recoveryCodesCopyFailed"), "error");
     }
+  }
+
+  function handleDownloadRecoveryCodes() {
+    if (recoveryCodes.length === 0) return;
+    downloadText(`${recoveryCodes.join("\n")}\n`, "romeo-recovery-codes.txt");
   }
 
   function handleRecoveryCodesSaved() {
@@ -148,14 +136,12 @@ export function AccountSecurityPanel() {
     setRecoveryStep(undefined);
     setRecoveryTotpCode("");
     setRecoveryCodes([]);
-    setRecoveryDownloadUrl(undefined);
   }
 
   function handleRegenerateRecoveryCodes() {
     setEnrollment(undefined);
     setRecoveryTotpCode("");
     setRecoveryCodes([]);
-    setRecoveryDownloadUrl(undefined);
     setRecoveryStep("awaiting-code");
   }
 
@@ -440,7 +426,7 @@ export function AccountSecurityPanel() {
         onRecoveryTotpCodeChange={setRecoveryTotpCode}
         onTotpCodeChange={setTotpCode}
         recoveryCodes={recoveryCodes}
-        recoveryDownloadUrl={recoveryDownloadUrl}
+        onDownloadRecoveryCodes={handleDownloadRecoveryCodes}
         recoveryStep={recoveryStep}
         recoveryTotpCode={recoveryTotpCode}
         totpCode={totpCode}

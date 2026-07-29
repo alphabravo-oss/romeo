@@ -18,6 +18,26 @@
       "path": "/admin?section=providers",
       "requiredSelector": "#console-content"
     },
+    {
+      "name": "admin-access",
+      "path": "/admin?section=access",
+      "requiredSelector": "#console-content"
+    },
+    {
+      "name": "admin-audit",
+      "path": "/admin?section=audit",
+      "requiredSelector": "#console-content"
+    },
+    {
+      "name": "admin-posture",
+      "path": "/admin?section=posture",
+      "requiredSelector": "#console-content"
+    },
+    {
+      "name": "settings-security",
+      "path": "/settings?section=security",
+      "requiredSelector": "#console-content"
+    },
     { "name": "ui-gallery", "path": "/ui", "requiredSelector": "main" }
   ],
   "maxHorizontalOverflowPx": 0,

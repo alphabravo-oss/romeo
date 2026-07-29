@@ -10,7 +10,10 @@ import type { ComponentProps, ReactNode } from "react";
 import { memo, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { writeTextToClipboard } from "./clipboard";
 import { useLocale } from "./i18n";
+import { downloadText } from "./download";
+import { toast } from "./toast";
 
 type RehypePlugins = NonNullable<
   ComponentProps<typeof ReactMarkdown>["rehypePlugins"]
@@ -75,20 +78,18 @@ function CodeBlock({
   const [preview, setPreview] = useState(false);
   const canPreview = language === "mermaid";
 
-  function copyCode() {
-    void navigator.clipboard.writeText(code);
+  async function copyCode() {
+    if (!(await writeTextToClipboard(code))) {
+      toast(t("copyFailed"), "error");
+      return;
+    }
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
   }
 
   function downloadCode() {
     const extension = languageExtension(language);
-    const url = URL.createObjectURL(new Blob([code], { type: "text/plain" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `romeo-code.${extension}`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadText(code, `romeo-code.${extension}`);
   }
 
   return (
@@ -113,7 +114,7 @@ function CodeBlock({
           <Button onClick={downloadCode} type="button">
             <Download size={13} /> {t("download")}
           </Button>
-          <Button onClick={copyCode} type="button">
+          <Button onClick={() => void copyCode()} type="button">
             {copied ? <Check size={13} /> : <Copy size={13} />}
             {copied ? t("copied") : t("copy")}
           </Button>

@@ -138,8 +138,15 @@ try {
         const axeViolations = viewport.runAxe
           ? await inspectAccessibility(page)
           : [];
+        const tablePreferenceFailures =
+          viewport.name === "desktop" &&
+          section === "users" &&
+          view === undefined
+            ? await inspectTablePreferencePersistence(page, path, title)
+            : [];
         const failures = [
           ...ui.failures,
+          ...tablePreferenceFailures,
           ...tabStates.flatMap((tabState) =>
             tabState.failures.map(
               (failure) => `tab:${tabState.label}:${failure}`,
@@ -216,6 +223,40 @@ console.log(
   `Romeo admin console audit passed for ${routes.length} routes across ${viewports.length} viewports.`,
 );
 console.log(`Wrote metadata-only evidence to ${evidencePath}`);
+
+async function inspectTablePreferencePersistence(page, path, title) {
+  const table = page.locator(".rm-table-block").first();
+  if ((await table.count()) === 0) {
+    return ["table preference audit could not find a framework table"];
+  }
+  await table.getByRole("button", { name: "Table options" }).click();
+  await page.getByRole("button", { name: "Compact" }).click();
+  await page.getByLabel("Rows per page").selectOption("10");
+  await page.goto(`${baseUrl}/admin?section=overview`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.goto(`${baseUrl}${path}`, { waitUntil: "domcontentloaded" });
+  await page
+    .locator("#console-content h2")
+    .filter({ hasText: title })
+    .first()
+    .waitFor();
+  const restored = await page
+    .locator(".rm-table-block")
+    .first()
+    .evaluate(
+      (block) =>
+        block.dataset.pageSize === "10" &&
+        block.querySelector(".rm-table-wrap")?.classList.contains("compact"),
+    );
+  await page
+    .locator(".rm-table-block")
+    .first()
+    .getByRole("button", { name: "Table options" })
+    .click();
+  await page.getByRole("button", { name: "Reset table view" }).click();
+  return restored ? [] : ["table preferences did not survive navigation"];
+}
 
 async function inspectAccessibility(page) {
   await page.addScriptTag({ content: axeSource });

@@ -16,7 +16,7 @@ import { type AppCommand, commandStore } from "../lib/commands";
 import { setTheme } from "../lib/theme";
 import { useLocale } from "../lib/i18n";
 import { OverlayShell } from "./OverlayShell";
-import { useWorkspaceData } from "./useWorkspaceData";
+import { useWorkspace } from "./WorkspaceContext";
 
 type Command = AppCommand;
 
@@ -33,14 +33,18 @@ function matches(label: string, q: string): boolean {
   return true;
 }
 
-export function CommandPalette() {
+export function CommandPalette({
+  initialOpen = false,
+}: {
+  initialOpen?: boolean;
+}) {
   const { t } = useLocale();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
-  const data = useWorkspaceData(undefined);
-  const isAdmin = data.subject?.isAdmin === true;
+  const { subject } = useWorkspace();
+  const isAdmin = subject?.isAdmin === true;
   // Context-bound actions published by the active screen (e.g. New chat, Switch agent).
   const dynamic = useStore(commandStore);
 

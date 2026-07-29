@@ -79,6 +79,12 @@ OPERATIONS = {
         "path": "/api/v1/admin/browser-automation/posture",
         "summary": "Get sanitized browser automation operational posture"
     },
+    "put_admin_chat_experience": {
+        "name": "put_admin_chat_experience",
+        "method": "PUT",
+        "path": "/api/v1/admin/chat-experience",
+        "summary": "Update organization chat experience settings"
+    },
     "post_admin_chats_cleanup_expired": {
         "name": "post_admin_chats_cleanup_expired",
         "method": "POST",
@@ -949,6 +955,12 @@ OPERATIONS = {
         "path": "/api/v1/channels/{channelId}/update/members/remove",
         "summary": "Remove OpenWebUI-compatible channel members"
     },
+    "get_chat_experience": {
+        "name": "get_chat_experience",
+        "method": "GET",
+        "path": "/api/v1/chat-experience",
+        "summary": "Read organization chat experience settings"
+    },
     "get_chat_tags": {
         "name": "get_chat_tags",
         "method": "GET",
@@ -1110,6 +1122,12 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/chats/{chatId}/fork",
         "summary": "Fork a chat history into a new chat"
+    },
+    "post_chats_chatid_generate_title": {
+        "name": "post_chats_chatid_generate_title",
+        "method": "POST",
+        "path": "/api/v1/chats/{chatId}/generate-title",
+        "summary": "Generate a concise title for a chat"
     },
     "post_chats_chatid_legal_hold": {
         "name": "post_chats_chatid_legal_hold",
@@ -2856,6 +2874,12 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/workspaces/{workspaceId}/archive",
         "summary": "Archive a workspace"
+    },
+    "get_workspaces_workspaceid_chat_events": {
+        "name": "get_workspaces_workspaceid_chat_events",
+        "method": "GET",
+        "path": "/api/v1/workspaces/{workspaceId}/chat-events",
+        "summary": "Stream workspace chat collection changes"
     },
     "get_workspaces_workspaceid_export": {
         "name": "get_workspaces_workspaceid_export",

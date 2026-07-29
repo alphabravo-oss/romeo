@@ -11,8 +11,7 @@ import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { ToastViewport } from "@romeo/ui";
 
 import { AppProviders } from "../providers/AppProviders";
-import { CommandPalette } from "../components/CommandPalette";
-import { ShortcutsModal } from "../components/ShortcutsModal";
+import { LazyGlobalOverlays } from "../components/LazyGlobalOverlays";
 import { themeInitScript, watchSystemTheme } from "../lib/theme";
 import { LocaleProvider } from "../lib/i18n";
 import appCss from "../styles/app.css?url";
@@ -73,8 +72,7 @@ function RootRoute() {
         <Suspense fallback={<div className="rm-empty">Loading…</div>}>
           <AppProviders>
             <Outlet />
-            <CommandPalette />
-            <ShortcutsModal />
+            <LazyGlobalOverlays />
             <ToastViewport />
           </AppProviders>
         </Suspense>

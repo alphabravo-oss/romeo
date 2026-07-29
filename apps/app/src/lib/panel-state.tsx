@@ -1,5 +1,7 @@
-import { Button } from "@romeo/ui";
+import { Button, EmptyState, InlineError, Skeleton } from "@romeo/ui";
 import type { UseQueryResult } from "@tanstack/react-query";
+
+import { useLocale } from "./i18n";
 
 /**
  * Renders the loading / error / empty / data states of a TanStack Query
@@ -24,9 +26,10 @@ export function PanelState<T>(props: {
   isEmpty?: (data: T) => boolean;
   children: (data: T) => React.ReactNode;
 }): React.ReactNode {
+  const { t } = useLocale();
   const {
     query,
-    empty = "Nothing here yet.",
+    empty = t("nothingHereYet"),
     emptyAction,
     isEmpty,
     children,
@@ -34,44 +37,43 @@ export function PanelState<T>(props: {
 
   if (query.isPending) {
     return (
-      <div className="grid gap-2 p-4" aria-busy="true">
-        <span className="rm-skeleton" style={{ width: "70%" }} />
-        <span className="rm-skeleton" style={{ width: "45%" }} />
-        <span className="rm-skeleton" style={{ width: "58%" }} />
+      <div
+        aria-busy="true"
+        aria-label={t("dataLoading")}
+        className="grid gap-2 p-4"
+        role="status"
+      >
+        <Skeleton className="w-2/3" />
+        <Skeleton className="w-1/2" />
+        <Skeleton className="w-3/5" />
       </div>
     );
   }
 
-  if (query.isError) {
-    const message =
-      query.error instanceof Error ? query.error.message : String(query.error);
+  if (query.isError && query.data === undefined) {
     return (
-      <div className="rm-composer-error" role="alert">
-        <span>{message}</span>
+      <InlineError className="flex flex-wrap items-center gap-2" role="alert">
+        <span>{t("queryCouldNotLoad")}</span>
         <Button
           onClick={() => void query.refetch()}
-          style={{ marginLeft: 8 }}
+          size="sm"
           type="button"
+          variant="outline"
         >
-          Retry
+          {t("tryAgain")}
         </Button>
-      </div>
+      </InlineError>
     );
   }
 
   const data = query.data;
+  if (data === undefined) {
+    return <EmptyState action={emptyAction} title={empty} />;
+  }
   const emptyCheck =
     isEmpty ?? ((value: T) => Array.isArray(value) && value.length === 0);
   if (emptyCheck(data)) {
-    if (emptyAction === undefined) {
-      return <div className="rm-empty">{empty}</div>;
-    }
-    return (
-      <div className="rm-empty-state">
-        <p className="rm-empty-state-text">{empty}</p>
-        {emptyAction}
-      </div>
-    );
+    return <EmptyState action={emptyAction} title={empty} />;
   }
 
   return children(data);

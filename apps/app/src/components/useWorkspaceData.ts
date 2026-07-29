@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { getBootstrap, listChatsPage } from "../features";
+import { listChatsPage } from "../features";
 import { getChatExperience } from "../features/chat-experience";
 import { listAgents } from "../features/managed-models";
 import {
@@ -13,14 +13,10 @@ import { listAgentTools } from "../features/tools";
 import { useWorkspace } from "./WorkspaceContext";
 
 export function useWorkspaceData(activeAgentId: string | undefined) {
-  const bootstrapQuery = useQuery({
-    queryKey: ["bootstrap"],
-    queryFn: getBootstrap,
-  });
   // The selected workspace is owned by WorkspaceProvider (persisted +
   // validated). This deduplicates the same ["bootstrap"] query rather than
   // re-fetching. Falls back to nothing while the selection reconciles.
-  const { workspace } = useWorkspace();
+  const { subject, workspace } = useWorkspace();
   const agentsQuery = useQuery({
     queryKey: ["agents", workspace?.id],
     queryFn: () => listAgents(workspace!.id),
@@ -70,7 +66,7 @@ export function useWorkspaceData(activeAgentId: string | undefined) {
     models: modelsQuery.data ?? [],
     providerOperationalSummary: providerOperationalSummaryQuery.data,
     providers: providersQuery.data ?? [],
-    subject: bootstrapQuery.data?.subject,
+    subject,
     tools: toolsQuery.data ?? [],
     workspace,
   };
