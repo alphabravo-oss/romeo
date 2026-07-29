@@ -9,13 +9,14 @@ import {
   type BillingStatus,
   type UpdateAbuseControlPolicyRequest,
 } from "../features/admin-insights";
+import { getBootstrap } from "../features/identity";
 import { type MessageKey, useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { DangerZone } from "./DangerZone";
-import { confirmTone } from "./danger-tier";
+import { confirmTone, requiresTypedConfirmation } from "./danger-tier";
 import { PanelStats } from "./PanelStats";
 import { PageActions } from "./PageActions";
 import { EdgeSecurityPostureTab } from "./EdgeSecurityPostureTab";
@@ -129,6 +130,10 @@ function ControlsEditor(props: {
   const { report, queryClient } = props;
   const updateMutation = useMutation({ mutationFn: updateAbuseControls });
   const suspensionMutation = useMutation({ mutationFn: updateAbuseControls });
+  const bootstrapQuery = useQuery({
+    queryKey: ["bootstrap"],
+    queryFn: getBootstrap,
+  });
   const { ask, dialog } = useConfirm();
 
   const form = useForm({
@@ -215,6 +220,11 @@ function ControlsEditor(props: {
 
   async function toggleSuspension(nextSuspended: boolean) {
     const tier = nextSuspended ? "high" : "medium";
+    const organization = bootstrapQuery.data?.organizations.find(
+      (entry) => entry.id === report.orgId,
+    );
+    const organizationName =
+      organization?.name ?? organization?.slug ?? report.orgId;
     const ok = await ask({
       title: nextSuspended
         ? t("abuseSuspendConfirmTitle")
@@ -224,6 +234,9 @@ function ControlsEditor(props: {
         : t("abuseResumeConfirmBody"),
       confirmLabel: nextSuspended ? t("abuseSuspendOrg") : t("abuseResumeOrg"),
       tone: confirmTone(tier),
+      ...(requiresTypedConfirmation(tier)
+        ? { confirmPhrase: organizationName }
+        : {}),
     });
     if (!ok) return;
 

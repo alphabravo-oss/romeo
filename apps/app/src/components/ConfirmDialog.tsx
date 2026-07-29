@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from "react";
-import { AlertDialog } from "@romeo/ui";
+import { AlertDialog, Field, Input } from "@romeo/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useLocale } from "../lib/i18n";
+import { matchesConfirmationPhrase } from "./confirm-typed";
 
 export type ConfirmTone = "default" | "danger";
 
@@ -11,6 +12,8 @@ export interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: ConfirmTone;
+  /** When set, the confirm button stays disabled until this phrase is typed. */
+  confirmPhrase?: string;
 }
 
 /**
@@ -28,10 +31,12 @@ export function ConfirmDialog(props: {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: ConfirmTone;
+  confirmPhrase?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }): React.ReactNode {
   const { t } = useLocale();
+  const [typed, setTyped] = useState("");
   const {
     open,
     title,
@@ -39,14 +44,25 @@ export function ConfirmDialog(props: {
     confirmLabel = t("confirm"),
     cancelLabel = t("cancel"),
     tone = "default",
+    confirmPhrase,
     onConfirm,
     onCancel,
   } = props;
+  const phraseSatisfied =
+    confirmPhrase === undefined ||
+    matchesConfirmationPhrase(typed, confirmPhrase);
+
+  useEffect(() => {
+    if (!open) setTyped("");
+  }, [open]);
 
   return (
     <AlertDialog
       actionLabel={confirmLabel}
-      actionProps={{ variant: tone === "danger" ? "danger" : "primary" }}
+      actionProps={{
+        disabled: !phraseSatisfied,
+        variant: tone === "danger" ? "danger" : "primary",
+      }}
       cancelLabel={cancelLabel}
       onConfirm={onConfirm}
       onOpenChange={(nextOpen) => {
@@ -55,7 +71,19 @@ export function ConfirmDialog(props: {
       open={open}
       title={title}
     >
-      {body ?? t("confirmDefaultBody")}
+      <div className="grid gap-3">
+        <div>{body ?? t("confirmDefaultBody")}</div>
+        {confirmPhrase !== undefined ? (
+          <Field label={`${t("confirmTypeToProceed")}: ${confirmPhrase}`}>
+            <Input
+              autoComplete="off"
+              name="confirmPhrase"
+              onChange={(event) => setTyped(event.currentTarget.value)}
+              value={typed}
+            />
+          </Field>
+        ) : null}
+      </div>
     </AlertDialog>
   );
 }
@@ -108,6 +136,9 @@ export function useConfirm(): {
         : {})}
       {...(pending?.cancelLabel !== undefined
         ? { cancelLabel: pending.cancelLabel }
+        : {})}
+      {...(pending?.confirmPhrase !== undefined
+        ? { confirmPhrase: pending.confirmPhrase }
         : {})}
       tone={pending?.tone ?? "default"}
       onConfirm={() => settle(true)}

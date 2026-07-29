@@ -6,6 +6,7 @@
   "closeDialogsMenus": "Close dialogs & menus",
   "commandPalette": "Command palette",
   "confirmDefaultBody": "Are you sure you want to continue?",
+  "confirmTypeToProceed": "Type the name to confirm",
   "chooseConsoleSection": "Choose a section.",
   "dismiss": "Dismiss",
   "goTo": "Go to",
