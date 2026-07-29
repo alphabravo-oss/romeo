@@ -13,6 +13,9 @@ import { type MessageKey, useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { useConfirm } from "./ConfirmDialog";
+import { DangerZone } from "./DangerZone";
+import { confirmTone } from "./danger-tier";
 import { PanelStats } from "./PanelStats";
 import { PageActions } from "./PageActions";
 import { EdgeSecurityPostureTab } from "./EdgeSecurityPostureTab";
@@ -125,10 +128,11 @@ function ControlsEditor(props: {
   const { t } = useLocale();
   const { report, queryClient } = props;
   const updateMutation = useMutation({ mutationFn: updateAbuseControls });
+  const suspensionMutation = useMutation({ mutationFn: updateAbuseControls });
+  const { ask, dialog } = useConfirm();
 
   const form = useForm({
     defaultValues: {
-      suspended: report.suspension.suspended,
       reasonCode: report.suspension.reasonCode ?? "",
       enforceBillingStatus: report.entitlements.enforceBillingStatus,
       denyWhenBillingPlanMissing:
@@ -181,7 +185,6 @@ function ControlsEditor(props: {
 
       const input: UpdateAbuseControlPolicyRequest = {
         suspension: {
-          suspended: value.suspended,
           // exactOptionalPropertyTypes: send null to clear, string to set — never undefined.
           reasonCode: reasonCode.length > 0 ? reasonCode : null,
         },
@@ -209,6 +212,32 @@ function ControlsEditor(props: {
       }
     },
   });
+
+  async function toggleSuspension(nextSuspended: boolean) {
+    const tier = nextSuspended ? "high" : "medium";
+    const ok = await ask({
+      title: nextSuspended
+        ? t("abuseSuspendConfirmTitle")
+        : t("abuseResumeConfirmTitle"),
+      body: nextSuspended
+        ? t("abuseSuspendConfirmBody")
+        : t("abuseResumeConfirmBody"),
+      confirmLabel: nextSuspended ? t("abuseSuspendOrg") : t("abuseResumeOrg"),
+      tone: confirmTone(tier),
+    });
+    if (!ok) return;
+
+    try {
+      await suspensionMutation.mutateAsync({
+        suspension: { suspended: nextSuspended },
+      });
+      await queryClient.invalidateQueries({ queryKey: ["abuseControls"] });
+      toast(t("abuseControlsUpdated"), "success");
+    } catch (caught) {
+      toast(t("abuseCouldNotUpdateControls"), "error");
+      throw caught;
+    }
+  }
 
   return (
     <div className="grid gap-4">
@@ -245,22 +274,6 @@ function ControlsEditor(props: {
         }}
       >
         <div className="rm-card-title">{t("abuseSuspension")}</div>
-        <form.Field name="suspended">
-          {(field) => (
-            <label className="flex items-center gap-2 text-sm">
-              <Input
-                name="suspended"
-                checked={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.checked)
-                }
-                type="checkbox"
-              />
-              <span>{t("abuseOrganizationSuspended")}</span>
-            </label>
-          )}
-        </form.Field>
         <form.Field name="reasonCode">
           {(field) => (
             <div className="grid gap-1">
@@ -435,6 +448,23 @@ function ControlsEditor(props: {
           )}
         </form.Subscribe>
       </form>
+      <DangerZone
+        description={t("abuseSuspendDescription")}
+        title={t("abuseSuspendTitle")}
+      >
+        <Button
+          aria-haspopup="dialog"
+          disabled={suspensionMutation.isPending}
+          onClick={() => void toggleSuspension(!report.suspension.suspended)}
+          type="button"
+          variant={report.suspension.suspended ? "secondary" : "danger"}
+        >
+          {report.suspension.suspended
+            ? t("abuseResumeOrg")
+            : t("abuseSuspendOrg")}
+        </Button>
+      </DangerZone>
+      {dialog}
     </div>
   );
 }
