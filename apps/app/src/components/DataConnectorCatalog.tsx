@@ -138,9 +138,6 @@ function CatalogCard(props: {
             )}
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <span className="rm-status rm-mono" style={{ fontSize: 11 }}>
-              {entry.type}
-            </span>
             <span
               className="rm-status"
               style={{ fontSize: 11, color: "var(--rm-muted)" }}

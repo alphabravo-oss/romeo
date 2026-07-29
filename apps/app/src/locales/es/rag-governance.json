@@ -118,5 +118,20 @@
   "hits": "Aciertos",
   "hitsLower": "aciertos",
   "working": "Procesando",
-  "workspaces": "Espacios de trabajo"
+  "workspaces": "Espacios de trabajo",
+  "ragExternalModeDeploymentManaged": "Gestionado por este despliegue",
+  "ragExternalModeDisabled": "Desactivado",
+  "ragIsolationAdvisory": "Orientativo",
+  "ragIsolationDedicated": "Almacén dedicado por inquilino",
+  "ragIsolationExternalCollection": "Colección externa por organización",
+  "ragIsolationExternalNamespace": "Espacio de nombres externo por organización",
+  "ragIsolationKnowledgeBase": "Base de conocimiento",
+  "ragIsolationNone": "Sin aislamiento",
+  "ragIsolationPgvectorPartitioned": "pgvector particionado por organización",
+  "ragIsolationRequired": "Obligatorio",
+  "ragIsolationSharedRowScope": "Almacén compartido con alcance por fila",
+  "ragTierOrg": "Organización",
+  "ragTierShared": "Compartido",
+  "ragTierUserPrivate": "Privado para cada miembro",
+  "ragTierWorkspace": "Espacio de trabajo"
 }

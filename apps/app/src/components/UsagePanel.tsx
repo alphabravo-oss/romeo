@@ -49,11 +49,7 @@ function alertColumns(t: Translate): ColumnDef<UsageAlert, any>[] {
     }),
     alertCol.accessor("metric", {
       header: t("usageMetric"),
-      cell: (c) => (
-        <span className="rm-mono" translate="no">
-          {c.getValue()}
-        </span>
-      ),
+      cell: (c) => <MetricLabel metric={c.getValue()} t={t} />,
     }),
     alertCol.accessor("percentUsed", {
       id: "percentUsed",
@@ -328,17 +324,16 @@ function MetricLabel({
                   ? t("usageImagesGenerated")
                   : metric === "storage.byte"
                     ? t("usageStorageBytes")
-                    : metric;
-  return (
-    <span className="grid gap-0.5">
-      <span className="font-medium">{label}</span>
-      {label !== metric ? (
-        <code className="text-xs text-muted" translate="no">
-          {metric}
-        </code>
-      ) : null}
-    </span>
-  );
+                    : metric === "pipeline_duration"
+                      ? t("usagePipelineDuration")
+                      : humanizeMetric(metric);
+  return <span className="font-medium">{label}</span>;
+}
+
+function humanizeMetric(metric: string): string {
+  const words = metric.replace(/[._]+/gu, " ").trim();
+  if (words.length === 0) return "";
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function usageSeverityMessageKey(severity: UsageAlert["severity"]): MessageKey {

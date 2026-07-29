@@ -28,7 +28,6 @@
   "jobsRunning": "En ejecución",
   "jobsFailed": "Fallidos",
   "jobsType": "Tipo",
-  "jobsId": "ID",
   "jobsUpdated": "Actualizado",
   "jobsStatusCompleted": "completado",
   "jobsStatusFailed": "fallido",

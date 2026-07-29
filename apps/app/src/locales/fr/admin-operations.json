@@ -65,6 +65,7 @@
   "usageRunsCompleted": "Exécutions terminées",
   "usageInputTokens": "Jetons d’entrée",
   "usageOutputTokens": "Jetons de sortie",
+  "usagePipelineDuration": "Durée du pipeline",
   "usageTotalTokens": "Total des jetons",
   "usageImagesGenerated": "Images générées",
   "usageStorageBytes": "Octets de stockage",

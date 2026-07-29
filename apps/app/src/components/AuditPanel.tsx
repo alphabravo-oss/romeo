@@ -61,12 +61,22 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
     }),
     col.accessor("actorId", {
       header: t("auditActor"),
-      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+      cell: (c) => (
+        <span className="rm-cell-muted">
+          {humanizeAuditActor(c.getValue())}
+        </span>
+      ),
     }),
   ];
 }
 
 const AUDIT_PAGE_SIZE = 50;
+
+function humanizeAuditActor(actorId: string): string {
+  const words = actorId.replace(/[._-]+/gu, " ").trim();
+  if (words.length === 0) return "";
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 export function AuditPanel() {
   const { t } = useLocale();

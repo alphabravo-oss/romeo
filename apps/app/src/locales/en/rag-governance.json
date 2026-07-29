@@ -118,5 +118,20 @@
   "hits": "Hits",
   "hitsLower": "hits",
   "working": "Working",
-  "workspaces": "Workspaces"
+  "workspaces": "Workspaces",
+  "ragExternalModeDeploymentManaged": "Managed by this deployment",
+  "ragExternalModeDisabled": "Disabled",
+  "ragIsolationAdvisory": "Advisory",
+  "ragIsolationDedicated": "Dedicated store per tenant",
+  "ragIsolationExternalCollection": "External collection per organization",
+  "ragIsolationExternalNamespace": "External namespace per organization",
+  "ragIsolationKnowledgeBase": "Knowledge base",
+  "ragIsolationNone": "No isolation",
+  "ragIsolationPgvectorPartitioned": "pgvector partitioned per organization",
+  "ragIsolationRequired": "Required",
+  "ragIsolationSharedRowScope": "Shared store, row-level scoping",
+  "ragTierOrg": "Organization",
+  "ragTierShared": "Shared",
+  "ragTierUserPrivate": "Private to each member",
+  "ragTierWorkspace": "Workspace"
 }

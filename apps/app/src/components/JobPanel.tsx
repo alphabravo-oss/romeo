@@ -17,12 +17,8 @@ export function JobPanel() {
   const columns: ColumnDef<BackgroundJob, any>[] = [
     col.accessor("type", {
       header: t("jobsType"),
-      cell: (c) => <span className="font-medium">{c.getValue()}</span>,
-    }),
-    col.accessor("id", {
-      header: t("jobsId"),
       cell: (c) => (
-        <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+        <span className="font-medium">{humanizeJobType(c.getValue())}</span>
       ),
     }),
     col.accessor("status", {
@@ -96,4 +92,10 @@ function jobStatusMessageKey(status: string): MessageKey {
   if (status === "failed") return "jobsStatusFailed";
   if (status === "running") return "jobsStatusRunning";
   return "jobsStatusQueued";
+}
+
+function humanizeJobType(type: string): string {
+  const words = type.replace(/[._-]+/gu, " ").trim();
+  if (words.length === 0) return "";
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }

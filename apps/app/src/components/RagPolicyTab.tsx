@@ -18,7 +18,7 @@ import {
   type RagVectorIsolationPolicy,
   type UpdateRagPolicyRequest,
 } from "../features/rag-governance";
-import { useLocale } from "../lib/i18n";
+import { useLocale, type MessageKey } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
@@ -26,6 +26,50 @@ import { PanelStats } from "./PanelStats";
 import { PageActions } from "./PageActions";
 
 // ── Policy tab ────────────────────────────────────────────────────────────────
+
+const TIER_LABEL_KEYS: Record<RagPolicyTier, MessageKey> = {
+  user_private: "ragTierUserPrivate",
+  workspace: "ragTierWorkspace",
+  org: "ragTierOrg",
+  shared: "ragTierShared",
+};
+
+const EXTERNAL_MODE_LABEL_KEYS: Record<
+  RagPolicyExternalVectorMode,
+  MessageKey
+> = {
+  deployment_managed: "ragExternalModeDeploymentManaged",
+  disabled: "ragExternalModeDisabled",
+};
+
+const ISOLATION_POLICY_LABEL_KEYS: Record<
+  RagVectorIsolationPolicy,
+  MessageKey
+> = {
+  knowledge_base: "ragIsolationKnowledgeBase",
+  none: "ragIsolationNone",
+  org: "ragTierOrg",
+  workspace: "ragTierWorkspace",
+};
+
+const PHYSICAL_MODE_LABEL_KEYS: Record<
+  RagPolicyPhysicalVectorIsolationMode,
+  MessageKey
+> = {
+  dedicated_vector_store_per_org: "ragIsolationDedicated",
+  external_collection_per_org: "ragIsolationExternalCollection",
+  external_namespace_per_org: "ragIsolationExternalNamespace",
+  pgvector_partitioned_by_org: "ragIsolationPgvectorPartitioned",
+  shared_row_scope: "ragIsolationSharedRowScope",
+};
+
+const ENFORCEMENT_LABEL_KEYS: Record<
+  RagPolicyPhysicalVectorIsolationEnforcement,
+  MessageKey
+> = {
+  advisory: "ragIsolationAdvisory",
+  required: "ragIsolationRequired",
+};
 
 export function RagPolicyTab() {
   const { t } = useLocale();
@@ -132,11 +176,15 @@ function PolicyEditor(props: {
           },
           {
             label: t("externalVectorStore"),
-            value: report.externalVectorStore.mode,
+            value: t(EXTERNAL_MODE_LABEL_KEYS[report.externalVectorStore.mode]),
           },
           {
             label: t("physicalIsolation"),
-            value: report.physicalVectorIsolation.enforcement,
+            value: t(
+              ENFORCEMENT_LABEL_KEYS[
+                report.physicalVectorIsolation.enforcement
+              ],
+            ),
           },
         ]}
       />
@@ -177,7 +225,7 @@ function PolicyEditor(props: {
                         }}
                         type="checkbox"
                       />
-                      <span>{tier}</span>
+                      <span>{t(TIER_LABEL_KEYS[tier])}</span>
                     </label>
                   );
                 })}
@@ -206,7 +254,7 @@ function PolicyEditor(props: {
               >
                 {ragPolicyExternalVectorModes.map((mode) => (
                   <option key={mode} value={mode}>
-                    {mode}
+                    {t(EXTERNAL_MODE_LABEL_KEYS[mode])}
                   </option>
                 ))}
               </NativeSelect>
@@ -236,7 +284,7 @@ function PolicyEditor(props: {
               >
                 {ragVectorIsolationPolicies.map((policy) => (
                   <option key={policy} value={policy}>
-                    {policy}
+                    {t(ISOLATION_POLICY_LABEL_KEYS[policy])}
                   </option>
                 ))}
               </NativeSelect>
@@ -266,7 +314,7 @@ function PolicyEditor(props: {
               >
                 {ragVectorIsolationPolicies.map((policy) => (
                   <option key={policy} value={policy}>
-                    {policy}
+                    {t(ISOLATION_POLICY_LABEL_KEYS[policy])}
                   </option>
                 ))}
               </NativeSelect>
@@ -294,7 +342,7 @@ function PolicyEditor(props: {
               >
                 {ragPolicyPhysicalVectorIsolationModes.map((mode) => (
                   <option key={mode} value={mode}>
-                    {mode}
+                    {t(PHYSICAL_MODE_LABEL_KEYS[mode])}
                   </option>
                 ))}
               </NativeSelect>
@@ -326,7 +374,7 @@ function PolicyEditor(props: {
                 {ragPolicyPhysicalVectorIsolationEnforcements.map(
                   (enforcement) => (
                     <option key={enforcement} value={enforcement}>
-                      {enforcement}
+                      {t(ENFORCEMENT_LABEL_KEYS[enforcement])}
                     </option>
                   ),
                 )}

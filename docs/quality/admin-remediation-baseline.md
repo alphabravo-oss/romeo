@@ -32,19 +32,19 @@ The audit runs each section at both `desktop` (1440×1000) and `mobile`
 | access                | `incomplete-empty-state` | "No API keys yet." / "No service accounts yet."                                           | Task 1.4   | ✅     |
 | connections           | `primary-actions`        | **10×** `Add connector` in the Catalog tab                                                | Task 4.2   | ✅     |
 | connections           | `primary-actions`        | `+ Import tool` ×2 (Tool connectors tab)                                                  | Task 4.2   | ✅     |
-| connections           | `identifier-leak`        | `local_import`                                                                            | Task 7.1   | ☐      |
+| connections           | `identifier-leak`        | `local_import`                                                                            | Task 7.1   | ✅     |
 | connections           | `incomplete-empty-state` | "No connectors yet." / "No connectors imported."                                          | Task 1.4   | ✅     |
 | usage                 | `primary-actions`        | `+ Add quota` ×2 (Quotas tab)                                                             | Task 4.2   | ✅     |
-| usage                 | `identifier-leak`        | `pipeline_duration`                                                                       | Task 7.1   | ☐      |
+| usage                 | `identifier-leak`        | `pipeline_duration`                                                                       | Task 7.1   | ✅     |
 | usage                 | `incomplete-empty-state` | "No quotas yet."                                                                          | Task 1.4   | ✅     |
 | webhooks              | `primary-actions`        | `+ Add webhook` ×2 (header + empty state)                                                 | Task 4.2   | ✅     |
 | webhooks              | `incomplete-empty-state` | "No webhooks yet."                                                                        | Task 1.4   | ✅     |
 | users                 | `unguarded-destructive`  | Red row-level `Disable`, no confirmation                                                  | Task 5.3   | ✅     |
-| overview              | `identifier-leak`        | Raw job/run IDs: `terminal_webhook`, `job_run_terminal_run_*`, `run_*`, `run_execution_*` | Task 7.1   | ☐      |
-| audit                 | `identifier-leak`        | `user_dev_admin`                                                                          | Task 7.1   | ☐      |
-| rag                   | `identifier-leak`        | `user_private` (Policy tab)                                                               | Task 7.1   | ☐      |
+| overview              | `identifier-leak`        | Raw job/run IDs: `terminal_webhook`, `job_run_terminal_run_*`, `run_*`, `run_execution_*` | Task 7.1   | ✅     |
+| audit                 | `identifier-leak`        | `user_dev_admin`                                                                          | Task 7.1   | ✅     |
+| rag                   | `identifier-leak`        | `user_private` (Policy tab)                                                               | Task 7.1   | ✅     |
 | rag                   | `incomplete-empty-state` | "No change request on record."                                                            | Task 1.4   | ✅     |
-| abuse                 | `identifier-leak`        | `past_due` (Controls tab)                                                                 | Task 7.1   | ☐      |
+| abuse                 | `identifier-leak`        | `past_due` (Controls tab)                                                                 | Task 7.1   | ✅     |
 | connected-apps        | `incomplete-empty-state` | "No connections yet."                                                                     | Task 1.4   | ✅     |
 | impersonation         | `incomplete-empty-state` | "No pending requests." / "No active sessions."                                            | Task 1.4   | ✅     |
 | notification-channels | `incomplete-empty-state` | "No channels yet."                                                                        | Task 1.4   | ✅     |

@@ -65,6 +65,7 @@
   "usageRunsCompleted": "Ejecuciones completadas",
   "usageInputTokens": "Tokens de entrada",
   "usageOutputTokens": "Tokens de salida",
+  "usagePipelineDuration": "Duración del proceso",
   "usageTotalTokens": "Tokens totales",
   "usageImagesGenerated": "Imágenes generadas",
   "usageStorageBytes": "Bytes de almacenamiento",

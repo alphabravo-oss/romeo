@@ -17,6 +17,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { DangerZone } from "./DangerZone";
 import { confirmTone, requiresTypedConfirmation } from "./danger-tier";
+import { billingPlanStatusKey } from "./billing-display";
 import { PanelStats } from "./PanelStats";
 import { PageActions } from "./PageActions";
 import { EdgeSecurityPostureTab } from "./EdgeSecurityPostureTab";
@@ -300,11 +301,11 @@ function ControlsEditor(props: {
                 onChange={(event) =>
                   field.handleChange(event.currentTarget.value)
                 }
-                placeholder="policy_violation"
+                placeholder={t("abuseReasonCodePlaceholder")}
                 value={field.state.value}
               />
               <div className="text-xs text-muted">
-                {t("abuseReasonCodeGuidance")}
+                {t("abuseReasonCodeHint")}
               </div>
             </div>
           )}
@@ -370,7 +371,7 @@ function ControlsEditor(props: {
                         }}
                         type="checkbox"
                       />
-                      <span>{status}</span>
+                      <span>{t(billingPlanStatusKey(status))}</span>
                     </label>
                   );
                 })}
