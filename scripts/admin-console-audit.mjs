@@ -432,6 +432,43 @@ async function inspectUi(
             !["auto", "scroll"].includes(style.overflowX)
           );
         });
+      const partialPanelHeaderDividers = [
+        ...document.querySelectorAll(".rm-panel"),
+      ]
+        .filter(visible)
+        .filter((panel) => {
+          const first = panel.firstElementChild;
+          if (first === null) return false;
+          if (first.matches(".rm-ui-tabs")) {
+            const tabList = first.querySelector(":scope > .rm-ui-tabs__list");
+            return (
+              tabList === null ||
+              Number.parseFloat(getComputedStyle(tabList).borderBottomWidth) <
+                1 ||
+              tabList.getBoundingClientRect().width <
+                first.getBoundingClientRect().width - 2
+            );
+          }
+          const title = first.matches(".rm-card-title")
+            ? first
+            : (first.querySelector(":scope > .rm-card-title") ??
+              first.querySelector(":scope > div > .rm-card-title"));
+          if (title === null) return false;
+          const panelStyle = getComputedStyle(panel);
+          const contentWidth =
+            panel.clientWidth -
+            Number.parseFloat(panelStyle.paddingLeft) -
+            Number.parseFloat(panelStyle.paddingRight);
+          const divider = [first, title].find(
+            (element) =>
+              Number.parseFloat(getComputedStyle(element).borderBottomWidth) >=
+              1,
+          );
+          return (
+            divider === undefined ||
+            divider.getBoundingClientRect().width < contentWidth - 2
+          );
+        });
 
       if (heading?.textContent?.trim() !== expectedTitle)
         failures.push("page heading does not match route metadata");
@@ -518,6 +555,10 @@ async function inspectUi(
             .map((value) => value.textContent?.trim())
             .join(", ")}`,
         );
+      if (partialPanelHeaderDividers.length > 0)
+        failures.push(
+          `${partialPanelHeaderDividers.length} panel header divider(s) are not full width`,
+        );
       if (
         /\b(?:undefined|NaN|Invalid Date|\[object Object\])\b/u.test(bodyText)
       )
@@ -592,6 +633,7 @@ async function inspectUi(
             visibleFormControls.length - nonFrameworkControls.length,
           overflowingCardText: overflowingCardText.length,
           overflowingStatValues: overflowingStatValues.length,
+          partialPanelHeaderDividers: partialPanelHeaderDividers.length,
           tableRows,
           tableCapabilityFailures: tableCapabilityFailures.length,
           tableFrameworkBlocks: tableBlocks.length,

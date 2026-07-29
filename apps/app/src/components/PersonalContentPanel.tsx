@@ -146,7 +146,7 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
   const label = kind === "memories" ? t("memory") : t("note");
   return (
     <section className="rm-panel p-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="rm-card-header">
         <div>
           <div className="rm-card-title">{label}</div>
           <p className="text-sm text-muted">

@@ -79,7 +79,7 @@ export function WebSearchPanel() {
   });
   return (
     <section className="rm-panel p-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="rm-card-header">
         <div>
           <div className="rm-card-title">{t("governedWebSearch")}</div>
           <p className="text-sm text-muted">

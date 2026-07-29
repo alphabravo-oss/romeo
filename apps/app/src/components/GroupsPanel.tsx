@@ -202,7 +202,7 @@ export function GroupsPanel() {
 
   return (
     <section className="rm-panel p-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="rm-card-header">
         <div className="rm-card-title">{t("groupsTitle")}</div>
         <Button
           variant="primary"

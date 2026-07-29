@@ -180,7 +180,7 @@ export function PromptTemplatePanel() {
 
   return (
     <section className="rm-panel p-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="rm-card-header">
         <div className="rm-card-title">{t("promptTemplates")}</div>
         <Button
           variant="primary"
