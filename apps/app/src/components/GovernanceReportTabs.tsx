@@ -1,4 +1,4 @@
-import { Button } from "@romeo/ui";
+import { Button, StatusBadge } from "@romeo/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import {
@@ -8,11 +8,51 @@ import {
   getAccessReviewReport,
   getDataRightsCoverage,
 } from "../features";
+import type { DataRightsCoverageReport } from "../features/types";
 import { downloadCsv } from "../lib/csv";
 import { useLocale } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { PanelStats } from "./PanelStats";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+
+type StorageClass = DataRightsCoverageReport["storageClasses"][number];
+const storageClassColumn = createColumnHelper<StorageClass>();
+
+function storageClassColumns(
+  t: ReturnType<typeof useLocale>["t"],
+): ColumnDef<StorageClass, any>[] {
+  return [
+    storageClassColumn.accessor("label", {
+      header: t("govStorageClass"),
+      cell: (cell) => <span className="font-medium">{cell.getValue()}</span>,
+    }),
+    storageClassColumn.accessor("deletionCoverage", {
+      header: t("govDeletion"),
+      cell: (cell) => <CoverageStatus value={cell.getValue()} />,
+    }),
+    storageClassColumn.accessor("exportCoverage", {
+      header: t("govExport"),
+      cell: (cell) => <CoverageStatus value={cell.getValue()} />,
+    }),
+    storageClassColumn.accessor("retentionCoverage", {
+      header: t("govRetention"),
+      cell: (cell) => <CoverageStatus value={cell.getValue()} />,
+    }),
+    storageClassColumn.accessor("containsCustomerContent", {
+      header: t("govCustomerContent"),
+      cell: (cell) => (cell.getValue() ? t("yes") : t("no")),
+    }),
+  ];
+}
+
+function CoverageStatus({ value }: { value: string }) {
+  return (
+    <StatusBadge tone={value === "implemented" ? "success" : "warning"}>
+      {value.replaceAll("_", " ")}
+    </StatusBadge>
+  );
+}
 
 export function DataRightsTab() {
   const { t } = useLocale();
@@ -56,21 +96,13 @@ export function DataRightsTab() {
       <div className="text-muted">
         {t("generated")} <LocalizedDateTime value={report.generatedAt} />
       </div>
-      <div className="grid gap-2">
-        {report.storageClasses.map((entry) => (
-          <div
-            className="grid gap-1 rounded-md border border-border p-2"
-            key={entry.id}
-          >
-            <div className="font-medium">{entry.label}</div>
-            <div className="text-muted">
-              {t("govDeleteLower")}: {entry.deletionCoverage} ·{" "}
-              {t("govExportLower")}: {entry.exportCoverage} ·{" "}
-              {t("govRetentionLower")}: {entry.retentionCoverage}
-            </div>
-          </div>
-        ))}
-      </div>
+      <DataTable
+        columns={storageClassColumns(t)}
+        data={report.storageClasses}
+        empty={t("govNoStorageClasses")}
+        getRowId={(entry) => entry.id}
+        minTableWidth={720}
+      />
       {report.openGaps.length > 0 ? (
         <div className="rounded-md border border-border p-2">
           <div className="font-medium">{t("govOpenGaps")}</div>

@@ -1,14 +1,62 @@
-import { Button } from "@romeo/ui";
+import { Button, StatusBadge } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 
 import {
   getEdgeSecurityPosture,
+  type EdgeSecurityPostureCheck,
   type EdgeSecurityPostureReport,
 } from "../features/edge-security";
 import { type MessageKey, useLocale } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { PanelState } from "../lib/panel-state";
 import { PanelStats } from "./PanelStats";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+
+const postureCheckColumn = createColumnHelper<EdgeSecurityPostureCheck>();
+
+function postureCheckColumns(
+  t: ReturnType<typeof useLocale>["t"],
+): ColumnDef<EdgeSecurityPostureCheck, any>[] {
+  return [
+    postureCheckColumn.accessor("id", {
+      header: t("abuseCheck"),
+      cell: (cell) => (
+        <span className="font-medium">
+          {humanizeCheckValue(cell.getValue())}
+        </span>
+      ),
+    }),
+    postureCheckColumn.accessor("status", {
+      header: t("abuseStatus"),
+      cell: (cell) => (
+        <StatusBadge tone={cell.getValue() === "pass" ? "success" : "warning"}>
+          {humanizeCheckValue(cell.getValue())}
+        </StatusBadge>
+      ),
+    }),
+    postureCheckColumn.accessor("message", {
+      header: t("abuseMessage"),
+      cell: (cell) => (
+        <span className="whitespace-normal">{cell.getValue()}</span>
+      ),
+    }),
+    postureCheckColumn.accessor(
+      (check) =>
+        Object.entries(check.details)
+          .map(([key, value]) => `${humanizeCheckValue(key)}: ${String(value)}`)
+          .join(" · "),
+      {
+        id: "details",
+        header: t("abuseDetails"),
+        cell: (cell) => (
+          <span className="whitespace-normal text-xs text-muted">
+            {cell.getValue()}
+          </span>
+        ),
+      },
+    ),
+  ];
+}
 
 export function EdgeSecurityPostureTab() {
   const { t } = useLocale();
@@ -140,33 +188,19 @@ function EdgeSecurityPostureView(props: { report: EdgeSecurityPostureReport }) {
           {t("generated")} <LocalizedDateTime value={report.generatedAt} />
         </span>
       </div>
-      <div className="grid gap-2">
-        {report.checks.map((check) => (
-          <div className="rm-card" key={check.id}>
-            <div className="rm-card-header">
-              <div className="rm-card-title">{check.id}</div>
-              <span
-                className={`rm-status ${check.status === "pass" ? "pass" : "warn"}`}
-              >
-                {check.status}
-              </span>
-            </div>
-            <div className="text-sm">{check.message}</div>
-            <div className="mt-2 flex flex-wrap gap-3">
-              {Object.entries(check.details).map(([key, value]) => (
-                <span className="text-xs text-muted" key={key}>
-                  <span className="rm-mono" translate="no">
-                    {key}
-                  </span>
-                  : {String(value)}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      <DataTable
+        columns={postureCheckColumns(t)}
+        data={report.checks}
+        empty={t("abuseNoChecks")}
+        getRowId={(check) => check.id}
+        minTableWidth={820}
+      />
     </div>
   );
+}
+
+function humanizeCheckValue(value: string): string {
+  return value.replaceAll("_", " ");
 }
 
 function PostureStats(props: {

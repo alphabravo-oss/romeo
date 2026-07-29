@@ -1,5 +1,7 @@
 {
   "toolAuthChecked": "Autenticación comprobada",
+  "toolConnectorApproval": "Política de aprobación",
+  "toolAuth": "Autenticación",
   "toolAuthRefSet": "referencia de autenticación configurada",
   "toolCheckAuth": "Comprobar autenticación",
   "toolConnector": "Conector",
@@ -19,6 +21,8 @@
   "toolImportToolConnector": "Importar conector de herramienta",
   "toolImported": "Conector importado",
   "toolImporting": "Importando",
+  "toolManage": "Gestionar",
+  "toolManageDescription": "Revise la postura del conector, cambie la disponibilidad, valide la autenticación e inspeccione las operaciones.",
   "toolManaged": "gestionado",
   "toolName": "Nombre",
   "toolNameRequired": "El nombre es obligatorio",
@@ -30,12 +34,16 @@
   "toolOpenApiJsonRequired": "El JSON de OpenAPI es obligatorio",
   "toolOperations": "Operaciones",
   "toolPasteOpenApiJson": "Pega el JSON de OpenAPI",
+  "toolRisk": "Riesgo",
   "toolSecretAvailable": "comprobación del secreto: disponible",
   "toolSecretNotConfigured": "comprobación del secreto: sin configurar",
   "toolSecretUnavailable": "comprobación del secreto",
+  "toolStatus": "Estado",
   "toolTotalConnectors": "Conectores totales",
+  "toolType": "Tipo",
   "toolUnableCheckAuth": "No se puede comprobar la autenticación del conector.",
   "toolUnableImport": "No se puede importar el conector.",
   "toolUnableUpdate": "No se puede actualizar el conector.",
-  "toolUnavailable": "no disponible"
+  "toolUnavailable": "no disponible",
+  "toolVisibility": "Visibilidad"
 }

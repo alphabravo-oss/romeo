@@ -38,6 +38,16 @@ const sections = [
   ["connected-apps", "Connected apps"],
 ];
 
+const routes = [
+  ...sections,
+  ["usage", "Usage & quotas", "quotas"],
+  ["providers", "Providers", "models"],
+  ["providers", "Providers", "observability"],
+  ["connections", "Connections", "imports"],
+  ["connections", "Connections", "catalog"],
+  ["connections", "Connections", "tools"],
+];
+
 const viewports = [
   { name: "desktop", width: 1440, height: 1000, runAxe: true },
   { name: "mobile", width: 390, height: 844, runAxe: false },
@@ -78,15 +88,18 @@ try {
       }
     });
 
-    for (const [section, title] of sections) {
+    for (const [section, title, view] of routes) {
       routeConsoleErrors = [];
       routePageErrors = [];
       routeResponseFailures = [];
       const startedAt = performance.now();
-      const path = `/admin?section=${encodeURIComponent(section)}`;
+      const path = `/admin?section=${encodeURIComponent(section)}${
+        view === undefined ? "" : `&view=${encodeURIComponent(view)}`
+      }`;
       const result = {
         section,
         title,
+        ...(view === undefined ? {} : { view }),
         viewport: viewport.name,
         status: "failed",
         path,
@@ -106,11 +119,22 @@ try {
           .catch(() => {});
 
         const ui = await inspectUi(page, section, title, sections.length);
+        const tabStates = await inspectTabStates(
+          page,
+          section,
+          title,
+          sections.length,
+        );
         const axeViolations = viewport.runAxe
           ? await inspectAccessibility(page)
           : [];
         const failures = [
           ...ui.failures,
+          ...tabStates.flatMap((tabState) =>
+            tabState.failures.map(
+              (failure) => `tab:${tabState.label}:${failure}`,
+            ),
+          ),
           ...axeViolations.map(
             (violation) =>
               `axe:${violation.id} (${violation.nodes.length} node(s))`,
@@ -126,6 +150,7 @@ try {
         Object.assign(result, {
           durationMs: Math.round(performance.now() - startedAt),
           metrics: ui.metrics,
+          tabStates,
           axeViolations,
           responseFailures: routeResponseFailures,
           failures,
@@ -150,6 +175,7 @@ const evidence = {
   generatedAt: new Date().toISOString(),
   baseUrl: new URL(baseUrl).origin,
   sectionCount: sections.length,
+  routeCount: routes.length,
   viewports: viewports.map(({ name, width, height }) => ({
     name,
     width,
@@ -177,7 +203,7 @@ if (failed.length > 0) {
 }
 
 console.log(
-  `Romeo admin console audit passed for ${sections.length} sections across ${viewports.length} viewports.`,
+  `Romeo admin console audit passed for ${routes.length} routes across ${viewports.length} viewports.`,
 );
 console.log(`Wrote metadata-only evidence to ${evidencePath}`);
 
@@ -199,6 +225,35 @@ async function inspectAccessibility(page) {
       })),
     }));
   });
+}
+
+async function inspectTabStates(
+  page,
+  expectedSection,
+  expectedTitle,
+  expectedNavigationItems,
+) {
+  const tabs = page.locator('button[role="tab"]:visible');
+  const count = await tabs.count();
+  const states = [];
+  for (let index = 0; index < count; index += 1) {
+    const tab = tabs.nth(index);
+    const label = (await tab.innerText()).trim() || `tab-${index + 1}`;
+    await tab.click();
+    await page
+      .locator(".rm-empty")
+      .filter({ hasText: /Loading(?: section)?/u })
+      .waitFor({ state: "hidden" })
+      .catch(() => {});
+    const ui = await inspectUi(
+      page,
+      expectedSection,
+      expectedTitle,
+      expectedNavigationItems,
+    );
+    states.push({ label, failures: ui.failures, metrics: ui.metrics });
+  }
+  return states;
 }
 
 async function inspectUi(
@@ -246,6 +301,7 @@ async function inspectUi(
       ].filter(
         (control) =>
           visible(control) &&
+          control.getAttribute("aria-hidden") !== "true" &&
           control.getAttribute("type") !== "hidden" &&
           control.getAttribute("type") !== "file",
       );
@@ -289,6 +345,46 @@ async function inspectUi(
           );
         });
       });
+      const tableBlocks = [
+        ...document.querySelectorAll(".rm-table-block"),
+      ].filter(visible);
+      const tableCapabilityFailures = tableBlocks.flatMap((block, index) => {
+        const rowCount = Number(block.dataset.rowCount);
+        const pageSize = Number(block.dataset.pageSize);
+        const virtualized = block.dataset.virtualized === "true";
+        const serverPaginated = block.dataset.serverPaginated === "true";
+        const blockFailures = [];
+        if (
+          Number.isFinite(rowCount) &&
+          rowCount > 1 &&
+          block.querySelector(".rm-th-sortable") === null
+        )
+          blockFailures.push("sorting");
+        if (
+          Number.isFinite(rowCount) &&
+          rowCount > 8 &&
+          block.querySelector(".rm-table-search") === null
+        )
+          blockFailures.push("search");
+        if (
+          Number.isFinite(rowCount) &&
+          rowCount > 8 &&
+          block.querySelector(".rm-table-view") === null
+        )
+          blockFailures.push("column/density controls");
+        if (
+          Number.isFinite(rowCount) &&
+          Number.isFinite(pageSize) &&
+          rowCount > pageSize &&
+          !virtualized &&
+          !serverPaginated &&
+          block.querySelector(".rm-table-pager") === null
+        )
+          blockFailures.push("pagination");
+        return blockFailures.map(
+          (capability) => `table ${index + 1} missing ${capability}`,
+        );
+      });
       const tablesEscapingContainers = tables.filter((table) => {
         const container =
           table.closest(".rm-table-wrap") ?? table.closest(".rm-ui-table-wrap");
@@ -304,6 +400,38 @@ async function inspectUi(
           (image) =>
             !image.hasAttribute("width") || !image.hasAttribute("height"),
         );
+      const overflowingStatValues = [
+        ...document.querySelectorAll(".rm-stat-value"),
+      ]
+        .filter(visible)
+        .filter((value) => {
+          const card = value.closest(".rm-stat");
+          if (card === null) return false;
+          const cardStyle = getComputedStyle(card);
+          const contentRight =
+            card.getBoundingClientRect().right -
+            Number.parseFloat(cardStyle.paddingRight);
+          return (
+            value.scrollWidth > value.clientWidth + 1 ||
+            [...value.children].some(
+              (child) => child.getBoundingClientRect().right > contentRight + 1,
+            )
+          );
+        });
+      const overflowingCardText = [
+        ...document.querySelectorAll(
+          ".rm-card-title, .rm-card p, .rm-card li, .rm-card dd, .rm-panel dd, .rm-status",
+        ),
+      ]
+        .filter(visible)
+        .filter((element) => {
+          if (element.scrollWidth <= element.clientWidth + 1) return false;
+          const style = getComputedStyle(element);
+          return (
+            style.textOverflow !== "ellipsis" &&
+            !["auto", "scroll"].includes(style.overflowX)
+          );
+        });
 
       if (heading?.textContent?.trim() !== expectedTitle)
         failures.push("page heading does not match route metadata");
@@ -367,6 +495,7 @@ async function inspectUi(
         );
       if (invalidTables.length > 0)
         failures.push(`${invalidTables.length} malformed/uncontained table(s)`);
+      failures.push(...tableCapabilityFailures);
       if (tablesEscapingContainers.length > 0)
         failures.push(
           `${tablesEscapingContainers.length} table container(s) escape the viewport`,
@@ -374,6 +503,20 @@ async function inspectUi(
       if (imagesWithoutDimensions.length > 0)
         failures.push(
           `${imagesWithoutDimensions.length} visible image(s) lack dimensions`,
+        );
+      if (overflowingStatValues.length > 0)
+        failures.push(
+          `stat values overflow cards: ${overflowingStatValues
+            .slice(0, 5)
+            .map((value) => value.textContent?.trim())
+            .join(", ")}`,
+        );
+      if (overflowingCardText.length > 0)
+        failures.push(
+          `card text overflows: ${overflowingCardText
+            .slice(0, 5)
+            .map((value) => value.textContent?.trim())
+            .join(", ")}`,
         );
       if (
         /\b(?:undefined|NaN|Invalid Date|\[object Object\])\b/u.test(bodyText)
@@ -404,6 +547,16 @@ async function inspectUi(
         })()
       )
         failures.push("audit summary does not match the rendered event data");
+      const locationView = new URLSearchParams(location.search).get("view");
+      if (
+        (expectedSection === "analytics" ||
+          expectedSection === "audit" ||
+          (expectedSection === "usage" && locationView !== "quotas")) &&
+        !visibleButtons.some((button) =>
+          /\bexport\b/iu.test(button.textContent ?? ""),
+        )
+      )
+        failures.push("export-capable dataset is missing its export action");
       if (expectedSection === "overview") {
         const readinessPanel = [...document.querySelectorAll(".rm-panel")].find(
           (panel) =>
@@ -437,7 +590,11 @@ async function inspectUi(
           frameworkButtons: visibleButtons.length - nonFrameworkButtons.length,
           frameworkControls:
             visibleFormControls.length - nonFrameworkControls.length,
+          overflowingCardText: overflowingCardText.length,
+          overflowingStatValues: overflowingStatValues.length,
           tableRows,
+          tableCapabilityFailures: tableCapabilityFailures.length,
+          tableFrameworkBlocks: tableBlocks.length,
           tables: tables.length,
         },
       };

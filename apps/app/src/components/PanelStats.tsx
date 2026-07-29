@@ -1,3 +1,5 @@
+import { LocalizedNumber } from "../lib/locale-format";
+
 /**
  * At-a-glance stat cards for a panel header. Values must be derived from REAL
  * query data (e.g. `data.length`, `data.filter(...).length`) — never hardcoded.
@@ -18,7 +20,11 @@ export function PanelStats(props: {
       {props.items.map((item) => (
         <div className="rm-stat" key={item.label}>
           <div className="rm-stat-label">{item.label}</div>
-          <div className="rm-stat-value">
+          <div
+            className={`rm-stat-value ${
+              typeof item.value === "number" ? "" : "rm-stat-value--text"
+            }`}
+          >
             {typeof item.value === "number" ? (
               <LocalizedNumber value={item.value} />
             ) : (
@@ -30,4 +36,3 @@ export function PanelStats(props: {
     </div>
   );
 }
-import { LocalizedNumber } from "../lib/locale-format";

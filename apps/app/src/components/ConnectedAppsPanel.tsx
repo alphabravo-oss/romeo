@@ -266,14 +266,14 @@ export function ConnectedAppsPanel() {
                         {t("connectedAppsWarnings")}
                       </strong>
                       <ul className="mt-1 grid gap-1 text-sm text-muted">
-                      {posture.warnings.map((warning) => (
-                        <li className="grid gap-0.5" key={warning}>
-                          <span>{connectedAppWarningLabel(warning, t)}</span>
-                          <code className="text-xs" translate="no">
-                            {warning}
-                          </code>
-                        </li>
-                      ))}
+                        {posture.warnings.map((warning) => (
+                          <li className="grid gap-0.5" key={warning}>
+                            <span>{connectedAppWarningLabel(warning, t)}</span>
+                            <code className="text-xs" translate="no">
+                              {warning}
+                            </code>
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   ) : null}

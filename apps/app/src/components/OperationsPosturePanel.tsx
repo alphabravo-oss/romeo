@@ -20,6 +20,13 @@ import { LocalizedDateTime } from "../lib/locale-format";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PanelStats } from "./PanelStats";
 import { Tabs } from "./Tabs";
+import {
+  humanizeOperationalCode,
+  jobStatusDot,
+  OperationalStatusDot,
+  operationalStatusLabel,
+  quotaHealthDot,
+} from "./operational-status";
 
 /**
  * Read-only "System posture" panel. Consolidates four admin GET endpoints into
@@ -56,14 +63,6 @@ export function OperationsPosturePanel(): React.ReactNode {
   );
 }
 
-function StatusDot({
-  status,
-}: {
-  status: "pass" | "warn" | "fail";
-}): React.ReactNode {
-  return <span className={`rm-status-dot ${status}`} />;
-}
-
 /* --------------------------------- GA evidence ---------------------------- */
 
 const gaGateCol = createColumnHelper<GaEvidencePostureGate>();
@@ -85,7 +84,17 @@ function gaGateColumns(t: Translate): ColumnDef<GaEvidencePostureGate, any>[] {
     }),
     gaGateCol.accessor("status", {
       header: t("opStatus"),
-      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+      cell: (c) => (
+        <span
+          className={`rm-status ${
+            c.getValue() === "satisfied" || c.getValue() === "excepted"
+              ? "pass"
+              : "warn"
+          }`}
+        >
+          {operationalStatusLabel(c.getValue(), t)}
+        </span>
+      ),
     }),
     gaGateCol.accessor((row) => (row.requiredForGa ? t("opYes") : t("opNo")), {
       id: "requiredForGa",
@@ -124,14 +133,17 @@ function GaEvidenceSection(): React.ReactNode {
                   label: t("opStatus"),
                   value: (
                     <>
-                      <StatusDot
+                      <OperationalStatusDot
                         status={report.status === "passed" ? "pass" : "warn"}
                       />
-                      {report.status}
+                      {operationalStatusLabel(report.status, t)}
                     </>
                   ),
                 },
-                { label: t("opChecklist"), value: report.checklist.status },
+                {
+                  label: t("opChecklist"),
+                  value: operationalStatusLabel(report.checklist.status, t),
+                },
                 { label: t("opGates"), value: report.gates.length },
                 { label: t("opBlockedGates"), value: blockedGates },
                 {
@@ -148,8 +160,8 @@ function GaEvidenceSection(): React.ReactNode {
                 </div>
                 <ul className="grid gap-1">
                   {report.warnings.map((warning) => (
-                    <li className="rm-mono text-sm" key={warning}>
-                      {warning}
+                    <li className="text-sm" key={warning}>
+                      {humanizeOperationalCode(warning)}
                     </li>
                   ))}
                 </ul>
@@ -184,11 +196,7 @@ function pgWarnColumns(t: Translate): ColumnDef<PostgresWarningRow, any>[] {
   return [
     pgWarnCol.accessor("code", {
       header: t("opWarning"),
-      cell: (c) => (
-        <span className="rm-mono" translate="no">
-          {c.getValue()}
-        </span>
-      ),
+      cell: (c) => <span>{humanizeOperationalCode(c.getValue())}</span>,
     }),
   ];
 }
@@ -212,10 +220,10 @@ function PostgresSection(): React.ReactNode {
                   label: t("opStatus"),
                   value: (
                     <>
-                      <StatusDot
+                      <OperationalStatusDot
                         status={report.status === "ready" ? "pass" : "warn"}
                       />
-                      {report.status}
+                      {operationalStatusLabel(report.status, t)}
                     </>
                   ),
                 },
@@ -232,20 +240,28 @@ function PostgresSection(): React.ReactNode {
                 },
                 {
                   label: t("opQueryPlanReview"),
-                  value:
+                  value: operationalStatusLabel(
                     report.queryPlanReview.representativeVolumeEvidence.status,
+                    t,
+                  ),
                 },
                 {
                   label: t("opSlowQueryTelemetry"),
-                  value: report.slowQueryTelemetry.status,
+                  value: operationalStatusLabel(
+                    report.slowQueryTelemetry.status,
+                    t,
+                  ),
                 },
                 {
                   label: t("opLockTelemetry"),
-                  value: report.lockTelemetry.status,
+                  value: operationalStatusLabel(report.lockTelemetry.status, t),
                 },
                 {
                   label: t("opArchivalPartitioning"),
-                  value: report.archivalPartitioning.status,
+                  value: operationalStatusLabel(
+                    report.archivalPartitioning.status,
+                    t,
+                  ),
                 },
               ]}
             />
@@ -352,8 +368,10 @@ function JobsSection(): React.ReactNode {
                 label: t("opStatus"),
                 value: (
                   <>
-                    <StatusDot status={jobStatusDot(summary.status)} />
-                    {summary.status}
+                    <OperationalStatusDot
+                      status={jobStatusDot(summary.status)}
+                    />
+                    {operationalStatusLabel(summary.status, t)}
                   </>
                 ),
               },
@@ -398,14 +416,6 @@ function JobsSection(): React.ReactNode {
   );
 }
 
-function jobStatusDot(
-  status: "critical" | "degraded" | "healthy",
-): "pass" | "warn" | "fail" {
-  if (status === "healthy") return "pass";
-  if (status === "critical") return "fail";
-  return "warn";
-}
-
 /* ----------------------------------- Quotas ------------------------------- */
 
 function QuotasSection(): React.ReactNode {
@@ -425,7 +435,9 @@ function QuotasSection(): React.ReactNode {
                 label: t("opHealth"),
                 value: (
                   <>
-                    <StatusDot status={quotaHealthDot(status.healthy)} />
+                    <OperationalStatusDot
+                      status={quotaHealthDot(status.healthy)}
+                    />
                     {status.healthy === null
                       ? t("opUnknown")
                       : status.healthy
@@ -466,9 +478,4 @@ function QuotasSection(): React.ReactNode {
       )}
     </PanelState>
   );
-}
-
-function quotaHealthDot(healthy: boolean | null): "pass" | "warn" | "fail" {
-  if (healthy === null) return "warn";
-  return healthy ? "pass" : "fail";
 }

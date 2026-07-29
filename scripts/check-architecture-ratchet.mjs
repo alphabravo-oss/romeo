@@ -92,6 +92,7 @@ const metrics = {
   rawButtons: matches(tsxText, /<button\b/gu),
   rawInputs: matches(tsxText, /<input\b/gu),
   rawSelects: matches(tsxText, /<select\b/gu),
+  rawTables: matches(tsxText, /<table\b/gu),
   rawTextareas: matches(tsxText, /<textarea\b/gu),
   rmButtonReferences: matches(
     `${appText}\n${joined(styleFiles)}`,

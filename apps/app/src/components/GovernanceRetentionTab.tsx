@@ -19,6 +19,7 @@ import {
 } from "../lib/retention";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
+import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 
 type AccessGrant = Awaited<ReturnType<typeof listAccessReviewGrants>>[number];
@@ -43,6 +44,7 @@ const retentionValidationMessageKeys: Record<
 
 export function GovernanceRetentionTab() {
   const { t } = useLocale();
+  const { ask, dialog } = useConfirm();
   const queryClient = useQueryClient();
   const retentionQuery = useQuery({
     queryKey: ["retentionPolicy"],
@@ -138,6 +140,7 @@ export function GovernanceRetentionTab() {
   });
   return (
     <div className="grid gap-4">
+      {dialog}
       <form
         className="grid gap-2 text-sm"
         key={retentionQuery.data?.updatedAt ?? "default"}
@@ -229,8 +232,14 @@ export function GovernanceRetentionTab() {
           </form.Subscribe>
           <Button
             disabled={enforceMutation.isPending}
-            onClick={() => {
-              if (!window.confirm(t("govRetentionConfirm"))) return;
+            onClick={async () => {
+              const confirmed = await ask({
+                title: t("govRunRetentionNow"),
+                body: t("govRetentionConfirm"),
+                confirmLabel: t("govRunRetentionNow"),
+                tone: "danger",
+              });
+              if (!confirmed) return;
               enforceMutation.mutate();
             }}
             type="button"

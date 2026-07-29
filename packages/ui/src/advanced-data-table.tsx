@@ -219,7 +219,13 @@ export function DataTable<T>({
     .filter((c) => c.getCanHide() && typeof c.columnDef.header === "string");
 
   return (
-    <div className="rm-table-block">
+    <div
+      className="rm-table-block"
+      data-page-size={pageSize}
+      data-row-count={data.length}
+      data-server-paginated={serverPagination !== undefined}
+      data-virtualized={virtualize}
+    >
       {showSearch ? (
         <div className="rm-table-toolbar">
           <div className="rm-table-search">

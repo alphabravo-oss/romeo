@@ -552,6 +552,7 @@ select:focus-visible {
 }
 
 .rm-stat {
+  min-width: 0;
   border: 1px solid var(--rm-border);
   border-radius: var(--rm-radius-item);
   background: var(--rm-surface);
@@ -568,6 +569,7 @@ select:focus-visible {
 }
 
 .rm-stat-value {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -577,6 +579,14 @@ select:focus-visible {
   line-height: 1.1;
   letter-spacing: -0.01em;
   text-transform: capitalize;
+}
+
+.rm-stat-value--text {
+  flex-wrap: wrap;
+  font-size: 20px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .rm-stat-sub {
@@ -598,6 +608,10 @@ select:focus-visible {
   .rm-stat-value {
     margin-top: 6px;
     font-size: 22px;
+  }
+
+  .rm-stat-value--text {
+    font-size: 18px;
   }
 }
 

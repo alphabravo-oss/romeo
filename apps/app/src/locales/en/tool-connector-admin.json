@@ -1,5 +1,7 @@
 {
   "toolAuthChecked": "Auth checked",
+  "toolConnectorApproval": "Approval policy",
+  "toolAuth": "Authentication",
   "toolAuthRefSet": "auth ref set",
   "toolCheckAuth": "Check auth",
   "toolConnector": "Connector",
@@ -19,6 +21,8 @@
   "toolImportToolConnector": "Import tool connector",
   "toolImported": "Connector imported",
   "toolImporting": "Importing",
+  "toolManage": "Manage",
+  "toolManageDescription": "Review connector posture, change availability, validate authentication, and inspect operations.",
   "toolManaged": "managed",
   "toolName": "Name",
   "toolNameRequired": "Name is required",
@@ -30,12 +34,16 @@
   "toolOpenApiJsonRequired": "OpenAPI JSON is required",
   "toolOperations": "Operations",
   "toolPasteOpenApiJson": "Paste OpenAPI JSON",
+  "toolRisk": "Risk",
   "toolSecretAvailable": "secret check: available",
   "toolSecretNotConfigured": "secret check: not configured",
   "toolSecretUnavailable": "secret check",
+  "toolStatus": "Status",
   "toolTotalConnectors": "Total connectors",
+  "toolType": "Type",
   "toolUnableCheckAuth": "Unable to check connector auth.",
   "toolUnableImport": "Unable to import connector.",
   "toolUnableUpdate": "Unable to update connector.",
-  "toolUnavailable": "unavailable"
+  "toolUnavailable": "unavailable",
+  "toolVisibility": "Visibility"
 }

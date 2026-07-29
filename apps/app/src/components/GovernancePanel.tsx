@@ -11,6 +11,7 @@ import {
   previewDataExport,
 } from "../features";
 import type {
+  DataExportPackageList,
   DataExportPreview,
   DataExportRequest,
   DataExportScope,
@@ -27,6 +28,9 @@ import { GovernanceRetentionTab } from "./GovernanceRetentionTab";
 import { PanelStats } from "./PanelStats";
 import { Tabs } from "./Tabs";
 import { WorkspaceLifecyclePanel } from "./WorkspaceLifecyclePanel";
+import { useConfirm } from "./ConfirmDialog";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { OverflowMenu } from "./OverflowMenu";
 
 export function GovernancePanel({
   activeChatId,
@@ -88,6 +92,7 @@ export function GovernancePanel({
 function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
+  const { ask, dialog } = useConfirm();
   const packagesQuery = useQuery({
     queryKey: ["dataExportPackages"],
     queryFn: listDataExportPackages,
@@ -148,9 +153,92 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
 
   const list = packagesQuery.data;
   const packages = list?.packages ?? [];
+  const columns: ColumnDef<DataExportPackageRow, any>[] = [
+    exportPackageColumn.accessor("packageId", {
+      header: t("govPackage"),
+      cell: (cell) => (
+        <span className="rm-mono font-medium" translate="no">
+          {cell.getValue()}
+        </span>
+      ),
+    }),
+    exportPackageColumn.accessor("request.scope", {
+      header: t("govScope"),
+      cell: (cell) => cell.getValue(),
+    }),
+    exportPackageColumn.accessor((entry) => entry.request.workspaceId ?? "—", {
+      id: "workspaceId",
+      header: t("govWorkspaceId"),
+      cell: (cell) => (
+        <span className="rm-mono" translate="no">
+          {cell.getValue()}
+        </span>
+      ),
+    }),
+    exportPackageColumn.accessor("artifact.sizeBytes", {
+      header: t("govSize"),
+      cell: (cell) => <LocalizedBytes value={cell.getValue()} />,
+    }),
+    exportPackageColumn.accessor("createdAt", {
+      header: t("govCreatedAt"),
+      cell: (cell) => <LocalizedDateTime value={cell.getValue()} />,
+    }),
+    exportPackageColumn.display({
+      id: "actions",
+      header: "",
+      enableSorting: false,
+      enableHiding: false,
+      cell: (cell) => {
+        const entry = cell.row.original;
+        return (
+          <OverflowMenu
+            label={t("govPackageActions")}
+            items={[
+              {
+                label: t("govDownloadContent"),
+                disabled: downloadMutation.isPending,
+                onClick: () => {
+                  void (async () => {
+                    const content = await downloadMutation.mutateAsync(
+                      entry.packageId,
+                    );
+                    downloadCsv(
+                      content,
+                      `romeo-data-export-${entry.packageId}.json`,
+                    );
+                  })();
+                },
+              },
+              {
+                label: t("govDelete"),
+                tone: "danger",
+                disabled: deleteMutation.isPending,
+                onClick: () => {
+                  void (async () => {
+                    const confirmed = await ask({
+                      title: `${t("govDeleteExportPackage")} ${entry.packageId}?`,
+                      body: t("govCannotUndo"),
+                      confirmLabel: t("govDelete"),
+                      tone: "danger",
+                    });
+                    if (!confirmed) return;
+                    deleteMutation.mutate({
+                      packageId: entry.packageId,
+                      confirmPackageId: entry.packageId,
+                    });
+                  })();
+                },
+              },
+            ]}
+          />
+        );
+      },
+    }),
+  ];
 
   return (
     <div className="grid gap-4 text-sm">
+      {dialog}
       <PanelStats
         items={[
           { label: t("govPackages"), value: packages.length },
@@ -265,64 +353,19 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
 
       <div className="grid gap-2">
         <div className="font-medium">{t("govPackages")}</div>
-        {packagesQuery.isLoading ? (
-          <div className="text-muted">{t("govLoading")}</div>
-        ) : null}
-        {!packagesQuery.isLoading && packages.length === 0 ? (
-          <div className="text-muted">{t("govNoExportPackages")}</div>
-        ) : null}
-        {packages.map((entry) => (
-          <div
-            className="grid gap-1 rounded-md border border-border p-2"
-            key={entry.packageId}
-          >
-            <div className="break-words font-medium">{entry.packageId}</div>
-            <div className="text-muted">
-              {entry.request.scope}
-              {entry.request.workspaceId
-                ? `:${entry.request.workspaceId}`
-                : ""}{" "}
-              · <LocalizedBytes value={entry.artifact.sizeBytes} /> ·{" "}
-              <LocalizedDateTime value={entry.createdAt} />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                disabled={downloadMutation.isPending}
-                onClick={async () => {
-                  const content = await downloadMutation.mutateAsync(
-                    entry.packageId,
-                  );
-                  downloadCsv(
-                    content,
-                    `romeo-data-export-${entry.packageId}.json`,
-                  );
-                }}
-                type="button"
-              >
-                {t("govDownloadContent")}
-              </Button>
-              <Button
-                disabled={deleteMutation.isPending}
-                onClick={() => {
-                  if (
-                    !window.confirm(
-                      `${t("govDeleteExportPackage")} ${entry.packageId}? ${t("govCannotUndo")}`,
-                    )
-                  )
-                    return;
-                  deleteMutation.mutate({
-                    packageId: entry.packageId,
-                    confirmPackageId: entry.packageId,
-                  });
-                }}
-                type="button"
-              >
-                {t("govDelete")}
-              </Button>
-            </div>
-          </div>
-        ))}
+        <DataTable
+          columns={columns}
+          data={packages}
+          empty={
+            packagesQuery.isLoading ? t("govLoading") : t("govNoExportPackages")
+          }
+          getRowId={(entry) => entry.packageId}
+          minTableWidth={780}
+        />
       </div>
     </div>
   );
 }
+
+type DataExportPackageRow = DataExportPackageList["packages"][number];
+const exportPackageColumn = createColumnHelper<DataExportPackageRow>();

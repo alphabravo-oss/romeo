@@ -1,5 +1,7 @@
 {
   "toolAuthChecked": "Authentification vérifiée",
+  "toolConnectorApproval": "Politique d’approbation",
+  "toolAuth": "Authentification",
   "toolAuthRefSet": "référence d’authentification définie",
   "toolCheckAuth": "Vérifier l’authentification",
   "toolConnector": "Connecteur",
@@ -19,6 +21,8 @@
   "toolImportToolConnector": "Importer un connecteur d’outil",
   "toolImported": "Connecteur importé",
   "toolImporting": "Importation",
+  "toolManage": "Gérer",
+  "toolManageDescription": "Examinez la posture du connecteur, modifiez sa disponibilité, validez l’authentification et inspectez les opérations.",
   "toolManaged": "géré",
   "toolName": "Nom",
   "toolNameRequired": "Le nom est requis",
@@ -30,12 +34,16 @@
   "toolOpenApiJsonRequired": "Le JSON OpenAPI est requis",
   "toolOperations": "Opérations",
   "toolPasteOpenApiJson": "Collez le JSON OpenAPI",
+  "toolRisk": "Risque",
   "toolSecretAvailable": "vérification du secret : disponible",
   "toolSecretNotConfigured": "vérification du secret : non configuré",
   "toolSecretUnavailable": "vérification du secret",
+  "toolStatus": "État",
   "toolTotalConnectors": "Total des connecteurs",
+  "toolType": "Type",
   "toolUnableCheckAuth": "Impossible de vérifier l’authentification du connecteur.",
   "toolUnableImport": "Impossible d’importer le connecteur.",
   "toolUnableUpdate": "Impossible de mettre à jour le connecteur.",
-  "toolUnavailable": "indisponible"
+  "toolUnavailable": "indisponible",
+  "toolVisibility": "Visibilité"
 }

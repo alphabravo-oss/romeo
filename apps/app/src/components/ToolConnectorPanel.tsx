@@ -1,10 +1,10 @@
-import { Input, Textarea, Button } from "@romeo/ui";
+import { Button, Input, Sheet, StatusBadge, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Power from "lucide-react/dist/esm/icons/power.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import Upload from "lucide-react/dist/esm/icons/upload.mjs";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   checkToolConnectorAuth,
@@ -12,13 +12,13 @@ import {
   listToolConnectors,
   updateToolConnector,
 } from "../features/tool-connectors";
-import type { ToolConnectorAuthCheck } from "../features/types";
+import type { ToolConnector, ToolConnectorAuthCheck } from "../features/types";
 import { PanelState } from "../lib/panel-state";
 import { type MessageKey, useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { PanelStats } from "./PanelStats";
-import { Tabs } from "./Tabs";
 import { ToolOperationList } from "./ToolOperationList";
 
 export function ToolConnectorPanel() {
@@ -33,6 +33,7 @@ export function ToolConnectorPanel() {
   const connectorMutation = useMutation({ mutationFn: updateToolConnector });
   const [error, setError] = useState<string>();
   const [addOpen, setAddOpen] = useState(false);
+  const [selectedConnectorId, setSelectedConnectorId] = useState<string>();
   const [authChecks, setAuthChecks] = useState<
     Record<string, ToolConnectorAuthCheck>
   >({});
@@ -86,6 +87,74 @@ export function ToolConnectorPanel() {
       toast(t("toolCouldNotCheckAuth"), "error");
     }
   }
+
+  const columns = useMemo<ColumnDef<ToolConnector, any>[]>(
+    () => [
+      toolConnectorColumn.accessor("name", {
+        header: t("toolName"),
+        cell: (cell) => (
+          <div className="grid min-w-0 gap-0.5">
+            <span className="truncate font-medium">{cell.getValue()}</span>
+            <span className="truncate text-xs text-muted">
+              {cell.row.original.description}
+            </span>
+          </div>
+        ),
+      }),
+      toolConnectorColumn.accessor("type", {
+        header: t("toolType"),
+        cell: (cell) => <span translate="no">{cell.getValue()}</span>,
+      }),
+      toolConnectorColumn.accessor("riskLevel", {
+        header: t("toolRisk"),
+        cell: (cell) => (
+          <StatusBadge
+            tone={
+              cell.getValue() === "critical" || cell.getValue() === "high"
+                ? "warning"
+                : "neutral"
+            }
+          >
+            {humanizeToolValue(cell.getValue())}
+          </StatusBadge>
+        ),
+      }),
+      toolConnectorColumn.accessor("approvalPolicy", {
+        header: t("toolConnectorApproval"),
+        cell: (cell) => humanizeToolValue(cell.getValue()),
+      }),
+      toolConnectorColumn.accessor("enabled", {
+        header: t("toolStatus"),
+        cell: (cell) => (
+          <StatusBadge tone={cell.getValue() ? "success" : "neutral"}>
+            {t(cell.getValue() ? "toolEnabled" : "toolDisabled")}
+          </StatusBadge>
+        ),
+      }),
+      toolConnectorColumn.display({
+        id: "actions",
+        header: "",
+        enableSorting: false,
+        enableHiding: false,
+        cell: (cell) => (
+          <Button
+            onClick={() => setSelectedConnectorId(cell.row.original.id)}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            {t("toolManage")}
+          </Button>
+        ),
+      }),
+    ],
+    [t],
+  );
+
+  const connectors = connectorsQuery.data ?? [];
+  const selectedConnector = connectors.find(
+    (connector) => connector.id === selectedConnectorId,
+  );
 
   return (
     <section className="rm-panel p-4">
@@ -198,6 +267,15 @@ export function ToolConnectorPanel() {
           </importForm.Subscribe>
         </form>
       </FormDialog>
+      <ToolConnectorDetailsSheet
+        authCheck={selectedConnector && authChecks[selectedConnector.id]}
+        checkingAuth={authCheckMutation.isPending}
+        connector={selectedConnector}
+        onCheckAuth={handleCheckAuth}
+        onClose={() => setSelectedConnectorId(undefined)}
+        onToggle={handleToggleConnector}
+        updating={connectorMutation.isPending}
+      />
       {error ? <div className="mt-3 text-sm text-red-600">{error}</div> : null}
       <div className="mt-4 grid gap-2 text-sm">
         <PanelState
@@ -225,89 +303,13 @@ export function ToolConnectorPanel() {
                   },
                 ]}
               />
-              <div className="grid gap-2">
-                {connectors.slice(0, 5).map((connector) => (
-                  <div
-                    className="rounded-md border border-border p-2"
-                    key={connector.id}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="font-medium">{connector.name}</div>
-                      <div className="text-xs text-muted">
-                        {t(connector.enabled ? "toolEnabled" : "toolDisabled")}
-                      </div>
-                    </div>
-                    <div className="text-muted">
-                      {connector.type} - {connector.approvalPolicy} -{" "}
-                      {t(
-                        connector.authConfig.configured === true
-                          ? "toolAuthRefSet"
-                          : "toolNoAuthRef",
-                      )}
-                    </div>
-                    {authChecks[connector.id] !== undefined ? (
-                      <div className="text-muted">
-                        {authCheckText(authChecks[connector.id]!, t)}
-                      </div>
-                    ) : null}
-                    <div className="text-muted">
-                      {networkPolicyText(connector.networkPolicy, t)}
-                    </div>
-                    <div className="mt-2">
-                      <Tabs
-                        tabs={[
-                          {
-                            id: "actions",
-                            label: t("toolConnector"),
-                            content: (
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  className="inline-flex items-center gap-2"
-                                  disabled={connectorMutation.isPending}
-                                  onClick={() =>
-                                    void handleToggleConnector(
-                                      connector.id,
-                                      !connector.enabled,
-                                    )
-                                  }
-                                  type="button"
-                                >
-                                  <Power aria-hidden="true" size={16} />
-                                  <span>
-                                    {t(
-                                      connector.enabled
-                                        ? "toolDisable"
-                                        : "toolEnable",
-                                    )}
-                                  </span>
-                                </Button>
-                                <Button
-                                  className="inline-flex items-center gap-2"
-                                  disabled={authCheckMutation.isPending}
-                                  onClick={() =>
-                                    void handleCheckAuth(connector.id)
-                                  }
-                                  type="button"
-                                >
-                                  <ShieldCheck aria-hidden="true" size={16} />
-                                  <span>{t("toolCheckAuth")}</span>
-                                </Button>
-                              </div>
-                            ),
-                          },
-                          {
-                            id: "operations",
-                            label: t("toolOperations"),
-                            content: (
-                              <ToolOperationList connectorId={connector.id} />
-                            ),
-                          },
-                        ]}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <DataTable
+                columns={columns}
+                data={connectors}
+                empty={t("toolNoConnectors")}
+                getRowId={(connector) => connector.id}
+                minTableWidth={760}
+              />
             </div>
           )}
         </PanelState>
@@ -317,6 +319,107 @@ export function ToolConnectorPanel() {
 }
 
 type Translate = (key: MessageKey) => string;
+const toolConnectorColumn = createColumnHelper<ToolConnector>();
+
+function ToolConnectorDetailsSheet({
+  authCheck,
+  checkingAuth,
+  connector,
+  onCheckAuth,
+  onClose,
+  onToggle,
+  updating,
+}: {
+  authCheck: ToolConnectorAuthCheck | undefined;
+  checkingAuth: boolean;
+  connector: ToolConnector | undefined;
+  onCheckAuth: (connectorId: string) => Promise<void>;
+  onClose: () => void;
+  onToggle: (connectorId: string, enabled: boolean) => Promise<void>;
+  updating: boolean;
+}) {
+  const { t } = useLocale();
+  return (
+    <Sheet
+      closeLabel={t("close")}
+      description={t("toolManageDescription")}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      open={connector !== undefined}
+      title={connector?.name ?? t("toolConnector")}
+    >
+      {connector ? (
+        <div className="grid gap-5">
+          <div className="rm-model-meta-grid">
+            <span>
+              <small>{t("toolType")}</small>
+              <span translate="no">{connector.type}</span>
+            </span>
+            <span>
+              <small>{t("toolStatus")}</small>
+              <StatusBadge tone={connector.enabled ? "success" : "neutral"}>
+                {t(connector.enabled ? "toolEnabled" : "toolDisabled")}
+              </StatusBadge>
+            </span>
+            <span>
+              <small>{t("toolRisk")}</small>
+              {humanizeToolValue(connector.riskLevel)}
+            </span>
+            <span>
+              <small>{t("toolConnectorApproval")}</small>
+              {humanizeToolValue(connector.approvalPolicy)}
+            </span>
+            <span>
+              <small>{t("toolVisibility")}</small>
+              {humanizeToolValue(connector.visibility)}
+            </span>
+            <span>
+              <small>{t("toolAuth")}</small>
+              {t(
+                connector.authConfig.configured === true
+                  ? "toolAuthRefSet"
+                  : "toolNoAuthRef",
+              )}
+            </span>
+          </div>
+          {connector.description ? (
+            <p className="text-sm text-muted">{connector.description}</p>
+          ) : null}
+          <div className="text-sm text-muted">
+            {networkPolicyText(connector.networkPolicy, t)}
+          </div>
+          {authCheck ? (
+            <div className="text-sm text-muted">
+              {authCheckText(authCheck, t)}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={updating}
+              onClick={() => void onToggle(connector.id, !connector.enabled)}
+              type="button"
+            >
+              <Power aria-hidden="true" size={16} />
+              {t(connector.enabled ? "toolDisable" : "toolEnable")}
+            </Button>
+            <Button
+              disabled={checkingAuth}
+              onClick={() => void onCheckAuth(connector.id)}
+              type="button"
+            >
+              <ShieldCheck aria-hidden="true" size={16} />
+              {t("toolCheckAuth")}
+            </Button>
+          </div>
+          <div className="border-t border-border pt-4">
+            <ToolOperationList connectorId={connector.id} />
+          </div>
+        </div>
+      ) : null}
+    </Sheet>
+  );
+}
 
 function authCheckText(check: ToolConnectorAuthCheck, t: Translate): string {
   if (!check.configured) return t("toolSecretNotConfigured");
@@ -332,4 +435,8 @@ function networkPolicyText(
   return policy.mode === "allow_hosts"
     ? `${t("toolNetwork")}: ${policy.allowedHosts.join(", ")}`
     : `${t("toolNetwork")}: ${t("toolNetworkDenyAll")}`;
+}
+
+function humanizeToolValue(value: string): string {
+  return value.replaceAll("_", " ");
 }
