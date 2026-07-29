@@ -23,6 +23,8 @@
   "searchCommands": "Search commands…",
   "sections": "Sections",
   "settings": "Settings",
+  "settingsDiscard": "Discard",
+  "settingsUnsavedChanges": "You have unsaved changes",
   "showingOfTotal": "Showing",
   "showShortcutsSheet": "Show this shortcuts sheet",
   "switchToDark": "Switch to dark",

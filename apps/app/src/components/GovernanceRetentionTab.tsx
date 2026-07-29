@@ -1,7 +1,9 @@
 import { Button, IconButton, Input } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useStore } from "@tanstack/react-store";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
+import { useEffect, useState } from "react";
 
 import {
   enforceRetention,
@@ -20,7 +22,11 @@ import {
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
+import { DangerZone } from "./DangerZone";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { confirmTone } from "./danger-tier";
+import { SettingsSaveBar } from "./SettingsSaveBar";
+import { isDirty } from "./settings-dirty-state";
 
 type AccessGrant = Awaited<ReturnType<typeof listAccessReviewGrants>>[number];
 
@@ -29,6 +35,13 @@ const accessGrantColumn = createColumnHelper<AccessGrant>();
 interface RetentionOverrideRow {
   days: string;
   id: string;
+}
+
+interface RetentionDraft {
+  days: number;
+  fileDays: string;
+  workspaceOverrides: string;
+  userOverrides: string;
 }
 
 const retentionValidationMessageKeys: Record<
@@ -69,6 +82,9 @@ export function GovernanceRetentionTab() {
     },
     onError: () => toast(t("govCouldNotEnforceRetention"), "error"),
   });
+  const [initial, setInitial] = useState<RetentionDraft>(() =>
+    retentionDraft(retentionQuery.data),
+  );
   const accessGrantColumns: ColumnDef<AccessGrant, any>[] = [
     accessGrantColumn.accessor(
       (grant) => `${grant.resourceType}:${grant.resourceId}`,
@@ -101,19 +117,10 @@ export function GovernanceRetentionTab() {
   ];
 
   const form = useForm({
-    defaultValues: {
-      days: retentionQuery.data?.auditLogRetentionDays ?? 365,
-      fileDays: retentionQuery.data?.fileRetentionDays?.toString() ?? "",
-      workspaceOverrides: formatRetentionOverrides(
-        retentionQuery.data?.workspaceFileRetentionDays ?? {},
-      ),
-      userOverrides: formatRetentionOverrides(
-        retentionQuery.data?.userFileRetentionDays ?? {},
-      ),
-    },
+    defaultValues: initial,
     onSubmit: async ({ value }) => {
       try {
-        await updateMutation.mutateAsync({
+        const saved = await updateMutation.mutateAsync({
           auditLogRetentionDays: value.days,
           fileRetentionDays: parseOptionalRetentionDays(value.fileDays),
           workspaceFileRetentionDays: parseRetentionOverrides(
@@ -121,6 +128,9 @@ export function GovernanceRetentionTab() {
           ),
           userFileRetentionDays: parseRetentionOverrides(value.userOverrides),
         });
+        const savedDraft = retentionDraft(saved);
+        setInitial(savedDraft);
+        form.reset(savedDraft);
         toast(t("govRetentionPolicySaved"), "success");
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ["retentionPolicy"] }),
@@ -138,6 +148,31 @@ export function GovernanceRetentionTab() {
       }
     },
   });
+  const draft = useStore(form.store, (state) => state.values);
+  const dirty = isDirty(initial, draft);
+
+  useEffect(() => {
+    if (retentionQuery.data === undefined || form.state.isDirty) return;
+    const next = retentionDraft(retentionQuery.data);
+    setInitial(next);
+    form.reset(next);
+    // The server timestamp is the policy version; resetting on it is safe only
+    // while the form is clean, so a background refetch cannot erase edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retentionQuery.data?.updatedAt]);
+
+  async function confirmRun() {
+    const ok = await ask({
+      title: t("governanceRunRetentionConfirmTitle"),
+      body: t("governanceRunRetentionConfirmBody"),
+      confirmLabel: t("governanceRunRetentionNow"),
+      tone: confirmTone("high"),
+      confirmPhrase: t("governanceRunRetentionPhrase"),
+    });
+    if (!ok) return;
+    await enforceMutation.mutateAsync();
+  }
+
   return (
     <div className="grid gap-4">
       {dialog}
@@ -210,46 +245,36 @@ export function GovernanceRetentionTab() {
           )}
         </form.Field>
         <p className="text-muted">{t("govRetentionOverrideGuidance")}</p>
-        <div className="flex flex-wrap gap-2">
-          <form.Subscribe
-            selector={(state) => ({
-              canSubmit: state.canSubmit,
-              isSubmitting: state.isSubmitting,
-            })}
-          >
-            {({ canSubmit, isSubmitting }) => (
-              <Button
-                disabled={
-                  updateMutation.isPending || !canSubmit || isSubmitting
-                }
-                type="submit"
-              >
-                {updateMutation.isPending
-                  ? t("govSaving")
-                  : t("govSaveRetention")}
-              </Button>
-            )}
-          </form.Subscribe>
-          <Button
-            disabled={enforceMutation.isPending}
-            onClick={async () => {
-              const confirmed = await ask({
-                title: t("govRunRetentionNow"),
-                body: t("govRetentionConfirm"),
-                confirmLabel: t("govRunRetentionNow"),
-                tone: "danger",
-              });
-              if (!confirmed) return;
-              enforceMutation.mutate();
-            }}
-            type="button"
-          >
-            {enforceMutation.isPending
-              ? t("govEnforcing")
-              : t("govRunRetentionNow")}
-          </Button>
-        </div>
+        <SettingsSaveBar
+          dirty={dirty}
+          discardLabel={t("settingsDiscard")}
+          dirtyLabel={t("settingsUnsavedChanges")}
+          onDiscard={() => form.reset(initial)}
+          onSave={() => void form.handleSubmit()}
+          saveLabel={t("govSaveRetention")}
+          saving={updateMutation.isPending}
+        />
       </form>
+      <DangerZone
+        description={t("governanceRunRetentionDescription")}
+        title={t("governanceRunRetentionTitle")}
+      >
+        <Button
+          aria-haspopup="dialog"
+          disabled={dirty || enforceMutation.isPending}
+          onClick={() => void confirmRun()}
+          pending={enforceMutation.isPending}
+          type="button"
+          variant="danger"
+        >
+          {t("governanceRunRetentionNow")}
+        </Button>
+        {dirty ? (
+          <p className="rm-danger-zone__description">
+            {t("governanceSaveBeforeRun")}
+          </p>
+        ) : null}
+      </DangerZone>
       <PanelState query={accessQuery} empty={t("noAccessGrants")}>
         {(grants) => (
           <div className="grid gap-2 text-sm">
@@ -266,6 +291,21 @@ export function GovernanceRetentionTab() {
       </PanelState>
     </div>
   );
+}
+
+function retentionDraft(
+  policy: Awaited<ReturnType<typeof getRetentionPolicy>> | undefined,
+): RetentionDraft {
+  return {
+    days: policy?.auditLogRetentionDays ?? 365,
+    fileDays: policy?.fileRetentionDays?.toString() ?? "",
+    workspaceOverrides: formatRetentionOverrides(
+      policy?.workspaceFileRetentionDays ?? {},
+    ),
+    userOverrides: formatRetentionOverrides(
+      policy?.userFileRetentionDays ?? {},
+    ),
+  };
 }
 
 function parseEditorRows(value: string): RetentionOverrideRow[] {

@@ -23,6 +23,8 @@
   "searchCommands": "Buscar comandos…",
   "sections": "Secciones",
   "settings": "Configuración",
+  "settingsDiscard": "Descartar",
+  "settingsUnsavedChanges": "Tienes cambios sin guardar",
   "showingOfTotal": "Mostrando",
   "showShortcutsSheet": "Mostrar esta hoja de atajos",
   "switchToDark": "Cambiar a oscuro",

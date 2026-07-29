@@ -23,6 +23,8 @@
   "searchCommands": "Rechercher des commandes…",
   "sections": "Sections",
   "settings": "Paramètres",
+  "settingsDiscard": "Annuler les modifications",
+  "settingsUnsavedChanges": "Vous avez des modifications non enregistrées",
   "showingOfTotal": "Affichage de",
   "showShortcutsSheet": "Afficher cette feuille de raccourcis",
   "switchToDark": "Passer au thème sombre",
