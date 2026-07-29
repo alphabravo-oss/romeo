@@ -956,3 +956,53 @@ select:focus-visible {
   justify-content: center;
   gap: 0.5rem;
 }
+
+/* Settings section: a labelled group of related controls. Two-column on wide
+   viewports (label rail + control body), stacked on narrow. */
+.rm-settings-section {
+  display: grid;
+  gap: 1rem;
+  padding-block: 1.5rem;
+  border-top: 1px solid var(--rm-ui-border);
+}
+
+.rm-settings-section:first-child {
+  border-top: 0;
+  padding-block-start: 0;
+}
+
+.rm-settings-section__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rm-settings-section__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.rm-settings-section__description {
+  color: var(--rm-ui-muted);
+  font-size: 0.875rem;
+  margin: 0.25rem 0 0;
+  max-width: 60ch;
+}
+
+.rm-settings-section__body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 60rem) {
+  .rm-settings-section {
+    grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
+    gap: 2rem;
+  }
+
+  .rm-settings-section__head {
+    display: block;
+  }
+}
