@@ -19,6 +19,7 @@ import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { PageActions } from "./PageActions";
 
 const requestCol = createColumnHelper<ImpersonationRequest>();
 const sessionCol = createColumnHelper<ImpersonationSession>();
@@ -263,13 +264,11 @@ export function ImpersonationPanel() {
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("impersonationRequests")}</div>
-        <Button
-          disabled={requestsQuery.isFetching}
-          onClick={() => void requestsQuery.refetch()}
-          type="button"
-        >
-          {requestsQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void requestsQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={requestsQuery.isFetching}
+        />
       </div>
       <div className="mt-4">
         <PanelState
@@ -285,13 +284,11 @@ export function ImpersonationPanel() {
 
       <div className="rm-card-header mt-6">
         <div className="rm-card-title">{t("impersonationActiveSessions")}</div>
-        <Button
-          disabled={sessionsQuery.isFetching}
-          onClick={() => void sessionsQuery.refetch()}
-          type="button"
-        >
-          {sessionsQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void sessionsQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={sessionsQuery.isFetching}
+        />
       </div>
       <div className="mt-4">
         <PanelState

@@ -14,6 +14,7 @@ import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 import { EdgeSecurityPostureTab } from "./EdgeSecurityPostureTab";
 import { IdListEditor } from "./IdListEditor";
 import { Tabs } from "./Tabs";
@@ -98,13 +99,11 @@ function ControlsTab() {
     <div className="grid gap-2">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("abuseControls")}</div>
-        <Button
-          disabled={controlsQuery.isFetching}
-          onClick={() => void controlsQuery.refetch()}
-          type="button"
-        >
-          {controlsQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void controlsQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={controlsQuery.isFetching}
+        />
       </div>
       <PanelState
         query={controlsQuery}

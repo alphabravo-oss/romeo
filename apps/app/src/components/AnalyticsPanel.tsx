@@ -20,6 +20,7 @@ import {
   LocalizedNumber,
 } from "../lib/locale-format";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { PageActions } from "./PageActions";
 import { PanelStats } from "./PanelStats";
 
 const toolCol = createColumnHelper<AdminAnalyticsToolSummaryRow>();
@@ -112,13 +113,11 @@ export function AnalyticsPanel() {
           >
             {isExporting ? t("analyticsExporting") : t("analyticsExportCsv")}
           </Button>
-          <Button
-            disabled={summaryQuery.isFetching}
-            onClick={() => void summaryQuery.refetch()}
-            type="button"
-          >
-            {summaryQuery.isFetching ? t("refreshing") : t("refresh")}
-          </Button>
+          <PageActions
+            onRefresh={() => void summaryQuery.refetch()}
+            refreshLabel={t("refresh")}
+            refreshing={summaryQuery.isFetching}
+          />
         </div>
       </div>
       {exportError ? (

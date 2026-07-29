@@ -183,13 +183,15 @@ export function PromptTemplatePanel() {
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("promptTemplates")}</div>
-        <Button
-          variant="primary"
-          onClick={() => setAddOpen(true)}
-          type="button"
-        >
-          + {t("promptAddTemplate")}
-        </Button>
+        {(templatesQuery.data?.length ?? 0) > 0 ? (
+          <Button
+            variant="primary"
+            onClick={() => setAddOpen(true)}
+            type="button"
+          >
+            + {t("promptAddTemplate")}
+          </Button>
+        ) : null}
       </div>
       <FormDialog
         open={addOpen}

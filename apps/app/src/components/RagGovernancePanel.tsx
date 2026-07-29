@@ -21,6 +21,7 @@ import { toast } from "../lib/toast";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { useConfirm } from "./ConfirmDialog";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 import { parseRagPolicyPatch } from "./rag-change-request";
 import { RagPolicyTab } from "./RagPolicyTab";
 import { RagPostureTab } from "./RagPostureTab";
@@ -160,13 +161,11 @@ function ChangeRequestTab() {
     <div className="grid gap-2">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("policyChangeRequests")}</div>
-        <Button
-          disabled={changeRequestQuery.isFetching}
-          onClick={() => void changeRequestQuery.refetch()}
-          type="button"
-        >
-          {changeRequestQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void changeRequestQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={changeRequestQuery.isFetching}
+        />
       </div>
       <form
         className="grid gap-3 rounded-md border border-border p-3"

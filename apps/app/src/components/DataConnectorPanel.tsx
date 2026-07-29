@@ -195,13 +195,15 @@ export function DataConnectorPanel({
     <div className="grid gap-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("connectorListTitle")}</div>
-        <Button
-          variant="primary"
-          onClick={() => openAdd("local_import")}
-          type="button"
-        >
-          + {t("connectorAdd")}
-        </Button>
+        {(connectorsQuery.data?.length ?? 0) > 0 ? (
+          <Button
+            variant="primary"
+            onClick={() => openAdd("local_import")}
+            type="button"
+          >
+            + {t("connectorAdd")}
+          </Button>
+        ) : null}
       </div>
 
       <PanelState

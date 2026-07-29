@@ -23,6 +23,7 @@ import { LocalizedDateTime } from "../lib/locale-format";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 
 // ── Policy tab ────────────────────────────────────────────────────────────────
 
@@ -38,13 +39,11 @@ export function RagPolicyTab() {
     <div className="grid gap-2">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("ragRetrievalPolicy")}</div>
-        <Button
-          disabled={policyQuery.isFetching}
-          onClick={() => void policyQuery.refetch()}
-          type="button"
-        >
-          {policyQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void policyQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={policyQuery.isFetching}
+        />
       </div>
       <PanelState
         query={policyQuery}

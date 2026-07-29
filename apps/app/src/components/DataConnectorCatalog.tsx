@@ -192,7 +192,7 @@ function CatalogCard(props: {
 
       <div className="flex flex-wrap items-center gap-2 mt-3">
         <Button
-          variant="primary"
+          variant="outline"
           disabled={planned || !canCreate}
           onClick={onAdd}
           type="button"

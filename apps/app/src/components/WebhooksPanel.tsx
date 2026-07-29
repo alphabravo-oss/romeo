@@ -37,6 +37,7 @@ import { Drawer } from "./Drawer";
 import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 import { useWorkspace } from "./WorkspaceContext";
 
 const DELIVERIES_PAGE_SIZE = 25;
@@ -278,20 +279,22 @@ export function WebhooksPanel() {
       <div className="rm-card-header">
         <div className="rm-card-title">{t("webhooksTitle")}</div>
         <div className="flex gap-2">
-          <Button
-            disabled={webhooksQuery.isFetching}
-            onClick={() => void webhooksQuery.refetch()}
-            type="button"
-          >
-            {webhooksQuery.isFetching ? t("refreshing") : t("refresh")}
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => setAddOpen(true)}
-            type="button"
-          >
-            + {t("webhooksAdd")}
-          </Button>
+          <PageActions
+            onRefresh={() => void webhooksQuery.refetch()}
+            primary={
+              (webhooksQuery.data?.length ?? 0) > 0 ? (
+                <Button
+                  variant="primary"
+                  onClick={() => setAddOpen(true)}
+                  type="button"
+                >
+                  + {t("webhooksAdd")}
+                </Button>
+              ) : undefined
+            }
+            refreshLabel={t("refresh")}
+            refreshing={webhooksQuery.isFetching}
+          />
         </div>
       </div>
 

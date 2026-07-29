@@ -15,6 +15,7 @@ import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { PageActions } from "./PageActions";
 import { decorateSessions } from "./session-rows";
 
 type SessionRow = Session & { current: boolean };
@@ -176,13 +177,11 @@ export function SessionsPanel() {
               ? t("signingOut")
               : t("signOutEverywhereElse")}
           </Button>
-          <Button
-            disabled={sessionsQuery.isFetching}
-            onClick={() => void sessionsQuery.refetch()}
-            type="button"
-          >
-            {sessionsQuery.isFetching ? t("refreshing") : t("refresh")}
-          </Button>
+          <PageActions
+            onRefresh={() => void sessionsQuery.refetch()}
+            refreshLabel={t("refresh")}
+            refreshing={sessionsQuery.isFetching}
+          />
         </div>
       </div>
       <div className="mt-4">

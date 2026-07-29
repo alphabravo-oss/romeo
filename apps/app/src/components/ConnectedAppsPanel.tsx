@@ -19,6 +19,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 import { ProviderSlotCard } from "./ProviderSlotCard";
 import { splitProviderZones } from "./auth-provider-zones";
 import { useWorkspace } from "./WorkspaceContext";
@@ -168,13 +169,11 @@ export function ConnectedAppsPanel() {
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("connectedAppsTitle")}</div>
-        <Button
-          disabled={connectionsQuery.isFetching}
-          onClick={() => void connectionsQuery.refetch()}
-          type="button"
-        >
-          {connectionsQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void connectionsQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={connectionsQuery.isFetching}
+        />
       </div>
 
       <div className="mt-3">

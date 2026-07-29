@@ -28,16 +28,16 @@ The audit runs each section at both `desktop` (1440×1000) and `mobile`
 
 | Section               | Assertion                | Detail                                                                                    | Cleared by | Status |
 | --------------------- | ------------------------ | ----------------------------------------------------------------------------------------- | ---------- | ------ |
-| access                | `primary-actions`        | `+ Add API key` \| `+ Add service account`                                                | Task 4.2   | ☐      |
+| access                | `primary-actions`        | `+ Add API key` \| `+ Add service account`                                                | Task 4.2   | ✅     |
 | access                | `incomplete-empty-state` | "No API keys yet." / "No service accounts yet."                                           | Task 1.4   | ✅     |
-| connections           | `primary-actions`        | **10×** `Add connector` in the Catalog tab                                                | Task 4.2   | ☐      |
-| connections           | `primary-actions`        | `+ Import tool` ×2 (Tool connectors tab)                                                  | Task 4.2   | ☐      |
+| connections           | `primary-actions`        | **10×** `Add connector` in the Catalog tab                                                | Task 4.2   | ✅     |
+| connections           | `primary-actions`        | `+ Import tool` ×2 (Tool connectors tab)                                                  | Task 4.2   | ✅     |
 | connections           | `identifier-leak`        | `local_import`                                                                            | Task 7.1   | ☐      |
 | connections           | `incomplete-empty-state` | "No connectors yet." / "No connectors imported."                                          | Task 1.4   | ✅     |
-| usage                 | `primary-actions`        | `+ Add quota` ×2 (Quotas tab)                                                             | Task 4.2   | ☐      |
+| usage                 | `primary-actions`        | `+ Add quota` ×2 (Quotas tab)                                                             | Task 4.2   | ✅     |
 | usage                 | `identifier-leak`        | `pipeline_duration`                                                                       | Task 7.1   | ☐      |
 | usage                 | `incomplete-empty-state` | "No quotas yet."                                                                          | Task 1.4   | ✅     |
-| webhooks              | `primary-actions`        | `+ Add webhook` ×2 (header + empty state)                                                 | Task 4.2   | ☐      |
+| webhooks              | `primary-actions`        | `+ Add webhook` ×2 (header + empty state)                                                 | Task 4.2   | ✅     |
 | webhooks              | `incomplete-empty-state` | "No webhooks yet."                                                                        | Task 1.4   | ✅     |
 | users                 | `unguarded-destructive`  | Red row-level `Disable`, no confirmation                                                  | Task 5.3   | ☐      |
 | overview              | `identifier-leak`        | Raw job/run IDs: `terminal_webhook`, `job_run_terminal_run_*`, `run_*`, `run_execution_*` | Task 7.1   | ☐      |

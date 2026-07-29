@@ -22,6 +22,7 @@ import { toast } from "../lib/toast";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
+import { PageActions } from "./PageActions";
 import { PanelStats } from "./PanelStats";
 import { NotificationPolicyForm } from "./NotificationPolicyForm";
 import { Tabs } from "./Tabs";
@@ -203,20 +204,22 @@ function ChannelsTab() {
       <div className="rm-card-header">
         <div className="rm-card-title">{t("notificationChannels")}</div>
         <div className="flex items-center gap-2">
-          <Button
-            disabled={channelsQuery.isFetching}
-            onClick={() => void channelsQuery.refetch()}
-            type="button"
-          >
-            {channelsQuery.isFetching ? t("refreshing") : t("refresh")}
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => setAddOpen(true)}
-            type="button"
-          >
-            + {t("addChannel")}
-          </Button>
+          <PageActions
+            onRefresh={() => void channelsQuery.refetch()}
+            primary={
+              (channelsQuery.data?.length ?? 0) > 0 ? (
+                <Button
+                  variant="primary"
+                  onClick={() => setAddOpen(true)}
+                  type="button"
+                >
+                  + {t("addChannel")}
+                </Button>
+              ) : undefined
+            }
+            refreshLabel={t("refresh")}
+            refreshing={channelsQuery.isFetching}
+          />
         </div>
       </div>
 
@@ -430,13 +433,11 @@ function ChannelsTab() {
 
       <div className="rm-card-header mt-4">
         <div className="rm-card-title">{t("deliveries")}</div>
-        <Button
-          disabled={deliveriesQuery.isFetching}
-          onClick={() => void deliveriesQuery.refetch()}
-          type="button"
-        >
-          {deliveriesQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void deliveriesQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={deliveriesQuery.isFetching}
+        />
       </div>
       <div className="mt-2">
         <DataTable

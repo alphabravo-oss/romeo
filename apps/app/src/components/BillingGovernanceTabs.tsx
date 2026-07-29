@@ -15,6 +15,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 
 const entitlementCol = createColumnHelper<BillingEntitlementQuotaReport>();
 
@@ -118,13 +119,11 @@ export function EntitlementsTab() {
       <div className="rm-card-header">
         <div className="rm-card-title">{t("entitlements")}</div>
         <div className="flex items-center gap-2">
-          <Button
-            disabled={entitlementsQuery.isFetching}
-            onClick={() => void entitlementsQuery.refetch()}
-            type="button"
-          >
-            {entitlementsQuery.isFetching ? t("refreshing") : t("refresh")}
-          </Button>
+          <PageActions
+            onRefresh={() => void entitlementsQuery.refetch()}
+            refreshLabel={t("refresh")}
+            refreshing={entitlementsQuery.isFetching}
+          />
           <Button
             variant="primary"
             disabled={reconcileMutation.isPending}
@@ -222,13 +221,11 @@ export function LifecycleTab() {
       <div className="rm-card-header">
         <div className="rm-card-title">{t("lifecycle")}</div>
         <div className="flex items-center gap-2">
-          <Button
-            disabled={lifecycleQuery.isFetching}
-            onClick={() => void lifecycleQuery.refetch()}
-            type="button"
-          >
-            {lifecycleQuery.isFetching ? t("refreshing") : t("refresh")}
-          </Button>
+          <PageActions
+            onRefresh={() => void lifecycleQuery.refetch()}
+            refreshLabel={t("refresh")}
+            refreshing={lifecycleQuery.isFetching}
+          />
           <Button
             variant="primary"
             disabled={enforceMutation.isPending}

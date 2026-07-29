@@ -6,6 +6,7 @@ import type { ToolCallRecord } from "../features/tools";
 import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { PageActions } from "./PageActions";
 
 const col = createColumnHelper<ToolCallRecord>();
 
@@ -76,13 +77,11 @@ export function ToolTracePanel({
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="text-sm text-muted">{t("toolTraceCalls")}</div>
-        <Button
-          disabled={callsQuery.isFetching || activeAgentId === undefined}
-          onClick={() => void callsQuery.refetch()}
-          type="button"
-        >
-          {callsQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void callsQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={callsQuery.isFetching || activeAgentId === undefined}
+        />
       </div>
       <PanelState query={callsQuery} empty={t("toolTraceNone")}>
         {(calls) => (

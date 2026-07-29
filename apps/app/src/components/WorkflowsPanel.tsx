@@ -20,6 +20,7 @@ import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import { DataTable } from "./DataTable";
 import { FormDialog } from "./FormDialog";
+import { PageActions } from "./PageActions";
 import { PanelStats } from "./PanelStats";
 import { WorkflowStepBuilder } from "./WorkflowStepBuilder";
 import {
@@ -234,23 +235,23 @@ export function WorkflowsPanel() {
       <div className="rm-card-header">
         <div className="rm-card-title">{t("workflows")}</div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            disabled={workflowsQuery.isFetching}
-            onClick={() => void workflowsQuery.refetch()}
-            type="button"
-          >
-            {workflowsQuery.isFetching ? t("refreshing") : t("refresh")}
-          </Button>
+          <PageActions
+            onRefresh={() => void workflowsQuery.refetch()}
+            refreshLabel={t("refresh")}
+            refreshing={workflowsQuery.isFetching}
+          />
           <Button onClick={() => setAddOpen(true)} type="button">
             + {t("fromTemplate")}
           </Button>
-          <Button
-            variant="primary"
-            onClick={() => setNewOpen(true)}
-            type="button"
-          >
-            + {t("newWorkflow")}
-          </Button>
+          {(workflowsQuery.data?.length ?? 0) > 0 ? (
+            <Button
+              variant="primary"
+              onClick={() => setNewOpen(true)}
+              type="button"
+            >
+              + {t("newWorkflow")}
+            </Button>
+          ) : null}
         </div>
       </div>
 

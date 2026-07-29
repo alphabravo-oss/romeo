@@ -18,6 +18,7 @@ import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { EntitlementsTab, LifecycleTab } from "./BillingGovernanceTabs";
+import { PageActions } from "./PageActions";
 import {
   billingEventTypeKey,
   billingMetricKey,
@@ -98,13 +99,11 @@ export function BillingPanel() {
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("billing")}</div>
-        <Button
-          disabled={planQuery.isFetching}
-          onClick={() => void planQuery.refetch()}
-          type="button"
-        >
-          {planQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void planQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={planQuery.isFetching}
+        />
       </div>
 
       <div className="text-sm text-muted mb-2">

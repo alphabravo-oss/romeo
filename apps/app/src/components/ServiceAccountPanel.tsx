@@ -222,7 +222,7 @@ export function ServiceAccountPanel() {
       <div className="rm-card-header">
         <div className="rm-card-title">{t("serviceAccounts")}</div>
         <Button
-          variant="primary"
+          variant="secondary"
           onClick={() => setAddOpen(true)}
           type="button"
         >

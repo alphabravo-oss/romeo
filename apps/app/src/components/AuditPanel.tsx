@@ -10,6 +10,7 @@ import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 import {
   type ColumnDef,
   DataTable,
@@ -133,13 +134,11 @@ export function AuditPanel() {
       <div className="rm-card-header">
         <div className="text-sm text-muted">{t("auditTitle")}</div>
         <div className="flex gap-2">
-          <Button
-            disabled={auditQuery.isFetching}
-            onClick={() => void auditQuery.refetch()}
-            type="button"
-          >
-            {auditQuery.isFetching ? t("refreshing") : t("refresh")}
-          </Button>
+          <PageActions
+            onRefresh={() => void auditQuery.refetch()}
+            refreshLabel={t("refresh")}
+            refreshing={auditQuery.isFetching}
+          />
           <Button
             disabled={isExporting}
             onClick={() => void handleExport()}

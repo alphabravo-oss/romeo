@@ -22,6 +22,7 @@ import {
   LocalizedNumber,
 } from "../lib/locale-format";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { PageActions } from "./PageActions";
 import { PanelStats } from "./PanelStats";
 
 const alertCol = createColumnHelper<UsageAlert>();
@@ -190,21 +191,15 @@ export function UsagePanel() {
           >
             {isExporting ? t("analyticsExporting") : t("analyticsExportCsv")}
           </Button>
-          <Button
-            disabled={
+          <PageActions
+            onRefresh={() => void refresh()}
+            refreshLabel={t("usageRefresh")}
+            refreshing={
               usageQuery.isFetching ||
               summaryQuery.isFetching ||
               alertsQuery.isFetching
             }
-            onClick={() => void refresh()}
-            type="button"
-          >
-            {usageQuery.isFetching ||
-            summaryQuery.isFetching ||
-            alertsQuery.isFetching
-              ? t("refreshing")
-              : t("usageRefresh")}
-          </Button>
+          />
         </div>
       </div>
       {exportError ? (

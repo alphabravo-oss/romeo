@@ -1,4 +1,3 @@
-import { Button } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 
 import {
@@ -9,6 +8,7 @@ import { useLocale } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { PanelState } from "../lib/panel-state";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 
 export function RagPostureTab() {
   const { t } = useLocale();
@@ -21,13 +21,11 @@ export function RagPostureTab() {
     <div className="grid gap-2">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("retrievalPosture")}</div>
-        <Button
-          disabled={postureQuery.isFetching}
-          onClick={() => void postureQuery.refetch()}
-          type="button"
-        >
-          {postureQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void postureQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={postureQuery.isFetching}
+        />
       </div>
       <PanelState
         query={postureQuery}

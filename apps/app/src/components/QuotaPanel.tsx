@@ -13,6 +13,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 import { QuotaEditDialog } from "./QuotaEditDialog";
 import { LocalizedDate } from "../lib/locale-format";
 import { useWorkspace } from "./WorkspaceContext";
@@ -170,20 +171,22 @@ export function QuotaPanel() {
       <div className="rm-card-header">
         <div className="text-sm text-muted">{t("quotaBuckets")}</div>
         <div className="flex items-center gap-2">
-          <Button
-            disabled={quotasQuery.isFetching}
-            onClick={() => void quotasQuery.refetch()}
-            type="button"
-          >
-            {quotasQuery.isFetching ? t("refreshing") : t("refresh")}
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => setAddOpen(true)}
-            type="button"
-          >
-            + {t("addQuota")}
-          </Button>
+          <PageActions
+            onRefresh={() => void quotasQuery.refetch()}
+            primary={
+              (quotasQuery.data?.length ?? 0) > 0 ? (
+                <Button
+                  variant="primary"
+                  onClick={() => setAddOpen(true)}
+                  type="button"
+                >
+                  + {t("addQuota")}
+                </Button>
+              ) : undefined
+            }
+            refreshLabel={t("refresh")}
+            refreshing={quotasQuery.isFetching}
+          />
         </div>
       </div>
       <FormDialog

@@ -1,4 +1,3 @@
-import { Button } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard.mjs";
 
@@ -7,6 +6,7 @@ import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 
 const col = createColumnHelper<BackgroundJob>();
@@ -56,13 +56,11 @@ export function JobPanel() {
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="text-sm text-muted">{t("jobsTitle")}</div>
-        <Button
-          disabled={jobsQuery.isFetching}
-          onClick={() => void jobsQuery.refetch()}
-          type="button"
-        >
-          {jobsQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void jobsQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={jobsQuery.isFetching}
+        />
       </div>
       <PanelState
         empty={t("jobsNone")}

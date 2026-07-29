@@ -1,4 +1,3 @@
-import { Button } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 
 import { getReadinessReport, type ReadinessCheck } from "../features/readiness";
@@ -7,6 +6,7 @@ import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PanelStats } from "./PanelStats";
+import { PageActions } from "./PageActions";
 import {
   orderReadinessChecks,
   summarizeReadinessChecks,
@@ -25,13 +25,11 @@ export function ReadinessPanel() {
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("overviewReadiness")}</div>
-        <Button
-          disabled={readinessQuery.isFetching}
-          onClick={() => void readinessQuery.refetch()}
-          type="button"
-        >
-          {readinessQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void readinessQuery.refetch()}
+          refreshLabel={t("refresh")}
+          refreshing={readinessQuery.isFetching}
+        />
       </div>
       <div className="mt-4">
         <PanelState

@@ -200,13 +200,15 @@ export function ApiKeyPanel() {
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("apiKeys")}</div>
-        <Button
-          variant="primary"
-          onClick={() => setAddOpen(true)}
-          type="button"
-        >
-          + {t("addApiKey")}
-        </Button>
+        {(apiKeysQuery.data?.length ?? 0) > 0 ? (
+          <Button
+            variant="primary"
+            onClick={() => setAddOpen(true)}
+            type="button"
+          >
+            + {t("addApiKey")}
+          </Button>
+        ) : null}
       </div>
 
       {createdToken ? (

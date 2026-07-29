@@ -161,13 +161,15 @@ export function ToolConnectorPanel() {
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("toolConnectors")}</div>
-        <Button
-          variant="primary"
-          onClick={() => setAddOpen(true)}
-          type="button"
-        >
-          + {t("toolImportTool")}
-        </Button>
+        {connectors.length > 0 ? (
+          <Button
+            variant="primary"
+            onClick={() => setAddOpen(true)}
+            type="button"
+          >
+            + {t("toolImportTool")}
+          </Button>
+        ) : null}
       </div>
       <FormDialog
         open={addOpen}
