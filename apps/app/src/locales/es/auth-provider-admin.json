@@ -37,6 +37,7 @@
   "authDirectorySyncDescription": "Concilia usuarios y pertenencias a grupos con el directorio. Previsualiza primero y después aplica.",
   "authDirectorySyncFailed": "La sincronización del directorio falló",
   "authDirectorySyncPreviewFailed": "La vista previa de sincronización falló",
+  "authEditConfiguration": "Editar configuración",
   "authDisableLocalFallbackBody": "Los usuarios ya no podrán iniciar sesión con contraseña. Asegúrate primero de que otro proveedor esté configurado y accesible.",
   "authDisableLocalFallbackTitle": "¿Desactivar el acceso local alternativo?",
   "authDisableLocalLogin": "Desactivar acceso local",

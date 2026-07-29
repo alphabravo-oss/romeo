@@ -19,10 +19,11 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PanelStats } from "./PanelStats";
+import { ProviderSlotCard } from "./ProviderSlotCard";
+import { splitProviderZones } from "./auth-provider-zones";
 import { useWorkspace } from "./WorkspaceContext";
 
 const connectionCol = createColumnHelper<DelegatedOAuthConnectionSummary>();
-const providerCol = createColumnHelper<DelegatedOAuthProvider>();
 
 export function ConnectedAppsPanel() {
   const queryClient = useQueryClient();
@@ -148,54 +149,19 @@ export function ConnectedAppsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [revokeMutation.isPending, t],
   );
-  const providerColumns = useMemo<ColumnDef<DelegatedOAuthProvider, any>[]>(
-    () => [
-      providerCol.accessor("displayName", {
-        header: t("connectedAppsProvider"),
-        cell: (cell) => <span className="font-medium">{cell.getValue()}</span>,
-      }),
-      providerCol.accessor("authorizationHost", {
-        header: t("connectedAppsAuthorizationHost"),
-        cell: (cell) => (
-          <span className="rm-mono text-sm" translate="no">
-            {cell.getValue()}
-          </span>
-        ),
-      }),
-      providerCol.accessor((row) => row.connectorTypes.join(", "), {
-        id: "connectors",
-        header: t("connectedAppsConnector"),
-        cell: (cell) => <span translate="no">{cell.getValue()}</span>,
-      }),
-      providerCol.accessor("configured", {
-        header: t("connectedAppsStatus"),
-        cell: (cell) => (
-          <StatusBadge tone={cell.getValue() ? "success" : "warning"}>
-            {cell.getValue()
-              ? t("connectedAppsConfigured")
-              : t("connectedAppsNotConfigured")}
-          </StatusBadge>
-        ),
-      }),
-      providerCol.display({
-        id: "actions",
-        header: "",
-        cell: (cell) => (
-          <Button
-            disabled={!cell.row.original.configured || startMutation.isPending}
-            onClick={() => void handleConnect(cell.row.original)}
-            size="sm"
-            type="button"
-          >
-            {startMutation.isPending
-              ? t("connectedAppsConnecting")
-              : t("connectedAppsConnect")}
-          </Button>
-        ),
-      }),
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startMutation.isPending, t, workspaceId],
+  const connectionCountByProvider = useMemo(
+    () =>
+      new Map(
+        (providersQuery.data ?? []).map((provider) => [
+          provider.id,
+          (connectionsQuery.data ?? []).filter(
+            (connection) =>
+              connection.providerId === provider.id &&
+              connection.status !== "revoked",
+          ).length,
+        ]),
+      ),
+    [connectionsQuery.data, providersQuery.data],
   );
 
   return (
@@ -275,9 +241,6 @@ export function ConnectedAppsPanel() {
                         {posture.warnings.map((warning) => (
                           <li className="grid gap-0.5" key={warning}>
                             <span>{connectedAppWarningLabel(warning, t)}</span>
-                            <code className="text-xs" translate="no">
-                              {warning}
-                            </code>
                           </li>
                         ))}
                       </ul>
@@ -301,14 +264,103 @@ export function ConnectedAppsPanel() {
             emptyDescription={t("connectedAppsNoProvidersDescription")}
             emptyIcon={<Link2 aria-hidden size={24} />}
           >
-            {(providers) => (
-              <DataTable
-                columns={providerColumns}
-                data={providers}
-                getRowId={(provider) => provider.id}
-                minTableWidth={720}
-              />
-            )}
+            {(providers) => {
+              const zones = splitProviderZones(
+                providers.map((provider) => {
+                  const connectionCount =
+                    connectionCountByProvider.get(provider.id) ?? 0;
+                  return {
+                    ...provider,
+                    configured: connectionCount > 0,
+                    connectionCount,
+                    enabled: connectionCount > 0,
+                    status: provider.configured
+                      ? ("implemented" as const)
+                      : ("planned" as const),
+                  };
+                }),
+              );
+              return (
+                <div className="grid gap-4">
+                  {zones.active.length > 0 ? (
+                    <section className="rm-provider-zone">
+                      <h3 className="rm-provider-zone__label">
+                        {t("authZoneActive")}
+                      </h3>
+                      <div className="rm-provider-zone__grid">
+                        {zones.active.map((provider) => (
+                          <ProviderSlotCard
+                            actions={
+                              <Button
+                                disabled={startMutation.isPending}
+                                onClick={() => void handleConnect(provider)}
+                                size="sm"
+                                type="button"
+                                variant="secondary"
+                              >
+                                {startMutation.isPending
+                                  ? t("connectedAppsConnecting")
+                                  : t("authConfigure")}
+                              </Button>
+                            }
+                            configured
+                            enabled
+                            facts={[
+                              {
+                                label: t("connectedAppsConnections"),
+                                value: String(provider.connectionCount),
+                              },
+                            ]}
+                            icon={<Link2 aria-hidden size={22} />}
+                            key={provider.id}
+                            name={provider.displayName}
+                            protocol={t("connectedAppsOAuthProtocol")}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {zones.available.length > 0 ? (
+                    <section className="rm-provider-zone">
+                      <h3 className="rm-provider-zone__label">
+                        {t("authZoneAvailable")}
+                      </h3>
+                      <div className="rm-provider-zone__grid rm-provider-zone__grid--dense">
+                        {zones.available.map((provider) => (
+                          <Button
+                            key={provider.id}
+                            disabled={startMutation.isPending}
+                            onClick={() => void handleConnect(provider)}
+                            variant="outline"
+                          >
+                            <Link2 aria-hidden size={18} />
+                            <span translate="no">{provider.displayName}</span>
+                            <span>{t("authConfigure")}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {zones.unavailable.length > 0 ? (
+                    <section className="rm-provider-zone">
+                      <h3 className="rm-provider-zone__label">
+                        {t("authZoneUnavailable")}
+                      </h3>
+                      <div className="rm-provider-card__facts">
+                        {zones.unavailable.map((provider) => (
+                          <StatusBadge key={provider.id} tone="warning">
+                            <span translate="no">{provider.displayName}</span> ·{" "}
+                            {t("connectedAppsNotConfiguredWarning")}
+                          </StatusBadge>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+                </div>
+              );
+            }}
           </PanelState>
         </div>
       </div>
@@ -346,9 +398,7 @@ function connectedAppWarningLabel(
   t: (key: MessageKey) => string,
 ): string {
   if (warning.startsWith("delegated_oauth_provider_not_configured:")) {
-    return `${t("connectedAppsProviderNotConfiguredWarning")}: ${
-      warning.split(":")[1] ?? ""
-    }`;
+    return t("connectedAppsNotConfiguredWarning");
   }
   return t("connectedAppsPostureWarning");
 }

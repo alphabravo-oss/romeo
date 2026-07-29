@@ -37,6 +37,7 @@
   "authDirectorySyncDescription": "Rapproche les utilisateurs et appartenances aux groupes avec l’annuaire. Prévisualisez, puis appliquez.",
   "authDirectorySyncFailed": "La synchronisation de l’annuaire a échoué",
   "authDirectorySyncPreviewFailed": "L’aperçu de synchronisation a échoué",
+  "authEditConfiguration": "Modifier la configuration",
   "authDisableLocalFallbackBody": "Les utilisateurs ne pourront plus se connecter avec un mot de passe. Vérifiez d’abord qu’un autre fournisseur est configuré et accessible.",
   "authDisableLocalFallbackTitle": "Désactiver le recours à la connexion locale ?",
   "authDisableLocalLogin": "Désactiver la connexion locale",

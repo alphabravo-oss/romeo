@@ -123,7 +123,7 @@ export function AuthProviderSplitView({
                       variant="secondary"
                     >
                       <Settings2 aria-hidden size={14} />
-                      {t("authConfigure")}
+                      {t("authEditConfiguration")}
                     </Button>
                     {canTestProvider(row.entry) ? (
                       <Button
