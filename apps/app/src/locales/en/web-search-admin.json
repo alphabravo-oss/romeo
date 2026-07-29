@@ -18,5 +18,11 @@
   "searchSettingsSaved": "Web search settings saved",
   "skipUnreachable": "Skip unreachable only",
   "unknownPublicationDates": "Unknown publication dates",
-  "unreachableUrls": "Unreachable URLs"
+  "unreachableUrls": "Unreachable URLs",
+  "webSearchDisabledDescription": "Turn it on to choose a search provider and set domain and freshness policy.",
+  "webSearchDisabledTitle": "Governed web search is off",
+  "webSearchPolicyDescription": "Which sources are allowed and how fresh they must be.",
+  "webSearchPolicySection": "Result policy",
+  "webSearchProviderDescription": "Where search queries are sent.",
+  "webSearchProviderSection": "Search provider"
 }

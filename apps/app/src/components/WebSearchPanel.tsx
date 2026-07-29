@@ -1,5 +1,6 @@
-import { Input, Textarea, NativeSelect, Button } from "@romeo/ui";
+import { Button, EmptyState, Input, NativeSelect, Textarea } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Search from "lucide-react/dist/esm/icons/search.mjs";
 import { useEffect, useState } from "react";
 
 import {
@@ -9,6 +10,7 @@ import {
 import { toast } from "../lib/toast";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
+import { SettingsSection } from "./SettingsSection";
 
 export function WebSearchPanel() {
   const { t } = useLocale();
@@ -77,6 +79,23 @@ export function WebSearchPanel() {
     onSuccess: async () =>
       queryClient.invalidateQueries({ queryKey: ["webSearchConfiguration"] }),
   });
+  const enabled = query.data?.enabled === true;
+  const isDirty =
+    query.data !== undefined &&
+    (provider !== query.data.provider ||
+      endpointUrl !== query.data.endpointUrl ||
+      credentialRef.trim() !== "" ||
+      allowedDomains !== query.data.allowedDomains.join("\n") ||
+      blockedDomains !== query.data.blockedDomains.join("\n") ||
+      maxResults !== query.data.maxResults ||
+      freshnessMaxAgeDays !==
+        (query.data.freshnessMaxAgeDays === null
+          ? ""
+          : String(query.data.freshnessMaxAgeDays)) ||
+      unknownPublicationDatePolicy !==
+        query.data.unknownPublicationDatePolicy ||
+      unreachableUrlPolicy !== query.data.unreachableUrlPolicy);
+
   return (
     <section className="rm-panel p-4">
       <div className="rm-card-header">
@@ -88,172 +107,197 @@ export function WebSearchPanel() {
         </div>
         <label>
           <Input
-            checked={query.data?.enabled === true}
-            disabled={toggle.isPending}
+            checked={enabled}
+            disabled={toggle.isPending || (enabled && isDirty)}
             onChange={(event) => toggle.mutate(event.currentTarget.checked)}
             type="checkbox"
           />{" "}
           {t("enabled")}
         </label>
       </div>
-      <div
-        className="mt-3 rounded-md border border-border p-3 text-sm"
-        aria-live="polite"
-      >
-        {t("providerHealth")}:{" "}
-        <strong>{query.data?.health.status ?? t("unknown")}</strong>
-        {query.data?.health.latencyMs === undefined
-          ? null
-          : ` · ${query.data.health.latencyMs} ms`}
-        {query.data?.health.lastCheckedAt === undefined ? null : (
-          <>
-            {" "}
-            · {t("checked")}{" "}
-            <LocalizedDateTime value={query.data.health.lastCheckedAt} />
-          </>
-        )}
-        {query.data?.health.lastErrorCode === undefined
-          ? null
-          : ` · ${query.data.health.lastErrorCode}`}
-      </div>
-      <form
-        className="mt-4 grid gap-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          save.mutate();
-        }}
-      >
-        <label className="rm-field-name" htmlFor="search-provider">
-          {t("providerPreset")}
-        </label>
-        <NativeSelect
-          name="search-provider"
-          id="search-provider"
-          onChange={(event) =>
-            setProvider(event.currentTarget.value as typeof provider)
-          }
-          value={provider}
+      {enabled ? (
+        <form
+          className="mt-4 grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            save.mutate();
+          }}
         >
-          <option value="searxng">SearXNG</option>
-          <option value="brave">Brave Search</option>
-          <option value="tavily">Tavily</option>
-        </NativeSelect>
-        <label className="rm-field-name" htmlFor="search-endpoint">
-          {t("endpointUrl")}
-        </label>
-        <Input
-          name="search-endpoint"
-          id="search-endpoint"
-          onChange={(event) => setEndpointUrl(event.currentTarget.value)}
-          required
-          type="url"
-          value={endpointUrl}
-        />
-        <label className="rm-field-name" htmlFor="search-secret">
-          {t("managedCredentialReference")}
-        </label>
-        <Input
-          name="search-secret"
-          id="search-secret"
-          onChange={(event) => setCredentialRef(event.currentTarget.value)}
-          placeholder={
-            query.data?.credentialConfigured
-              ? t("credentialConfiguredReplace")
-              : "romeo-secret://…"
-          }
-          value={credentialRef}
-        />
-        <div className="grid gap-3 md:grid-cols-2">
-          <label>
-            {t("allowedDomainsPerLine")}
-            <Textarea
-              name="allowedDomains"
-              className="mt-1"
-              onChange={(event) => setAllowedDomains(event.currentTarget.value)}
-              rows={5}
-              value={allowedDomains}
-            />
-          </label>
-          <label>
-            {t("blockedDomainsPerLine")}
-            <Textarea
-              name="blockedDomains"
-              className="mt-1"
-              onChange={(event) => setBlockedDomains(event.currentTarget.value)}
-              rows={5}
-              value={blockedDomains}
-            />
-          </label>
-        </div>
-        <label>
-          {t("maximumResults")}{" "}
-          <Input
-            name="maxResults"
-            max={10}
-            min={1}
-            onChange={(event) =>
-              setMaxResults(event.currentTarget.valueAsNumber)
-            }
-            type="number"
-            value={maxResults}
-          />
-        </label>
-        <div className="grid gap-3 md:grid-cols-3">
-          <label>
-            {t("maximumSourceAge")}
+          <SettingsSection
+            description={t("webSearchProviderDescription")}
+            title={t("webSearchProviderSection")}
+          >
+            <label className="rm-field-name" htmlFor="search-provider">
+              {t("providerPreset")}
+            </label>
+            <NativeSelect
+              name="search-provider"
+              id="search-provider"
+              onChange={(event) =>
+                setProvider(event.currentTarget.value as typeof provider)
+              }
+              value={provider}
+            >
+              <option value="searxng">SearXNG</option>
+              <option value="brave">Brave Search</option>
+              <option value="tavily">Tavily</option>
+            </NativeSelect>
+            <label className="rm-field-name" htmlFor="search-endpoint">
+              {t("endpointUrl")}
+            </label>
             <Input
-              name="freshnessMaxAgeDays"
-              className="mt-1"
-              min={1}
-              max={3650}
-              onChange={(event) =>
-                setFreshnessMaxAgeDays(event.currentTarget.value)
-              }
-              type="number"
-              value={freshnessMaxAgeDays}
+              name="search-endpoint"
+              id="search-endpoint"
+              onChange={(event) => setEndpointUrl(event.currentTarget.value)}
+              required
+              type="url"
+              value={endpointUrl}
             />
-          </label>
-          <label>
-            {t("unknownPublicationDates")}
-            <NativeSelect
-              name="unknownPublicationDatePolicy"
-              className="mt-1"
-              onChange={(event) =>
-                setUnknownPublicationDatePolicy(
-                  event.currentTarget
-                    .value as typeof unknownPublicationDatePolicy,
-                )
+            <label className="rm-field-name" htmlFor="search-secret">
+              {t("managedCredentialReference")}
+            </label>
+            <Input
+              name="search-secret"
+              id="search-secret"
+              onChange={(event) => setCredentialRef(event.currentTarget.value)}
+              placeholder={
+                query.data?.credentialConfigured
+                  ? t("credentialConfiguredReplace")
+                  : "romeo-secret://…"
               }
-              value={unknownPublicationDatePolicy}
+              value={credentialRef}
+            />
+            <div
+              className="rounded-md border border-border p-3 text-sm"
+              aria-live="polite"
             >
-              <option value="allow">{t("allow")}</option>
-              <option value="exclude">{t("exclude")}</option>
-            </NativeSelect>
-          </label>
-          <label>
-            {t("unreachableUrls")}
-            <NativeSelect
-              name="unreachableUrlPolicy"
-              className="mt-1"
-              onChange={(event) =>
-                setUnreachableUrlPolicy(
-                  event.currentTarget.value as typeof unreachableUrlPolicy,
-                )
-              }
-              value={unreachableUrlPolicy}
-            >
-              <option value="fail">{t("failRequest")}</option>
-              <option value="skip">{t("skipUnreachable")}</option>
-            </NativeSelect>
-          </label>
+              {t("providerHealth")}:{" "}
+              <strong>{query.data?.health.status ?? t("unknown")}</strong>
+              {query.data?.health.latencyMs === undefined
+                ? null
+                : ` · ${query.data.health.latencyMs} ms`}
+              {query.data?.health.lastCheckedAt === undefined ? null : (
+                <>
+                  {" "}
+                  · {t("checked")}{" "}
+                  <LocalizedDateTime value={query.data.health.lastCheckedAt} />
+                </>
+              )}
+              {query.data?.health.lastErrorCode === undefined
+                ? null
+                : ` · ${query.data.health.lastErrorCode}`}
+            </div>
+          </SettingsSection>
+          <SettingsSection
+            description={t("webSearchPolicyDescription")}
+            title={t("webSearchPolicySection")}
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <label>
+                {t("allowedDomainsPerLine")}
+                <Textarea
+                  name="allowedDomains"
+                  className="mt-1"
+                  onChange={(event) =>
+                    setAllowedDomains(event.currentTarget.value)
+                  }
+                  rows={5}
+                  value={allowedDomains}
+                />
+              </label>
+              <label>
+                {t("blockedDomainsPerLine")}
+                <Textarea
+                  name="blockedDomains"
+                  className="mt-1"
+                  onChange={(event) =>
+                    setBlockedDomains(event.currentTarget.value)
+                  }
+                  rows={5}
+                  value={blockedDomains}
+                />
+              </label>
+            </div>
+            <label>
+              {t("maximumResults")}{" "}
+              <Input
+                name="maxResults"
+                max={10}
+                min={1}
+                onChange={(event) =>
+                  setMaxResults(event.currentTarget.valueAsNumber)
+                }
+                type="number"
+                value={maxResults}
+              />
+            </label>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label>
+                {t("maximumSourceAge")}
+                <Input
+                  name="freshnessMaxAgeDays"
+                  className="mt-1"
+                  min={1}
+                  max={3650}
+                  onChange={(event) =>
+                    setFreshnessMaxAgeDays(event.currentTarget.value)
+                  }
+                  type="number"
+                  value={freshnessMaxAgeDays}
+                />
+              </label>
+              <label>
+                {t("unknownPublicationDates")}
+                <NativeSelect
+                  name="unknownPublicationDatePolicy"
+                  className="mt-1"
+                  onChange={(event) =>
+                    setUnknownPublicationDatePolicy(
+                      event.currentTarget
+                        .value as typeof unknownPublicationDatePolicy,
+                    )
+                  }
+                  value={unknownPublicationDatePolicy}
+                >
+                  <option value="allow">{t("allow")}</option>
+                  <option value="exclude">{t("exclude")}</option>
+                </NativeSelect>
+              </label>
+              <label>
+                {t("unreachableUrls")}
+                <NativeSelect
+                  name="unreachableUrlPolicy"
+                  className="mt-1"
+                  onChange={(event) =>
+                    setUnreachableUrlPolicy(
+                      event.currentTarget.value as typeof unreachableUrlPolicy,
+                    )
+                  }
+                  value={unreachableUrlPolicy}
+                >
+                  <option value="fail">{t("failRequest")}</option>
+                  <option value="skip">{t("skipUnreachable")}</option>
+                </NativeSelect>
+              </label>
+            </div>
+          </SettingsSection>
+          {save.error ? (
+            <div className="rm-composer-error">{save.error.message}</div>
+          ) : null}
+          <Button variant="primary" disabled={save.isPending} type="submit">
+            {t("saveConfiguration")}
+          </Button>
+        </form>
+      ) : (
+        <div className="mt-4">
+          <EmptyState
+            icon={<Search aria-hidden size={24} />}
+            title={t("webSearchDisabledTitle")}
+          >
+            {t("webSearchDisabledDescription")}
+          </EmptyState>
         </div>
-        {save.error ? (
-          <div className="rm-composer-error">{save.error.message}</div>
-        ) : null}
-        <Button variant="primary" disabled={save.isPending} type="submit">
-          {t("saveConfiguration")}
-        </Button>
-      </form>
+      )}
     </section>
   );
 }

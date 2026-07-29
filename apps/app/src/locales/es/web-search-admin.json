@@ -18,5 +18,11 @@
   "searchSettingsSaved": "Configuración de búsqueda web guardada",
   "skipUnreachable": "Omitir solo las inaccesibles",
   "unknownPublicationDates": "Fechas de publicación desconocidas",
-  "unreachableUrls": "URL inaccesibles"
+  "unreachableUrls": "URL inaccesibles",
+  "webSearchDisabledDescription": "Actívala para elegir un proveedor de búsqueda y definir la política de dominios y antigüedad.",
+  "webSearchDisabledTitle": "La búsqueda web gobernada está desactivada",
+  "webSearchPolicyDescription": "Qué fuentes se permiten y qué antigüedad máxima pueden tener.",
+  "webSearchPolicySection": "Política de resultados",
+  "webSearchProviderDescription": "Adónde se envían las consultas de búsqueda.",
+  "webSearchProviderSection": "Proveedor de búsqueda"
 }
