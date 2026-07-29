@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import Upload from "lucide-react/dist/esm/icons/upload.mjs";
 
 import {
-  createKnowledgeBase,
   createKnowledgeSource,
   deleteKnowledgeSource,
   extractKnowledgeSource,
@@ -22,6 +21,8 @@ import { useConfirm } from "./ConfirmDialog";
 import { FormDialog } from "./FormDialog";
 import { Tabs } from "./Tabs";
 import { KnowledgeSourcesTab } from "./KnowledgeSourcesTab";
+import { KnowledgeQueryTab } from "./KnowledgeQueryTab";
+import { KnowledgeBaseCreateDialog } from "./KnowledgeBaseCreateDialog";
 import {
   canInlineUpload,
   knowledgeJobStatusKey,
@@ -64,7 +65,6 @@ export function KnowledgePanel({
     enabled: activeKnowledgeBase !== undefined,
   });
 
-  const createBaseMutation = useMutation({ mutationFn: createKnowledgeBase });
   const createSourceMutation = useMutation({
     mutationFn: createKnowledgeSource,
   });
@@ -83,29 +83,6 @@ export function KnowledgePanel({
     if (activeKnowledgeBaseId === undefined && knowledgeBases[0])
       setActiveKnowledgeBaseId(knowledgeBases[0].id);
   }, [activeKnowledgeBaseId, knowledgeBases]);
-
-  const KnowledgeBaseForm = useForm({
-    defaultValues: { name: "" },
-    onSubmit: async ({ value }) => {
-      if (!workspaceId) return;
-
-      try {
-        const created = await createBaseMutation.mutateAsync({
-          workspaceId,
-          name: value.name,
-        });
-        setActiveKnowledgeBaseId(created.id);
-        setNotice(t("knowledgeBaseCreatedNotice"));
-        await queryClient.invalidateQueries({
-          queryKey: ["knowledgeBases", workspaceId],
-        });
-        toast(t("knowledgeBaseCreated"), "success");
-        setBaseDialogOpen(false);
-      } catch {
-        toast(t("knowledgeCouldNotCreateBase"), "error");
-      }
-    },
-  });
 
   const SourceForm = useForm({
     defaultValues: {
@@ -218,19 +195,15 @@ export function KnowledgePanel({
     setNotice(t("knowledgeFileLoaded"));
   }
 
-  const QueryForm = useForm({
-    defaultValues: { query: "" },
-    onSubmit: async ({ value }) => {
-      if (!activeKnowledgeBase) return;
-
-      const results = await queryMutation.mutateAsync({
-        knowledgeBaseId: activeKnowledgeBase.id,
-        query: value.query,
-      });
-      setHits(results);
-      setNotice(t("knowledgeQueryComplete"));
-    },
-  });
+  async function handleQuery(query: string) {
+    if (!activeKnowledgeBase) return;
+    const results = await queryMutation.mutateAsync({
+      knowledgeBaseId: activeKnowledgeBase.id,
+      query,
+    });
+    setHits(results);
+    setNotice(t("knowledgeQueryComplete"));
+  }
 
   async function handleDeleteSource(sourceId: string) {
     if (!activeKnowledgeBase) return;
@@ -322,59 +295,15 @@ export function KnowledgePanel({
         </div>
       </div>
 
-      <FormDialog
+      <KnowledgeBaseCreateDialog
         onClose={() => setBaseDialogOpen(false)}
+        onCreated={(knowledgeBaseId) => {
+          setActiveKnowledgeBaseId(knowledgeBaseId);
+          setNotice(t("knowledgeBaseCreatedNotice"));
+        }}
         open={baseDialogOpen}
-        title={t("knowledgeNewBase")}
-      >
-        <form
-          className="grid gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void KnowledgeBaseForm.handleSubmit();
-          }}
-        >
-          <label className="text-sm text-muted" htmlFor="knowledge-name">
-            {t("knowledgeBase")}
-          </label>
-          <KnowledgeBaseForm.Field
-            name="name"
-            validators={{
-              onChange: ({ value }: { value: string }) =>
-                !value?.trim() ? t("knowledgeNameRequired") : undefined,
-            }}
-          >
-            {(field) => (
-              <>
-                <Input
-                  name="name"
-                  id="knowledge-name"
-                  onBlur={field.handleBlur}
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value)
-                  }
-                  placeholder={t("knowledgeBaseName")}
-                  value={field.state.value}
-                />
-                {field.state.meta.errors.length ? (
-                  <div className="rm-composer-error">
-                    {field.state.meta.errors.join(", ")}
-                  </div>
-                ) : null}
-              </>
-            )}
-          </KnowledgeBaseForm.Field>
-          <Button
-            disabled={!workspaceId || createBaseMutation.isPending}
-            type="submit"
-          >
-            {createBaseMutation.isPending
-              ? t("knowledgeCreating")
-              : t("knowledgeCreateBase")}
-          </Button>
-        </form>
-      </FormDialog>
+        workspaceId={workspaceId}
+      />
 
       <FormDialog
         onClose={() => setSourceDialogOpen(false)}
@@ -537,62 +466,13 @@ export function KnowledgePanel({
             id: "query",
             label: t("knowledgeQuery"),
             content: (
-              <div>
-                <form
-                  className="grid gap-2"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void QueryForm.handleSubmit();
-                  }}
-                >
-                  <label
-                    className="text-sm text-muted"
-                    htmlFor="knowledge-query"
-                  >
-                    {t("knowledgeQuery")}
-                  </label>
-                  <QueryForm.Field name="query">
-                    {(field) => (
-                      <Input
-                        name="query"
-                        id="knowledge-query"
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.currentTarget.value)
-                        }
-                        placeholder={t("knowledgeAskQuestion")}
-                        value={field.state.value}
-                      />
-                    )}
-                  </QueryForm.Field>
-                  <Button
-                    disabled={!activeKnowledgeBase || queryMutation.isPending}
-                    type="submit"
-                  >
-                    {queryMutation.isPending
-                      ? t("knowledgeQuerying")
-                      : t("knowledgeQueryBase")}
-                  </Button>
-                </form>
-
-                {notice ? (
-                  <div className="mt-3 text-sm text-muted">{notice}</div>
-                ) : null}
-                <div className="mt-2 grid gap-2 text-sm">
-                  {hits.map((hit) => (
-                    <div
-                      className="rounded-md border border-border p-2"
-                      key={hit.id}
-                    >
-                      <div className="font-medium">{hit.citation.title}</div>
-                      <div className="line-clamp-3 text-muted">
-                        {hit.content}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <KnowledgeQueryTab
+                enabled={activeKnowledgeBase !== undefined}
+                hits={hits}
+                isPending={queryMutation.isPending}
+                notice={notice}
+                onQuery={handleQuery}
+              />
             ),
           },
         ]}

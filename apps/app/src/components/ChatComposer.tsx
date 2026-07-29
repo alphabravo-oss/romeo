@@ -19,25 +19,18 @@ import {
   useMemo,
   useRef,
   useState,
-  type FormEvent,
   type KeyboardEvent,
 } from "react";
 
-import type { BaseModel, Provider } from "../features/types";
-import type { QueuedChatTurn } from "../features/runs";
 import { listPromptTemplatesPage } from "../features/prompts";
-import type { FileObject } from "../features/files";
 import { useLocale } from "../lib/i18n";
 import { ChatComposerDialogs } from "./ChatComposerDialogs";
+import type { ChatComposerProps } from "./chat-composer-props";
 import {
   listImageGenerationModels,
   materializePrompt,
 } from "./chat-composer-utils";
 import { ComposerModelSelect } from "./ComposerModelSelect";
-import type {
-  PendingDocumentAttachment,
-  PendingImageAttachment,
-} from "./useWorkspaceAttachments";
 import { VoiceInputButton } from "./VoiceInputButton";
 
 export function ChatComposer({
@@ -503,45 +496,4 @@ export function ChatComposer({
       />
     </>
   );
-}
-
-interface ChatComposerProps {
-  attachedUrls: string[];
-  canInspectContext: boolean;
-  canOverrideModel: boolean;
-  documentAttachments: PendingDocumentAttachment[];
-  draft: string;
-  error: string | undefined;
-  imageAttachments: PendingImageAttachment[];
-  isInspectingContext: boolean;
-  isStreaming: boolean;
-  isTemporaryChat: boolean;
-  isTranscribingVoice: boolean;
-  messageCount: number;
-  models: BaseModel[];
-  onAddUrl: (url: string) => void;
-  onAttachExistingFile: (file: FileObject) => void;
-  onAttachFiles: (files: File[]) => void;
-  onCancel: () => void;
-  onCancelQueuedTurn: (turnId: string) => void;
-  onDraftChange: (value: string) => void;
-  onGenerateImages: (input: {
-    modelId: string;
-    prompt: string;
-    size: "1024x1024" | "1024x1536" | "1536x1024";
-  }) => void;
-  onInspectContext: () => void;
-  onRemoveDocumentAttachment: (attachmentId: string) => void;
-  onRemoveImageAttachment: (attachmentId: string) => void;
-  onRemoveUrl: (url: string) => void;
-  onSelectModel: (modelId: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onToggleWebSearch: (enabled: boolean) => void;
-  onTranscribeAudio: (blob: Blob) => Promise<void>;
-  onTranscriptionError: (message: string) => void;
-  providers: Provider[];
-  queuedTurns: QueuedChatTurn[];
-  selectedModelId: string | undefined;
-  webSearchEnabled: boolean;
-  workspaceId: string | undefined;
 }

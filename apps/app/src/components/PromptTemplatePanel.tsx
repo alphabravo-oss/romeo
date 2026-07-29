@@ -8,7 +8,6 @@ import {
   deletePromptTemplate,
   listPromptMarketplace,
   listPromptTemplates,
-  updatePromptTemplate,
 } from "../features/prompts";
 import type {
   CreatePromptTemplateInput,
@@ -22,17 +21,16 @@ import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { PanelStats } from "./PanelStats";
+import { PromptTemplateEditDialog } from "./PromptTemplateEditDialog";
 import { parsePromptTemplateTags } from "./prompt-template-fields";
+import {
+  promptTemplateVisibilities,
+  promptTemplateVisibilityKey,
+} from "./prompt-template-visibility";
 import { useWorkspace } from "./WorkspaceContext";
 
 const templateCol = createColumnHelper<PromptTemplate>();
 const marketplaceCol = createColumnHelper<PromptTemplate>();
-
-const visibilities: PromptTemplateVisibility[] = [
-  "private",
-  "workspace",
-  "marketplace",
-];
 
 export function PromptTemplatePanel() {
   const { t } = useLocale();
@@ -105,7 +103,7 @@ export function PromptTemplatePanel() {
         header: t("promptVisibility"),
         cell: (c) => (
           <span className="rm-cell-muted">
-            {t(visibilityKey(c.getValue()))}
+            {t(promptTemplateVisibilityKey(c.getValue()))}
           </span>
         ),
       }),
@@ -303,9 +301,9 @@ export function PromptTemplatePanel() {
                   }
                   value={field.state.value}
                 >
-                  {visibilities.map((option) => (
+                  {promptTemplateVisibilities.map((option) => (
                     <option key={option} value={option}>
-                      {t(visibilityKey(option))}
+                      {t(promptTemplateVisibilityKey(option))}
                     </option>
                   ))}
                 </NativeSelect>
@@ -388,188 +386,4 @@ export function PromptTemplatePanel() {
       {dialog}
     </section>
   );
-}
-
-function PromptTemplateEditDialog({
-  template,
-  onClose,
-  onSaved,
-}: {
-  template: PromptTemplate;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const { t } = useLocale();
-  const editForm = useForm({
-    defaultValues: {
-      name: template.name,
-      description: template.description ?? "",
-      tags: template.tags.join(", "),
-      body: template.body,
-      visibility: template.visibility,
-    },
-    onSubmit: async ({ value }) => {
-      try {
-        await updatePromptTemplate(template.id, {
-          name: value.name,
-          description:
-            value.description.trim().length === 0
-              ? null
-              : value.description.trim(),
-          body: value.body,
-          tags: parsePromptTemplateTags(value.tags),
-          visibility: value.visibility,
-        });
-        toast(t("promptTemplateUpdated"), "success");
-        await onSaved();
-      } catch (caught) {
-        toast(t("promptCouldNotUpdate"), "error");
-        throw caught;
-      }
-    },
-  });
-
-  return (
-    <FormDialog open title={t("promptEditTemplate")} onClose={onClose}>
-      <form
-        className="grid gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void editForm.handleSubmit();
-        }}
-      >
-        <editForm.Field
-          name="name"
-          validators={{
-            onChange: ({ value }: { value: string }) =>
-              !value?.trim() ? t("promptNameRequired") : undefined,
-          }}
-        >
-          {(field) => (
-            <>
-              <Input
-                name="name"
-                aria-label={t("promptTemplateName")}
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                placeholder={t("promptTemplateName")}
-                value={field.state.value}
-              />
-              {field.state.meta.errors.length ? (
-                <div className="rm-composer-error">
-                  {field.state.meta.errors.join(", ")}
-                </div>
-              ) : null}
-            </>
-          )}
-        </editForm.Field>
-        <editForm.Field name="description">
-          {(field) => (
-            <Field label={t("promptDescription")}>
-              <Textarea
-                name="description"
-                maxLength={500}
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                rows={2}
-                value={field.state.value}
-              />
-            </Field>
-          )}
-        </editForm.Field>
-        <editForm.Field name="tags">
-          {(field) => (
-            <Field description={t("promptTagsHelp")} label={t("promptTags")}>
-              <Input
-                name="tags"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                value={field.state.value}
-              />
-            </Field>
-          )}
-        </editForm.Field>
-        <editForm.Field
-          name="body"
-          validators={{
-            onChange: ({ value }: { value: string }) =>
-              !value?.trim() ? t("promptBodyRequired") : undefined,
-          }}
-        >
-          {(field) => (
-            <>
-              <Textarea
-                name="body"
-                aria-label={t("promptTemplateBody")}
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                placeholder={t("promptTemplateBody")}
-                rows={4}
-                value={field.state.value}
-              />
-              {field.state.meta.errors.length ? (
-                <div className="rm-composer-error">
-                  {field.state.meta.errors.join(", ")}
-                </div>
-              ) : null}
-            </>
-          )}
-        </editForm.Field>
-        <editForm.Field name="visibility">
-          {(field) => (
-            <Field label={t("promptVisibility")}>
-              <NativeSelect
-                name="visibility"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(
-                    event.currentTarget.value as PromptTemplateVisibility,
-                  )
-                }
-                value={field.state.value}
-              >
-                {visibilities.map((option) => (
-                  <option key={option} value={option}>
-                    {t(visibilityKey(option))}
-                  </option>
-                ))}
-              </NativeSelect>
-            </Field>
-          )}
-        </editForm.Field>
-        <editForm.Subscribe
-          selector={(state) => ({
-            canSubmit: state.canSubmit,
-            isSubmitting: state.isSubmitting,
-          })}
-        >
-          {({ canSubmit, isSubmitting }) => (
-            <Button disabled={!canSubmit || isSubmitting} type="submit">
-              {isSubmitting ? t("promptSaving") : t("promptSaveTemplate")}
-            </Button>
-          )}
-        </editForm.Subscribe>
-      </form>
-    </FormDialog>
-  );
-}
-
-function visibilityKey(
-  visibility: PromptTemplateVisibility,
-):
-  | "promptVisibilityMarketplace"
-  | "promptVisibilityPrivate"
-  | "promptVisibilityWorkspace" {
-  if (visibility === "marketplace") return "promptVisibilityMarketplace";
-  if (visibility === "workspace") return "promptVisibilityWorkspace";
-  return "promptVisibilityPrivate";
 }

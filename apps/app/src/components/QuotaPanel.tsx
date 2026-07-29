@@ -3,12 +3,7 @@ import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import {
-  createQuotaBucket,
-  deleteQuotaBucket,
-  listQuotas,
-  updateQuotaBucket,
-} from "../features";
+import { createQuotaBucket, deleteQuotaBucket, listQuotas } from "../features";
 import type { QuotaBucket } from "../features/types";
 import { PanelState } from "../lib/panel-state";
 import { useLocale, type MessageKey } from "../lib/i18n";
@@ -17,6 +12,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { PanelStats } from "./PanelStats";
+import { QuotaEditDialog } from "./QuotaEditDialog";
 import { LocalizedDate } from "../lib/locale-format";
 import { useWorkspace } from "./WorkspaceContext";
 
@@ -373,108 +369,6 @@ export function QuotaPanel() {
       </div>
       {dialog}
     </section>
-  );
-}
-
-function QuotaEditDialog({
-  quota,
-  onClose,
-  onSaved,
-}: {
-  quota: QuotaBucket;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const { t } = useLocale();
-  const editForm = useForm({
-    defaultValues: {
-      limit: quota.limit,
-      resetInterval: quota.resetInterval,
-    },
-    onSubmit: async ({ value }) => {
-      try {
-        await updateQuotaBucket(quota.id, {
-          limit: value.limit,
-          resetInterval: value.resetInterval,
-        });
-        toast(t("quotaUpdated"), "success");
-        await onSaved();
-      } catch (caught) {
-        toast(t("couldNotUpdateQuota"), "error");
-        throw caught;
-      }
-    },
-  });
-
-  return (
-    <FormDialog
-      open
-      title={t("editQuota")}
-      description={`${quota.scopeType}:${quota.scopeId}`}
-      onClose={onClose}
-    >
-      <form
-        className="grid gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void editForm.handleSubmit();
-        }}
-      >
-        <label className="text-sm text-muted" htmlFor="quota-edit-limit">
-          {t("limit")}
-        </label>
-        <editForm.Field name="limit">
-          {(field) => (
-            <Input
-              name="limit"
-              id="quota-edit-limit"
-              min={0}
-              onBlur={field.handleBlur}
-              onChange={(event) =>
-                field.handleChange(Number(event.currentTarget.value))
-              }
-              type="number"
-              value={field.state.value}
-            />
-          )}
-        </editForm.Field>
-        <label className="text-sm text-muted" htmlFor="quota-edit-reset">
-          {t("reset")}
-        </label>
-        <editForm.Field name="resetInterval">
-          {(field) => (
-            <NativeSelect
-              name="resetInterval"
-              id="quota-edit-reset"
-              onBlur={field.handleBlur}
-              onChange={(event) =>
-                field.handleChange(
-                  event.currentTarget.value as QuotaBucket["resetInterval"],
-                )
-              }
-              value={field.state.value}
-            >
-              <option value="none">{t("noReset")}</option>
-              <option value="daily">{t("daily")}</option>
-              <option value="monthly">{t("monthly")}</option>
-            </NativeSelect>
-          )}
-        </editForm.Field>
-        <editForm.Subscribe
-          selector={(state) => ({
-            canSubmit: state.canSubmit,
-            isSubmitting: state.isSubmitting,
-          })}
-        >
-          {({ canSubmit, isSubmitting }) => (
-            <Button disabled={!canSubmit || isSubmitting} type="submit">
-              {isSubmitting ? t("saving") : t("saveQuota")}
-            </Button>
-          )}
-        </editForm.Subscribe>
-      </form>
-    </FormDialog>
   );
 }
 

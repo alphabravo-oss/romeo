@@ -1,4 +1,4 @@
-import { Button, Field, Input, LinkButton } from "@romeo/ui";
+import { Button, Input } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -17,9 +17,8 @@ import { LocalizedDate } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import { FormDialog } from "./FormDialog";
+import { AccountMfaDialogs, type RecoveryStep } from "./AccountMfaDialogs";
 import { isLockoutRisk, recoveryCodesRemaining } from "./mfa-recovery";
-
-type RecoveryStep = "awaiting-code" | "showing-codes";
 
 export function AccountSecurityPanel() {
   const queryClient = useQueryClient();
@@ -413,183 +412,39 @@ export function AccountSecurityPanel() {
         </form>
       </FormDialog>
 
-      {/* TOTP enrollment dialog */}
-      <FormDialog
-        open={enrollment !== undefined || recoveryStep !== undefined}
-        title={
-          recoveryStep === undefined
-            ? t("setupAuthenticator")
-            : t("recoveryCodes")
-        }
-        description={
-          recoveryStep === undefined
-            ? t("scanAuthenticator")
-            : t("recoveryCodesWhy")
-        }
-        onClose={() => {
-          // Once MFA is active, closing this dialog before recovery codes are
-          // saved would recreate the lockout this flow exists to prevent.
-          if (recoveryStep !== undefined) return;
-          setEnrollment(undefined);
-          setTotpCode("");
-        }}
-      >
-        {recoveryStep === "awaiting-code" ? (
-          <form
-            className="grid gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleGenerateRecoveryCodes();
-            }}
-          >
-            <p className="text-sm text-muted">{t("recoveryCodesWhy")}</p>
-            <Field label={t("verificationCode")}>
-              <Input
-                name="recoveryTotpCode"
-                autoComplete="one-time-code"
-                inputMode="numeric"
-                maxLength={6}
-                onChange={(event) =>
-                  setRecoveryTotpCode(
-                    event.currentTarget.value.replace(/\D/gu, ""),
-                  )
-                }
-                placeholder="000000"
-                value={recoveryTotpCode}
-              />
-            </Field>
-            <Button
-              variant="primary"
-              disabled={
-                !/^\d{6}$/u.test(recoveryTotpCode) || recoveryMutation.isPending
-              }
-              pending={recoveryMutation.isPending}
-              type="submit"
-            >
-              {t("recoveryCodesGenerate")}
-            </Button>
-          </form>
-        ) : recoveryStep === "showing-codes" ? (
-          <div className="grid gap-3">
-            <div className="rm-composer-error" role="status">
-              {t("recoveryCodesShownOnce")}
-            </div>
-            <ul className="grid gap-1 rounded-md border border-border p-3">
-              {recoveryCodes.map((code) => (
-                <li className="font-mono text-sm" key={code}>
-                  {code}
-                </li>
-              ))}
-            </ul>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={() => void handleCopyRecoveryCodes()}
-                type="button"
-              >
-                {t("recoveryCodesCopyAll")}
-              </Button>
-              {recoveryDownloadUrl !== undefined ? (
-                <LinkButton
-                  download="romeo-recovery-codes.txt"
-                  href={recoveryDownloadUrl}
-                >
-                  {t("recoveryCodesDownload")}
-                </LinkButton>
-              ) : null}
-            </div>
-            <Button
-              variant="primary"
-              onClick={handleRecoveryCodesSaved}
-              type="button"
-            >
-              {t("recoveryCodesSaved")}
-            </Button>
-          </div>
-        ) : enrollment !== undefined ? (
-          <div className="grid gap-3">
-            <div className="grid gap-1 text-sm">
-              <span className="text-muted">{t("setupKey")}</span>
-              <code className="break-all font-mono text-sm">
-                {enrollment.secret}
-              </code>
-              <span className="text-xs text-muted">{t("manualSetupKey")}</span>
-            </div>
-            <details className="text-xs text-muted">
-              <summary className="cursor-pointer">{t("otpUri")}</summary>
-              <code className="mt-1 block break-all font-mono">
-                {enrollment.otpauthUri}
-              </code>
-            </details>
-            <label className="grid gap-1 text-sm">
-              <span className="text-muted">{t("sixDigitCode")}</span>
-              <Input
-                autoComplete="one-time-code"
-                inputMode="numeric"
-                maxLength={6}
-                onChange={(event) =>
-                  setTotpCode(event.currentTarget.value.replace(/\D/gu, ""))
-                }
-                placeholder="000000"
-                value={totpCode}
-              />
-            </label>
-            <Button
-              variant="primary"
-              disabled={!/^\d{6}$/u.test(totpCode) || confirmMutation.isPending}
-              onClick={() => void handleConfirmEnrollment()}
-              type="button"
-            >
-              {confirmMutation.isPending ? t("verifying") : t("verifyEnable")}
-            </Button>
-          </div>
-        ) : null}
-      </FormDialog>
-
-      <FormDialog
-        open={disableFactorId !== undefined}
-        title={t("removeAuthenticatorTitle")}
-        description={t("removeAuthenticatorBody")}
-        onClose={() => {
+      <AccountMfaDialogs
+        disableCode={disableCode}
+        disableFactorId={disableFactorId}
+        enrollment={enrollment}
+        isConfirming={confirmMutation.isPending}
+        isDisabling={disableMutation.isPending}
+        isGeneratingRecoveryCodes={recoveryMutation.isPending}
+        onCloseDisable={() => {
           if (disableMutation.isPending) return;
           setDisableFactorId(undefined);
           setDisableCode("");
         }}
-      >
-        <form
-          className="grid gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void handleDisableFactor();
-          }}
-        >
-          <Field
-            description={t("removeAuthenticatorCodeRequired")}
-            label={t("verificationCode")}
-          >
-            <Input
-              name="disableAuthenticatorCode"
-              autoComplete="one-time-code"
-              inputMode="numeric"
-              maxLength={6}
-              onChange={(event) =>
-                setDisableCode(event.currentTarget.value.replace(/\D/gu, ""))
-              }
-              placeholder="000000"
-              value={disableCode}
-            />
-          </Field>
-          <Button
-            variant="danger"
-            disabled={
-              !/^\d{6}$/u.test(disableCode) || disableMutation.isPending
-            }
-            pending={disableMutation.isPending}
-            type="submit"
-          >
-            {t("remove")}
-          </Button>
-        </form>
-      </FormDialog>
+        onCloseEnrollment={() => {
+          // Once MFA is active, closing before recovery codes are saved would
+          // recreate the lockout this flow exists to prevent.
+          if (recoveryStep !== undefined) return;
+          setEnrollment(undefined);
+          setTotpCode("");
+        }}
+        onConfirmEnrollment={handleConfirmEnrollment}
+        onCopyRecoveryCodes={handleCopyRecoveryCodes}
+        onDisableCodeChange={setDisableCode}
+        onDisableFactor={handleDisableFactor}
+        onGenerateRecoveryCodes={handleGenerateRecoveryCodes}
+        onRecoveryCodesSaved={handleRecoveryCodesSaved}
+        onRecoveryTotpCodeChange={setRecoveryTotpCode}
+        onTotpCodeChange={setTotpCode}
+        recoveryCodes={recoveryCodes}
+        recoveryDownloadUrl={recoveryDownloadUrl}
+        recoveryStep={recoveryStep}
+        recoveryTotpCode={recoveryTotpCode}
+        totpCode={totpCode}
+      />
     </section>
   );
 }

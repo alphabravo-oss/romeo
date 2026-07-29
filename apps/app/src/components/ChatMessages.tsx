@@ -1,4 +1,4 @@
-import { Input, Textarea, Button } from "@romeo/ui";
+import { Textarea, Button } from "@romeo/ui";
 import BotMessageSquare from "lucide-react/dist/esm/icons/bot-message-square.mjs";
 import Check from "lucide-react/dist/esm/icons/check.mjs";
 import Copy from "lucide-react/dist/esm/icons/copy.mjs";
@@ -28,6 +28,12 @@ import {
   RunActivityList,
 } from "./ChatMessageMetadata";
 import { FormDialog } from "./FormDialog";
+import {
+  Action,
+  MessageActions,
+  MessageAttachments,
+  previewUrlForAttachment,
+} from "./ChatMessageActions";
 
 export const ChatMessages = memo(function ChatMessages({
   activeVoiceProfileId,
@@ -387,131 +393,3 @@ export const ChatMessages = memo(function ChatMessages({
     </>
   );
 });
-
-function previewUrlForAttachment(
-  attachment: MessageAttachment,
-): string | undefined {
-  if (attachment.previewUrl === undefined) return undefined;
-  if (isOfficeMimeType(attachment.mimeType))
-    return `${attachment.previewUrl}/preview`;
-  return canInlinePreview(attachment.mimeType)
-    ? attachment.previewUrl
-    : undefined;
-}
-
-function canInlinePreview(mimeType: string): boolean {
-  return (
-    mimeType.startsWith("image/") ||
-    mimeType === "application/pdf" ||
-    mimeType.startsWith("text/") ||
-    mimeType === "application/json"
-  );
-}
-
-function isOfficeMimeType(mimeType: string): boolean {
-  return (
-    mimeType ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-    mimeType ===
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
-    mimeType ===
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  );
-}
-
-function MessageAttachments({
-  isStreaming,
-  message,
-  onRetentionChange,
-  onPreview,
-}: {
-  isStreaming: boolean;
-  message: Message;
-  onRetentionChange: (
-    messageId: string,
-    attachmentId: string,
-    retainedInContext: boolean,
-  ) => void;
-  onPreview: (attachment: MessageAttachment) => void;
-}) {
-  const { t } = useLocale();
-  if (!message.attachments?.length) return null;
-  return (
-    <div className="rm-message-attachments">
-      {message.attachments.map((attachment) => (
-        <div className="rm-attachment-with-retention" key={attachment.id}>
-          <Button
-            className="rm-attachment-tile"
-            disabled={attachment.previewUrl === undefined}
-            onClick={() => onPreview(attachment)}
-            type="button"
-          >
-            {attachment.previewUrl && attachment.kind === "image" ? (
-              <img
-                alt={attachment.fileName}
-                height={48}
-                loading="lazy"
-                src={attachment.previewUrl}
-                width={48}
-              />
-            ) : null}
-            <div className="truncate">{attachment.fileName}</div>
-          </Button>
-          <label
-            title={isStreaming ? t("waitForResponse") : t("keepContextTitle")}
-          >
-            <Input
-              checked={attachment.retainedInContext}
-              disabled={isStreaming}
-              onChange={(event) =>
-                onRetentionChange(
-                  message.id,
-                  attachment.id,
-                  event.currentTarget.checked,
-                )
-              }
-              type="checkbox"
-            />
-            {t("keepContext")}
-          </label>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MessageActions({ children }: { children: React.ReactNode }) {
-  return <div className="rm-message-actions">{children}</div>;
-}
-
-function Action({
-  active = false,
-  children,
-  disabled = false,
-  label,
-  onClick,
-  pressed,
-  title,
-}: {
-  active?: boolean;
-  children: React.ReactNode;
-  disabled?: boolean;
-  label: string;
-  onClick: () => void;
-  pressed?: boolean;
-  title?: string;
-}) {
-  return (
-    <Button
-      aria-label={label}
-      aria-pressed={pressed || undefined}
-      className={`rm-message-tool ${active ? "active" : ""}`}
-      disabled={disabled}
-      onClick={onClick}
-      title={title ?? label}
-      type="button"
-    >
-      {children}
-    </Button>
-  );
-}

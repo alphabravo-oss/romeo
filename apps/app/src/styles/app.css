@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "@romeo/ui/styles.css";
 @import "./app-foundation.css";
+@import "./app-sidebar-controls.css";
 @import "./app-navigation.css";
 @import "./app-conversation.css";
 @import "./app-content.css";

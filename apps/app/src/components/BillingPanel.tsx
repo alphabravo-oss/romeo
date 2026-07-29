@@ -15,9 +15,14 @@ import type {
   ExternalBillingEventType,
 } from "../features/billing";
 import { toast } from "../lib/toast";
-import { useLocale, type MessageKey } from "../lib/i18n";
+import { useLocale } from "../lib/i18n";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { EntitlementsTab, LifecycleTab } from "./BillingGovernanceTabs";
+import {
+  billingEventTypeKey,
+  billingMetricKey,
+  billingPlanStatusKey,
+} from "./billing-display";
 import {
   buildApplyPayload,
   buildPlanDefaults,
@@ -106,7 +111,8 @@ export function BillingPanel() {
         {plan ? (
           <span>
             {t("currentPlan")}: <span className="font-medium">{plan.name}</span>{" "}
-            ({plan.code}) — {t(planStatusKey(plan.status))} / {plan.source}
+            ({plan.code}) — {t(billingPlanStatusKey(plan.status))} /{" "}
+            {plan.source}
           </span>
         ) : (
           <span>{t("noBillingPlan")}</span>
@@ -401,7 +407,7 @@ function BillingPlanEditor({
               >
                 {planStatuses.map((option) => (
                   <option key={option} value={option}>
-                    {t(planStatusKey(option))}
+                    {t(billingPlanStatusKey(option))}
                   </option>
                 ))}
               </NativeSelect>
@@ -465,53 +471,4 @@ function BillingPlanEditor({
       {dialog}
     </>
   );
-}
-
-function planStatusKey(status: BillingPlanStatus): MessageKey {
-  switch (status) {
-    case "active":
-      return "billingStatusActive";
-    case "canceled":
-      return "billingStatusCanceled";
-    case "past_due":
-      return "billingStatusPastDue";
-    case "trialing":
-      return "billingStatusTrialing";
-  }
-}
-
-function billingMetricKey(metric: BillingQuotaMetric): MessageKey {
-  switch (metric) {
-    case "image.cost.micro_usd":
-      return "quotaMetricImageCost";
-    case "image.generated":
-      return "quotaMetricImagesGenerated";
-    case "run.started":
-      return "quotaMetricRunsStarted";
-    case "storage.byte":
-      return "quotaMetricStorageBytes";
-    case "tool.call":
-      return "quotaMetricToolCalls";
-    case "web.search.request":
-      return "quotaMetricWebSearches";
-    case "web.url.fetch":
-      return "quotaMetricWebFetches";
-  }
-}
-
-function billingEventTypeKey(type: ExternalBillingEventType): MessageKey {
-  switch (type) {
-    case "customer.updated":
-      return "billingEventCustomerUpdated";
-    case "invoice.paid":
-      return "billingEventInvoicePaid";
-    case "invoice.payment_failed":
-      return "billingEventInvoicePaymentFailed";
-    case "subscription.canceled":
-      return "billingEventSubscriptionCanceled";
-    case "subscription.created":
-      return "billingEventSubscriptionCreated";
-    case "subscription.updated":
-      return "billingEventSubscriptionUpdated";
-  }
 }

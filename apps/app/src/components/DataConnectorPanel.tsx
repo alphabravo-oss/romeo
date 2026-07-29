@@ -8,9 +8,7 @@ import {
   createDataConnector,
   getDataConnectorCatalog,
   listDataConnectors,
-  listDataConnectorSyncs,
   listKnowledgeBases,
-  syncLocalDataConnector,
 } from "../features";
 import type { DataConnector, DataConnectorType } from "../features/types";
 import { useLocale } from "../lib/i18n";
@@ -18,14 +16,13 @@ import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
-import { DataConnectorSyncHistory } from "./DataConnectorSyncHistory";
 import { resolveKnowledgeBaseBinding } from "./data-connector-binding";
 import {
   buildDataConnectorConfig,
   connectorConfigHint,
   DataConnectorCatalog,
-  mimeTypeFor,
 } from "./DataConnectorCatalog";
+import { DataConnectorImportsTab } from "./DataConnectorImportsTab";
 import { FormDialog } from "./FormDialog";
 import { PanelStats } from "./PanelStats";
 
@@ -72,13 +69,7 @@ export function DataConnectorPanel({
   const activeConnector =
     connectors.find((connector) => connector.id === activeConnectorId) ??
     connectors[0];
-  const syncsQuery = useQuery({
-    queryKey: ["dataConnectorSyncs", activeConnector?.id],
-    queryFn: () => listDataConnectorSyncs(activeConnector!.id),
-    enabled: activeConnector !== undefined,
-  });
   const createMutation = useMutation({ mutationFn: createDataConnector });
-  const syncMutation = useMutation({ mutationFn: syncLocalDataConnector });
   const activeConfigHint = useMemo(
     () => connectorConfigHint(addType, t),
     [addType, t],
@@ -130,39 +121,6 @@ export function DataConnectorPanel({
         setAddOpen(false);
       } catch (caught) {
         toast(t("connectorCreateFailed"), "error");
-        throw caught;
-      }
-    },
-  });
-
-  const syncForm = useForm({
-    defaultValues: {
-      fileName: "",
-      content: "",
-    },
-    onSubmit: async ({ value }) => {
-      if (!activeConnector) return;
-      try {
-        await syncMutation.mutateAsync({
-          connectorId: activeConnector.id,
-          fileName: value.fileName,
-          mimeType: mimeTypeFor(value.fileName),
-          content: value.content,
-        });
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ["dataConnectorSyncs", activeConnector.id],
-          }),
-          queryClient.invalidateQueries({
-            queryKey: ["knowledgeSources", activeConnector.knowledgeBaseId],
-          }),
-          queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
-          queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-          queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-        ]);
-        toast(t("connectorSynced"), "success");
-      } catch (caught) {
-        toast(t("connectorSyncFailed"), "error");
         throw caught;
       }
     },
@@ -265,111 +223,6 @@ export function DataConnectorPanel({
           </div>
         )}
       </PanelState>
-    </div>
-  );
-
-  const importsTab = (
-    <div className="grid gap-4">
-      <div>
-        <div className="rm-card-title">{t("connectorImportsTitle")}</div>
-        <p className="text-sm text-muted">
-          {activeConnector
-            ? `${t("connectorImportingTo")} ${activeConnector.name}`
-            : t("connectorImportNeedsSource")}
-        </p>
-      </div>
-      <form
-        className="grid gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void syncForm.handleSubmit();
-        }}
-      >
-        <label className="text-sm text-muted" htmlFor="connector-file-name">
-          {t("connectorSourceFile")}
-        </label>
-        <syncForm.Field
-          name="fileName"
-          validators={{
-            onChange: ({ value }: { value: string }) =>
-              !value?.trim() ? t("connectorSourceFileRequired") : undefined,
-          }}
-        >
-          {(field) => (
-            <>
-              <Input
-                name="fileName"
-                id="connector-file-name"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                placeholder={t("connectorSourceFilePlaceholder")}
-                value={field.state.value}
-              />
-              {field.state.meta.errors.length ? (
-                <div className="rm-composer-error">
-                  {field.state.meta.errors.join(", ")}
-                </div>
-              ) : null}
-            </>
-          )}
-        </syncForm.Field>
-        <label
-          className="text-sm text-muted"
-          htmlFor="connector-source-content"
-        >
-          {t("connectorSourceText")}
-        </label>
-        <syncForm.Field
-          name="content"
-          validators={{
-            onChange: ({ value }: { value: string }) =>
-              !value?.trim() ? t("connectorSourceTextRequired") : undefined,
-          }}
-        >
-          {(field) => (
-            <>
-              <Textarea
-                name="content"
-                className="min-h-24"
-                id="connector-source-content"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                placeholder={t("connectorSourceTextPlaceholder")}
-                value={field.state.value}
-              />
-              {field.state.meta.errors.length ? (
-                <div className="rm-composer-error">
-                  {field.state.meta.errors.join(", ")}
-                </div>
-              ) : null}
-            </>
-          )}
-        </syncForm.Field>
-        <syncForm.Subscribe
-          selector={(state) => ({
-            canSubmit: state.canSubmit,
-            isSubmitting: state.isSubmitting,
-          })}
-        >
-          {({ canSubmit, isSubmitting }) => (
-            <Button
-              disabled={!canSubmit || isSubmitting || !activeConnector}
-              type="submit"
-            >
-              {isSubmitting
-                ? t("connectorSyncing")
-                : t("connectorSyncLocalText")}
-            </Button>
-          )}
-        </syncForm.Subscribe>
-      </form>
-
-      <DataConnectorSyncHistory syncs={syncsQuery.data ?? []} />
     </div>
   );
 
@@ -534,11 +387,13 @@ export function DataConnectorPanel({
           query={knowledgeBasesQuery}
         >
           {() =>
-            view === "sources"
-              ? sourcesTab
-              : view === "imports"
-                ? importsTab
-                : catalogTab
+            view === "sources" ? (
+              sourcesTab
+            ) : view === "imports" ? (
+              <DataConnectorImportsTab connector={activeConnector} />
+            ) : (
+              catalogTab
+            )
           }
         </PanelState>
       </div>

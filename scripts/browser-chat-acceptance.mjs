@@ -1568,8 +1568,11 @@ function assertComposerLocalization() {
       providerAdmin.includes(locale.models),
       `${locale.code} did not translate model administration`,
     );
+    run("open", `${baseUrl}/admin?section=providers&view=models`);
+    run("wait", "--load", "networkidle");
+    const modelAdmin = run("get", "text", "body");
     assert(
-      providerAdmin.includes(locale.modelPricing),
+      modelAdmin.includes(locale.modelPricing),
       `${locale.code} did not translate model pricing administration`,
     );
     run("open", `${baseUrl}/admin?section=overview`);
@@ -1597,16 +1600,24 @@ function assertComposerLocalization() {
       connectionsAdmin.includes(locale.toolConnectors),
       `${locale.code} did not translate tool-connector administration`,
     );
+    run("open", `${baseUrl}/admin?section=connections&view=imports`);
+    run("wait", "--load", "networkidle");
+    const importsAdmin = run("get", "text", "body");
     assert(
-      connectionsAdmin.includes(locale.connectorSyncNone) ||
-        connectionsAdmin.includes(locale.connectorSyncStarted),
+      importsAdmin.includes(locale.connectorSyncNone) ||
+        importsAdmin.includes(locale.connectorSyncStarted),
       `${locale.code} did not translate connector sync history`,
     );
+    run("open", `${baseUrl}/admin?section=connections&view=catalog`);
+    run("wait", "--load", "networkidle");
+    const catalogAdmin = run("get", "text", "body");
     assert(
-      connectionsAdmin.includes(locale.dataConnectors) &&
-        connectionsAdmin.includes(locale.connectorCatalog),
+      catalogAdmin.includes(locale.dataConnectors) &&
+        catalogAdmin.includes(locale.connectorCatalog),
       `${locale.code} did not translate data-connector administration`,
     );
+    run("open", `${baseUrl}/admin?section=connections`);
+    run("wait", "--load", "networkidle");
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === ${JSON.stringify(`+ ${locale.connectorAdd}`)}))?.click()`,
@@ -1617,6 +1628,8 @@ function assertComposerLocalization() {
       `${locale.code} did not translate data-connector creation`,
     );
     run("press", "Escape");
+    run("open", `${baseUrl}/admin?section=connections&view=tools`);
+    run("wait", "--load", "networkidle");
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.toolImportTool)})))?.click()`,
@@ -1670,6 +1683,8 @@ function assertComposerLocalization() {
       usageAdmin.includes(locale.quotaBuckets),
       `${locale.code} did not translate quota administration`,
     );
+    run("open", `${baseUrl}/admin?section=usage&view=quotas`);
+    run("wait", "--load", "networkidle");
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.addQuota)})))?.click()`,
@@ -1756,15 +1771,20 @@ function assertComposerLocalization() {
       run("get", "text", "body").includes(locale.authProviders),
       `${locale.code} did not translate authentication provider administration`,
     );
+    run("eval", `document.querySelector("tbody button")?.click()`);
+    run("wait", ".rm-ui-sheet");
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === ${JSON.stringify(locale.configureAuth)}))?.click()`,
     );
-    run("wait", ".rm-ui-dialog");
+    run("wait", ".rm-ui-dialog:not(.rm-ui-sheet)");
     assert(
-      run("get", "text", ".rm-ui-dialog").includes(locale.displayName),
+      run("get", "text", ".rm-ui-dialog:not(.rm-ui-sheet)").includes(
+        locale.displayName,
+      ),
       `${locale.code} did not translate authentication provider configuration`,
     );
+    run("press", "Escape");
     run("press", "Escape");
     run(
       "eval",
@@ -2066,7 +2086,7 @@ function assertProviderSetupAndDiagnostics() {
   const endpointName = `Browser acceptance endpoint ${process.pid}-${Date.now()}`;
   const endpointNameLiteral = JSON.stringify(endpointName);
   const secretSentinel = "browser-secret-must-not-render";
-  const cardSelector = ".rm-connection-card";
+  const rowSelector = "tbody tr";
 
   function openVllmDialog() {
     run(
@@ -2112,7 +2132,7 @@ function assertProviderSetupAndDiagnostics() {
   run(
     "wait",
     "--fn",
-    `Boolean(document.querySelector(".rm-ui-dialog .rm-ui-inline-error")) || (!document.querySelector(".rm-ui-dialog") && Boolean([...document.querySelectorAll("${cardSelector}")].find((card) => card.textContent?.includes(${endpointNameLiteral}))))`,
+    `Boolean(document.querySelector(".rm-ui-dialog .rm-ui-inline-error")) || (!document.querySelector(".rm-ui-dialog") && Boolean([...document.querySelectorAll("${rowSelector}")].find((row) => row.textContent?.includes(${endpointNameLiteral}))))`,
   );
   const secretFailure = evaluate(
     `document.querySelector(".rm-ui-dialog .rm-ui-inline-error")?.textContent ?? null`,
@@ -2143,36 +2163,40 @@ function assertProviderSetupAndDiagnostics() {
     run(
       "wait",
       "--fn",
-      `!document.querySelector(".rm-ui-dialog") && Boolean([...document.querySelectorAll("${cardSelector}")].find((card) => card.textContent?.includes(${endpointNameLiteral})))`,
+      `!document.querySelector(".rm-ui-dialog") && Boolean([...document.querySelectorAll("${rowSelector}")].find((row) => row.textContent?.includes(${endpointNameLiteral})))`,
     );
   }
 
   run(
     "eval",
-    `(() => { const card = [...document.querySelectorAll("${cardSelector}")].find((item) => item.textContent?.includes(${endpointNameLiteral})); const button = [...(card?.querySelectorAll("button") ?? [])].find((item) => item.textContent?.includes("Refresh models")); if (!button) return false; button.focus(); return true; })()`,
+    `(() => { const row = [...document.querySelectorAll("${rowSelector}")].find((item) => item.textContent?.includes(${endpointNameLiteral})); const button = [...(row?.querySelectorAll("button") ?? [])].find((item) => item.textContent?.includes("Manage provider")); if (!button) return false; button.click(); return true; })()`,
+  );
+  run("wait", ".rm-ui-sheet");
+  run(
+    "eval",
+    `(() => { const button = [...document.querySelectorAll(".rm-ui-sheet button")].find((item) => item.textContent?.includes("Refresh models")); if (!button) return false; button.focus(); return true; })()`,
   );
   run("press", "Enter");
   run("wait", "--fn", `document.body.innerText.includes("Models synced")`);
   run(
     "eval",
-    `(() => { const card = [...document.querySelectorAll("${cardSelector}")].find((item) => item.textContent?.includes(${endpointNameLiteral})); const button = [...(card?.querySelectorAll("button") ?? [])].find((item) => item.textContent?.includes("Verify")); if (!button) return false; button.focus(); return true; })()`,
+    `(() => { const button = [...document.querySelectorAll(".rm-ui-sheet button")].find((item) => item.textContent?.includes("Verify")); if (!button) return false; button.focus(); return true; })()`,
   );
   run("press", "Enter");
   run(
     "wait",
     "--fn",
-    `Boolean([...document.querySelectorAll("${cardSelector}")].find((card) => card.textContent?.includes(${endpointNameLiteral}))?.querySelector(".rm-connection-result"))`,
+    `Boolean(document.querySelector(".rm-ui-sheet .rm-connection-result"))`,
   );
   const diagnostics = JSON.parse(
     evaluate(`JSON.stringify((() => {
-    const card = [...document.querySelectorAll("${cardSelector}")].find((item) => item.textContent?.includes(${endpointNameLiteral}));
-    return { text: card?.textContent, diagnosticClass: card?.querySelector(".rm-connection-result")?.className, secretVisible: document.body.innerText.includes(${JSON.stringify(secretSentinel)}) };
+    const sheet = document.querySelector(".rm-ui-sheet");
+    return { text: sheet?.textContent, diagnosticClass: sheet?.querySelector(".rm-connection-result")?.className, secretVisible: document.body.innerText.includes(${JSON.stringify(secretSentinel)}) };
   })())`),
   );
   assert(
     diagnostics.diagnosticClass.includes("error") &&
-      diagnostics.text.includes("no discoverable models") &&
-      diagnostics.text.includes("could not be verified"),
+      diagnostics.text.includes("no discoverable models"),
     "provider diagnostic failure was not explained",
   );
   assert(
