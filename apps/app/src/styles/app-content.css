@@ -1119,6 +1119,34 @@ select:focus-visible {
   border-top: 1px solid var(--rm-ui-border);
 }
 
+/* Contextual save bar: present only while the form is dirty, so a settings
+   page has no permanently-parked Save competing with the page's real work. */
+.rm-save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-start: 1.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--rm-ui-border);
+  border-radius: var(--rm-ui-radius);
+  background: var(--rm-ui-soft);
+  box-shadow: var(--rm-ui-shadow);
+}
+
+.rm-save-bar__label {
+  color: var(--rm-ui-muted);
+  font-size: 0.875rem;
+}
+
+.rm-save-bar__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .rm-provider-card__name {
   font-weight: 600;
   overflow: hidden;
