@@ -16,6 +16,7 @@ import {
   useLocaleNamespaces,
 } from "../lib/i18n";
 import { resolveSectionKey } from "../lib/section-routing";
+import adminCss from "../styles/admin.css?url";
 
 function lazyNamed<
   T extends Record<K, React.ComponentType<any>>,
@@ -152,6 +153,9 @@ interface AdminSearch {
 }
 
 export const Route = createFileRoute("/admin")({
+  head: () => ({
+    links: [{ rel: "stylesheet", href: adminCss }],
+  }),
   validateSearch: (search: Record<string, unknown>): AdminSearch => ({
     ...(typeof search.section === "string" ? { section: search.section } : {}),
     ...(typeof search.view === "string" ? { view: search.view } : {}),
