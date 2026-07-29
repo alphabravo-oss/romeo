@@ -69,7 +69,7 @@ verified by eye, not by the audit.
 | abuse           | `Organization suspended` is a plain checkbox                               | A checkbox is not a danger button, so `unguarded-destructive` cannot see it                                                                                                                       | Task 5.1                                |
 | usage, audit    | No date-range control                                                      | Absence of a control cannot be asserted generically                                                                                                                                               | Task 8.3                                |
 | rag             | 6 stat tiles echo the form fields beneath them                             | Judgment call                                                                                                                                                                                     | Out of scope — needs a product decision |
-| posture         | `Ga checklist path not configured`                                         | Casing, not an identifier                                                                                                                                                                         | Task 7.2                                |
+| posture         | ✅ `GA checklist path not configured`                                      | Casing, not an identifier                                                                                                                                                                         | Task 7.2                                |
 
 ## How to update this file
 

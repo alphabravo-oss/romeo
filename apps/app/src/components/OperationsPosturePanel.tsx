@@ -19,6 +19,7 @@ import { type MessageKey, useLocale } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PanelStats } from "./PanelStats";
+import { humanizeWarningCode } from "./posture-warning-text";
 import { Tabs } from "./Tabs";
 import {
   humanizeOperationalCode,
@@ -161,7 +162,7 @@ function GaEvidenceSection(): React.ReactNode {
                 <ul className="grid gap-1">
                   {report.warnings.map((warning) => (
                     <li className="text-sm" key={warning}>
-                      {humanizeOperationalCode(warning)}
+                      {humanizeWarningCode(warning)}
                     </li>
                   ))}
                 </ul>
@@ -196,7 +197,7 @@ function pgWarnColumns(t: Translate): ColumnDef<PostgresWarningRow, any>[] {
   return [
     pgWarnCol.accessor("code", {
       header: t("opWarning"),
-      cell: (c) => <span>{humanizeOperationalCode(c.getValue())}</span>,
+      cell: (c) => <span>{humanizeWarningCode(c.getValue())}</span>,
     }),
   ];
 }
