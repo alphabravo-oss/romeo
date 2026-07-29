@@ -2,6 +2,7 @@ import { Button, Field, Input, Select, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import Plug from "lucide-react/dist/esm/icons/plug.mjs";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -203,7 +204,21 @@ export function DataConnectorPanel({
         </Button>
       </div>
 
-      <PanelState empty={t("connectorNone")} query={connectorsQuery}>
+      <PanelState
+        empty={t("connectorNone")}
+        emptyAction={
+          <Button
+            onClick={() => openAdd("local_import")}
+            type="button"
+            variant="primary"
+          >
+            + {t("connectorAdd")}
+          </Button>
+        }
+        emptyDescription={t("connectorNoneDescription")}
+        emptyIcon={<Plug aria-hidden size={24} />}
+        query={connectorsQuery}
+      >
         {(rows) => (
           <div className="grid gap-4">
             <PanelStats
@@ -227,7 +242,12 @@ export function DataConnectorPanel({
   );
 
   const catalogTab = (
-    <PanelState query={catalogQuery} empty={t("connectorCatalogEmpty")}>
+    <PanelState
+      empty={t("connectorCatalogEmpty")}
+      emptyDescription={t("connectorCatalogEmptyDescription")}
+      emptyIcon={<Plug aria-hidden size={24} />}
+      query={catalogQuery}
+    >
       {(report) => (
         <DataConnectorCatalog
           canCreate={workspaceId !== undefined}
@@ -384,6 +404,8 @@ export function DataConnectorPanel({
               </Link>
             </Button>
           }
+          emptyDescription={t("dataConnectorNeedsKbDescription")}
+          emptyIcon={<Plug aria-hidden size={24} />}
           query={knowledgeBasesQuery}
         >
           {() =>

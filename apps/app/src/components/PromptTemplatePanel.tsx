@@ -1,6 +1,7 @@
 import { Button, Field, Input, NativeSelect, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
 import { useMemo, useState } from "react";
 
 import {
@@ -355,6 +356,8 @@ export function PromptTemplatePanel() {
               + {t("promptAddTemplate")}
             </Button>
           }
+          emptyDescription={t("promptNoTemplatesDescription")}
+          emptyIcon={<FileText aria-hidden size={24} />}
         >
           {(rows) => (
             <div className="grid gap-4">
@@ -379,6 +382,8 @@ export function PromptTemplatePanel() {
         <PanelState
           query={marketplaceQuery}
           empty={t("promptNoMarketplaceTemplates")}
+          emptyDescription={t("promptNoMarketplaceTemplatesDescription")}
+          emptyIcon={<FileText aria-hidden size={24} />}
         >
           {(rows) => <DataTable columns={marketplaceColumns} data={rows} />}
         </PanelState>

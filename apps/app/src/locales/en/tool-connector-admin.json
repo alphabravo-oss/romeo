@@ -30,6 +30,7 @@
   "toolNetworkDenyAll": "deny all",
   "toolNoAuthRef": "no auth ref",
   "toolNoConnectors": "No connectors imported.",
+  "toolNoConnectorsDescription": "Import an OpenAPI definition to make its operations available as governed tools.",
   "toolOpenApiJson": "OpenAPI JSON",
   "toolOpenApiJsonRequired": "OpenAPI JSON is required",
   "toolOperations": "Operations",

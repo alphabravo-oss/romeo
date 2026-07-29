@@ -2,6 +2,7 @@ import { Button, Input, Sheet, StatusBadge, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Power from "lucide-react/dist/esm/icons/power.mjs";
+import Plug from "lucide-react/dist/esm/icons/plug.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import Upload from "lucide-react/dist/esm/icons/upload.mjs";
 import { useMemo, useState } from "react";
@@ -289,6 +290,8 @@ export function ToolConnectorPanel() {
               + {t("toolImportTool")}
             </Button>
           }
+          emptyDescription={t("toolNoConnectorsDescription")}
+          emptyIcon={<Plug aria-hidden size={24} />}
           query={connectorsQuery}
         >
           {(connectors) => (

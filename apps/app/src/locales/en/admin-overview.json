@@ -23,6 +23,7 @@
   "readinessStatusFail": "fail",
   "jobsTitle": "Jobs",
   "jobsNone": "No background jobs yet.",
+  "jobsNoneDescription": "Background jobs appear here when Romeo processes queued administrative work.",
   "jobsTotal": "Total jobs",
   "jobsRunning": "Running",
   "jobsFailed": "Failed",

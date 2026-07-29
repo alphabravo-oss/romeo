@@ -57,6 +57,7 @@
   "noPlanQuotasReconcile": "No plan quotas to reconcile.",
   "noReset": "No reset",
   "noQuotasYet": "No quotas yet.",
+  "noQuotasYetDescription": "Quotas cap consumption for members, workspaces, providers, or assistants.",
   "none": "none",
   "plan": "Plan",
   "planCode": "Plan code",

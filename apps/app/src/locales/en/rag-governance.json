@@ -56,6 +56,7 @@
   "knowledgeBases": "Knowledge bases",
   "namespacePolicy": "Namespace policy",
   "noChangeRequest": "No change request on record.",
+  "noChangeRequestDescription": "Governance change requests appear here when an admin proposes a policy update.",
   "noPostureReport": "No posture report loaded.",
   "noRagPolicy": "No RAG policy loaded.",
   "nominal": "nominal",

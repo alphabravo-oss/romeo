@@ -6,6 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import Webhook from "lucide-react/dist/esm/icons/webhook.mjs";
 import { useMemo, useState } from "react";
 
 import {
@@ -406,6 +407,8 @@ export function WebhooksPanel() {
               + {t("webhooksAdd")}
             </Button>
           }
+          emptyDescription={t("webhooksNoneDescription")}
+          emptyIcon={<Webhook aria-hidden size={24} />}
           query={webhooksQuery}
         >
           {(rows) => (
@@ -448,6 +451,8 @@ export function WebhooksPanel() {
       >
         <PanelState
           empty={t("webhooksNoDeliveries")}
+          emptyDescription={t("webhooksNoDeliveriesDescription")}
+          emptyIcon={<Webhook aria-hidden size={24} />}
           isEmpty={(page) =>
             page.data.length === 0 && deliveryCursors.length === 1
           }

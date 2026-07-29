@@ -1,5 +1,6 @@
 import { Button, StatusBadge } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link2 from "lucide-react/dist/esm/icons/link-2.mjs";
 import { useMemo } from "react";
 
 import {
@@ -213,7 +214,12 @@ export function ConnectedAppsPanel() {
       <div className="mt-3">
         <div className="text-sm text-muted">{t("connectedAppsPosture")}</div>
         <div className="mt-2">
-          <PanelState query={postureQuery} empty={t("connectedAppsNoPosture")}>
+          <PanelState
+            empty={t("connectedAppsNoPosture")}
+            emptyDescription={t("connectedAppsNoPostureDescription")}
+            emptyIcon={<Link2 aria-hidden size={24} />}
+            query={postureQuery}
+          >
             {(posture) => {
               const totals = posture.providers.reduce(
                 (acc, provider) => ({
@@ -292,6 +298,8 @@ export function ConnectedAppsPanel() {
           <PanelState
             query={providersQuery}
             empty={t("connectedAppsNoProviders")}
+            emptyDescription={t("connectedAppsNoProvidersDescription")}
+            emptyIcon={<Link2 aria-hidden size={24} />}
           >
             {(providers) => (
               <DataTable
@@ -313,6 +321,8 @@ export function ConnectedAppsPanel() {
           <PanelState
             query={connectionsQuery}
             empty={t("connectedAppsNoConnections")}
+            emptyDescription={t("connectedAppsNoConnectionsDescription")}
+            emptyIcon={<Link2 aria-hidden size={24} />}
           >
             {(rows) => <DataTable columns={columns} data={rows} />}
           </PanelState>

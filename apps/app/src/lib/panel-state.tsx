@@ -23,6 +23,10 @@ export function PanelState<T>(props: {
   empty?: string;
   /** Optional CTA (e.g. a "+ Add X" button) shown under the empty message. */
   emptyAction?: React.ReactNode;
+  /** One-sentence explanation of what this list holds and how to fill it. */
+  emptyDescription?: string;
+  /** Section icon, matching the admin navigation icon. */
+  emptyIcon?: React.ReactNode;
   isEmpty?: (data: T) => boolean;
   children: (data: T) => React.ReactNode;
 }): React.ReactNode {
@@ -31,6 +35,8 @@ export function PanelState<T>(props: {
     query,
     empty = t("nothingHereYet"),
     emptyAction,
+    emptyDescription,
+    emptyIcon,
     isEmpty,
     children,
   } = props;
@@ -67,13 +73,18 @@ export function PanelState<T>(props: {
   }
 
   const data = query.data;
+  const emptyState = (
+    <EmptyState action={emptyAction} icon={emptyIcon} title={empty}>
+      {emptyDescription}
+    </EmptyState>
+  );
   if (data === undefined) {
-    return <EmptyState action={emptyAction} title={empty} />;
+    return emptyState;
   }
   const emptyCheck =
     isEmpty ?? ((value: T) => Array.isArray(value) && value.length === 0);
   if (emptyCheck(data)) {
-    return <EmptyState action={emptyAction} title={empty} />;
+    return emptyState;
   }
 
   return children(data);

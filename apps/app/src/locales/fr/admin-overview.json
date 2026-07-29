@@ -23,6 +23,7 @@
   "readinessStatusFail": "échouée",
   "jobsTitle": "Tâches",
   "jobsNone": "Aucune tâche en arrière-plan.",
+  "jobsNoneDescription": "Les tâches en arrière-plan apparaissent ici lorsque Romeo traite des travaux administratifs en attente.",
   "jobsTotal": "Total des tâches",
   "jobsRunning": "En cours",
   "jobsFailed": "Échouées",

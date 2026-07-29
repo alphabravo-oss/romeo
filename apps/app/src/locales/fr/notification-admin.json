@@ -39,6 +39,7 @@
   "info": "Information",
   "newChannel": "Nouveau canal",
   "noChannels": "Aucun canal.",
+  "noChannelsDescription": "Les canaux acheminent les alertes vers la messagerie, le chat, le mobile ou la gestion d’incidents.",
   "noDeliveries": "Aucune livraison.",
   "noPolicyLoaded": "Aucune politique chargée.",
   "notification": "Notification",

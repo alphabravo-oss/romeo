@@ -1,5 +1,6 @@
 import { Button } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
+import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard.mjs";
 
 import { listJobs, type BackgroundJob } from "../features/jobs";
 import { useLocale, type MessageKey } from "../lib/i18n";
@@ -63,7 +64,12 @@ export function JobPanel() {
           {jobsQuery.isFetching ? t("refreshing") : t("refresh")}
         </Button>
       </div>
-      <PanelState query={jobsQuery} empty={t("jobsNone")}>
+      <PanelState
+        empty={t("jobsNone")}
+        emptyDescription={t("jobsNoneDescription")}
+        emptyIcon={<LayoutDashboard aria-hidden size={24} />}
+        query={jobsQuery}
+      >
         {(jobs) => (
           <div className="grid gap-4">
             <PanelStats

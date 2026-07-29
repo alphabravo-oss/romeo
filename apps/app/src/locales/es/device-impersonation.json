@@ -53,6 +53,8 @@
   "impersonationSessionRevoked": "Sesión revocada",
   "impersonationCouldNotRevoke": "No se pudo revocar la sesión",
   "impersonationNoPending": "No hay solicitudes pendientes.",
+  "impersonationNoPendingDescription": "Las solicitudes aparecen cuando un flujo de soporte aprobado pide suplantar a un miembro.",
   "impersonationActiveSessions": "Sesiones activas",
-  "impersonationNoActive": "No hay sesiones activas."
+  "impersonationNoActive": "No hay sesiones activas.",
+  "impersonationNoActiveDescription": "Las sesiones activas aparecen después de iniciar una solicitud de suplantación aprobada."
 }

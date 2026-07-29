@@ -1,6 +1,7 @@
 import { Button, Field, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Workflow from "lucide-react/dist/esm/icons/workflow.mjs";
 import { useRef, useState } from "react";
 
 import {
@@ -404,7 +405,21 @@ export function WorkflowsPanel() {
       </FormDialog>
 
       <div className="mt-4">
-        <PanelState empty={t("noWorkflows")} query={workflowsQuery}>
+        <PanelState
+          empty={t("noWorkflows")}
+          emptyAction={
+            <Button
+              onClick={() => setNewOpen(true)}
+              type="button"
+              variant="primary"
+            >
+              + {t("createWorkflow")}
+            </Button>
+          }
+          emptyDescription={t("noWorkflowsDescription")}
+          emptyIcon={<Workflow aria-hidden size={24} />}
+          query={workflowsQuery}
+        >
           {(rows) => (
             <div className="grid gap-4">
               <PanelStats
@@ -428,7 +443,12 @@ export function WorkflowsPanel() {
 
       <div className="mt-4">
         <div className="rm-card-title">{t("templates")}</div>
-        <PanelState query={templatesQuery} empty={t("noTemplatesAvailable")}>
+        <PanelState
+          empty={t("noTemplatesAvailable")}
+          emptyDescription={t("noTemplatesAvailableDescription")}
+          emptyIcon={<Workflow aria-hidden size={24} />}
+          query={templatesQuery}
+        >
           {(rows) => <DataTable columns={templateColumns} data={rows} />}
         </PanelState>
       </div>

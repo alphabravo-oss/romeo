@@ -1,6 +1,7 @@
 import { Button, Field, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Bell from "lucide-react/dist/esm/icons/bell.mjs";
 import { useMemo, useState } from "react";
 
 import {
@@ -395,7 +396,21 @@ function ChannelsTab() {
       </FormDialog>
 
       <div className="mt-4">
-        <PanelState query={channelsQuery} empty={t("noChannels")}>
+        <PanelState
+          empty={t("noChannels")}
+          emptyAction={
+            <Button
+              onClick={() => setAddOpen(true)}
+              type="button"
+              variant="primary"
+            >
+              + {t("addChannel")}
+            </Button>
+          }
+          emptyDescription={t("noChannelsDescription")}
+          emptyIcon={<Bell aria-hidden size={24} />}
+          query={channelsQuery}
+        >
           {(rows) => (
             <div className="grid gap-4">
               <PanelStats

@@ -56,6 +56,7 @@
   "knowledgeBases": "Bases de connaissances",
   "namespacePolicy": "Politique d’espace de noms",
   "noChangeRequest": "Aucune demande de changement enregistrée.",
+  "noChangeRequestDescription": "Les demandes de modification de gouvernance apparaissent ici lorsqu’un administrateur propose une mise à jour de la politique.",
   "noPostureReport": "Aucun rapport d’état chargé.",
   "noRagPolicy": "Aucune politique RAG chargée.",
   "nominal": "nominal",

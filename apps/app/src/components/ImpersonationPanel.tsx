@@ -1,5 +1,6 @@
 import { Button } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import UserCog from "lucide-react/dist/esm/icons/user-cog.mjs";
 import { useMemo } from "react";
 
 import {
@@ -274,6 +275,8 @@ export function ImpersonationPanel() {
         <PanelState
           query={requestsQuery}
           empty={t("impersonationNoPending")}
+          emptyDescription={t("impersonationNoPendingDescription")}
+          emptyIcon={<UserCog aria-hidden size={24} />}
           isEmpty={() => pending.length === 0}
         >
           {() => <DataTable columns={columns} data={pending} />}
@@ -294,6 +297,8 @@ export function ImpersonationPanel() {
         <PanelState
           query={sessionsQuery}
           empty={t("impersonationNoActive")}
+          emptyDescription={t("impersonationNoActiveDescription")}
+          emptyIcon={<UserCog aria-hidden size={24} />}
           isEmpty={() => activeSessions.length === 0}
         >
           {() => <DataTable columns={sessionColumns} data={activeSessions} />}

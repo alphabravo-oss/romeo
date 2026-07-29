@@ -1,6 +1,7 @@
 import { Input, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
 import { useMemo, useState } from "react";
 
 import {
@@ -236,7 +237,21 @@ export function ServiceAccountPanel() {
         />
       ) : null}
       <div className="mt-4">
-        <PanelState query={accountsQuery} empty={t("noServiceAccounts")}>
+        <PanelState
+          empty={t("noServiceAccounts")}
+          emptyAction={
+            <Button
+              onClick={() => setAddOpen(true)}
+              type="button"
+              variant="secondary"
+            >
+              + {t("addServiceAccount")}
+            </Button>
+          }
+          emptyDescription={t("noServiceAccountsDescription")}
+          emptyIcon={<KeyRound aria-hidden size={24} />}
+          query={accountsQuery}
+        >
           {(accounts) => (
             <div className="grid gap-4">
               <PanelStats

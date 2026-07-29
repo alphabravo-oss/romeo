@@ -1,6 +1,7 @@
 import { Input, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
 import { useMemo, useState } from "react";
 
 import {
@@ -217,7 +218,21 @@ export function ApiKeyPanel() {
       ) : null}
 
       <div className="mt-4">
-        <PanelState query={apiKeysQuery} empty={t("noApiKeys")}>
+        <PanelState
+          empty={t("noApiKeys")}
+          emptyAction={
+            <Button
+              onClick={() => setAddOpen(true)}
+              type="button"
+              variant="primary"
+            >
+              + {t("addApiKey")}
+            </Button>
+          }
+          emptyDescription={t("noApiKeysDescription")}
+          emptyIcon={<KeyRound aria-hidden size={24} />}
+          query={apiKeysQuery}
+        >
           {(apiKeys) => (
             <div className="grid gap-4">
               <PanelStats

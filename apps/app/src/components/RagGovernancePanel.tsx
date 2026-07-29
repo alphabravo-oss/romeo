@@ -1,5 +1,6 @@
 import { Button, Field, NativeSelect, Select, Textarea } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Database from "lucide-react/dist/esm/icons/database.mjs";
 import { useState } from "react";
 
 import {
@@ -227,6 +228,8 @@ function ChangeRequestTab() {
       <PanelState
         query={changeRequestQuery}
         empty={t("noChangeRequest")}
+        emptyDescription={t("noChangeRequestDescription")}
+        emptyIcon={<Database aria-hidden size={24} />}
         isEmpty={(request) => request === null}
       >
         {(request) =>

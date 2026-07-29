@@ -57,6 +57,7 @@
   "noPlanQuotasReconcile": "No hay cuotas del plan para conciliar.",
   "noReset": "Sin restablecimiento",
   "noQuotasYet": "Aún no hay cuotas.",
+  "noQuotasYetDescription": "Las cuotas limitan el consumo de miembros, espacios de trabajo, proveedores o asistentes.",
   "none": "ninguna",
   "plan": "Plan",
   "planCode": "Código del plan",

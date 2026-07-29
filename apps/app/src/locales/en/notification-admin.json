@@ -39,6 +39,7 @@
   "info": "Info",
   "newChannel": "New channel",
   "noChannels": "No channels yet.",
+  "noChannelsDescription": "Channels route alerts to email, chat, mobile, or incident-management destinations.",
   "noDeliveries": "No deliveries yet.",
   "noPolicyLoaded": "No policy loaded.",
   "notification": "Notification",

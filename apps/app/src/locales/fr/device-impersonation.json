@@ -53,6 +53,8 @@
   "impersonationSessionRevoked": "Session révoquée",
   "impersonationCouldNotRevoke": "Impossible de révoquer la session",
   "impersonationNoPending": "Aucune demande en attente.",
+  "impersonationNoPendingDescription": "Les demandes apparaissent lorsqu’un processus d’assistance approuvé demande d’usurper l’identité d’un membre.",
   "impersonationActiveSessions": "Sessions actives",
-  "impersonationNoActive": "Aucune session active."
+  "impersonationNoActive": "Aucune session active.",
+  "impersonationNoActiveDescription": "Les sessions actives apparaissent après le démarrage d’une demande d’usurpation approuvée."
 }

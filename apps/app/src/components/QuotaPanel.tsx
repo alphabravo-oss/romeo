@@ -1,6 +1,7 @@
 import { Button, Field, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import BarChart3 from "lucide-react/dist/esm/icons/chart-bar.mjs";
 import { useMemo, useState } from "react";
 
 import { createQuotaBucket, deleteQuotaBucket, listQuotas } from "../features";
@@ -349,6 +350,8 @@ export function QuotaPanel() {
               + {t("addQuota")}
             </Button>
           }
+          emptyDescription={t("noQuotasYetDescription")}
+          emptyIcon={<BarChart3 aria-hidden size={24} />}
         >
           {(rows) => (
             <div className="grid gap-4">

@@ -53,6 +53,8 @@
   "impersonationSessionRevoked": "Session revoked",
   "impersonationCouldNotRevoke": "Could not revoke session",
   "impersonationNoPending": "No pending requests.",
+  "impersonationNoPendingDescription": "Requests appear when an approved support workflow asks to impersonate a member.",
   "impersonationActiveSessions": "Active sessions",
-  "impersonationNoActive": "No active sessions."
+  "impersonationNoActive": "No active sessions.",
+  "impersonationNoActiveDescription": "Active sessions appear after an approved impersonation request is started."
 }

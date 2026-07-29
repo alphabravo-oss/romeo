@@ -23,6 +23,7 @@
   "readinessStatusFail": "fallida",
   "jobsTitle": "Trabajos",
   "jobsNone": "Todavía no hay trabajos en segundo plano.",
+  "jobsNoneDescription": "Los trabajos en segundo plano aparecen aquí cuando Romeo procesa tareas administrativas en cola.",
   "jobsTotal": "Trabajos totales",
   "jobsRunning": "En ejecución",
   "jobsFailed": "Fallidos",
