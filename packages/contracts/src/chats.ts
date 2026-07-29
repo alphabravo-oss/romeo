@@ -8,6 +8,7 @@ import {
   unarchiveChatRoute,
   updateChatLegalHoldRoute,
 } from "./chat-collaboration-routes";
+import { streamChatEventsRoute } from "./chat-events";
 
 import {
   authenticationSecurity,
@@ -18,7 +19,6 @@ import {
 
 import {
   chatIdentifier,
-  chatTimestamp,
   chatRole,
   ChatSchema,
   MessageCitationSchema,
@@ -47,6 +47,7 @@ import {
 
 export * from "./chat-schemas";
 export * from "./chat-collaboration-routes";
+export * from "./chat-events";
 
 const chatPath = z.strictObject({ chatId: chatIdentifier });
 const messagePath = z.strictObject({
@@ -437,6 +438,7 @@ export const previewAttachmentRoute = createRoute({
 export const chatRoutes = [
   cleanupExpiredChatsRoute,
   listChatsRoute,
+  streamChatEventsRoute,
   searchChatsRoute,
   importChatRoute,
   createChatRoute,

@@ -11302,6 +11302,38 @@ export const zChatsCreateResponse = z.object({
   data: zChat,
 });
 
+export const zChatsStreamEventsPath = z.object({
+  workspaceId: z.string().min(1).max(300),
+});
+
+/**
+ * SSE stream carrying ChatEvent frames
+ */
+export const zChatsStreamEventsResponse = z.union([
+  z.object({
+    id: z.string().min(1).max(300),
+    type: z.enum(["connected"]),
+    workspaceId: z.string().min(1).max(300),
+    createdAt: z.iso.datetime(),
+  }),
+  z.object({
+    id: z.string().min(1).max(300),
+    type: z.enum(["changed"]),
+    action: z.enum([
+      "archived",
+      "created",
+      "deleted",
+      "forked",
+      "imported",
+      "unarchived",
+      "updated",
+    ]),
+    chatId: z.string().min(1).max(300),
+    workspaceId: z.string().min(1).max(300),
+    createdAt: z.iso.datetime(),
+  }),
+]);
+
 export const zChatsSearchQuery = z.object({
   workspaceId: z.string().min(1).max(300).optional(),
   q: z.string().max(1000).optional(),

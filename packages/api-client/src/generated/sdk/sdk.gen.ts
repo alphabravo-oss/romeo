@@ -276,6 +276,9 @@ import type {
   ChatsSearchData,
   ChatsSearchErrors,
   ChatsSearchResponses,
+  ChatsStreamEventsData,
+  ChatsStreamEventsErrors,
+  ChatsStreamEventsResponses,
   ChatsUnarchiveData,
   ChatsUnarchiveErrors,
   ChatsUnarchiveResponses,
@@ -7091,6 +7094,33 @@ export const chatsCreate = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Stream workspace chat collection changes
+ */
+export const chatsStreamEvents = <ThrowOnError extends boolean = false>(
+  options: Options<ChatsStreamEventsData, ThrowOnError>,
+): RequestResult<
+  ChatsStreamEventsResponses,
+  ChatsStreamEventsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ChatsStreamEventsResponses,
+    ChatsStreamEventsErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/workspaces/{workspaceId}/chat-events",
+    ...options,
   });
 
 /**

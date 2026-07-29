@@ -13,6 +13,7 @@ import type { AuthProviderSettingsService } from "./auth-provider-settings-servi
 import { BillingService } from "./billing-service";
 import type { BrowserAutomationService } from "./browser-automation-service";
 import { ChannelService } from "./channel-service";
+import type { ChatEventService } from "./chat-event-service";
 import { ChatCommentService } from "./chat-comment-service";
 import type { ChatService } from "./chat-service";
 import { ChatTagService } from "./chat-tag-service";
@@ -82,6 +83,7 @@ interface ServiceRegistryInput {
   activeVectorStoreDeployment: VectorStoreDeploymentPosture;
   authProviderSettings: AuthProviderSettingsService;
   browserAutomation: BrowserAutomationService;
+  chatEvents: ChatEventService;
   chats: ChatService;
   dataConnectorExecutor: DataConnectorExecutor;
   delegatedOAuth: DelegatedOAuthService;
@@ -119,6 +121,7 @@ export function buildServiceRegistry(
     activeVectorStoreDeployment,
     authProviderSettings,
     browserAutomation,
+    chatEvents,
     chats,
     dataConnectorExecutor,
     delegatedOAuth,
@@ -169,6 +172,7 @@ export function buildServiceRegistry(
       webhookOrgId: env.BILLING_WEBHOOK_ORG_ID,
     }),
     browserAutomation,
+    chatEvents,
     channels: new ChannelService(repository, openWebUiCompatibility),
     chats,
     temporaryChatCleanup,

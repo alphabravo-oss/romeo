@@ -1,4 +1,6 @@
 import type { RomeoApi } from "../context";
+import type { AuthSubject } from "@romeo/auth";
+import type { RomeoServices } from "../../services";
 import {
   archiveChatRoute,
   cleanupExpiredChatsRoute,
@@ -25,8 +27,10 @@ import {
   updateChatRoute,
   updateMessageFeedbackRoute,
 } from "@romeo/contracts";
+import { registerChatEventRoutes } from "./chat-events";
 
 export function registerChatRoutes(app: RomeoApi): void {
+  registerChatEventRoutes(app);
   app.openapi(cleanupExpiredChatsRoute, async (context) => {
     const body = context.req.valid("json");
     const data = await context
@@ -84,9 +88,10 @@ export function registerChatRoutes(app: RomeoApi): void {
   });
 
   app.openapi(importChatRoute, async (context) => {
+    const subject = context.get("subject");
     const body = context.req.valid("json");
     const data = await context.get("services").chats.importChat({
-      subject: context.get("subject"),
+      subject,
       workspaceId: body.workspaceId,
       ...(body.title === undefined ? {} : { title: body.title }),
       ...(body.modelId === undefined ? {} : { modelId: body.modelId }),
@@ -138,6 +143,7 @@ export function registerChatRoutes(app: RomeoApi): void {
           : { createdAt: message.createdAt }),
       })),
     });
+    publishChatChange(context.get("services"), subject, data, "imported");
     return context.json({ data }, 201);
   });
 
@@ -151,6 +157,7 @@ export function registerChatRoutes(app: RomeoApi): void {
       ...(body.temporary === undefined ? {} : { temporary: body.temporary }),
       ...(body.expiresAt === undefined ? {} : { expiresAt: body.expiresAt }),
     });
+    publishChatChange(context.get("services"), subject, data, "created");
     return context.json({ data }, 201);
   });
 
@@ -190,6 +197,7 @@ export function registerChatRoutes(app: RomeoApi): void {
       ...(body.title !== undefined ? { title: body.title } : {}),
       ...(body.modelId !== undefined ? { modelId: body.modelId } : {}),
     });
+    publishChatChange(context.get("services"), subject, data, "updated");
     return context.json({ data });
   });
 
@@ -205,11 +213,15 @@ export function registerChatRoutes(app: RomeoApi): void {
   app.openapi(deleteChatRoute, async (context) => {
     const subject = context.get("subject");
     const body = context.req.valid("json");
+    const chat = await context
+      .get("services")
+      .chats.get(context.req.valid("param").chatId, subject);
     const data = await context.get("services").chats.delete({
       subject,
       chatId: context.req.valid("param").chatId,
       confirmChatId: body.confirmChatId,
     });
+    publishChatChange(context.get("services"), subject, chat, "deleted");
     return context.json({ data });
   });
 
@@ -322,6 +334,7 @@ export function registerChatRoutes(app: RomeoApi): void {
     const data = await context
       .get("services")
       .chats.archive({ subject, chatId: context.req.valid("param").chatId });
+    publishChatChange(context.get("services"), subject, data, "archived");
     return context.json({ data });
   });
 
@@ -339,6 +352,7 @@ export function registerChatRoutes(app: RomeoApi): void {
         ? { includeAttachments: body.includeAttachments }
         : {}),
     });
+    publishChatChange(context.get("services"), subject, data, "forked");
     return context.json({ data }, 201);
   });
 
@@ -348,6 +362,7 @@ export function registerChatRoutes(app: RomeoApi): void {
       subject,
       chatId: context.req.valid("param").chatId,
     });
+    publishChatChange(context.get("services"), subject, data, "unarchived");
     return context.json({ data });
   });
 
@@ -384,6 +399,20 @@ export function registerChatRoutes(app: RomeoApi): void {
       body: body.body,
     });
     return context.json({ data }, 201);
+  });
+}
+
+function publishChatChange(
+  services: RomeoServices,
+  subject: AuthSubject,
+  chat: { id: string; workspaceId: string },
+  action: import("../../services/chat-event-service").ChatChangeAction,
+): void {
+  services.chatEvents.publish({
+    action,
+    chatId: chat.id,
+    orgId: subject.orgId,
+    workspaceId: chat.workspaceId,
   });
 }
 

@@ -18225,6 +18225,80 @@ export type ChatsCreateResponses = {
 export type ChatsCreateResponse =
   ChatsCreateResponses[keyof ChatsCreateResponses];
 
+export type ChatsStreamEventsData = {
+  body?: never;
+  path: {
+    workspaceId: string;
+  };
+  query?: never;
+  url: "/workspaces/{workspaceId}/chat-events";
+};
+
+export type ChatsStreamEventsErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type ChatsStreamEventsError =
+  ChatsStreamEventsErrors[keyof ChatsStreamEventsErrors];
+
+export type ChatsStreamEventsResponses = {
+  /**
+   * SSE stream carrying ChatEvent frames
+   */
+  200:
+    | {
+        id: string;
+        type: "connected";
+        workspaceId: string;
+        createdAt: string;
+      }
+    | {
+        id: string;
+        type: "changed";
+        action:
+          | "archived"
+          | "created"
+          | "deleted"
+          | "forked"
+          | "imported"
+          | "unarchived"
+          | "updated";
+        chatId: string;
+        workspaceId: string;
+        createdAt: string;
+      };
+};
+
+export type ChatsStreamEventsResponse =
+  ChatsStreamEventsResponses[keyof ChatsStreamEventsResponses];
+
 export type ChatsSearchData = {
   body?: never;
   path?: never;

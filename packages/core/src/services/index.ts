@@ -15,6 +15,7 @@ import { BillingService } from "./billing-service";
 import { BrowserAutomationService } from "./browser-automation-service";
 import { ChannelService } from "./channel-service";
 import { ChatService } from "./chat-service";
+import { ChatEventService } from "./chat-event-service";
 import { ChatCommentService } from "./chat-comment-service";
 import { ChatTagService } from "./chat-tag-service";
 import { CollaborationService } from "./collaboration-service";
@@ -123,6 +124,7 @@ export interface RomeoServices {
   billing: BillingService;
   browserAutomation: BrowserAutomationService;
   channels: ChannelService;
+  chatEvents: ChatEventService;
   chats: ChatService;
   temporaryChatCleanup: TemporaryChatCleanupWorker;
   chatComments: ChatCommentService;
@@ -443,6 +445,7 @@ export function createServices(
       ? {}
       : { scanner: options.fileMalwareScanner }),
   });
+  const chatEvents = new ChatEventService();
   const temporaryChatCleanup = new TemporaryChatCleanupWorker(
     repository,
     chats,
@@ -458,6 +461,7 @@ export function createServices(
     activeVectorStoreDeployment,
     authProviderSettings,
     browserAutomation,
+    chatEvents,
     chats,
     dataConnectorExecutor,
     delegatedOAuth,

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import {
   createContext,
@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 
-import { getBootstrap } from "../features";
+import { getBootstrap, subscribeToChatEvents } from "../features";
 import type { Workspace } from "../features/tenancy";
 
 const STORAGE_KEY = "hm.workspaceId";
@@ -53,6 +53,7 @@ function persistWorkspaceId(id: string): void {
  * (useWorkspaceData, etc.) read from this context rather than re-fetching.
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const bootstrapQuery = useQuery({
     queryKey: ["bootstrap"],
     queryFn: getBootstrap,
@@ -99,6 +100,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     () => workspaces.find((candidate) => candidate.id === workspaceId),
     [workspaces, workspaceId],
   );
+
+  useEffect(() => {
+    if (workspaceId === undefined) return;
+    const reconcileChats = () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["chats", workspaceId],
+      });
+    };
+    return subscribeToChatEvents(workspaceId, reconcileChats);
+  }, [queryClient, workspaceId]);
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({ workspace, workspaceId, workspaces, setWorkspaceId }),

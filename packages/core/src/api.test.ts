@@ -201,6 +201,68 @@ describe("Open WebUI-class governed chat extensions", () => {
     expect(invalidResponse.status).toBe(400);
   });
 
+  it("streams workspace chat collection changes without polling", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const eventsResponse = await api.request(
+      "/api/v1/workspaces/workspace_default/chat-events",
+    );
+    expect(eventsResponse.headers.get("content-type")).toContain(
+      "text/event-stream",
+    );
+    const reader = eventsResponse.body?.getReader();
+    expect(reader).toBeDefined();
+
+    const connected = await readSseEvent(
+      reader as ReadableStreamDefaultReader<Uint8Array>,
+    );
+    expect(connected).toMatchObject({
+      event: "chats:changed",
+      data: {
+        type: "connected",
+        workspaceId: "workspace_default",
+      },
+    });
+
+    const createResponse = await api.request("/api/v1/chats", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Realtime chat sentinel",
+      }),
+    });
+    const createdChat = await createResponse.json();
+    const created = await readSseEvent(
+      reader as ReadableStreamDefaultReader<Uint8Array>,
+    );
+    expect(created).toMatchObject({
+      event: "chats:changed",
+      data: {
+        type: "changed",
+        action: "created",
+        chatId: createdChat.data.id,
+        workspaceId: "workspace_default",
+      },
+    });
+
+    await api.request(`/api/v1/chats/${createdChat.data.id}/archive`, {
+      method: "POST",
+    });
+    const archived = await readSseEvent(
+      reader as ReadableStreamDefaultReader<Uint8Array>,
+    );
+    expect(archived).toMatchObject({
+      event: "chats:changed",
+      data: {
+        type: "changed",
+        action: "archived",
+        chatId: createdChat.data.id,
+        workspaceId: "workspace_default",
+      },
+    });
+    await reader?.cancel();
+  });
+
   it("creates, controls, and exposes retained memory in context inspection", async () => {
     const objectStore = new MemoryObjectStore();
     const api = createRomeoApi(new InMemoryRomeoRepository(), { objectStore });

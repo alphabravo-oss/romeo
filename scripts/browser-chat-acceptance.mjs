@@ -5,10 +5,14 @@ const session = `romeo-chat-${process.pid}`;
 const secondSession = `${session}-second`;
 const imageProviderPort = 32_000 + (process.pid % 1_000);
 const imageProvider = startImageProvider(imageProviderPort);
+const createdChatIds = new Set();
+let initialChatIds;
 
 try {
   run("open", baseUrl);
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
+  run("wait", "#prompt");
+  initialChatIds = listWorkspaceChatIds();
   const initial = run("snapshot", "-i");
   for (const required of [
     "New chat",
@@ -43,6 +47,7 @@ try {
     axeViolations.length === 0,
     `axe violations: ${JSON.stringify(axeViolations)}`,
   );
+  assertRealtimeChatListSync();
 
   run(
     "eval",
@@ -56,6 +61,7 @@ try {
   );
   run("click", 'button[aria-label="Send message"]');
   run("wait", "1500");
+  trackActiveChat();
 
   const rendered = JSON.parse(
     evaluate(`JSON.stringify({
@@ -82,7 +88,8 @@ try {
   );
 
   run("reload");
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
+  run("wait", "--fn", `document.querySelectorAll(".rm-codeblock").length >= 2`);
   const persisted = JSON.parse(
     evaluate(`JSON.stringify({
     codeBlocks: document.querySelectorAll(".rm-codeblock").length,
@@ -177,7 +184,7 @@ try {
   run("click", 'button[aria-label="Close context inspector"]');
 
   run("reload");
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   run(
     "wait",
     "--fn",
@@ -263,7 +270,7 @@ try {
 
   for (const route of ["/settings", "/admin?section=providers"]) {
     run("open", `${baseUrl}${route}`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const violations = axeViolationsForCurrentPage();
     assert(
       violations.length === 0,
@@ -276,9 +283,13 @@ try {
 
   console.log("Romeo expanded core chat browser acceptance passed.");
 } finally {
-  run("close", { allowFailure: true });
-  runFor(secondSession, "close", { allowFailure: true });
-  imageProvider.kill("SIGTERM");
+  try {
+    if (initialChatIds !== undefined) cleanupCreatedChats(initialChatIds);
+  } finally {
+    run("close", { allowFailure: true });
+    runFor(secondSession, "close", { allowFailure: true });
+    imageProvider.kill("SIGTERM");
+  }
 }
 
 function seedAndAttachBrowserFixtures() {
@@ -324,7 +335,7 @@ function seedAndAttachBrowserFixtures() {
   })()`,
   );
   run("reload");
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   for (const fileName of ["browser-source.txt", "browser-image.png"]) {
     clickComposerMenuItem("Reusable files");
     run("wait", ".rm-ui-dialog");
@@ -344,6 +355,58 @@ function seedAndAttachBrowserFixtures() {
   }
 }
 
+function assertRealtimeChatListSync() {
+  const title = "Browser realtime sidebar sentinel";
+  const chat = JSON.parse(
+    evaluate(`(async () => {
+      const response = await fetch("/api/v1/chats", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "workspace_default",
+          title: ${JSON.stringify(title)},
+        }),
+      });
+      if (!response.ok) throw new Error("Unable to create realtime sidebar fixture.");
+      return JSON.stringify((await response.json()).data);
+    })()`),
+  );
+  trackChatId(chat.id);
+
+  runFor(secondSession, "open", baseUrl);
+  runFor(secondSession, "wait", "#prompt");
+  runFor(
+    secondSession,
+    "wait",
+    "--fn",
+    `document.body.innerText.includes(${JSON.stringify(title)})`,
+  );
+
+  const deletion = JSON.parse(
+    evaluate(`(async () => {
+      const chatId = ${JSON.stringify(chat.id)};
+      const response = await fetch(\`/api/v1/chats/\${chatId}\`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirmChatId: chatId }),
+      });
+      return JSON.stringify({ ok: response.ok, status: response.status });
+    })()`),
+  );
+  assert(
+    deletion.ok,
+    `unable to delete realtime sidebar fixture (${deletion.status})`,
+  );
+  runFor(
+    secondSession,
+    "wait",
+    "--fn",
+    `!document.body.innerText.includes(${JSON.stringify(title)})`,
+  );
+  createdChatIds.delete(chat.id);
+  runFor(secondSession, "close");
+}
+
 function assertModelPinsAndSelectionSync() {
   run("click", ".rm-composer-model-select");
   run("wait", '[role="listbox"]');
@@ -354,7 +417,7 @@ function assertModelPinsAndSelectionSync() {
   run("wait", 'button[aria-label="Unpin Ollama llama3.2"]');
 
   runFor(secondSession, "open", baseUrl);
-  runFor(secondSession, "wait", "--load", "networkidle");
+  waitForDocumentReady(secondSession);
   runFor(secondSession, "click", ".rm-composer-model-select");
   runFor(secondSession, "wait", '[role="listbox"]');
   runFor(secondSession, "wait", 'button[aria-label="Unpin Ollama llama3.2"]');
@@ -370,7 +433,7 @@ function assertModelPinsAndSelectionSync() {
   );
   runFor(secondSession, "wait", "500");
   runFor(secondSession, "reload");
-  runFor(secondSession, "wait", "--load", "networkidle");
+  waitForDocumentReady(secondSession);
   const secondSelected = runFor(
     secondSession,
     "get",
@@ -383,7 +446,7 @@ function assertModelPinsAndSelectionSync() {
   );
 
   run("reload");
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   const firstSelected = run("get", "text", ".rm-composer-model-select");
   assert(
     firstSelected.includes("Ollama llama3.2"),
@@ -422,6 +485,7 @@ function assertQueuedReloadRecovery() {
     "--fn",
     `document.body.innerText.includes("Browser queue recovery anchor") && document.querySelector("#composer-status")?.textContent?.includes("Ready to send")`,
   );
+  trackActiveChat();
   run("wait", ".rm-sidebar-item.active[data-chat-id]");
   const queuedPersisted = evaluate(`(async () => {
     const chatId = document.querySelector(".rm-sidebar-item.active")?.dataset.chatId;
@@ -441,7 +505,7 @@ function assertQueuedReloadRecovery() {
   })()`);
   assert(queuedPersisted, "queued follower was not durably persisted");
   run("reload");
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   run(
     "wait",
     "--fn",
@@ -455,19 +519,21 @@ function assertQueuedReloadRecovery() {
 }
 
 function assertShareAndExport() {
-  run(
-    "eval",
-    `(async () => {
+  trackChatId(
+    evaluate(
+      `(async () => {
     const response = await fetch("/api/v1/chats", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ workspaceId: "workspace_default", title: "Browser share export chat" }),
     });
     if (!response.ok) throw new Error(await response.text());
+    return (await response.json()).data.id;
   })()`,
+    ),
   );
   run("reload");
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   run(
     "wait",
     "--fn",
@@ -538,6 +604,7 @@ function assertShareAndExport() {
     "--fn",
     `document.body.innerText.includes("Browser imported chat")`,
   );
+  trackChatByTitle("Browser imported chat");
 }
 
 function assertPromptNotesMemoryAndTemporaryChat() {
@@ -558,7 +625,7 @@ function assertPromptNotesMemoryAndTemporaryChat() {
   })()`,
   );
   run("reload");
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   clickComposerMenuItem("Prompt library");
   run("wait", ".rm-ui-dialog");
   run(
@@ -582,7 +649,7 @@ function assertPromptNotesMemoryAndTemporaryChat() {
   run("fill", "#prompt", "");
 
   run("open", `${baseUrl}/settings?section=notes`);
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   run(
     "eval",
     `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Add note"))?.click()`,
@@ -598,7 +665,7 @@ function assertPromptNotesMemoryAndTemporaryChat() {
   );
 
   run("open", `${baseUrl}/settings?section=memories`);
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   run(
     "eval",
     `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Add memory"))?.click()`,
@@ -628,7 +695,7 @@ function assertPromptNotesMemoryAndTemporaryChat() {
   );
 
   run("open", baseUrl);
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   clickComposerMenuItem("Insert note");
   run("wait", ".rm-ui-dialog");
   run("fill", 'input[aria-label="Search notes"]', "Browser reusable note");
@@ -706,6 +773,7 @@ function assertPromptNotesMemoryAndTemporaryChat() {
     "--fn",
     `document.body.innerText.includes("Browser temporary chat sentinel")`,
   );
+  trackActiveChat();
   run(
     "wait",
     "--fn",
@@ -746,7 +814,7 @@ function assertImageGeneration(port) {
     "image-capable provider model was not discovered",
   );
   run("open", baseUrl);
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   clickComposerMenuItem("Generate image");
   run("wait", "#image-prompt");
   run("select", "#image-model", seeded);
@@ -914,6 +982,7 @@ function assertKeyboardAndFocusNavigation() {
     "--fn",
     `document.body.innerText.includes("Keyboard composer submit sentinel")`,
   );
+  trackActiveChat();
   settleComposerRun();
   const status = JSON.parse(
     evaluate(`JSON.stringify((() => {
@@ -1000,6 +1069,7 @@ function assertNarrowViewportInteractions(width, height, label) {
     "--fn",
     `document.body.innerText.includes(${JSON.stringify(`Keyboard ${label} composer sentinel`)})`,
   );
+  trackActiveChat();
   settleComposerRun();
 }
 
@@ -1288,7 +1358,7 @@ function assertComposerLocalization() {
       `localStorage.setItem("romeo:locale", ${JSON.stringify(locale.code)})`,
     );
     run("reload");
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     run("wait", `button[aria-label=${JSON.stringify(locale.model)}]`);
     const localized = JSON.parse(
       evaluate(`JSON.stringify({
@@ -1421,31 +1491,31 @@ function assertComposerLocalization() {
       body: JSON.stringify({ locale: ${JSON.stringify(locale.code)} }),
     }).then((response) => { if (!response.ok) throw new Error("locale sync failed"); return response.json(); })`);
     run("open", `${baseUrl}/settings?section=interface`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.appearance),
       `${locale.code} did not translate interface settings`,
     );
     run("open", `${baseUrl}/settings?section=memories`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.addMemory),
       `${locale.code} did not translate memory settings`,
     );
     run("open", `${baseUrl}/settings?section=account`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.profileDescription),
       `${locale.code} did not translate profile settings`,
     );
     run("open", `${baseUrl}/settings?section=security`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.activeSessions),
       `${locale.code} did not translate security settings`,
     );
     run("open", `${baseUrl}/workspace?section=evals`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const evalWorkspace = run("get", "text", "body");
     assert(
       evalWorkspace.includes(locale.evals),
@@ -1470,7 +1540,7 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/workspace?section=agents`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const agentStudio = run("get", "text", "body");
     assert(
       agentStudio.includes(locale.agentStudio),
@@ -1489,7 +1559,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate the agent test console`,
     );
     run("open", `${baseUrl}/workspace?section=tools`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const workspaceTools = run("get", "text", "body");
     assert(
       workspaceTools.includes(locale.workspaceTools),
@@ -1500,7 +1570,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate workspace tool actions`,
     );
     run("open", `${baseUrl}/workspace?section=voice`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const workspaceVoice = run("get", "text", "body");
     assert(
       workspaceVoice.includes(locale.workspaceVoice),
@@ -1511,7 +1581,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate workspace voice actions`,
     );
     run("open", `${baseUrl}/workspace?section=collaboration`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const workspaceCollaboration = run("get", "text", "body");
     assert(
       workspaceCollaboration.includes(locale.workspaceCollaboration),
@@ -1522,7 +1592,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate workspace sharing actions`,
     );
     run("open", `${baseUrl}/workspace?section=knowledge`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.knowledgeTitle),
       `${locale.code} did not translate knowledge workspace`,
@@ -1548,7 +1618,7 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=providers`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const providerAdmin = run("get", "text", "body");
     assert(
       providerAdmin.includes(locale.admin),
@@ -1569,20 +1639,20 @@ function assertComposerLocalization() {
       `${locale.code} did not translate model administration`,
     );
     run("open", `${baseUrl}/admin?section=providers&view=models`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const modelAdmin = run("get", "text", "body");
     assert(
       modelAdmin.includes(locale.modelPricing),
       `${locale.code} did not translate model pricing administration`,
     );
     run("open", `${baseUrl}/admin?section=overview`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.readiness),
       `${locale.code} did not translate the admin overview`,
     );
     run("open", `${baseUrl}/admin?section=providers`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.addProvider)})))?.click()`,
@@ -1594,14 +1664,14 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=connections`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const connectionsAdmin = run("get", "text", "body");
     assert(
       connectionsAdmin.includes(locale.toolConnectors),
       `${locale.code} did not translate tool-connector administration`,
     );
     run("open", `${baseUrl}/admin?section=connections&view=imports`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const importsAdmin = run("get", "text", "body");
     assert(
       importsAdmin.includes(locale.connectorSyncNone) ||
@@ -1609,7 +1679,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate connector sync history`,
     );
     run("open", `${baseUrl}/admin?section=connections&view=catalog`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const catalogAdmin = run("get", "text", "body");
     assert(
       catalogAdmin.includes(locale.dataConnectors) &&
@@ -1617,7 +1687,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate data-connector administration`,
     );
     run("open", `${baseUrl}/admin?section=connections`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === ${JSON.stringify(`+ ${locale.connectorAdd}`)}))?.click()`,
@@ -1629,7 +1699,7 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=connections&view=tools`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.toolImportTool)})))?.click()`,
@@ -1641,13 +1711,13 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=web-search`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.governedWebSearch),
       `${locale.code} did not translate governed web search administration`,
     );
     run("open", `${baseUrl}/admin?section=prompt-templates`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.promptTemplates),
       `${locale.code} did not translate prompt-template administration`,
@@ -1663,13 +1733,13 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=billing`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.billing),
       `${locale.code} did not translate billing administration`,
     );
     run("open", `${baseUrl}/admin?section=usage`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const usageAdmin = run("get", "text", "body");
     assert(
       usageAdmin.includes(locale.usageTitle),
@@ -1684,7 +1754,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate quota administration`,
     );
     run("open", `${baseUrl}/admin?section=usage&view=quotas`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.addQuota)})))?.click()`,
@@ -1696,13 +1766,13 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=analytics`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.analyticsTitle),
       `${locale.code} did not translate analytics administration`,
     );
     run("open", `${baseUrl}/admin?section=governance`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const governanceAdmin = run("get", "text", "body");
     assert(
       governanceAdmin.includes(locale.governance),
@@ -1739,7 +1809,7 @@ function assertComposerLocalization() {
       `document.body.innerText.includes(${JSON.stringify(locale.newExportDsar)})`,
     );
     run("open", `${baseUrl}/admin?section=posture`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const postureAdmin = run("get", "text", "body");
     assert(
       postureAdmin.includes(locale.systemPosture),
@@ -1750,7 +1820,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate GA evidence administration`,
     );
     run("open", `${baseUrl}/admin?section=abuse`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.abuseControls),
       `${locale.code} did not translate abuse-control administration`,
@@ -1766,7 +1836,7 @@ function assertComposerLocalization() {
       `document.body.innerText.includes(${JSON.stringify(locale.edgeSecurityPosture)})`,
     );
     run("open", `${baseUrl}/admin?section=auth-providers`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.authProviders),
       `${locale.code} did not translate authentication provider administration`,
@@ -1797,7 +1867,7 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=users`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.users),
       `${locale.code} did not translate user administration`,
@@ -1813,7 +1883,7 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=groups`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const groupsAdmin = run("get", "text", "body");
     assert(
       groupsAdmin.includes(locale.groupsTitle),
@@ -1830,13 +1900,13 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=organizations`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.organizationsTitle),
       `${locale.code} did not translate organization administration`,
     );
     run("open", `${baseUrl}/settings?section=device-tokens`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.deviceTokensTitle),
       `${locale.code} did not translate device-token settings`,
@@ -1852,7 +1922,7 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=impersonation`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const impersonationAdmin = run("get", "text", "body");
     assert(
       impersonationAdmin.includes(locale.impersonationRequests),
@@ -1863,7 +1933,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate impersonation sessions`,
     );
     run("open", `${baseUrl}/admin?section=audit`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const auditAdmin = run("get", "text", "body");
     assert(
       auditAdmin.includes(locale.auditTitle),
@@ -1881,13 +1951,13 @@ function assertComposerLocalization() {
       `${locale.code} did not translate shared table controls`,
     );
     run("open", `${baseUrl}/admin?section=notification-channels`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.notificationChannels),
       `${locale.code} did not translate notification administration`,
     );
     run("open", `${baseUrl}/admin?section=webhooks`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.webhooksTitle),
       `${locale.code} did not translate webhook administration`,
@@ -1903,7 +1973,7 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=connected-apps`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const connectedAppsAdmin = run("get", "text", "body");
     assert(
       connectedAppsAdmin.includes(locale.connectedAppsTitle),
@@ -1915,7 +1985,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate connected-app posture`,
     );
     run("open", `${baseUrl}/admin?section=access`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     const accessAdmin = run("get", "text", "body");
     assert(
       accessAdmin.includes(locale.apiKeys),
@@ -1926,7 +1996,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate service account administration`,
     );
     run("open", `${baseUrl}/admin?section=workflows`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.workflows),
       `${locale.code} did not translate workflow administration`,
@@ -1942,7 +2012,7 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=rag`);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
     assert(
       run("get", "text", "body").includes(locale.ragRetrievalPolicy),
       `${locale.code} did not translate RAG policy administration`,
@@ -1968,7 +2038,7 @@ function assertComposerLocalization() {
       `document.body.innerText.includes(${JSON.stringify(locale.retrievalReplay)})`,
     );
     run("open", baseUrl);
-    run("wait", "--load", "networkidle");
+    waitForDocumentReady();
   }
   run("errors", "--clear");
   evaluate(`fetch("/api/v1/me/interface-preferences", {
@@ -1978,7 +2048,7 @@ function assertComposerLocalization() {
   }).then((response) => { if (!response.ok) throw new Error("locale reset failed"); return response.json(); })`);
   run("eval", `localStorage.setItem("romeo:locale", "en")`);
   run("reload");
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   run("wait", 'button[aria-label="Choose model"]');
   const englishErrors = run("errors");
   assert(
@@ -2026,7 +2096,7 @@ function startImageProvider(port) {
 function assertAdminOverviewPresentation() {
   run("set", "viewport", "390", "844");
   run("open", `${baseUrl}/admin?section=overview`);
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   run("wait", ".rm-table");
 
   const overview = JSON.parse(
@@ -2104,7 +2174,7 @@ function assertProviderSetupAndDiagnostics() {
   }
 
   run("open", `${baseUrl}/admin?section=providers`);
-  run("wait", "--load", "networkidle");
+  waitForDocumentReady();
   openVllmDialog();
   const preset = JSON.parse(
     evaluate(`JSON.stringify({
@@ -2233,6 +2303,91 @@ function assertProviderSetupAndDiagnostics() {
   }
 }
 
+function listWorkspaceChatIds() {
+  return evaluate(`(async () => {
+    const response = await fetch("/api/v1/chats?workspaceId=workspace_default");
+    if (!response.ok) throw new Error(await response.text());
+    const body = await response.json();
+    return body.data.map((chat) => chat.id);
+  })()`);
+}
+
+function trackChatId(chatId) {
+  assert(
+    typeof chatId === "string" && chatId.length > 0,
+    "browser acceptance could not track a created chat",
+  );
+  createdChatIds.add(chatId);
+}
+
+function trackActiveChat() {
+  trackChatId(
+    evaluate(
+      `document.querySelector(".rm-sidebar-item.active[data-chat-id]")?.dataset.chatId ?? ""`,
+    ),
+  );
+}
+
+function trackChatByTitle(title) {
+  const baseline = initialChatIds ?? [];
+  trackChatId(
+    evaluate(`(async () => {
+      const response = await fetch("/api/v1/chats?workspaceId=workspace_default");
+      if (!response.ok) throw new Error(await response.text());
+      const body = await response.json();
+      const baseline = new Set(${JSON.stringify(baseline)});
+      return body.data.find(
+        (chat) => chat.title === ${JSON.stringify(title)} && !baseline.has(chat.id),
+      )?.id ?? "";
+    })()`),
+  );
+}
+
+function cleanupCreatedChats(baselineChatIds) {
+  const fixtureTitles = [
+    "Browser acceptance **bold**\n\n```typescript\nconst parity: boolean = true;\n```",
+    "Browser imported chat",
+    "Browser queue recovery anchor",
+    "Browser share export chat",
+    "Browser temporary chat sentinel",
+    "Keyboard mobile composer sentinel",
+    "Keyboard tablet composer sentinel",
+  ];
+  const result = evaluate(`(async () => {
+    const listResponse = await fetch("/api/v1/chats?workspaceId=workspace_default");
+    if (!listResponse.ok) throw new Error(await listResponse.text());
+    const body = await listResponse.json();
+    const baseline = new Set(${JSON.stringify(baselineChatIds)});
+    const tracked = new Set(${JSON.stringify([...createdChatIds])});
+    const fixtureTitles = new Set(${JSON.stringify(fixtureTitles)});
+    const created = body.data.filter(
+      (chat) =>
+        tracked.has(chat.id) ||
+        (!baseline.has(chat.id) && fixtureTitles.has(chat.title)),
+    );
+    const failures = [];
+    let deleted = 0;
+    for (const chat of created) {
+      const response = await fetch(
+        "/api/v1/chats/" + encodeURIComponent(chat.id),
+        {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ confirmChatId: chat.id }),
+        },
+      );
+      if (response.ok || response.status === 404) deleted += 1;
+      else failures.push({ id: chat.id, status: response.status });
+    }
+    return { created: created.length, deleted, failures };
+  })()`);
+  assert(
+    result.failures.length === 0 && result.deleted === result.created,
+    `browser acceptance chat cleanup failed: ${JSON.stringify(result)}`,
+  );
+  console.log(`Cleaned up ${result.deleted} browser-acceptance chat(s).`);
+}
+
 function evaluate(script) {
   const output = run("eval", script);
   return JSON.parse(output);
@@ -2243,6 +2398,7 @@ function evaluate(script) {
 // aria-label) and only mounted while the menu is open.
 function clickComposerMenuItem(label, triggerLabel = "More actions") {
   const lookup = `[...document.querySelectorAll('.rm-ui-menu [role="menuitem"]')].find((item) => item.textContent?.trim() === ${JSON.stringify(label)})`;
+  run("wait", `button[aria-label=${JSON.stringify(triggerLabel)}]`);
   run("click", `button[aria-label=${JSON.stringify(triggerLabel)}]`);
   run("wait", ".rm-ui-menu");
   run(
@@ -2282,6 +2438,13 @@ function axeViolationsForCurrentPage() {
     })));
   })()`),
   );
+}
+
+function waitForDocumentReady(targetSession = session) {
+  runFor(targetSession, "wait", "--fn", `document.readyState === "complete"`);
+  // SSE intentionally remains open, so network-idle is not a useful signal.
+  // Allow React to commit the routed view after the document load completes.
+  runFor(targetSession, "wait", "1000");
 }
 
 function run(...args) {
