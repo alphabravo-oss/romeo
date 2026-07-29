@@ -1161,7 +1161,6 @@ function assertComposerLocalization() {
       changeRequests: "Solicitudes de cambio",
       createFolder: "Crear carpeta",
       createFolderDialog: "Crear carpeta de chats",
-      configureAuth: "Configurar",
       dataDeletion: "Eliminación de datos",
       connections: "Conexiones",
       commandPalette: "Paleta de comandos",
@@ -1199,6 +1198,7 @@ function assertComposerLocalization() {
       navConfiguration: "Configuración",
       newExportDsar: "Nueva exportación (DSAR)",
       notificationChannels: "Canales de notificación",
+      createWorkflow: "Crear flujo de trabajo",
       newWorkflow: "Nuevo flujo de trabajo",
       serviceAccounts: "Cuentas de servicio",
       systemPosture: "Estado del sistema",
@@ -1285,7 +1285,6 @@ function assertComposerLocalization() {
       changeRequests: "Demandes de changement",
       createFolder: "Créer un dossier",
       createFolderDialog: "Créer un dossier de discussions",
-      configureAuth: "Configurer",
       dataDeletion: "Suppression des données",
       connections: "Connexions",
       commandPalette: "Palette de commandes",
@@ -1323,6 +1322,7 @@ function assertComposerLocalization() {
       navConfiguration: "Configuration",
       newExportDsar: "Nouvelle exportation (DSAR)",
       notificationChannels: "Canaux de notification",
+      createWorkflow: "Créer un flux de travail",
       newWorkflow: "Nouveau flux de travail",
       serviceAccounts: "Comptes de service",
       systemPosture: "État du système",
@@ -1848,12 +1848,8 @@ function assertComposerLocalization() {
       run("get", "text", "body").includes(locale.authProviders),
       `${locale.code} did not translate authentication provider administration`,
     );
-    run("eval", `document.querySelector("tbody button")?.click()`);
-    run("wait", ".rm-ui-sheet");
-    run(
-      "eval",
-      `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === ${JSON.stringify(locale.configureAuth)}))?.click()`,
-    );
+    run("wait", ".rm-provider-zone__grid--dense button");
+    run("click", ".rm-provider-zone__grid--dense button");
     run("wait", ".rm-ui-dialog:not(.rm-ui-sheet)");
     assert(
       run("get", "text", ".rm-ui-dialog:not(.rm-ui-sheet)").includes(
@@ -2009,8 +2005,13 @@ function assertComposerLocalization() {
       `${locale.code} did not translate workflow administration`,
     );
     run(
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll("button")].some((button) => button.textContent?.includes(${JSON.stringify(locale.createWorkflow)}) || button.textContent?.includes(${JSON.stringify(locale.newWorkflow)}))`,
+    );
+    run(
       "eval",
-      `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.newWorkflow)})))?.click()`,
+      `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.createWorkflow)}) || button.textContent?.includes(${JSON.stringify(locale.newWorkflow)})))?.click()`,
     );
     run("wait", ".rm-ui-dialog");
     assert(
