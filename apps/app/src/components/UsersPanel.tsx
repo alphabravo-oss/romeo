@@ -14,9 +14,11 @@ import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { confirmTone } from "./danger-tier";
 import { FormDialog } from "./FormDialog";
 import { PageActions } from "./PageActions";
 import { PanelStats } from "./PanelStats";
+import { canDisableUser } from "./user-disable-guard";
 
 const userCol = createColumnHelper<User>();
 
@@ -32,18 +34,18 @@ export function UsersPanel() {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["users"] });
 
-  async function handleDisable(userId: string) {
+  async function handleDisable(user: User) {
     if (
       !(await ask({
-        title: t("userDisableTitle"),
-        body: t("userDisableImmediate"),
+        title: t("usersDisableConfirmTitle"),
+        body: t("usersDisableConfirmBody"),
         confirmLabel: t("userDisable"),
-        tone: "danger",
+        tone: confirmTone("medium"),
       }))
     )
       return;
     try {
-      await disableMutation.mutateAsync(userId);
+      await disableMutation.mutateAsync(user.id);
       await refresh();
       toast(t("userDisabledNotice"), "success");
     } catch {
@@ -82,24 +84,39 @@ export function UsersPanel() {
       userCol.display({
         id: "actions",
         header: "",
-        cell: (c) => (
-          <div className="flex justify-end gap-2">
-            <Button onClick={() => setManaging(c.row.original)} type="button">
-              {t("userManage")}
-            </Button>
-            <Button
-              variant="danger"
-              disabled={
-                disableMutation.isPending ||
-                c.row.original.disabledAt !== undefined
-              }
-              onClick={() => void handleDisable(c.row.original.id)}
-              type="button"
-            >
-              {t("userDisable")}
-            </Button>
-          </div>
-        ),
+        cell: (c) => {
+          const target = disableGuardEntry(c.row.original);
+          const canDisable = canDisableUser(
+            target,
+            (usersQuery.data ?? []).map(disableGuardEntry),
+          );
+          const isDisabled = c.row.original.disabledAt !== undefined;
+
+          return (
+            <div className="flex items-center justify-end gap-2">
+              {!canDisable && !isDisabled ? (
+                <span className="text-xs text-muted">
+                  {t("usersLastAdminHint")}
+                </span>
+              ) : null}
+              <Button onClick={() => setManaging(c.row.original)} type="button">
+                {t("userManage")}
+              </Button>
+              <Button
+                aria-haspopup="dialog"
+                disabled={
+                  disableMutation.isPending || isDisabled || !canDisable
+                }
+                onClick={() => void handleDisable(c.row.original)}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                {t("userDisable")}
+              </Button>
+            </div>
+          );
+        },
       }),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -290,4 +307,16 @@ function roleKey(
   if (role === "global_admin") return "userGlobalAdmin";
   if (role === "org_admin") return "userOrgAdmin";
   return "userUser";
+}
+
+function disableGuardEntry(user: User): {
+  id: string;
+  role: string;
+  status: string;
+} {
+  return {
+    id: user.id,
+    role: user.role,
+    status: user.disabledAt === undefined ? "active" : "disabled",
+  };
 }

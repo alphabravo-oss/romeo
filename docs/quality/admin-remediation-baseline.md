@@ -39,7 +39,7 @@ The audit runs each section at both `desktop` (1440×1000) and `mobile`
 | usage                 | `incomplete-empty-state` | "No quotas yet."                                                                          | Task 1.4   | ✅     |
 | webhooks              | `primary-actions`        | `+ Add webhook` ×2 (header + empty state)                                                 | Task 4.2   | ✅     |
 | webhooks              | `incomplete-empty-state` | "No webhooks yet."                                                                        | Task 1.4   | ✅     |
-| users                 | `unguarded-destructive`  | Red row-level `Disable`, no confirmation                                                  | Task 5.3   | ☐      |
+| users                 | `unguarded-destructive`  | Red row-level `Disable`, no confirmation                                                  | Task 5.3   | ✅     |
 | overview              | `identifier-leak`        | Raw job/run IDs: `terminal_webhook`, `job_run_terminal_run_*`, `run_*`, `run_execution_*` | Task 7.1   | ☐      |
 | audit                 | `identifier-leak`        | `user_dev_admin`                                                                          | Task 7.1   | ☐      |
 | rag                   | `identifier-leak`        | `user_private` (Policy tab)                                                               | Task 7.1   | ☐      |
