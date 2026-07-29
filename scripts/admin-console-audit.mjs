@@ -359,6 +359,68 @@ async function inspectUi(
       const duplicateIds = [...document.querySelectorAll("[id]")]
         .map((element) => element.id)
         .filter((id, index, ids) => id.length > 0 && ids.indexOf(id) !== index);
+      // --- Admin remediation guardrails (see docs/superpowers/plans/
+      // 2026-07-29-admin-console-remediation.md, Phase 0) ---
+      // A page has one job. More than one primary action means the admin has
+      // to guess which one they came here for.
+      const primaryButtons = visibleButtons.filter((button) =>
+        button.classList.contains("rm-ui-button--primary"),
+      );
+      // Internal identifiers must never reach an admin's screen. Matches
+      // snake_case tokens of 2+ segments and colon-suffixed error codes.
+      // `translate="no"` marks intentional proper nouns (provider slugs).
+      const identifierPattern =
+        /\b[a-z][a-z0-9]*(?:_[a-z0-9]+){1,}(?::[a-z0-9_-]+)?\b/gu;
+      const identifierAllowlist = new Set([
+        "romeo_local",
+        "org_default",
+        "agent_default",
+        "group_admins",
+      ]);
+      const leakedIdentifiers = [
+        ...document.querySelectorAll("#console-content *"),
+      ]
+        .filter(
+          (element) =>
+            visible(element) &&
+            element.children.length === 0 &&
+            element.closest('[translate="no"]') === null &&
+            element.closest("code") === null &&
+            element.closest("pre") === null &&
+            element.closest("input") === null,
+        )
+        .flatMap((element) => [
+          ...(element.textContent ?? "").matchAll(identifierPattern),
+        ])
+        .map((match) => match[0])
+        .filter((token) => !identifierAllowlist.has(token));
+      // A danger-styled control must either open a confirmation or live in an
+      // explicit danger zone. A bare danger button wired straight to a
+      // mutation is an accidental-destruction risk.
+      const dangerButtons = visibleButtons.filter((button) =>
+        button.classList.contains("rm-ui-button--danger"),
+      );
+      const unguardedDangerButtons = dangerButtons.filter(
+        (button) =>
+          button.closest(".rm-danger-zone") === null &&
+          button.getAttribute("aria-haspopup") !== "dialog" &&
+          button.dataset.confirms !== "true",
+      );
+      // An empty state is an invitation to act, not a dead end. The
+      // EmptyState primitive is already in use everywhere, but a title alone
+      // ("No connectors yet.") tells the admin nothing about what a connector
+      // is or how to get one. Require an icon and an explanatory description;
+      // the action slot is optional because some lists (impersonation
+      // requests) are populated by users, not admins.
+      const incompleteEmptyStates = [
+        ...document.querySelectorAll(".rm-ui-empty"),
+      ]
+        .filter(visible)
+        .filter(
+          (element) =>
+            element.querySelector(".rm-ui-empty__icon") === null ||
+            element.querySelector(".rm-ui-empty__description") === null,
+        );
       const nonFrameworkButtons = visibleButtons.filter(
         (button) =>
           ![
@@ -620,6 +682,32 @@ async function inspectUi(
           .some((element) => element.textContent?.trim())
       )
         failures.push("page rendered a visible application error");
+      if (primaryButtons.length > 1)
+        failures.push(
+          `page has ${primaryButtons.length} primary actions (expected at most 1): ${primaryButtons
+            .map((button) => button.innerText.trim().replace(/\s+/gu, " "))
+            .join(" | ")}`,
+        );
+      if (leakedIdentifiers.length > 0)
+        failures.push(
+          `page exposes internal identifier: ${[...new Set(leakedIdentifiers)].join(", ")}`,
+        );
+      if (unguardedDangerButtons.length > 0)
+        failures.push(
+          `unguarded destructive action(s): ${unguardedDangerButtons
+            .map((button) => button.innerText.trim().replace(/\s+/gu, " "))
+            .join(" | ")}`,
+        );
+      if (incompleteEmptyStates.length > 0)
+        failures.push(
+          `empty state missing icon or description: ${incompleteEmptyStates
+            .map((element) =>
+              (
+                element.querySelector(".rm-ui-empty__title")?.textContent ?? ""
+              ).trim(),
+            )
+            .join(" | ")}`,
+        );
       if (
         expectedSection === "audit" &&
         (() => {
@@ -675,9 +763,13 @@ async function inspectUi(
         failures,
         metrics: {
           buttons: visibleButtons.length,
+          incompleteEmptyStates: incompleteEmptyStates.length,
           emptyStates: [...document.querySelectorAll(".rm-empty")].filter(
             visible,
           ).length,
+          leakedIdentifiers: [...new Set(leakedIdentifiers)].length,
+          primaryActions: primaryButtons.length,
+          unguardedDangerActions: unguardedDangerButtons.length,
           formControls: visibleFormControls.length,
           frameworkButtons: visibleButtons.length - nonFrameworkButtons.length,
           frameworkControls:
