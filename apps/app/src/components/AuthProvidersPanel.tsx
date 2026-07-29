@@ -25,7 +25,7 @@ import { toast } from "../lib/toast";
 import { AuthDirectorySyncDialog } from "./AuthDirectorySyncDialog";
 import { ConfigureDialog } from "./AuthProviderConfigureDialog";
 import { DeprovisionDialog } from "./AuthProviderDeprovisionDialog";
-import { AuthProviderTableView } from "./AuthProviderTableView";
+import { AuthProviderSplitView } from "./AuthProviderSplitView";
 import { useConfirm } from "./ConfirmDialog";
 
 type Scope = "global" | "org";
@@ -218,7 +218,7 @@ export function AuthProvidersPanel(): React.ReactNode {
               >(settings.effective.providers.map((p) => [p.providerId, p]));
 
               return (
-                <AuthProviderTableView
+                <AuthProviderSplitView
                   busy={updateMutation.isPending}
                   catalog={catalog}
                   deprovisioning={deprovisionMutation.isPending}
