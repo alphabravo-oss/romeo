@@ -1,4 +1,4 @@
-import { Input, NativeSelect, Button } from "@romeo/ui";
+import { Input, LinkButton, NativeSelect, Button } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
@@ -15,6 +15,7 @@ import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
+import { PageActions } from "./PageActions";
 import { PanelStats } from "./PanelStats";
 
 const userCol = createColumnHelper<User>();
@@ -109,13 +110,24 @@ export function UsersPanel() {
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("userUsers")}</div>
-        <Button
-          disabled={usersQuery.isFetching}
-          onClick={() => void usersQuery.refetch()}
-          type="button"
-        >
-          {usersQuery.isFetching ? t("refreshing") : t("refresh")}
-        </Button>
+        <PageActions
+          onRefresh={() => void usersQuery.refetch()}
+          primary={
+            <div className="grid justify-items-end gap-1">
+              <LinkButton
+                href="/admin?section=auth-providers"
+                variant="primary"
+              >
+                {t("usersAddViaSso")}
+              </LinkButton>
+              <span className="text-xs text-muted">
+                {t("usersAddViaSsoHint")}
+              </span>
+            </div>
+          }
+          refreshLabel={t("refresh")}
+          refreshing={usersQuery.isFetching}
+        />
       </div>
       <div className="mt-4">
         <PanelState query={usersQuery} empty={t("userNoUsers")}>

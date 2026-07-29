@@ -30,5 +30,7 @@
   "userTotalUsers": "Usuarios totales",
   "userUpdateRole": "Actualizar rol",
   "userUser": "Usuario",
-  "userUsers": "Usuarios"
+  "userUsers": "Usuarios",
+  "usersAddViaSso": "Configurar inicio de sesión",
+  "usersAddViaSsoHint": "Los miembros se unen a través de un proveedor de inicio de sesión configurado."
 }

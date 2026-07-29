@@ -30,5 +30,7 @@
   "userTotalUsers": "Total des utilisateurs",
   "userUpdateRole": "Mettre à jour le rôle",
   "userUser": "Utilisateur",
-  "userUsers": "Utilisateurs"
+  "userUsers": "Utilisateurs",
+  "usersAddViaSso": "Configurer la connexion",
+  "usersAddViaSsoHint": "Les membres rejoignent via un fournisseur de connexion configuré."
 }

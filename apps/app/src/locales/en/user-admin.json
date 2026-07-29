@@ -30,5 +30,7 @@
   "userTotalUsers": "Total users",
   "userUpdateRole": "Update role",
   "userUser": "User",
-  "userUsers": "Users"
+  "userUsers": "Users",
+  "usersAddViaSso": "Set up sign-on",
+  "usersAddViaSsoHint": "Members join through a configured sign-on provider."
 }
