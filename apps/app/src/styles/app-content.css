@@ -1006,3 +1006,28 @@ select:focus-visible {
     display: block;
   }
 }
+
+/* Danger zone: destructive actions are separated from routine settings by a
+   visible boundary so they are never adjacent to a Save. */
+.rm-danger-zone {
+  display: grid;
+  gap: 0.75rem;
+  margin-block-start: 2rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--rm-ui-danger) 40%, transparent);
+  border-radius: var(--rm-ui-radius);
+  background: color-mix(in srgb, var(--rm-ui-danger) 6%, transparent);
+}
+
+.rm-danger-zone__title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.rm-danger-zone__description {
+  color: var(--rm-ui-muted);
+  font-size: 0.875rem;
+  margin: 0;
+  max-width: 60ch;
+}
