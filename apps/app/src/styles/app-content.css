@@ -1031,3 +1031,68 @@ select:focus-visible {
   margin: 0;
   max-width: 60ch;
 }
+
+/* Provider zones. Active slots get rich cards; available slots use a dense,
+   quiet grid because they are a catalog to browse, not an inventory. */
+.rm-provider-zone {
+  display: grid;
+  gap: 0.75rem;
+  margin-block-start: 1.5rem;
+}
+
+.rm-provider-zone__label {
+  color: var(--rm-ui-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.rm-provider-zone__grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+}
+
+.rm-provider-zone__grid--dense {
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+}
+
+.rm-provider-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--rm-ui-border);
+  border-radius: var(--rm-ui-radius);
+  background: var(--rm-ui-surface);
+}
+
+.rm-provider-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.rm-provider-card__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-provider-card__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 1rem;
+  color: var(--rm-ui-muted);
+  font-size: 0.8125rem;
+}
+
+.rm-provider-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}

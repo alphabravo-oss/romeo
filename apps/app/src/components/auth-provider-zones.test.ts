@@ -28,9 +28,7 @@ describe("provider zones", () => {
   });
 
   it("separates planned providers so they are never offered as claimable", () => {
-    const zones = splitProviderZones([
-      row("saml", false, false, "planned"),
-    ]);
+    const zones = splitProviderZones([row("saml", false, false, "planned")]);
     expect(zones.unavailable.map((entry) => entry.id)).toEqual(["saml"]);
     expect(zones.available).toHaveLength(0);
   });
