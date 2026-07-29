@@ -22,8 +22,10 @@ import {
   LocalizedNumber,
 } from "../lib/locale-format";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { DateRangeSelect } from "./DateRangeSelect";
 import { PageActions } from "./PageActions";
 import { PanelStats } from "./PanelStats";
+import { rangeToBounds, type RangePreset } from "./date-range";
 
 const alertCol = createColumnHelper<UsageAlert>();
 
@@ -147,8 +149,9 @@ function eventColumns(t: Translate): ColumnDef<UsageEvent, any>[] {
 
 export function UsagePanel() {
   const { t } = useLocale();
+  const [range, setRange] = useState<RangePreset>("7d");
   const usageQuery = useQuery({
-    queryKey: ["usageEvents"],
+    queryKey: ["usageEvents", range],
     queryFn: listUsageEvents,
   });
   const summaryQuery = useQuery({
@@ -162,7 +165,12 @@ export function UsagePanel() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string>();
   const alerts = alertsQuery.data ?? [];
-  const events = usageQuery.data ?? [];
+  const bounds = rangeToBounds(range, new Date());
+  // ponytail: client-side range filter; move to a server parameter when the
+  // usage dataset outgrows the unpaginated endpoint response.
+  const events = (usageQuery.data ?? []).filter((event) =>
+    isWithinBounds(event.createdAt, bounds),
+  );
   const totals = summaryQuery.data?.totals ?? [];
   const runCount = metricQuantity(totals, (metric) => metric === "run.started");
   const toolCallCount = metricQuantity(
@@ -180,6 +188,7 @@ export function UsagePanel() {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-muted">{t("usageTitle")}</div>
         <div className="flex flex-wrap gap-2">
+          <DateRangeSelect onChange={setRange} value={range} />
           <Button
             disabled={isExporting || events.length === 0}
             onClick={() => void exportCsv()}
@@ -334,6 +343,18 @@ function humanizeMetric(metric: string): string {
   const words = metric.replace(/[._]+/gu, " ").trim();
   if (words.length === 0) return "";
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function isWithinBounds(
+  value: string,
+  bounds: { from: Date | undefined; to: Date },
+): boolean {
+  const instant = new Date(value).getTime();
+  return (
+    Number.isFinite(instant) &&
+    instant <= bounds.to.getTime() &&
+    (bounds.from === undefined || instant >= bounds.from.getTime())
+  );
 }
 
 function usageSeverityMessageKey(severity: UsageAlert["severity"]): MessageKey {

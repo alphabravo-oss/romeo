@@ -9,8 +9,10 @@ import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { DateRangeSelect } from "./DateRangeSelect";
 import { PanelStats } from "./PanelStats";
 import { PageActions } from "./PageActions";
+import { rangeToBounds, type RangePreset } from "./date-range";
 import {
   type ColumnDef,
   DataTable,
@@ -80,6 +82,7 @@ function humanizeAuditActor(actorId: string): string {
 
 export function AuditPanel() {
   const { t } = useLocale();
+  const [range, setRange] = useState<RangePreset>("7d");
   const [action, setAction] = useState("");
   const [outcome, setOutcome] = useState<AuditLogFilter["outcome"] | "">("");
   const [isExporting, setIsExporting] = useState(false);
@@ -93,8 +96,9 @@ export function AuditPanel() {
   if (action.trim().length > 0) filter.action = action.trim();
   if (outcome === "success" || outcome === "failure") filter.outcome = outcome;
   const cursor = cursorStack[cursorStack.length - 1];
+  const bounds = rangeToBounds(range, new Date());
   const auditQuery = useQuery({
-    queryKey: ["auditLogs", filter, cursor ?? null],
+    queryKey: ["auditLogs", filter, cursor ?? null, range],
     queryFn: () =>
       listAuditLogs(
         filter,
@@ -164,6 +168,13 @@ export function AuditPanel() {
         </div>
       ) : null}
       <div className="mb-3 flex flex-wrap gap-2">
+        <DateRangeSelect
+          onChange={(value) => {
+            setRange(value);
+            resetPaging();
+          }}
+          value={range}
+        />
         <Input
           onChange={(event) => {
             setAction(event.currentTarget.value);
@@ -195,35 +206,51 @@ export function AuditPanel() {
         empty={t("auditNoEvents")}
         isEmpty={() => false}
       >
-        {(page) => (
-          <div
-            className="grid gap-4"
-            data-audit-event-count={page.data.length}
-            data-audit-failure-count={
-              page.data.filter((event) => event.outcome === "failure").length
-            }
-          >
-            <PanelStats
-              items={[
-                { label: t("auditEvents"), value: page.data.length },
-                {
-                  label: t("auditFailures"),
-                  value: page.data.filter(
-                    (event) => event.outcome === "failure",
-                  ).length,
-                },
-              ]}
-            />
-            <DataTable
-              columns={auditColumns(t)}
-              data={page.data}
-              empty={t("auditNoEvents")}
-              maxBodyHeight={620}
-              serverPagination={serverPagination}
-            />
-          </div>
-        )}
+        {(page) => {
+          // ponytail: client-side range filter; move to a server parameter
+          // when the audit dataset outgrows one page.
+          const visibleEvents = page.data.filter((event) =>
+            isWithinBounds(event.createdAt, bounds),
+          );
+          const failureCount = visibleEvents.filter(
+            (event) => event.outcome === "failure",
+          ).length;
+
+          return (
+            <div
+              className="grid gap-4"
+              data-audit-event-count={visibleEvents.length}
+              data-audit-failure-count={failureCount}
+            >
+              <PanelStats
+                items={[
+                  { label: t("auditEvents"), value: visibleEvents.length },
+                  { label: t("auditFailures"), value: failureCount },
+                ]}
+              />
+              <DataTable
+                columns={auditColumns(t)}
+                data={visibleEvents}
+                empty={t("auditNoEvents")}
+                maxBodyHeight={620}
+                serverPagination={serverPagination}
+              />
+            </div>
+          );
+        }}
       </PanelState>
     </section>
+  );
+}
+
+function isWithinBounds(
+  value: string,
+  bounds: { from: Date | undefined; to: Date },
+): boolean {
+  const instant = new Date(value).getTime();
+  return (
+    Number.isFinite(instant) &&
+    instant <= bounds.to.getTime() &&
+    (bounds.from === undefined || instant >= bounds.from.getTime())
   );
 }
