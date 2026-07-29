@@ -44,9 +44,9 @@ export function ThemeToggle() {
       type="button"
     >
       {dark ? (
-        <Sun aria-hidden="true" size={17} />
+        <Sun aria-hidden="true" size={15} />
       ) : (
-        <Moon aria-hidden="true" size={17} />
+        <Moon aria-hidden="true" size={15} />
       )}
     </Button>
   );

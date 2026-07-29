@@ -19,6 +19,7 @@ const sections = [
   ["audit", "Audit log"],
   ["posture", "System posture"],
   ["providers", "Providers"],
+  ["chat-experience", "Chat experience"],
   ["connections", "Connections"],
   ["governance", "Governance"],
   ["rag", "RAG governance"],
@@ -89,6 +90,9 @@ try {
     });
 
     for (const [section, title, view] of routes) {
+      console.log(
+        `[admin-console-audit] ${viewport.name} ${section}${view === undefined ? "" : `/${view}`}`,
+      );
       routeConsoleErrors = [];
       routePageErrors = [];
       routeResponseFailures = [];
@@ -106,7 +110,13 @@ try {
       };
 
       try {
-        await page.goto(`${baseUrl}${path}`, { waitUntil: "networkidle" });
+        // Romeo keeps an authenticated EventSource open for live chat-list
+        // updates, so a healthy page intentionally never becomes network-idle.
+        // The heading and loading-state waits below are the deterministic
+        // readiness signals for this SPA.
+        await page.goto(`${baseUrl}${path}`, {
+          waitUntil: "domcontentloaded",
+        });
         await page
           .locator("#console-content h2")
           .filter({ hasText: title })

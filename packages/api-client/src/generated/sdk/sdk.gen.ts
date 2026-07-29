@@ -219,6 +219,15 @@ import type {
   ChannelsUpdateMessageErrors,
   ChannelsUpdateMessageResponses,
   ChannelsUpdateResponses,
+  ChatExperienceGenerateTitleData,
+  ChatExperienceGenerateTitleErrors,
+  ChatExperienceGenerateTitleResponses,
+  ChatExperienceGetData,
+  ChatExperienceGetErrors,
+  ChatExperienceGetResponses,
+  ChatExperienceUpdateData,
+  ChatExperienceUpdateErrors,
+  ChatExperienceUpdateResponses,
   ChatsArchiveData,
   ChatsArchiveErrors,
   ChatsArchiveResponses,
@@ -7683,6 +7692,97 @@ export const chatsCreateComment = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/chats/{chatId}/comments",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Read organization chat experience settings
+ */
+export const chatExperienceGet = <ThrowOnError extends boolean = false>(
+  options?: Options<ChatExperienceGetData, ThrowOnError>,
+): RequestResult<
+  ChatExperienceGetResponses,
+  ChatExperienceGetErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ChatExperienceGetResponses,
+    ChatExperienceGetErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/chat-experience",
+    ...options,
+  });
+
+/**
+ * Update organization chat experience settings
+ */
+export const chatExperienceUpdate = <ThrowOnError extends boolean = false>(
+  options: Options<ChatExperienceUpdateData, ThrowOnError>,
+): RequestResult<
+  ChatExperienceUpdateResponses,
+  ChatExperienceUpdateErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    ChatExperienceUpdateResponses,
+    ChatExperienceUpdateErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/chat-experience",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Generate a concise title for a chat
+ */
+export const chatExperienceGenerateTitle = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ChatExperienceGenerateTitleData, ThrowOnError>,
+): RequestResult<
+  ChatExperienceGenerateTitleResponses,
+  ChatExperienceGenerateTitleErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ChatExperienceGenerateTitleResponses,
+    ChatExperienceGenerateTitleErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/chats/{chatId}/generate-title",
     ...options,
     headers: {
       "Content-Type": "application/json",

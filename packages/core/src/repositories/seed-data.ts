@@ -398,6 +398,20 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
   };
 }
 
+export function createRuntimeSeedData(
+  now = new Date().toISOString(),
+): SeedData {
+  const seed = createSeedData(now);
+  return {
+    ...seed,
+    chats: seed.chats.filter((chat) => chat.id !== "chat_welcome"),
+    grants: seed.grants.filter(
+      (grant) =>
+        !(grant.resourceType === "chat" && grant.resourceId === "chat_welcome"),
+    ),
+  };
+}
+
 function createSeedGrants(): ResourceGrant[] {
   const resources: Array<
     [ResourceGrant["resourceType"], string, ResourceGrant["permission"]]

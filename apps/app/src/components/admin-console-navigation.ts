@@ -10,6 +10,7 @@ import KeySquare from "lucide-react/dist/esm/icons/key-square.mjs";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard.mjs";
 import LineChart from "lucide-react/dist/esm/icons/line-chart.mjs";
 import Link2 from "lucide-react/dist/esm/icons/link-2.mjs";
+import MessageSquareText from "lucide-react/dist/esm/icons/message-square-text.mjs";
 import Plug from "lucide-react/dist/esm/icons/plug.mjs";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text.mjs";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
@@ -46,6 +47,11 @@ export const ADMIN_GROUPS: Array<{
     labelKey: "navConfiguration",
     items: [
       { key: "providers", labelKey: "navProviders", icon: Server },
+      {
+        key: "chat-experience",
+        labelKey: "navChatExperience",
+        icon: MessageSquareText,
+      },
       { key: "connections", labelKey: "navConnections", icon: Plug },
       { key: "governance", labelKey: "navGovernance", icon: ShieldCheck },
       { key: "rag", labelKey: "navRagGovernance", icon: Database },
@@ -109,6 +115,10 @@ export const ADMIN_META: Record<
   providers: {
     titleKey: "navProviders",
     descriptionKey: "adminProvidersDescription",
+  },
+  "chat-experience": {
+    titleKey: "navChatExperience",
+    descriptionKey: "adminChatExperienceDescription",
   },
   connections: {
     titleKey: "navConnections",

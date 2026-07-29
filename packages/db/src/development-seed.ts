@@ -7,7 +7,6 @@ import {
   agentToolBindings,
   agentVersions,
   baseModels,
-  chats,
   groups,
   groupMemberships,
   knowledgeBases,
@@ -76,7 +75,6 @@ export async function seedPostgresDevelopmentData(
       .insert(agentToolBindings)
       .values(defaultAgentToolBindings(now))
       .onConflictDoNothing();
-    await tx.insert(chats).values(defaultChat(now)).onConflictDoNothing();
     await tx
       .insert(retentionPolicies)
       .values(defaultRetentionPolicy(now))
@@ -131,7 +129,6 @@ export async function seedPostgresDevelopmentData(
       "voice_profile",
       "knowledge_base",
       "agent",
-      "chat",
       "retention_policy",
       "quota_bucket",
       "resource_grants",
@@ -348,18 +345,6 @@ function defaultAgentToolBindings(now: Date) {
   ];
 }
 
-function defaultChat(now: Date) {
-  return {
-    id: "chat_welcome",
-    orgId: "org_default",
-    workspaceId: "workspace_default",
-    title: "Welcome",
-    createdBy: "user_dev_admin",
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
 function defaultRetentionPolicy(now: Date) {
   return {
     orgId: "org_default",
@@ -390,7 +375,6 @@ function defaultQuotaBucket(now: Date) {
 
 function defaultResourceGrants(now: Date) {
   const grants: Array<[string, string, "read" | "run" | "use" | "write"]> = [
-    ["chat", "chat_welcome", "write"],
     ["agent", "agent_default", "run"],
     ["tool", "tool_calculator", "use"],
     ["tool", "tool_datetime", "use"],
@@ -404,8 +388,10 @@ function defaultResourceGrants(now: Date) {
     ["voice_profile", "voice_default", "use"],
   ];
 
+  // Keep the remaining deterministic IDs stable after removing the former
+  // chat_welcome grant, which occupied grant_seed_1.
   return grants.map(([resourceType, resourceId, permission], index) => ({
-    id: `grant_seed_${index + 1}`,
+    id: `grant_seed_${index + 2}`,
     orgId: "org_default",
     resourceType,
     resourceId,

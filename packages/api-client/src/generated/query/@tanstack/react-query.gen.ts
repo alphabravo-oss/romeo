@@ -79,6 +79,9 @@ import {
   channelsRemoveReaction,
   channelsUpdate,
   channelsUpdateMessage,
+  chatExperienceGenerateTitle,
+  chatExperienceGet,
+  chatExperienceUpdate,
   chatsArchive,
   chatsCleanupExpired,
   chatsCreate,
@@ -691,6 +694,15 @@ import type {
   ChannelsUpdateMessageError,
   ChannelsUpdateMessageResponse,
   ChannelsUpdateResponse,
+  ChatExperienceGenerateTitleData,
+  ChatExperienceGenerateTitleError,
+  ChatExperienceGenerateTitleResponse,
+  ChatExperienceGetData,
+  ChatExperienceGetError,
+  ChatExperienceGetResponse,
+  ChatExperienceUpdateData,
+  ChatExperienceUpdateError,
+  ChatExperienceUpdateResponse,
   ChatsArchiveData,
   ChatsArchiveError,
   ChatsArchiveResponse,
@@ -8019,6 +8031,88 @@ export const chatsCreateCommentMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await chatsCreateComment({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const chatExperienceGetQueryKey = (
+  options?: Options<ChatExperienceGetData>,
+) => createQueryKey("chatExperienceGet", options);
+
+/**
+ * Read organization chat experience settings
+ */
+export const chatExperienceGetOptions = (
+  options?: Options<ChatExperienceGetData>,
+) =>
+  queryOptions<
+    ChatExperienceGetResponse,
+    ChatExperienceGetError,
+    ChatExperienceGetResponse,
+    ReturnType<typeof chatExperienceGetQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await chatExperienceGet({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: chatExperienceGetQueryKey(options),
+  });
+
+/**
+ * Update organization chat experience settings
+ */
+export const chatExperienceUpdateMutation = (
+  options?: Partial<Options<ChatExperienceUpdateData>>,
+): UseMutationOptions<
+  ChatExperienceUpdateResponse,
+  ChatExperienceUpdateError,
+  Options<ChatExperienceUpdateData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ChatExperienceUpdateResponse,
+    ChatExperienceUpdateError,
+    Options<ChatExperienceUpdateData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await chatExperienceUpdate({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Generate a concise title for a chat
+ */
+export const chatExperienceGenerateTitleMutation = (
+  options?: Partial<Options<ChatExperienceGenerateTitleData>>,
+): UseMutationOptions<
+  ChatExperienceGenerateTitleResponse,
+  ChatExperienceGenerateTitleError,
+  Options<ChatExperienceGenerateTitleData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ChatExperienceGenerateTitleResponse,
+    ChatExperienceGenerateTitleError,
+    Options<ChatExperienceGenerateTitleData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await chatExperienceGenerateTitle({
         ...options,
         ...fnOptions,
         throwOnError: true,

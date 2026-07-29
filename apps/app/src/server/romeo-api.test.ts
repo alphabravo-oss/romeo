@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createServerRepository } from "./romeo-api";
 
 describe("Romeo server repository runtime", () => {
-  it("keeps memory persistence development-only", () => {
+  it("keeps memory persistence development-only and starts without chats", async () => {
     const devRepository = createServerRepository(
       readEnv({
         DEV_SEEDED_LOGIN: "true",
@@ -18,6 +18,7 @@ describe("Romeo server repository runtime", () => {
       driver: "memory",
       durable: false,
     });
+    expect(await devRepository.listChats("workspace_default")).toEqual([]);
     expect(() =>
       createServerRepository(
         readEnv({

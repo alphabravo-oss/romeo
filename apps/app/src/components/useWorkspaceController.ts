@@ -88,6 +88,7 @@ export function useWorkspaceController() {
     agents,
     chats,
     chatsTotal,
+    chatExperience,
     hasMoreChats,
     isLoadingMoreChats,
     loadMoreChats,
@@ -173,6 +174,7 @@ export function useWorkspaceController() {
   } = useWorkspaceTurnActions({
     activeAgentId: activeAgent?.id,
     activeChatId,
+    autoTitleEnabled: chatExperience?.autoTitleEnabled ?? true,
     appendMessage,
     attachedUrls,
     clearPendingAttachments,
@@ -342,6 +344,7 @@ export function useWorkspaceController() {
     agents,
     chats,
     chatsTotal,
+    chatExperience,
     citations,
     contextPreview,
     contextPreviewError,

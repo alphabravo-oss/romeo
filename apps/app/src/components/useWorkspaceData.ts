@@ -2,6 +2,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { getBootstrap, listChatsPage } from "../features";
+import { getChatExperience } from "../features/chat-experience";
 import { listAgents } from "../features/managed-models";
 import {
   getProviderOperationalSummary,
@@ -34,6 +35,10 @@ export function useWorkspaceData(activeAgentId: string | undefined) {
       lastPage.hasMore ? lastPage.offset + lastPage.items.length : undefined,
     enabled: workspace !== undefined,
   });
+  const chatExperienceQuery = useQuery({
+    queryKey: ["chatExperience"],
+    queryFn: getChatExperience,
+  });
   const modelsQuery = useQuery({ queryKey: ["models"], queryFn: listModels });
   const providersQuery = useQuery({
     queryKey: ["providers"],
@@ -57,6 +62,7 @@ export function useWorkspaceData(activeAgentId: string | undefined) {
     activeAgent,
     agents,
     chats: chatsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    chatExperience: chatExperienceQuery.data,
     chatsTotal: chatsQuery.data?.pages[0]?.total ?? 0,
     hasMoreChats: chatsQuery.hasNextPage,
     isLoadingMoreChats: chatsQuery.isFetchingNextPage,

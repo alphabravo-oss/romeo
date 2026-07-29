@@ -14,6 +14,7 @@ import { BillingService } from "./billing-service";
 import type { BrowserAutomationService } from "./browser-automation-service";
 import { ChannelService } from "./channel-service";
 import type { ChatEventService } from "./chat-event-service";
+import { ChatExperienceService } from "./chat-experience-service";
 import { ChatCommentService } from "./chat-comment-service";
 import type { ChatService } from "./chat-service";
 import { ChatTagService } from "./chat-tag-service";
@@ -173,6 +174,7 @@ export function buildServiceRegistry(
     }),
     browserAutomation,
     chatEvents,
+    chatExperience: new ChatExperienceService(repository),
     channels: new ChannelService(repository, openWebUiCompatibility),
     chats,
     temporaryChatCleanup,

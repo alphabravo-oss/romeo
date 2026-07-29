@@ -100,6 +100,8 @@ html.dark .rm-sidebar-item.active {
   place-items: center;
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   flex-shrink: 0;
   border-radius: 9999px;
   background: var(--rm-surface-soft);
@@ -185,14 +187,17 @@ html.dark .rm-sidebar-item.active {
 
 .rm-theme-toggle {
   display: inline-grid;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid var(--rm-border);
   border-radius: 999px;
   background: var(--rm-surface);
   color: var(--rm-muted);
+  padding: 0;
 }
 
 .rm-theme-toggle:hover {
@@ -578,17 +583,9 @@ html.dark .rm-topbar-button:hover {
   gap: 2px;
 }
 
-/* justify-content, not text-align: @romeo/ui's .rm-ui-button sets
- * justify-content: center (packages/ui/src/styles.css:49) and outranks a bare
- * .rm-suggestion. The implicit column shrink-wraps to its text, so centring
- * the *track* pushed the label ~293px right of the "Suggested" heading it sits
- * under. text-align never got a say — it only aligns text inside a track that
- * was already the width of its content. */
-
 .rm-suggestion {
-  display: grid;
+  display: flex;
   justify-content: start;
-  gap: 1px;
   border: 0;
   border-radius: var(--rm-radius-item);
   background: transparent;
@@ -632,14 +629,6 @@ html.dark .rm-topbar-button:hover {
   font-size: 15px;
   font-weight: 500;
   color: var(--rm-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rm-suggestion-sub {
-  font-size: 13px;
-  color: var(--rm-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

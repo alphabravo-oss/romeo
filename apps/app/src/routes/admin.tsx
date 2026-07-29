@@ -52,6 +52,10 @@ const ConnectedAppsPanel = lazyNamed(
   () => import("../components/ConnectedAppsPanel"),
   "ConnectedAppsPanel",
 );
+const ChatExperiencePanel = lazyNamed(
+  () => import("../components/ChatExperiencePanel"),
+  "ChatExperiencePanel",
+);
 const DataConnectorPanel = lazyNamed(
   () => import("../components/DataConnectorPanel"),
   "DataConnectorPanel",
@@ -358,6 +362,8 @@ function AdminPage() {
             ) : null}
           </div>
         ) : null}
+
+        {section === "chat-experience" ? <ChatExperiencePanel /> : null}
 
         {section === "connections" ? (
           <div className="grid gap-4">

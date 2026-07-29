@@ -6,6 +6,7 @@ export * from "./billing";
 export * from "./browser-automation";
 export * from "./admin-insights";
 export * from "./chats";
+export * from "./chat-experience";
 export * from "./channels";
 export * from "./collaboration";
 export * from "./collaboration-routes";

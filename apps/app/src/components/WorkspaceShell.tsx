@@ -166,6 +166,7 @@ export function WorkspaceShell() {
           canInspectContext={workspace.activeChatId !== undefined}
           models={workspace.models}
           providers={workspace.providers}
+          promptSuggestions={workspace.chatExperience?.suggestions ?? []}
           selectedModelId={workspace.selectedModelId}
           onSelectModel={workspace.handleSelectModel}
           draft={workspace.draft}

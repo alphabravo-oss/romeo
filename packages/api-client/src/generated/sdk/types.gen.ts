@@ -4403,6 +4403,21 @@ export type CreateChatCommentRequest = {
   body: string;
 };
 
+export type ChatExperience = {
+  suggestions: Array<ChatSuggestion>;
+  autoTitleEnabled: boolean;
+};
+
+export type ChatSuggestion = {
+  title: string;
+  prompt: string;
+};
+
+export type UpdateChatExperienceRequest = {
+  suggestions: Array<ChatSuggestion>;
+  autoTitleEnabled: boolean;
+};
+
 export type Channel = {
   id: string;
   type: "dm" | "group" | "standard";
@@ -19376,6 +19391,181 @@ export type ChatsCreateCommentResponses = {
 
 export type ChatsCreateCommentResponse =
   ChatsCreateCommentResponses[keyof ChatsCreateCommentResponses];
+
+export type ChatExperienceGetData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/chat-experience";
+};
+
+export type ChatExperienceGetErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+};
+
+export type ChatExperienceGetError =
+  ChatExperienceGetErrors[keyof ChatExperienceGetErrors];
+
+export type ChatExperienceGetResponses = {
+  /**
+   * Chat experience
+   */
+  200: {
+    data: ChatExperience;
+  };
+};
+
+export type ChatExperienceGetResponse =
+  ChatExperienceGetResponses[keyof ChatExperienceGetResponses];
+
+export type ChatExperienceUpdateData = {
+  body: UpdateChatExperienceRequest;
+  path?: never;
+  query?: never;
+  url: "/admin/chat-experience";
+};
+
+export type ChatExperienceUpdateErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+};
+
+export type ChatExperienceUpdateError =
+  ChatExperienceUpdateErrors[keyof ChatExperienceUpdateErrors];
+
+export type ChatExperienceUpdateResponses = {
+  /**
+   * Chat experience
+   */
+  200: {
+    data: ChatExperience;
+  };
+};
+
+export type ChatExperienceUpdateResponse =
+  ChatExperienceUpdateResponses[keyof ChatExperienceUpdateResponses];
+
+export type ChatExperienceGenerateTitleData = {
+  body: {
+    modelId: string;
+  };
+  path: {
+    chatId: string;
+  };
+  query?: never;
+  url: "/chats/{chatId}/generate-title";
+};
+
+export type ChatExperienceGenerateTitleErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+};
+
+export type ChatExperienceGenerateTitleError =
+  ChatExperienceGenerateTitleErrors[keyof ChatExperienceGenerateTitleErrors];
+
+export type ChatExperienceGenerateTitleResponses = {
+  /**
+   * Updated chat
+   */
+  200: {
+    data: Chat;
+  };
+};
+
+export type ChatExperienceGenerateTitleResponse =
+  ChatExperienceGenerateTitleResponses[keyof ChatExperienceGenerateTitleResponses];
 
 export type ChannelsListData = {
   body?: never;

@@ -4958,6 +4958,21 @@ export const zCreateChatCommentRequest = z.object({
   body: z.string().min(1).max(5000),
 });
 
+export const zChatSuggestion = z.object({
+  title: z.string().min(1).max(80),
+  prompt: z.string().min(1).max(4000),
+});
+
+export const zChatExperience = z.object({
+  suggestions: z.array(zChatSuggestion).max(8),
+  autoTitleEnabled: z.boolean(),
+});
+
+export const zUpdateChatExperienceRequest = z.object({
+  suggestions: z.array(zChatSuggestion).max(8),
+  autoTitleEnabled: z.boolean(),
+});
+
 export const zChannelUser = z.object({
   id: z.string().min(1).max(200),
   email: z.email(),
@@ -11601,6 +11616,37 @@ export const zChatsCreateCommentPath = z.object({
  */
 export const zChatsCreateCommentResponse = z.object({
   data: zChatComment,
+});
+
+/**
+ * Chat experience
+ */
+export const zChatExperienceGetResponse = z.object({
+  data: zChatExperience,
+});
+
+export const zChatExperienceUpdateBody = zUpdateChatExperienceRequest;
+
+/**
+ * Chat experience
+ */
+export const zChatExperienceUpdateResponse = z.object({
+  data: zChatExperience,
+});
+
+export const zChatExperienceGenerateTitleBody = z.object({
+  modelId: z.string().min(1).max(200),
+});
+
+export const zChatExperienceGenerateTitlePath = z.object({
+  chatId: z.string().min(1).max(300),
+});
+
+/**
+ * Updated chat
+ */
+export const zChatExperienceGenerateTitleResponse = z.object({
+  data: zChat,
 });
 
 /**

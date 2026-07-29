@@ -7,6 +7,7 @@ import { adminInsightsRoutes } from "./admin-insights";
 import { billingRoutes } from "./billing";
 import { browserAutomationRoutes } from "./browser-automation";
 import { chatRoutes } from "./chats";
+import { chatExperienceRoutes } from "./chat-experience";
 import { channelRoutes } from "./channels";
 import { collaborationRoutes } from "./collaboration-routes";
 import { dataConnectorRoutes } from "./data-connectors";
@@ -115,6 +116,7 @@ export const contractRoutes = [
   ...ssoAdministrationRoutes,
   ...scimRoutes,
   ...chatRoutes,
+  ...chatExperienceRoutes,
   ...channelRoutes,
   ...collaborationRoutes,
   ...dataConnectorRoutes,

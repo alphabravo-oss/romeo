@@ -1,6 +1,7 @@
 import { readEnv, type RomeoEnv } from "@romeo/config";
 import {
   createRomeoApi,
+  createRuntimeSeedData,
   InMemoryRomeoRepository,
   type RomeoRepository,
 } from "@romeo/core";
@@ -31,7 +32,7 @@ export function createServerRepository(
     );
   }
 
-  return new InMemoryRomeoRepository();
+  return new InMemoryRomeoRepository(createRuntimeSeedData());
 }
 
 export function createPostgresRomeoRepository(

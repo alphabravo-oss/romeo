@@ -184,7 +184,7 @@ export function AuditPanel() {
       <PanelState
         query={auditQuery}
         empty={t("auditNoEvents")}
-        isEmpty={(page) => page.data.length === 0}
+        isEmpty={() => false}
       >
         {(page) => (
           <div

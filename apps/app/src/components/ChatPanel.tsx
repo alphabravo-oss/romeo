@@ -12,6 +12,7 @@ import type {
   SpeechArtifact,
 } from "../features/types";
 import type { RunContextPreview } from "../features/chat";
+import type { ChatSuggestion } from "../features/chat-experience";
 import type { QueuedChatTurn } from "../features/runs";
 import { useStickToBottom } from "../lib/use-stick-to-bottom";
 import { ChatMessages } from "./ChatMessages";
@@ -26,12 +27,6 @@ import type {
 } from "./useWorkspaceController";
 import type { FileObject } from "../features/files";
 import { useLocale } from "../lib/i18n";
-
-const promptSuggestions = [
-  { title: "Draft a secure rollout plan", subtitle: "for Milestone 1" },
-  { title: "Summarize workspace risks", subtitle: "across agents and data" },
-  { title: "Create an operator checklist", subtitle: "for go-live readiness" },
-];
 
 export function ChatPanel({
   activeVoiceProfileId,
@@ -56,6 +51,7 @@ export function ChatPanel({
   messageFeedback,
   models,
   providers,
+  promptSuggestions,
   selectedModelId,
   webSearchEnabled,
   workspaceId,
@@ -110,6 +106,7 @@ export function ChatPanel({
   /** Every model known to the workspace; the composer filters to enabled ones. */
   models: BaseModel[];
   providers: Provider[];
+  promptSuggestions: ChatSuggestion[];
   /**
    * The model that will answer the next message: the caller's override if
    * one is selected, otherwise the active agent's published baseModelId.
@@ -261,29 +258,29 @@ export function ChatPanel({
               <h1 className="rm-placeholder-title">{agentName}</h1>
             </div>
             {composer}
-            <div className="rm-suggestions">
-              <div className="rm-suggestions-label">
-                <Zap aria-hidden="true" size={12} />
-                <span>{t("suggested")}</span>
+            {promptSuggestions.length > 0 ? (
+              <div className="rm-suggestions">
+                <div className="rm-suggestions-label">
+                  <Zap aria-hidden="true" size={12} />
+                  <span>{t("suggested")}</span>
+                </div>
+                <div className="rm-suggestion-grid">
+                  {promptSuggestions.map((suggestion, index) => (
+                    <Button
+                      className="rm-suggestion"
+                      key={`${suggestion.title}-${index}`}
+                      onClick={() => onDraftChange(suggestion.prompt)}
+                      title={suggestion.title}
+                      type="button"
+                    >
+                      <span className="rm-suggestion-title">
+                        {suggestion.title}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
               </div>
-              <div className="rm-suggestion-grid">
-                {promptSuggestions.map((suggestion) => (
-                  <Button
-                    className="rm-suggestion"
-                    key={suggestion.title}
-                    onClick={() => onDraftChange(suggestion.title)}
-                    type="button"
-                  >
-                    <span className="rm-suggestion-title">
-                      {suggestion.title}
-                    </span>
-                    <span className="rm-suggestion-sub">
-                      {suggestion.subtitle}
-                    </span>
-                  </Button>
-                ))}
-              </div>
-            </div>
+            ) : null}
           </div>
         </div>
         {contextInspectorOpen ? (

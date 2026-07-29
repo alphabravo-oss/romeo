@@ -16,6 +16,7 @@ import { BrowserAutomationService } from "./browser-automation-service";
 import { ChannelService } from "./channel-service";
 import { ChatService } from "./chat-service";
 import { ChatEventService } from "./chat-event-service";
+import { ChatExperienceService } from "./chat-experience-service";
 import { ChatCommentService } from "./chat-comment-service";
 import { ChatTagService } from "./chat-tag-service";
 import { CollaborationService } from "./collaboration-service";
@@ -125,6 +126,7 @@ export interface RomeoServices {
   browserAutomation: BrowserAutomationService;
   channels: ChannelService;
   chatEvents: ChatEventService;
+  chatExperience: ChatExperienceService;
   chats: ChatService;
   temporaryChatCleanup: TemporaryChatCleanupWorker;
   chatComments: ChatCommentService;

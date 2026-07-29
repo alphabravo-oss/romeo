@@ -18,6 +18,10 @@ import {
 } from "../features/runs";
 import type { MessageKey } from "../lib/i18n";
 import {
+  fallbackChatTitle,
+  generateAutomaticChatTitle,
+} from "../lib/chat-titles";
+import {
   normalizeImageMimeType,
   type ImageAttachmentMimeType,
   type PendingDocumentAttachment,
@@ -29,6 +33,7 @@ import { blobToBase64, clientMessageId } from "./workspace-controller-media";
 interface WorkspaceTurnActionsOptions {
   activeAgentId: string | undefined;
   activeChatId: string | undefined;
+  autoTitleEnabled: boolean;
   appendMessage: (
     chatId: string,
     role: Message["role"],
@@ -158,11 +163,12 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     options.clearPendingAttachments();
     options.resetRunPresentation();
     try {
+      const isNewChat = options.activeChatId === undefined;
       const chat = options.activeChatId
         ? { id: options.activeChatId }
         : await createChatMutation.mutateAsync({
             workspaceId: options.workspaceId,
-            title: content.slice(0, 80),
+            title: fallbackChatTitle(content),
             ...(options.temporaryNextChat ? { temporary: true } : {}),
           });
       options.setActiveChatId(chat.id);
@@ -205,6 +211,13 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       options.setActiveRunId(run.id);
       await options.consumeRunStream(run.id);
       await options.syncPersistedMessages(chat.id);
+      await generateAutomaticChatTitle({
+        chatId: chat.id,
+        enabled: isNewChat && options.autoTitleEnabled,
+        modelId: options.selectedModelId,
+        queryClient: options.queryClient,
+        workspaceId: options.workspaceId,
+      });
       await followQueuedRuns(chat.id, run.id);
       await options.refreshUsageControls();
       const outcome = resolveTurnOutcome({ snapshot, accepted });

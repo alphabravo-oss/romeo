@@ -21,6 +21,7 @@ import { registerBrowserAutomationRoutes } from "./http/routes/browser-automatio
 import { registerBootstrapRoutes } from "./http/routes/bootstrap";
 import { registerChannelRoutes } from "./http/routes/channels";
 import { registerChatRoutes } from "./http/routes/chats";
+import { registerChatExperienceRoutes } from "./http/routes/chat-experience";
 import { registerChatTagRoutes } from "./http/routes/chat-tags";
 import { registerCollaborationRoutes } from "./http/routes/collaboration";
 import { registerCompatibilityRoutes } from "./http/routes/compatibility";
@@ -114,6 +115,7 @@ export function createRomeoApi(
   }
   registerPostgresOperationalPostureRoutes(app);
   registerChatRoutes(app);
+  registerChatExperienceRoutes(app);
   registerChatTagRoutes(app);
   registerChannelRoutes(app);
   registerCollaborationRoutes(app);
