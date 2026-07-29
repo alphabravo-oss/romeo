@@ -1,4 +1,4 @@
-import { Input, Textarea, Button } from "@romeo/ui";
+import { Button, Input } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -15,6 +15,7 @@ import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { PanelStats } from "./PanelStats";
 import { EdgeSecurityPostureTab } from "./EdgeSecurityPostureTab";
+import { IdListEditor } from "./IdListEditor";
 import { Tabs } from "./Tabs";
 
 const billingStatuses: BillingStatus[] = [
@@ -29,7 +30,7 @@ const ID_PATTERN = /^[A-Za-z0-9_.:/@-]+$/u;
 const ID_MAX_LENGTH = 200;
 const ID_LIST_MAX = 250;
 
-/** textarea (one-per-line) <-> string[] helpers. */
+/** Serialized form value <-> string[] helpers. */
 function linesToArray(text: string): string[] {
   return text
     .split("\n")
@@ -356,94 +357,54 @@ function ControlsEditor(props: {
           )}
         </form.Field>
 
-        <div className="rm-card-title">{t("abuseKillSwitchesPerLine")}</div>
+        <div>
+          <div className="rm-card-title">{t("abuseKillSwitches")}</div>
+          <p className="text-sm text-muted">
+            {t("abuseKillSwitchesDescription")}
+          </p>
+        </div>
         <form.Field name="connectorIds">
           {(field) => (
-            <div className="grid gap-1">
-              <label
-                className="text-sm text-muted"
-                htmlFor="abuse-connector-ids"
-              >
-                {t("abuseConnectorIds")}
-              </label>
-              <Textarea
-                name="connectorIds"
-                id="abuse-connector-ids"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                placeholder={"gmail\nslack"}
-                rows={3}
-                value={field.state.value}
-              />
-            </div>
+            <IdListEditor
+              id="abuse-connector-ids"
+              label={t("abuseConnectorIds")}
+              onChange={field.handleChange}
+              placeholder="gmail"
+              value={field.state.value}
+            />
           )}
         </form.Field>
         <form.Field name="providerIds">
           {(field) => (
-            <div className="grid gap-1">
-              <label
-                className="text-sm text-muted"
-                htmlFor="abuse-provider-ids"
-              >
-                {t("abuseProviderIds")}
-              </label>
-              <Textarea
-                name="providerIds"
-                id="abuse-provider-ids"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                placeholder={"openai\nanthropic"}
-                rows={3}
-                value={field.state.value}
-              />
-            </div>
+            <IdListEditor
+              id="abuse-provider-ids"
+              label={t("abuseProviderIds")}
+              onChange={field.handleChange}
+              placeholder="openai"
+              value={field.state.value}
+            />
           )}
         </form.Field>
         <form.Field name="toolIds">
           {(field) => (
-            <div className="grid gap-1">
-              <label className="text-sm text-muted" htmlFor="abuse-tool-ids">
-                {t("abuseToolIds")}
-              </label>
-              <Textarea
-                name="toolIds"
-                id="abuse-tool-ids"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                placeholder={"web.search\nfile.write"}
-                rows={3}
-                value={field.state.value}
-              />
-            </div>
+            <IdListEditor
+              id="abuse-tool-ids"
+              label={t("abuseToolIds")}
+              onChange={field.handleChange}
+              placeholder="web.search"
+              value={field.state.value}
+            />
           )}
         </form.Field>
         <form.Field name="workerClasses">
           {(field) => (
-            <div className="grid gap-1">
-              <label
-                className="text-sm text-muted"
-                htmlFor="abuse-worker-classes"
-              >
-                {t("abuseWorkerClasses")}
-              </label>
-              <Textarea
-                name="workerClasses"
-                id="abuse-worker-classes"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                placeholder={"ingest\ndispatch"}
-                rows={3}
-                value={field.state.value}
-              />
-            </div>
+            <IdListEditor
+              id="abuse-worker-classes"
+              label={t("abuseWorkerClasses")}
+              onChange={field.handleChange}
+              placeholder="ingest"
+              value={field.state.value}
+            />
           )}
         </form.Field>
 

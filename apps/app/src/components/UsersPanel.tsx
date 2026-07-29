@@ -59,7 +59,9 @@ export function UsersPanel() {
       userCol.accessor("email", {
         header: t("userEmail"),
         cell: (c) => (
-          <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+          <span className="rm-cell-muted rm-mono" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
       userCol.accessor("role", {

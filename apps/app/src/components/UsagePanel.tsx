@@ -1,4 +1,4 @@
-import { Button } from "@romeo/ui";
+import { Button, StatusBadge } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -22,6 +22,7 @@ import {
   LocalizedNumber,
 } from "../lib/locale-format";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { PanelStats } from "./PanelStats";
 
 const alertCol = createColumnHelper<UsageAlert>();
 
@@ -32,14 +33,26 @@ function alertColumns(t: Translate): ColumnDef<UsageAlert, any>[] {
     alertCol.accessor("severity", {
       header: t("usageSeverity"),
       cell: (c) => (
-        <span className="font-medium">
+        <StatusBadge
+          tone={
+            c.getValue() === "warning"
+              ? "warning"
+              : c.getValue() === "critical"
+                ? "danger"
+                : "danger"
+          }
+        >
           {t(usageSeverityMessageKey(c.getValue()))}
-        </span>
+        </StatusBadge>
       ),
     }),
     alertCol.accessor("metric", {
       header: t("usageMetric"),
-      cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+      cell: (c) => (
+        <span className="rm-mono" translate="no">
+          {c.getValue()}
+        </span>
+      ),
     }),
     alertCol.accessor("percentUsed", {
       id: "percentUsed",
@@ -57,7 +70,9 @@ function alertColumns(t: Translate): ColumnDef<UsageAlert, any>[] {
       id: "scope",
       header: t("usageScope"),
       cell: (c) => (
-        <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+        <span className="rm-cell-muted rm-mono" translate="no">
+          {c.getValue()}
+        </span>
       ),
     }),
   ];
@@ -69,7 +84,7 @@ function totalColumns(t: Translate): ColumnDef<UsageSummaryMetric, any>[] {
   return [
     totalCol.accessor("metric", {
       header: t("usageMetric"),
-      cell: (c) => <span className="font-medium">{c.getValue()}</span>,
+      cell: (c) => <MetricLabel metric={c.getValue()} t={t} />,
     }),
     totalCol.accessor("quantity", {
       header: t("usageQuantity"),
@@ -108,7 +123,7 @@ function eventColumns(t: Translate): ColumnDef<UsageEvent, any>[] {
     }),
     eventCol.accessor("metric", {
       header: t("usageMetric"),
-      cell: (c) => <span className="font-medium">{c.getValue()}</span>,
+      cell: (c) => <MetricLabel metric={c.getValue()} t={t} />,
     }),
     eventCol.accessor("quantity", {
       header: t("usageQuantity"),
@@ -152,6 +167,16 @@ export function UsagePanel() {
   const alerts = alertsQuery.data ?? [];
   const events = usageQuery.data ?? [];
   const totals = summaryQuery.data?.totals ?? [];
+  const runCount = metricQuantity(totals, (metric) => metric === "run.started");
+  const toolCallCount = metricQuantity(
+    totals,
+    (metric) => metric === "tool.call",
+  );
+  const tokenCount = tokenQuantity(totals);
+  const estimatedCost = totals.reduce(
+    (sum, metric) => sum + metric.estimatedCostUsd,
+    0,
+  );
 
   return (
     <section className="rm-panel p-4">
@@ -187,6 +212,17 @@ export function UsagePanel() {
           {exportError}
         </div>
       ) : null}
+      <PanelStats
+        items={[
+          { label: t("usageRuns"), value: runCount },
+          { label: t("usageTokens"), value: tokenCount },
+          { label: t("usageToolCalls"), value: toolCallCount },
+          {
+            label: t("usageEstimatedCost"),
+            value: <LocalizedCurrency value={estimatedCost} />,
+          },
+        ]}
+      />
       {alerts.length > 0 ? (
         <>
           <div className="mb-2 mt-3 text-xs font-medium text-muted">
@@ -241,6 +277,73 @@ export function UsagePanel() {
       setIsExporting(false);
     }
   }
+}
+
+function metricQuantity(
+  totals: UsageSummaryMetric[],
+  predicate: (metric: string) => boolean,
+): number {
+  return totals
+    .filter((item) => predicate(item.metric))
+    .reduce((sum, item) => sum + item.quantity, 0);
+}
+
+function tokenQuantity(totals: UsageSummaryMetric[]): number {
+  const reportedTotal = metricQuantity(
+    totals,
+    (metric) => metric === "llm.total_token.reported",
+  );
+  if (reportedTotal > 0) return reportedTotal;
+  const reportedParts = metricQuantity(
+    totals,
+    (metric) =>
+      metric === "llm.input_token.reported" ||
+      metric === "llm.output_token.reported",
+  );
+  if (reportedParts > 0) return reportedParts;
+  return metricQuantity(
+    totals,
+    (metric) =>
+      metric === "llm.input_token.estimated" ||
+      metric === "llm.output_token.estimated",
+  );
+}
+
+function MetricLabel({
+  metric,
+  t,
+}: {
+  metric: string;
+  t: Translate;
+}): React.ReactNode {
+  const label =
+    metric === "run.started"
+      ? t("usageRunsStarted")
+      : metric === "run.completed"
+        ? t("usageRunsCompleted")
+        : metric.includes("input_token")
+          ? t("usageInputTokens")
+          : metric.includes("output_token")
+            ? t("usageOutputTokens")
+            : metric.includes("total_token")
+              ? t("usageTotalTokens")
+              : metric === "tool.call"
+                ? t("usageToolCalls")
+                : metric === "image.generated"
+                  ? t("usageImagesGenerated")
+                  : metric === "storage.byte"
+                    ? t("usageStorageBytes")
+                    : metric;
+  return (
+    <span className="grid gap-0.5">
+      <span className="font-medium">{label}</span>
+      {label !== metric ? (
+        <code className="text-xs text-muted" translate="no">
+          {metric}
+        </code>
+      ) : null}
+    </span>
+  );
 }
 
 function usageSeverityMessageKey(severity: UsageAlert["severity"]): MessageKey {

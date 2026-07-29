@@ -144,7 +144,9 @@ export function ApiKeyPanel() {
         id: "scopes",
         header: t("scopes"),
         cell: (c) => (
-          <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+          <span className="rm-cell-muted rm-mono" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
       col.accessor("createdAt", {
@@ -215,19 +217,7 @@ export function ApiKeyPanel() {
       ) : null}
 
       <div className="mt-4">
-        <PanelState
-          query={apiKeysQuery}
-          empty={t("noApiKeys")}
-          emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setAddOpen(true)}
-              type="button"
-            >
-              + {t("addApiKey")}
-            </Button>
-          }
-        >
+        <PanelState query={apiKeysQuery} empty={t("noApiKeys")}>
           {(apiKeys) => (
             <div className="grid gap-4">
               <PanelStats

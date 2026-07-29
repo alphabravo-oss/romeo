@@ -123,6 +123,7 @@
     "evidence:multi-replica:live": "pnpm --filter @romeo/cli exec tsx ../../scripts/live-multi-replica-recovery-acceptance.ts",
     "evidence:chat-load-soak:live": "pnpm --filter @romeo/cli exec tsx ../../scripts/live-chat-load-soak-acceptance.ts",
     "test:browser:chat": "node scripts/browser-chat-acceptance.mjs",
+    "test:browser:admin": "node scripts/admin-console-audit.mjs",
     "test:browser:matrix": "node scripts/browser-engine-matrix.mjs",
     "test:browser:visual": "node scripts/browser-visual-baselines.mjs",
     "smoke:browser-automation:contract": "pnpm --filter @romeo/cli exec tsx ../../scripts/browser-automation-contract-smoke.ts",

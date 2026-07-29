@@ -9,6 +9,7 @@ import { useLocale } from "../lib/i18n";
 import { formatNumber, LocalizedNumber } from "../lib/locale-format";
 import { JobPanel } from "./JobPanel";
 import { ReadinessPanel } from "./ReadinessPanel";
+import { summarizeReadinessChecks } from "./readiness-presentation";
 
 function StatCard({
   label,
@@ -19,7 +20,7 @@ function StatCard({
   label: string;
   value: ReactNode;
   status?: "pass" | "warn" | "fail" | undefined;
-  sub?: string;
+  sub?: string | undefined;
 }) {
   return (
     <div className="rm-stat">
@@ -52,9 +53,15 @@ export function AdminOverview({
   });
 
   const checks = readiness.data?.checks ?? [];
-  const passing = checks.filter((c) => c.status === "pass").length;
-  const total = checks.length;
-  const ready = readiness.data?.status === "ready";
+  const readinessSummary = summarizeReadinessChecks(checks);
+  const readinessBreakdown =
+    readinessSummary.total === 0
+      ? undefined
+      : [
+          `${formatNumber(readinessSummary.pass, locale)} ${t("readinessPassing")}`,
+          `${formatNumber(readinessSummary.warn, locale)} ${t("readinessWarnings")}`,
+          `${formatNumber(readinessSummary.fail, locale)} ${t("readinessFailing")}`,
+        ].join(" · ");
 
   const jobList = jobs.data ?? [];
   const activeJobs = jobList.filter(
@@ -69,13 +76,15 @@ export function AdminOverview({
       <div className="rm-stat-grid">
         <StatCard
           label={t("overviewReadiness")}
-          status={total === 0 ? undefined : ready ? "pass" : "warn"}
-          sub={
-            ready ? t("overviewAllChecksPassing") : t("overviewNeedsAttention")
-          }
+          status={readinessSummary.tone}
+          sub={readinessBreakdown}
           value={
-            total > 0
-              ? `${formatNumber(passing, locale)}/${formatNumber(total, locale)}`
+            readinessSummary.total > 0
+              ? t(
+                  readinessSummary.tone === "pass"
+                    ? "readinessReady"
+                    : "readinessAttention",
+                )
               : "—"
           }
         />

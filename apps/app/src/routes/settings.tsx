@@ -36,7 +36,6 @@ function SettingsPage() {
   const data = useWorkspaceData(undefined);
   const { t } = useLocale();
   const { section: sectionParam } = Route.useSearch();
-  const navigate = Route.useNavigate();
   const groups = [
     {
       label: t("preferences"),
@@ -84,7 +83,7 @@ function SettingsPage() {
     <ConsoleLayout
       active={section}
       groups={groups}
-      onSelect={(key) => void navigate({ search: { section: key } })}
+      route="/settings"
       title={t("settings")}
       userMenu={
         <WorkspaceUserMenu

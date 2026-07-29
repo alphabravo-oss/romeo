@@ -24,13 +24,17 @@ export function OrganizationsPanel() {
       orgCol.accessor("slug", {
         header: t("organizationsSlug"),
         cell: (c) => (
-          <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+          <span className="rm-cell-muted rm-mono" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
       orgCol.accessor("id", {
         header: t("organizationsId"),
         cell: (c) => (
-          <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+          <span className="rm-cell-muted rm-mono" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
     ],

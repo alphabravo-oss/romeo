@@ -1,37 +1,17 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard.mjs";
-import Activity from "lucide-react/dist/esm/icons/activity.mjs";
-import BarChart3 from "lucide-react/dist/esm/icons/bar-chart-3.mjs";
-import Bell from "lucide-react/dist/esm/icons/bell.mjs";
-import Database from "lucide-react/dist/esm/icons/database.mjs";
-import LineChart from "lucide-react/dist/esm/icons/line-chart.mjs";
-import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert.mjs";
-import Building2 from "lucide-react/dist/esm/icons/building-2.mjs";
-import CreditCard from "lucide-react/dist/esm/icons/credit-card.mjs";
-import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
-import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
-import Link2 from "lucide-react/dist/esm/icons/link-2.mjs";
-import Plug from "lucide-react/dist/esm/icons/plug.mjs";
-import KeySquare from "lucide-react/dist/esm/icons/key-square.mjs";
-import ScrollText from "lucide-react/dist/esm/icons/scroll-text.mjs";
-import Server from "lucide-react/dist/esm/icons/server.mjs";
-import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
-import UserCog from "lucide-react/dist/esm/icons/user-cog.mjs";
-import Users from "lucide-react/dist/esm/icons/users.mjs";
-import UsersRound from "lucide-react/dist/esm/icons/users-round.mjs";
-import Webhook from "lucide-react/dist/esm/icons/webhook.mjs";
-import Workflow from "lucide-react/dist/esm/icons/workflow.mjs";
-import Search from "lucide-react/dist/esm/icons/search.mjs";
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useCallback } from "react";
 import { Button } from "@romeo/ui";
 
 import { ConsoleLayout } from "../components/ConsoleLayout";
 import { PageHeader } from "../components/PageHeader";
 import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
+import {
+  ADMIN_GROUPS,
+  ADMIN_META,
+} from "../components/admin-console-navigation";
 import { useAdminController } from "../components/useAdminController";
 import {
   localeNamespaceGroups,
-  type MessageKey,
   useLocale,
   useLocaleNamespaces,
 } from "../lib/i18n";
@@ -120,6 +100,10 @@ const ProviderPanel = lazyNamed(
   () => import("../components/ProviderPanel"),
   "ProviderPanel",
 );
+const ProviderObservabilityPanel = lazyNamed(
+  () => import("../components/ProviderObservabilityPanel"),
+  "ProviderObservabilityPanel",
+);
 const QuotaPanel = lazyNamed(
   () => import("../components/QuotaPanel"),
   "QuotaPanel",
@@ -153,166 +137,79 @@ const WebSearchPanel = lazyNamed(
   "WebSearchPanel",
 );
 
+interface AdminSearch {
+  availability?: string;
+  model?: string;
+  page?: number;
+  provider?: string;
+  query?: string;
+  section?: string;
+  view?: string;
+}
+
 export const Route = createFileRoute("/admin")({
-  validateSearch: (search: Record<string, unknown>): { section?: string } =>
-    typeof search.section === "string" ? { section: search.section } : {},
+  validateSearch: (search: Record<string, unknown>): AdminSearch => ({
+    ...(typeof search.section === "string" ? { section: search.section } : {}),
+    ...(typeof search.view === "string" ? { view: search.view } : {}),
+    ...(typeof search.query === "string" ? { query: search.query } : {}),
+    ...(typeof search.provider === "string"
+      ? { provider: search.provider }
+      : {}),
+    ...(typeof search.availability === "string"
+      ? { availability: search.availability }
+      : {}),
+    ...(typeof search.model === "string" ? { model: search.model } : {}),
+    ...(typeof search.page === "number" && Number.isInteger(search.page)
+      ? { page: Math.max(0, search.page) }
+      : {}),
+  }),
   component: AdminPage,
 });
-
-const GROUPS: Array<{
-  labelKey: MessageKey;
-  items: Array<{
-    key: string;
-    labelKey: MessageKey;
-    icon: React.ComponentType<any>;
-  }>;
-}> = [
-  {
-    labelKey: "navOperations",
-    items: [
-      { key: "overview", labelKey: "navOverview", icon: LayoutDashboard },
-      { key: "usage", labelKey: "navUsageQuotas", icon: BarChart3 },
-      { key: "analytics", labelKey: "navAnalytics", icon: LineChart },
-      { key: "audit", labelKey: "navAuditLog", icon: ScrollText },
-      { key: "posture", labelKey: "navSystemPosture", icon: Activity },
-    ],
-  },
-  {
-    labelKey: "navConfiguration",
-    items: [
-      { key: "providers", labelKey: "navProviders", icon: Server },
-      { key: "connections", labelKey: "navConnections", icon: Plug },
-      { key: "governance", labelKey: "navGovernance", icon: ShieldCheck },
-      { key: "rag", labelKey: "navRagGovernance", icon: Database },
-      { key: "abuse", labelKey: "navAbuseSecurity", icon: ShieldAlert },
-      { key: "billing", labelKey: "navBilling", icon: CreditCard },
-      {
-        key: "prompt-templates",
-        labelKey: "navPromptTemplates",
-        icon: FileText,
-      },
-      { key: "web-search", labelKey: "navWebSearch", icon: Search },
-    ],
-  },
-  {
-    labelKey: "navAccessIdentity",
-    items: [
-      { key: "access", labelKey: "navAccessKeys", icon: KeyRound },
-      { key: "users", labelKey: "navUsers", icon: Users },
-      { key: "groups", labelKey: "navGroups", icon: UsersRound },
-      { key: "organizations", labelKey: "navOrganizations", icon: Building2 },
-      { key: "impersonation", labelKey: "navImpersonation", icon: UserCog },
-      { key: "auth-providers", labelKey: "navAuthentication", icon: KeySquare },
-    ],
-  },
-  {
-    labelKey: "navAutomation",
-    items: [
-      { key: "workflows", labelKey: "navWorkflows", icon: Workflow },
-      { key: "webhooks", labelKey: "navWebhooks", icon: Webhook },
-      {
-        key: "notification-channels",
-        labelKey: "navNotifications",
-        icon: Bell,
-      },
-      { key: "connected-apps", labelKey: "navConnectedApps", icon: Link2 },
-    ],
-  },
-];
-
-const META: Record<
-  string,
-  { titleKey: MessageKey; descriptionKey: MessageKey }
-> = {
-  overview: {
-    titleKey: "navOverview",
-    descriptionKey: "adminOverviewDescription",
-  },
-  usage: {
-    titleKey: "navUsageQuotas",
-    descriptionKey: "adminUsageDescription",
-  },
-  analytics: {
-    titleKey: "navAnalytics",
-    descriptionKey: "adminAnalyticsDescription",
-  },
-  audit: { titleKey: "navAuditLog", descriptionKey: "adminAuditDescription" },
-  posture: {
-    titleKey: "navSystemPosture",
-    descriptionKey: "adminPostureDescription",
-  },
-  providers: {
-    titleKey: "navProviders",
-    descriptionKey: "adminProvidersDescription",
-  },
-  connections: {
-    titleKey: "navConnections",
-    descriptionKey: "adminConnectionsDescription",
-  },
-  governance: {
-    titleKey: "navGovernance",
-    descriptionKey: "adminGovernanceDescription",
-  },
-  rag: { titleKey: "navRagGovernance", descriptionKey: "adminRagDescription" },
-  abuse: {
-    titleKey: "navAbuseSecurity",
-    descriptionKey: "adminAbuseDescription",
-  },
-  access: {
-    titleKey: "navAccessKeys",
-    descriptionKey: "adminAccessDescription",
-  },
-  billing: {
-    titleKey: "navBilling",
-    descriptionKey: "adminBillingDescription",
-  },
-  "prompt-templates": {
-    titleKey: "navPromptTemplates",
-    descriptionKey: "adminPromptTemplatesDescription",
-  },
-  "web-search": {
-    titleKey: "navWebSearch",
-    descriptionKey: "adminWebSearchDescription",
-  },
-  users: { titleKey: "navUsers", descriptionKey: "adminUsersDescription" },
-  groups: { titleKey: "navGroups", descriptionKey: "adminGroupsDescription" },
-  organizations: {
-    titleKey: "navOrganizations",
-    descriptionKey: "adminOrganizationsDescription",
-  },
-  impersonation: {
-    titleKey: "navImpersonation",
-    descriptionKey: "adminImpersonationDescription",
-  },
-  workflows: {
-    titleKey: "navWorkflows",
-    descriptionKey: "adminWorkflowsDescription",
-  },
-  webhooks: {
-    titleKey: "navWebhooks",
-    descriptionKey: "adminWebhooksDescription",
-  },
-  "notification-channels": {
-    titleKey: "navNotifications",
-    descriptionKey: "adminNotificationsDescription",
-  },
-  "auth-providers": {
-    titleKey: "navAuthentication",
-    descriptionKey: "adminAuthenticationDescription",
-  },
-  "connected-apps": {
-    titleKey: "navConnectedApps",
-    descriptionKey: "adminConnectedAppsDescription",
-  },
-};
 
 function AdminPage() {
   useLocaleNamespaces(localeNamespaceGroups.admin);
   const { t } = useLocale();
   const admin = useAdminController();
-  const { section: sectionParam } = Route.useSearch();
+  const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const section = resolveSectionKey(sectionParam, META, "overview");
+  const { section: sectionParam } = search;
+  const section = resolveSectionKey(sectionParam, ADMIN_META, "overview");
+  const providerView = ["connections", "models", "observability"].includes(
+    search.view ?? "",
+  )
+    ? search.view!
+    : "connections";
+  const usageView = ["consumption", "quotas"].includes(search.view ?? "")
+    ? search.view!
+    : "consumption";
+  const connectionView = ["sources", "imports", "catalog", "tools"].includes(
+    search.view ?? "",
+  )
+    ? search.view!
+    : "sources";
+  const updateProviderSearch = useCallback(
+    (next: {
+      availability?: "all" | "enabled" | "disabled";
+      model?: string | null;
+      page?: number;
+      provider?: string;
+      query?: string;
+    }) =>
+      void navigate({
+        search: (previous) => {
+          const merged = {
+            ...previous,
+            section: "providers",
+            view: "models",
+            ...next,
+          };
+          if (merged.model !== null) return merged;
+          const { model: _model, ...withoutModel } = merged;
+          return withoutModel;
+        },
+      }),
+    [navigate],
+  );
 
   // Client-side gate is UX only — the API enforces real authz on every
   // admin endpoint. ponytail: no beforeLoad/router-context plumbing needed.
@@ -334,7 +231,7 @@ function AdminPage() {
   return (
     <ConsoleLayout
       active={section}
-      groups={GROUPS.map((group) => ({
+      groups={ADMIN_GROUPS.map((group) => ({
         label: t(group.labelKey),
         items: group.items.map((item) => ({
           key: item.key,
@@ -342,7 +239,7 @@ function AdminPage() {
           icon: item.icon,
         })),
       }))}
-      onSelect={(key) => void navigate({ search: { section: key } })}
+      route="/admin"
       title={t("admin")}
       userMenu={
         <WorkspaceUserMenu
@@ -357,8 +254,8 @@ function AdminPage() {
       }
     >
       <PageHeader
-        description={t(META[section]!.descriptionKey)}
-        title={t(META[section]!.titleKey)}
+        description={t(ADMIN_META[section]!.descriptionKey)}
+        title={t(ADMIN_META[section]!.titleKey)}
       />
       {admin.error ? (
         <div className="rm-composer-error">{admin.error}</div>
@@ -380,8 +277,17 @@ function AdminPage() {
 
         {section === "usage" ? (
           <div className="grid gap-4">
-            <UsagePanel />
-            <QuotaPanel />
+            <AdminViewNav
+              active={usageView}
+              ariaLabel={t("navUsageQuotas")}
+              items={[
+                ["consumption", t("usageConsumption")],
+                ["quotas", t("usageQuotas")],
+              ]}
+              section="usage"
+            />
+            {usageView === "consumption" ? <UsagePanel /> : null}
+            {usageView === "quotas" ? <QuotaPanel /> : null}
           </div>
         ) : null}
 
@@ -393,37 +299,86 @@ function AdminPage() {
 
         {section === "providers" ? (
           <div className="grid gap-4">
-            <ProviderPanel
-              isCreating={admin.isCreatingProvider}
-              isUpdating={admin.isUpdatingProvider}
-              pullingProviderId={admin.pullingProviderId}
-              deletingModelId={admin.deletingModelId}
-              onCreateProvider={admin.handleCreateProvider}
-              onPullProviderModel={admin.handlePullProviderModel}
-              onDeleteProviderModel={admin.handleDeleteProviderModel}
-              onSyncProvider={admin.handleSyncProvider}
-              onUpdateProvider={admin.handleUpdateProvider}
-              onVerifyProvider={admin.handleVerifyProvider}
-              operationalSummary={admin.providerOperationalSummary}
-              models={admin.models}
-              providers={admin.providers}
-              syncingProviderId={admin.syncingProviderId}
-              verifyingProviderId={admin.verifyingProviderId}
+            <AdminViewNav
+              active={providerView}
+              ariaLabel={t("navProviders")}
+              items={[
+                ["connections", t("connections")],
+                ["models", t("models")],
+                ["observability", t("observability")],
+              ]}
+              section="providers"
             />
-            <ModelCatalogPanel
-              isUpdating={admin.isUpdatingModelPricing || admin.isUpdatingModel}
-              models={admin.models}
-              providers={admin.providers}
-              onUpdateModel={admin.handleUpdateModel}
-              onUpdatePricing={admin.handleUpdateModelPricing}
-            />
+            {providerView === "connections" ? (
+              <ProviderPanel
+                isCreating={admin.isCreatingProvider}
+                isUpdating={admin.isUpdatingProvider}
+                pullingProviderId={admin.pullingProviderId}
+                deletingModelId={admin.deletingModelId}
+                onCreateProvider={admin.handleCreateProvider}
+                onPullProviderModel={admin.handlePullProviderModel}
+                onDeleteProviderModel={admin.handleDeleteProviderModel}
+                onSyncProvider={admin.handleSyncProvider}
+                onUpdateProvider={admin.handleUpdateProvider}
+                onVerifyProvider={admin.handleVerifyProvider}
+                operationalSummary={admin.providerOperationalSummary}
+                models={admin.models}
+                providers={admin.providers}
+                syncingProviderId={admin.syncingProviderId}
+                verifyingProviderId={admin.verifyingProviderId}
+              />
+            ) : null}
+            {providerView === "models" ? (
+              <ModelCatalogPanel
+                availability={
+                  search.availability === "enabled" ||
+                  search.availability === "disabled"
+                    ? search.availability
+                    : "all"
+                }
+                isUpdating={
+                  admin.isUpdatingModelPricing || admin.isUpdatingModel
+                }
+                models={admin.models}
+                onNavigationChange={updateProviderSearch}
+                providers={admin.providers}
+                providerId={search.provider ?? "all"}
+                query={search.query ?? ""}
+                selectedModelId={search.model}
+                page={search.page ?? 0}
+                onUpdateModel={admin.handleUpdateModel}
+                onUpdatePricing={admin.handleUpdateModelPricing}
+              />
+            ) : null}
+            {providerView === "observability" ? (
+              <ProviderObservabilityPanel
+                operationalSummary={admin.providerOperationalSummary}
+                providers={admin.providers}
+              />
+            ) : null}
           </div>
         ) : null}
 
         {section === "connections" ? (
           <div className="grid gap-4">
-            <DataConnectorPanel workspaceId={admin.workspace?.id} />
-            <ToolConnectorPanel />
+            <AdminViewNav
+              active={connectionView}
+              ariaLabel={t("navConnections")}
+              items={[
+                ["sources", t("connectorSourcesTab")],
+                ["imports", t("connectorImportsTab")],
+                ["catalog", t("connectorCatalogTab")],
+                ["tools", t("connectorToolsTab")],
+              ]}
+              section="connections"
+            />
+            {connectionView === "tools" ? <ToolConnectorPanel /> : null}
+            {connectionView !== "tools" ? (
+              <DataConnectorPanel
+                view={connectionView as "catalog" | "imports" | "sources"}
+                workspaceId={admin.workspace?.id}
+              />
+            ) : null}
           </div>
         ) : null}
 
@@ -474,5 +429,41 @@ function AdminPage() {
         ) : null}
       </Suspense>
     </ConsoleLayout>
+  );
+}
+
+function AdminViewNav({
+  active,
+  ariaLabel,
+  items,
+  section,
+}: {
+  active: string;
+  ariaLabel: string;
+  items: ReadonlyArray<readonly [string, string]>;
+  section: string;
+}) {
+  return (
+    <nav aria-label={ariaLabel} className="rm-ui-tabs">
+      <div className="rm-ui-tabs__list">
+        {items.map(([value, label]) => (
+          <Button
+            asChild
+            className="rm-ui-tabs__trigger"
+            data-state={active === value ? "active" : "inactive"}
+            key={value}
+            variant="ghost"
+          >
+            <Link
+              aria-current={active === value ? "page" : undefined}
+              search={{ section, view: value }}
+              to="/admin"
+            >
+              {label}
+            </Link>
+          </Button>
+        ))}
+      </div>
+    </nav>
   );
 }

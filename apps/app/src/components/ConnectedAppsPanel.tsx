@@ -1,4 +1,4 @@
-import { Button } from "@romeo/ui";
+import { Button, StatusBadge } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
@@ -21,6 +21,7 @@ import { PanelStats } from "./PanelStats";
 import { useWorkspace } from "./WorkspaceContext";
 
 const connectionCol = createColumnHelper<DelegatedOAuthConnectionSummary>();
+const providerCol = createColumnHelper<DelegatedOAuthProvider>();
 
 export function ConnectedAppsPanel() {
   const queryClient = useQueryClient();
@@ -101,7 +102,9 @@ export function ConnectedAppsPanel() {
           id: "account",
           header: t("connectedAppsAccount"),
           cell: (c) => (
-            <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+            <span className="rm-cell-muted rm-mono" translate="no">
+              {c.getValue()}
+            </span>
           ),
         },
       ),
@@ -144,6 +147,55 @@ export function ConnectedAppsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [revokeMutation.isPending, t],
   );
+  const providerColumns = useMemo<ColumnDef<DelegatedOAuthProvider, any>[]>(
+    () => [
+      providerCol.accessor("displayName", {
+        header: t("connectedAppsProvider"),
+        cell: (cell) => <span className="font-medium">{cell.getValue()}</span>,
+      }),
+      providerCol.accessor("authorizationHost", {
+        header: t("connectedAppsAuthorizationHost"),
+        cell: (cell) => (
+          <span className="rm-mono text-sm" translate="no">
+            {cell.getValue()}
+          </span>
+        ),
+      }),
+      providerCol.accessor((row) => row.connectorTypes.join(", "), {
+        id: "connectors",
+        header: t("connectedAppsConnector"),
+        cell: (cell) => <span translate="no">{cell.getValue()}</span>,
+      }),
+      providerCol.accessor("configured", {
+        header: t("connectedAppsStatus"),
+        cell: (cell) => (
+          <StatusBadge tone={cell.getValue() ? "success" : "warning"}>
+            {cell.getValue()
+              ? t("connectedAppsConfigured")
+              : t("connectedAppsNotConfigured")}
+          </StatusBadge>
+        ),
+      }),
+      providerCol.display({
+        id: "actions",
+        header: "",
+        cell: (cell) => (
+          <Button
+            disabled={!cell.row.original.configured || startMutation.isPending}
+            onClick={() => void handleConnect(cell.row.original)}
+            size="sm"
+            type="button"
+          >
+            {startMutation.isPending
+              ? t("connectedAppsConnecting")
+              : t("connectedAppsConnect")}
+          </Button>
+        ),
+      }),
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [startMutation.isPending, t, workspaceId],
+  );
 
   return (
     <section className="rm-panel p-4">
@@ -184,42 +236,48 @@ export function ConnectedAppsPanel() {
                 },
               );
               return (
-                <PanelStats
-                  items={[
-                    {
-                      label: t("connectedAppsStatus"),
-                      value:
-                        posture.status === "healthy"
-                          ? t("connectedAppsHealthy")
-                          : t("connectedAppsAttention"),
-                    },
-                    {
-                      label: t("connectedAppsProviders"),
-                      value: posture.providers.length,
-                    },
-                    {
-                      label: t("connectedAppsConnections"),
-                      value: totals.total,
-                    },
-                    { label: t("connectedAppsActive"), value: totals.active },
-                    {
-                      label: t("connectedAppsReauthRequired"),
-                      value: totals.reauthorizationRequired,
-                    },
-                    {
-                      label: t("connectedAppsExpiringTokens"),
-                      value: totals.expiringAccessToken,
-                    },
-                    {
-                      label: t("connectedAppsStatusRevoked"),
-                      value: totals.revoked,
-                    },
-                    {
-                      label: t("connectedAppsWarnings"),
-                      value: posture.warnings.length,
-                    },
-                  ]}
-                />
+                <>
+                  <PanelStats
+                    items={[
+                      {
+                        label: t("connectedAppsStatus"),
+                        value:
+                          posture.status === "healthy"
+                            ? t("connectedAppsHealthy")
+                            : t("connectedAppsAttention"),
+                      },
+                      {
+                        label: t("connectedAppsConnections"),
+                        value: totals.total,
+                      },
+                      { label: t("connectedAppsActive"), value: totals.active },
+                      {
+                        label: t("connectedAppsAttention"),
+                        value:
+                          totals.reauthorizationRequired +
+                          totals.expiringAccessToken +
+                          totals.revoked,
+                      },
+                    ]}
+                  />
+                  {posture.warnings.length > 0 ? (
+                    <div className="mt-3 rounded-md border border-border p-3">
+                      <strong className="text-sm">
+                        {t("connectedAppsWarnings")}
+                      </strong>
+                      <ul className="mt-1 grid gap-1 text-sm text-muted">
+                      {posture.warnings.map((warning) => (
+                        <li className="grid gap-0.5" key={warning}>
+                          <span>{connectedAppWarningLabel(warning, t)}</span>
+                          <code className="text-xs" translate="no">
+                            {warning}
+                          </code>
+                        </li>
+                      ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </>
               );
             }}
           </PanelState>
@@ -236,32 +294,12 @@ export function ConnectedAppsPanel() {
             empty={t("connectedAppsNoProviders")}
           >
             {(providers) => (
-              <div className="grid gap-2 text-sm">
-                {providers.map((provider) => (
-                  <div
-                    className="rounded-md border border-border p-3"
-                    key={provider.id}
-                  >
-                    <div className="font-medium">{provider.displayName}</div>
-                    <div className="break-words text-muted">
-                      {provider.authorizationHost}
-                      {provider.configured
-                        ? ""
-                        : ` - ${t("connectedAppsNotConfigured")}`}
-                    </div>
-                    <Button
-                      className="mt-2"
-                      disabled={!provider.configured || startMutation.isPending}
-                      onClick={() => void handleConnect(provider)}
-                      type="button"
-                    >
-                      {startMutation.isPending
-                        ? t("connectedAppsConnecting")
-                        : t("connectedAppsConnect")}
-                    </Button>
-                  </div>
-                ))}
-              </div>
+              <DataTable
+                columns={providerColumns}
+                data={providers}
+                getRowId={(provider) => provider.id}
+                minTableWidth={720}
+              />
             )}
           </PanelState>
         </div>
@@ -291,4 +329,16 @@ function connectedAppStatusMessageKey(
   if (status === "active") return "connectedAppsStatusActive";
   if (status === "reauthorization_required") return "connectedAppsStatusReauth";
   return "connectedAppsStatusRevoked";
+}
+
+function connectedAppWarningLabel(
+  warning: string,
+  t: (key: MessageKey) => string,
+): string {
+  if (warning.startsWith("delegated_oauth_provider_not_configured:")) {
+    return `${t("connectedAppsProviderNotConfiguredWarning")}: ${
+      warning.split(":")[1] ?? ""
+    }`;
+  }
+  return t("connectedAppsPostureWarning");
 }

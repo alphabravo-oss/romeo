@@ -17,15 +17,33 @@ import { PanelStats } from "./PanelStats";
 const perMillion = 1_000_000;
 
 export function ModelCatalogPanel({
+  availability,
   isUpdating,
   models,
+  onNavigationChange,
+  page,
   providers,
+  providerId,
+  query,
+  selectedModelId,
   onUpdateModel,
   onUpdatePricing,
 }: {
+  availability: "all" | "enabled" | "disabled";
   isUpdating: boolean;
   models: BaseModel[];
+  onNavigationChange: (next: {
+    availability?: "all" | "enabled" | "disabled";
+    model?: string | null;
+    page?: number;
+    provider?: string;
+    query?: string;
+  }) => void;
+  page: number;
   providers: Provider[];
+  providerId: string;
+  query: string;
+  selectedModelId: string | undefined;
   onUpdateModel: (
     input:
       | { modelId: string; enabled: boolean }
@@ -48,13 +66,6 @@ export function ModelCatalogPanel({
 }) {
   const { t } = useLocale();
   const pageSize = 50;
-  const [query, setQuery] = useState("");
-  const [providerId, setProviderId] = useState("all");
-  const [availability, setAvailability] = useState<
-    "all" | "enabled" | "disabled"
-  >("all");
-  const [selectedModelId, setSelectedModelId] = useState<string>();
-  const [page, setPage] = useState(0);
   const providerById = useMemo(
     () => new Map(providers.map((provider) => [provider.id, provider])),
     [providers],
@@ -81,15 +92,13 @@ export function ModelCatalogPanel({
 
   useEffect(() => {
     if (selectedModelId === undefined && catalogModels[0])
-      setSelectedModelId(catalogModels[0].id);
+      onNavigationChange({ model: catalogModels[0].id });
     else if (
       selectedModelId &&
       !catalogModels.some((model) => model.id === selectedModelId)
     )
-      setSelectedModelId(catalogModels[0]?.id);
-  }, [catalogModels, selectedModelId]);
-
-  useEffect(() => setPage(0), [availability, providerId, query]);
+      onNavigationChange({ model: catalogModels[0]?.id ?? null });
+  }, [catalogModels, onNavigationChange, selectedModelId]);
 
   return (
     <section className="rm-panel p-4">
@@ -118,14 +127,27 @@ export function ModelCatalogPanel({
             <Search aria-hidden="true" size={15} />
             <Input
               aria-label={t("searchModels")}
-              onChange={(event) => setQuery(event.currentTarget.value)}
+              name="modelSearch"
+              onChange={(event) =>
+                onNavigationChange({
+                  model: null,
+                  page: 0,
+                  query: event.currentTarget.value,
+                })
+              }
               placeholder={t("searchModels")}
               value={query}
             />
           </label>
           <Select
             aria-label={t("filterByProvider")}
-            onValueChange={setProviderId}
+            onValueChange={(provider) =>
+              onNavigationChange({
+                model: null,
+                page: 0,
+                provider,
+              })
+            }
             options={[
               { label: t("allConnections"), value: "all" },
               ...providers.map((provider) => ({
@@ -138,7 +160,11 @@ export function ModelCatalogPanel({
           <Select
             aria-label={t("filterByAvailability")}
             onValueChange={(value) =>
-              setAvailability(value as typeof availability)
+              onNavigationChange({
+                availability: value as typeof availability,
+                model: null,
+                page: 0,
+              })
             }
             options={[
               { label: t("allAvailability"), value: "all" },
@@ -174,7 +200,7 @@ export function ModelCatalogPanel({
                     aria-selected={model.id === selectedModelId}
                     className={`rm-model-catalog-item ${model.id === selectedModelId ? "selected" : ""}`}
                     key={model.id}
-                    onClick={() => setSelectedModelId(model.id)}
+                    onClick={() => onNavigationChange({ model: model.id })}
                     role="option"
                     type="button"
                   >
@@ -218,7 +244,9 @@ export function ModelCatalogPanel({
           </div>
         </div>
         <CatalogPager
-          onPageChange={setPage}
+          onPageChange={(nextPage) =>
+            onNavigationChange({ model: null, page: nextPage })
+          }
           page={page}
           pageSize={pageSize}
           total={catalogTotal}

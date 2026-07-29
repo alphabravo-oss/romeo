@@ -102,7 +102,9 @@ export function GroupsPanel() {
       groupCol.accessor("slug", {
         header: t("groupsSlug"),
         cell: (c) => (
-          <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+          <span className="rm-cell-muted rm-mono" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
       groupCol.accessor((row) => row.createdAt, {
@@ -136,7 +138,11 @@ export function GroupsPanel() {
     () => [
       memberCol.accessor("userId", {
         header: t("groupsUser"),
-        cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+        cell: (c) => (
+          <span className="rm-mono" translate="no">
+            {c.getValue()}
+          </span>
+        ),
       }),
       memberCol.accessor((row) => row.createdAt, {
         id: "createdAt",

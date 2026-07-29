@@ -38,6 +38,18 @@ describe("Romeo UI primitives", () => {
     ).toBe(true);
   });
 
+  it("composes button styling onto a semantic link", () => {
+    render(
+      <Button asChild>
+        <a href="/admin">Open admin</a>
+      </Button>,
+    );
+
+    const link = screen.getByRole("link", { name: "Open admin" });
+    expect(link.getAttribute("href")).toBe("/admin");
+    expect(link.classList.contains("rm-ui-button")).toBe(true);
+  });
+
   it("delegates dialog focus, escape, and dismissal behavior to Radix", async () => {
     const onOpenChange = vi.fn();
     const user = userEvent.setup();

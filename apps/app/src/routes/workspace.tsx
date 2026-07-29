@@ -95,7 +95,6 @@ function WorkspacePage() {
   useLocaleNamespaces(localeNamespaceGroups.workspace);
   const { t } = useLocale();
   const { section: sectionParam } = Route.useSearch();
-  const navigate = Route.useNavigate();
   const section = resolveSectionKey(sectionParam, META, "agents");
   const [agentId, setAgentId] = useState<string>();
   const data = useWorkspaceData(agentId);
@@ -130,7 +129,7 @@ function WorkspacePage() {
           icon: item.icon,
         })),
       }))}
-      onSelect={(key) => void navigate({ search: { section: key } })}
+      route="/workspace"
       title={t("workspaceSettings")}
       userMenu={
         <WorkspaceUserMenu

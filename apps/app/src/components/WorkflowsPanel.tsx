@@ -232,7 +232,7 @@ export function WorkflowsPanel() {
     <section className="rm-panel p-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("workflows")}</div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             disabled={workflowsQuery.isFetching}
             onClick={() => void workflowsQuery.refetch()}
@@ -404,19 +404,7 @@ export function WorkflowsPanel() {
       </FormDialog>
 
       <div className="mt-4">
-        <PanelState
-          empty={t("noWorkflows")}
-          emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setAddOpen(true)}
-              type="button"
-            >
-              + {t("createWorkflow")}
-            </Button>
-          }
-          query={workflowsQuery}
-        >
+        <PanelState empty={t("noWorkflows")} query={workflowsQuery}>
           {(rows) => (
             <div className="grid gap-4">
               <PanelStats

@@ -155,7 +155,10 @@ function EdgeSecurityPostureView(props: { report: EdgeSecurityPostureReport }) {
             <div className="mt-2 flex flex-wrap gap-3">
               {Object.entries(check.details).map(([key, value]) => (
                 <span className="text-xs text-muted" key={key}>
-                  <span className="rm-mono">{key}</span>: {String(value)}
+                  <span className="rm-mono" translate="no">
+                    {key}
+                  </span>
+                  : {String(value)}
                 </span>
               ))}
             </div>

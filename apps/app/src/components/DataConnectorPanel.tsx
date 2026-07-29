@@ -28,13 +28,14 @@ import {
 } from "./DataConnectorCatalog";
 import { FormDialog } from "./FormDialog";
 import { PanelStats } from "./PanelStats";
-import { Tabs } from "./Tabs";
 
 const col = createColumnHelper<DataConnector>();
 
 export function DataConnectorPanel({
+  view,
   workspaceId,
 }: {
+  view: "catalog" | "imports" | "sources";
   workspaceId: string | undefined;
 }) {
   const { t } = useLocale();
@@ -176,7 +177,9 @@ export function DataConnectorPanel({
       col.accessor("type", {
         header: t("connectorType"),
         cell: (c) => (
-          <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+          <span className="rm-cell-muted rm-mono" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
       col.accessor("knowledgeBaseId", {
@@ -232,12 +235,7 @@ export function DataConnectorPanel({
   const sourcesTab = (
     <div className="grid gap-4">
       <div className="rm-card-header">
-        <div
-          className="rm-card-title"
-          style={{ margin: 0, padding: 0, border: "none" }}
-        >
-          {t("connectorListTitle")}
-        </div>
+        <div className="rm-card-title">{t("connectorListTitle")}</div>
         <Button
           variant="primary"
           onClick={() => openAdd("local_import")}
@@ -247,19 +245,7 @@ export function DataConnectorPanel({
         </Button>
       </div>
 
-      <PanelState
-        empty={t("connectorNone")}
-        emptyAction={
-          <Button
-            variant="primary"
-            onClick={() => openAdd("local_import")}
-            type="button"
-          >
-            + {t("connectorAdd")}
-          </Button>
-        }
-        query={connectorsQuery}
-      >
+      <PanelState empty={t("connectorNone")} query={connectorsQuery}>
         {(rows) => (
           <div className="grid gap-4">
             <PanelStats
@@ -279,7 +265,19 @@ export function DataConnectorPanel({
           </div>
         )}
       </PanelState>
+    </div>
+  );
 
+  const importsTab = (
+    <div className="grid gap-4">
+      <div>
+        <div className="rm-card-title">{t("connectorImportsTitle")}</div>
+        <p className="text-sm text-muted">
+          {activeConnector
+            ? `${t("connectorImportingTo")} ${activeConnector.name}`
+            : t("connectorImportNeedsSource")}
+        </p>
+      </div>
       <form
         className="grid gap-2"
         onSubmit={(event) => {
@@ -390,12 +388,7 @@ export function DataConnectorPanel({
   return (
     <section className="rm-panel p-4">
       <div className="rm-card-header">
-        <div
-          className="rm-card-title"
-          style={{ margin: 0, padding: 0, border: "none" }}
-        >
-          {t("connectorTitle")}
-        </div>
+        <div className="rm-card-title">{t("connectorTitle")}</div>
       </div>
 
       <FormDialog
@@ -540,22 +533,13 @@ export function DataConnectorPanel({
           }
           query={knowledgeBasesQuery}
         >
-          {() => (
-            <Tabs
-              tabs={[
-                {
-                  id: "sources",
-                  label: t("connectorSourcesTab"),
-                  content: sourcesTab,
-                },
-                {
-                  id: "catalog",
-                  label: t("connectorCatalogTab"),
-                  content: catalogTab,
-                },
-              ]}
-            />
-          )}
+          {() =>
+            view === "sources"
+              ? sourcesTab
+              : view === "imports"
+                ? importsTab
+                : catalogTab
+          }
         </PanelState>
       </div>
     </section>

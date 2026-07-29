@@ -366,18 +366,20 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
               />
               <div className="grid max-h-80 gap-2 overflow-y-auto">
                 {allSuites.map((suite) => (
-                  <button
+                  <Button
                     aria-current={
                       activeSuite?.id === suite.id ? "true" : undefined
                     }
-                    className="rounded-md border border-border p-2"
+                    className="w-full justify-start rounded-md p-2 text-left"
                     key={suite.id}
                     onClick={() => setSelectedSuiteId(suite.id)}
                     type="button"
                   >
-                    <div className="font-medium">{suite.name}</div>
-                    <div className="break-words text-muted">{suite.id}</div>
-                  </button>
+                    <div className="min-w-0 flex-1 whitespace-normal">
+                      <div className="font-medium">{suite.name}</div>
+                      <div className="break-words text-muted">{suite.id}</div>
+                    </div>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -387,9 +389,9 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
           {(allRuns) => (
             <div className="grid max-h-80 gap-2 overflow-y-auto">
               {allRuns.map((run) => (
-                <button
+                <Button
                   aria-current={activeRun?.id === run.id ? "true" : undefined}
-                  className="rounded-md border border-border p-2 text-left"
+                  className="w-full justify-start rounded-md p-2 text-left"
                   key={run.id}
                   onClick={() => {
                     setSelectedRunId(run.id);
@@ -397,20 +399,22 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
                   }}
                   type="button"
                 >
-                  <div className="font-medium">
-                    {t(
-                      run.status === "passed"
-                        ? "evalStatusPassed"
-                        : "evalStatusFailed",
-                    )}{" "}
-                    -{" "}
-                    <LocalizedNumber
-                      options={{ maximumFractionDigits: 0, style: "percent" }}
-                      value={run.score}
-                    />
+                  <div className="min-w-0 flex-1 whitespace-normal">
+                    <div className="font-medium">
+                      {t(
+                        run.status === "passed"
+                          ? "evalStatusPassed"
+                          : "evalStatusFailed",
+                      )}{" "}
+                      -{" "}
+                      <LocalizedNumber
+                        options={{ maximumFractionDigits: 0, style: "percent" }}
+                        value={run.score}
+                      />
+                    </div>
+                    <div className="break-words text-muted">{run.modelId}</div>
                   </div>
-                  <div className="break-words text-muted">{run.modelId}</div>
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -420,19 +424,19 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
             {(results) => (
               <div className="grid max-h-80 gap-2 overflow-y-auto">
                 {results.map((result) => (
-                  <button
+                  <Button
                     aria-current={
                       activeResult?.id === result.id ? "true" : undefined
                     }
-                    className="rounded-md border border-border p-2 text-left"
+                    className="w-full justify-start rounded-md p-2 text-left"
                     key={result.id}
                     onClick={() => setSelectedResultId(result.id)}
                     type="button"
                   >
-                    <div className="line-clamp-2 break-words">
+                    <div className="line-clamp-2 min-w-0 flex-1 whitespace-normal break-words">
                       {result.output}
                     </div>
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}

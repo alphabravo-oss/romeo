@@ -170,7 +170,9 @@ export function ServiceAccountPanel() {
         id: "scopes",
         header: t("scopes"),
         cell: (c) => (
-          <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+          <span className="rm-cell-muted rm-mono" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
       col.accessor((row) => (row.disabledAt ? "disabled" : "active"), {
@@ -234,19 +236,7 @@ export function ServiceAccountPanel() {
         />
       ) : null}
       <div className="mt-4">
-        <PanelState
-          query={accountsQuery}
-          empty={t("noServiceAccounts")}
-          emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setAddOpen(true)}
-              type="button"
-            >
-              + {t("addServiceAccount")}
-            </Button>
-          }
-        >
+        <PanelState query={accountsQuery} empty={t("noServiceAccounts")}>
           {(accounts) => (
             <div className="grid gap-4">
               <PanelStats

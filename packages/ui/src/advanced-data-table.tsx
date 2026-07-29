@@ -78,6 +78,7 @@ export interface DataTableProps<T> {
   getRowId?: (row: T, index: number) => string;
   labels: DataTableLabels;
   maxBodyHeight?: number;
+  minTableWidth?: number;
   pageSize?: number;
   serverPagination?: ServerPagination;
 }
@@ -100,6 +101,7 @@ export function DataTable<T>({
   data,
   empty,
   maxBodyHeight,
+  minTableWidth,
   pageSize = 25,
   serverPagination,
   enableRowSelection = false,
@@ -301,7 +303,11 @@ export function DataTable<T>({
             : undefined
         }
       >
-        <table className="rm-table">
+        <table
+          aria-rowcount={rows.length + 1}
+          className="rm-table"
+          style={minTableWidth ? { minWidth: minTableWidth } : undefined}
+        >
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>

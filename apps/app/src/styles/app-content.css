@@ -16,7 +16,6 @@
 
 .rm-console-title {
   padding: 10px 8px 6px;
-  font-family: inherit;
   letter-spacing: -0.021em;
   font-size: 20px;
   font-weight: 600;
@@ -50,16 +49,14 @@
   color: var(--rm-muted);
 }
 
-.rm-console-item {
-  display: flex;
-  align-items: center;
+.rm-ui-button.rm-console-item {
+  justify-content: flex-start;
   gap: 10px;
   border: 0;
   border-radius: var(--rm-radius-item);
   background: transparent;
   padding: 8px 10px;
   color: var(--rm-text);
-  font: inherit;
   font-size: 14px;
   text-align: left;
 }
@@ -182,7 +179,7 @@
 
 /* Panel = card. Titles/headers become proper card headers with a hairline. */
 
-.rm-card-title,
+.rm-card-title:not(.rm-card-header .rm-card-title),
 .rm-card-header {
   margin-bottom: 14px;
   padding-bottom: 10px;
@@ -216,8 +213,6 @@
 
 .rm-page-header h2 {
   margin: 0;
-  font-family: inherit;
-  letter-spacing: -0.021em;
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -364,64 +359,14 @@ select:focus-visible {
   }
 
   .rm-console-nav {
+    display: none;
+  }
+
+  .rm-console-topbar {
     position: sticky;
     top: 0;
     z-index: 30;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 4px 8px;
-    overflow: hidden;
-    border-right: 0;
-    border-bottom: 1px solid var(--rm-border);
-    padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px;
-  }
-
-  .rm-console-brand {
-    display: none;
-  }
-
-  .rm-console-back {
-    width: 36px;
-    height: 36px;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .rm-console-back span,
-  .rm-console-group-label {
-    display: none;
-  }
-
-  .rm-console-title {
-    min-width: 0;
-    padding: 0;
-    font-size: 18px;
-  }
-
-  .rm-console-sections {
-    grid-column: 1 / -1;
-    display: flex;
-    gap: 2px;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    padding-top: 4px;
-    scrollbar-width: none;
-  }
-
-  .rm-console-sections::-webkit-scrollbar {
-    display: none;
-  }
-
-  .rm-console-group {
-    display: flex;
-    gap: 2px;
-  }
-
-  .rm-console-item {
-    min-height: 34px;
-    padding: 7px 10px;
-    white-space: nowrap;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
   }
 
   .rm-console-content {
@@ -445,6 +390,53 @@ select:focus-visible {
   .rm-field {
     align-items: flex-start;
     gap: 16px;
+  }
+}
+
+.rm-console-topbar-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.rm-console-mobile-trigger {
+  display: none;
+}
+
+.rm-console-mobile-back {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.rm-console-mobile-sections,
+.rm-console-mobile-group {
+  display: grid;
+  gap: 4px;
+}
+
+.rm-console-mobile-sections {
+  gap: 18px;
+}
+
+.rm-console-mobile-group-label {
+  padding: 0 10px 4px;
+  color: var(--rm-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.rm-console-mobile-sections .rm-console-item {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .rm-console-mobile-trigger {
+    display: inline-flex;
   }
 }
 
@@ -580,8 +572,6 @@ select:focus-visible {
   align-items: center;
   gap: 8px;
   margin-top: 8px;
-  font-family: inherit;
-  letter-spacing: -0.021em;
   font-size: 28px;
   font-weight: 590;
   line-height: 1.1;
@@ -593,6 +583,22 @@ select:focus-visible {
   margin-top: 6px;
   font-size: 12px;
   color: var(--rm-muted);
+}
+
+@media (max-width: 520px) {
+  .rm-stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+    gap: 8px;
+  }
+
+  .rm-stat {
+    padding: 12px;
+  }
+
+  .rm-stat-value {
+    margin-top: 6px;
+    font-size: 22px;
+  }
 }
 
 .rm-status-dot {

@@ -177,7 +177,9 @@ export function WebhooksPanel() {
       webhookCol.accessor("url", {
         header: t("webhooksUrl"),
         cell: (c) => (
-          <span className="rm-mono font-medium">{c.getValue()}</span>
+          <span className="rm-mono font-medium" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
       webhookCol.accessor((row) => row.eventTypes.join(", "), {
@@ -362,7 +364,9 @@ export function WebhooksPanel() {
                           }}
                           type="checkbox"
                         />
-                        <span className="rm-mono">{eventType}</span>
+                        <span className="rm-mono" translate="no">
+                          {eventType}
+                        </span>
                       </label>
                     );
                   })}

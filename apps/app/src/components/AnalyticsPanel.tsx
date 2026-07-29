@@ -1,4 +1,4 @@
-import { Button } from "@romeo/ui";
+import { Button, StatusBadge } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -24,6 +24,16 @@ import { PanelStats } from "./PanelStats";
 
 const toolCol = createColumnHelper<AdminAnalyticsToolSummaryRow>();
 
+interface AnalyticsSignalRow {
+  detail?: string;
+  id: string;
+  label: string;
+  tone: "danger" | "neutral" | "success" | "warning";
+  value: number | string;
+}
+
+const signalCol = createColumnHelper<AnalyticsSignalRow>();
+
 type Translate = (key: MessageKey) => string;
 
 function toolColumns(
@@ -32,7 +42,11 @@ function toolColumns(
   return [
     toolCol.accessor("toolId", {
       header: t("analyticsTool"),
-      cell: (c) => <span className="rm-mono font-medium">{c.getValue()}</span>,
+      cell: (c) => (
+        <span className="rm-mono font-medium" translate="no">
+          {c.getValue()}
+        </span>
+      ),
     }),
     toolCol.accessor("totalCount", {
       header: t("analyticsTotal"),
@@ -142,6 +156,61 @@ function AnalyticsSummaryView({
 }): React.ReactNode {
   const { t } = useLocale();
   const tools = summary.tools.byTool;
+  const signals: AnalyticsSignalRow[] = [
+    {
+      id: "evals",
+      label: t("analyticsEvalStatus"),
+      detail: `${summary.evals.suiteCount} ${t("analyticsEvalSuites")} · ${summary.evals.generatedRunCount} ${t("analyticsEvalRuns")}`,
+      tone:
+        summary.evals.status === "passed"
+          ? "success"
+          : summary.evals.status === "failed"
+            ? "danger"
+            : "warning",
+      value: t(evalStatusMessageKey(summary.evals.status)),
+    },
+    {
+      id: "tool-failures",
+      label: t("analyticsToolFailures"),
+      tone: summary.tools.failureCount > 0 ? "warning" : "success",
+      value: summary.tools.failureCount,
+    },
+    {
+      id: "provider-alerts",
+      label: t("analyticsProviderAlerts"),
+      tone: summary.providers.criticalAlertCount > 0 ? "danger" : "success",
+      value: summary.providers.criticalAlertCount,
+    },
+    {
+      id: "failed-jobs",
+      label: t("analyticsJobsFailed"),
+      tone: summary.jobs.failed > 0 ? "danger" : "success",
+      value: summary.jobs.failed,
+    },
+  ];
+  const signalColumns: ColumnDef<AnalyticsSignalRow, any>[] = [
+    signalCol.accessor("label", {
+      header: t("analyticsOperationalSignal"),
+      cell: (cell) => <span className="font-medium">{cell.getValue()}</span>,
+    }),
+    signalCol.accessor("value", {
+      header: t("analyticsCurrentValue"),
+      cell: (cell) => (
+        <StatusBadge tone={cell.row.original.tone}>
+          {typeof cell.getValue() === "number" ? (
+            <LocalizedNumber value={cell.getValue() as number} />
+          ) : (
+            cell.getValue()
+          )}
+        </StatusBadge>
+      ),
+    }),
+    signalCol.accessor((row) => row.detail ?? "—", {
+      id: "detail",
+      header: t("analyticsDetails"),
+      cell: (cell) => <span className="text-muted">{cell.getValue()}</span>,
+    }),
+  ];
 
   return (
     <>
@@ -152,30 +221,20 @@ function AnalyticsSummaryView({
             value: t(analyticsStatusMessageKey(summary.status)),
           },
           {
-            label: t("analyticsEvalStatus"),
-            value: t(evalStatusMessageKey(summary.evals.status)),
-          },
-          { label: t("analyticsEvalSuites"), value: summary.evals.suiteCount },
-          {
-            label: t("analyticsEvalRuns"),
-            value: summary.evals.generatedRunCount,
-          },
-          {
             label: t("analyticsEstimatedCost"),
             value: <LocalizedCurrency value={summary.usage.estimatedCostUsd} />,
           },
           { label: t("analyticsUsageEvents"), value: summary.usage.eventCount },
           { label: t("analyticsToolCalls"), value: summary.tools.totalCount },
-          {
-            label: t("analyticsToolFailures"),
-            value: summary.tools.failureCount,
-          },
-          {
-            label: t("analyticsProviderAlerts"),
-            value: summary.providers.criticalAlertCount,
-          },
-          { label: t("analyticsJobsFailed"), value: summary.jobs.failed },
         ]}
+      />
+      <div className="mb-2 mt-3 text-xs font-medium text-muted">
+        {t("analyticsOperationalSignals")}
+      </div>
+      <DataTable
+        columns={signalColumns}
+        data={signals}
+        getRowId={(row) => row.id}
       />
       <div className="mb-2 mt-3 text-xs font-medium text-muted">
         {t("analyticsToolBreakdown")}

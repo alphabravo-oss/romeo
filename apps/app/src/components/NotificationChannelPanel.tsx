@@ -167,13 +167,17 @@ function ChannelsTab() {
       deliveryCol.accessor("notificationId", {
         header: t("notification"),
         cell: (c) => (
-          <span className="rm-mono rm-cell-muted">{c.getValue()}</span>
+          <span className="rm-mono rm-cell-muted" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
       deliveryCol.accessor("channelId", {
         header: t("channel"),
         cell: (c) => (
-          <span className="rm-mono rm-cell-muted">{c.getValue()}</span>
+          <span className="rm-mono rm-cell-muted" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
       deliveryCol.accessor("status", {
@@ -387,19 +391,7 @@ function ChannelsTab() {
       </FormDialog>
 
       <div className="mt-4">
-        <PanelState
-          query={channelsQuery}
-          empty={t("noChannels")}
-          emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setAddOpen(true)}
-              type="button"
-            >
-              + {t("addChannel")}
-            </Button>
-          }
-        >
+        <PanelState query={channelsQuery} empty={t("noChannels")}>
           {(rows) => (
             <div className="grid gap-4">
               <PanelStats

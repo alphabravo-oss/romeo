@@ -1,17 +1,18 @@
 import { Button } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 
-import { getReadinessReport } from "../features/readiness";
+import { getReadinessReport, type ReadinessCheck } from "../features/readiness";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PanelStats } from "./PanelStats";
+import {
+  orderReadinessChecks,
+  summarizeReadinessChecks,
+} from "./readiness-presentation";
 
-const severityRank: Record<string, number> = {
-  critical: 0,
-  warning: 1,
-  info: 2,
-};
+const col = createColumnHelper<ReadinessCheck>();
 
 export function ReadinessPanel() {
   const { t } = useLocale();
@@ -39,25 +40,46 @@ export function ReadinessPanel() {
           empty={t("readinessNoChecks")}
         >
           {(report) => {
-            const pass = report.checks.filter(
-              (check) => check.status === "pass",
-            ).length;
-            const warn = report.checks.filter(
-              (check) => check.status === "warn",
-            ).length;
-            const fail = report.checks.filter(
-              (check) => check.status === "fail",
-            ).length;
-            const checks = [...report.checks].sort(
-              (a, b) =>
-                (severityRank[a.severity] ?? 3) -
-                (severityRank[b.severity] ?? 3),
-            );
+            const summary = summarizeReadinessChecks(report.checks);
+            const checks = orderReadinessChecks(report.checks);
+            const columns: ColumnDef<ReadinessCheck, any>[] = [
+              col.accessor("id", {
+                header: t("readinessCheck"),
+                cell: (cell) => (
+                  <span className="font-medium rm-mono" translate="no">
+                    {cell.getValue()}
+                  </span>
+                ),
+              }),
+              col.accessor("status", {
+                header: t("status"),
+                cell: (cell) => {
+                  const status = cell.getValue();
+                  return (
+                    <span
+                      className={`rm-status ${status} whitespace-nowrap font-medium`}
+                    >
+                      {t(readinessStatusMessageKey(status))}
+                    </span>
+                  );
+                },
+              }),
+              col.accessor("message", {
+                header: t("readinessResult"),
+                cell: (cell) => (
+                  <span className="break-words text-muted">
+                    {cell.getValue()}
+                  </span>
+                ),
+              }),
+            ];
             return (
               <div className="grid gap-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <span
-                    className={`rm-status ${report.status === "ready" ? "ok" : "warn"} text-sm font-medium`}
+                    className={`rm-status ${
+                      summary.tone === "pass" ? "ok" : (summary.tone ?? "warn")
+                    } text-sm font-medium`}
                   >
                     {report.status === "ready"
                       ? t("readinessReady")
@@ -70,31 +92,28 @@ export function ReadinessPanel() {
                 </div>
                 <PanelStats
                   items={[
-                    { label: t("readinessPassing"), value: pass },
-                    { label: t("readinessWarnings"), value: warn },
-                    { label: t("readinessFailing"), value: fail },
+                    {
+                      label: t("readinessPassing"),
+                      value: summary.pass,
+                    },
+                    {
+                      label: t("readinessWarnings"),
+                      value: summary.warn,
+                    },
+                    {
+                      label: t("readinessFailing"),
+                      value: summary.fail,
+                    },
                   ]}
                 />
-                <div className="grid gap-2">
-                  {checks.map((check) => (
-                    <div
-                      className="flex items-start justify-between gap-3 rounded-md border border-border p-3"
-                      key={check.id}
-                    >
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium">{check.id}</div>
-                        <div className="mt-0.5 break-words text-sm text-muted">
-                          {check.message}
-                        </div>
-                      </div>
-                      <span
-                        className={`rm-status ${check.status} shrink-0 whitespace-nowrap text-xs font-medium`}
-                      >
-                        {t(readinessStatusMessageKey(check.status))}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <DataTable
+                  columns={columns}
+                  data={checks}
+                  empty={t("readinessNoChecks")}
+                  getRowId={(check) => check.id}
+                  maxBodyHeight={620}
+                  minTableWidth={760}
+                />
               </div>
             );
           }}

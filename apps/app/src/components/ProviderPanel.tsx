@@ -1,40 +1,43 @@
-import CheckCircle2 from "lucide-react/dist/esm/icons/circle-check-big.mjs";
-import CircleAlert from "lucide-react/dist/esm/icons/circle-alert.mjs";
-import Pencil from "lucide-react/dist/esm/icons/pencil.mjs";
-import Download from "lucide-react/dist/esm/icons/download.mjs";
-import PlugZap from "lucide-react/dist/esm/icons/plug-zap.mjs";
-import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
-import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
 import {
   Button,
+  DropdownMenu,
   EmptyState,
-  Field,
-  Input,
+  IconButton,
   StatusBadge,
-  Switch,
 } from "@romeo/ui";
+import MoreHorizontal from "lucide-react/dist/esm/icons/ellipsis.mjs";
+import { useMemo, useState } from "react";
 
 import type {
   BaseModel,
   Provider,
+  ProviderOperationalProviderSummary,
   ProviderOperationalSummary,
   ProviderVerification,
 } from "../features/providers/types";
-import { toast } from "../lib/toast";
-import {
-  LocalizedDuration,
-  LocalizedNumber,
-  LocalizedTokens,
-} from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
-import { PanelStats } from "./PanelStats";
+import { toast } from "../lib/toast";
 import {
   ConnectionDialog,
   type ProviderFormInput,
 } from "./ProviderConnectionDialog";
+import { DataTable, createColumnHelper, type ColumnDef } from "./DataTable";
+import { PanelStats } from "./PanelStats";
+import { ProviderDetailsSheet } from "./ProviderDetailsSheet";
 import { useProviderPanelState } from "./useProviderPanelState";
 
 export type { ProviderFormInput } from "./ProviderConnectionDialog";
+
+interface ProviderTableRow {
+  chatModelCount: number;
+  enabledModelCount: number;
+  operational: ProviderOperationalProviderSummary | undefined;
+  provider: Provider;
+  totalModelCount: number;
+  verification: ProviderVerification | undefined;
+}
+
+const providerColumn = createColumnHelper<ProviderTableRow>();
 
 export function ProviderPanel({
   isCreating,
@@ -80,16 +83,15 @@ export function ProviderPanel({
   models: BaseModel[];
 }) {
   const { t } = useLocale();
+  const [selectedProviderId, setSelectedProviderId] = useState<string>();
   const {
     confirmDialog,
     dialog,
-    expandedProviders,
     modelsByProvider,
     pull,
     pullNames,
     remove,
     setDialog,
-    setExpandedProviders,
     setPullNames,
     sync,
     verification,
@@ -102,9 +104,194 @@ export function ProviderPanel({
     onVerifyProvider,
   });
 
+  const operationalByProvider = useMemo(
+    () =>
+      new Map(
+        (operationalSummary?.providers ?? []).map((provider) => [
+          provider.providerId,
+          provider,
+        ]),
+      ),
+    [operationalSummary?.providers],
+  );
+  const rows = useMemo<ProviderTableRow[]>(
+    () =>
+      providers.map((provider) => {
+        const providerModels = modelsByProvider.get(provider.id) ?? [];
+        const chatModels = providerModels.filter(
+          (model) => !model.capabilities.modalities.includes("embeddings"),
+        );
+        return {
+          chatModelCount: chatModels.length,
+          enabledModelCount: chatModels.filter((model) => model.enabled).length,
+          operational: operationalByProvider.get(provider.id),
+          provider,
+          totalModelCount: providerModels.length,
+          verification: verification[provider.id],
+        };
+      }),
+    [modelsByProvider, operationalByProvider, providers, verification],
+  );
+
+  const updateEnabled = (provider: Provider, enabled: boolean) =>
+    onUpdateProvider({
+      providerId: provider.id,
+      name: provider.name,
+      baseUrl: provider.baseUrl,
+      ...(provider.modelIds === undefined
+        ? {}
+        : { modelIds: provider.modelIds }),
+      enabled,
+    });
+
+  const columns = useMemo<ColumnDef<ProviderTableRow, any>[]>(
+    () => [
+      providerColumn.accessor((row) => row.provider.name, {
+        id: "provider",
+        header: t("providerCredentials"),
+        cell: (context) => {
+          const provider = context.row.original.provider;
+          return (
+            <div className="min-w-0">
+              <strong className="block truncate" translate="no">
+                {provider.name}
+              </strong>
+              <span
+                className="mt-1 block truncate text-xs text-muted"
+                title={provider.baseUrl}
+                translate="no"
+              >
+                {provider.baseUrl}
+              </span>
+            </div>
+          );
+        },
+      }),
+      providerColumn.accessor((row) => row.provider.type, {
+        id: "type",
+        header: t("providerType"),
+        cell: (context) => (
+          <StatusBadge translate="no">{context.getValue()}</StatusBadge>
+        ),
+      }),
+      providerColumn.accessor(
+        (row) =>
+          row.verification
+            ? row.verification.ok
+              ? "available"
+              : "unavailable"
+            : (row.operational?.status ??
+              (row.provider.enabled ? "available" : "disabled")),
+        {
+          id: "health",
+          header: t("connectionHealth"),
+          cell: (context) => {
+            const status = context.getValue();
+            return (
+              <StatusBadge
+                tone={
+                  status === "available"
+                    ? "success"
+                    : status === "degraded"
+                      ? "warning"
+                      : status === "disabled"
+                        ? "neutral"
+                        : "danger"
+                }
+              >
+                {status}
+              </StatusBadge>
+            );
+          },
+        },
+      ),
+      providerColumn.accessor((row) => row.enabledModelCount, {
+        id: "models",
+        header: t("models"),
+        cell: (context) => {
+          const row = context.row.original;
+          return (
+            <span>
+              {row.enabledModelCount}/{row.chatModelCount}
+            </span>
+          );
+        },
+      }),
+      providerColumn.display({
+        id: "actions",
+        header: "",
+        enableSorting: false,
+        cell: (context) => {
+          const provider = context.row.original.provider;
+          const verifying = verifyingProviderId === provider.id;
+          const syncing = syncingProviderId === provider.id;
+          return (
+            <div className="flex justify-end gap-1">
+              <Button
+                onClick={() => setSelectedProviderId(provider.id)}
+                size="sm"
+              >
+                {t("manageProvider")}
+              </Button>
+              <DropdownMenu
+                items={[
+                  {
+                    disabled: verifying,
+                    label: t("verify"),
+                    onSelect: () => void verify(provider.id),
+                  },
+                  {
+                    disabled: syncing,
+                    label: t("refreshModels"),
+                    onSelect: () => void sync(provider.id),
+                  },
+                  {
+                    label: provider.enabled
+                      ? t("disableProvider")
+                      : t("enableProvider"),
+                    onSelect: () =>
+                      void updateEnabled(provider, !provider.enabled),
+                  },
+                  {
+                    label: t("configure"),
+                    onSelect: () => setDialog(provider),
+                  },
+                ]}
+                trigger={
+                  <IconButton
+                    aria-label={`${t("moreActions")}: ${provider.name}`}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <MoreHorizontal aria-hidden size={16} />
+                  </IconButton>
+                }
+              />
+            </div>
+          );
+        },
+      }),
+    ],
+    [setDialog, syncingProviderId, t, verifyingProviderId, verify, sync],
+  );
+
+  const selectedProvider = selectedProviderId
+    ? providers.find((provider) => provider.id === selectedProviderId)
+    : undefined;
+  const selectedModels = selectedProvider
+    ? (modelsByProvider.get(selectedProvider.id) ?? [])
+    : [];
+  const selectedVerification = selectedProvider
+    ? verification[selectedProvider.id]
+    : undefined;
+  const availableProviders =
+    operationalSummary?.providers.filter(
+      (provider) => provider.status === "available",
+    ).length ?? providers.filter((provider) => provider.enabled).length;
+
   return (
     <section className="rm-panel p-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="rm-card-header">
         <div>
           <div className="rm-card-title">{t("providerCredentials")}</div>
           <p className="text-sm text-muted">{t("connectionsDescription")}</p>
@@ -117,340 +304,65 @@ export function ProviderPanel({
       <div className="mt-4 grid gap-4">
         <PanelStats
           items={[
-            { label: t("providerCredentials"), value: providers.length },
+            { label: t("connections"), value: providers.length },
+            { label: t("availability"), value: availableProviders },
             {
-              label: t("enabled"),
-              value: providers.filter((provider) => provider.enabled).length,
-            },
-            {
-              label: t("posture"),
-              value: operationalSummary?.status ?? t("unknown"),
+              label: t("operationalAlerts"),
+              value: operationalSummary?.alerts.length ?? 0,
             },
           ]}
         />
 
-        {operationalSummary?.runtime ? (
-          <div className="grid gap-2">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted">
-              {t("runtimeLast")}{" "}
-              <LocalizedNumber
-                value={Math.round(
-                  operationalSummary.runtime.lookbackSeconds / 60,
-                )}
-              />{" "}
-              {t("minutes")}
-            </div>
-            <PanelStats
-              items={[
-                {
-                  label: t("ttftP95"),
-                  value: (
-                    <LocalizedDuration
-                      milliseconds={
-                        operationalSummary.runtime.timeToFirstTokenP95Ms
-                      }
-                    />
-                  ),
-                },
-                {
-                  label: t("outputSpeed"),
-                  value: (
-                    <>
-                      <LocalizedNumber
-                        options={{ maximumFractionDigits: 1 }}
-                        value={
-                          operationalSummary.runtime.outputThroughputAverage
-                        }
-                      />{" "}
-                      tok/s
-                    </>
-                  ),
-                },
-                {
-                  label: t("queueP95"),
-                  value: (
-                    <LocalizedDuration
-                      milliseconds={operationalSummary.runtime.queueWaitP95Ms}
-                    />
-                  ),
-                },
-                {
-                  label: t("reconnects"),
-                  value: operationalSummary.runtime.sseReconnectCount,
-                },
-                {
-                  label: t("providerErrors"),
-                  value: operationalSummary.runtime.providerErrorCount,
-                },
-                {
-                  label: t("storageErrors"),
-                  value: operationalSummary.runtime.objectStoreFailureCount,
-                },
-                {
-                  label: t("contextAverage"),
-                  value: (
-                    <LocalizedTokens
-                      value={Math.round(
-                        operationalSummary.runtime.contextInputTokensAverage,
-                      )}
-                    />
-                  ),
-                },
-              ]}
-            />
-            {operationalSummary.alerts.length > 0 ? (
-              <ul aria-label={t("operationalAlerts")} className="grid gap-1">
-                {operationalSummary.alerts.map((alert) => (
-                  <li className="rm-connection-result error" key={alert.id}>
-                    <CircleAlert aria-hidden="true" size={14} />
-                    <span>{operationalAlertLabel(alert.code)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
-
         {providers.length === 0 ? (
-          <EmptyState
-            action={
-              <Button onClick={() => setDialog("new")} variant="primary">
-                + {t("addProvider")}
-              </Button>
-            }
-            title={t("connectEndpoint")}
-          />
+          <EmptyState title={t("connectEndpoint")}>
+            {t("connectionsDescription")}
+          </EmptyState>
         ) : (
-          <div className="grid gap-3">
-            {providers.map((provider) => {
-              const result = verification[provider.id];
-              const providerModels = modelsByProvider.get(provider.id) ?? [];
-              const chatModels = providerModels.filter(
-                (model) =>
-                  !model.capabilities.modalities.includes("embeddings"),
-              );
-              const embeddingModels = providerModels.filter((model) =>
-                model.capabilities.modalities.includes("embeddings"),
-              );
-              const expanded = expandedProviders.has(provider.id);
-              return (
-                <article
-                  className={`rm-connection-card ${provider.enabled ? "" : "disabled"}`}
-                  key={provider.id}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{provider.name}</span>
-                      <StatusBadge
-                        tone={provider.enabled ? "success" : "neutral"}
-                      >
-                        {provider.enabled ? t("enabled") : t("disabled")}
-                      </StatusBadge>
-                      <StatusBadge>{provider.type}</StatusBadge>
-                    </div>
-                    <div
-                      className="mt-1 truncate text-xs text-muted"
-                      title={provider.baseUrl}
-                    >
-                      {provider.baseUrl}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                      <span>
-                        {provider.credentialConfigured
-                          ? t("managedCredential")
-                          : t("noCredential")}
-                      </span>
-                      <span>
-                        {provider.modelIds?.length
-                          ? `${provider.modelIds.length} ${t("modelsAllowed")}`
-                          : t("automaticDiscovery")}
-                      </span>
-                      <span>
-                        {chatModels.filter((model) => model.enabled).length}/
-                        {chatModels.length} {t("chatModelsAvailable")}
-                      </span>
-                      {embeddingModels.length > 0 ? (
-                        <span>
-                          {embeddingModels.length} {t("embeddingModels")}
-                        </span>
-                      ) : null}
-                    </div>
-                    {result ? (
-                      <div
-                        className={`rm-connection-result ${result.ok ? "success" : "error"}`}
-                      >
-                        {result.ok ? (
-                          <CheckCircle2 size={14} />
-                        ) : (
-                          <CircleAlert size={14} />
-                        )}
-                        <span>{result.message}</span>
-                        {result.latencyMs !== undefined ? (
-                          <small>{result.latencyMs} ms</small>
-                        ) : null}
-                        {result.checks?.length ? (
-                          <ul className="rm-connection-checks">
-                            {result.checks.map((check) => (
-                              <li className={check.status} key={check.label}>
-                                <strong>{check.label}:</strong> {check.detail}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="rm-connection-actions">
-                    <Switch
-                      checked={provider.enabled}
-                      disabled={isUpdating}
-                      label={t("enabled")}
-                      onCheckedChange={(checked) => {
-                        void onUpdateProvider({
-                          providerId: provider.id,
-                          name: provider.name,
-                          baseUrl: provider.baseUrl,
-                          ...(provider.modelIds === undefined
-                            ? {}
-                            : { modelIds: provider.modelIds }),
-                          enabled: checked === true,
-                        }).catch(() => undefined);
-                      }}
-                    />
-                    <Button
-                      disabled={verifyingProviderId === provider.id}
-                      onClick={() => void verify(provider.id)}
-                      pending={verifyingProviderId === provider.id}
-                    >
-                      <PlugZap size={14} /> {t("verify")}
-                    </Button>
-                    <Button
-                      disabled={syncingProviderId === provider.id}
-                      onClick={() => void sync(provider.id)}
-                      pending={syncingProviderId === provider.id}
-                    >
-                      <RefreshCw size={14} /> {t("refreshModels")}
-                    </Button>
-                    <Button onClick={() => setDialog(provider)}>
-                      <Pencil size={14} /> {t("configure")}
-                    </Button>
-                  </div>
-                  {providerModels.length > 0 ? (
-                    <div className="rm-connection-models">
-                      <div className="rm-connection-models-header">
-                        <strong>{t("discoveredModels")}</strong>
-                        {providerModels.length > 4 ? (
-                          <Button
-                            onClick={() =>
-                              setExpandedProviders((current) => {
-                                const next = new Set(current);
-                                if (next.has(provider.id))
-                                  next.delete(provider.id);
-                                else next.add(provider.id);
-                                return next;
-                              })
-                            }
-                            size="sm"
-                            variant="ghost"
-                          >
-                            {expanded ? t("showLess") : t("showAll")}
-                          </Button>
-                        ) : null}
-                      </div>
-                      <ul className="rm-connection-model-list">
-                        {(expanded
-                          ? providerModels
-                          : providerModels.slice(0, 4)
-                        ).map((model) => (
-                          <li key={model.id}>
-                            <span title={model.name}>{model.name}</span>
-                            <span className="flex items-center gap-2">
-                              <StatusBadge
-                                tone={model.enabled ? "success" : "neutral"}
-                              >
-                                {model.capabilities.modalities.includes(
-                                  "embeddings",
-                                )
-                                  ? t("embeddingOnly")
-                                  : model.enabled
-                                    ? t("availableInChat")
-                                    : t("notAvailableInChat")}
-                              </StatusBadge>
-                              {provider.type === "ollama" ? (
-                                <Button
-                                  aria-label={`${t("deleteOllamaModel")} ${model.name}`}
-                                  disabled={deletingModelId === model.id}
-                                  onClick={() =>
-                                    void remove(provider.id, model)
-                                  }
-                                  pending={deletingModelId === model.id}
-                                  size="sm"
-                                  variant="ghost"
-                                >
-                                  <Trash2 aria-hidden="true" size={14} />
-                                </Button>
-                              ) : null}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : (
-                    <div className="rm-connection-models empty">
-                      {t("noModelsDiscovered")}
-                    </div>
-                  )}
-                  {provider.type === "ollama" ? (
-                    <form
-                      className="rm-ollama-pull"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void pull(provider.id);
-                      }}
-                    >
-                      <div>
-                        <Field
-                          description={t("pullOllamaModelDescription")}
-                          label={t("pullOllamaModel")}
-                        >
-                          <Input
-                            name="pullNames"
-                            onChange={(event) =>
-                              setPullNames((current) => ({
-                                ...current,
-                                [provider.id]: event.currentTarget.value,
-                              }))
-                            }
-                            placeholder="llama3.2:latest"
-                            value={pullNames[provider.id] ?? ""}
-                          />
-                        </Field>
-                        <Button
-                          disabled={
-                            pullingProviderId === provider.id ||
-                            !pullNames[provider.id]?.trim()
-                          }
-                          pending={pullingProviderId === provider.id}
-                          type="submit"
-                        >
-                          <Download aria-hidden="true" size={14} />
-                          {t("pullModel")}
-                        </Button>
-                      </div>
-                      {pullingProviderId === provider.id ? (
-                        <progress
-                          aria-label={t("pullingModel")}
-                          className="rm-ollama-pull-progress"
-                        />
-                      ) : null}
-                    </form>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
+          <DataTable
+            columns={columns}
+            data={rows}
+            getRowId={(row) => row.provider.id}
+            minTableWidth={820}
+          />
         )}
       </div>
+
+      <ProviderDetailsSheet
+        deletingModelId={deletingModelId}
+        isUpdating={isUpdating}
+        models={selectedModels}
+        onClose={() => setSelectedProviderId(undefined)}
+        onConfigure={() => {
+          if (selectedProvider) setDialog(selectedProvider);
+        }}
+        onDeleteModel={remove}
+        onPullModel={pull}
+        onRefresh={() => {
+          if (selectedProvider) void sync(selectedProvider.id);
+        }}
+        onToggle={(enabled) => {
+          if (selectedProvider) void updateEnabled(selectedProvider, enabled);
+        }}
+        onVerify={() => {
+          if (selectedProvider) void verify(selectedProvider.id);
+        }}
+        open={selectedProvider !== undefined}
+        provider={selectedProvider}
+        pullName={
+          selectedProvider ? (pullNames[selectedProvider.id] ?? "") : ""
+        }
+        pulling={pullingProviderId === selectedProvider?.id}
+        setPullName={(value) => {
+          if (!selectedProvider) return;
+          setPullNames((current) => ({
+            ...current,
+            [selectedProvider.id]: value,
+          }));
+        }}
+        syncing={syncingProviderId === selectedProvider?.id}
+        verification={selectedVerification}
+        verifying={verifyingProviderId === selectedProvider?.id}
+      />
 
       {dialog ? (
         <ConnectionDialog
@@ -482,11 +394,4 @@ export function ProviderPanel({
       {confirmDialog}
     </section>
   );
-}
-
-function operationalAlertLabel(code: string): string {
-  return code
-    .split("_")
-    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
-    .join(" ");
 }

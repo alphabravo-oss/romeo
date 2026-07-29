@@ -97,7 +97,9 @@ export function QuotaPanel() {
         id: "scope",
         header: t("quotaScope"),
         cell: (c) => (
-          <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+          <span className="rm-cell-muted rm-mono" translate="no">
+            {c.getValue()}
+          </span>
         ),
       }),
       quotaCol.accessor((row) => `${row.used}/${row.limit}`, {

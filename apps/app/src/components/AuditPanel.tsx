@@ -33,7 +33,11 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
     }),
     col.accessor("action", {
       header: t("auditAction"),
-      cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+      cell: (c) => (
+        <span className="rm-mono" translate="no">
+          {c.getValue()}
+        </span>
+      ),
     }),
     col.accessor("outcome", {
       header: t("auditOutcome"),
@@ -49,7 +53,9 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
       id: "resource",
       header: t("auditResource"),
       cell: (c) => (
-        <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+        <span className="rm-cell-muted rm-mono" translate="no">
+          {c.getValue()}
+        </span>
       ),
     }),
     col.accessor("actorId", {
@@ -181,7 +187,13 @@ export function AuditPanel() {
         isEmpty={(page) => page.data.length === 0}
       >
         {(page) => (
-          <div className="grid gap-4">
+          <div
+            className="grid gap-4"
+            data-audit-event-count={page.data.length}
+            data-audit-failure-count={
+              page.data.filter((event) => event.outcome === "failure").length
+            }
+          >
             <PanelStats
               items={[
                 { label: t("auditEvents"), value: page.data.length },
@@ -197,6 +209,7 @@ export function AuditPanel() {
               columns={auditColumns(t)}
               data={page.data}
               empty={t("auditNoEvents")}
+              maxBodyHeight={620}
               serverPagination={serverPagination}
             />
           </div>

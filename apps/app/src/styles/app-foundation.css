@@ -400,37 +400,6 @@ html.dark .rm-new-chat-button:hover {
   border-color: var(--rm-accent);
 }
 
-.rm-connection-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: flex-start;
-  gap: 1rem;
-  border: 1px solid hsl(var(--border));
-  border-radius: 0.75rem;
-  padding: 1rem;
-  background: hsl(var(--card));
-}
-
-.rm-connection-models {
-  grid-column: 1 / -1;
-  border-top: 1px solid hsl(var(--border));
-  padding-top: 0.75rem;
-  color: hsl(var(--muted-foreground));
-  font-size: 0.75rem;
-}
-
-.rm-connection-models.empty {
-  font-style: italic;
-}
-
-.rm-connection-models-header {
-  display: flex;
-  min-height: 1.75rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
 .rm-connection-model-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
@@ -495,46 +464,6 @@ html.dark .rm-new-chat-button:hover {
   white-space: nowrap;
 }
 
-.rm-ollama-pull-progress {
-  width: 100%;
-  height: 0.3rem;
-  accent-color: var(--rm-accent);
-}
-
-.rm-connection-card.disabled {
-  opacity: 0.68;
-}
-
-.rm-connection-kind {
-  border-radius: 999px;
-  background: hsl(var(--muted));
-  color: hsl(var(--muted-foreground));
-  padding: 0.15rem 0.5rem;
-  font-size: 0.7rem;
-}
-
-.rm-connection-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.rm-connection-actions .rm-ui-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.rm-switch-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: hsl(var(--muted-foreground));
-  font-size: 0.75rem;
-}
-
 .rm-connection-result {
   display: flex;
   align-items: center;
@@ -549,15 +478,6 @@ html.dark .rm-new-chat-button:hover {
 
 .rm-connection-result.error {
   color: var(--rm-danger);
-}
-
-@media (max-width: 780px) {
-  .rm-connection-card {
-    grid-template-columns: 1fr;
-  }
-  .rm-connection-actions {
-    justify-content: flex-start;
-  }
 }
 
 .rm-model-catalog-toolbar {

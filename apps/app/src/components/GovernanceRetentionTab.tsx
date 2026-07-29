@@ -1,6 +1,7 @@
-import { Button, Input, Textarea } from "@romeo/ui";
+import { Button, IconButton, Input } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
 
 import {
   enforceRetention,
@@ -18,6 +19,16 @@ import {
 } from "../lib/retention";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+
+type AccessGrant = Awaited<ReturnType<typeof listAccessReviewGrants>>[number];
+
+const accessGrantColumn = createColumnHelper<AccessGrant>();
+
+interface RetentionOverrideRow {
+  days: string;
+  id: string;
+}
 
 const retentionValidationMessageKeys: Record<
   RetentionValidationCode,
@@ -56,6 +67,36 @@ export function GovernanceRetentionTab() {
     },
     onError: () => toast(t("govCouldNotEnforceRetention"), "error"),
   });
+  const accessGrantColumns: ColumnDef<AccessGrant, any>[] = [
+    accessGrantColumn.accessor(
+      (grant) => `${grant.resourceType}:${grant.resourceId}`,
+      {
+        id: "resource",
+        header: t("govAccessResource"),
+        cell: (cell) => (
+          <span className="rm-mono break-all" translate="no">
+            {cell.getValue()}
+          </span>
+        ),
+      },
+    ),
+    accessGrantColumn.accessor(
+      (grant) => `${grant.principalType}:${grant.principalId}`,
+      {
+        id: "principal",
+        header: t("govAccessPrincipal"),
+        cell: (cell) => (
+          <span className="rm-mono break-all" translate="no">
+            {cell.getValue()}
+          </span>
+        ),
+      },
+    ),
+    accessGrantColumn.accessor("permission", {
+      header: t("govAccessPermission"),
+      cell: (cell) => <span className="rm-status pass">{cell.getValue()}</span>,
+    }),
+  ];
 
   const form = useForm({
     defaultValues: {
@@ -145,40 +186,22 @@ export function GovernanceRetentionTab() {
             />
           )}
         </form.Field>
-        <label className="text-muted" htmlFor="workspace-file-retention">
-          {t("govWorkspaceOverrides")}
-        </label>
         <form.Field name="workspaceOverrides">
           {(field) => (
-            <Textarea
-              name="workspaceOverrides"
-              className="font-mono text-xs"
-              id="workspace-file-retention"
-              onBlur={field.handleBlur}
-              onChange={(event) =>
-                field.handleChange(event.currentTarget.value)
-              }
-              placeholder={"workspace_id=90\nworkspace_indefinite=forever"}
-              rows={3}
+            <RetentionOverrideEditor
+              idPrefix="workspace-file-retention"
+              label={t("govWorkspaceOverrides")}
+              onChange={field.handleChange}
               value={field.state.value}
             />
           )}
         </form.Field>
-        <label className="text-muted" htmlFor="user-file-retention">
-          {t("govUserOverrides")}
-        </label>
         <form.Field name="userOverrides">
           {(field) => (
-            <Textarea
-              name="userOverrides"
-              className="font-mono text-xs"
-              id="user-file-retention"
-              onBlur={field.handleBlur}
-              onChange={(event) =>
-                field.handleChange(event.currentTarget.value)
-              }
-              placeholder={"user_id=30\nuser_indefinite=forever"}
-              rows={3}
+            <RetentionOverrideEditor
+              idPrefix="user-file-retention"
+              label={t("govUserOverrides")}
+              onChange={field.handleChange}
               value={field.state.value}
             />
           )}
@@ -221,28 +244,142 @@ export function GovernanceRetentionTab() {
       <PanelState query={accessQuery} empty={t("noAccessGrants")}>
         {(grants) => (
           <div className="grid gap-2 text-sm">
-            <div className="text-xs text-muted">
-              {t("showingOfTotal")} {grants.length} {t("of")} {grants.length}
-            </div>
-            <div className="grid max-h-80 gap-2 overflow-y-auto">
-              {grants.map((grant) => (
-                <div
-                  className="rounded-md border border-border p-2"
-                  key={grant.id}
-                >
-                  <div className="font-medium">
-                    {grant.resourceType}:{grant.resourceId}
-                  </div>
-                  <div className="break-words text-muted">
-                    {grant.principalType}:{grant.principalId} -{" "}
-                    {grant.permission}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <DataTable
+              columns={accessGrantColumns}
+              data={grants}
+              empty={t("noAccessGrants")}
+              getRowId={(grant) => grant.id}
+              maxBodyHeight={320}
+              minTableWidth={720}
+            />
           </div>
         )}
       </PanelState>
     </div>
+  );
+}
+
+function parseEditorRows(value: string): RetentionOverrideRow[] {
+  return value
+    .split(/\r?\n/u)
+    .filter((line) => line.trim().length > 0)
+    .map((line) => {
+      const separator = line.indexOf("=");
+      return {
+        id: separator < 0 ? line.trim() : line.slice(0, separator).trim(),
+        days: separator < 0 ? "90" : line.slice(separator + 1).trim() || "90",
+      };
+    });
+}
+
+function serializeEditorRows(rows: RetentionOverrideRow[]): string {
+  return rows.map((row) => `${row.id}=${row.days}`).join("\n");
+}
+
+function RetentionOverrideEditor({
+  idPrefix,
+  label,
+  onChange,
+  value,
+}: {
+  idPrefix: string;
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  const { t } = useLocale();
+  const rows = parseEditorRows(value);
+  const updateRow = (index: number, patch: Partial<RetentionOverrideRow>) => {
+    const next = rows.map((row, rowIndex) =>
+      rowIndex === index ? { ...row, ...patch } : row,
+    );
+    onChange(serializeEditorRows(next));
+  };
+  return (
+    <fieldset className="grid gap-2 rounded-md border border-border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <legend className="text-sm font-medium">{label}</legend>
+        <Button
+          onClick={() =>
+            onChange(serializeEditorRows([...rows, { days: "90", id: "" }]))
+          }
+          size="sm"
+          type="button"
+        >
+          + {t("govAddOverride")}
+        </Button>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted">{t("govNoOverrides")}</p>
+      ) : (
+        <div className="grid gap-2">
+          {rows.map((row, index) => (
+            <div
+              className="grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_180px_auto]"
+              key={`${idPrefix}-${index}`}
+            >
+              <label className="grid gap-1 text-xs text-muted">
+                {t("govOverrideId")}
+                <Input
+                  id={`${idPrefix}-${index}-id`}
+                  name={`${idPrefix}-${index}-id`}
+                  onChange={(event) =>
+                    updateRow(index, { id: event.currentTarget.value })
+                  }
+                  placeholder={t("govOverrideIdPlaceholder")}
+                  value={row.id}
+                />
+              </label>
+              <div className="grid gap-1">
+                <span className="text-xs text-muted">
+                  {t("govRetentionPeriod")}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label={t("govRetentionDays")}
+                    disabled={row.days === "forever"}
+                    max={3650}
+                    min={1}
+                    name={`${idPrefix}-${index}-days`}
+                    onChange={(event) =>
+                      updateRow(index, { days: event.currentTarget.value })
+                    }
+                    type="number"
+                    value={row.days === "forever" ? "" : row.days}
+                  />
+                  <Button
+                    aria-pressed={row.days === "forever"}
+                    onClick={() =>
+                      updateRow(index, {
+                        days: row.days === "forever" ? "90" : "forever",
+                      })
+                    }
+                    size="sm"
+                    type="button"
+                    variant={row.days === "forever" ? "primary" : "default"}
+                  >
+                    {t("govForever")}
+                  </Button>
+                </div>
+              </div>
+              <IconButton
+                aria-label={`${t("govRemoveOverride")}: ${row.id || index + 1}`}
+                onClick={() =>
+                  onChange(
+                    serializeEditorRows(
+                      rows.filter((_, rowIndex) => rowIndex !== index),
+                    ),
+                  )
+                }
+                type="button"
+                variant="ghost"
+              >
+                <Trash2 aria-hidden size={16} />
+              </IconButton>
+            </div>
+          ))}
+        </div>
+      )}
+    </fieldset>
   );
 }

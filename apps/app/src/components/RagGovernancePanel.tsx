@@ -171,7 +171,9 @@ function PostureView(props: { report: RagPostureReport }) {
           <ul className="grid gap-1">
             {report.readiness.warnings.map((warning) => (
               <li className="text-sm" key={warning.code}>
-                <span className="rm-mono">{warning.code}</span>{" "}
+                <span className="rm-mono" translate="no">
+                  {warning.code}
+                </span>{" "}
                 <span className="rm-cell-muted">
                   ({warning.severity}, {warning.count})
                 </span>
@@ -419,7 +421,9 @@ function ChangeRequestView(props: {
       <div className="grid gap-1 text-sm">
         <div>
           <span className="text-muted">{t("request")} </span>
-          <span className="rm-mono">{request.requestId}</span>
+          <span className="rm-mono" translate="no">
+            {request.requestId}
+          </span>
         </div>
         <div className="rm-cell-muted">
           {t("requestedBy")} {request.requestedBy} {t("ragAt")}{" "}

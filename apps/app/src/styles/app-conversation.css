@@ -959,6 +959,7 @@ html.dark .rm-markdown :not(pre) > code {
   grid-template-columns: 260px minmax(0, 1fr);
   height: 100vh;
   background: var(--rm-bg);
+  font-variant-numeric: tabular-nums;
 }
 
 .rm-console-nav {

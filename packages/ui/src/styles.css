@@ -404,6 +404,7 @@ html.dark {
   padding: 0.65rem 0.75rem;
   border: 0;
   border-bottom: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--rm-ui-muted);
   font: inherit;

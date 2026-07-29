@@ -81,7 +81,11 @@ export function ImpersonationPanel() {
       }),
       requestCol.accessor("requestedByUserId", {
         header: t("impersonationRequestedBy"),
-        cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+        cell: (c) => (
+          <span className="rm-mono" translate="no">
+            {c.getValue()}
+          </span>
+        ),
       }),
       requestCol.accessor("ttlMinutes", {
         header: t("impersonationTtlMinutes"),
@@ -138,11 +142,19 @@ export function ImpersonationPanel() {
     () => [
       sessionCol.accessor("adminUserId", {
         header: t("impersonationImpersonator"),
-        cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+        cell: (c) => (
+          <span className="rm-mono" translate="no">
+            {c.getValue()}
+          </span>
+        ),
       }),
       sessionCol.accessor("targetUserId", {
         header: t("impersonationTargetUser"),
-        cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+        cell: (c) => (
+          <span className="rm-mono" translate="no">
+            {c.getValue()}
+          </span>
+        ),
       }),
       sessionCol.accessor((row) => row.ttlMinutes ?? "", {
         id: "ttlMinutes",

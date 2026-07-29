@@ -271,6 +271,7 @@ try {
     );
   }
 
+  assertAdminOverviewPresentation();
   assertProviderSetupAndDiagnostics();
 
   console.log("Romeo expanded core chat browser acceptance passed.");
@@ -2000,6 +2001,65 @@ function startImageProvider(port) {
   }
   child.kill("SIGTERM");
   throw new Error("Image-provider acceptance fixture did not start.");
+}
+
+function assertAdminOverviewPresentation() {
+  run("set", "viewport", "390", "844");
+  run("open", `${baseUrl}/admin?section=overview`);
+  run("wait", "--load", "networkidle");
+  run("wait", ".rm-table");
+
+  const overview = JSON.parse(
+    evaluate(`JSON.stringify((() => {
+      const readinessStat = [...document.querySelectorAll(".rm-stat")].find(
+        (stat) => stat.querySelector(".rm-stat-label")?.textContent?.trim() === "Readiness",
+      );
+      const tableWrap = document.querySelector(".rm-table-wrap");
+      const table = tableWrap?.querySelector(".rm-table");
+      const navItems = [...document.querySelectorAll(".rm-console-item")];
+      return {
+        bodyFitsViewport: document.documentElement.scrollWidth <= innerWidth,
+        navIsLeftAligned:
+          navItems.length > 0 &&
+          navItems.every(
+            (item) =>
+              getComputedStyle(item).justifyContent === "flex-start" &&
+              getComputedStyle(item).textAlign === "left",
+          ),
+        readinessStatus: readinessStat?.querySelector(".rm-stat-value")?.textContent?.trim(),
+        readinessBreakdown: readinessStat?.querySelector(".rm-stat-sub")?.textContent?.trim(),
+        readinessRows: table?.querySelectorAll("tbody tr").length ?? 0,
+        tableScrollsWithinContainer:
+          Boolean(tableWrap && table) &&
+          table.scrollWidth > tableWrap.clientWidth &&
+          tableWrap.scrollWidth === table.scrollWidth,
+      };
+    })())`),
+  );
+
+  assert(
+    overview.readinessStatus === "Ready" ||
+      overview.readinessStatus === "Attention required",
+    `admin readiness summary was not outcome-oriented: ${JSON.stringify(overview)}`,
+  );
+  assert(
+    /Passing/u.test(overview.readinessBreakdown) &&
+      /Warnings/u.test(overview.readinessBreakdown) &&
+      /Failing/u.test(overview.readinessBreakdown),
+    `admin readiness breakdown was incomplete: ${JSON.stringify(overview)}`,
+  );
+  assert(
+    overview.readinessRows > 0,
+    "admin readiness checks were not rendered in the shared table",
+  );
+  assert(
+    overview.navIsLeftAligned,
+    "admin sidebar items were not left-aligned",
+  );
+  assert(
+    overview.bodyFitsViewport && overview.tableScrollsWithinContainer,
+    `admin readiness table overflow escaped its container: ${JSON.stringify(overview)}`,
+  );
 }
 
 function assertProviderSetupAndDiagnostics() {

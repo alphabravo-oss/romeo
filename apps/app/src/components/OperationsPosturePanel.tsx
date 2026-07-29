@@ -78,7 +78,9 @@ function gaGateColumns(t: Translate): ColumnDef<GaEvidencePostureGate, any>[] {
     gaGateCol.accessor("phase", {
       header: t("opPhase"),
       cell: (c) => (
-        <span className="rm-cell-muted rm-mono">{c.getValue()}</span>
+        <span className="rm-cell-muted rm-mono" translate="no">
+          {c.getValue()}
+        </span>
       ),
     }),
     gaGateCol.accessor("status", {
@@ -182,7 +184,11 @@ function pgWarnColumns(t: Translate): ColumnDef<PostgresWarningRow, any>[] {
   return [
     pgWarnCol.accessor("code", {
       header: t("opWarning"),
-      cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+      cell: (c) => (
+        <span className="rm-mono" translate="no">
+          {c.getValue()}
+        </span>
+      ),
     }),
   ];
 }
@@ -311,7 +317,11 @@ function jobAlertColumns(t: Translate): ColumnDef<JobOperationalAlert, any>[] {
     }),
     jobAlertCol.accessor("metric", {
       header: t("opMetric"),
-      cell: (c) => <span className="rm-mono">{c.getValue()}</span>,
+      cell: (c) => (
+        <span className="rm-mono" translate="no">
+          {c.getValue()}
+        </span>
+      ),
     }),
     jobAlertCol.accessor("type", {
       header: t("opType"),

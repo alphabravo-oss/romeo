@@ -296,7 +296,7 @@ function ReplayReportView(props: { report: KnowledgeRetrievalReplayReport }) {
       <div className="grid gap-1">
         {report.cases.map((replayCase, index) => (
           <div className="text-sm" key={replayCase.caseId ?? index}>
-            <span className="rm-mono">
+            <span className="rm-mono" translate="no">
               {replayCase.caseId ?? `${t("caseLabel")} ${index + 1}`}
             </span>{" "}
             <span className="rm-cell-muted">

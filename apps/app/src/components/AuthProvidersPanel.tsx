@@ -22,16 +22,11 @@ import type {
 import { PanelState } from "../lib/panel-state";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
-import { authProviderIcon } from "./AuthProviderIcons";
 import { AuthDirectorySyncDialog } from "./AuthDirectorySyncDialog";
 import { ConfigureDialog } from "./AuthProviderConfigureDialog";
 import { DeprovisionDialog } from "./AuthProviderDeprovisionDialog";
+import { AuthProviderTableView } from "./AuthProviderTableView";
 import { useConfirm } from "./ConfirmDialog";
-import {
-  canDeprovisionProvider,
-  canTestProvider,
-} from "./auth-provider-card-actions";
-import { PanelStats } from "./PanelStats";
 
 type Scope = "global" | "org";
 
@@ -181,12 +176,7 @@ export function AuthProvidersPanel(): React.ReactNode {
   return (
     <section className="rm-panel p-4">
       <div className="rm-card-header">
-        <div
-          className="rm-card-title"
-          style={{ margin: 0, padding: 0, border: "none" }}
-        >
-          {t("authProviders")}
-        </div>
+        <div className="rm-card-title">{t("authProviders")}</div>
         <div className="flex items-center gap-2">
           <Button onClick={openDirectorySync} type="button">
             {t("authSyncDirectory")}
@@ -226,195 +216,22 @@ export function AuthProvidersPanel(): React.ReactNode {
                 AuthProviderId,
                 EffectiveAuthProviderSetting
               >(settings.effective.providers.map((p) => [p.providerId, p]));
-              const effective = settings.effective.providers;
-              const busy = updateMutation.isPending;
 
               return (
-                <div className="grid gap-4">
-                  <PanelStats
-                    items={[
-                      { label: t("authTotal"), value: catalog.length },
-                      {
-                        label: t("authEnabled"),
-                        value: effective.filter((p) => p.enabled).length,
-                      },
-                      {
-                        label: t("authConfigured"),
-                        value: effective.filter(
-                          (p) =>
-                            p.oidc?.issuerConfigured || p.secretRefConfigured,
-                        ).length,
-                      },
-                    ]}
-                  />
-
-                  <div
-                    className="grid gap-3"
-                    style={{
-                      gridTemplateColumns:
-                        "repeat(auto-fill, minmax(260px, 1fr))",
-                    }}
-                  >
-                    {catalog.map((entry) => {
-                      const setting = effectiveById.get(entry.id);
-                      const planned = entry.status === "planned";
-                      const enabled = setting?.enabled ?? false;
-                      const source = setting?.source ?? "default";
-                      const test = testResults[entry.id];
-                      const canTest = canTestProvider(entry);
-                      const canDeprovision = canDeprovisionProvider(entry);
-
-                      return (
-                        <div
-                          className="rm-panel"
-                          key={entry.id}
-                          style={{ padding: 14, opacity: planned ? 0.75 : 1 }}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div
-                              style={{
-                                flexShrink: 0,
-                                display: "flex",
-                                alignItems: "center",
-                              }}
-                            >
-                              {authProviderIcon(entry.id)}
-                            </div>
-                            <div className="min-w-0" style={{ flex: 1 }}>
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="font-medium truncate">
-                                  {entry.name}
-                                </span>
-                                {planned ? (
-                                  <span
-                                    className="rm-status"
-                                    style={{ color: "var(--rm-muted)" }}
-                                  >
-                                    {t("authComingSoon")}
-                                  </span>
-                                ) : (
-                                  <span
-                                    className={`rm-status ${enabled ? "pass" : "fail"}`}
-                                  >
-                                    {enabled ? t("authOn") : t("authOff")}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span
-                                  className="rm-status rm-mono"
-                                  style={{ fontSize: 11 }}
-                                >
-                                  {entry.protocol}
-                                </span>
-                                <span
-                                  className="rm-status"
-                                  style={{
-                                    fontSize: 11,
-                                    color: "var(--rm-muted)",
-                                  }}
-                                >
-                                  {source}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {setting?.disabledReason ? (
-                            <div className="text-xs text-muted mt-2">
-                              {setting.disabledReason}
-                            </div>
-                          ) : null}
-
-                          {entry.id === "local" ? (
-                            <div className="text-xs text-muted mt-2">
-                              {t("authLocalProviderGuidance")}
-                            </div>
-                          ) : null}
-
-                          {test ? (
-                            <div className="mt-2 grid gap-1 rounded-md border border-border p-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-muted">
-                                  {t("authConnection")}
-                                </span>
-                                <span
-                                  className={`rm-status ${
-                                    test.status === "passed"
-                                      ? "pass"
-                                      : test.status === "partial"
-                                        ? "warn"
-                                        : "fail"
-                                  }`}
-                                >
-                                  {test.status}
-                                </span>
-                              </div>
-                              {test.checks.map((check) => (
-                                <div
-                                  className="flex items-center justify-between text-xs"
-                                  key={check.id}
-                                >
-                                  <span className="text-muted">{check.id}</span>
-                                  <span
-                                    className={`rm-status ${
-                                      check.status === "pass"
-                                        ? "pass"
-                                        : check.status === "skip"
-                                          ? "warn"
-                                          : "fail"
-                                    }`}
-                                  >
-                                    {check.status}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-
-                          <div className="flex flex-wrap items-center gap-2 mt-3">
-                            <Button
-                              variant={enabled ? "default" : "primary"}
-                              disabled={planned || busy}
-                              onClick={() => void handleToggle(entry, !enabled)}
-                              type="button"
-                            >
-                              {enabled ? t("authDisable") : t("authEnable")}
-                            </Button>
-                            <Button
-                              disabled={planned}
-                              onClick={() => setConfiguring(entry)}
-                              type="button"
-                            >
-                              {t("authConfigure")}
-                            </Button>
-                            {canTest ? (
-                              <Button
-                                disabled={testMutation.isPending}
-                                onClick={() => void handleTest(entry)}
-                                type="button"
-                              >
-                                {testMutation.isPending
-                                  ? t("authTesting")
-                                  : t("authTest")}
-                              </Button>
-                            ) : null}
-                            {canDeprovision ? (
-                              <Button
-                                variant="danger"
-                                disabled={deprovisionMutation.isPending}
-                                onClick={() => setDeprovisioning(entry)}
-                                type="button"
-                              >
-                                {t("authDeprovision")}
-                              </Button>
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                <AuthProviderTableView
+                  busy={updateMutation.isPending}
+                  catalog={catalog}
+                  deprovisioning={deprovisionMutation.isPending}
+                  effectiveById={effectiveById}
+                  onConfigure={setConfiguring}
+                  onDeprovision={setDeprovisioning}
+                  onTest={(entry) => void handleTest(entry)}
+                  onToggle={(entry, enabled) =>
+                    void handleToggle(entry, enabled)
+                  }
+                  testing={testMutation.isPending}
+                  testResults={testResults}
+                />
               );
             }}
           </PanelState>
