@@ -24,7 +24,7 @@ The audit runs each section at both `desktop` (1440×1000) and `mobile`
 | `unguarded-destructive`  | A `.rm-ui-button--danger` outside a danger zone with no dialog | Task 0.3 |
 | `incomplete-empty-state` | An `.rm-ui-empty` missing its icon or description              | Task 0.4 |
 
-## Open findings
+## Remediated findings
 
 | Section               | Assertion                | Detail                                                                                    | Cleared by | Status |
 | --------------------- | ------------------------ | ----------------------------------------------------------------------------------------- | ---------- | ------ |
@@ -51,7 +51,7 @@ The audit runs each section at both `desktop` (1440×1000) and `mobile`
 | prompt-templates      | `incomplete-empty-state` | "No marketplace templates."                                                               | Task 1.4   | ✅     |
 | workflows             | `incomplete-empty-state` | "No workflows yet."                                                                       | Task 1.4   | ✅     |
 
-**22 open findings across 14 of the 24 sections.**
+**All 22 findings across 14 of the 24 sections are cleared.**
 
 ## Findings the assertions deliberately do NOT flag
 
@@ -59,17 +59,17 @@ These were identified in the design review but are out of the guardrails'
 reach. They are still real work — they are covered by plan tasks and must be
 verified by eye, not by the audit.
 
-| Section         | Issue                                                                      | Why the audit stays silent                                                                                                                                                                        | Covered by                              |
-| --------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| auth-providers  | 11-row catalog table where 10 rows are `Off · Not configured · Not tested` | Structural, not a rule violation                                                                                                                                                                  | Phase 2                                 |
-| connected-apps  | ✅ Removed `delegated_oauth_provider_not_configured:github` from the UI    | The translated warning and provider-zone status were verified in the rendered page; the generic identifier detector intentionally excludes code elements and could not prove this item by itself. | Task 3.1 Step 4                         |
-| web-search      | 12 policy fields render live while `Enabled` is off                        | No rule expresses "gate on a toggle"                                                                                                                                                              | Task 6.1                                |
-| chat-experience | 8 starter prompts all expanded, ~3000px scroll                             | No rule expresses page length                                                                                                                                                                     | Task 6.2                                |
-| governance      | ✅ Contextual `Save retention`; destructive job isolated in a danger zone  | Dirty changes block the typed-confirmation retention job until saved or discarded.                                                                                                                | Task 8.2                                |
-| abuse           | `Organization suspended` is a plain checkbox                               | A checkbox is not a danger button, so `unguarded-destructive` cannot see it                                                                                                                       | Task 5.1                                |
-| usage, audit    | No date-range control                                                      | Absence of a control cannot be asserted generically                                                                                                                                               | Task 8.3                                |
-| rag             | 6 stat tiles echo the form fields beneath them                             | Judgment call                                                                                                                                                                                     | Out of scope — needs a product decision |
-| posture         | ✅ `GA checklist path not configured`                                      | Casing, not an identifier                                                                                                                                                                         | Task 7.2                                |
+| Section         | Issue                                                                     | Why the audit stays silent                                                                                                                                                                        | Covered by                              |
+| --------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| auth-providers  | ✅ Configured/available split with one active-provider card               | Structural, not a rule violation                                                                                                                                                                  | Phase 2                                 |
+| connected-apps  | ✅ Removed `delegated_oauth_provider_not_configured:github` from the UI   | The translated warning and provider-zone status were verified in the rendered page; the generic identifier detector intentionally excludes code elements and could not prove this item by itself. | Task 3.1 Step 4                         |
+| web-search      | ✅ Policy fields are gated behind `Enabled`                               | No rule expresses "gate on a toggle"                                                                                                                                                              | Task 6.1                                |
+| chat-experience | ✅ Starter prompts render as compact disclosure rows                      | No rule expresses page length                                                                                                                                                                     | Task 6.2                                |
+| governance      | ✅ Contextual `Save retention`; destructive job isolated in a danger zone | Dirty changes block the typed-confirmation retention job until saved or discarded.                                                                                                                | Task 8.2                                |
+| abuse           | ✅ Organization suspension uses a Danger Zone and typed confirmation      | The original checkbox could not be detected by `unguarded-destructive`; the replacement is now independently guarded.                                                                             | Task 5.1                                |
+| usage, audit    | ✅ Seven-day date range with 24h, 30d, 90d, and all-time presets          | The current APIs have no date parameters, so both views carry the documented client-side filtering ceiling.                                                                                       | Task 8.3                                |
+| rag             | 6 stat tiles echo the form fields beneath them                            | Judgment call                                                                                                                                                                                     | Out of scope — needs a product decision |
+| posture         | ✅ `GA checklist path not configured`                                     | Casing, not an identifier                                                                                                                                                                         | Task 7.2                                |
 
 ## How to update this file
 
