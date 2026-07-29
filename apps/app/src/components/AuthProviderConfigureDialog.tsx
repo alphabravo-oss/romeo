@@ -13,6 +13,7 @@ import { toast } from "../lib/toast";
 import { linesToArray } from "./auth-provider-lines";
 import { AuthProviderProtocolFields } from "./AuthProviderProtocolFields";
 import { FormDialog } from "./FormDialog";
+import { SettingsSection } from "./SettingsSection";
 
 export function ConfigureDialog(props: {
   entry: AuthProviderCatalogEntry;
@@ -201,43 +202,81 @@ export function ConfigureDialog(props: {
         className="grid gap-3"
         onSubmit={(event) => void handleSubmit(event)}
       >
-        <label className="text-sm text-muted" htmlFor="ap-display-name">
-          {t("authDisplayName")}
-        </label>
-        <Input
-          name="ap-display-name"
-          id="ap-display-name"
-          onChange={(event) => setDisplayName(event.currentTarget.value)}
-          placeholder={entry.name}
-          value={displayName}
-        />
-
-        <label className="text-sm text-muted" htmlFor="ap-login-order">
-          {t("authLoginOrder")}
-        </label>
-        <Input
-          name="ap-login-order"
-          id="ap-login-order"
-          onChange={(event) => setLoginOrder(event.currentTarget.value)}
-          type="number"
-          value={loginOrder}
-        />
-
-        <label className="text-sm text-muted" htmlFor="ap-domains">
-          {t("authAllowedEmailDomains")}
-        </label>
-        <Textarea
-          name="ap-domains"
-          className="rm-textarea"
-          id="ap-domains"
-          onChange={(event) => setDomains(event.currentTarget.value)}
-          placeholder={"example.com\nsub.example.com"}
-          rows={3}
-          value={domains}
-        />
-
         {isLocal ? null : (
-          <>
+          <SettingsSection
+            description={t("authConnectionSectionDescription")}
+            title={t("authConnectionSection")}
+          >
+            <AuthProviderProtocolFields
+              draft={{
+                issuerUrl,
+                clientId,
+                groupClaim,
+                adminGroups,
+                workspaceGroupPrefix,
+                oauth2AdminTeams,
+                oauth2RequiredOrganizations,
+                oauth2RequiredTeams,
+                oauth2Scopes,
+                oauth2WorkspaceTeamPrefix,
+                samlEntryPoint,
+                samlIdpIssuer,
+                samlSpEntityId,
+                samlEmailAttribute,
+                samlNameAttribute,
+                samlGroupsAttribute,
+                samlAdminGroups,
+                samlSignedResponse,
+                ldapUrl,
+                ldapBindDn,
+                ldapBaseDn,
+                ldapUserSearchFilter,
+                ldapUserIdAttribute,
+                ldapEmailAttribute,
+                ldapNameAttribute,
+                ldapGroupSearchBaseDn,
+                ldapGroupSearchFilter,
+                ldapAdminGroups,
+                ldapStartTls,
+              }}
+              group="connection"
+              onChange={(key, value) => {
+                const setters = {
+                  issuerUrl: setIssuerUrl,
+                  clientId: setClientId,
+                  groupClaim: setGroupClaim,
+                  adminGroups: setAdminGroups,
+                  workspaceGroupPrefix: setWorkspaceGroupPrefix,
+                  oauth2AdminTeams: setOauth2AdminTeams,
+                  oauth2RequiredOrganizations: setOauth2RequiredOrganizations,
+                  oauth2RequiredTeams: setOauth2RequiredTeams,
+                  oauth2Scopes: setOauth2Scopes,
+                  oauth2WorkspaceTeamPrefix: setOauth2WorkspaceTeamPrefix,
+                  samlEntryPoint: setSamlEntryPoint,
+                  samlIdpIssuer: setSamlIdpIssuer,
+                  samlSpEntityId: setSamlSpEntityId,
+                  samlEmailAttribute: setSamlEmailAttribute,
+                  samlNameAttribute: setSamlNameAttribute,
+                  samlGroupsAttribute: setSamlGroupsAttribute,
+                  samlAdminGroups: setSamlAdminGroups,
+                  samlSignedResponse: setSamlSignedResponse,
+                  ldapUrl: setLdapUrl,
+                  ldapBindDn: setLdapBindDn,
+                  ldapBaseDn: setLdapBaseDn,
+                  ldapUserSearchFilter: setLdapUserSearchFilter,
+                  ldapUserIdAttribute: setLdapUserIdAttribute,
+                  ldapEmailAttribute: setLdapEmailAttribute,
+                  ldapNameAttribute: setLdapNameAttribute,
+                  ldapGroupSearchBaseDn: setLdapGroupSearchBaseDn,
+                  ldapGroupSearchFilter: setLdapGroupSearchFilter,
+                  ldapAdminGroups: setLdapAdminGroups,
+                  ldapStartTls: setLdapStartTls,
+                };
+                setters[key](value as never);
+              }}
+              protocol={entry.protocol}
+              setting={setting}
+            />
             <label className="text-sm text-muted" htmlFor="ap-client-secret">
               {t("authClientSecret")}
             </label>
@@ -254,91 +293,140 @@ export function ConfigureDialog(props: {
               {t("authSecretStoredGuidance")}
             </span>
 
-            <label className="text-sm text-muted" htmlFor="ap-secret-ref">
-              {t("authSecretReferenceAdvanced")}
-            </label>
-            <Input
-              name="ap-secret-ref"
-              id="ap-secret-ref"
-              onChange={(event) => setSecretRef(event.currentTarget.value)}
-              placeholder="romeo-secret://… or vault://…"
-              value={secretRef}
-            />
-            <span className="text-xs text-muted">
-              {t("authExistingSecretReferenceGuidance")}
-            </span>
-          </>
+            <details className="rm-settings-advanced">
+              <summary>{t("authAdvancedSecretReference")}</summary>
+              <label className="text-sm text-muted" htmlFor="ap-secret-ref">
+                {t("authAdvancedSecretReference")}
+              </label>
+              <Input
+                name="ap-secret-ref"
+                id="ap-secret-ref"
+                onChange={(event) => setSecretRef(event.currentTarget.value)}
+                placeholder="romeo-secret://… or vault://…"
+                value={secretRef}
+              />
+              <span className="text-xs text-muted">
+                {t("authExistingSecretReferenceGuidance")}
+              </span>
+            </details>
+          </SettingsSection>
         )}
 
-        <AuthProviderProtocolFields
-          draft={{
-            issuerUrl,
-            clientId,
-            groupClaim,
-            adminGroups,
-            workspaceGroupPrefix,
-            oauth2AdminTeams,
-            oauth2RequiredOrganizations,
-            oauth2RequiredTeams,
-            oauth2Scopes,
-            oauth2WorkspaceTeamPrefix,
-            samlEntryPoint,
-            samlIdpIssuer,
-            samlSpEntityId,
-            samlEmailAttribute,
-            samlNameAttribute,
-            samlGroupsAttribute,
-            samlAdminGroups,
-            samlSignedResponse,
-            ldapUrl,
-            ldapBindDn,
-            ldapBaseDn,
-            ldapUserSearchFilter,
-            ldapUserIdAttribute,
-            ldapEmailAttribute,
-            ldapNameAttribute,
-            ldapGroupSearchBaseDn,
-            ldapGroupSearchFilter,
-            ldapAdminGroups,
-            ldapStartTls,
-          }}
-          onChange={(key, value) => {
-            const setters = {
-              issuerUrl: setIssuerUrl,
-              clientId: setClientId,
-              groupClaim: setGroupClaim,
-              adminGroups: setAdminGroups,
-              workspaceGroupPrefix: setWorkspaceGroupPrefix,
-              oauth2AdminTeams: setOauth2AdminTeams,
-              oauth2RequiredOrganizations: setOauth2RequiredOrganizations,
-              oauth2RequiredTeams: setOauth2RequiredTeams,
-              oauth2Scopes: setOauth2Scopes,
-              oauth2WorkspaceTeamPrefix: setOauth2WorkspaceTeamPrefix,
-              samlEntryPoint: setSamlEntryPoint,
-              samlIdpIssuer: setSamlIdpIssuer,
-              samlSpEntityId: setSamlSpEntityId,
-              samlEmailAttribute: setSamlEmailAttribute,
-              samlNameAttribute: setSamlNameAttribute,
-              samlGroupsAttribute: setSamlGroupsAttribute,
-              samlAdminGroups: setSamlAdminGroups,
-              samlSignedResponse: setSamlSignedResponse,
-              ldapUrl: setLdapUrl,
-              ldapBindDn: setLdapBindDn,
-              ldapBaseDn: setLdapBaseDn,
-              ldapUserSearchFilter: setLdapUserSearchFilter,
-              ldapUserIdAttribute: setLdapUserIdAttribute,
-              ldapEmailAttribute: setLdapEmailAttribute,
-              ldapNameAttribute: setLdapNameAttribute,
-              ldapGroupSearchBaseDn: setLdapGroupSearchBaseDn,
-              ldapGroupSearchFilter: setLdapGroupSearchFilter,
-              ldapAdminGroups: setLdapAdminGroups,
-              ldapStartTls: setLdapStartTls,
-            };
-            setters[key](value as never);
-          }}
-          protocol={entry.protocol}
-          setting={setting}
-        />
+        <SettingsSection
+          description={t("authMappingSectionDescription")}
+          title={t("authMappingSection")}
+        >
+          <label className="text-sm text-muted" htmlFor="ap-domains">
+            {t("authAllowedEmailDomains")}
+          </label>
+          <Textarea
+            name="ap-domains"
+            className="rm-textarea"
+            id="ap-domains"
+            onChange={(event) => setDomains(event.currentTarget.value)}
+            placeholder={"example.com\nsub.example.com"}
+            rows={3}
+            value={domains}
+          />
+
+          <AuthProviderProtocolFields
+            draft={{
+              issuerUrl,
+              clientId,
+              groupClaim,
+              adminGroups,
+              workspaceGroupPrefix,
+              oauth2AdminTeams,
+              oauth2RequiredOrganizations,
+              oauth2RequiredTeams,
+              oauth2Scopes,
+              oauth2WorkspaceTeamPrefix,
+              samlEntryPoint,
+              samlIdpIssuer,
+              samlSpEntityId,
+              samlEmailAttribute,
+              samlNameAttribute,
+              samlGroupsAttribute,
+              samlAdminGroups,
+              samlSignedResponse,
+              ldapUrl,
+              ldapBindDn,
+              ldapBaseDn,
+              ldapUserSearchFilter,
+              ldapUserIdAttribute,
+              ldapEmailAttribute,
+              ldapNameAttribute,
+              ldapGroupSearchBaseDn,
+              ldapGroupSearchFilter,
+              ldapAdminGroups,
+              ldapStartTls,
+            }}
+            group="mapping"
+            onChange={(key, value) => {
+              const setters = {
+                issuerUrl: setIssuerUrl,
+                clientId: setClientId,
+                groupClaim: setGroupClaim,
+                adminGroups: setAdminGroups,
+                workspaceGroupPrefix: setWorkspaceGroupPrefix,
+                oauth2AdminTeams: setOauth2AdminTeams,
+                oauth2RequiredOrganizations: setOauth2RequiredOrganizations,
+                oauth2RequiredTeams: setOauth2RequiredTeams,
+                oauth2Scopes: setOauth2Scopes,
+                oauth2WorkspaceTeamPrefix: setOauth2WorkspaceTeamPrefix,
+                samlEntryPoint: setSamlEntryPoint,
+                samlIdpIssuer: setSamlIdpIssuer,
+                samlSpEntityId: setSamlSpEntityId,
+                samlEmailAttribute: setSamlEmailAttribute,
+                samlNameAttribute: setSamlNameAttribute,
+                samlGroupsAttribute: setSamlGroupsAttribute,
+                samlAdminGroups: setSamlAdminGroups,
+                samlSignedResponse: setSamlSignedResponse,
+                ldapUrl: setLdapUrl,
+                ldapBindDn: setLdapBindDn,
+                ldapBaseDn: setLdapBaseDn,
+                ldapUserSearchFilter: setLdapUserSearchFilter,
+                ldapUserIdAttribute: setLdapUserIdAttribute,
+                ldapEmailAttribute: setLdapEmailAttribute,
+                ldapNameAttribute: setLdapNameAttribute,
+                ldapGroupSearchBaseDn: setLdapGroupSearchBaseDn,
+                ldapGroupSearchFilter: setLdapGroupSearchFilter,
+                ldapAdminGroups: setLdapAdminGroups,
+                ldapStartTls: setLdapStartTls,
+              };
+              setters[key](value as never);
+            }}
+            protocol={entry.protocol}
+            setting={setting}
+          />
+        </SettingsSection>
+
+        <SettingsSection
+          description={t("authPresentationSectionDescription")}
+          title={t("authPresentationSection")}
+        >
+          <label className="text-sm text-muted" htmlFor="ap-display-name">
+            {t("authDisplayName")}
+          </label>
+          <Input
+            name="ap-display-name"
+            id="ap-display-name"
+            onChange={(event) => setDisplayName(event.currentTarget.value)}
+            placeholder={entry.name}
+            value={displayName}
+          />
+
+          <label className="text-sm text-muted" htmlFor="ap-login-order">
+            {t("authLoginOrder")}
+          </label>
+          <Input
+            name="ap-login-order"
+            id="ap-login-order"
+            onChange={(event) => setLoginOrder(event.currentTarget.value)}
+            type="number"
+            value={loginOrder}
+          />
+        </SettingsSection>
 
         <div className="flex justify-end gap-2">
           <Button onClick={onClose} type="button">
