@@ -1,6 +1,7 @@
 import { Button, Field, Input, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import {
   getChatExperience,
@@ -46,6 +47,9 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
   const mutation = useMutation({ mutationFn: updateChatExperience });
+  const [openPromptIndexes, setOpenPromptIndexes] = useState<Set<number>>(
+    () => new Set(),
+  );
   const form = useForm({
     defaultValues: initial,
     onSubmit: async ({ value }) => {
@@ -113,9 +117,15 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
               </div>
               <Button
                 disabled={suggestionsField.state.value.length >= 8}
-                onClick={() =>
-                  suggestionsField.pushValue({ title: "", prompt: "" })
-                }
+                onClick={() => {
+                  const nextIndex = suggestionsField.state.value.length;
+                  setOpenPromptIndexes((current) => {
+                    const next = new Set(current);
+                    next.add(nextIndex);
+                    return next;
+                  });
+                  suggestionsField.pushValue({ title: "", prompt: "" });
+                }}
                 type="button"
               >
                 {t("chatAddStarter")}
@@ -126,79 +136,106 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
               <div className="rm-empty">{t("chatNoStarters")}</div>
             ) : null}
 
-            {suggestionsField.state.value.map((_suggestion, index) => (
-              <fieldset
-                className="grid gap-3 rounded-md border border-border p-4"
+            {suggestionsField.state.value.map((suggestion, index) => (
+              <details
+                className="rm-starter-prompt"
                 key={index}
+                onToggle={(event) => {
+                  const open = event.currentTarget.open;
+                  setOpenPromptIndexes((current) => {
+                    if (current.has(index) === open) return current;
+                    const next = new Set(current);
+                    if (open) next.add(index);
+                    else next.delete(index);
+                    return next;
+                  });
+                }}
+                open={openPromptIndexes.has(index)}
               >
-                <legend className="sr-only">
-                  {t("chatStarterPrompt")} {index + 1}
-                </legend>
-                <div className="rm-card-header">
-                  <div aria-hidden="true" className="font-medium">
+                <summary className="rm-starter-prompt__summary">
+                  <span className="rm-starter-prompt__label">
+                    {suggestion.title.trim() === ""
+                      ? t("chatStarterUntitled")
+                      : suggestion.title}
+                  </span>
+                </summary>
+                <div className="rm-starter-prompt__body">
+                  <span className="sr-only">
                     {t("chatStarterPrompt")} {index + 1}
-                  </div>
+                  </span>
+                  <form.Field
+                    name={`suggestions[${index}].title`}
+                    validators={{
+                      onChange: ({ value }) =>
+                        value.trim().length === 0 ? t("required") : undefined,
+                    }}
+                  >
+                    {(field) => (
+                      <Field
+                        error={field.state.meta.errors.join(", ")}
+                        label={t("chatStarterLabel")}
+                        required
+                      >
+                        <Input
+                          maxLength={80}
+                          name={`suggestions-${index}-title`}
+                          onBlur={field.handleBlur}
+                          onChange={(event) =>
+                            field.handleChange(event.currentTarget.value)
+                          }
+                          placeholder={t("chatStarterLabelPlaceholder")}
+                          value={field.state.value}
+                        />
+                      </Field>
+                    )}
+                  </form.Field>
+                  <form.Field
+                    name={`suggestions[${index}].prompt`}
+                    validators={{
+                      onChange: ({ value }) =>
+                        value.trim().length === 0 ? t("required") : undefined,
+                    }}
+                  >
+                    {(field) => (
+                      <Field
+                        error={field.state.meta.errors.join(", ")}
+                        label={t("chatStarterContent")}
+                        required
+                      >
+                        <Textarea
+                          maxLength={4_000}
+                          name={`suggestions-${index}-prompt`}
+                          onBlur={field.handleBlur}
+                          onChange={(event) =>
+                            field.handleChange(event.currentTarget.value)
+                          }
+                          placeholder={t("chatStarterContentPlaceholder")}
+                          rows={4}
+                          value={field.state.value}
+                        />
+                      </Field>
+                    )}
+                  </form.Field>
                   <Button
-                    onClick={() => suggestionsField.removeValue(index)}
+                    onClick={() => {
+                      suggestionsField.removeValue(index);
+                      setOpenPromptIndexes((current) => {
+                        const next = new Set<number>();
+                        for (const openIndex of current) {
+                          if (openIndex < index) next.add(openIndex);
+                          if (openIndex > index) next.add(openIndex - 1);
+                        }
+                        return next;
+                      });
+                    }}
+                    size="sm"
                     type="button"
+                    variant="ghost"
                   >
                     {t("remove")}
                   </Button>
                 </div>
-                <form.Field
-                  name={`suggestions[${index}].title`}
-                  validators={{
-                    onChange: ({ value }) =>
-                      value.trim().length === 0 ? t("required") : undefined,
-                  }}
-                >
-                  {(field) => (
-                    <Field
-                      error={field.state.meta.errors.join(", ")}
-                      label={t("chatStarterLabel")}
-                      required
-                    >
-                      <Input
-                        maxLength={80}
-                        name={`suggestions-${index}-title`}
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.currentTarget.value)
-                        }
-                        placeholder={t("chatStarterLabelPlaceholder")}
-                        value={field.state.value}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-                <form.Field
-                  name={`suggestions[${index}].prompt`}
-                  validators={{
-                    onChange: ({ value }) =>
-                      value.trim().length === 0 ? t("required") : undefined,
-                  }}
-                >
-                  {(field) => (
-                    <Field
-                      error={field.state.meta.errors.join(", ")}
-                      label={t("chatStarterContent")}
-                      required
-                    >
-                      <Textarea
-                        maxLength={4_000}
-                        name={`suggestions-${index}-prompt`}
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.currentTarget.value)
-                        }
-                        placeholder={t("chatStarterContentPlaceholder")}
-                        rows={4}
-                        value={field.state.value}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-              </fieldset>
+              </details>
             ))}
           </div>
         )}

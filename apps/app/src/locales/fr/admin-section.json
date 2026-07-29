@@ -12,6 +12,7 @@
   "chatAutoTitleDescription": "Après la première réponse, le modèle sélectionné crée un titre concis. La discussion continue si le modèle est indisponible.",
   "chatStarterPrompts": "Suggestions de départ",
   "chatStarterPromptsDescription": "Affichez jusqu'à huit suggestions concises sur une ligne. Le contenu complet est inséré lors de la sélection.",
+  "chatStarterUntitled": "Suggestion sans titre",
   "chatAddStarter": "Ajouter une suggestion",
   "chatNoStarters": "Aucune suggestion n'est configurée. La page affichera uniquement la zone de saisie.",
   "chatStarterPrompt": "Suggestion de départ",

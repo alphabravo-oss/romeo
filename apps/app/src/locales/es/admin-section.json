@@ -12,6 +12,7 @@
   "chatAutoTitleDescription": "Después de la primera respuesta, utiliza el modelo seleccionado para crear un título conciso. Si el modelo no está disponible, la conversación continúa.",
   "chatStarterPrompts": "Mensajes iniciales",
   "chatStarterPromptsDescription": "Muestra hasta ocho sugerencias concisas de una línea. Al seleccionarlas se inserta el mensaje completo.",
+  "chatStarterUntitled": "Sugerencia sin título",
   "chatAddStarter": "Añadir sugerencia",
   "chatNoStarters": "No hay mensajes iniciales configurados. La página mostrará solo el compositor.",
   "chatStarterPrompt": "Mensaje inicial",

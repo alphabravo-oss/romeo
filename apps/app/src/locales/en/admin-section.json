@@ -12,6 +12,7 @@
   "chatAutoTitleDescription": "After the first response, use the selected governed model to create a concise title. Title generation is non-blocking if the model is unavailable.",
   "chatStarterPrompts": "Starter prompts",
   "chatStarterPromptsDescription": "Show up to eight concise, one-line suggestions on the new-chat page. The full prompt is inserted when selected.",
+  "chatStarterUntitled": "Untitled starter",
   "chatAddStarter": "Add starter",
   "chatNoStarters": "No starter prompts are configured. The new-chat page will show only the composer.",
   "chatStarterPrompt": "Starter prompt",
