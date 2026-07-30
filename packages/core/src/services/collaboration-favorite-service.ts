@@ -11,13 +11,15 @@ import type { Agent, ResourceFavorite } from "../domain/entities";
 import type { FavoritableResourceType } from "../domain/collaboration";
 import { notFound } from "../errors";
 import { createId } from "../ids";
-import { getAuthorizedAgent } from "./agent-access";
 import { getAuthorizedChat } from "./chat-access";
 import { CollaborationShareService } from "./collaboration-share-service";
 import { getAuthorizedKnowledgeBase } from "./knowledge-access";
+import { buildAgentReadinessReport } from "./agent-readiness";
 
 export interface AgentGalleryItem extends Agent {
   favorite: boolean;
+  readinessReason?: string;
+  readinessStatus: "ready" | "blocked";
 }
 
 export class CollaborationFavoriteService extends CollaborationShareService {
@@ -43,15 +45,29 @@ export class CollaborationFavoriteService extends CollaborationShareService {
         .filter((favorite) => favorite.resourceType === "agent")
         .map((favorite) => favorite.resourceId),
     );
-    return agents
+    const visibleAgents = agents
       .filter((agent) => agent.publishedVersionId !== undefined)
       .filter((agent) => canAccessOrg(subject, agent.orgId))
-      .filter(
-        (agent) =>
-          hasGrant(subject, grants, "agent", agent.id, "run") ||
-          hasGrant(subject, grants, "agent", agent.id, "read"),
-      )
-      .map((agent) => ({ ...agent, favorite: favoriteIds.has(agent.id) }));
+      .filter((agent) => hasGrant(subject, grants, "agent", agent.id, "run"));
+    return Promise.all(
+      visibleAgents.map(async (agent) => {
+        const readiness = await buildAgentReadinessReport(this.repository, {
+          agent,
+          caller: subject,
+        });
+        const firstBlocker = readiness.checks.find(
+          (check) => check.status === "blocked",
+        );
+        return {
+          ...agent,
+          favorite: favoriteIds.has(agent.id),
+          readinessStatus: readiness.status,
+          ...(firstBlocker === undefined
+            ? {}
+            : { readinessReason: firstBlocker.message }),
+        };
+      }),
+    );
   }
 
   async favorites(subject: AuthSubject): Promise<ResourceFavorite[]> {
@@ -124,11 +140,16 @@ export class CollaborationFavoriteService extends CollaborationShareService {
   ): Promise<void> {
     const grants = await this.repository.listResourceGrants(subject.orgId);
     if (resourceType === "agent") {
-      const agent = await getAuthorizedAgent(this.repository, {
-        agentId: resourceId,
-        subject,
-        scope: "agents:read",
-      });
+      assertScope(subject, "agents:read");
+      const agent = await this.repository.getAgent(resourceId);
+      if (
+        agent === undefined ||
+        agent.archivedAt !== undefined ||
+        agent.publishedVersionId === undefined ||
+        !canAccessOrg(subject, agent.orgId) ||
+        !hasWorkspaceAccess(subject, agent.workspaceId)
+      )
+        throw notFound("Agent");
       if (
         !hasGrant(subject, grants, "agent", agent.id, "run") &&
         !hasGrant(subject, grants, "agent", agent.id, "read")
@@ -149,7 +170,8 @@ export class CollaborationFavoriteService extends CollaborationShareService {
 
     if (resourceType === "model") {
       const model = await this.repository.getModel(resourceId);
-      if (model === undefined || !model.enabled) throw notFound("Model");
+      if (model === undefined || !model.enabled || model.available === false)
+        throw notFound("Model");
       const provider = await this.repository.getProvider(model.providerId);
       if (
         provider === undefined ||

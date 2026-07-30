@@ -264,7 +264,6 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
             },
           ]}
           label={t("moreChatActions")}
-          orientation="vertical"
         />
         <Input
           accept="application/json,.json"

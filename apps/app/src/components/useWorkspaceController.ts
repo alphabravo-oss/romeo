@@ -11,6 +11,7 @@ import { getManagedModelPreferences } from "../features/managed-models";
 import type { QueuedChatTurn } from "../features/runs";
 import { useLocale } from "../lib/i18n";
 import { shouldAutoSelectChat } from "./chat-selection";
+import { resolveChatModelSelection } from "./chat-model-selection";
 import { useChatMessageState } from "./useChatMessageState";
 import {
   useChatRunStream,
@@ -33,13 +34,24 @@ export type {
 
 export type { ChatCitation, ChatRunActivity } from "./useChatRunStream";
 
-export function useWorkspaceController() {
+export function useWorkspaceController(
+  options: {
+    onAgentSelection?: (agentId: string) => void;
+    onChatSelection?: (chatId: string | undefined) => void;
+    requestedAgentId?: string;
+    requestedChatId?: string;
+  } = {},
+) {
   const queryClient = useQueryClient();
   const { t } = useLocale();
   const [draft, setDraft] = useState(initialDraft);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [activeAgentId, setActiveAgentId] = useState<string>();
-  const [activeChatId, setActiveChatId] = useState<string>();
+  const [activeAgentId, setActiveAgentId] = useState<string | undefined>(
+    options.requestedAgentId,
+  );
+  const [activeChatId, setActiveChatId] = useState<string | undefined>(
+    options.requestedChatId,
+  );
   // Explicit intent: the user asked for a blank chat and there is no chat row
   // behind it yet. Distinguishes "New chat" from "the active chat vanished",
   // which look identical from activeChatId alone. See ./chat-selection.
@@ -98,7 +110,12 @@ export function useWorkspaceController() {
     subject,
     tools,
     workspace,
-  } = useWorkspaceData(activeAgentId);
+  } = useWorkspaceData(activeAgentId, {
+    ...(activeChatId === undefined ? {} : { activeChatId }),
+    ...(options.requestedAgentId === undefined
+      ? {}
+      : { requestedAgentId: options.requestedAgentId }),
+  });
   const {
     clearPendingAttachments,
     documentAttachments,
@@ -117,30 +134,25 @@ export function useWorkspaceController() {
     workspaceId: workspace?.id,
   });
   const {
-    handleCloneAgent,
     handleCreateProvider,
     handleSyncProvider,
     handleUpdateModelPricing,
-    isCloningAgent,
     isCreatingProvider,
     isUpdatingModelPricing,
     syncingProviderId,
   } = useWorkspaceProviderActions({
-    activeAgent,
     queryClient,
-    setActiveAgentId,
     setError,
-    workspaceId: workspace?.id,
   });
-  // The composer lets the caller override the agent's published model.
-  // `modelOverrideId` is undefined until the user picks one, at which point it
-  // wins over the agent's baseModelId and STICKS for every following message --
-  // it is not per-message. Only an agent switch clears it (see the effect
-  // below); a chat switch deliberately does not, because the composer always
-  // renders the selection, so what you see is what the next run uses.
+  // The assistant provides the default, while a chat can persist an explicit
+  // model choice. A pending override also survives the first send while the
+  // new chat row is being created.
   const activeChat = chats.find((chat) => chat.id === activeChatId);
-  const selectedModelId =
-    modelOverrideId ?? activeChat?.modelId ?? activeAgent?.baseModelId;
+  const selectedModelId = resolveChatModelSelection({
+    assistantModelId: activeAgent?.baseModelId,
+    chatModelId: activeChat?.modelId,
+    overrideModelId: modelOverrideId,
+  });
   const managedModelPreferencesQuery = useQuery({
     queryKey: ["managedModelPreferences", activeAgent?.id],
     queryFn: () => getManagedModelPreferences(activeAgent!.id),
@@ -211,9 +223,9 @@ export function useWorkspaceController() {
     handleCancelQueuedTurn,
     handleChatArchived,
     handleChatDeleted,
-    handleNewChat,
-    handleNewTemporaryChat,
-    handleSelectChat,
+    handleNewChat: handleNewChatInternal,
+    handleNewTemporaryChat: handleNewTemporaryChatInternal,
+    handleSelectChat: handleSelectChatInternal,
     handleSelectModel,
     handleWorkspaceArchived,
     renameChat,
@@ -239,7 +251,47 @@ export function useWorkspaceController() {
     t,
     workspaceId: workspace?.id,
   });
+  const handleSelectChat = async (chatId: string) => {
+    setModelOverrideId(undefined);
+    await handleSelectChatInternal(chatId);
+    options.onChatSelection?.(chatId);
+  };
+  const handleNewChat = () => {
+    setModelOverrideId(undefined);
+    handleNewChatInternal();
+    options.onChatSelection?.(undefined);
+  };
+  const handleNewTemporaryChat = () => {
+    setModelOverrideId(undefined);
+    handleNewTemporaryChatInternal();
+    options.onChatSelection?.(undefined);
+  };
   const firstChatId = chats[0]?.id;
+
+  useEffect(() => {
+    if (options.requestedAgentId !== undefined)
+      setActiveAgentId(options.requestedAgentId);
+  }, [options.requestedAgentId]);
+
+  useEffect(() => {
+    if (options.requestedChatId !== undefined)
+      setActiveChatId(options.requestedChatId);
+  }, [options.requestedChatId]);
+
+  useEffect(() => {
+    setModelOverrideId(undefined);
+  }, [activeAgent?.id]);
+
+  useEffect(() => {
+    if (
+      activeChatId === undefined ||
+      activeAgent === undefined ||
+      activeAgentId === activeAgent.id
+    )
+      return;
+    setActiveAgentId(activeAgent.id);
+    options.onAgentSelection?.(activeAgent.id);
+  }, [activeAgent?.id, activeAgentId, activeChatId]);
 
   useEffect(() => {
     const key = `romeo:draft:${activeChatId ?? `new:${workspace?.id ?? "none"}`}`;
@@ -275,31 +327,8 @@ export function useWorkspaceController() {
     );
   }, [activeChatId, firstChatId, isDraftingNewChat, isStreaming]);
 
-  // Reset on agent change only -- NOT on chat change.
-  //
-  // A new agent brings its own baseModelId, so a leftover override there would
-  // be wrong. Chat changes must not reset: sending the first message *creates*
-  // a chat, so keying this on activeChatId silently reverted the user's pick
-  // the moment they pressed send, and the next message went to a different
-  // model than the one they chose.
-  //
-  // Carrying an override across a chat switch is safe because the composer
-  // always renders the selection -- what you see is what the next run uses.
-  useEffect(() => {
-    setModelOverrideId(undefined);
-  }, [activeAgent?.id]);
-
-  useEffect(() => {
-    setModelOverrideId(undefined);
-  }, [activeChatId]);
-
   async function handleInspectContext() {
-    if (
-      activeChatId === undefined ||
-      activeAgent === undefined ||
-      selectedModelId === undefined
-    )
-      return;
+    if (activeChatId === undefined || activeAgent === undefined) return;
     setIsInspectingContext(true);
     setContextPreviewError(undefined);
     try {
@@ -307,7 +336,9 @@ export function useWorkspaceController() {
         await inspectRunContext({
           chatId: activeChatId,
           agentId: activeAgent.id,
-          modelId: selectedModelId,
+          ...(selectedModelId === undefined
+            ? {}
+            : { modelId: selectedModelId }),
           content: draft.trim() || "Continue the conversation.",
           fileIds: documentAttachments.map((item) => item.fileId),
           imageCount: imageAttachments.length,
@@ -357,7 +388,6 @@ export function useWorkspaceController() {
     handleChatArchived,
     handleChatDeleted,
     handleWorkspaceArchived,
-    handleCloneAgent,
     handleCreateProvider,
     handleApproveTool: toolExecution.approvePendingTool,
     handleCancelToolApproval: toolExecution.cancelPendingTool,
@@ -385,10 +415,10 @@ export function useWorkspaceController() {
     handleTranscriptionError: setError,
     handleTranscribeAudio,
     handleSelectChat,
+    handleSelectModel,
     handleSubmit,
     handleSyncProvider,
     handleUpdateModelPricing,
-    isCloningAgent,
     isCreatingProvider,
     isExecutingTool: toolExecution.isExecutingTool,
     isGeneratingSpeech,
@@ -414,7 +444,10 @@ export function useWorkspaceController() {
     regenerateLast,
     renameChat,
     selectedModelId,
-    setActiveAgentId,
+    setActiveAgentId: (agentId: string) => {
+      setActiveAgentId(agentId);
+      options.onAgentSelection?.(agentId);
+    },
     setDraft,
     speechArtifacts,
     speechMessageId,
@@ -423,7 +456,6 @@ export function useWorkspaceController() {
     runActivities,
     toolResult: toolExecution.toolResult,
     tools,
-    handleSelectModel,
     workspace,
   };
 }

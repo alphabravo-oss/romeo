@@ -4,6 +4,7 @@ import type {
   AgentMemoryPolicy,
   AgentParameters,
   AgentSafetySettings,
+  AgentPromptSuggestion,
 } from "../domain/entities";
 
 export interface PortableAgentKnowledgeBinding {
@@ -30,11 +31,16 @@ export interface AgentExportDocument {
   exportedAt: string;
   agent: {
     name: string;
+    description?: string;
+    icon?: string;
+    avatarUrl?: string;
     baseModelId: string;
     systemPrompt: string;
     parameters: AgentParameters;
     memoryPolicy: AgentMemoryPolicy;
+    promptSuggestions: AgentPromptSuggestion[];
     safetySettings: AgentSafetySettings;
+    tags: string[];
     voiceProfileId?: string;
     accessGrants?: PortableAgentAccessGrant[];
     knowledgeBaseBindings?: PortableAgentKnowledgeBinding[];

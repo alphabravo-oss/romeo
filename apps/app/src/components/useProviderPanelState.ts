@@ -59,8 +59,11 @@ export function useProviderPanelState(input: {
     try {
       await input.onSyncProvider(providerId);
       toast(t("modelsSynced"), "success");
-    } catch {
-      toast(t("couldNotSyncModels"), "error");
+    } catch (caught) {
+      toast(
+        caught instanceof Error ? caught.message : t("couldNotSyncModels"),
+        "error",
+      );
     }
   }
 

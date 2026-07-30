@@ -11,6 +11,7 @@ export function listImageGenerationModels(
   return models.filter(
     (model) =>
       model.enabled &&
+      model.available !== false &&
       model.capabilities.imageGeneration &&
       providerById.get(model.providerId)?.enabled === true &&
       ["openai-compatible", "openai-responses-compatible"].includes(

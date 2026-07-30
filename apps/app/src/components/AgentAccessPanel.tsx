@@ -1,17 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import CircleAlert from "lucide-react/dist/esm/icons/circle-alert.mjs";
+import CircleCheck from "lucide-react/dist/esm/icons/circle-check.mjs";
+import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 
-import { Button, Checkbox, Input, Select } from "@romeo/ui";
+import { Button, Checkbox, Input, Select, StatusBadge } from "@romeo/ui";
 
 import { listShareTargets } from "../features";
 import type { ShareTarget } from "../features/types";
-import { listAgentShares, shareAgentAccess } from "../features/managed-models";
-import type { Agent, AgentGrant } from "../features/managed-models";
+import {
+  getAgentReadiness,
+  listAgentShares,
+  revokeAgentGrant,
+  shareAgentAccess,
+} from "../features/managed-models";
+import type { Agent, ManagedModelReadiness } from "../features/managed-models";
 import { useLocale, type MessageKey } from "../lib/i18n";
+import { LocalizedDateTime } from "../lib/locale-format";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
-
-type AgentPermission = "read" | "run" | "write";
+import { createColumnHelper, DataTable } from "./DataTable";
+import {
+  groupAgentShares,
+  type AgentAccessRow,
+  type AgentPermission,
+} from "./agent-access-model";
 
 const defaultPermissions: Record<AgentPermission, boolean> = {
   read: true,
@@ -19,6 +32,7 @@ const defaultPermissions: Record<AgentPermission, boolean> = {
   write: false,
 };
 const emptyTargets: ShareTarget[] = [];
+const accessColumnHelper = createColumnHelper<AgentAccessRow>();
 
 export function AgentAccessPanel({
   activeAgent,
@@ -43,10 +57,34 @@ export function AgentAccessPanel({
     enabled: activeAgent !== undefined,
   });
   const shareMutation = useMutation({ mutationFn: shareAgentAccess });
+  const revokeMutation = useMutation({ mutationFn: revokeAgentGrant });
   const targets = targetsQuery.data ?? emptyTargets;
+  const groupedShares = useMemo(
+    () => groupAgentShares(sharesQuery.data ?? []),
+    [sharesQuery.data],
+  );
+  const targetsByKey = useMemo(
+    () => new Map(targets.map((target) => [targetKey(target), target])),
+    [targets],
+  );
   const selectedTarget = targets.find(
     (target) => targetKey(target) === selectedTargetKey,
   );
+  const readinessQuery = useQuery({
+    queryKey: [
+      "agentReadiness",
+      activeAgent?.id,
+      selectedTarget?.principalType,
+      selectedTarget?.principalId,
+    ],
+    queryFn: () =>
+      getAgentReadiness({
+        agentId: activeAgent!.id,
+        principalType: selectedTarget!.principalType,
+        principalId: selectedTarget!.principalId,
+      }),
+    enabled: activeAgent !== undefined && selectedTarget !== undefined,
+  });
   const selectedPermissions = (
     Object.entries(permissions) as Array<[AgentPermission, boolean]>
   )
@@ -76,6 +114,28 @@ export function AgentAccessPanel({
         principalId: selectedTarget.principalId,
         permissions: selectedPermissions,
       });
+      const existing = groupedShares.find(
+        (share) =>
+          share.principalType === selectedTarget.principalType &&
+          share.principalId === selectedTarget.principalId,
+      );
+      const obsoleteGrantIds =
+        existing?.grants
+          .filter(
+            (grant) =>
+              !selectedPermissions.includes(
+                grant.permission as AgentPermission,
+              ),
+          )
+          .map((grant) => grant.id) ?? [];
+      await Promise.all(
+        obsoleteGrantIds.map((grantId) =>
+          revokeMutation.mutateAsync({
+            agentId: activeAgent.id,
+            grantId,
+          }),
+        ),
+      );
       onNotice(t("agentAccessUpdated"));
       toast(t("agentAccessGranted"), "success");
       await Promise.all([
@@ -83,12 +143,127 @@ export function AgentAccessPanel({
           queryKey: ["agentShares", activeAgent.id],
         }),
         queryClient.invalidateQueries({ queryKey: ["agentGallery"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["agentReadiness", activeAgent.id],
+        }),
         queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
       ]);
     } catch {
       toast(t("agentCouldNotGrantAccess"), "error");
     }
   }
+
+  async function revokeGrants(rows: AgentAccessRow[]) {
+    if (!activeAgent || rows.length === 0) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(t("agentConfirmRevokeAccess"))
+    )
+      return;
+    try {
+      await Promise.all(
+        rows.flatMap((row) =>
+          row.grants.map((grant) =>
+            revokeMutation.mutateAsync({
+              agentId: activeAgent.id,
+              grantId: grant.id,
+            }),
+          ),
+        ),
+      );
+      toast(t("agentAccessRevoked"), "success");
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["agentShares", activeAgent.id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["agentGallery"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["agentReadiness", activeAgent.id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
+      ]);
+    } catch {
+      toast(t("agentCouldNotRevokeAccess"), "error");
+    }
+  }
+
+  function editShare(row: AgentAccessRow) {
+    setQuery(row.principalId);
+    setSelectedTargetKey(`${row.principalType}:${row.principalId}`);
+    setPermissions({
+      read: row.permissions.includes("read"),
+      run: row.permissions.includes("run"),
+      write: row.permissions.includes("write"),
+    });
+  }
+
+  const accessColumns = useMemo(
+    () => [
+      accessColumnHelper.accessor(
+        (row) =>
+          targetsByKey.get(`${row.principalType}:${row.principalId}`)?.label ??
+          row.principalId,
+        {
+          id: "principal",
+          header: t("agentAccessPrincipal"),
+          cell: ({ getValue, row }) => (
+            <span className="block min-w-0">
+              <strong className="block truncate">{getValue()}</strong>
+              <small className="block truncate text-muted">
+                {row.original.principalId}
+              </small>
+            </span>
+          ),
+        },
+      ),
+      accessColumnHelper.accessor("principalType", {
+        header: t("agentAccessPrincipalType"),
+      }),
+      accessColumnHelper.accessor(() => t("agentAccessDirect"), {
+        id: "source",
+        header: t("agentAccessSource"),
+      }),
+      ...(["read", "run", "write"] as const).map((permission) =>
+        accessColumnHelper.accessor(
+          (row) => row.permissions.includes(permission),
+          {
+            id: permission,
+            header: t(permissionMessageKey(permission)),
+            cell: ({ getValue }) => (getValue() ? "✓" : "—"),
+          },
+        ),
+      ),
+      accessColumnHelper.accessor("createdAt", {
+        header: t("agentAccessUpdated"),
+        cell: ({ getValue }) =>
+          getValue() ? <LocalizedDateTime value={getValue()!} /> : "—",
+      }),
+      accessColumnHelper.display({
+        id: "actions",
+        header: t("agentAccessActions"),
+        cell: ({ row }) => (
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              onClick={() => editShare(row.original)}
+              size="sm"
+              variant="ghost"
+            >
+              {t("agentAccessEdit")}
+            </Button>
+            <Button
+              disabled={revokeMutation.isPending}
+              onClick={() => void revokeGrants([row.original])}
+              size="sm"
+              variant="ghost"
+            >
+              {t("agentAccessRevoke")}
+            </Button>
+          </div>
+        ),
+      }),
+    ],
+    [revokeMutation.isPending, t, targetsByKey],
+  );
 
   function togglePermission(permission: AgentPermission) {
     setPermissions((current) => ({
@@ -98,11 +273,19 @@ export function AgentAccessPanel({
   }
 
   return (
-    <div
-      className="mt-4 grid gap-3 border-t border-border pt-4"
+    <section
+      className="rm-managed-model-section"
       data-testid="agent-access-panel"
     >
-      <div className="text-sm text-muted">{t("agentAccess")}</div>
+      <div className="rm-managed-model-section__header">
+        <span className="rm-managed-model-section__icon">
+          <ShieldCheck aria-hidden="true" size={17} />
+        </span>
+        <div>
+          <h3>{t("agentAccess")}</h3>
+          <p>{t("managedModelAccessDescription")}</p>
+        </div>
+      </div>
       <div className="grid gap-2 text-sm">
         <Input
           onChange={(event) => setQuery(event.currentTarget.value)}
@@ -149,44 +332,136 @@ export function AgentAccessPanel({
                   />
                 ))}
               </div>
+              {readinessQuery.isLoading ? (
+                <div className="rm-managed-model-readiness" role="status">
+                  {t("managedModelReadinessChecking")}…
+                </div>
+              ) : readinessQuery.isError ? (
+                <div className="rm-managed-model-readiness is-blocked">
+                  {t("managedModelReadinessFailed")}
+                </div>
+              ) : readinessQuery.data ? (
+                <ReadinessResult report={readinessQuery.data} t={t} />
+              ) : null}
             </>
           )}
         </PanelState>
       </div>
       <div className="grid gap-2 text-sm">
         <PanelState query={sharesQuery} empty={t("agentNoAccessGrants")}>
-          {(shares) => {
-            const groupedShares = groupShares(shares);
-            return (
-              <>
-                <div className="text-xs text-muted">
-                  {t("showingOfTotal")} {groupedShares.length} {t("of")}{" "}
-                  {groupedShares.length}
-                </div>
-                <div className="grid max-h-80 gap-2 overflow-y-auto">
-                  {groupedShares.map((share) => (
-                    <div
-                      className="rounded-md border border-border p-2"
-                      key={`${share.principalType}:${share.principalId}`}
-                    >
-                      <div className="break-all font-medium">
-                        {share.principalId}
-                      </div>
-                      <div className="text-muted">
-                        {share.permissions
-                          .map((permission) => permissionLabel(permission, t))
-                          .join(", ")}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            );
-          }}
+          {() => (
+            <DataTable
+              bulkActions={(ids, clearSelection) => (
+                <Button
+                  disabled={revokeMutation.isPending}
+                  onClick={() =>
+                    void revokeGrants(
+                      groupedShares.filter((share) =>
+                        ids.includes(
+                          `${share.principalType}:${share.principalId}`,
+                        ),
+                      ),
+                    ).then(clearSelection)
+                  }
+                  size="sm"
+                  variant="outline"
+                >
+                  {t("agentAccessRevokeSelected")}
+                </Button>
+              )}
+              columns={accessColumns}
+              data={groupedShares}
+              enableRowSelection
+              getRowId={(row) => `${row.principalType}:${row.principalId}`}
+              minTableWidth={820}
+              preferenceKey="managed-model-access"
+              searchVisibility="always"
+            />
+          )}
         </PanelState>
+      </div>
+    </section>
+  );
+}
+
+function ReadinessResult({
+  report,
+  t,
+}: {
+  report: ManagedModelReadiness;
+  t: (key: MessageKey) => string;
+}) {
+  return (
+    <div
+      className={`rm-managed-model-readiness ${report.status === "ready" ? "is-ready" : "is-blocked"}`}
+    >
+      <div className="rm-managed-model-readiness__summary">
+        <div className="flex min-w-0 items-center gap-2">
+          {report.status === "ready" ? (
+            <CircleCheck aria-hidden="true" size={18} />
+          ) : (
+            <CircleAlert aria-hidden="true" size={18} />
+          )}
+          <strong className="truncate">{report.principal.label}</strong>
+        </div>
+        <StatusBadge tone={report.status === "ready" ? "success" : "danger"}>
+          {t(
+            report.status === "ready"
+              ? "managedModelReadinessReady"
+              : "managedModelReadinessBlocked",
+          )}
+        </StatusBadge>
+      </div>
+      <p className="text-xs text-muted">
+        {report.status === "ready"
+          ? t("managedModelReadinessReadyDescription")
+          : t("managedModelReadinessBlockedDescription")}
+      </p>
+      <div className="rm-managed-model-readiness__checks">
+        {report.checks.map((check) => (
+          <details
+            className={`rm-managed-model-readiness__check is-${check.status}`}
+            key={check.key}
+            open={check.status === "blocked"}
+          >
+            <summary>
+              {check.status === "ready" ? (
+                <CircleCheck aria-hidden="true" size={15} />
+              ) : (
+                <CircleAlert aria-hidden="true" size={15} />
+              )}
+              <span>{t(readinessKey(check.key))}</span>
+              <small>{check.message}</small>
+            </summary>
+            {check.issues.length > 0 ? (
+              <ul>
+                {check.issues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            ) : null}
+          </details>
+        ))}
       </div>
     </div>
   );
+}
+
+function readinessKey(
+  key: ManagedModelReadiness["checks"][number]["key"],
+): MessageKey {
+  const keys: Record<typeof key, MessageKey> = {
+    principal: "managedModelReadinessPrincipal",
+    workspace: "managedModelReadinessWorkspace",
+    assistant_access: "managedModelReadinessAssistant",
+    published_version: "managedModelReadinessPublished",
+    base_model: "managedModelReadinessModel",
+    provider: "managedModelReadinessProvider",
+    knowledge: "managedModelReadinessKnowledge",
+    tools: "managedModelReadinessTools",
+    voice: "managedModelReadinessVoice",
+  };
+  return keys[key];
 }
 
 function permissionMessageKey(permission: AgentPermission): MessageKey {
@@ -195,46 +470,6 @@ function permissionMessageKey(permission: AgentPermission): MessageKey {
   return "agentPermissionWrite";
 }
 
-function permissionLabel(
-  permission: string,
-  t: (key: MessageKey) => string,
-): string {
-  return permission === "read" || permission === "run" || permission === "write"
-    ? t(permissionMessageKey(permission))
-    : permission;
-}
-
 function targetKey(target: ShareTarget): string {
   return `${target.principalType}:${target.principalId}`;
-}
-
-function groupShares(grants: AgentGrant[]): Array<{
-  principalType: string;
-  principalId: string;
-  permissions: string[];
-}> {
-  const grouped = new Map<
-    string,
-    { principalType: string; principalId: string; permissions: string[] }
-  >();
-  for (const grant of grants) {
-    const key = `${grant.principalType}:${grant.principalId}`;
-    const existing = grouped.get(key) ?? {
-      principalType: grant.principalType,
-      principalId: grant.principalId,
-      permissions: [],
-    };
-    existing.permissions.push(grant.permission);
-    grouped.set(key, existing);
-  }
-  return [...grouped.values()]
-    .map((share) => ({
-      ...share,
-      permissions: [...new Set(share.permissions)].sort(),
-    }))
-    .sort(
-      (left, right) =>
-        left.principalType.localeCompare(right.principalType) ||
-        left.principalId.localeCompare(right.principalId),
-    );
 }

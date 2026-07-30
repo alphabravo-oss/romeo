@@ -405,9 +405,21 @@ export function createRuntimeSeedData(
   return {
     ...seed,
     chats: seed.chats.filter((chat) => chat.id !== "chat_welcome"),
+    models: seed.models
+      .filter((model) => model.id !== "model_ollama_default")
+      .map((model) =>
+        model.id === "model_openai_compatible_default"
+          ? { ...model, available: false }
+          : model,
+      ),
     grants: seed.grants.filter(
       (grant) =>
-        !(grant.resourceType === "chat" && grant.resourceId === "chat_welcome"),
+        !(
+          (grant.resourceType === "chat" &&
+            grant.resourceId === "chat_welcome") ||
+          (grant.resourceType === "model" &&
+            grant.resourceId === "model_ollama_default")
+        ),
     ),
   };
 }

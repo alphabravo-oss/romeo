@@ -11,6 +11,7 @@ export interface OrganizationRecord {
 }
 
 export interface WorkspaceRecord {
+  defaultAgentId?: string;
   id: string;
   orgId: string;
   name: string;
@@ -111,6 +112,7 @@ export class PgTenantRepository {
         name: workspace.name,
         slug: workspace.slug,
         archivedAt: optionalDate(workspace.archivedAt),
+        defaultAgentId: workspace.defaultAgentId ?? null,
         createdAt: now,
         updatedAt: now,
       })
@@ -152,6 +154,8 @@ export function toWorkspaceRecord(
     name: row.name,
     slug: row.slug,
   };
+  if (row.defaultAgentId !== null)
+    workspace.defaultAgentId = row.defaultAgentId;
   const archivedAt = optionalIsoString(row.archivedAt);
   if (archivedAt !== undefined) workspace.archivedAt = archivedAt;
   return workspace;

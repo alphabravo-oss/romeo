@@ -114,9 +114,7 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
       return;
     try {
       await updateChat(options.activeChatId, { modelId });
-      await options.queryClient.invalidateQueries({
-        queryKey: ["chats", options.workspaceId],
-      });
+      await invalidateWorkspaceChats(options);
     } catch (caught) {
       options.setError(
         caught instanceof Error

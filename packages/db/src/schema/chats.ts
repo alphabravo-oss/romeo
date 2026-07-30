@@ -25,6 +25,7 @@ export const chats = pgTable(
       .notNull()
       .references(() => workspaces.id),
     title: text("title").notNull(),
+    agentId: text("agent_id"),
     modelId: text("model_id"),
     temporary: boolean("temporary").notNull().default(false),
     expiresAt: timestamp("expires_at", { withTimezone: true }),

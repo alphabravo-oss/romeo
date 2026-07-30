@@ -1,10 +1,10 @@
 import {
   type ColumnDef,
+  type OnChangeFn,
   type PaginationState,
   type RowSelectionState,
   type SortingState,
   createColumnHelper,
-  flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
@@ -13,21 +13,21 @@ import {
 } from "@tanstack/react-table";
 import type React from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import ArrowDown from "lucide-react/dist/esm/icons/arrow-down.mjs";
-import ArrowUp from "lucide-react/dist/esm/icons/arrow-up.mjs";
-import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down.mjs";
-import { Button } from "./button";
 import { Checkbox } from "./forms";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DataTableControls } from "./data-table-controls";
+import { DataTableGrid } from "./data-table-grid";
 import { ClientTablePager, ServerTablePager } from "./data-table-pagination";
 import { downloadCsv, serializeTableCsv } from "./table-csv";
 import {
   defaultTablePreferences,
   readTablePreferences,
+  readTableSavedViews,
   removeTablePreferences,
+  type TableSavedView,
   tablePreferenceIdentity,
   writeTablePreferences,
+  writeTableSavedViews,
 } from "./table-preferences";
 
 export { createColumnHelper };
@@ -70,6 +70,10 @@ export interface DataTableLabels {
   selected: string;
   selectRow: string;
   shown: string;
+  savedViews: string;
+  saveView: string;
+  viewName: string;
+  deleteView: string;
   total: string;
 }
 
@@ -86,11 +90,22 @@ export interface DataTableProps<T> {
   formatNumber?: (value: number) => React.ReactNode;
   getRowId?: (row: T, index: number) => string;
   labels: DataTableLabels;
+  globalFilter?: string;
+  manualFiltering?: boolean;
+  manualSorting?: boolean;
   maxBodyHeight?: number;
   minTableWidth?: number;
+  onGlobalFilterChange?: OnChangeFn<string>;
+  onPaginationChange?: OnChangeFn<PaginationState>;
+  onRowActivate?: (row: T) => void;
+  onSortingChange?: OnChangeFn<SortingState>;
+  pagination?: PaginationState;
   pageSize?: number;
   preferenceKey?: string;
+  rowAriaLabel?: (row: T) => string;
+  searchVisibility?: "auto" | "always" | "hidden";
   serverPagination?: ServerPagination;
+  sorting?: SortingState;
 }
 
 /**
@@ -113,9 +128,20 @@ export function DataTable<T>({
   exportFileName = "romeo-table.csv",
   maxBodyHeight,
   minTableWidth,
+  globalFilter: controlledGlobalFilter,
+  manualFiltering = false,
+  manualSorting = false,
+  onGlobalFilterChange,
+  onPaginationChange,
+  onRowActivate,
+  onSortingChange,
+  pagination: controlledPagination,
   pageSize = 25,
   preferenceKey,
+  rowAriaLabel,
+  searchVisibility = "auto",
   serverPagination,
+  sorting: controlledSorting,
   enableRowSelection = false,
   bulkActions,
   formatNumber = String,
@@ -140,17 +166,32 @@ export function DataTable<T>({
       pageSize,
     ),
   );
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [internalSorting, setInternalSorting] = useState<SortingState>([]);
+  const [internalGlobalFilter, setInternalGlobalFilter] = useState("");
   const [columnVisibility, setColumnVisibility] = useState(
     initialPreferences.columnVisibility,
   );
   const [density, setDensity] = useState(initialPreferences.density);
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: initialPreferences.pageSize,
-  });
+  const [internalPagination, setInternalPagination] = useState<PaginationState>(
+    {
+      pageIndex: 0,
+      pageSize: initialPreferences.pageSize,
+    },
+  );
+  const sorting = controlledSorting ?? internalSorting;
+  const globalFilter = controlledGlobalFilter ?? internalGlobalFilter;
+  const pagination = controlledPagination ?? internalPagination;
+  const updateSorting = onSortingChange ?? setInternalSorting;
+  const updateGlobalFilter = onGlobalFilterChange ?? setInternalGlobalFilter;
+  const updatePagination = onPaginationChange ?? setInternalPagination;
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [savedViews, setSavedViews] = useState<TableSavedView[]>(() =>
+    readTableSavedViews(
+      resolvedPreferenceKey,
+      new Set(preferenceColumnIds),
+      pageSize,
+    ),
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualize = maxBodyHeight !== undefined;
   // Server pagination is authoritative: the parent owns page state, so the
@@ -213,21 +254,25 @@ export function DataTable<T>({
     },
     enableRowSelection,
     ...(getRowId ? { getRowId } : {}),
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    onSortingChange: updateSorting,
+    onGlobalFilterChange: updateGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
-    onPaginationChange: setPagination,
+    onPaginationChange: updatePagination,
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
+    manualSorting,
+    manualFiltering,
+    ...(manualSorting ? {} : { getSortedRowModel: getSortedRowModel() }),
+    ...(manualFiltering ? {} : { getFilteredRowModel: getFilteredRowModel() }),
     ...(clientPaginate
       ? { getPaginationRowModel: getPaginationRowModel() }
       : {}),
   });
 
   const rows = table.getRowModel().rows;
-  const showSearch = data.length > 8;
+  const showSearch =
+    searchVisibility === "always" ||
+    (searchVisibility === "auto" && data.length > 8);
   const showPager = clientPaginate && table.getPageCount() > 1;
 
   const selectedRows = table.getSelectedRowModel().rows;
@@ -248,16 +293,6 @@ export function DataTable<T>({
   const lastItem = virtualItems[virtualItems.length - 1];
   const padTop = firstItem ? firstItem.start : 0;
   const padBottom = lastItem ? virtualizer.getTotalSize() - lastItem.end : 0;
-
-  const renderRow = (row: (typeof rows)[number]) => (
-    <tr key={row.id}>
-      {row.getVisibleCells().map((cell) => (
-        <td key={cell.id}>
-          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-        </td>
-      ))}
-    </tr>
-  );
 
   const filteredRows = table.getFilteredRowModel().rows;
   const exportableColumns = table
@@ -291,10 +326,48 @@ export function DataTable<T>({
     removeTablePreferences(resolvedPreferenceKey);
     setColumnVisibility(defaults.columnVisibility);
     setDensity(defaults.density);
-    setPagination({ pageIndex: 0, pageSize: defaults.pageSize });
-    setSorting([]);
-    setGlobalFilter("");
+    updatePagination({ pageIndex: 0, pageSize: defaults.pageSize });
+    updateSorting([]);
+    updateGlobalFilter("");
     setRowSelection({});
+  }
+
+  function saveView(name: string) {
+    const savedView: TableSavedView = {
+      columnVisibility,
+      density,
+      globalFilter,
+      name,
+      pageSize: pagination.pageSize,
+      sorting,
+    };
+    setSavedViews((current) => {
+      const next = [
+        ...current.filter(
+          (view) => view.name.toLocaleLowerCase() !== name.toLocaleLowerCase(),
+        ),
+        savedView,
+      ].sort((left, right) => left.name.localeCompare(right.name));
+      writeTableSavedViews(resolvedPreferenceKey, next);
+      return next;
+    });
+  }
+
+  function applySavedView(view: TableSavedView) {
+    setColumnVisibility(view.columnVisibility);
+    setDensity(view.density);
+    updateGlobalFilter(view.globalFilter);
+    updateSorting(view.sorting);
+    updatePagination({ pageIndex: 0, pageSize: view.pageSize });
+    setRowSelection({});
+  }
+
+  function deleteSavedView(name: string) {
+    setSavedViews((current) => {
+      const next = current.filter((view) => view.name !== name);
+      writeTableSavedViews(resolvedPreferenceKey, next);
+      return next;
+    });
   }
 
   const summary = [
@@ -327,9 +400,13 @@ export function DataTable<T>({
         globalFilter={globalFilter}
         labels={labels}
         onExport={exportRows}
+        onApplySavedView={applySavedView}
+        onDeleteSavedView={deleteSavedView}
         onReset={resetView}
+        onSaveView={saveView}
         pageSize={pagination.pageSize}
         setDensity={setDensity}
+        savedViews={savedViews}
         showExport={exportFileName !== false}
         showSearch={showSearch}
         table={table}
@@ -349,117 +426,23 @@ export function DataTable<T>({
         </div>
       ) : null}
 
-      <div
-        className={`rm-table-wrap ${density === "compact" ? "compact" : ""}`}
-        ref={scrollRef}
-        style={
-          virtualize
-            ? { maxHeight: maxBodyHeight, overflowY: "auto" }
-            : undefined
-        }
-      >
-        <table
-          aria-rowcount={rows.length + 1}
-          className="rm-table"
-          style={minTableWidth ? { minWidth: minTableWidth } : undefined}
-        >
-          <thead>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  const canSort = header.column.getCanSort();
-                  const sorted = header.column.getIsSorted();
-                  const toggleSort = header.column.getToggleSortingHandler();
-                  const inner = (
-                    <span className="rm-th-inner">
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                      {canSort ? (
-                        <span className="rm-th-sort">
-                          {sorted === "asc" ? (
-                            <ArrowUp size={12} />
-                          ) : sorted === "desc" ? (
-                            <ArrowDown size={12} />
-                          ) : (
-                            <ChevronsUpDown size={12} />
-                          )}
-                        </span>
-                      ) : null}
-                    </span>
-                  );
-                  return (
-                    <th
-                      aria-sort={
-                        canSort
-                          ? sorted === "asc"
-                            ? "ascending"
-                            : sorted === "desc"
-                              ? "descending"
-                              : "none"
-                          : undefined
-                      }
-                      className={canSort ? "rm-th-sortable" : undefined}
-                      key={header.id}
-                      style={{ width: header.getSize() || undefined }}
-                    >
-                      {canSort ? (
-                        <Button
-                          className="rm-th-sort-btn"
-                          onClick={toggleSort}
-                          variant="ghost"
-                        >
-                          {inner}
-                        </Button>
-                      ) : (
-                        inner
-                      )}
-                    </th>
-                  );
-                })}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td
-                  className="rm-table-empty"
-                  colSpan={table.getVisibleLeafColumns().length}
-                >
-                  {globalFilter ? labels.noMatches : resolvedEmpty}
-                </td>
-              </tr>
-            ) : virtualize ? (
-              <>
-                {padTop > 0 ? (
-                  <tr>
-                    <td
-                      colSpan={table.getVisibleLeafColumns().length}
-                      style={{ height: padTop }}
-                    />
-                  </tr>
-                ) : null}
-                {virtualItems.map((vi) => {
-                  const row = rows[vi.index];
-                  return row ? renderRow(row) : null;
-                })}
-                {padBottom > 0 ? (
-                  <tr>
-                    <td
-                      colSpan={table.getVisibleLeafColumns().length}
-                      style={{ height: padBottom }}
-                    />
-                  </tr>
-                ) : null}
-              </>
-            ) : (
-              rows.map(renderRow)
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTableGrid
+        density={density}
+        empty={resolvedEmpty}
+        globalFilter={globalFilter}
+        maxBodyHeight={maxBodyHeight}
+        minTableWidth={minTableWidth}
+        noMatches={labels.noMatches}
+        onRowActivate={onRowActivate}
+        padBottom={padBottom}
+        padTop={padTop}
+        rowAriaLabel={rowAriaLabel}
+        rows={rows}
+        scrollRef={scrollRef}
+        table={table}
+        virtualItems={virtualItems}
+        virtualize={virtualize}
+      />
 
       {showPager ? (
         <ClientTablePager

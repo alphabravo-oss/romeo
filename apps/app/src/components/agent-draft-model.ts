@@ -29,6 +29,10 @@ type Translate = (key: MessageKey) => string;
 
 export function buildDefaults(activeAgent: Agent | undefined) {
   return {
+    name: activeAgent?.name ?? "",
+    description: activeAgent?.description ?? "",
+    icon: activeAgent?.icon ?? "",
+    avatarUrl: activeAgent?.avatarUrl ?? "",
     systemPrompt: activeAgent?.systemPrompt ?? "",
     baseModelId: activeAgent?.baseModelId ?? "",
     temperature: readNumberParameter(activeAgent, "temperature", "0.2"),
@@ -38,7 +42,55 @@ export function buildDefaults(activeAgent: Agent | undefined) {
     maxMemoryMessages: readMemoryNumber(activeAgent, "maxMessages", "6"),
     maxUserInputLength: readSafetyNumber(activeAgent, "maxUserInputLength", ""),
     blockedTerms: activeAgent?.safetySettings.blockedTerms?.join("\n") ?? "",
+    tags: activeAgent?.tags?.join(", ") ?? "",
+    promptSuggestions:
+      activeAgent?.promptSuggestions
+        ?.map((suggestion) => `${suggestion.title} | ${suggestion.prompt}`)
+        .join("\n") ?? "",
   };
+}
+
+export function parseAgentTags(value: string): {
+  error?: string;
+  value?: string[];
+} {
+  const tags = [
+    ...new Set(
+      value
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (tags.length > 20 || tags.some((tag) => tag.length > 60))
+    return { error: "Use at most 20 tags, each 60 characters or fewer." };
+  return { value: tags };
+}
+
+export function parsePromptSuggestions(value: string): {
+  error?: string;
+  value?: Array<{ title: string; prompt: string }>;
+} {
+  const lines = value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length > 12) return { error: "Use at most 12 starter prompts." };
+  const suggestions: Array<{ title: string; prompt: string }> = [];
+  for (const line of lines) {
+    const separator = line.indexOf("|");
+    if (separator < 1)
+      return { error: "Each starter prompt must use “Title | Prompt”." };
+    const title = line.slice(0, separator).trim();
+    const prompt = line.slice(separator + 1).trim();
+    if (!title || !prompt || title.length > 120 || prompt.length > 2_000)
+      return {
+        error:
+          "Starter prompt titles must be 120 characters or fewer and include prompt text.",
+      };
+    suggestions.push({ title, prompt });
+  }
+  return { value: suggestions };
 }
 
 export function buildModelGroups(
@@ -58,6 +110,7 @@ export function buildModelGroups(
     const providerLabel = provider?.name ?? model.providerId;
     const providerType = provider?.type ?? "custom";
     const providerEnabled = provider?.enabled ?? true;
+    const modelAvailable = model.available !== false;
     const groupId = provider?.id ?? model.providerId;
     const group = groups.get(groupId) ?? {
       id: groupId,
@@ -66,8 +119,14 @@ export function buildModelGroups(
     };
     group.models.push({
       id: model.id,
-      label: `${model.displayName}${model.enabled && providerEnabled ? "" : ` - ${t("agentDisabled")}`}`,
-      enabled: model.enabled && providerEnabled,
+      label: `${model.displayName}${
+        modelAvailable
+          ? model.enabled && providerEnabled
+            ? ""
+            : ` - ${t("agentDisabled")}`
+          : ` - ${t("agentUnavailableMetadata")}`
+      }`,
+      enabled: model.enabled && modelAvailable && providerEnabled,
       providerLabel,
       providerType,
       badges: modelCapabilityBadges(
@@ -118,7 +177,7 @@ function modelCapabilityBadges(
   return [
     providerLabel,
     providerType,
-    providerEnabled && model.enabled
+    providerEnabled && model.enabled && model.available !== false
       ? t("agentEnabled")
       : t("agentDisabledBadge"),
     formatContextWindow(model.contextWindow, t, locale),

@@ -9,6 +9,7 @@ import type {
   Agent,
   AgentMemoryPolicy,
   AgentParameters,
+  AgentPromptSuggestion,
   AgentSafetySettings,
   AgentVersion,
 } from "../domain/entities";
@@ -26,10 +27,8 @@ import {
 } from "./agent-portability";
 import { normalizeAgentMemoryPolicy } from "./agent-memory";
 import { normalizeAgentSafetySettings } from "./agent-safety";
-import {
-  getManagedModelCustomizationPolicy,
-  setManagedModelCustomizationPolicy,
-} from "./managed-model-customization";
+import { cloneManagedModel } from "./clone-managed-model";
+import { managedModelPresentation } from "./managed-model-presentation";
 import { AgentReadService } from "./agent-read-service";
 import {
   assertAgentEvalGate,
@@ -51,11 +50,16 @@ export class AgentService extends AgentReadService {
     subject: AuthSubject;
     workspaceId: string;
     name: string;
+    description?: string;
+    icon?: string;
+    avatarUrl?: string;
     baseModelId: string;
     systemPrompt: string;
     parameters?: AgentParameters;
     memoryPolicy?: AgentMemoryPolicy;
+    promptSuggestions?: AgentPromptSuggestion[];
     safetySettings?: AgentSafetySettings;
+    tags?: string[];
   }): Promise<Agent> {
     assertScope(input.subject, "agents:create");
     if (!hasWorkspaceAccess(input.subject, input.workspaceId)) {
@@ -86,12 +90,19 @@ export class AgentService extends AgentReadService {
       orgId: input.subject.orgId,
       workspaceId: input.workspaceId,
       name: input.name,
+      ...managedModelPresentation({
+        avatarUrl: input.avatarUrl,
+        description: input.description,
+        icon: input.icon,
+      }),
       createdBy,
       baseModelId: input.baseModelId,
       systemPrompt: input.systemPrompt,
       parameters: input.parameters ?? {},
       memoryPolicy: normalizeAgentMemoryPolicy(input.memoryPolicy),
+      promptSuggestions: normalizePromptSuggestions(input.promptSuggestions),
       safetySettings: normalizeAgentSafetySettings(input.safetySettings),
+      tags: normalizeAgentTags(input.tags),
       updatedAt: new Date().toISOString(),
     });
     await createAgentOwnerGrants(this.repository, input.subject, agent.id);
@@ -126,11 +137,16 @@ export class AgentService extends AgentReadService {
     subject: AuthSubject;
     agentId: string;
     name?: string;
+    description?: string;
+    icon?: string;
+    avatarUrl?: string;
     baseModelId?: string;
     systemPrompt?: string;
     parameters?: AgentParameters;
     memoryPolicy?: AgentMemoryPolicy;
+    promptSuggestions?: AgentPromptSuggestion[];
     safetySettings?: AgentSafetySettings;
+    tags?: string[];
   }): Promise<Agent> {
     const agent = await getAuthorizedAgent(this.repository, {
       agentId: input.agentId,
@@ -147,6 +163,11 @@ export class AgentService extends AgentReadService {
     const updated = await this.repository.updateAgent({
       ...agent,
       name: input.name ?? agent.name,
+      ...managedModelPresentation({
+        description: input.description ?? agent.description,
+        icon: input.icon ?? agent.icon,
+        avatarUrl: input.avatarUrl ?? agent.avatarUrl,
+      }),
       baseModelId,
       systemPrompt: input.systemPrompt ?? agent.systemPrompt,
       parameters: input.parameters ?? agent.parameters,
@@ -154,10 +175,18 @@ export class AgentService extends AgentReadService {
         input.memoryPolicy === undefined
           ? agent.memoryPolicy
           : normalizeAgentMemoryPolicy(input.memoryPolicy),
+      promptSuggestions:
+        input.promptSuggestions === undefined
+          ? (agent.promptSuggestions ?? [])
+          : normalizePromptSuggestions(input.promptSuggestions),
       safetySettings:
         input.safetySettings === undefined
           ? agent.safetySettings
           : normalizeAgentSafetySettings(input.safetySettings),
+      tags:
+        input.tags === undefined
+          ? (agent.tags ?? [])
+          : normalizeAgentTags(input.tags),
       updatedAt: new Date().toISOString(),
     });
     await this.audit(input.subject, "agent.update", "agent", updated.id, {
@@ -173,59 +202,17 @@ export class AgentService extends AgentReadService {
   async clone(input: {
     subject: AuthSubject;
     agentId: string;
+    includeKnowledgeBindings?: boolean;
     name?: string;
     systemPrompt?: string;
   }): Promise<Agent> {
-    assertScope(input.subject, "agents:create");
-    assertScope(input.subject, "agents:read");
-
-    const source = await getAuthorizedAgent(this.repository, {
-      agentId: input.agentId,
-      subject: input.subject,
-      scope: "agents:read",
-    });
-    await assertWorkspaceActive(this.repository, {
-      orgId: input.subject.orgId,
-      workspaceId: source.workspaceId,
-    });
-    await assertUsableAgentModel(
-      this.repository,
-      input.subject,
-      source.baseModelId,
-    );
-    const { publishedVersionId: _publishedVersionId, ...draft } = source;
-
-    const createdBy = await persistedSubjectActorId(
-      this.repository,
-      input.subject,
-      {
-        kind: "service_account_agent_owner",
-        name: "Service Account Agent Owner",
-      },
-    );
-    const cloned = await this.repository.createAgent({
-      ...draft,
-      id: createId("agent"),
-      name: input.name ?? `${source.name} copy`,
-      createdBy,
-      systemPrompt: input.systemPrompt ?? source.systemPrompt,
-      updatedAt: new Date().toISOString(),
-    });
-    const sourceCustomizationPolicy = await getManagedModelCustomizationPolicy(
-      this.repository,
-      source.orgId,
-      source.id,
-    );
-    await setManagedModelCustomizationPolicy(
-      this.repository,
-      cloned.orgId,
-      cloned.id,
-      sourceCustomizationPolicy,
-    );
+    const result = await cloneManagedModel(this.repository, input);
+    const { cloned } = result;
     await this.audit(input.subject, "agent.clone", "agent", cloned.id, {
       workspaceId: cloned.workspaceId,
-      sourceAgentId: source.id,
+      sourceAgentId: result.sourceAgentId,
       baseModelId: cloned.baseModelId,
+      knowledgeBindingsCopied: result.knowledgeBindingsCopied,
     });
     return cloned;
   }
@@ -258,11 +245,18 @@ export class AgentService extends AgentReadService {
       subject: input.subject,
       workspaceId: input.workspaceId,
       name: input.agent.name,
+      ...managedModelPresentation({
+        avatarUrl: input.agent.avatarUrl,
+        description: input.agent.description,
+        icon: input.agent.icon,
+      }),
       baseModelId: input.agent.baseModelId,
       systemPrompt: input.agent.systemPrompt,
       parameters: input.agent.parameters,
       memoryPolicy: input.agent.memoryPolicy,
+      promptSuggestions: input.agent.promptSuggestions,
       safetySettings: input.agent.safetySettings,
+      tags: input.agent.tags,
     });
     const importedWithBindings = await applyAgentImportBindings(
       this.repository,
@@ -329,7 +323,9 @@ export class AgentService extends AgentReadService {
         systemPrompt: agent.systemPrompt,
         parameters: agent.parameters,
         memoryPolicy: agent.memoryPolicy,
+        promptSuggestions: agent.promptSuggestions ?? [],
         safetySettings: agent.safetySettings,
+        tags: agent.tags ?? [],
         knowledgeBaseBindings: bindingSnapshot.knowledgeBaseBindings,
         toolBindings: bindingSnapshot.toolBindings,
         createdBy,
@@ -400,7 +396,9 @@ export class AgentService extends AgentReadService {
       systemPrompt: version.systemPrompt,
       parameters: version.parameters,
       memoryPolicy: version.memoryPolicy,
+      promptSuggestions: version.promptSuggestions ?? [],
       safetySettings: version.safetySettings,
+      tags: version.tags ?? [],
       ...(version.voiceProfileId !== undefined
         ? { voiceProfileId: version.voiceProfileId }
         : {}),
@@ -473,4 +471,27 @@ export class AgentService extends AgentReadService {
       metadata,
     });
   }
+}
+
+function normalizeAgentTags(tags: string[] | undefined): string[] {
+  return [
+    ...new Set(
+      (tags ?? [])
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .map((tag) => tag.slice(0, 60)),
+    ),
+  ].slice(0, 20);
+}
+
+function normalizePromptSuggestions(
+  suggestions: AgentPromptSuggestion[] | undefined,
+): AgentPromptSuggestion[] {
+  return (suggestions ?? [])
+    .map((suggestion) => ({
+      title: suggestion.title.trim().slice(0, 120),
+      prompt: suggestion.prompt.trim().slice(0, 2_000),
+    }))
+    .filter((suggestion) => suggestion.title && suggestion.prompt)
+    .slice(0, 12);
 }

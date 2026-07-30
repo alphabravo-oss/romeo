@@ -71,12 +71,31 @@ export abstract class InMemoryCatalogRepository extends InMemoryAuthRepository {
       )
       .filter(
         (model) =>
+          input.available === undefined ||
+          (model.available !== false) === input.available,
+      )
+      .filter(
+        (model) =>
           query === "" ||
           `${model.name} ${model.displayName}`
             .toLocaleLowerCase()
             .includes(query),
       )
-      .sort((left, right) => left.displayName.localeCompare(right.displayName));
+      .sort((left, right) => {
+        const direction = input.direction === "desc" ? -1 : 1;
+        const comparison =
+          input.sort === "name"
+            ? left.name.localeCompare(right.name)
+            : input.sort === "availability"
+              ? Number(left.available !== false) -
+                Number(right.available !== false)
+              : input.sort === "enabled"
+                ? Number(left.enabled) - Number(right.enabled)
+                : input.sort === "contextWindow"
+                  ? left.contextWindow - right.contextWindow
+                  : left.displayName.localeCompare(right.displayName);
+        return (comparison || left.id.localeCompare(right.id)) * direction;
+      });
     return {
       items: models.slice(input.offset, input.offset + input.limit),
       total: models.length,

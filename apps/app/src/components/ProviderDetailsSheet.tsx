@@ -1,40 +1,36 @@
-import {
-  Button,
-  Field,
-  IconButton,
-  Input,
-  Sheet,
-  StatusBadge,
-  Switch,
-} from "@romeo/ui";
+import { Button, Field, Input, StatusBadge, Switch } from "@romeo/ui";
 import { Link } from "@tanstack/react-router";
+import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left.mjs";
 import CheckCircle2 from "lucide-react/dist/esm/icons/circle-check-big.mjs";
 import CircleAlert from "lucide-react/dist/esm/icons/circle-alert.mjs";
 import Download from "lucide-react/dist/esm/icons/download.mjs";
 import Pencil from "lucide-react/dist/esm/icons/pencil.mjs";
 import PlugZap from "lucide-react/dist/esm/icons/plug-zap.mjs";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
-import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
 
 import type {
   BaseModel,
   Provider,
   ProviderVerification,
 } from "../features/providers/types";
+import type { Agent } from "../features/managed-models/types";
 import { useLocale } from "../lib/i18n";
+import { ProviderCatalogStatus } from "./ProviderCatalogStatus";
+import { ProviderModelsTable } from "./ProviderModelsTable";
 
-export function ProviderDetailsSheet({
+export function ProviderDetailsPage({
+  dependentAgents,
   deletingModelId,
   isUpdating,
   models,
-  onClose,
+  onBack,
   onConfigure,
   onDeleteModel,
   onPullModel,
   onRefresh,
   onToggle,
+  onToggleModel,
   onVerify,
-  open,
   provider,
   pullName,
   pulling,
@@ -43,17 +39,18 @@ export function ProviderDetailsSheet({
   verification,
   verifying,
 }: {
+  dependentAgents: Agent[];
   deletingModelId: string | undefined;
   isUpdating: boolean;
   models: BaseModel[];
-  onClose: () => void;
+  onBack: () => void;
   onConfigure: () => void;
   onDeleteModel: (providerId: string, model: BaseModel) => Promise<void>;
   onPullModel: (providerId: string) => Promise<void>;
   onRefresh: () => void;
   onToggle: (enabled: boolean) => void;
+  onToggleModel: (model: BaseModel, enabled: boolean) => Promise<void>;
   onVerify: () => void;
-  open: boolean;
   provider: Provider | undefined;
   pullName: string;
   pulling: boolean;
@@ -63,17 +60,27 @@ export function ProviderDetailsSheet({
   verifying: boolean;
 }) {
   const { t } = useLocale();
+  if (!provider) return null;
+  const availableModels = models.filter(
+    (model) => model.available !== false,
+  ).length;
+
   return (
-    <Sheet
-      closeLabel={t("close")}
-      description={t("connectionDetails")}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) onClose();
-      }}
-      open={open}
-      title={provider?.name ?? t("providerCredentials")}
-    >
-      {provider ? (
+    <div className="grid gap-4">
+      <Button className="w-fit" onClick={onBack} variant="ghost">
+        <ArrowLeft aria-hidden="true" size={16} />
+        {t("backToProviders")}
+      </Button>
+      <section className="rm-panel p-4">
+        <div className="rm-card-header">
+          <div>
+            <h2 className="rm-card-title">{provider.name}</h2>
+            <p className="text-sm text-muted">{t("connectionDetails")}</p>
+          </div>
+          <Button onClick={onConfigure} variant="primary">
+            <Pencil aria-hidden size={14} /> {t("configure")}
+          </Button>
+        </div>
         <div className="grid gap-5">
           <div className="rm-model-meta-grid">
             <span>
@@ -88,9 +95,25 @@ export function ProviderDetailsSheet({
             </span>
             <span>
               <small>{t("models")}</small>
-              {models.length}
+              {availableModels}/{models.length}
+            </span>
+            <span>
+              <small>{t("catalog")}</small>
+              <ProviderCatalogStatus compact provider={provider} />
+            </span>
+            <span>
+              <small>{t("providerDependentAssistants")}</small>
+              {dependentAgents.length}
             </span>
           </div>
+          {dependentAgents.length > 0 ? (
+            <div className="rounded-md border border-border p-3 text-sm">
+              <strong>{t("dependencyImpact")}</strong>
+              <p className="mt-1 text-muted">
+                {dependentAgents.map((agent) => agent.name).join(", ")}
+              </p>
+            </div>
+          ) : null}
           <div className="grid gap-1">
             <span className="text-xs font-medium uppercase tracking-wide text-muted">
               {t("endpoint")}
@@ -110,11 +133,15 @@ export function ProviderDetailsSheet({
               <PlugZap aria-hidden size={14} /> {t("verify")}
             </Button>
             <Button disabled={syncing} onClick={onRefresh} pending={syncing}>
-              <RefreshCw aria-hidden size={14} /> {t("refreshModels")}
+              <RefreshCw aria-hidden size={14} /> {t("syncNow")}
             </Button>
-            <Button onClick={onConfigure} variant="primary">
-              <Pencil aria-hidden size={14} /> {t("configure")}
-            </Button>
+          </div>
+          <div className="rm-catalog-sync-summary">
+            <div>
+              <strong>{t("automaticCatalogSync")}</strong>
+              <p>{t("automaticCatalogSyncDescription")}</p>
+            </div>
+            <ProviderCatalogStatus provider={provider} />
           </div>
           {verification ? (
             <div
@@ -135,10 +162,9 @@ export function ProviderDetailsSheet({
               <strong>{t("discoveredModels")}</strong>
               <Button asChild size="sm" variant="ghost">
                 <Link
-                  onClick={onClose}
                   search={{
                     section: "providers",
-                    view: "models",
+                    view: "base-models",
                     provider: provider.id,
                   }}
                   to="/admin"
@@ -148,35 +174,21 @@ export function ProviderDetailsSheet({
               </Button>
             </div>
             {models.length > 0 ? (
-              <ul className="rm-connection-model-list">
-                {models.map((model) => (
-                  <li key={model.id}>
-                    <span title={model.name} translate="no">
-                      {model.displayName}
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <StatusBadge tone={model.enabled ? "success" : "neutral"}>
-                        {model.enabled
-                          ? t("availableInChat")
-                          : t("notAvailableInChat")}
-                      </StatusBadge>
-                      {provider.type === "ollama" ? (
-                        <IconButton
-                          aria-label={`${t("deleteOllamaModel")} ${model.name}`}
-                          disabled={deletingModelId === model.id}
-                          onClick={() => void onDeleteModel(provider.id, model)}
-                          size="sm"
-                          variant="ghost"
-                        >
-                          <Trash2 aria-hidden size={14} />
-                        </IconButton>
-                      ) : null}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <ProviderModelsTable
+                deletingModelId={deletingModelId}
+                dependentAgents={dependentAgents}
+                isUpdating={isUpdating}
+                models={models}
+                onDeleteModel={onDeleteModel}
+                onToggleModel={onToggleModel}
+                provider={provider}
+              />
             ) : (
-              <p className="text-sm text-muted">{t("noModelsDiscovered")}</p>
+              <p className="text-sm text-muted">
+                {provider.catalogSync?.status === "error"
+                  ? t("catalogSyncFailedEmpty")
+                  : t("catalogSyncPendingEmpty")}
+              </p>
             )}
           </div>
           {provider.type === "ollama" ? (
@@ -211,7 +223,7 @@ export function ProviderDetailsSheet({
             </form>
           ) : null}
         </div>
-      ) : null}
-    </Sheet>
+      </section>
+    </div>
   );
 }

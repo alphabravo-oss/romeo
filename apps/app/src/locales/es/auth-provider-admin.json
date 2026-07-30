@@ -70,8 +70,6 @@
   "authMembershipsRemoved": "pertenencia(s) eliminadas",
   "authMembershipsToRemove": "Pertenencias a eliminar",
   "authNameAttribute": "Atributo de nombre",
-  "authNoActiveProviders": "No hay ningún método de inicio de sesión activo",
-  "authNoActiveProvidersDescription": "Elige un proveedor abajo para configurarlo. Los miembros no podrán iniciar sesión hasta que haya al menos un método activo.",
   "authNoProviderSettings": "No hay configuración de proveedores disponible.",
   "authNoProvidersInCatalog": "No hay proveedores de autenticación en el catálogo.",
   "authNotConfigured": "Sin configurar",

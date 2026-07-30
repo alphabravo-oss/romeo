@@ -31,7 +31,6 @@ import { useLocale } from "../lib/i18n";
 export function ChatPanel({
   activeVoiceProfileId,
   agentName,
-  canOverrideModel,
   citations,
   attachedUrls,
   canInspectContext,
@@ -53,9 +52,9 @@ export function ChatPanel({
   providers,
   promptSuggestions,
   selectedModelId,
+  onSelectModel,
   webSearchEnabled,
   workspaceId,
-  onSelectModel,
   onAttachFiles,
   onAttachExistingFile,
   onAddUrl,
@@ -85,7 +84,6 @@ export function ChatPanel({
 }: {
   activeVoiceProfileId: string | undefined;
   agentName: string;
-  canOverrideModel: boolean;
   citations: ChatCitation[];
   attachedUrls: string[];
   canInspectContext: boolean;
@@ -107,15 +105,11 @@ export function ChatPanel({
   models: BaseModel[];
   providers: Provider[];
   promptSuggestions: ChatSuggestion[];
-  /**
-   * The model that will answer the next message: the caller's override if
-   * one is selected, otherwise the active agent's published baseModelId.
-   * Undefined only while the active agent hasn't loaded yet.
-   */
+  /** The model that will answer the next message in this chat. */
   selectedModelId: string | undefined;
+  onSelectModel: (modelId: string) => void;
   webSearchEnabled: boolean;
   workspaceId: string | undefined;
-  onSelectModel: (modelId: string) => void;
   onAttachFiles: (files: File[]) => void;
   onAttachExistingFile: (file: FileObject) => void;
   onAddUrl: (url: string) => void;
@@ -200,7 +194,6 @@ export function ChatPanel({
     <ChatComposer
       attachedUrls={attachedUrls}
       canInspectContext={canInspectContext}
-      canOverrideModel={canOverrideModel}
       documentAttachments={documentAttachments}
       draft={draft}
       error={error}

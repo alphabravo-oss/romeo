@@ -45,6 +45,7 @@ import {
   voiceCatalogKey,
   voiceProfileFromProvider,
 } from "./voice-service-helpers";
+import { listVoiceProfilesWithDependencies } from "./voice-catalog-summary";
 
 export type {
   PublicSpeechArtifact,
@@ -59,9 +60,8 @@ export class VoiceService {
     private readonly objectStore: ObjectStore = memoryObjectStore,
   ) {}
 
-  list(subject: AuthSubject): Promise<VoiceProfile[]> {
-    assertScope(subject, "voices:use");
-    return this.repository.listVoiceProfiles(subject.orgId);
+  async list(subject: AuthSubject): Promise<VoiceProfile[]> {
+    return listVoiceProfilesWithDependencies(this.repository, subject);
   }
 
   async syncCatalog(subject: AuthSubject) {

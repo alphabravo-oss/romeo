@@ -1,4 +1,3 @@
-import MoreHorizontal from "lucide-react/dist/esm/icons/more-horizontal.mjs";
 import MoreVertical from "lucide-react/dist/esm/icons/more-vertical.mjs";
 import { DropdownMenu, IconButton } from "@romeo/ui";
 
@@ -14,14 +13,11 @@ export interface OverflowMenuItem {
 export function OverflowMenu({
   items,
   label = "More actions",
-  orientation = "horizontal",
 }: {
   items: OverflowMenuItem[];
   label?: string;
-  orientation?: "horizontal" | "vertical";
 }): React.ReactNode {
   if (items.length === 0) return null;
-  const Icon = orientation === "vertical" ? MoreVertical : MoreHorizontal;
   return (
     <DropdownMenu
       items={items.map((item) => ({
@@ -41,7 +37,7 @@ export function OverflowMenu({
           className="rm-icon-button"
           variant="ghost"
         >
-          <Icon aria-hidden="true" size={16} />
+          <MoreVertical aria-hidden="true" size={16} />
         </IconButton>
       }
     />

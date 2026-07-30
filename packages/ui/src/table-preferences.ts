@@ -6,8 +6,19 @@ export interface TablePreferences {
   pageSize: number;
 }
 
+export interface TableSavedView extends TablePreferences {
+  globalFilter: string;
+  name: string;
+  sorting: Array<{ id: string; desc: boolean }>;
+}
+
 interface StoredTablePreferences extends TablePreferences {
   version: 1;
+}
+
+interface StoredTableSavedViews {
+  version: 1;
+  views: TableSavedView[];
 }
 
 export interface TablePreferenceStorage {
@@ -18,6 +29,7 @@ export interface TablePreferenceStorage {
 
 export const tablePageSizes = [10, 25, 50, 100] as const;
 const storagePrefix = "romeo:table-view:v1:";
+const savedViewsStoragePrefix = "romeo:table-saved-views:v1:";
 
 export function defaultTablePreferences(pageSize = 25): TablePreferences {
   return {
@@ -105,11 +117,97 @@ export function removeTablePreferences(
   }
 }
 
+export function readTableSavedViews(
+  key: string,
+  validColumnIds: ReadonlySet<string>,
+  fallbackPageSize = 25,
+  storage = browserStorage(),
+): TableSavedView[] {
+  if (storage === undefined) return [];
+  try {
+    const raw = storage.getItem(tableSavedViewsStorageKey(key));
+    if (raw === null) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      !isRecord(parsed) ||
+      parsed.version !== 1 ||
+      !Array.isArray(parsed.views)
+    )
+      return [];
+    return parsed.views.flatMap((candidate) =>
+      normalizeSavedView(candidate, validColumnIds, fallbackPageSize),
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function writeTableSavedViews(
+  key: string,
+  views: readonly TableSavedView[],
+  storage = browserStorage(),
+): void {
+  if (storage === undefined) return;
+  try {
+    const value: StoredTableSavedViews = { version: 1, views: [...views] };
+    storage.setItem(tableSavedViewsStorageKey(key), JSON.stringify(value));
+  } catch {
+    // Saved views are a convenience and must never break table rendering.
+  }
+}
+
+export function tableSavedViewsStorageKey(identity: string): string {
+  return `${savedViewsStoragePrefix}${encodeURIComponent(identity)}`;
+}
+
 function normalizePageSize(value: unknown, fallback: number): number {
   return typeof value === "number" &&
     (tablePageSizes as readonly number[]).includes(value)
     ? value
     : fallback;
+}
+
+function normalizeSavedView(
+  value: unknown,
+  validColumnIds: ReadonlySet<string>,
+  fallbackPageSize: number,
+): TableSavedView[] {
+  if (!isRecord(value) || typeof value.name !== "string") return [];
+  const name = value.name.trim().slice(0, 80);
+  if (name.length === 0) return [];
+  const defaults = defaultTablePreferences(fallbackPageSize);
+  const columnVisibility = isRecord(value.columnVisibility)
+    ? Object.fromEntries(
+        Object.entries(value.columnVisibility).filter(
+          (entry): entry is [string, boolean] =>
+            validColumnIds.has(entry[0]) && typeof entry[1] === "boolean",
+        ),
+      )
+    : {};
+  const sorting = Array.isArray(value.sorting)
+    ? value.sorting.flatMap((sort) =>
+        isRecord(sort) &&
+        typeof sort.id === "string" &&
+        validColumnIds.has(sort.id) &&
+        typeof sort.desc === "boolean"
+          ? [{ id: sort.id, desc: sort.desc }]
+          : [],
+      )
+    : [];
+  return [
+    {
+      columnVisibility,
+      density:
+        value.density === "compact" || value.density === "comfortable"
+          ? value.density
+          : defaults.density,
+      globalFilter:
+        typeof value.globalFilter === "string" ? value.globalFilter : "",
+      name,
+      pageSize: normalizePageSize(value.pageSize, defaults.pageSize),
+      sorting,
+    },
+  ];
 }
 
 function browserRoute(): { pathname: string; search: string } | undefined {

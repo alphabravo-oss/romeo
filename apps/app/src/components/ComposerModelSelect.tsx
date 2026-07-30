@@ -1,4 +1,5 @@
 import { Button, Input } from "@romeo/ui";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import Check from "lucide-react/dist/esm/icons/check.mjs";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
@@ -33,8 +34,10 @@ export function ComposerModelSelect({
   const [pinnedModels, setPinnedModels] = useState<Map<string, string>>(
     () => new Map(),
   );
-  const pinnedIds = [...pinnedModels.keys()];
+  const pinnedIds = useMemo(() => new Set(pinnedModels.keys()), [pinnedModels]);
   const ref = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const enabledProviderIds = useMemo(
     () =>
@@ -45,33 +48,59 @@ export function ComposerModelSelect({
       ),
     [providers],
   );
-  const enabledModels = models.filter(
-    (model) => model.enabled && enabledProviderIds.has(model.providerId),
+  const enabledModels = useMemo(
+    () =>
+      models.filter(
+        (model) =>
+          model.enabled &&
+          model.available !== false &&
+          enabledProviderIds.has(model.providerId),
+      ),
+    [enabledProviderIds, models],
   );
   const providerById = useMemo(
     () => new Map(providers.map((provider) => [provider.id, provider.name])),
     [providers],
   );
-  const filteredModels = enabledModels
-    .filter((model) =>
-      capabilityFilter === "vision"
-        ? model.capabilities.vision
-        : capabilityFilter === "tools"
-          ? model.capabilities.toolCalling
-          : true,
-    )
-    .filter((model) =>
-      `${model.displayName} ${model.name} ${model.providerId}`
-        .toLowerCase()
-        .includes(query.trim().toLowerCase()),
-    );
-  filteredModels.sort((left, right) => {
-    const pinDifference =
-      Number(pinnedIds.includes(right.id)) -
-      Number(pinnedIds.includes(left.id));
-    return pinDifference || left.displayName.localeCompare(right.displayName);
+  const filteredModels = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return enabledModels
+      .filter((model) =>
+        capabilityFilter === "vision"
+          ? model.capabilities.vision
+          : capabilityFilter === "tools"
+            ? model.capabilities.toolCalling
+            : true,
+      )
+      .filter((model) =>
+        `${model.displayName} ${model.name} ${model.providerId}`
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+      .sort((left, right) => {
+        const pinDifference =
+          Number(pinnedIds.has(right.id)) - Number(pinnedIds.has(left.id));
+        return (
+          pinDifference || left.displayName.localeCompare(right.displayName)
+        );
+      });
+  }, [capabilityFilter, enabledModels, pinnedIds, query]);
+  const pickerRows = useMemo(
+    () => modelPickerRows(filteredModels, providerById),
+    [filteredModels, providerById],
+  );
+  const modelRowIndexes = useMemo(
+    () =>
+      pickerRows.flatMap((row, index) => (row.kind === "model" ? [index] : [])),
+    [pickerRows],
+  );
+  const rowVirtualizer = useVirtualizer({
+    count: pickerRows.length,
+    estimateSize: (index) => (pickerRows[index]?.kind === "provider" ? 32 : 56),
+    getItemKey: (index) => pickerRows[index]?.id ?? index,
+    getScrollElement: () => listRef.current,
+    overscan: 8,
   });
-  const groupedModels = groupModelsByProvider(filteredModels);
   const selectedModel = enabledModels.find(
     (model) => model.id === selectedModelId,
   );
@@ -106,27 +135,39 @@ export function ComposerModelSelect({
       return;
     }
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-    const options = Array.from(
-      ref.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [],
-    ).filter((option) => !option.disabled);
-    if (options.length === 0) return;
+    if (modelRowIndexes.length === 0) return;
     event.preventDefault();
-    const current = options.indexOf(
-      document.activeElement as HTMLButtonElement,
+    const activeModelId = (document.activeElement as HTMLElement | null)
+      ?.dataset.modelId;
+    const currentRow = pickerRows.findIndex(
+      (row) => row.kind === "model" && row.model.id === activeModelId,
     );
-    const next =
+    const current = modelRowIndexes.indexOf(currentRow);
+    const nextPosition =
       event.key === "Home"
         ? 0
         : event.key === "End"
-          ? options.length - 1
+          ? modelRowIndexes.length - 1
           : event.key === "ArrowDown"
             ? current < 0
               ? 0
-              : (current + 1) % options.length
+              : (current + 1) % modelRowIndexes.length
             : current < 0
-              ? options.length - 1
-              : (current - 1 + options.length) % options.length;
-    options[next]?.focus();
+              ? modelRowIndexes.length - 1
+              : (current - 1 + modelRowIndexes.length) % modelRowIndexes.length;
+    const nextRowIndex = modelRowIndexes[nextPosition];
+    const nextRow = pickerRows[nextRowIndex ?? -1];
+    if (nextRowIndex === undefined || nextRow?.kind !== "model") return;
+    rowVirtualizer.scrollToIndex(nextRowIndex, { align: "auto" });
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        ref.current
+          ?.querySelector<HTMLButtonElement>(
+            `[data-model-id="${CSS.escape(nextRow.model.id)}"]`,
+          )
+          ?.focus(),
+      ),
+    );
   }
 
   useEffect(() => {
@@ -143,6 +184,12 @@ export function ComposerModelSelect({
     const onResize = () => measureMenuMaxHeight();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !window.matchMedia("(pointer: fine)").matches) return;
+    const frame = requestAnimationFrame(() => searchRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [open]);
 
   useEffect(() => {
@@ -212,8 +259,9 @@ export function ComposerModelSelect({
       {open ? (
         <div
           className="rm-composer-model-menu rm-model-menu rm-chat-model-menu"
+          aria-label={t("chooseModel")}
           onKeyDown={handleModelMenuKeyDown}
-          role="listbox"
+          role="dialog"
           style={
             menuMaxHeight === undefined
               ? undefined
@@ -224,15 +272,18 @@ export function ComposerModelSelect({
             <Search aria-hidden="true" size={14} />
             <Input
               aria-label={t("searchModels")}
-              autoFocus
+              autoComplete="off"
+              name="model-search"
               onChange={(event) => setQuery(event.currentTarget.value)}
               placeholder={t("searchModels")}
+              ref={searchRef}
               value={query}
             />
           </label>
           <div className="rm-chat-model-filters">
             {(["all", "tools", "vision"] as const).map((filter) => (
               <Button
+                aria-pressed={capabilityFilter === filter}
                 className={capabilityFilter === filter ? "active" : ""}
                 key={filter}
                 onClick={() => setCapabilityFilter(filter)}
@@ -246,72 +297,121 @@ export function ComposerModelSelect({
               </Button>
             ))}
           </div>
-          <div className="rm-chat-model-list">
+          <div
+            aria-label={t("models")}
+            className="rm-chat-model-list"
+            ref={listRef}
+            role="listbox"
+          >
             {filteredModels.length === 0 ? (
               <div className="p-3 text-sm text-muted">
                 {t("noMatchingModels")}
               </div>
             ) : (
-              [...groupedModels].map(([groupProviderId, groupModels]) => (
-                <div key={groupProviderId}>
-                  <div className="rm-chat-model-group">
-                    {providerById.get(groupProviderId) ?? groupProviderId}
-                  </div>
-                  {groupModels.map((model) => (
-                    <div className="rm-chat-model-row" key={model.id}>
-                      <Button
-                        aria-selected={model.id === selectedModelId}
-                        className="rm-model-option min-w-0 flex-1"
-                        onClick={() => {
-                          onSelectModel(model.id);
-                          closeModelMenu({ restoreFocus: true });
-                        }}
-                        role="option"
-                        type="button"
-                      >
-                        <span className="min-w-0 flex-1 text-left">
-                          <span className="block truncate">
-                            {model.displayName}
-                          </span>
-                          <small className="block truncate text-muted">
-                            {model.capabilities.toolCalling ? "Tools" : "Chat"}
-                            {model.capabilities.vision
-                              ? " · Vision"
-                              : ""} · {formatModelContext(model.contextWindow)}
-                          </small>
-                        </span>
-                        {model.id === selectedModelId ? (
-                          <Check aria-hidden="true" size={16} />
-                        ) : null}
-                      </Button>
-                      <Button
-                        aria-label={
-                          pinnedIds.includes(model.id)
-                            ? `Unpin ${model.displayName}`
-                            : `Pin ${model.displayName}`
-                        }
-                        className={`rm-chat-model-pin ${pinnedIds.includes(model.id) ? "active" : ""}`}
-                        onClick={() => void togglePinned(model.id)}
-                        type="button"
-                      >
-                        <Star
-                          aria-hidden="true"
-                          fill={
-                            pinnedIds.includes(model.id)
-                              ? "currentColor"
-                              : "none"
-                          }
-                          size={14}
+              <div
+                className="rm-chat-model-virtual-canvas"
+                style={{ height: rowVirtualizer.getTotalSize() }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const row = pickerRows[virtualRow.index];
+                  if (row === undefined) return null;
+                  return (
+                    <div
+                      className="rm-chat-model-virtual-row"
+                      data-index={virtualRow.index}
+                      key={row.id}
+                      ref={rowVirtualizer.measureElement}
+                      style={{
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      {row.kind === "provider" ? (
+                        <div
+                          className="rm-chat-model-group"
+                          role="presentation"
+                        >
+                          {row.label}
+                        </div>
+                      ) : (
+                        <ModelPickerOption
+                          closeModelMenu={closeModelMenu}
+                          model={row.model}
+                          onSelectModel={onSelectModel}
+                          pinned={pinnedIds.has(row.model.id)}
+                          selected={row.model.id === selectedModelId}
+                          togglePinned={togglePinned}
                         />
-                      </Button>
+                      )}
                     </div>
-                  ))}
-                </div>
-              ))
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ModelPickerOption({
+  closeModelMenu,
+  model,
+  onSelectModel,
+  pinned,
+  selected,
+  togglePinned,
+}: {
+  closeModelMenu: (options?: { restoreFocus?: boolean }) => void;
+  model: BaseModel;
+  onSelectModel: (modelId: string) => void;
+  pinned: boolean;
+  selected: boolean;
+  togglePinned: (modelId: string) => Promise<void>;
+}) {
+  return (
+    <div className={`rm-chat-model-row ${selected ? "selected" : ""}`}>
+      <Button
+        aria-selected={selected}
+        className="rm-model-option min-w-0 flex-1"
+        data-model-id={model.id}
+        onClick={() => {
+          onSelectModel(model.id);
+          closeModelMenu({ restoreFocus: true });
+        }}
+        role="option"
+        type="button"
+      >
+        <span className="min-w-0 flex-1 text-left">
+          <span
+            className="rm-chat-model-name"
+            title={model.displayName}
+            translate="no"
+          >
+            {model.displayName}
+          </span>
+          <small className="rm-chat-model-meta">
+            {model.capabilities.toolCalling ? "Tools" : "Chat"}
+            {model.capabilities.vision ? " · Vision" : ""} ·{" "}
+            {formatModelContext(model.contextWindow)}
+          </small>
+        </span>
+        {selected ? <Check aria-hidden="true" size={16} /> : null}
+      </Button>
+      <Button
+        aria-label={
+          pinned ? `Unpin ${model.displayName}` : `Pin ${model.displayName}`
+        }
+        className={`rm-chat-model-pin ${pinned ? "active" : ""}`}
+        onClick={() => void togglePinned(model.id)}
+        type="button"
+      >
+        <Star
+          aria-hidden="true"
+          fill={pinned ? "currentColor" : "none"}
+          size={14}
+        />
+      </Button>
     </div>
   );
 }
@@ -322,12 +422,30 @@ function formatModelContext(contextWindow: number): string {
     : `${contextWindow} context`;
 }
 
-function groupModelsByProvider(models: BaseModel[]): Map<string, BaseModel[]> {
+type ModelPickerRow =
+  | { id: string; kind: "provider"; label: string }
+  | { id: string; kind: "model"; model: BaseModel };
+
+function modelPickerRows(
+  models: BaseModel[],
+  providerById: Map<string, string>,
+): ModelPickerRow[] {
   const grouped = new Map<string, BaseModel[]>();
   for (const model of models) {
     const group = grouped.get(model.providerId) ?? [];
     group.push(model);
     grouped.set(model.providerId, group);
   }
-  return grouped;
+  return [...grouped].flatMap(([providerId, providerModels]) => [
+    {
+      id: `provider:${providerId}`,
+      kind: "provider" as const,
+      label: providerById.get(providerId) ?? providerId,
+    },
+    ...providerModels.map((model) => ({
+      id: `model:${model.id}`,
+      kind: "model" as const,
+      model,
+    })),
+  ]);
 }

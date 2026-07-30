@@ -17,14 +17,29 @@ import { ManagedModelPersonalization } from "./ManagedModelPersonalization";
 
 const subscribeToHydration = () => () => {};
 
-export function WorkspaceShell() {
+export function WorkspaceShell({
+  onAgentSelection,
+  onChatSelection,
+  requestedAgentId,
+  requestedChatId,
+}: {
+  onAgentSelection?: (agentId: string) => void;
+  onChatSelection?: (chatId: string | undefined) => void;
+  requestedAgentId?: string;
+  requestedChatId?: string;
+}) {
   const { t } = useLocale();
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
     () => true,
     () => false,
   );
-  const workspace = useWorkspaceController();
+  const workspace = useWorkspaceController({
+    ...(onAgentSelection === undefined ? {} : { onAgentSelection }),
+    ...(onChatSelection === undefined ? {} : { onChatSelection }),
+    ...(requestedAgentId === undefined ? {} : { requestedAgentId }),
+    ...(requestedChatId === undefined ? {} : { requestedChatId }),
+  });
   const { workspaceId, workspaces, setWorkspaceId } = useWorkspace();
 
   // Publish chat actions to the ⌘K command registry while this screen is mounted.
@@ -98,10 +113,8 @@ export function WorkspaceShell() {
                 workspace.activeAgent?.name ?? t("shellRomeoAssistant")
               }
               agents={workspace.agents}
-              canClone={workspace.subject?.isAdmin === true}
-              isCloning={workspace.isCloningAgent}
-              onCloneAgent={() => void workspace.handleCloneAgent()}
               onSelectAgent={workspace.setActiveAgentId}
+              workspaceId={workspace.workspace?.id}
             />
             <ManagedModelPersonalization agentId={workspace.activeAgent?.id} />
             {/*
@@ -158,7 +171,6 @@ export function WorkspaceShell() {
         <ChatPanel
           activeVoiceProfileId={workspace.activeVoiceProfileId}
           agentName={workspace.activeAgent?.name ?? t("shellRomeoAssistant")}
-          canOverrideModel={workspace.subject?.isAdmin === true}
           attachedUrls={workspace.attachedUrls}
           citations={workspace.citations}
           contextPreview={workspace.contextPreview}
@@ -166,9 +178,13 @@ export function WorkspaceShell() {
           canInspectContext={workspace.activeChatId !== undefined}
           models={workspace.models}
           providers={workspace.providers}
-          promptSuggestions={workspace.chatExperience?.suggestions ?? []}
+          promptSuggestions={
+            workspace.activeAgent?.promptSuggestions?.length
+              ? workspace.activeAgent.promptSuggestions
+              : (workspace.chatExperience?.suggestions ?? [])
+          }
           selectedModelId={workspace.selectedModelId}
-          onSelectModel={workspace.handleSelectModel}
+          onSelectModel={(modelId) => void workspace.handleSelectModel(modelId)}
           draft={workspace.draft}
           documentAttachments={workspace.documentAttachments}
           error={workspace.error}

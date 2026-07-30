@@ -38,6 +38,7 @@ export type PrincipalTypeRecord = "group" | "service_account" | "user";
 export type ResourcePermissionRecord = "read" | "run" | "use" | "write";
 
 export interface ResourceGrantRecord {
+  createdAt?: string;
   id: string;
   resourceType: ResourceTypeRecord;
   resourceId: string;
@@ -349,6 +350,7 @@ export function toResourceGrantRecord(
   row: typeof resourceGrants.$inferSelect,
 ): ResourceGrantRecord {
   return {
+    createdAt: row.createdAt.toISOString(),
     id: row.id,
     resourceType: asResourceType(row.resourceType),
     resourceId: row.resourceId,

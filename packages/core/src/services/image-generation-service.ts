@@ -54,7 +54,7 @@ export class ImageGenerationService {
     const provider = await this.repository.getProvider(model.providerId);
     if (provider === undefined || !canAccessOrg(subject, provider.orgId))
       throw notFound("Model");
-    if (!provider.enabled || !model.enabled)
+    if (!provider.enabled || !model.enabled || model.available === false)
       throw new ApiError(
         "image_model_disabled",
         "The selected image model is disabled.",

@@ -82,6 +82,13 @@ export async function resolveRunContext(
       409,
     );
   }
+  if (model.available === false) {
+    throw new ApiError(
+      "model_unavailable",
+      "This model is no longer available from its provider.",
+      409,
+    );
+  }
   if (!provider.enabled) {
     throw new ApiError(
       "provider_disabled",

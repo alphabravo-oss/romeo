@@ -73,12 +73,17 @@ export class PgAgentRepository extends PgManagedModelPreferenceRepository {
     const [row] = await this.db
       .update(agentModels)
       .set({
+        avatarUrl: agent.avatarUrl ?? null,
         baseModelId: agent.baseModelId,
+        description: agent.description ?? null,
+        icon: agent.icon ?? null,
         memoryPolicy: agent.memoryPolicy,
+        promptSuggestions: agent.promptSuggestions ?? [],
         name: agent.name,
         parameters: agent.parameters,
         publishedVersionId: agent.publishedVersionId ?? null,
         safetySettings: agent.safetySettings,
+        tags: agent.tags ?? [],
         slug: stableAgentSlug(agent),
         systemPrompt: agent.systemPrompt,
         updatedAt: new Date(agent.updatedAt),
@@ -206,9 +211,14 @@ export function toAgentRecord(
     systemPrompt: row.systemPrompt,
     parameters: asAgentParameters(row.parameters),
     memoryPolicy: asAgentMemoryPolicy(row.memoryPolicy),
+    promptSuggestions: asPromptSuggestions(row.promptSuggestions),
     safetySettings: asAgentSafetySettings(row.safetySettings),
+    tags: asStringList(row.tags, 20),
     updatedAt: toIsoString(row.updatedAt),
   };
+  if (row.description !== null) agent.description = row.description;
+  if (row.icon !== null) agent.icon = row.icon;
+  if (row.avatarUrl !== null) agent.avatarUrl = row.avatarUrl;
   const voiceProfileId = optionalIsoString(row.voiceProfileId);
   if (voiceProfileId !== undefined) agent.voiceProfileId = voiceProfileId;
   const publishedVersionId = optionalIsoString(row.publishedVersionId);
@@ -262,7 +272,9 @@ export function toAgentVersionRecord(
     systemPrompt: row.systemPrompt,
     parameters: asAgentParameters(row.parameters),
     memoryPolicy: asAgentMemoryPolicy(row.memoryPolicy),
+    promptSuggestions: asPromptSuggestions(row.promptSuggestions),
     safetySettings: asAgentSafetySettings(row.safetySettings),
+    tags: asStringList(row.tags, 20),
     createdBy: row.createdBy,
     createdAt: toIsoString(row.createdAt),
     publishedAt:
@@ -287,11 +299,16 @@ function toAgentInsert(record: AgentRecord): typeof agentModels.$inferInsert {
     workspaceId: record.workspaceId,
     name: record.name,
     slug: stableAgentSlug(record),
+    description: record.description ?? null,
+    icon: record.icon ?? null,
+    avatarUrl: record.avatarUrl ?? null,
     baseModelId: record.baseModelId,
     systemPrompt: record.systemPrompt,
     parameters: record.parameters,
     memoryPolicy: record.memoryPolicy,
+    promptSuggestions: record.promptSuggestions ?? [],
     safetySettings: record.safetySettings,
+    tags: record.tags ?? [],
     voiceProfileId: record.voiceProfileId ?? null,
     publishedVersionId: record.publishedVersionId ?? null,
     createdBy: record.createdBy,
@@ -344,7 +361,9 @@ function toAgentVersionInsert(
     systemPrompt: record.systemPrompt,
     parameters: record.parameters,
     memoryPolicy: record.memoryPolicy,
+    promptSuggestions: record.promptSuggestions ?? [],
     safetySettings: record.safetySettings,
+    tags: record.tags ?? [],
     voiceProfileId: record.voiceProfileId ?? null,
     knowledgeBaseBindings: record.knowledgeBaseBindings ?? [],
     toolBindings: record.toolBindings ?? [],
@@ -396,6 +415,31 @@ function asAgentMemoryPolicy(value: unknown): AgentMemoryPolicyRecord {
   if (typeof input.maxMessages === "number")
     policy.maxMessages = input.maxMessages;
   return policy;
+}
+
+function asStringList(value: unknown, limit: number): string[] {
+  return Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === "string")
+        .slice(0, limit)
+    : [];
+}
+
+function asPromptSuggestions(
+  value: unknown,
+): Array<{ title: string; prompt: string }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      const input = asJsonRecord(item);
+      return typeof input.title === "string" && typeof input.prompt === "string"
+        ? { title: input.title, prompt: input.prompt }
+        : undefined;
+    })
+    .filter(
+      (item): item is { title: string; prompt: string } => item !== undefined,
+    )
+    .slice(0, 12);
 }
 
 function asVersionKnowledgeBindings(

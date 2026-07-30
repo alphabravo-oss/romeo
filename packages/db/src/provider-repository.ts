@@ -1,6 +1,8 @@
-import { and, asc, count, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import type { ProviderCatalogSyncState } from "@romeo/providers";
 
 import type { RomeoDatabase } from "./client";
+import { asProviderCatalogSyncState } from "./provider-catalog-record";
 import { baseModels, providerInstances } from "./schema";
 
 export type ProviderKind =
@@ -55,6 +57,7 @@ export interface ProviderRecord {
   modelIds?: string[];
   enabled: boolean;
   capabilities: ProviderCapabilities;
+  catalogSync?: ProviderCatalogSyncState;
 }
 
 export interface BaseModelRecord {
@@ -63,6 +66,7 @@ export interface BaseModelRecord {
   name: string;
   displayName: string;
   enabled: boolean;
+  available?: boolean;
   capabilities: ProviderCapabilities;
   contextWindow: number;
   pricing?: ModelPricing;
@@ -119,11 +123,19 @@ export class PgProviderRepository {
   async listModelsPage(
     orgId: string,
     input: {
+      available?: boolean;
+      direction?: "asc" | "desc";
       enabled?: boolean;
       limit: number;
       offset: number;
       providerId?: string;
       query?: string;
+      sort?:
+        | "availability"
+        | "contextWindow"
+        | "displayName"
+        | "enabled"
+        | "name";
     },
   ): Promise<{ items: BaseModelRecord[]; total: number }> {
     const query = input.query?.trim();
@@ -135,6 +147,9 @@ export class PgProviderRepository {
       input.enabled === undefined
         ? undefined
         : eq(baseModels.enabled, input.enabled),
+      input.available === undefined
+        ? undefined
+        : eq(baseModels.available, input.available),
       query === undefined || query === ""
         ? undefined
         : or(
@@ -142,12 +157,23 @@ export class PgProviderRepository {
             ilike(baseModels.displayName, `%${query}%`),
           ),
     );
+    const sortColumn =
+      input.sort === "name"
+        ? baseModels.name
+        : input.sort === "availability"
+          ? baseModels.available
+          : input.sort === "enabled"
+            ? baseModels.enabled
+            : input.sort === "contextWindow"
+              ? baseModels.contextWindow
+              : baseModels.displayName;
+    const order = input.direction === "desc" ? desc : asc;
     const [rows, totals] = await Promise.all([
       this.db
         .select()
         .from(baseModels)
         .where(where)
-        .orderBy(asc(baseModels.displayName), asc(baseModels.id))
+        .orderBy(order(sortColumn), order(baseModels.id))
         .limit(input.limit)
         .offset(input.offset),
       this.db.select({ value: count() }).from(baseModels).where(where),
@@ -176,6 +202,7 @@ export class PgProviderRepository {
         contextWindow: model.contextWindow,
         displayName: model.displayName,
         enabled: model.enabled,
+        available: model.available ?? true,
         name: model.name,
         orgId,
         pricing: model.pricing ?? null,
@@ -211,6 +238,7 @@ export class PgProviderRepository {
             contextWindow: model.contextWindow,
             displayName: model.displayName,
             enabled: model.enabled,
+            available: model.available ?? true,
             name: model.name,
             orgId,
             pricing: model.pricing ?? null,
@@ -249,6 +277,7 @@ export class PgProviderRepository {
 export function toProviderRecord(
   row: typeof providerInstances.$inferSelect,
 ): ProviderRecord {
+  const catalogSync = asProviderCatalogSyncState(row.catalogSync);
   return {
     id: row.id,
     orgId: row.orgId,
@@ -265,6 +294,7 @@ export function toProviderRecord(
       : {}),
     enabled: row.enabled,
     capabilities: asProviderCapabilities(row.capabilities),
+    ...(catalogSync === undefined ? {} : { catalogSync }),
   };
 }
 
@@ -277,6 +307,7 @@ export function toBaseModelRecord(
     name: row.name,
     displayName: row.displayName,
     enabled: row.enabled,
+    available: row.available,
     capabilities: asProviderCapabilities(row.capabilities),
     contextWindow: row.contextWindow,
     capabilitiesSource:
@@ -299,6 +330,7 @@ function toProviderInsert(
     credentialRef: record.credentialRef ?? null,
     modelIds: record.modelIds ?? null,
     capabilities: record.capabilities,
+    catalogSync: record.catalogSync ?? null,
     enabled: record.enabled,
   };
 }
@@ -318,6 +350,7 @@ function toBaseModelInsert(
     contextWindow: record.contextWindow,
     pricing: record.pricing ?? null,
     enabled: record.enabled,
+    available: record.available ?? true,
   };
 }
 

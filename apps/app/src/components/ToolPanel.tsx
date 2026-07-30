@@ -1,14 +1,17 @@
-import { Input, Button } from "@romeo/ui";
+import { Input, Button, StatusBadge } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import Calculator from "lucide-react/dist/esm/icons/calculator.mjs";
 import Clock3 from "lucide-react/dist/esm/icons/clock-3.mjs";
-import type { FormEvent } from "react";
+import { useMemo, type FormEvent } from "react";
 
 import type { AgentToolSummary } from "../features/types";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { toast } from "../lib/toast";
 import { ToolApprovalModal } from "./ToolApprovalModal";
 import type { PendingToolApproval } from "./useToolExecution";
+import { createColumnHelper, DataTable } from "./DataTable";
+
+const toolColumn = createColumnHelper<AgentToolSummary>();
 
 export function ToolPanel({
   isExecuting,
@@ -34,6 +37,35 @@ export function ToolPanel({
   const dateTime = tools.find((tool) => tool.id === "tool_datetime");
   const canRunCalculator = isCallable(calculator);
   const canRunDateTime = isCallable(dateTime);
+  const columns = useMemo(
+    () => [
+      toolColumn.accessor("name", {
+        header: t("tools"),
+        cell: ({ row }) => (
+          <span className="block min-w-0">
+            <strong className="block truncate">{row.original.name}</strong>
+            <small className="block truncate font-mono text-muted">
+              {row.original.id}
+            </small>
+          </span>
+        ),
+      }),
+      toolColumn.accessor("riskLevel", {
+        header: t("workspaceToolRisk"),
+        cell: ({ getValue }) => t(riskMessageKey(getValue())),
+      }),
+      toolColumn.accessor((tool) => toolState(tool, t), {
+        id: "status",
+        header: t("status"),
+        cell: ({ row, getValue }) => (
+          <StatusBadge tone={isCallable(row.original) ? "success" : "neutral"}>
+            {getValue()}
+          </StatusBadge>
+        ),
+      }),
+    ],
+    [t],
+  );
 
   const calculatorForm = useForm({
     defaultValues: { expression: "2 + 3 * 4" },
@@ -60,19 +92,12 @@ export function ToolPanel({
   return (
     <section className="rm-panel p-4">
       <div className="rm-card-title">{t("tools")}</div>
-      <div className="grid gap-2 text-sm">
-        {tools.map((tool) => (
-          <div className="rounded-md border border-border p-3" key={tool.id}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="font-medium">{tool.name}</div>
-              <div className="text-xs text-muted">{toolState(tool, t)}</div>
-            </div>
-            <div className="text-muted">
-              {t(riskMessageKey(tool.riskLevel))} {t("workspaceToolRisk")}
-            </div>
-          </div>
-        ))}
-      </div>
+      <DataTable
+        columns={columns}
+        data={tools}
+        getRowId={(tool) => tool.id}
+        preferenceKey="workspace-agent-tools"
+      />
       <form
         className="mt-4 grid gap-2"
         onSubmit={(event) => {

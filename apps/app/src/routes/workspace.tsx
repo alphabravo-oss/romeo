@@ -8,7 +8,10 @@ import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
 import { Field, Select } from "@romeo/ui";
 import { useState } from "react";
 
-import { AgentStudioPanel } from "../components/AgentStudioPanel";
+import {
+  AgentStudioPanel,
+  resolveAgentStudioTab,
+} from "../components/AgentStudioPanel";
 import { CollaborationPanel } from "../components/CollaborationPanel";
 import { ConsoleLayout } from "../components/ConsoleLayout";
 import { EvalPanel } from "../components/EvalPanel";
@@ -27,10 +30,21 @@ import {
   useLocaleNamespaces,
 } from "../lib/i18n";
 import { resolveSectionKey } from "../lib/section-routing";
+import adminCss from "../styles/admin.css?url";
 
 export const Route = createFileRoute("/workspace")({
-  validateSearch: (search: Record<string, unknown>): { section?: string } =>
-    typeof search.section === "string" ? { section: search.section } : {},
+  head: () => ({
+    links: [{ rel: "stylesheet", href: adminCss }],
+  }),
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { resource?: string; section?: string; tab?: string } => ({
+    ...(typeof search.resource === "string"
+      ? { resource: search.resource }
+      : {}),
+    ...(typeof search.section === "string" ? { section: search.section } : {}),
+    ...(typeof search.tab === "string" ? { tab: search.tab } : {}),
+  }),
   component: WorkspacePage,
 });
 
@@ -94,10 +108,12 @@ const META: Record<
 function WorkspacePage() {
   useLocaleNamespaces(localeNamespaceGroups.workspace);
   const { t } = useLocale();
-  const { section: sectionParam } = Route.useSearch();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const { section: sectionParam } = search;
   const section = resolveSectionKey(sectionParam, META, "agents");
   const [agentId, setAgentId] = useState<string>();
-  const data = useWorkspaceData(agentId);
+  const data = useWorkspaceData(agentId, { includeDrafts: true });
   const tools = useToolExecution(data.activeAgent, data.tools, () => {});
   const workspaceId = data.workspace?.id;
 
@@ -155,9 +171,19 @@ function WorkspacePage() {
         <div className="grid gap-4">
           <AgentStudioPanel
             activeAgent={data.activeAgent}
+            activeTab={resolveAgentStudioTab(search.tab)}
             isAdmin={data.subject?.isAdmin === true}
             models={data.models}
             onAgentCreated={setAgentId}
+            onTabChange={(tab) =>
+              void navigate({
+                search: (previous) => ({
+                  ...previous,
+                  section: "agents",
+                  tab,
+                }),
+              })
+            }
             providers={data.providers}
             workspaceId={workspaceId}
           />
@@ -167,6 +193,19 @@ function WorkspacePage() {
       {section === "knowledge" ? (
         <KnowledgePanel
           activeAgent={data.activeAgent}
+          onSelectionChange={(resource) =>
+            void navigate({
+              search: (previous) => {
+                const { resource: _resource, ...rest } = previous;
+                return {
+                  ...rest,
+                  section: "knowledge",
+                  ...(resource ? { resource } : {}),
+                };
+              },
+            })
+          }
+          selectedKnowledgeBaseId={search.resource}
           workspaceId={workspaceId}
         />
       ) : null}
@@ -190,7 +229,23 @@ function WorkspacePage() {
       ) : null}
 
       {section === "voice" ? (
-        <VoicePanel activeAgent={data.activeAgent} workspaceId={workspaceId} />
+        <VoicePanel
+          activeAgent={data.activeAgent}
+          onSelectionChange={(resource) =>
+            void navigate({
+              search: (previous) => {
+                const { resource: _resource, ...rest } = previous;
+                return {
+                  ...rest,
+                  section: "voice",
+                  ...(resource ? { resource } : {}),
+                };
+              },
+            })
+          }
+          selectedVoiceId={search.resource}
+          workspaceId={workspaceId}
+        />
       ) : null}
 
       {section === "evals" ? (

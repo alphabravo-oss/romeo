@@ -54,7 +54,59 @@ export class ToolConnectorService extends ToolConnectorDispatchService {
 
   async list(subject: AuthSubject): Promise<ToolConnector[]> {
     assertScope(subject, "tools:manage");
-    return this.repository.listToolConnectors(subject.orgId);
+    const connectors = await this.repository.listToolConnectors(subject.orgId);
+    const [operationsByConnector, agentsByWorkspace] = await Promise.all([
+      Promise.all(
+        connectors.map(
+          async (connector) =>
+            [
+              connector.id,
+              await this.repository.listToolOperations(connector.id),
+            ] as const,
+        ),
+      ),
+      Promise.all(
+        subject.workspaceIds.map((workspaceId) =>
+          this.repository.listAgents(workspaceId),
+        ),
+      ),
+    ]);
+    const agents = agentsByWorkspace.flat();
+    const bindingsByAgent = await Promise.all(
+      agents.map(
+        async (agent) =>
+          [
+            agent.id,
+            await this.repository.listAgentToolBindings(agent.id),
+          ] as const,
+      ),
+    );
+    const agentBindings = new Map(bindingsByAgent);
+    const operationMap = new Map(operationsByConnector);
+    return connectors.map((connector) => {
+      const operationIds = new Set(
+        (operationMap.get(connector.id) ?? []).map((operation) => operation.id),
+      );
+      const dependentAgents = agents.filter((agent) =>
+        (agentBindings.get(agent.id) ?? []).some(
+          (binding) => binding.enabled && operationIds.has(binding.toolId),
+        ),
+      );
+      const dependentOperationIds = new Set(
+        dependentAgents.flatMap((agent) =>
+          (agentBindings.get(agent.id) ?? [])
+            .filter(
+              (binding) => binding.enabled && operationIds.has(binding.toolId),
+            )
+            .map((binding) => binding.toolId),
+        ),
+      );
+      return {
+        ...connector,
+        dependentAgentCount: dependentAgents.length,
+        dependentOperationCount: dependentOperationIds.size,
+      };
+    });
   }
 
   catalog(subject: AuthSubject): ToolConnectorCatalogReport {

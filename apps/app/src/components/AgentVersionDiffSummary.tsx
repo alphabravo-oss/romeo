@@ -46,10 +46,14 @@ function agentDiffFieldKey(
       return "agentDiffFieldMemoryPolicy";
     case "parameters":
       return "agentDiffFieldParameters";
+    case "promptSuggestions":
+      return "agentDiffFieldPromptSuggestions";
     case "safetySettings":
       return "agentDiffFieldSafetySettings";
     case "systemPrompt":
       return "agentDiffFieldSystemPrompt";
+    case "tags":
+      return "agentDiffFieldTags";
     case "toolBindings":
       return "agentDiffFieldToolBindings";
     case "voiceProfileId":

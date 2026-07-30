@@ -101,7 +101,11 @@ export function useLocale() {
     () => ({
       locale,
       setLocale,
-      t: (key: MessageKey): string => translate(key),
+      t: (
+        key: MessageKey,
+        values?: Record<string, boolean | number | string>,
+      ): string =>
+        values === undefined ? translate(key) : translate(key, values),
     }),
     [locale, setLocale, translate],
   );

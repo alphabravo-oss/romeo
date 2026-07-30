@@ -13,6 +13,7 @@ export interface SystemSetting {
 }
 
 export interface Workspace {
+  defaultAgentId?: string;
   id: string;
   orgId: string;
   name: string;

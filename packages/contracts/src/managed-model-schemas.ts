@@ -5,6 +5,10 @@ import { dataEnvelope } from "./common";
 export const managedModelIdentifier = z.string().trim().min(1).max(300);
 export const managedModelTimestamp = z.iso.datetime();
 export const parameters = z.record(z.string(), z.unknown());
+export const ManagedModelPromptSuggestionSchema = z.strictObject({
+  title: z.string().trim().min(1).max(120),
+  prompt: z.string().trim().min(1).max(2_000),
+});
 
 export const ManagedModelMemoryPolicySchema = z
   .discriminatedUnion("mode", [
@@ -39,14 +43,23 @@ export const ManagedModelSchema = z
     orgId: managedModelIdentifier,
     workspaceId: managedModelIdentifier,
     name: z.string().min(1).max(200),
+    description: z.string().max(1_000).optional(),
+    icon: z.string().max(16).optional(),
+    avatarUrl: z.union([z.literal(""), z.url().max(2_000)]).optional(),
     createdBy: managedModelIdentifier,
     baseModelId: managedModelIdentifier,
     systemPrompt: z.string(),
     parameters,
     memoryPolicy: ManagedModelMemoryPolicySchema,
+    promptSuggestions: z
+      .array(ManagedModelPromptSuggestionSchema)
+      .max(12)
+      .optional(),
     safetySettings: ManagedModelSafetySettingsSchema,
+    tags: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
     voiceProfileId: managedModelIdentifier.optional(),
     publishedVersionId: managedModelIdentifier.optional(),
+    grantCount: z.number().int().nonnegative().optional(),
     archivedAt: managedModelTimestamp.optional(),
     updatedAt: managedModelTimestamp,
   })
@@ -93,7 +106,12 @@ export const ManagedModelVersionSchema = z
     systemPrompt: z.string(),
     parameters,
     memoryPolicy: ManagedModelMemoryPolicySchema,
+    promptSuggestions: z
+      .array(ManagedModelPromptSuggestionSchema)
+      .max(12)
+      .optional(),
     safetySettings: ManagedModelSafetySettingsSchema,
+    tags: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
     voiceProfileId: managedModelIdentifier.optional(),
     knowledgeBaseBindings: z.array(knowledgeBinding).optional(),
     toolBindings: z.array(toolBinding).optional(),
@@ -132,11 +150,19 @@ export const CreateManagedModelSchema = z
   .strictObject({
     workspaceId: managedModelIdentifier,
     name: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(1_000).optional(),
+    icon: z.string().trim().max(16).optional(),
+    avatarUrl: z.union([z.literal(""), z.url().max(2_000)]).optional(),
     baseModelId: managedModelIdentifier,
     systemPrompt: z.string().min(1).max(200_000),
     parameters: parameters.optional(),
     memoryPolicy: ManagedModelMemoryPolicySchema.optional(),
+    promptSuggestions: z
+      .array(ManagedModelPromptSuggestionSchema)
+      .max(12)
+      .optional(),
     safetySettings: ManagedModelSafetySettingsSchema.optional(),
+    tags: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
   })
   .openapi("CreateManagedModelRequest");
 
@@ -151,6 +177,7 @@ export const UpdateManagedModelSchema = CreateManagedModelSchema.omit({
 
 export const CloneManagedModelSchema = z
   .strictObject({
+    includeKnowledgeBindings: z.boolean().optional(),
     name: z.string().trim().min(1).max(200).optional(),
     systemPrompt: z.string().min(1).max(200_000).optional(),
   })
@@ -185,11 +212,16 @@ export const ManagedModelExportDocumentSchema = z
     exportedAt: managedModelTimestamp,
     agent: z.strictObject({
       name: z.string().min(1),
+      description: z.string().max(1_000).optional(),
+      icon: z.string().max(16).optional(),
+      avatarUrl: z.union([z.literal(""), z.url().max(2_000)]).optional(),
       baseModelId: managedModelIdentifier,
       systemPrompt: z.string().min(1),
       parameters,
       memoryPolicy: ManagedModelMemoryPolicySchema,
+      promptSuggestions: z.array(ManagedModelPromptSuggestionSchema).max(12),
       safetySettings: ManagedModelSafetySettingsSchema,
+      tags: z.array(z.string().trim().min(1).max(60)).max(20),
       voiceProfileId: managedModelIdentifier.optional(),
       accessGrants: z.array(portableGrant).max(50).optional(),
       knowledgeBaseBindings: z.array(knowledgeBinding).max(50).optional(),
@@ -209,7 +241,12 @@ export const ImportManagedModelSchema = z
         memoryPolicy: ManagedModelMemoryPolicySchema.default({
           mode: "disabled",
         }),
+        promptSuggestions: z
+          .array(ManagedModelPromptSuggestionSchema)
+          .max(12)
+          .default([]),
         safetySettings: ManagedModelSafetySettingsSchema.default({}),
+        tags: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
         accessGrants: z.array(portableGrant).max(50).default([]),
         knowledgeBaseBindings: z.array(knowledgeBinding).max(50).default([]),
         toolBindings: z.array(toolBinding).max(100).default([]),
@@ -249,10 +286,12 @@ export const versionDiffSchema = z.strictObject({
         "baseModelId",
         "knowledgeBaseBindings",
         "memoryPolicy",
+        "promptSuggestions",
         "safetySettings",
         "systemPrompt",
         "parameters",
         "toolBindings",
+        "tags",
         "voiceProfileId",
       ]),
       left: z.unknown(),
@@ -263,6 +302,7 @@ export const versionDiffSchema = z.strictObject({
 
 export const ManagedModelGrantSchema = z
   .strictObject({
+    createdAt: managedModelTimestamp.optional(),
     id: managedModelIdentifier,
     resourceType: z.literal("agent"),
     resourceId: managedModelIdentifier,
@@ -285,7 +325,73 @@ export const ShareManagedModelSchema = z
 
 export const ManagedModelGalleryItemSchema = ManagedModelSchema.extend({
   favorite: z.boolean(),
+  readinessReason: z.string().max(1_000).optional(),
+  readinessStatus: z.enum(["ready", "blocked"]),
 }).openapi("ManagedModelGalleryItem");
+
+export const ManagedModelReadinessCheckSchema = z
+  .strictObject({
+    key: z.enum([
+      "principal",
+      "workspace",
+      "assistant_access",
+      "published_version",
+      "base_model",
+      "provider",
+      "knowledge",
+      "tools",
+      "voice",
+    ]),
+    status: z.enum(["ready", "warning", "blocked"]),
+    code: z.string().min(1).max(120),
+    message: z.string().min(1).max(1_000),
+    issues: z.array(z.string().min(1).max(500)).max(100),
+    resourceType: z
+      .enum([
+        "agent",
+        "knowledge_base",
+        "model",
+        "provider",
+        "tool",
+        "voice_profile",
+        "workspace",
+      ])
+      .optional(),
+    resourceId: managedModelIdentifier.optional(),
+  })
+  .openapi("ManagedModelReadinessCheck");
+
+export const ManagedModelReadinessSchema = z
+  .strictObject({
+    agentId: managedModelIdentifier,
+    status: z.enum(["ready", "blocked"]),
+    generatedAt: managedModelTimestamp,
+    principal: z.strictObject({
+      principalType: z.enum(["group", "service_account", "user"]),
+      principalId: managedModelIdentifier,
+      label: z.string().min(1).max(500),
+      simulated: z.boolean(),
+    }),
+    checks: z.array(ManagedModelReadinessCheckSchema),
+    blockingCount: z.number().int().nonnegative(),
+  })
+  .openapi("ManagedModelReadiness");
+
+export const ManagedModelReadinessQuerySchema = z
+  .strictObject({
+    principalType: z.enum(["group", "service_account", "user"]).optional(),
+    principalId: managedModelIdentifier.optional(),
+  })
+  .refine(
+    (value) =>
+      (value.principalType === undefined) === (value.principalId === undefined),
+    {
+      message: "principalType and principalId must be provided together.",
+    },
+  )
+  .openapi("ManagedModelReadinessQuery");
+
+export const readinessResponse = dataEnvelope(ManagedModelReadinessSchema);
 
 export const ManagedModelKnowledgeBaseSchema = z.strictObject({
   id: managedModelIdentifier,

@@ -4,7 +4,7 @@
   "adminAnalyticsDescription": "Vue globale de l’utilisation, des évaluations, des fournisseurs et des outils.",
   "adminAuditDescription": "Journal des actions liées à la sécurité dans toute l’organisation.",
   "adminPostureDescription": "Préparation de la version et santé de Postgres, de la file de tâches et de la coordination des quotas.",
-  "adminProvidersDescription": "Fournisseurs de modèles, connexions et tarification par modèle.",
+  "adminProvidersDescription": "Configurez les assistants proposés aux utilisateurs, puis gérez leurs modèles de base et leurs fournisseurs.",
   "adminChatExperienceDescription": "Configurez l'accueil d'une nouvelle discussion, les suggestions et les titres automatiques.",
   "chatExperienceSettings": "Paramètres de l'expérience de discussion",
   "chatExperienceSettingsDescription": "Ces paramètres globaux s'appliquent à la page de nouvelle discussion de chaque membre.",

@@ -70,8 +70,6 @@
   "authMembershipsRemoved": "membership(s) removed",
   "authMembershipsToRemove": "Memberships to remove",
   "authNameAttribute": "Name attribute",
-  "authNoActiveProviders": "No sign-on method is active",
-  "authNoActiveProvidersDescription": "Choose a provider below to set it up. Members cannot sign in until at least one method is active.",
   "authNoProviderSettings": "No provider settings available.",
   "authNoProvidersInCatalog": "No authentication providers in the catalog.",
   "authNotConfigured": "Not configured",

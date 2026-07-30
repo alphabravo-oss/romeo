@@ -481,6 +481,12 @@ OPERATIONS = {
         "path": "/api/v1/agents/{agentId}/preferences",
         "summary": "Update exposed managed-model preferences"
     },
+    "get_agents_agentid_readiness": {
+        "name": "get_agents_agentid_readiness",
+        "method": "GET",
+        "path": "/api/v1/agents/{agentId}/readiness",
+        "summary": "Evaluate effective access and dependency readiness"
+    },
     "get_agents_agentid_shares": {
         "name": "get_agents_agentid_shares",
         "method": "GET",
@@ -492,6 +498,12 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/agents/{agentId}/shares",
         "summary": "Grant managed-model access"
+    },
+    "delete_agents_agentid_shares_grantid": {
+        "name": "delete_agents_agentid_shares_grantid",
+        "method": "DELETE",
+        "path": "/api/v1/agents/{agentId}/shares/{grantId}",
+        "summary": "Revoke a managed-model access grant"
     },
     "get_agents_agentid_tools": {
         "name": "get_agents_agentid_tools",
@@ -2880,6 +2892,12 @@ OPERATIONS = {
         "method": "GET",
         "path": "/api/v1/workspaces/{workspaceId}/chat-events",
         "summary": "Stream workspace chat collection changes"
+    },
+    "patch_workspaces_workspaceid_default_agent": {
+        "name": "patch_workspaces_workspaceid_default_agent",
+        "method": "PATCH",
+        "path": "/api/v1/workspaces/{workspaceId}/default-agent",
+        "summary": "Set the workspace default assistant"
     },
     "get_workspaces_workspaceid_export": {
         "name": "get_workspaces_workspaceid_export",

@@ -25,6 +25,7 @@ export const providerInstances = pgTable(
     credentialRef: text("credential_ref"),
     modelIds: jsonb("model_ids"),
     capabilities: jsonb("capabilities").notNull(),
+    catalogSync: jsonb("catalog_sync"),
     enabled: boolean("enabled").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -87,6 +88,7 @@ export const baseModels = pgTable(
     contextWindow: integer("context_window").notNull(),
     pricing: jsonb("pricing"),
     enabled: boolean("enabled").notNull().default(true),
+    available: boolean("available").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

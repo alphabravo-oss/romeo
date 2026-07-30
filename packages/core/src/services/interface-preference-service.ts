@@ -3,6 +3,7 @@ import type { AuthSubject } from "@romeo/auth";
 import type { RomeoRepository } from "../domain/repository";
 
 export interface InterfacePreferences {
+  defaultAgentByWorkspace: Record<string, string>;
   theme: "system" | "light" | "dark";
   locale: "en" | "es" | "fr";
   fontSize: "small" | "medium" | "large";
@@ -11,6 +12,7 @@ export interface InterfacePreferences {
 }
 
 const defaults: InterfacePreferences = {
+  defaultAgentByWorkspace: {},
   theme: "system",
   locale: "en",
   fontSize: "medium",
@@ -50,6 +52,9 @@ function preferenceKey(
 
 function normalize(value: Record<string, unknown>): InterfacePreferences {
   return {
+    defaultAgentByWorkspace: normalizeAgentDefaults(
+      value.defaultAgentByWorkspace,
+    ),
     theme:
       value.theme === "light" || value.theme === "dark"
         ? value.theme
@@ -65,4 +70,19 @@ function normalize(value: Record<string, unknown>): InterfacePreferences {
     density: value.density === "compact" ? "compact" : defaults.density,
     reducedMotion: value.reducedMotion === true,
   };
+}
+
+function normalizeAgentDefaults(value: unknown): Record<string, string> {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(
+        (entry): entry is [string, string] =>
+          entry[0].trim().length > 0 &&
+          typeof entry[1] === "string" &&
+          entry[1].trim().length > 0,
+      )
+      .slice(0, 100),
+  );
 }

@@ -29,6 +29,12 @@ describe("provider repository mappers", () => {
       credentialRef: "vault://providers/provider-1",
       modelIds: null,
       capabilities,
+      catalogSync: {
+        status: "ready",
+        modelCount: 12,
+        lastAttemptAt: "2026-06-27T00:00:30.000Z",
+        lastSyncedAt: "2026-06-27T00:00:31.000Z",
+      },
       enabled: true,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
       updatedAt: new Date("2026-06-27T00:01:00.000Z"),
@@ -42,6 +48,12 @@ describe("provider repository mappers", () => {
       baseUrl: "https://api.example.com/v1",
       credentialRef: "vault://providers/provider-1",
       enabled: true,
+      catalogSync: {
+        status: "ready",
+        modelCount: 12,
+        lastAttemptAt: "2026-06-27T00:00:30.000Z",
+        lastSyncedAt: "2026-06-27T00:00:31.000Z",
+      },
       capabilities: {
         ...capabilities,
         modalities: ["text", "vision"],
@@ -69,6 +81,7 @@ describe("provider repository mappers", () => {
         },
       },
       enabled: true,
+      available: true,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
     });
     const unpriced = toBaseModelRecord({
@@ -82,6 +95,7 @@ describe("provider repository mappers", () => {
       contextWindow: 8192,
       pricing: { inputTokenUsd: Number.NaN, outputTokenUsd: 1 },
       enabled: false,
+      available: false,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
     });
 
@@ -94,6 +108,8 @@ describe("provider repository mappers", () => {
         "1536x1024": 0.08,
       },
     });
+    expect(priced.available).toBe(true);
+    expect(unpriced.available).toBe(false);
     expect(unpriced.pricing).toBeUndefined();
     expect(unpriced.capabilities).toMatchObject({
       streaming: false,

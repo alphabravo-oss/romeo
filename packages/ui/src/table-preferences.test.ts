@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   defaultTablePreferences,
   readTablePreferences,
+  readTableSavedViews,
   removeTablePreferences,
   tablePreferenceIdentity,
   tablePreferenceStorageKey,
+  tableSavedViewsStorageKey,
   writeTablePreferences,
+  writeTableSavedViews,
   type TablePreferenceStorage,
 } from "./table-preferences";
 
@@ -75,6 +78,40 @@ describe("table view preferences", () => {
       writeTablePreferences("users", defaultTablePreferences(), blocked),
     ).not.toThrow();
     expect(() => removeTablePreferences("users", blocked)).not.toThrow();
+  });
+
+  it("round-trips named views and rejects removed sort or visibility columns", () => {
+    const storage = memoryStorage();
+    writeTableSavedViews(
+      "models",
+      [
+        {
+          columnVisibility: { provider: false, removed: false },
+          density: "compact",
+          globalFilter: "llama",
+          name: "Local models",
+          pageSize: 50,
+          sorting: [
+            { id: "name", desc: false },
+            { id: "removed", desc: true },
+          ],
+        },
+      ],
+      storage,
+    );
+    expect(
+      readTableSavedViews("models", new Set(["name", "provider"]), 25, storage),
+    ).toEqual([
+      {
+        columnVisibility: { provider: false },
+        density: "compact",
+        globalFilter: "llama",
+        name: "Local models",
+        pageSize: 50,
+        sorting: [{ id: "name", desc: false }],
+      },
+    ]);
+    expect(storage.getItem(tableSavedViewsStorageKey("models"))).not.toBeNull();
   });
 });
 

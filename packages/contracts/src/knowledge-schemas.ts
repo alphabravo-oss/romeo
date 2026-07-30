@@ -42,6 +42,11 @@ export const KnowledgeBaseSchema = z
     createdBy: knowledgeIdentifier,
     createdAt: timestamp,
     updatedAt: timestamp,
+    dependentAgentCount: z.number().int().nonnegative().optional(),
+    grantCount: z.number().int().nonnegative().optional(),
+    indexedSourceCount: z.number().int().nonnegative().optional(),
+    sourceCount: z.number().int().nonnegative().optional(),
+    totalSizeBytes: z.number().int().nonnegative().optional(),
   })
   .openapi("KnowledgeBase");
 

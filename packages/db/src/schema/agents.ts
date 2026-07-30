@@ -29,6 +29,9 @@ export const agentModels = pgTable(
       .references(() => workspaces.id),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    description: text("description"),
+    icon: text("icon"),
+    avatarUrl: text("avatar_url"),
     baseModelId: text("base_model_id")
       .notNull()
       .references(() => baseModels.id),
@@ -37,7 +40,9 @@ export const agentModels = pgTable(
     memoryPolicy: jsonb("memory_policy")
       .notNull()
       .default({ mode: "disabled" }),
+    promptSuggestions: jsonb("prompt_suggestions").notNull().default([]),
     safetySettings: jsonb("safety_settings").notNull().default({}),
+    tags: jsonb("tags").notNull().default([]),
     voiceProfileId: text("voice_profile_id").references(() => voiceProfiles.id),
     publishedVersionId: text("published_version_id"),
     createdBy: text("created_by")
@@ -85,7 +90,9 @@ export const agentVersions = pgTable(
     memoryPolicy: jsonb("memory_policy")
       .notNull()
       .default({ mode: "disabled" }),
+    promptSuggestions: jsonb("prompt_suggestions").notNull().default([]),
     safetySettings: jsonb("safety_settings").notNull().default({}),
+    tags: jsonb("tags").notNull().default([]),
     voiceProfileId: text("voice_profile_id").references(() => voiceProfiles.id),
     knowledgeBaseBindings: jsonb("knowledge_base_bindings")
       .notNull()

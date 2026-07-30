@@ -9,6 +9,7 @@ import {
 
 export const InterfacePreferencesSchema = z
   .strictObject({
+    defaultAgentByWorkspace: z.record(z.string(), z.string()),
     theme: z.enum(["system", "light", "dark"]),
     locale: z.enum(["en", "es", "fr"]),
     fontSize: z.enum(["small", "medium", "large"]),

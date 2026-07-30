@@ -154,6 +154,7 @@ export function registerChatRoutes(app: RomeoApi): void {
       subject,
       workspaceId: body.workspaceId,
       title: body.title,
+      ...(body.agentId === undefined ? {} : { agentId: body.agentId }),
       ...(body.temporary === undefined ? {} : { temporary: body.temporary }),
       ...(body.expiresAt === undefined ? {} : { expiresAt: body.expiresAt }),
     });
@@ -194,6 +195,7 @@ export function registerChatRoutes(app: RomeoApi): void {
     const data = await context.get("services").chats.update({
       subject,
       chatId: context.req.valid("param").chatId,
+      ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
       ...(body.title !== undefined ? { title: body.title } : {}),
       ...(body.modelId !== undefined ? { modelId: body.modelId } : {}),
     });

@@ -1,27 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-import { Button } from "@romeo/ui";
+import { useMemo, useState } from "react";
+import { Button, StatusBadge } from "@romeo/ui";
+import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left.mjs";
 
 import { listVoices, previewVoice, syncVoices } from "../features";
 import { bindAgentVoice } from "../features/managed-models";
-import type { SpeechArtifact } from "../features/voices";
+import type { SpeechArtifact, VoiceProfile } from "../features/voices";
 import type { Agent } from "../features/managed-models";
 import { useLocale, type Locale } from "../lib/i18n";
-import { formatNumber } from "../lib/locale-format";
+import { formatNumber, LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { createColumnHelper, DataTable } from "./DataTable";
+
+const voiceColumn = createColumnHelper<VoiceProfile>();
 
 export function VoicePanel({
   activeAgent,
+  onSelectionChange,
+  selectedVoiceId,
   workspaceId,
 }: {
   activeAgent: Agent | undefined;
+  onSelectionChange: (voiceId: string | null) => void;
+  selectedVoiceId: string | undefined;
   workspaceId: string | undefined;
 }) {
   const queryClient = useQueryClient();
   const { locale, t } = useLocale();
   const voicesQuery = useQuery({ queryKey: ["voices"], queryFn: listVoices });
   const voices = useMemo(() => voicesQuery.data ?? [], [voicesQuery.data]);
-  const [voiceProfileId, setVoiceProfileId] = useState("");
   const [notice, setNotice] = useState<string>();
   const [previewArtifact, setPreviewArtifact] = useState<SpeechArtifact>();
 
@@ -29,9 +36,51 @@ export function VoicePanel({
   const previewMutation = useMutation({ mutationFn: previewVoice });
   const syncMutation = useMutation({ mutationFn: syncVoices });
 
-  useEffect(() => {
-    setVoiceProfileId(activeAgent?.voiceProfileId ?? voices[0]?.id ?? "");
-  }, [activeAgent?.id, activeAgent?.voiceProfileId, voices]);
+  const selectedVoice = voices.find((voice) => voice.id === selectedVoiceId);
+  const voiceProfileId = selectedVoice?.id ?? "";
+  const columns = useMemo(
+    () => [
+      voiceColumn.accessor("name", {
+        header: t("workspaceVoiceName"),
+        cell: ({ row }) => (
+          <span className="block min-w-0">
+            <strong className="block truncate">{row.original.name}</strong>
+            <small className="block truncate text-muted">
+              {row.original.styleTags.join(", ") || "—"}
+            </small>
+          </span>
+        ),
+      }),
+      voiceColumn.accessor("providerId", {
+        header: t("workspaceVoiceProvider"),
+      }),
+      voiceColumn.accessor("language", {
+        header: t("workspaceVoiceLanguage"),
+      }),
+      voiceColumn.accessor("enabled", {
+        header: t("workspaceVoiceAvailability"),
+        cell: ({ getValue }) => (
+          <StatusBadge tone={getValue() ? "success" : "neutral"}>
+            {t(getValue() ? "workspaceVoiceAvailable" : "assistantUnavailable")}
+          </StatusBadge>
+        ),
+      }),
+      voiceColumn.accessor("grantCount", {
+        header: t("workspaceVoiceAccess"),
+        cell: ({ getValue }) =>
+          `${formatNumber(getValue() ?? 0, locale)} ${t("workspaceVoiceGrants")}`,
+      }),
+      voiceColumn.accessor("dependentAgentCount", {
+        header: t("workspaceVoiceAssistants"),
+        cell: ({ getValue }) => formatNumber(getValue() ?? 0, locale),
+      }),
+      voiceColumn.accessor("updatedAt", {
+        header: t("workspaceVoiceUpdated"),
+        cell: ({ getValue }) => <LocalizedDateTime value={getValue()} />,
+      }),
+    ],
+    [locale, t],
+  );
 
   async function handleBind() {
     if (!activeAgent || !voiceProfileId) return;
@@ -94,60 +143,152 @@ export function VoicePanel({
     }
   }
 
-  return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-title">{t("workspaceVoice")}</div>
-      <div className="grid gap-2 text-sm">
-        {voices.map((voice) => (
+  if (selectedVoiceId === undefined) {
+    return (
+      <section className="rm-panel p-4">
+        <div className="rm-card-header">
+          <div>
+            <div className="rm-card-title">{t("workspaceVoice")}</div>
+            <p className="text-sm text-muted">
+              {t("workspaceVoiceCatalogDescription")}
+            </p>
+          </div>
           <Button
-            className="min-w-0 justify-start text-left"
-            key={voice.id}
-            onClick={() => setVoiceProfileId(voice.id)}
-            variant={voice.id === voiceProfileId ? "primary" : "outline"}
+            disabled={syncMutation.isPending}
+            onClick={handleSync}
+            pending={syncMutation.isPending}
           >
-            <span className="block truncate">{voice.name}</span>
+            {t("sync")}
           </Button>
-        ))}
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <Button
-          disabled={syncMutation.isPending}
-          onClick={handleSync}
-          pending={syncMutation.isPending}
-        >
-          {t("sync")}
-        </Button>
-        <Button
-          disabled={!voiceProfileId || previewMutation.isPending}
-          onClick={handlePreview}
-          pending={previewMutation.isPending}
-        >
-          {t("preview")}
-        </Button>
-        <Button
-          disabled={!activeAgent || !voiceProfileId || bindMutation.isPending}
-          onClick={handleBind}
-          pending={bindMutation.isPending}
-          variant="primary"
-        >
-          {t("workspaceVoiceBind")}
-        </Button>
-      </div>
-      {notice ? <div className="mt-3 text-sm text-muted">{notice}</div> : null}
-      {previewArtifact ? (
-        <div className="mt-3 grid gap-2 text-xs text-muted">
-          <span>{formatSpeechArtifact(previewArtifact, locale)}</span>
-          {previewArtifact.playbackUrl ? (
-            <audio
-              className="w-full"
-              controls
-              preload="metadata"
-              src={previewArtifact.playbackUrl}
-            />
-          ) : null}
         </div>
-      ) : null}
-    </section>
+        <div className="mt-4">
+          <DataTable
+            columns={columns}
+            data={voices}
+            empty={
+              voicesQuery.isLoading
+                ? t("loading")
+                : t("workspaceVoiceNoProfiles")
+            }
+            getRowId={(voice) => voice.id}
+            minTableWidth={900}
+            onRowActivate={(voice) => onSelectionChange(voice.id)}
+            preferenceKey="workspace-voices"
+            rowAriaLabel={(voice) =>
+              t("workspaceVoiceOpen", { name: voice.name })
+            }
+            searchVisibility="always"
+          />
+        </div>
+        {notice ? (
+          <div className="mt-3 text-sm text-muted">{notice}</div>
+        ) : null}
+      </section>
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      <Button
+        className="w-fit"
+        onClick={() => onSelectionChange(null)}
+        variant="ghost"
+      >
+        <ArrowLeft aria-hidden="true" size={16} />
+        {t("workspaceVoiceBack")}
+      </Button>
+      <section className="rm-panel p-4">
+        {selectedVoice ? (
+          <>
+            <div>
+              <div className="rm-card-title">{selectedVoice.name}</div>
+              <p className="text-sm text-muted">
+                {selectedVoice.providerId} · {selectedVoice.providerVoiceId}
+              </p>
+            </div>
+            <div className="rm-model-meta-grid mt-4">
+              <span>
+                <small>{t("workspaceVoiceLanguage")}</small>
+                {selectedVoice.language}
+              </span>
+              <span>
+                <small>{t("workspaceVoiceAvailability")}</small>
+                <StatusBadge
+                  tone={selectedVoice.enabled ? "success" : "neutral"}
+                >
+                  {t(
+                    selectedVoice.enabled
+                      ? "workspaceVoiceAvailable"
+                      : "assistantUnavailable",
+                  )}
+                </StatusBadge>
+              </span>
+              <span>
+                <small>{t("workspaceVoiceAccess")}</small>
+                {formatNumber(selectedVoice.grantCount ?? 0, locale)}
+              </span>
+              <span>
+                <small>{t("workspaceVoiceAssistants")}</small>
+                {formatNumber(selectedVoice.dependentAgentCount ?? 0, locale)}
+              </span>
+              <span>
+                <small>{t("workspaceVoiceCloning")}</small>
+                {t(
+                  selectedVoice.cloningAllowed
+                    ? "workspaceVoiceAllowed"
+                    : "workspaceVoiceNotAllowed",
+                )}
+              </span>
+              <span>
+                <small>{t("workspaceVoiceUpdated")}</small>
+                <LocalizedDateTime value={selectedVoice.updatedAt} />
+              </span>
+            </div>
+            <div className="mt-4 text-sm text-muted">
+              {selectedVoice.styleTags.join(", ") ||
+                t("workspaceVoiceNoStyles")}
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button
+                disabled={!voiceProfileId || previewMutation.isPending}
+                onClick={handlePreview}
+                pending={previewMutation.isPending}
+              >
+                {t("preview")}
+              </Button>
+              <Button
+                disabled={
+                  !activeAgent || !voiceProfileId || bindMutation.isPending
+                }
+                onClick={handleBind}
+                pending={bindMutation.isPending}
+                variant="primary"
+              >
+                {t("workspaceVoiceBind")}
+              </Button>
+            </div>
+            {notice ? (
+              <div className="mt-3 text-sm text-muted">{notice}</div>
+            ) : null}
+            {previewArtifact ? (
+              <div className="mt-3 grid gap-2 text-xs text-muted">
+                <span>{formatSpeechArtifact(previewArtifact, locale)}</span>
+                {previewArtifact.playbackUrl ? (
+                  <audio
+                    className="w-full"
+                    controls
+                    preload="metadata"
+                    src={previewArtifact.playbackUrl}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="rm-empty">{t("workspaceVoiceNotFound")}</div>
+        )}
+      </section>
+    </div>
   );
 }
 

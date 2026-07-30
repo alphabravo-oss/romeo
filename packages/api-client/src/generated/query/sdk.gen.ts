@@ -708,6 +708,9 @@ import type {
   ManagedModelsGetPreferencesData,
   ManagedModelsGetPreferencesErrors,
   ManagedModelsGetPreferencesResponses,
+  ManagedModelsGetReadinessData,
+  ManagedModelsGetReadinessErrors,
+  ManagedModelsGetReadinessResponses,
   ManagedModelsGetResponses,
   ManagedModelsImportData,
   ManagedModelsImportErrors,
@@ -730,6 +733,9 @@ import type {
   ManagedModelsPublishData,
   ManagedModelsPublishErrors,
   ManagedModelsPublishResponses,
+  ManagedModelsRevokeGrantData,
+  ManagedModelsRevokeGrantErrors,
+  ManagedModelsRevokeGrantResponses,
   ManagedModelsRollbackVersionData,
   ManagedModelsRollbackVersionErrors,
   ManagedModelsRollbackVersionResponses,
@@ -1197,6 +1203,9 @@ import type {
   TenancyListWorkspacesData,
   TenancyListWorkspacesErrors,
   TenancyListWorkspacesResponses,
+  TenancyUpdateWorkspaceDefaultAgentData,
+  TenancyUpdateWorkspaceDefaultAgentErrors,
+  TenancyUpdateWorkspaceDefaultAgentResponses,
   TenantAdministrationCancelDeletionData,
   TenantAdministrationCancelDeletionErrors,
   TenantAdministrationCancelDeletionResponses,
@@ -2963,6 +2972,39 @@ export const tenancyArchiveWorkspace = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Set the workspace default assistant
+ */
+export const tenancyUpdateWorkspaceDefaultAgent = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<TenancyUpdateWorkspaceDefaultAgentData, ThrowOnError>,
+): RequestResult<
+  TenancyUpdateWorkspaceDefaultAgentResponses,
+  TenancyUpdateWorkspaceDefaultAgentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    TenancyUpdateWorkspaceDefaultAgentResponses,
+    TenancyUpdateWorkspaceDefaultAgentErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/workspaces/{workspaceId}/default-agent",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Export a sanitized workspace inventory
  */
 export const tenancyExportWorkspace = <ThrowOnError extends boolean = false>(
@@ -4462,6 +4504,33 @@ export const managedModelsShare = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Revoke a managed-model access grant
+ */
+export const managedModelsRevokeGrant = <ThrowOnError extends boolean = false>(
+  options: Options<ManagedModelsRevokeGrantData, ThrowOnError>,
+): RequestResult<
+  ManagedModelsRevokeGrantResponses,
+  ManagedModelsRevokeGrantErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    ManagedModelsRevokeGrantResponses,
+    ManagedModelsRevokeGrantErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/agents/{agentId}/shares/{grantId}",
+    ...options,
+  });
+
+/**
  * List published managed models available to the caller
  */
 export const managedModelsListGallery = <ThrowOnError extends boolean = false>(
@@ -4485,6 +4554,35 @@ export const managedModelsListGallery = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/agent-gallery",
+    ...options,
+  });
+
+/**
+ * Evaluate effective access and dependency readiness
+ *
+ * Evaluates whether the current caller, or an administrator-selected principal, can run the published assistant with its model, provider, knowledge, tools, and voice dependencies.
+ */
+export const managedModelsGetReadiness = <ThrowOnError extends boolean = false>(
+  options: Options<ManagedModelsGetReadinessData, ThrowOnError>,
+): RequestResult<
+  ManagedModelsGetReadinessResponses,
+  ManagedModelsGetReadinessErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ManagedModelsGetReadinessResponses,
+    ManagedModelsGetReadinessErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/agents/{agentId}/readiness",
     ...options,
   });
 

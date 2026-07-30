@@ -46,11 +46,14 @@ export interface AuthorizedFileCatalogQuery {
 }
 
 export interface ModelCatalogQuery {
+  available?: boolean;
+  direction?: "asc" | "desc";
   enabled?: boolean;
   limit: number;
   offset: number;
   providerId?: string;
   query?: string;
+  sort?: "availability" | "contextWindow" | "displayName" | "enabled" | "name";
 }
 
 export interface AuthorizedPromptCatalogQuery {

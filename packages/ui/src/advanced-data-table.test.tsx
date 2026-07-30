@@ -32,12 +32,16 @@ const labels: DataTableLabels = {
   resetView: "Reset table view",
   results: "results",
   rowsPerPage: "Rows per page",
+  savedViews: "Saved views",
+  saveView: "Save",
   search: "Search table",
   searchPlaceholder: "Search",
   selectAllRows: "Select all rows",
   selected: "selected",
   selectRow: "Select row",
   shown: "shown",
+  viewName: "View name",
+  deleteView: "Delete view",
   total: "total",
 };
 const column = createColumnHelper<{ id: string; name: string }>();
@@ -124,6 +128,24 @@ describe("advanced data table", () => {
     const blob = createObjectUrl.mock.calls[0]?.[0];
     expect(blob).toBeInstanceOf(Blob);
     expect(downloadedFilename).toBe("users.csv");
+  });
+
+  it("saves and reapplies a named table view", async () => {
+    const user = userEvent.setup();
+    renderTable();
+    const search = screen.getByRole("textbox", { name: "Search table" });
+    await user.type(search, "30");
+    await user.click(screen.getByRole("button", { name: "Table options" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "View name" }),
+      "Only 30",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.clear(search);
+    await user.click(screen.getByRole("button", { name: "Table options" }));
+    await user.click(screen.getByRole("button", { name: "Only 30" }));
+    expect((search as HTMLInputElement).value).toBe("30");
+    expect(screen.getAllByRole("row")).toHaveLength(2);
   });
 });
 

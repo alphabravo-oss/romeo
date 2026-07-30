@@ -1,5 +1,6 @@
 import type {
   AgentMemoryPolicy,
+  AgentPromptSuggestion,
   AgentSafetySettings,
 } from "../../domain/entities";
 import {
@@ -9,6 +10,7 @@ import {
   deleteManagedModelRoute,
   diffManagedModelVersionRoute,
   exportManagedModelRoute,
+  getManagedModelReadinessRoute,
   getManagedModelCustomizationPolicyRoute,
   getManagedModelPreferencesRoute,
   getManagedModelRoute,
@@ -41,11 +43,16 @@ export function registerAgentRoutes(app: RomeoApi): void {
       subject: typeof subject;
       workspaceId: string;
       name: string;
+      description?: string;
+      icon?: string;
+      avatarUrl?: string;
       baseModelId: string;
       systemPrompt: string;
       parameters?: Record<string, unknown>;
       memoryPolicy?: AgentMemoryPolicy;
+      promptSuggestions?: AgentPromptSuggestion[];
       safetySettings?: AgentSafetySettings;
+      tags?: string[];
     } = {
       subject,
       workspaceId: body.workspaceId,
@@ -53,11 +60,17 @@ export function registerAgentRoutes(app: RomeoApi): void {
       baseModelId: body.baseModelId,
       systemPrompt: body.systemPrompt,
     };
+    if (body.description !== undefined) input.description = body.description;
+    if (body.icon !== undefined) input.icon = body.icon;
+    if (body.avatarUrl !== undefined) input.avatarUrl = body.avatarUrl;
     if (body.parameters !== undefined) input.parameters = body.parameters;
     if (body.memoryPolicy !== undefined)
       input.memoryPolicy = compactMemoryPolicy(body.memoryPolicy);
+    if (body.promptSuggestions !== undefined)
+      input.promptSuggestions = body.promptSuggestions;
     if (body.safetySettings !== undefined)
       input.safetySettings = compactSafetySettings(body.safetySettings);
+    if (body.tags !== undefined) input.tags = body.tags;
 
     const data = await context.get("services").agents.create(input);
     return context.json({ data }, 201);
@@ -70,6 +83,23 @@ export function registerAgentRoutes(app: RomeoApi): void {
     return context.json({ data }, 200);
   });
 
+  app.openapi(getManagedModelReadinessRoute, async (context) => {
+    const subject = context.get("subject");
+    const { agentId } = context.req.valid("param");
+    const query = context.req.valid("query");
+    const data = await context.get("services").agents.readiness({
+      agentId,
+      subject,
+      ...(query.principalType === undefined
+        ? {}
+        : { principalType: query.principalType }),
+      ...(query.principalId === undefined
+        ? {}
+        : { principalId: query.principalId }),
+    });
+    return context.json({ data }, 200);
+  });
+
   app.openapi(updateManagedModelRoute, async (context) => {
     const subject = context.get("subject");
     const { agentId } = context.req.valid("param");
@@ -78,20 +108,31 @@ export function registerAgentRoutes(app: RomeoApi): void {
       subject: typeof subject;
       agentId: string;
       name?: string;
+      description?: string;
+      icon?: string;
+      avatarUrl?: string;
       baseModelId?: string;
       systemPrompt?: string;
       parameters?: Record<string, unknown>;
       memoryPolicy?: AgentMemoryPolicy;
+      promptSuggestions?: AgentPromptSuggestion[];
       safetySettings?: AgentSafetySettings;
+      tags?: string[];
     } = { subject, agentId };
     if (body.name !== undefined) input.name = body.name;
+    if (body.description !== undefined) input.description = body.description;
+    if (body.icon !== undefined) input.icon = body.icon;
+    if (body.avatarUrl !== undefined) input.avatarUrl = body.avatarUrl;
     if (body.baseModelId !== undefined) input.baseModelId = body.baseModelId;
     if (body.systemPrompt !== undefined) input.systemPrompt = body.systemPrompt;
     if (body.parameters !== undefined) input.parameters = body.parameters;
     if (body.memoryPolicy !== undefined)
       input.memoryPolicy = compactMemoryPolicy(body.memoryPolicy);
+    if (body.promptSuggestions !== undefined)
+      input.promptSuggestions = body.promptSuggestions;
     if (body.safetySettings !== undefined)
       input.safetySettings = compactSafetySettings(body.safetySettings);
+    if (body.tags !== undefined) input.tags = body.tags;
 
     const data = await context.get("services").agents.update(input);
     return context.json({ data }, 200);
@@ -111,12 +152,15 @@ export function registerAgentRoutes(app: RomeoApi): void {
     const input: {
       subject: typeof subject;
       agentId: string;
+      includeKnowledgeBindings?: boolean;
       name?: string;
       systemPrompt?: string;
     } = {
       subject,
       agentId,
     };
+    if (body.includeKnowledgeBindings !== undefined)
+      input.includeKnowledgeBindings = body.includeKnowledgeBindings;
     if (body.name !== undefined) input.name = body.name;
     if (body.systemPrompt !== undefined) input.systemPrompt = body.systemPrompt;
 
@@ -226,7 +270,9 @@ export function registerAgentRoutes(app: RomeoApi): void {
       systemPrompt: body.document.agent.systemPrompt,
       parameters: body.document.agent.parameters,
       memoryPolicy: compactMemoryPolicy(body.document.agent.memoryPolicy),
+      promptSuggestions: body.document.agent.promptSuggestions,
       safetySettings: compactSafetySettings(body.document.agent.safetySettings),
+      tags: body.document.agent.tags,
       ...(body.document.agent.accessGrants === undefined
         ? {}
         : { accessGrants: body.document.agent.accessGrants }),

@@ -45,11 +45,17 @@ export async function buildAgentExportDocument(
     systemPrompt: agent.systemPrompt,
     parameters: agent.parameters,
     memoryPolicy: normalizeAgentMemoryPolicy(agent.memoryPolicy),
+    promptSuggestions: agent.promptSuggestions ?? [],
     safetySettings: normalizeAgentSafetySettings(agent.safetySettings),
+    tags: agent.tags ?? [],
     accessGrants,
     knowledgeBaseBindings: snapshot.knowledgeBaseBindings,
     toolBindings: snapshot.toolBindings,
   };
+  if (agent.description !== undefined)
+    exportedAgent.description = agent.description;
+  if (agent.icon !== undefined) exportedAgent.icon = agent.icon;
+  if (agent.avatarUrl !== undefined) exportedAgent.avatarUrl = agent.avatarUrl;
   if (agent.voiceProfileId !== undefined)
     exportedAgent.voiceProfileId = agent.voiceProfileId;
   return {

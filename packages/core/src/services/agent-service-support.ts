@@ -101,11 +101,16 @@ export function changedAgentFields(previous: Agent, next: Agent): string[] {
   return (
     [
       "name",
+      "description",
+      "icon",
+      "avatarUrl",
       "baseModelId",
       "systemPrompt",
       "parameters",
       "memoryPolicy",
+      "promptSuggestions",
       "safetySettings",
+      "tags",
     ] as const
   ).filter(
     (field) => JSON.stringify(previous[field]) !== JSON.stringify(next[field]),

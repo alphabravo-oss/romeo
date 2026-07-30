@@ -245,6 +245,7 @@ import {
   managedModelsGet,
   managedModelsGetCustomizationPolicy,
   managedModelsGetPreferences,
+  managedModelsGetReadiness,
   managedModelsImport,
   managedModelsList,
   managedModelsListGallery,
@@ -252,6 +253,7 @@ import {
   managedModelsListKnowledgeBindings,
   managedModelsListVersions,
   managedModelsPublish,
+  managedModelsRevokeGrant,
   managedModelsRollbackVersion,
   managedModelsShare,
   managedModelsUpdate,
@@ -409,6 +411,7 @@ import {
   tenancyExportWorkspace,
   tenancyListOrganizations,
   tenancyListWorkspaces,
+  tenancyUpdateWorkspaceDefaultAgent,
   tenantAdministrationCancelDeletion,
   tenantAdministrationCreateOrganization,
   tenantAdministrationExecuteDeletionFinalization,
@@ -1187,6 +1190,9 @@ import type {
   ManagedModelsGetPreferencesData,
   ManagedModelsGetPreferencesError,
   ManagedModelsGetPreferencesResponse,
+  ManagedModelsGetReadinessData,
+  ManagedModelsGetReadinessError,
+  ManagedModelsGetReadinessResponse,
   ManagedModelsGetResponse,
   ManagedModelsImportData,
   ManagedModelsImportError,
@@ -1209,6 +1215,9 @@ import type {
   ManagedModelsPublishData,
   ManagedModelsPublishError,
   ManagedModelsPublishResponse,
+  ManagedModelsRevokeGrantData,
+  ManagedModelsRevokeGrantError,
+  ManagedModelsRevokeGrantResponse,
   ManagedModelsRollbackVersionData,
   ManagedModelsRollbackVersionError,
   ManagedModelsRollbackVersionResponse,
@@ -1676,6 +1685,9 @@ import type {
   TenancyListWorkspacesData,
   TenancyListWorkspacesError,
   TenancyListWorkspacesResponse,
+  TenancyUpdateWorkspaceDefaultAgentData,
+  TenancyUpdateWorkspaceDefaultAgentError,
+  TenancyUpdateWorkspaceDefaultAgentResponse,
   TenantAdministrationCancelDeletionData,
   TenantAdministrationCancelDeletionError,
   TenantAdministrationCancelDeletionResponse,
@@ -3319,6 +3331,33 @@ export const tenancyArchiveWorkspaceMutation = (
   return mutationOptions;
 };
 
+/**
+ * Set the workspace default assistant
+ */
+export const tenancyUpdateWorkspaceDefaultAgentMutation = (
+  options?: Partial<Options<TenancyUpdateWorkspaceDefaultAgentData>>,
+): UseMutationOptions<
+  TenancyUpdateWorkspaceDefaultAgentResponse,
+  TenancyUpdateWorkspaceDefaultAgentError,
+  Options<TenancyUpdateWorkspaceDefaultAgentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TenancyUpdateWorkspaceDefaultAgentResponse,
+    TenancyUpdateWorkspaceDefaultAgentError,
+    Options<TenancyUpdateWorkspaceDefaultAgentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tenancyUpdateWorkspaceDefaultAgent({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const tenancyExportWorkspaceQueryKey = (
   options: Options<TenancyExportWorkspaceData>,
 ) => createQueryKey("tenancyExportWorkspace", options);
@@ -4715,6 +4754,33 @@ export const managedModelsShareMutation = (
   return mutationOptions;
 };
 
+/**
+ * Revoke a managed-model access grant
+ */
+export const managedModelsRevokeGrantMutation = (
+  options?: Partial<Options<ManagedModelsRevokeGrantData>>,
+): UseMutationOptions<
+  ManagedModelsRevokeGrantResponse,
+  ManagedModelsRevokeGrantError,
+  Options<ManagedModelsRevokeGrantData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ManagedModelsRevokeGrantResponse,
+    ManagedModelsRevokeGrantError,
+    Options<ManagedModelsRevokeGrantData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await managedModelsRevokeGrant({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const managedModelsListGalleryQueryKey = (
   options?: Options<ManagedModelsListGalleryData>,
 ) => createQueryKey("managedModelsListGallery", options);
@@ -4741,6 +4807,36 @@ export const managedModelsListGalleryOptions = (
       return data;
     },
     queryKey: managedModelsListGalleryQueryKey(options),
+  });
+
+export const managedModelsGetReadinessQueryKey = (
+  options: Options<ManagedModelsGetReadinessData>,
+) => createQueryKey("managedModelsGetReadiness", options);
+
+/**
+ * Evaluate effective access and dependency readiness
+ *
+ * Evaluates whether the current caller, or an administrator-selected principal, can run the published assistant with its model, provider, knowledge, tools, and voice dependencies.
+ */
+export const managedModelsGetReadinessOptions = (
+  options: Options<ManagedModelsGetReadinessData>,
+) =>
+  queryOptions<
+    ManagedModelsGetReadinessResponse,
+    ManagedModelsGetReadinessError,
+    ManagedModelsGetReadinessResponse,
+    ReturnType<typeof managedModelsGetReadinessQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await managedModelsGetReadiness({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: managedModelsGetReadinessQueryKey(options),
   });
 
 export const managedModelsListKnowledgeBindingsQueryKey = (

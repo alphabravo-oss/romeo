@@ -282,6 +282,13 @@ export function buildServiceRegistry(
     postgresOperationalPosture: new PostgresOperationalPostureService(env),
     providers: new ProviderService(repository, {
       secretResolver,
+      catalogSync: {
+        enabled:
+          env.MODEL_CATALOG_SYNC_ENABLED && process.env.NODE_ENV !== "test",
+        intervalMs: env.MODEL_CATALOG_SYNC_INTERVAL_MS,
+        timeoutMs: env.MODEL_CATALOG_SYNC_TIMEOUT_MS,
+        ttlMs: env.MODEL_CATALOG_SYNC_TTL_MS,
+      },
       ...(options.providerFetch === undefined
         ? {}
         : { fetchImpl: options.providerFetch }),

@@ -1,6 +1,7 @@
 import type { Message, Ollama, Tool } from "ollama";
 
 import { ollamaCapabilities } from "../capabilities";
+import { MAX_DISCOVERED_MODELS } from "../model-catalog";
 import {
   normalizeProviderToolCalls,
   type ProviderToolCallRequest,
@@ -36,7 +37,7 @@ export const ollamaAdapter: ModelProviderAdapter = {
   async listModels(provider, options): Promise<BaseModel[]> {
     const client = createOllamaClient(provider, {
       ...options,
-      timeoutMs: 1_500,
+      timeoutMs: options?.timeoutMs ?? 1_500,
     });
     const allowedNames = new Set(
       (provider.modelIds ?? []).map((name) => name.trim()).filter(Boolean),
@@ -50,7 +51,7 @@ export const ollamaAdapter: ModelProviderAdapter = {
       )
       .sort((left, right) => left.localeCompare(right));
     const enriched = await mapConcurrent(
-      [...new Set(discovered)].slice(0, 100),
+      [...new Set(discovered)].slice(0, MAX_DISCOVERED_MODELS),
       6,
       async (name) =>
         discoverOllamaModel(client, name).catch(() => discoveredModel(name)),

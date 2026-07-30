@@ -151,6 +151,47 @@ export class WorkspaceService {
     });
   }
 
+  async updateDefaultAgent(input: {
+    subject: AuthSubject;
+    workspaceId: string;
+    agentId: string | null;
+  }): Promise<Workspace> {
+    assertScope(input.subject, "admin:write");
+    const workspace = await this.workspaceForSubject(
+      this.repository,
+      input.subject,
+      input.workspaceId,
+    );
+    if (input.agentId !== null) {
+      const agent = await this.repository.getAgent(input.agentId);
+      if (
+        agent === undefined ||
+        agent.orgId !== input.subject.orgId ||
+        agent.workspaceId !== workspace.id ||
+        agent.archivedAt !== undefined ||
+        agent.publishedVersionId === undefined
+      )
+        throw new ApiError(
+          "invalid_workspace_default_agent",
+          "The workspace default must be a published assistant in this workspace.",
+          400,
+        );
+    }
+    const updated =
+      input.agentId === null
+        ? withoutDefaultAgent(workspace)
+        : { ...workspace, defaultAgentId: input.agentId };
+    const saved = await this.repository.updateWorkspace(updated);
+    await this.audit(
+      this.repository,
+      input.subject,
+      "workspace.default_agent.update",
+      workspace.id,
+      { agentId: input.agentId },
+    );
+    return saved;
+  }
+
   async exportWorkspace(input: {
     subject: AuthSubject;
     workspaceId: string;
@@ -277,6 +318,11 @@ export class WorkspaceService {
       metadata,
     });
   }
+}
+
+function withoutDefaultAgent(workspace: Workspace): Workspace {
+  const { defaultAgentId: _defaultAgentId, ...rest } = workspace;
+  return rest;
 }
 
 function normalizeSlug(value: string): string {

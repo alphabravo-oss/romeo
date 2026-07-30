@@ -4,7 +4,10 @@ import {
   managedModelsBindVoice,
   managedModelsClearPreferences,
   managedModelsClone,
+  managedModelsExport,
+  managedModelsImport,
   managedModelsPublish,
+  managedModelsRevokeGrant,
   managedModelsRollbackVersion,
   managedModelsShare,
   managedModelsUpdate,
@@ -22,12 +25,16 @@ import type {
   AgentSafetySettings,
   AgentVersion,
   ManagedModelCustomizationPolicy,
+  ManagedModelExportDocument,
   ManagedModelPreferences,
 } from "./types";
 
 export async function createAgent(input: {
   workspaceId: string;
   name: string;
+  description?: string;
+  icon?: string;
+  avatarUrl?: string;
   baseModelId: string;
   systemPrompt: string;
 }): Promise<Agent> {
@@ -50,6 +57,7 @@ export async function deleteAgent(agentId: string): Promise<Agent> {
 
 export async function cloneAgent(input: {
   agentId: string;
+  includeKnowledgeBindings?: boolean;
   name?: string;
   systemPrompt?: string;
 }): Promise<Agent> {
@@ -57,11 +65,37 @@ export async function cloneAgent(input: {
   const response = await managedModelsClone({
     path: { agentId: input.agentId },
     body: {
+      ...(input.includeKnowledgeBindings === undefined
+        ? {}
+        : { includeKnowledgeBindings: input.includeKnowledgeBindings }),
       ...(input.name === undefined ? {} : { name: input.name }),
       ...(input.systemPrompt === undefined
         ? {}
         : { systemPrompt: input.systemPrompt }),
     },
+    throwOnError: true,
+  });
+  return response.data.data;
+}
+
+export async function exportAgentDefinition(
+  agentId: string,
+): Promise<ManagedModelExportDocument> {
+  configureBrowserApiClients();
+  const response = await managedModelsExport({
+    path: { agentId },
+    throwOnError: true,
+  });
+  return response.data.data;
+}
+
+export async function importAgentDefinition(input: {
+  workspaceId: string;
+  document: ManagedModelExportDocument;
+}): Promise<Agent> {
+  configureBrowserApiClients();
+  const response = await managedModelsImport({
+    body: input,
     throwOnError: true,
   });
   return response.data.data;
@@ -97,6 +131,18 @@ export async function shareAgentAccess(input: {
   return response.data.data;
 }
 
+export async function revokeAgentGrant(input: {
+  agentId: string;
+  grantId: string;
+}): Promise<AgentGrant> {
+  configureBrowserApiClients();
+  const response = await managedModelsRevokeGrant({
+    path: input,
+    throwOnError: true,
+  });
+  return response.data.data;
+}
+
 export function shareAgent(input: {
   agentId: string;
   principalId: string;
@@ -126,11 +172,16 @@ export async function updateAgentKnowledgeBinding(input: {
 export async function updateAgent(input: {
   agentId: string;
   name?: string;
+  description?: string;
+  icon?: string;
+  avatarUrl?: string;
   baseModelId?: string;
   systemPrompt?: string;
   parameters?: Record<string, unknown>;
   memoryPolicy?: AgentMemoryPolicy;
   safetySettings?: AgentSafetySettings;
+  promptSuggestions?: Array<{ title: string; prompt: string }>;
+  tags?: string[];
 }): Promise<Agent> {
   configureBrowserApiClients();
   const { agentId, ...body } = input;

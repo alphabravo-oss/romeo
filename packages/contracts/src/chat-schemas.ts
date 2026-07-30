@@ -6,6 +6,7 @@ export const chatRole = z.enum(["system", "user", "assistant", "tool"]);
 
 export const ChatSchema = z
   .strictObject({
+    agentId: chatIdentifier.optional(),
     id: chatIdentifier,
     orgId: chatIdentifier,
     workspaceId: chatIdentifier,
@@ -145,6 +146,7 @@ export const DataDeletionResultSchema = z
 
 export const CreateChatSchema = z
   .strictObject({
+    agentId: chatIdentifier.optional(),
     workspaceId: chatIdentifier,
     title: z.string().min(1).max(200),
     temporary: z.boolean().optional(),
@@ -154,6 +156,7 @@ export const CreateChatSchema = z
 
 export const UpdateChatSchema = z
   .strictObject({
+    agentId: z.union([chatIdentifier, z.null()]).optional(),
     title: z.string().min(1).max(200).optional(),
     modelId: z.union([chatIdentifier, z.null()]).optional(),
   })

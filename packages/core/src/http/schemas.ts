@@ -95,6 +95,9 @@ const agentMemoryPolicySchema = z.discriminatedUnion("mode", [
 export const createAgentSchema = z.object({
   workspaceId: z.string().min(1),
   name: z.string().min(1),
+  description: z.string().max(1_000).optional(),
+  icon: z.string().max(16).optional(),
+  avatarUrl: z.union([z.literal(""), z.url().max(2_000)]).optional(),
   baseModelId: z.string().min(1),
   systemPrompt: z.string().min(1),
   parameters: z.record(z.string(), z.unknown()).optional(),
@@ -103,6 +106,7 @@ export const createAgentSchema = z.object({
 });
 
 export const cloneAgentSchema = z.object({
+  includeKnowledgeBindings: z.boolean().optional(),
   name: z.string().min(1).optional(),
   systemPrompt: z.string().min(1).optional(),
 });
@@ -141,6 +145,9 @@ const importAgentDocumentSchema = z.object({
   schemaVersion: z.literal(1),
   agent: z.object({
     name: z.string().min(1),
+    description: z.string().max(1_000).optional(),
+    icon: z.string().max(16).optional(),
+    avatarUrl: z.union([z.literal(""), z.url().max(2_000)]).optional(),
     baseModelId: z.string().min(1),
     systemPrompt: z.string().min(1),
     parameters: z.record(z.string(), z.unknown()).default({}),

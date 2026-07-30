@@ -11,6 +11,14 @@ describe("chat experience", () => {
 
     expect(seed.chats).toEqual([]);
     expect(
+      seed.models.some((model) => model.id === "model_ollama_default"),
+    ).toBe(false);
+    expect(
+      seed.models.find(
+        (model) => model.id === "model_openai_compatible_default",
+      )?.available,
+    ).toBe(false);
+    expect(
       seed.grants.some(
         (grant) =>
           grant.resourceType === "chat" && grant.resourceId === "chat_welcome",

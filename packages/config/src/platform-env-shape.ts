@@ -3,6 +3,25 @@ import { z } from "zod";
 export const platformEnvShape = {
   APP_ORIGIN: z.string().url().default("http://localhost:3000"),
   REPOSITORY_DRIVER: z.enum(["memory", "postgres"]).default("memory"),
+  MODEL_CATALOG_SYNC_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  MODEL_CATALOG_SYNC_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(10_000)
+    .default(60_000),
+  MODEL_CATALOG_SYNC_TTL_MS: z.coerce
+    .number()
+    .int()
+    .min(10_000)
+    .default(300_000),
+  MODEL_CATALOG_SYNC_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .default(10_000),
   DATABASE_URL: z
     .string()
     .default("postgres://romeo:romeo@localhost:5432/romeo"),

@@ -8227,16 +8227,23 @@ describe("Romeo API thin slice", () => {
     );
   });
 
-  it("clones an agent without changing its base model", async () => {
+  it("clones an agent with authorized knowledge bindings without changing its base model", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
     const detailResponse = await api.request("/api/v1/agents/agent_default");
     const detail = await detailResponse.json();
     const response = await api.request("/api/v1/agents/agent_default/clone", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Romeo Assistant copy" }),
+      body: JSON.stringify({
+        includeKnowledgeBindings: true,
+        name: "Romeo Assistant copy",
+      }),
     });
     const cloned = await response.json();
+    const clonedKnowledgeResponse = await api.request(
+      `/api/v1/agents/${cloned.data.id}/knowledge-bases`,
+    );
+    const clonedKnowledge = await clonedKnowledgeResponse.json();
 
     const agentsResponse = await api.request(
       "/api/v1/agents?workspaceId=workspace_default",
@@ -8251,6 +8258,9 @@ describe("Romeo API thin slice", () => {
     expect(response.status).toBe(201);
     expect(cloned.data.id).not.toBe("agent_default");
     expect(cloned.data.baseModelId).toBe("model_openai_compatible_default");
+    expect(clonedKnowledgeResponse.status).toBe(200);
+    expect(clonedKnowledge.data[0].knowledgeBase.id).toBe("kb_default");
+    expect(clonedKnowledge.data[0].enabled).toBe(true);
     expect(agents.data).toHaveLength(2);
     expect(
       audit.data.some(
@@ -8261,7 +8271,8 @@ describe("Romeo API thin slice", () => {
         }) =>
           event.action === "agent.clone" &&
           event.resourceId === cloned.data.id &&
-          event.metadata.sourceAgentId === "agent_default",
+          event.metadata.sourceAgentId === "agent_default" &&
+          event.metadata.knowledgeBindingsCopied === 1,
       ),
     ).toBe(true);
     expect(JSON.stringify(audit.data)).not.toContain("Romeo Assistant copy");
@@ -10821,8 +10832,8 @@ describe("Romeo API thin slice", () => {
       expect(
         models.data.find(
           (model: { id: string }) => model.id === "model_ollama_default",
-        ).enabled,
-      ).toBe(false);
+        ),
+      ).toMatchObject({ available: false, enabled: true });
       expect(
         audit.data.some(
           (event: {

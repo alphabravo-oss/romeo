@@ -127,7 +127,7 @@ describe("service authorization", () => {
     });
 
     await expect(agents.list("workspace_default", subject)).resolves.toEqual([
-      created,
+      { ...created, grantCount: 3 },
     ]);
     await expect(
       agents.update({

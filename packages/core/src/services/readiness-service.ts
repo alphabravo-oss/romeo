@@ -153,9 +153,11 @@ export class ReadinessService {
             count: providers.length,
           })
         : fail("providers", "critical", "No providers are configured.", {}),
-      models.some((model) => model.enabled)
+      models.some((model) => model.enabled && model.available !== false)
         ? pass("models", "At least one enabled model is available.", {
-            enabled: models.filter((model) => model.enabled).length,
+            enabled: models.filter(
+              (model) => model.enabled && model.available !== false,
+            ).length,
           })
         : fail("models", "critical", "No enabled models are available.", {}),
       retentionPolicy

@@ -2,6 +2,7 @@ import {
   archiveWorkspaceRoute,
   createWorkspaceRoute,
   exportWorkspaceRoute,
+  updateWorkspaceDefaultAgentRoute,
 } from "@romeo/contracts";
 import type { RomeoApi } from "../context";
 
@@ -22,6 +23,15 @@ export function registerWorkspaceRoutes(app: RomeoApi): void {
     const data = await context.get("services").workspace.archive({
       subject,
       workspaceId: context.req.valid("param").workspaceId,
+    });
+    return context.json({ data });
+  });
+
+  app.openapi(updateWorkspaceDefaultAgentRoute, async (context) => {
+    const data = await context.get("services").workspace.updateDefaultAgent({
+      subject: context.get("subject"),
+      workspaceId: context.req.valid("param").workspaceId,
+      agentId: context.req.valid("json").agentId,
     });
     return context.json({ data });
   });

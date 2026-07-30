@@ -7,11 +7,13 @@ export function createOpenAiClient(
   provider: Pick<ProviderInstance, "baseUrl">,
   apiKey: string | undefined,
   fetchImpl: typeof fetch | undefined,
+  timeoutMs?: number,
 ): OpenAI {
   return new OpenAI({
     apiKey: apiKey ?? "romeo-no-credential-required",
     baseURL: provider.baseUrl.replace(/\/$/u, ""),
     maxRetries: 0,
+    ...(timeoutMs === undefined ? {} : { timeout: timeoutMs }),
     ...(fetchImpl === undefined ? {} : { fetch: fetchImpl }),
   });
 }

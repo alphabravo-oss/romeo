@@ -198,6 +198,7 @@ export class PgChatRepository {
         legalHoldReason: chat.legalHoldReason ?? null,
         legalHoldUntil: optionalDate(chat.legalHoldUntil),
         title: chat.title,
+        agentId: chat.agentId ?? null,
         modelId: chat.modelId ?? null,
         temporary: chat.temporary === true,
         expiresAt: optionalDate(chat.expiresAt),

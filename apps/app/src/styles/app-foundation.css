@@ -436,7 +436,7 @@ html.dark .rm-new-chat-button:hover {
 
 .rm-connection-model-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
   gap: 0.4rem 0.75rem;
   margin-top: 0.45rem;
 }
@@ -450,13 +450,6 @@ html.dark .rm-new-chat-button:hover {
   border-radius: 0.5rem;
   background: hsl(var(--muted) / 0.55);
   padding: 0.4rem 0.5rem;
-}
-
-.rm-connection-model-list li > span {
-  overflow: hidden;
-  color: hsl(var(--foreground));
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .rm-advanced-settings {

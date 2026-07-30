@@ -16,19 +16,16 @@ import { writeAuditLog } from "./audit-log";
 import { getAuthorizedChat } from "./chat-access";
 import { getAuthorizedKnowledgeBase } from "./knowledge-access";
 import { filterVisibleServiceAccounts } from "./service-account-access";
+import {
+  groupLabel,
+  principalOrder,
+  type ShareInput,
+  type ShareTarget,
+  targetMatches,
+  validateSharePrincipal,
+} from "./collaboration-share-model";
 
-export interface ShareInput {
-  principalType: ResourceGrant["principalType"];
-  principalId: string;
-  permissions: ResourceGrant["permission"][];
-}
-
-export interface ShareTarget {
-  principalType: ShareInput["principalType"];
-  principalId: string;
-  label: string;
-  detail?: string;
-}
+export type { ShareInput, ShareTarget } from "./collaboration-share-model";
 
 export class CollaborationShareService {
   constructor(protected readonly repository: RomeoRepository) {}
@@ -139,6 +136,30 @@ export class CollaborationShareService {
       );
       return grants;
     });
+  }
+
+  async revokeAgentGrant(input: {
+    subject: AuthSubject;
+    agentId: string;
+    grantId: string;
+  }): Promise<ResourceGrant> {
+    const agent = await getAuthorizedAgent(this.repository, {
+      agentId: input.agentId,
+      subject: input.subject,
+      scope: "agents:write",
+    });
+    const grant = (
+      await this.sharesFor("agent", agent.id, input.subject.orgId)
+    ).find((item) => item.id === input.grantId);
+    if (grant === undefined) throw notFound("Managed-model grant");
+    const deleted = await this.repository.deleteResourceGrant(grant.id);
+    if (deleted === undefined) throw notFound("Managed-model grant");
+    await this.audit(input.subject, "agent.share.revoke", "agent", agent.id, {
+      principalType: grant.principalType,
+      principalId: grant.principalId,
+      permission: grant.permission,
+    });
+    return deleted;
   }
 
   async listKnowledgeBaseShares(
@@ -326,7 +347,7 @@ export class CollaborationShareService {
     allowedPermissions: ResourceGrant["permission"][];
     share: ShareInput;
   }): Promise<ResourceGrant[]> {
-    validatePrincipal(input.share);
+    validateSharePrincipal(input.share);
     const invalid = input.share.permissions.filter(
       (permission) => !input.allowedPermissions.includes(permission),
     );
@@ -432,52 +453,4 @@ export class CollaborationShareService {
       metadata,
     });
   }
-}
-
-function validatePrincipal(share: ShareInput): void {
-  if (!["group", "service_account", "user"].includes(share.principalType)) {
-    throw new ApiError(
-      "invalid_principal",
-      "Share principal type is not supported.",
-      400,
-    );
-  }
-  if (share.principalId.trim().length === 0)
-    throw new ApiError(
-      "invalid_principal",
-      "Share principal ID is required.",
-      400,
-    );
-  if (share.permissions.length === 0)
-    throw new ApiError(
-      "invalid_share_permission",
-      "Share requires at least one permission.",
-      400,
-    );
-}
-
-function targetMatches(target: ShareTarget, query: string): boolean {
-  if (query.length === 0) return true;
-  return (
-    target.principalId.toLowerCase().includes(query) ||
-    target.label.toLowerCase().includes(query) ||
-    target.detail?.toLowerCase().includes(query) === true
-  );
-}
-
-function groupLabel(groupId: string): string {
-  return (
-    groupId
-      .replace(/^group_/u, "")
-      .split(/[_-]+/u)
-      .filter((part) => part.length > 0)
-      .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
-      .join(" ") || groupId
-  );
-}
-
-function principalOrder(type: ShareTarget["principalType"]): number {
-  if (type === "user") return 0;
-  if (type === "group") return 1;
-  return 2;
 }

@@ -38,7 +38,10 @@ describe("model catalog pagination", () => {
     });
     await repository.upsertModels([
       model("model_catalog_alpha", provider.id, "Alpha", true),
-      model("model_catalog_beta", provider.id, "Beta", false),
+      {
+        ...model("model_catalog_beta", provider.id, "Beta", false),
+        available: false,
+      },
       model("model_catalog_hidden", "provider_other_org", "Alpha hidden", true),
     ]);
     const service = new ProviderService(repository);
@@ -61,6 +64,12 @@ describe("model catalog pagination", () => {
       offset: 0,
       providerId: provider.id,
     });
+    const unavailable = await service.modelsPage(subject, {
+      available: false,
+      limit: 10,
+      offset: 0,
+      providerId: provider.id,
+    });
 
     expect(first.total).toBe(2);
     expect(second.total).toBe(2);
@@ -68,6 +77,9 @@ describe("model catalog pagination", () => {
       new Set([...first.items, ...second.items].map((item) => item.id)),
     ).toEqual(new Set(["model_catalog_alpha", "model_catalog_beta"]));
     expect(disabled.items.map((item) => item.id)).toEqual([
+      "model_catalog_beta",
+    ]);
+    expect(unavailable.items.map((item) => item.id)).toEqual([
       "model_catalog_beta",
     ]);
   });

@@ -25,17 +25,24 @@ export async function listModels(): Promise<BaseModel[]> {
 }
 
 export async function listModelsPage(input: {
+  available?: boolean;
+  direction?: "asc" | "desc";
   enabled?: boolean;
   limit: number;
   offset: number;
   providerId?: string;
   query?: string;
+  sort?: "availability" | "contextWindow" | "displayName" | "enabled" | "name";
 }): Promise<ModelPage> {
   configureBrowserApiClients();
   const response = await providersListModels({
     query: {
       limit: input.limit,
       offset: input.offset,
+      ...(input.direction === undefined ? {} : { direction: input.direction }),
+      ...(input.available === undefined
+        ? {}
+        : { available: String(input.available) as "false" | "true" }),
       ...(input.enabled === undefined
         ? {}
         : { enabled: String(input.enabled) as "false" | "true" }),
@@ -43,6 +50,7 @@ export async function listModelsPage(input: {
         ? {}
         : { providerId: input.providerId }),
       ...(input.query?.trim() ? { q: input.query.trim() } : {}),
+      ...(input.sort === undefined ? {} : { sort: input.sort }),
     },
     throwOnError: true,
   });

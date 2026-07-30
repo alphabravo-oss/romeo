@@ -5,6 +5,7 @@ export type * from "./agent-entities";
 export type * from "./identity-entities";
 
 export interface Chat {
+  agentId?: string;
   id: string;
   orgId: string;
   workspaceId: string;
@@ -185,6 +186,8 @@ export interface VoiceProfile {
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
+  dependentAgentCount?: number;
+  grantCount?: number;
 }
 
 export interface AuditLog {

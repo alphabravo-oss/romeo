@@ -2,13 +2,18 @@ import type { Table } from "@tanstack/react-table";
 import Download from "lucide-react/dist/esm/icons/download.mjs";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal.mjs";
-import { useId, type Dispatch, type SetStateAction } from "react";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
+import { useId, useState, type Dispatch, type SetStateAction } from "react";
 
 import type { DataTableLabels } from "./advanced-data-table";
 import { Button, IconButton } from "./button";
 import { Checkbox, Input, NativeSelect } from "./forms";
 import { Popover } from "./overlays";
-import { tablePageSizes, type TableDensity } from "./table-preferences";
+import {
+  tablePageSizes,
+  type TableDensity,
+  type TableSavedView,
+} from "./table-preferences";
 
 export function DataTableControls<T>({
   canExport,
@@ -17,9 +22,13 @@ export function DataTableControls<T>({
   globalFilter,
   labels,
   onExport,
+  onApplySavedView,
+  onDeleteSavedView,
   onReset,
+  onSaveView,
   pageSize,
   setDensity,
+  savedViews,
   showExport,
   showSearch,
   table,
@@ -30,14 +39,19 @@ export function DataTableControls<T>({
   globalFilter: string;
   labels: DataTableLabels;
   onExport: () => void;
+  onApplySavedView: (view: TableSavedView) => void;
+  onDeleteSavedView: (name: string) => void;
   onReset: () => void;
+  onSaveView: (name: string) => void;
   pageSize: number;
   setDensity: Dispatch<SetStateAction<TableDensity>>;
+  savedViews: TableSavedView[];
   showExport: boolean;
   showSearch: boolean;
   table: Table<T>;
 }) {
   const pageSizeId = useId();
+  const [viewName, setViewName] = useState("");
   const hideableColumns = table
     .getAllLeafColumns()
     .filter(
@@ -150,6 +164,50 @@ export function DataTableControls<T>({
                 </label>
               ))}
             </>
+          ) : null}
+          <div className="rm-table-view-label">{labels.savedViews}</div>
+          <div className="rm-table-saved-view-create">
+            <Input
+              aria-label={labels.viewName}
+              maxLength={80}
+              onChange={(event) => setViewName(event.currentTarget.value)}
+              placeholder={labels.viewName}
+              value={viewName}
+            />
+            <Button
+              disabled={viewName.trim().length === 0}
+              onClick={() => {
+                onSaveView(viewName.trim());
+                setViewName("");
+              }}
+              size="sm"
+              variant="outline"
+            >
+              {labels.saveView}
+            </Button>
+          </div>
+          {savedViews.length > 0 ? (
+            <div className="rm-table-saved-views">
+              {savedViews.map((view) => (
+                <div className="rm-table-saved-view" key={view.name}>
+                  <Button
+                    className="rm-table-saved-view-name"
+                    onClick={() => onApplySavedView(view)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {view.name}
+                  </Button>
+                  <IconButton
+                    aria-label={`${labels.deleteView}: ${view.name}`}
+                    onClick={() => onDeleteSavedView(view.name)}
+                    variant="ghost"
+                  >
+                    <Trash2 aria-hidden size={13} />
+                  </IconButton>
+                </div>
+              ))}
+            </div>
           ) : null}
           <Button
             className="rm-table-reset"

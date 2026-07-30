@@ -45,6 +45,21 @@ export interface ModelPricing {
   };
 }
 
+export type ProviderCatalogSyncStatus =
+  | "error"
+  | "never"
+  | "ready"
+  | "stale"
+  | "syncing";
+
+export interface ProviderCatalogSyncState {
+  status: ProviderCatalogSyncStatus;
+  modelCount: number;
+  lastAttemptAt?: string;
+  lastSyncedAt?: string;
+  error?: string;
+}
+
 export interface ProviderInstance {
   id: string;
   orgId: string;
@@ -55,6 +70,7 @@ export interface ProviderInstance {
   modelIds?: string[];
   enabled: boolean;
   capabilities: ProviderCapabilities;
+  catalogSync?: ProviderCatalogSyncState;
 }
 
 export interface BaseModel {
@@ -63,6 +79,7 @@ export interface BaseModel {
   name: string;
   displayName: string;
   enabled: boolean;
+  available?: boolean;
   capabilities: ProviderCapabilities;
   contextWindow: number;
   pricing?: ModelPricing;
@@ -128,7 +145,11 @@ export interface ModelProviderAdapter {
   ): Promise<{ ok: boolean; message: string }>;
   listModels(
     provider: ProviderInstance,
-    options?: { apiKey?: string; fetchImpl?: typeof fetch },
+    options?: {
+      apiKey?: string;
+      fetchImpl?: typeof fetch;
+      timeoutMs?: number;
+    },
   ): Promise<BaseModel[]>;
   streamChat(input: StreamChatInput): AsyncIterable<StreamChatChunk>;
 }

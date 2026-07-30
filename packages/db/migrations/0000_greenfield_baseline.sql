@@ -115,11 +115,16 @@ CREATE TABLE "agent_models" (
 	"workspace_id" text NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
+	"description" text,
+	"icon" text,
+	"avatar_url" text,
 	"base_model_id" text NOT NULL,
 	"system_prompt" text NOT NULL,
 	"parameters" jsonb NOT NULL,
 	"memory_policy" jsonb DEFAULT '{"mode":"disabled"}'::jsonb NOT NULL,
+	"prompt_suggestions" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"safety_settings" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"tags" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"voice_profile_id" text,
 	"published_version_id" text,
 	"created_by" text NOT NULL,
@@ -149,7 +154,9 @@ CREATE TABLE "agent_versions" (
 	"system_prompt" text NOT NULL,
 	"parameters" jsonb NOT NULL,
 	"memory_policy" jsonb DEFAULT '{"mode":"disabled"}'::jsonb NOT NULL,
+	"prompt_suggestions" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"safety_settings" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"tags" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"voice_profile_id" text,
 	"knowledge_base_bindings" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"tool_bindings" jsonb DEFAULT '[]'::jsonb NOT NULL,
@@ -188,6 +195,7 @@ CREATE TABLE "chats" (
 	"org_id" text NOT NULL,
 	"workspace_id" text NOT NULL,
 	"title" text NOT NULL,
+	"agent_id" text,
 	"model_id" text,
 	"temporary" boolean DEFAULT false NOT NULL,
 	"expires_at" timestamp with time zone,
@@ -620,6 +628,7 @@ CREATE TABLE "base_models" (
 	"context_window" integer NOT NULL,
 	"pricing" jsonb,
 	"enabled" boolean DEFAULT true NOT NULL,
+	"available" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -646,6 +655,7 @@ CREATE TABLE "provider_instances" (
 	"credential_ref" text,
 	"model_ids" jsonb,
 	"capabilities" jsonb NOT NULL,
+	"catalog_sync" jsonb,
 	"enabled" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -769,6 +779,7 @@ CREATE TABLE "workspaces" (
 	"org_id" text NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
+	"default_agent_id" text,
 	"archived_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL

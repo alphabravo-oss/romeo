@@ -47,6 +47,8 @@ export const ToolConnectorSchema = z
     approvalPolicy: approval,
     visibility: z.enum(["private", "workspace", "org"]),
     enabled: z.boolean(),
+    dependentAgentCount: z.number().int().nonnegative().optional(),
+    dependentOperationCount: z.number().int().nonnegative().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })

@@ -72,6 +72,7 @@ export interface AuthSubject {
 }
 
 export interface ResourceGrant {
+  createdAt?: string;
   id: string;
   resourceType: ResourceType;
   resourceId: string;

@@ -1400,6 +1400,7 @@ export type Workspace = {
   orgId: string;
   name: string;
   slug: string;
+  defaultAgentId?: string;
   archivedAt?: string;
 };
 
@@ -1690,6 +1691,9 @@ export type InterfacePreferencesResponse = {
 };
 
 export type InterfacePreferences = {
+  defaultAgentByWorkspace: {
+    [key: string]: string;
+  };
   theme: "system" | "light" | "dark";
   locale: "en" | "es" | "fr";
   fontSize: "small" | "medium" | "large";
@@ -1698,6 +1702,9 @@ export type InterfacePreferences = {
 };
 
 export type UpdateInterfacePreferencesRequest = {
+  defaultAgentByWorkspace?: {
+    [key: string]: string;
+  };
   theme?: "system" | "light" | "dark";
   locale?: "en" | "es" | "fr";
   fontSize?: "small" | "medium" | "large";
@@ -1898,6 +1905,9 @@ export type ManagedModel = {
   orgId: string;
   workspaceId: string;
   name: string;
+  description?: string;
+  icon?: string;
+  avatarUrl?: "" | string;
   createdBy: string;
   baseModelId: string;
   systemPrompt: string;
@@ -1905,9 +1915,15 @@ export type ManagedModel = {
     [key: string]: unknown;
   };
   memoryPolicy: ManagedModelMemoryPolicy;
+  promptSuggestions?: Array<{
+    title: string;
+    prompt: string;
+  }>;
   safetySettings: ManagedModelSafetySettings;
+  tags?: Array<string>;
   voiceProfileId?: string;
   publishedVersionId?: string;
+  grantCount?: number;
   archivedAt?: string;
   updatedAt: string;
 };
@@ -1934,27 +1950,44 @@ export type ManagedModelSafetySettings = {
 export type CreateManagedModelRequest = {
   workspaceId: string;
   name: string;
+  description?: string;
+  icon?: string;
+  avatarUrl?: "" | string;
   baseModelId: string;
   systemPrompt: string;
   parameters?: {
     [key: string]: unknown;
   };
   memoryPolicy?: ManagedModelMemoryPolicy;
+  promptSuggestions?: Array<{
+    title: string;
+    prompt: string;
+  }>;
   safetySettings?: ManagedModelSafetySettings;
+  tags?: Array<string>;
 };
 
 export type UpdateManagedModelRequest = {
   name?: string;
+  description?: string;
+  icon?: string;
+  avatarUrl?: "" | string;
   baseModelId?: string;
   systemPrompt?: string;
   parameters?: {
     [key: string]: unknown;
   };
   memoryPolicy?: ManagedModelMemoryPolicy;
+  promptSuggestions?: Array<{
+    title: string;
+    prompt: string;
+  }>;
   safetySettings?: ManagedModelSafetySettings;
+  tags?: Array<string>;
 };
 
 export type CloneManagedModelRequest = {
+  includeKnowledgeBindings?: boolean;
   name?: string;
   systemPrompt?: string;
 };
@@ -2010,13 +2043,21 @@ export type ManagedModelExportDocument = {
   exportedAt: string;
   agent: {
     name: string;
+    description?: string;
+    icon?: string;
+    avatarUrl?: "" | string;
     baseModelId: string;
     systemPrompt: string;
     parameters: {
       [key: string]: unknown;
     };
     memoryPolicy: ManagedModelMemoryPolicy;
+    promptSuggestions: Array<{
+      title: string;
+      prompt: string;
+    }>;
     safetySettings: ManagedModelSafetySettings;
+    tags: Array<string>;
     voiceProfileId?: string;
     accessGrants?: Array<{
       principalType: "group" | "service_account" | "user";
@@ -2042,13 +2083,21 @@ export type ImportManagedModelRequest = {
     exportedAt?: string;
     agent: {
       name: string;
+      description?: string;
+      icon?: string;
+      avatarUrl?: "" | string;
       baseModelId: string;
       systemPrompt: string;
       parameters?: {
         [key: string]: unknown;
       };
       memoryPolicy?: ManagedModelMemoryPolicy;
+      promptSuggestions?: Array<{
+        title: string;
+        prompt: string;
+      }>;
       safetySettings?: ManagedModelSafetySettings;
+      tags?: Array<string>;
       voiceProfileId?: string;
       accessGrants?: Array<{
         principalType: "group" | "service_account" | "user";
@@ -2081,7 +2130,12 @@ export type ManagedModelVersion = {
     [key: string]: unknown;
   };
   memoryPolicy: ManagedModelMemoryPolicy;
+  promptSuggestions?: Array<{
+    title: string;
+    prompt: string;
+  }>;
   safetySettings: ManagedModelSafetySettings;
+  tags?: Array<string>;
   voiceProfileId?: string;
   knowledgeBaseBindings?: Array<{
     knowledgeBaseId: string;
@@ -2114,6 +2168,7 @@ export type ManagedModelVersion = {
 };
 
 export type ManagedModelGrant = {
+  createdAt?: string;
   id: string;
   resourceType: "agent";
   resourceId: string;
@@ -2130,6 +2185,48 @@ export type ShareManagedModelRequest = {
 
 export type ManagedModelGalleryItem = ManagedModel & {
   favorite: boolean;
+  readinessReason?: string;
+  readinessStatus: "ready" | "blocked";
+};
+
+export type ManagedModelReadiness = {
+  agentId: string;
+  status: "ready" | "blocked";
+  generatedAt: string;
+  principal: {
+    principalType: "group" | "service_account" | "user";
+    principalId: string;
+    label: string;
+    simulated: boolean;
+  };
+  checks: Array<ManagedModelReadinessCheck>;
+  blockingCount: number;
+};
+
+export type ManagedModelReadinessCheck = {
+  key:
+    | "principal"
+    | "workspace"
+    | "assistant_access"
+    | "published_version"
+    | "base_model"
+    | "provider"
+    | "knowledge"
+    | "tools"
+    | "voice";
+  status: "ready" | "warning" | "blocked";
+  code: string;
+  message: string;
+  issues: Array<string>;
+  resourceType?:
+    | "agent"
+    | "knowledge_base"
+    | "model"
+    | "provider"
+    | "tool"
+    | "voice_profile"
+    | "workspace";
+  resourceId?: string;
 };
 
 export type ManagedModelKnowledgeBinding = {
@@ -3203,6 +3300,7 @@ export type ProviderConnection = {
   modelIds?: Array<string>;
   enabled: boolean;
   capabilities: ProviderCapabilities;
+  catalogSync?: ProviderCatalogSync;
   credentialConfigured: boolean;
   credentialRefScheme?: string;
 };
@@ -3223,6 +3321,14 @@ export type ProviderCapabilities = {
     networkAccess: "external-http" | "local-http";
     credentialRequired: boolean;
   };
+};
+
+export type ProviderCatalogSync = {
+  status: "error" | "never" | "ready" | "stale" | "syncing";
+  modelCount: number;
+  lastAttemptAt?: string;
+  lastSyncedAt?: string;
+  error?: string;
 };
 
 export type CreateProviderConnectionRequest = {
@@ -3262,6 +3368,7 @@ export type ProviderModel = {
   name: string;
   displayName: string;
   enabled: boolean;
+  available?: boolean;
   capabilities: ProviderCapabilities;
   contextWindow: number;
   pricing?: {
@@ -4192,6 +4299,7 @@ export type ScimGroupRequest = {
 };
 
 export type Chat = {
+  agentId?: string;
   id: string;
   orgId: string;
   workspaceId: string;
@@ -4244,6 +4352,7 @@ export type MessageCitation = {
 };
 
 export type CreateChatRequest = {
+  agentId?: string;
   workspaceId: string;
   title: string;
   temporary?: boolean;
@@ -4281,6 +4390,7 @@ export type MessageAttachment = {
 };
 
 export type UpdateChatRequest = {
+  agentId?: string | null;
   title?: string;
   modelId?: string | null;
 };
@@ -4569,6 +4679,7 @@ export type ShareTarget = {
 };
 
 export type ResourceGrant = {
+  createdAt?: string;
   id: string;
   resourceType:
     | "organization"
@@ -6358,6 +6469,11 @@ export type KnowledgeBase = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  dependentAgentCount?: number;
+  grantCount?: number;
+  indexedSourceCount?: number;
+  sourceCount?: number;
+  totalSizeBytes?: number;
 };
 
 export type CreateKnowledgeBaseRequest = {
@@ -7017,6 +7133,8 @@ export type ToolConnector = {
     | "admin_only";
   visibility: "private" | "workspace" | "org";
   enabled: boolean;
+  dependentAgentCount?: number;
+  dependentOperationCount?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -7672,6 +7790,8 @@ export type VoiceProfile = {
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
+  dependentAgentCount?: number;
+  grantCount?: number;
 };
 
 export type CreateVoiceProfileRequest = {
@@ -11180,6 +11300,63 @@ export type TenancyArchiveWorkspaceResponses = {
 export type TenancyArchiveWorkspaceResponse =
   TenancyArchiveWorkspaceResponses[keyof TenancyArchiveWorkspaceResponses];
 
+export type TenancyUpdateWorkspaceDefaultAgentData = {
+  body: {
+    agentId: string | null;
+  };
+  path: {
+    workspaceId: string;
+  };
+  query?: never;
+  url: "/workspaces/{workspaceId}/default-agent";
+};
+
+export type TenancyUpdateWorkspaceDefaultAgentErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type TenancyUpdateWorkspaceDefaultAgentError =
+  TenancyUpdateWorkspaceDefaultAgentErrors[keyof TenancyUpdateWorkspaceDefaultAgentErrors];
+
+export type TenancyUpdateWorkspaceDefaultAgentResponses = {
+  /**
+   * Updated workspace
+   */
+  200: {
+    data: Workspace;
+  };
+};
+
+export type TenancyUpdateWorkspaceDefaultAgentResponse =
+  TenancyUpdateWorkspaceDefaultAgentResponses[keyof TenancyUpdateWorkspaceDefaultAgentResponses];
+
 export type TenancyExportWorkspaceData = {
   body?: never;
   path: {
@@ -13268,10 +13445,12 @@ export type ManagedModelsDiffVersionResponses = {
           | "baseModelId"
           | "knowledgeBaseBindings"
           | "memoryPolicy"
+          | "promptSuggestions"
           | "safetySettings"
           | "systemPrompt"
           | "parameters"
           | "toolBindings"
+          | "tags"
           | "voiceProfileId";
         left?: unknown;
         right?: unknown;
@@ -13429,6 +13608,58 @@ export type ManagedModelsShareResponses = {
 export type ManagedModelsShareResponse =
   ManagedModelsShareResponses[keyof ManagedModelsShareResponses];
 
+export type ManagedModelsRevokeGrantData = {
+  body?: never;
+  path: {
+    agentId: string;
+    grantId: string;
+  };
+  query?: never;
+  url: "/agents/{agentId}/shares/{grantId}";
+};
+
+export type ManagedModelsRevokeGrantErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type ManagedModelsRevokeGrantError =
+  ManagedModelsRevokeGrantErrors[keyof ManagedModelsRevokeGrantErrors];
+
+export type ManagedModelsRevokeGrantResponses = {
+  /**
+   * Revoked managed-model access grant
+   */
+  200: {
+    data: ManagedModelGrant;
+  };
+};
+
+export type ManagedModelsRevokeGrantResponse =
+  ManagedModelsRevokeGrantResponses[keyof ManagedModelsRevokeGrantResponses];
+
 export type ManagedModelsListGalleryData = {
   body?: never;
   path?: never;
@@ -13467,6 +13698,56 @@ export type ManagedModelsListGalleryResponses = {
 
 export type ManagedModelsListGalleryResponse =
   ManagedModelsListGalleryResponses[keyof ManagedModelsListGalleryResponses];
+
+export type ManagedModelsGetReadinessData = {
+  body?: never;
+  path: {
+    agentId: string;
+  };
+  query?: {
+    principalType?: "group" | "service_account" | "user";
+    principalId?: string;
+  };
+  url: "/agents/{agentId}/readiness";
+};
+
+export type ManagedModelsGetReadinessErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type ManagedModelsGetReadinessError =
+  ManagedModelsGetReadinessErrors[keyof ManagedModelsGetReadinessErrors];
+
+export type ManagedModelsGetReadinessResponses = {
+  /**
+   * Managed-model readiness
+   */
+  200: {
+    data: ManagedModelReadiness;
+  };
+};
+
+export type ManagedModelsGetReadinessResponse =
+  ManagedModelsGetReadinessResponses[keyof ManagedModelsGetReadinessResponses];
 
 export type ManagedModelsListKnowledgeBindingsData = {
   body?: never;
@@ -15573,11 +15854,19 @@ export type ProvidersListModelsData = {
   body?: never;
   path?: never;
   query?: {
+    available?: "true" | "false";
     enabled?: "true" | "false";
+    direction?: "asc" | "desc";
     limit?: number;
     offset?: number | null;
     providerId?: string;
     q?: string;
+    sort?:
+      | "availability"
+      | "contextWindow"
+      | "displayName"
+      | "enabled"
+      | "name";
   };
   url: "/models";
 };

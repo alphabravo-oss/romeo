@@ -18,12 +18,10 @@ export function KnowledgeSourcesTab({
   isDeleting,
   isExtracting,
   isReindexing,
-  knowledgeBases,
   onAddSource,
   onDelete,
   onExtract,
   onReindex,
-  onSelect,
   sourcesQuery,
 }: {
   activeAgent: Agent | undefined;
@@ -31,30 +29,15 @@ export function KnowledgeSourcesTab({
   isDeleting: boolean;
   isExtracting: boolean;
   isReindexing: boolean;
-  knowledgeBases: KnowledgeBase[];
   onAddSource: () => void;
   onDelete: (sourceId: string) => void;
   onExtract: (sourceId: string) => void;
   onReindex: (sourceId: string) => void;
-  onSelect: (knowledgeBaseId: string) => void;
   sourcesQuery: UseQueryResult<KnowledgeSource[], Error>;
 }) {
   const { t } = useLocale();
   return (
     <div className="grid gap-4">
-      <div className="grid gap-2 text-sm">
-        {knowledgeBases.map((knowledgeBase) => (
-          <Button
-            className={`min-w-0 text-left ${knowledgeBase.id === activeKnowledgeBase?.id ? "selected" : ""}`}
-            key={knowledgeBase.id}
-            onClick={() => onSelect(knowledgeBase.id)}
-            type="button"
-          >
-            <span className="block truncate">{knowledgeBase.name}</span>
-          </Button>
-        ))}
-      </div>
-
       <AgentKnowledgeBindingControls
         activeAgent={activeAgent}
         activeKnowledgeBase={activeKnowledgeBase}
@@ -79,7 +62,6 @@ export function KnowledgeSourcesTab({
             <PanelStats
               items={[
                 { label: t("knowledgeTotalSources"), value: sources.length },
-                { label: t("knowledgeBases"), value: knowledgeBases.length },
                 {
                   label: t("knowledgeIndexed"),
                   value: sources.filter((source) => source.status === "indexed")

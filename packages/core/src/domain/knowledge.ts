@@ -7,6 +7,11 @@ export interface KnowledgeBase {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  dependentAgentCount?: number;
+  grantCount?: number;
+  indexedSourceCount?: number;
+  sourceCount?: number;
+  totalSizeBytes?: number;
 }
 
 export interface KnowledgeSource {

@@ -1,8 +1,9 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Suspense, lazy, useCallback } from "react";
+import { Suspense, useCallback } from "react";
 import { Button } from "@romeo/ui";
 
 import { ConsoleLayout } from "../components/ConsoleLayout";
+import { AdminViewNav } from "../components/AdminViewNav";
 import { PageHeader } from "../components/PageHeader";
 import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
 import {
@@ -16,139 +17,58 @@ import {
   useLocaleNamespaces,
 } from "../lib/i18n";
 import { resolveSectionKey } from "../lib/section-routing";
+import {
+  resolveAgentStudioTab,
+  type AgentStudioTab,
+} from "../components/AgentStudioPanel";
+import { modelAvailabilityFilter } from "../components/model-catalog-navigation";
+import {
+  AbuseControlsPanel,
+  AdminOverview,
+  AnalyticsPanel,
+  ApiKeyPanel,
+  AuditPanel,
+  AuthProvidersPanel,
+  BillingPanel,
+  ChatExperiencePanel,
+  ConnectedAppsPanel,
+  DataConnectorPanel,
+  GovernancePanel,
+  GroupsPanel,
+  ImpersonationPanel,
+  ManagedModelAdminPanel,
+  ModelCatalogPanel,
+  NotificationChannelPanel,
+  OperationsPosturePanel,
+  OrganizationsPanel,
+  PromptTemplatePanel,
+  ProviderObservabilityPanel,
+  ProviderPanel,
+  QuotaPanel,
+  RagGovernancePanel,
+  ServiceAccountPanel,
+  ToolConnectorPanel,
+  UsagePanel,
+  UsersPanel,
+  WebhooksPanel,
+  WebSearchPanel,
+  WorkflowsPanel,
+} from "../components/admin-lazy-panels";
 import adminCss from "../styles/admin.css?url";
-
-function lazyNamed<
-  T extends Record<K, React.ComponentType<any>>,
-  K extends keyof T,
->(loader: () => Promise<T>, name: K) {
-  return lazy(async () => ({ default: (await loader())[name] }));
-}
-
-const AdminOverview = lazyNamed(
-  () => import("../components/AdminOverview"),
-  "AdminOverview",
-);
-const AbuseControlsPanel = lazyNamed(
-  () => import("../components/AbuseControlsPanel"),
-  "AbuseControlsPanel",
-);
-const AnalyticsPanel = lazyNamed(
-  () => import("../components/AnalyticsPanel"),
-  "AnalyticsPanel",
-);
-const ApiKeyPanel = lazyNamed(
-  () => import("../components/ApiKeyPanel"),
-  "ApiKeyPanel",
-);
-const AuditPanel = lazyNamed(
-  () => import("../components/AuditPanel"),
-  "AuditPanel",
-);
-const BillingPanel = lazyNamed(
-  () => import("../components/BillingPanel"),
-  "BillingPanel",
-);
-const ConnectedAppsPanel = lazyNamed(
-  () => import("../components/ConnectedAppsPanel"),
-  "ConnectedAppsPanel",
-);
-const ChatExperiencePanel = lazyNamed(
-  () => import("../components/ChatExperiencePanel"),
-  "ChatExperiencePanel",
-);
-const DataConnectorPanel = lazyNamed(
-  () => import("../components/DataConnectorPanel"),
-  "DataConnectorPanel",
-);
-const AuthProvidersPanel = lazyNamed(
-  () => import("../components/AuthProvidersPanel"),
-  "AuthProvidersPanel",
-);
-const GovernancePanel = lazyNamed(
-  () => import("../components/GovernancePanel"),
-  "GovernancePanel",
-);
-const GroupsPanel = lazyNamed(
-  () => import("../components/GroupsPanel"),
-  "GroupsPanel",
-);
-const ImpersonationPanel = lazyNamed(
-  () => import("../components/ImpersonationPanel"),
-  "ImpersonationPanel",
-);
-const ModelCatalogPanel = lazyNamed(
-  () => import("../components/ModelCatalogPanel"),
-  "ModelCatalogPanel",
-);
-const NotificationChannelPanel = lazyNamed(
-  () => import("../components/NotificationChannelPanel"),
-  "NotificationChannelPanel",
-);
-const OperationsPosturePanel = lazyNamed(
-  () => import("../components/OperationsPosturePanel"),
-  "OperationsPosturePanel",
-);
-const OrganizationsPanel = lazyNamed(
-  () => import("../components/OrganizationsPanel"),
-  "OrganizationsPanel",
-);
-const PromptTemplatePanel = lazyNamed(
-  () => import("../components/PromptTemplatePanel"),
-  "PromptTemplatePanel",
-);
-const RagGovernancePanel = lazyNamed(
-  () => import("../components/RagGovernancePanel"),
-  "RagGovernancePanel",
-);
-const ProviderPanel = lazyNamed(
-  () => import("../components/ProviderPanel"),
-  "ProviderPanel",
-);
-const ProviderObservabilityPanel = lazyNamed(
-  () => import("../components/ProviderObservabilityPanel"),
-  "ProviderObservabilityPanel",
-);
-const QuotaPanel = lazyNamed(
-  () => import("../components/QuotaPanel"),
-  "QuotaPanel",
-);
-const ServiceAccountPanel = lazyNamed(
-  () => import("../components/ServiceAccountPanel"),
-  "ServiceAccountPanel",
-);
-const ToolConnectorPanel = lazyNamed(
-  () => import("../components/ToolConnectorPanel"),
-  "ToolConnectorPanel",
-);
-const UsagePanel = lazyNamed(
-  () => import("../components/UsagePanel"),
-  "UsagePanel",
-);
-const UsersPanel = lazyNamed(
-  () => import("../components/UsersPanel"),
-  "UsersPanel",
-);
-const WebhooksPanel = lazyNamed(
-  () => import("../components/WebhooksPanel"),
-  "WebhooksPanel",
-);
-const WorkflowsPanel = lazyNamed(
-  () => import("../components/WorkflowsPanel"),
-  "WorkflowsPanel",
-);
-const WebSearchPanel = lazyNamed(
-  () => import("../components/WebSearchPanel"),
-  "WebSearchPanel",
-);
 
 interface AdminSearch {
   availability?: string;
+  connection?: string;
+  direction?: string;
+  managedModel?: string;
+  managedModelTab?: string;
   model?: string;
   page?: number;
   provider?: string;
   query?: string;
   section?: string;
+  sort?: string;
+  toolConnector?: string;
   view?: string;
 }
 
@@ -166,7 +86,23 @@ export const Route = createFileRoute("/admin")({
     ...(typeof search.availability === "string"
       ? { availability: search.availability }
       : {}),
+    ...(typeof search.connection === "string"
+      ? { connection: search.connection }
+      : {}),
+    ...(typeof search.direction === "string"
+      ? { direction: search.direction }
+      : {}),
+    ...(typeof search.managedModel === "string"
+      ? { managedModel: search.managedModel }
+      : {}),
+    ...(typeof search.managedModelTab === "string"
+      ? { managedModelTab: search.managedModelTab }
+      : {}),
     ...(typeof search.model === "string" ? { model: search.model } : {}),
+    ...(typeof search.sort === "string" ? { sort: search.sort } : {}),
+    ...(typeof search.toolConnector === "string"
+      ? { toolConnector: search.toolConnector }
+      : {}),
     ...(typeof search.page === "number" && Number.isInteger(search.page)
       ? { page: Math.max(0, search.page) }
       : {}),
@@ -182,11 +118,14 @@ function AdminPage() {
   const navigate = Route.useNavigate();
   const { section: sectionParam } = search;
   const section = resolveSectionKey(sectionParam, ADMIN_META, "overview");
-  const providerView = ["connections", "models", "observability"].includes(
-    search.view ?? "",
-  )
-    ? search.view!
-    : "connections";
+  const providerView =
+    search.view === "models"
+      ? "base-models"
+      : ["curated", "base-models", "providers", "observability"].includes(
+            search.view ?? "",
+          )
+        ? search.view!
+        : "curated";
   const usageView = ["consumption", "quotas"].includes(search.view ?? "")
     ? search.view!
     : "consumption";
@@ -197,23 +136,92 @@ function AdminPage() {
     : "sources";
   const updateProviderSearch = useCallback(
     (next: {
-      availability?: "all" | "enabled" | "disabled";
+      availability?:
+        | "all"
+        | "available"
+        | "unavailable"
+        | "enabled"
+        | "disabled";
+      direction?: "asc" | "desc";
       model?: string | null;
       page?: number;
       provider?: string;
       query?: string;
+      sort?:
+        | "availability"
+        | "contextWindow"
+        | "displayName"
+        | "enabled"
+        | "name";
     }) =>
       void navigate({
         search: (previous) => {
           const merged = {
             ...previous,
             section: "providers",
-            view: "models",
+            view: "base-models",
             ...next,
           };
           if (merged.model !== null) return merged;
           const { model: _model, ...withoutModel } = merged;
           return withoutModel;
+        },
+      }),
+    [navigate],
+  );
+  const updateManagedModelSearch = useCallback(
+    (managedModel: string | null) =>
+      void navigate({
+        search: (previous) => {
+          const {
+            managedModel: _managedModel,
+            managedModelTab: _managedModelTab,
+            ...rest
+          } = previous;
+          return {
+            ...rest,
+            section: "providers",
+            view: "curated",
+            ...(managedModel ? { managedModel } : {}),
+          };
+        },
+      }),
+    [navigate],
+  );
+  const updateManagedModelTab = useCallback(
+    (managedModelTab: AgentStudioTab) =>
+      void navigate({
+        search: (previous) => ({
+          ...previous,
+          section: "providers",
+          view: "curated",
+          managedModelTab,
+        }),
+      }),
+    [navigate],
+  );
+  const updateProviderConnectionSearch = useCallback(
+    (connection: string | null) =>
+      void navigate({
+        search: {
+          section: "providers",
+          view: "providers",
+          ...(connection ? { connection } : {}),
+        },
+      }),
+    [navigate],
+  );
+  const updateToolConnectorSearch = useCallback(
+    (toolConnector: string | null) =>
+      void navigate({
+        search: (previous) => {
+          const { toolConnector: _toolConnector, ...rest } = previous;
+          return {
+            ...rest,
+            section: "connections",
+            view: "tools",
+            ...(toolConnector ? { toolConnector } : {}),
+          };
         },
       }),
     [navigate],
@@ -306,56 +314,89 @@ function AdminPage() {
         {section === "posture" ? <OperationsPosturePanel /> : null}
 
         {section === "providers" ? (
-          <div className="grid gap-4">
+          <div className="grid min-w-0 gap-4">
             <AdminViewNav
               active={providerView}
               ariaLabel={t("navProviders")}
               items={[
-                ["connections", t("connections")],
-                ["models", t("models")],
+                ["curated", t("curatedModels")],
+                ["base-models", t("baseModels")],
+                ["providers", t("providers")],
                 ["observability", t("observability")],
               ]}
               section="providers"
             />
-            {providerView === "connections" ? (
+            {providerView === "curated" ? (
+              <ManagedModelAdminPanel
+                activeTab={resolveAgentStudioTab(search.managedModelTab)}
+                agents={admin.agents}
+                models={admin.models}
+                onNavigationChange={updateManagedModelSearch}
+                onTabChange={updateManagedModelTab}
+                providers={admin.providers}
+                selectedAgentId={search.managedModel}
+                workspaceDefaultAgentId={admin.workspace?.defaultAgentId}
+                workspaceId={admin.workspace?.id}
+              />
+            ) : null}
+            {providerView === "providers" ? (
               <ProviderPanel
+                agents={admin.agents}
                 isCreating={admin.isCreatingProvider}
-                isUpdating={admin.isUpdatingProvider}
+                isUpdating={admin.isUpdatingProvider || admin.isUpdatingModel}
                 pullingProviderId={admin.pullingProviderId}
                 deletingModelId={admin.deletingModelId}
                 onCreateProvider={admin.handleCreateProvider}
                 onPullProviderModel={admin.handlePullProviderModel}
                 onDeleteProviderModel={admin.handleDeleteProviderModel}
                 onSyncProvider={admin.handleSyncProvider}
+                onUpdateModel={admin.handleUpdateModel}
                 onUpdateProvider={admin.handleUpdateProvider}
                 onVerifyProvider={admin.handleVerifyProvider}
                 operationalSummary={admin.providerOperationalSummary}
                 models={admin.models}
                 providers={admin.providers}
+                onProviderSelectionChange={updateProviderConnectionSearch}
+                selectedProviderId={search.connection}
                 syncingProviderId={admin.syncingProviderId}
                 verifyingProviderId={admin.verifyingProviderId}
               />
             ) : null}
-            {providerView === "models" ? (
+            {providerView === "base-models" ? (
               <ModelCatalogPanel
-                availability={
-                  search.availability === "enabled" ||
-                  search.availability === "disabled"
-                    ? search.availability
-                    : "all"
-                }
+                agents={admin.agents}
+                availability={modelAvailabilityFilter(search.availability)}
                 isUpdating={
                   admin.isUpdatingModelPricing || admin.isUpdatingModel
                 }
                 models={admin.models}
                 onNavigationChange={updateProviderSearch}
+                direction={search.direction === "desc" ? "desc" : "asc"}
                 providers={admin.providers}
                 providerId={search.provider ?? "all"}
                 query={search.query ?? ""}
                 selectedModelId={search.model}
                 page={search.page ?? 0}
+                sort={
+                  [
+                    "availability",
+                    "contextWindow",
+                    "displayName",
+                    "enabled",
+                    "name",
+                  ].includes(search.sort ?? "")
+                    ? (search.sort as
+                        | "availability"
+                        | "contextWindow"
+                        | "displayName"
+                        | "enabled"
+                        | "name")
+                    : "displayName"
+                }
                 onUpdateModel={admin.handleUpdateModel}
                 onUpdatePricing={admin.handleUpdateModelPricing}
+                onManagedModelCreated={updateManagedModelSearch}
+                workspaceId={admin.workspace?.id}
               />
             ) : null}
             {providerView === "observability" ? (
@@ -382,7 +423,12 @@ function AdminPage() {
               ]}
               section="connections"
             />
-            {connectionView === "tools" ? <ToolConnectorPanel /> : null}
+            {connectionView === "tools" ? (
+              <ToolConnectorPanel
+                onSelectionChange={updateToolConnectorSearch}
+                selectedConnectorId={search.toolConnector}
+              />
+            ) : null}
             {connectionView !== "tools" ? (
               <DataConnectorPanel
                 view={connectionView as "catalog" | "imports" | "sources"}
@@ -439,41 +485,5 @@ function AdminPage() {
         ) : null}
       </Suspense>
     </ConsoleLayout>
-  );
-}
-
-function AdminViewNav({
-  active,
-  ariaLabel,
-  items,
-  section,
-}: {
-  active: string;
-  ariaLabel: string;
-  items: ReadonlyArray<readonly [string, string]>;
-  section: string;
-}) {
-  return (
-    <nav aria-label={ariaLabel} className="rm-ui-tabs">
-      <div className="rm-ui-tabs__list">
-        {items.map(([value, label]) => (
-          <Button
-            asChild
-            className="rm-ui-tabs__trigger"
-            data-state={active === value ? "active" : "inactive"}
-            key={value}
-            variant="ghost"
-          >
-            <Link
-              aria-current={active === value ? "page" : undefined}
-              search={{ section, view: value }}
-              to="/admin"
-            >
-              {label}
-            </Link>
-          </Button>
-        ))}
-      </div>
-    </nav>
   );
 }

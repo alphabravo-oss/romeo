@@ -35,6 +35,7 @@ describe("tenant identity repository mappers", () => {
         orgId: "org_1",
         name: "Workspace One",
         slug: "workspace-one",
+        defaultAgentId: null,
         archivedAt: new Date("2026-06-28T00:00:00.000Z"),
         createdAt: new Date("2026-06-27T00:00:00.000Z"),
         updatedAt: new Date("2026-06-27T00:00:00.000Z"),

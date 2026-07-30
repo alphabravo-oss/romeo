@@ -1,5 +1,4 @@
-import { Button, EmptyState, StatusBadge, Switch } from "@romeo/ui";
-import KeySquare from "lucide-react/dist/esm/icons/key-square.mjs";
+import { Button, StatusBadge, Switch } from "@romeo/ui";
 import Settings2 from "lucide-react/dist/esm/icons/settings-2.mjs";
 import TestTube2 from "lucide-react/dist/esm/icons/test-tube-2.mjs";
 import { useMemo } from "react";
@@ -17,8 +16,8 @@ import {
   canTestProvider,
 } from "./auth-provider-card-actions";
 import { splitProviderZones } from "./auth-provider-zones";
+import { createColumnHelper, DataTable } from "./DataTable";
 import { PanelStats } from "./PanelStats";
-import { ProviderSlotCard } from "./ProviderSlotCard";
 
 interface AuthProviderRow {
   configured: boolean;
@@ -30,11 +29,8 @@ interface AuthProviderRow {
   test: AuthProviderConnectionTestReport | undefined;
 }
 
-/**
- * Authentication is a closed catalog of singleton slots, so it is presented
- * as active/configured methods and available slots rather than as an inventory
- * table that implies administrators can create duplicate providers.
- */
+const providerColumn = createColumnHelper<AuthProviderRow>();
+
 export function AuthProviderSplitView({
   busy,
   catalog,
@@ -83,6 +79,126 @@ export function AuthProviderSplitView({
     () => rows.filter((row) => row.enabled).length,
     [rows],
   );
+  const columns = useMemo(
+    () => [
+      providerColumn.accessor((row) => row.entry.name, {
+        id: "provider",
+        header: t("provider"),
+        cell: ({ row }) => (
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0">
+              {authProviderIcon(row.original.entry.id)}
+            </span>
+            <span className="block min-w-0">
+              <strong className="block truncate" translate="no">
+                {row.original.entry.name}
+              </strong>
+              <small className="block truncate text-muted">
+                {row.original.entry.protocol}
+              </small>
+            </span>
+          </span>
+        ),
+      }),
+      providerColumn.accessor("status", {
+        header: t("status"),
+        cell: ({ row }) => (
+          <StatusBadge
+            tone={
+              row.original.status === "planned"
+                ? "neutral"
+                : row.original.configured
+                  ? "success"
+                  : "warning"
+            }
+          >
+            {row.original.status === "planned"
+              ? t("authComingSoon")
+              : row.original.configured
+                ? t("authZoneActive")
+                : t("authNotConfigured")}
+          </StatusBadge>
+        ),
+      }),
+      providerColumn.accessor(
+        (row) =>
+          row.test?.status === "disabled"
+            ? "not_tested"
+            : (row.test?.status ?? "not_tested"),
+        {
+          id: "test",
+          header: t("authTest"),
+          cell: ({ getValue }) => <AuthProviderTestStatus value={getValue()} />,
+        },
+      ),
+      providerColumn.accessor("enabled", {
+        header: t("authEnabled"),
+        cell: ({ row }) => (
+          <Switch
+            checked={row.original.enabled}
+            disabled={row.original.status === "planned" || busy}
+            label={t("authEnabled")}
+            onCheckedChange={(checked) =>
+              onToggle(row.original.entry, checked === true)
+            }
+          />
+        ),
+      }),
+      providerColumn.display({
+        id: "actions",
+        header: t("managedModelActions"),
+        cell: ({ row }) => (
+          <div className="flex flex-wrap items-center justify-end gap-1">
+            <Button
+              disabled={row.original.status === "planned"}
+              onClick={() => onConfigure(row.original.entry)}
+              size="sm"
+              variant="secondary"
+            >
+              <Settings2 aria-hidden size={14} />
+              {row.original.configured
+                ? t("authEditConfiguration")
+                : t("authConfigure")}
+            </Button>
+            {canTestProvider(row.original.entry) ? (
+              <Button
+                disabled={testing}
+                onClick={() => onTest(row.original.entry)}
+                pending={testing}
+                size="sm"
+              >
+                <TestTube2 aria-hidden size={14} />
+                {t("authTest")}
+              </Button>
+            ) : null}
+            {canDeprovisionProvider(row.original.entry) ? (
+              <Button
+                aria-haspopup="dialog"
+                disabled={deprovisioning}
+                onClick={() => onDeprovision(row.original.entry)}
+                size="sm"
+                variant="ghost"
+              >
+                {t("authDeprovisionUser")}
+              </Button>
+            ) : null}
+          </div>
+        ),
+        enableHiding: false,
+        enableSorting: false,
+      }),
+    ],
+    [
+      busy,
+      deprovisioning,
+      onConfigure,
+      onDeprovision,
+      onTest,
+      onToggle,
+      t,
+      testing,
+    ],
+  );
 
   return (
     <div className="grid gap-4">
@@ -94,115 +210,43 @@ export function AuthProviderSplitView({
         ]}
       />
 
-      <section className="rm-provider-zone">
-        <h3 className="rm-provider-zone__label">{t("authZoneActive")}</h3>
-        {zones.active.length === 0 ? (
-          <EmptyState
-            icon={<KeySquare aria-hidden size={24} />}
-            title={t("authNoActiveProviders")}
-          >
-            {t("authNoActiveProvidersDescription")}
-          </EmptyState>
-        ) : (
-          <div className="rm-provider-zone__grid">
-            {zones.active.map((row) => (
-              <ProviderSlotCard
-                actions={
-                  <>
-                    <Switch
-                      checked={row.enabled}
-                      disabled={row.status === "planned" || busy}
-                      label={t("authEnabled")}
-                      onCheckedChange={(checked) =>
-                        onToggle(row.entry, checked === true)
-                      }
-                    />
-                    <Button
-                      onClick={() => onConfigure(row.entry)}
-                      size="sm"
-                      variant="secondary"
-                    >
-                      <Settings2 aria-hidden size={14} />
-                      {t("authEditConfiguration")}
-                    </Button>
-                    {canTestProvider(row.entry) ? (
-                      <Button
-                        disabled={testing}
-                        onClick={() => onTest(row.entry)}
-                        pending={testing}
-                        size="sm"
-                      >
-                        <TestTube2 aria-hidden size={14} />
-                        {t("authTest")}
-                      </Button>
-                    ) : null}
-                    {canDeprovisionProvider(row.entry) ? (
-                      <Button
-                        aria-haspopup="dialog"
-                        disabled={deprovisioning}
-                        onClick={() => onDeprovision(row.entry)}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        {t("authDeprovisionUser")}
-                      </Button>
-                    ) : null}
-                  </>
-                }
-                configured={row.configured}
-                enabled={row.enabled}
-                icon={authProviderIcon(row.entry.id)}
-                key={row.entry.id}
-                name={row.entry.name}
-                protocol={row.entry.protocol}
-                testStatus={
-                  row.test?.status === "disabled"
-                    ? "not_tested"
-                    : (row.test?.status ?? "not_tested")
-                }
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {zones.available.length > 0 ? (
-        <section className="rm-provider-zone">
-          <h3 className="rm-provider-zone__label">
-            {t("authZoneAvailable")} · {zones.available.length}
-          </h3>
-          <div className="rm-provider-zone__grid rm-provider-zone__grid--dense">
-            {zones.available.map((row) => (
-              <Button
-                key={row.entry.id}
-                onClick={() => onConfigure(row.entry)}
-                variant="outline"
-              >
-                <span className="shrink-0">
-                  {authProviderIcon(row.entry.id)}
-                </span>
-                <span translate="no">{row.entry.name}</span>
-              </Button>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {zones.unavailable.length > 0 ? (
-        <section className="rm-provider-zone">
-          <h3 className="rm-provider-zone__label">
-            {t("authZoneUnavailable")}
-          </h3>
-          <div className="rm-provider-card__facts">
-            {zones.unavailable.map((row) => (
-              <StatusBadge key={row.entry.id}>
-                <span translate="no">{row.entry.name}</span> ·{" "}
-                {t("authComingSoon")}
-              </StatusBadge>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.id}
+        minTableWidth={840}
+        preferenceKey="authentication-providers"
+        searchVisibility="always"
+      />
     </div>
+  );
+}
+
+function AuthProviderTestStatus({
+  value,
+}: {
+  value: "failed" | "not_tested" | "partial" | "passed";
+}) {
+  const { t } = useLocale();
+  if (value === "not_tested")
+    return <span className="text-xs text-muted">—</span>;
+  return (
+    <StatusBadge
+      tone={
+        value === "passed"
+          ? "success"
+          : value === "partial"
+            ? "warning"
+            : "danger"
+      }
+    >
+      {t(
+        value === "passed"
+          ? "authTestPassed"
+          : value === "partial"
+            ? "authTestPartial"
+            : "authTestFailed",
+      )}
+    </StatusBadge>
   );
 }

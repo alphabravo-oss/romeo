@@ -7,39 +7,16 @@ import {
   jsonResponse,
   standardErrorResponses,
 } from "./common";
+import { ProviderCatalogSyncSchema } from "./provider-catalog-schemas";
+import {
+  ProviderCapabilitiesSchema,
+  ProviderImagePricingSchema as imagePricing,
+  ProviderKindSchema as providerKind,
+} from "./provider-capability-schemas";
+
+export { ProviderCapabilitiesSchema } from "./provider-capability-schemas";
 
 const identifier = z.string().trim().min(1).max(300);
-const providerKind = z.enum([
-  "anthropic",
-  "openai-compatible",
-  "openai-responses-compatible",
-  "ollama",
-]);
-const modelModality = z.enum([
-  "audio-input",
-  "audio-output",
-  "embeddings",
-  "text",
-  "vision",
-]);
-
-export const ProviderCapabilitiesSchema = z
-  .strictObject({
-    streaming: z.boolean(),
-    toolCalling: z.boolean(),
-    vision: z.boolean(),
-    audioInput: z.boolean(),
-    structuredJson: z.boolean(),
-    reasoning: z.boolean(),
-    imageGeneration: z.boolean().optional(),
-    modalities: z.array(modelModality),
-    deployment: z.strictObject({
-      mode: z.enum(["hosted-api", "local-runtime"]),
-      networkAccess: z.enum(["external-http", "local-http"]),
-      credentialRequired: z.boolean(),
-    }),
-  })
-  .openapi("ProviderCapabilities");
 
 export const ProviderConnectionSchema = z
   .strictObject({
@@ -51,16 +28,11 @@ export const ProviderConnectionSchema = z
     modelIds: z.array(identifier).optional(),
     enabled: z.boolean(),
     capabilities: ProviderCapabilitiesSchema,
+    catalogSync: ProviderCatalogSyncSchema.optional(),
     credentialConfigured: z.boolean(),
     credentialRefScheme: z.string().optional(),
   })
   .openapi("ProviderConnection");
-
-const imagePricing = z.strictObject({
-  "1024x1024": z.number().nonnegative(),
-  "1024x1536": z.number().nonnegative(),
-  "1536x1024": z.number().nonnegative(),
-});
 
 export const ProviderModelSchema = z
   .strictObject({
@@ -69,6 +41,7 @@ export const ProviderModelSchema = z
     name: z.string().min(1),
     displayName: z.string().min(1),
     enabled: z.boolean(),
+    available: z.boolean().optional(),
     capabilities: ProviderCapabilitiesSchema,
     contextWindow: z.number().int().positive(),
     pricing: z
@@ -88,7 +61,7 @@ export const CreateProviderConnectionSchema = z
     name: z.string().trim().min(1).max(200),
     baseUrl: z.url(),
     credentialRef: z.string().trim().min(1).max(500).optional(),
-    modelIds: z.array(identifier).max(100).optional(),
+    modelIds: z.array(identifier).max(2_000).optional(),
   })
   .openapi("CreateProviderConnectionRequest");
 
@@ -362,11 +335,22 @@ export const listProviderModelsRoute = createRoute({
   summary: "List authorized provider models",
   request: {
     query: z.strictObject({
+      available: z.enum(["true", "false"]).optional(),
       enabled: z.enum(["true", "false"]).optional(),
+      direction: z.enum(["asc", "desc"]).optional(),
       limit: z.coerce.number().int().min(1).max(100).optional(),
       offset: z.coerce.number().int().min(0).max(1_000_000).optional(),
       providerId: identifier.optional(),
       q: z.string().trim().max(300).optional(),
+      sort: z
+        .enum([
+          "availability",
+          "contextWindow",
+          "displayName",
+          "enabled",
+          "name",
+        ])
+        .optional(),
     }),
   },
   responses: {

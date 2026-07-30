@@ -2,6 +2,7 @@ import {
   managedModelsDiffVersion,
   managedModelsGetCustomizationPolicy,
   managedModelsGetPreferences,
+  managedModelsGetReadiness,
   managedModelsList,
   managedModelsListGallery,
   managedModelsListGrants,
@@ -19,6 +20,7 @@ import type {
   AgentVersionDiff,
   ManagedModelCustomizationPolicy,
   ManagedModelPreferences,
+  ManagedModelReadiness,
 } from "./types";
 
 export async function listAgents(workspaceId: string): Promise<Agent[]> {
@@ -103,6 +105,26 @@ export async function getManagedModelPreferences(
   configureBrowserApiClients();
   const response = await managedModelsGetPreferences({
     path: { agentId },
+    throwOnError: true,
+  });
+  return response.data.data;
+}
+
+export async function getAgentReadiness(input: {
+  agentId: string;
+  principalType?: "group" | "service_account" | "user";
+  principalId?: string;
+}): Promise<ManagedModelReadiness> {
+  configureBrowserApiClients();
+  const response = await managedModelsGetReadiness({
+    path: { agentId: input.agentId },
+    query:
+      input.principalType === undefined || input.principalId === undefined
+        ? {}
+        : {
+            principalType: input.principalType,
+            principalId: input.principalId,
+          },
     throwOnError: true,
   });
   return response.data.data;

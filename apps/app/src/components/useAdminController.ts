@@ -116,6 +116,7 @@ export function useAdminController() {
     try {
       await syncProviderModels(providerId);
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["providers"] }),
         queryClient.invalidateQueries({ queryKey: ["models"] }),
         queryClient.invalidateQueries({
           queryKey: ["providerOperationalSummary"],
@@ -140,6 +141,7 @@ export function useAdminController() {
       const result = await pullOllamaProviderModel({ providerId, model });
       await syncProviderModels(providerId);
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["providers"] }),
         queryClient.invalidateQueries({ queryKey: ["models"] }),
         queryClient.invalidateQueries({
           queryKey: ["providerOperationalSummary"],
@@ -168,6 +170,7 @@ export function useAdminController() {
     try {
       const result = await deleteOllamaProviderModel({ providerId, model });
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["providers"] }),
         queryClient.invalidateQueries({ queryKey: ["models"] }),
         queryClient.invalidateQueries({
           queryKey: ["providerOperationalSummary"],

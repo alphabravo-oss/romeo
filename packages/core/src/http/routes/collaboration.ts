@@ -17,6 +17,7 @@ import {
   listManagedModelGrantsRoute,
   listShareTargetsRoute,
   revokeChatShareRoute,
+  revokeManagedModelGrantRoute,
   shareChatRoute,
   shareFileRoute,
   shareFolderRoute,
@@ -52,6 +53,16 @@ export function registerCollaborationRoutes(app: RomeoApi): void {
       share: context.req.valid("json"),
     });
     return context.json({ data: toManagedModelGrants(data) }, 201);
+  });
+
+  app.openapi(revokeManagedModelGrantRoute, async (context) => {
+    const { agentId, grantId } = context.req.valid("param");
+    const data = await context.get("services").collaboration.revokeAgentGrant({
+      subject: context.get("subject"),
+      agentId,
+      grantId,
+    });
+    return context.json({ data: toManagedModelGrants([data])[0]! }, 200);
   });
 
   app.openapi(listKnowledgeBaseSharesRoute, async (context) => {
@@ -244,6 +255,7 @@ export function registerCollaborationRoutes(app: RomeoApi): void {
 
 function toManagedModelGrants(
   grants: Array<{
+    createdAt?: string;
     id: string;
     principalId: string;
     principalType: "group" | "service_account" | "user";

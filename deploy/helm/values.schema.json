@@ -524,6 +524,30 @@
             { "type": "string", "pattern": "^[1-9][0-9]*$" }
           ]
         },
+        "MODEL_CATALOG_SYNC_ENABLED": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "string", "enum": ["true", "false"] }
+          ]
+        },
+        "MODEL_CATALOG_SYNC_INTERVAL_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 10000 },
+            { "type": "string", "pattern": "^[1-9][0-9]{4,}$" }
+          ]
+        },
+        "MODEL_CATALOG_SYNC_TTL_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 10000 },
+            { "type": "string", "pattern": "^[1-9][0-9]{4,}$" }
+          ]
+        },
+        "MODEL_CATALOG_SYNC_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1000 },
+            { "type": "string", "pattern": "^[1-9][0-9]{3,}$" }
+          ]
+        },
         "RUN_EXECUTION_LEASE_SECONDS": {
           "oneOf": [
             { "type": "integer", "minimum": 1, "maximum": 3600 },

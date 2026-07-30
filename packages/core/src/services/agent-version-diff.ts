@@ -5,10 +5,12 @@ export interface AgentVersionDiffChange {
     | "baseModelId"
     | "knowledgeBaseBindings"
     | "memoryPolicy"
+    | "promptSuggestions"
     | "safetySettings"
     | "systemPrompt"
     | "parameters"
     | "toolBindings"
+    | "tags"
     | "voiceProfileId";
   left: unknown;
   right: unknown;
@@ -31,6 +33,13 @@ export function diffAgentVersions(
   pushChange(changes, "systemPrompt", left.systemPrompt, right.systemPrompt);
   pushChange(changes, "parameters", left.parameters, right.parameters);
   pushChange(changes, "memoryPolicy", left.memoryPolicy, right.memoryPolicy);
+  pushChange(
+    changes,
+    "promptSuggestions",
+    left.promptSuggestions ?? [],
+    right.promptSuggestions ?? [],
+  );
+  pushChange(changes, "tags", left.tags ?? [], right.tags ?? []);
   pushChange(
     changes,
     "safetySettings",

@@ -1,10 +1,13 @@
 {
+  "toolBackToConnectors": "Retour aux connecteurs d’outils",
+  "toolConnectorNotFound": "Connecteur d’outils introuvable.",
+  "toolConnectorSchema": "Schéma du connecteur",
+  "toolOpenConnector": "Ouvrir {{name}}",
   "toolAuthChecked": "Authentification vérifiée",
   "toolConnectorApproval": "Politique d’approbation",
   "toolAuth": "Authentification",
   "toolAuthRefSet": "référence d’authentification définie",
   "toolCheckAuth": "Vérifier l’authentification",
-  "toolConnector": "Connecteur",
   "toolConnectorDisabled": "Connecteur désactivé",
   "toolConnectorEnabled": "Connecteur activé",
   "toolConnectorName": "Nom du connecteur",
@@ -46,5 +49,9 @@
   "toolUnableImport": "Impossible d’importer le connecteur.",
   "toolUnableUpdate": "Impossible de mettre à jour le connecteur.",
   "toolUnavailable": "indisponible",
-  "toolVisibility": "Visibilité"
+  "toolVisibility": "Visibilité",
+  "toolDependentAssistants": "Assistants dépendants",
+  "toolDependentOperations": "Opérations liées",
+  "toolDisableImpactTitle": "Désactiver ce connecteur ?",
+  "toolDisableImpactDescription": "Cela bloquera {{agents}} assistants utilisant {{operations}} opérations. Leurs prochaines exécutions peuvent échouer jusqu’à ce qu’un remplacement soit lié."
 }

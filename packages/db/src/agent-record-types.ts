@@ -27,12 +27,17 @@ export interface AgentRecord {
   orgId: string;
   workspaceId: string;
   name: string;
+  description?: string;
+  icon?: string;
+  avatarUrl?: string;
   createdBy: string;
   baseModelId: string;
   systemPrompt: string;
   parameters: AgentParametersRecord;
   memoryPolicy: AgentMemoryPolicyRecord;
+  promptSuggestions?: Array<{ title: string; prompt: string }>;
   safetySettings: AgentSafetySettingsRecord;
+  tags?: string[];
   voiceProfileId?: string;
   publishedVersionId?: string;
   archivedAt?: string;
@@ -71,7 +76,9 @@ export interface AgentVersionRecord {
   systemPrompt: string;
   parameters: AgentParametersRecord;
   memoryPolicy: AgentMemoryPolicyRecord;
+  promptSuggestions?: Array<{ title: string; prompt: string }>;
   safetySettings: AgentSafetySettingsRecord;
+  tags?: string[];
   voiceProfileId?: string;
   knowledgeBaseBindings?: Array<{ knowledgeBaseId: string; enabled: boolean }>;
   toolBindings?: Array<{

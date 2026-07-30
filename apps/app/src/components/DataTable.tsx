@@ -39,6 +39,10 @@ export function DataTable<T>(
     selected: t("tableSelected"),
     selectRow: t("tableSelectRow"),
     shown: t("tableShown"),
+    savedViews: t("tableSavedViews"),
+    saveView: t("tableSaveView"),
+    viewName: t("tableViewName"),
+    deleteView: t("tableDeleteView"),
     total: t("tableTotal"),
   };
   const exportFileName =

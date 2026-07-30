@@ -40,16 +40,26 @@ import {
   versionsResponse,
   exportResponse,
   versionDiffSchema,
-  ManagedModelGrantSchema,
-  ShareManagedModelSchema,
   ManagedModelGalleryItemSchema,
   ManagedModelKnowledgeBaseSchema,
   ManagedModelKnowledgeBindingSchema,
   UpdateManagedModelKnowledgeBindingSchema,
   BindManagedModelVoiceSchema,
 } from "./managed-model-schemas";
+import { getManagedModelReadinessRoute } from "./managed-model-readiness";
+import {
+  listManagedModelGrantsRoute,
+  revokeManagedModelGrantRoute,
+  shareManagedModelRoute,
+} from "./managed-model-access";
 
 export * from "./managed-model-schemas";
+export { getManagedModelReadinessRoute } from "./managed-model-readiness";
+export {
+  listManagedModelGrantsRoute,
+  revokeManagedModelGrantRoute,
+  shareManagedModelRoute,
+} from "./managed-model-access";
 
 const authenticatedErrors = {
   401: standardErrorResponses[401],
@@ -346,46 +356,6 @@ export const rollbackManagedModelVersionRoute = createRoute({
   },
 });
 
-export const listManagedModelGrantsRoute = createRoute({
-  ...metadata,
-  method: "get",
-  path: "/api/v1/agents/{agentId}/shares",
-  operationId: "managedModels.listGrants",
-  summary: "List managed-model access grants",
-  request: { params: agentPath },
-  responses: {
-    200: jsonResponse(
-      "Managed-model access grants",
-      dataEnvelope(z.array(ManagedModelGrantSchema)),
-    ),
-    ...managedModelErrors,
-  },
-});
-
-export const shareManagedModelRoute = createRoute({
-  ...metadata,
-  method: "post",
-  path: "/api/v1/agents/{agentId}/shares",
-  operationId: "managedModels.share",
-  summary: "Grant managed-model access",
-  description:
-    "Idempotently grants the selected permissions to one tenant principal.",
-  request: {
-    params: agentPath,
-    body: {
-      required: true,
-      content: { "application/json": { schema: ShareManagedModelSchema } },
-    },
-  },
-  responses: {
-    201: jsonResponse(
-      "Managed-model access grants",
-      dataEnvelope(z.array(ManagedModelGrantSchema)),
-    ),
-    ...managedModelMutationErrors,
-  },
-});
-
 export const listManagedModelGalleryRoute = createRoute({
   ...metadata,
   method: "get",
@@ -486,7 +456,9 @@ export const managedModelRoutes = [
   rollbackManagedModelVersionRoute,
   listManagedModelGrantsRoute,
   shareManagedModelRoute,
+  revokeManagedModelGrantRoute,
   listManagedModelGalleryRoute,
+  getManagedModelReadinessRoute,
   listManagedModelKnowledgeBindingsRoute,
   updateManagedModelKnowledgeBindingRoute,
   bindManagedModelVoiceRoute,

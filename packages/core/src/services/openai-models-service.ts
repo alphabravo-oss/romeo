@@ -84,6 +84,7 @@ export class OpenAiModelsService {
         (entry): entry is { model: BaseModel; provider: ProviderInstance } =>
           entry.provider !== undefined &&
           entry.model.enabled &&
+          entry.model.available !== false &&
           entry.provider.enabled &&
           hasGrant(subject, grants, "model", entry.model.id, "use") &&
           hasGrant(subject, grants, "provider", entry.provider.id, "use"),

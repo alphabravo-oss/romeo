@@ -60,7 +60,12 @@ async function resolveFallback(
   if (policy.fallbackModelId === primary.model.id) return {};
 
   const fallbackModel = await repository.getModel(policy.fallbackModelId);
-  if (fallbackModel === undefined || !fallbackModel.enabled) return {};
+  if (
+    fallbackModel === undefined ||
+    !fallbackModel.enabled ||
+    fallbackModel.available === false
+  )
+    return {};
 
   const fallbackProvider = await repository.getProvider(
     fallbackModel.providerId,

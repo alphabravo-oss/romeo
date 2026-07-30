@@ -36,7 +36,6 @@ import { VoiceInputButton } from "./VoiceInputButton";
 export function ChatComposer({
   attachedUrls,
   canInspectContext,
-  canOverrideModel,
   documentAttachments,
   draft,
   error,
@@ -376,15 +375,13 @@ export function ChatComposer({
                 </Button>
               }
             />
-            {canOverrideModel ? (
-              <ComposerModelSelect
-                disabled={isStreaming}
-                models={models}
-                providers={providers}
-                onSelectModel={onSelectModel}
-                selectedModelId={selectedModelId}
-              />
-            ) : null}
+            <ComposerModelSelect
+              disabled={isStreaming}
+              models={models}
+              providers={providers}
+              onSelectModel={onSelectModel}
+              selectedModelId={selectedModelId}
+            />
             <Button
               aria-pressed={webSearchEnabled}
               aria-label={t("search")}

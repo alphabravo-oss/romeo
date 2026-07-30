@@ -167,12 +167,13 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       const chat = options.activeChatId
         ? { id: options.activeChatId }
         : await createChatMutation.mutateAsync({
+            agentId: options.activeAgentId,
             workspaceId: options.workspaceId,
             title: fallbackChatTitle(content),
             ...(options.temporaryNextChat ? { temporary: true } : {}),
           });
       options.setActiveChatId(chat.id);
-      if (options.selectedModelId !== undefined && !options.activeChatId) {
+      if (options.selectedModelId !== undefined && isNewChat) {
         await updateChat(chat.id, { modelId: options.selectedModelId });
       }
       options.setIsDraftingNewChat(false);

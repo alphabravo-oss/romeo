@@ -147,10 +147,12 @@ export class OpenAiChatCompletionsService {
         "The model provider is outside the caller organization.",
       );
     }
-    if (!model.enabled) {
+    if (!model.enabled || model.available === false) {
       throw new ApiError(
-        "model_disabled",
-        "The requested model is disabled.",
+        model.available === false ? "model_unavailable" : "model_disabled",
+        model.available === false
+          ? "The requested model is no longer available from its provider."
+          : "The requested model is disabled.",
         409,
         { modelId: model.id },
       );

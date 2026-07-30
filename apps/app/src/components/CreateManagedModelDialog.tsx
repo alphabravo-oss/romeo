@@ -12,11 +12,15 @@ export function CreateManagedModelDialog({
   onCreated,
   providers,
   workspaceId,
+  defaultBaseModelId,
+  trigger,
 }: {
   models: BaseModel[];
   onCreated: (agentId: string) => void;
   providers: Provider[];
   workspaceId: string | undefined;
+  defaultBaseModelId?: string;
+  trigger?: React.ReactNode;
 }) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
@@ -28,12 +32,26 @@ export function CreateManagedModelDialog({
     () => new Map(providers.map((provider) => [provider.id, provider.name])),
     [providers],
   );
-  const enabledModels = models.filter((model) => model.enabled);
+  const enabledProviderIds = useMemo(
+    () =>
+      new Set(
+        providers
+          .filter((provider) => provider.enabled)
+          .map((provider) => provider.id),
+      ),
+    [providers],
+  );
+  const enabledModels = models.filter(
+    (model) =>
+      model.enabled &&
+      model.available !== false &&
+      enabledProviderIds.has(model.providerId),
+  );
   const createMutation = useMutation({ mutationFn: createAgent });
 
   function reset() {
     setName("");
-    setBaseModelId(enabledModels[0]?.id ?? "");
+    setBaseModelId(defaultBaseModelId ?? enabledModels[0]?.id ?? "");
     setSystemPrompt("");
   }
 
@@ -78,14 +96,16 @@ export function CreateManagedModelDialog({
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
         if (nextOpen && !baseModelId)
-          setBaseModelId(enabledModels[0]?.id ?? "");
+          setBaseModelId(defaultBaseModelId ?? enabledModels[0]?.id ?? "");
       }}
       open={open}
       title={t("agentCreateTitle")}
       trigger={
-        <Button disabled={!workspaceId || enabledModels.length === 0}>
-          {t("agentNew")}
-        </Button>
+        trigger ?? (
+          <Button disabled={!workspaceId || enabledModels.length === 0}>
+            {t("agentNew")}
+          </Button>
+        )
       }
     >
       <div className="grid gap-3">

@@ -1,7 +1,6 @@
 import { useMutation, type QueryClient } from "@tanstack/react-query";
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useState } from "react";
 
-import { cloneAgent } from "../features/managed-models";
 import {
   createProvider,
   syncProviderModels,
@@ -9,45 +8,19 @@ import {
 } from "../features/providers/mutations";
 
 interface WorkspaceProviderActionsOptions {
-  activeAgent: { id: string; name: string } | undefined;
   queryClient: QueryClient;
-  setActiveAgentId: Dispatch<SetStateAction<string | undefined>>;
   setError: (error: string | undefined) => void;
-  workspaceId: string | undefined;
 }
 
 export function useWorkspaceProviderActions({
-  activeAgent,
   queryClient,
-  setActiveAgentId,
   setError,
-  workspaceId,
 }: WorkspaceProviderActionsOptions) {
   const [syncingProviderId, setSyncingProviderId] = useState<string>();
-  const cloneAgentMutation = useMutation({ mutationFn: cloneAgent });
   const createProviderMutation = useMutation({ mutationFn: createProvider });
   const updateModelPricingMutation = useMutation({
     mutationFn: updateModelPricing,
   });
-
-  async function handleCloneAgent() {
-    if (activeAgent === undefined || workspaceId === undefined) return;
-    setError(undefined);
-    try {
-      const cloned = await cloneAgentMutation.mutateAsync({
-        agentId: activeAgent.id,
-        name: `${activeAgent.name} copy`,
-      });
-      setActiveAgentId(cloned.id);
-      await queryClient.invalidateQueries({
-        queryKey: ["agents", workspaceId],
-      });
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Unable to clone agent.",
-      );
-    }
-  }
 
   async function handleCreateProvider(
     input: Parameters<typeof createProvider>[0],
@@ -110,11 +83,9 @@ export function useWorkspaceProviderActions({
   }
 
   return {
-    handleCloneAgent,
     handleCreateProvider,
     handleSyncProvider,
     handleUpdateModelPricing,
-    isCloningAgent: cloneAgentMutation.isPending,
     isCreatingProvider: createProviderMutation.isPending,
     isUpdatingModelPricing: updateModelPricingMutation.isPending,
     syncingProviderId,

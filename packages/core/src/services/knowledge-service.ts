@@ -101,9 +101,52 @@ export class KnowledgeService {
     subject: AuthSubject,
   ): Promise<KnowledgeBase[]> {
     assertKnowledgeWorkspaceAccess(subject, workspaceId, "knowledge:read");
-    return (await this.repository.listKnowledgeBases(workspaceId)).filter(
-      (knowledgeBase) => canAccessOrg(subject, knowledgeBase.orgId),
-    );
+    const knowledgeBases = (
+      await this.repository.listKnowledgeBases(workspaceId)
+    ).filter((knowledgeBase) => canAccessOrg(subject, knowledgeBase.orgId));
+    const [sourcesByBase, agents, grants] = await Promise.all([
+      Promise.all(
+        knowledgeBases.map((knowledgeBase) =>
+          this.repository.listKnowledgeSources(knowledgeBase.id),
+        ),
+      ),
+      this.repository.listAgents(workspaceId),
+      this.repository.listResourceGrants(subject.orgId),
+    ]);
+    const bindings = (
+      await Promise.all(
+        agents.map((agent) =>
+          this.repository.listAgentKnowledgeBindings(agent.id),
+        ),
+      )
+    ).flat();
+    return knowledgeBases.map((knowledgeBase, index) => {
+      const sources = sourcesByBase[index] ?? [];
+      return {
+        ...knowledgeBase,
+        dependentAgentCount: new Set(
+          bindings
+            .filter(
+              (binding) =>
+                binding.enabled && binding.knowledgeBaseId === knowledgeBase.id,
+            )
+            .map((binding) => binding.agentId),
+        ).size,
+        grantCount: grants.filter(
+          (grant) =>
+            grant.resourceType === "knowledge_base" &&
+            grant.resourceId === knowledgeBase.id,
+        ).length,
+        indexedSourceCount: sources.filter(
+          (source) => source.status === "indexed",
+        ).length,
+        sourceCount: sources.length,
+        totalSizeBytes: sources.reduce(
+          (total, source) => total + source.sizeBytes,
+          0,
+        ),
+      };
+    });
   }
 
   async create(input: {

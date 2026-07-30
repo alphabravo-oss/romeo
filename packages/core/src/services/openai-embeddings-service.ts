@@ -222,6 +222,14 @@ export class OpenAiEmbeddingsService {
         { modelId: model.id },
       );
     }
+    if (model.available === false) {
+      throw new ApiError(
+        "model_unavailable",
+        "The requested embedding model is no longer available from its provider.",
+        409,
+        { modelId: model.id },
+      );
+    }
     if (!provider.enabled) {
       throw new ApiError(
         "provider_disabled",

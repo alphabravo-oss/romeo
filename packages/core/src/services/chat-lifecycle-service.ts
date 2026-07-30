@@ -24,6 +24,7 @@ export class ChatLifecycleService {
   constructor(private readonly repository: RomeoRepository) {}
 
   async create(input: {
+    agentId?: string;
     workspaceId: string;
     title: string;
     subject: AuthSubject;
@@ -41,6 +42,12 @@ export class ChatLifecycleService {
       workspaceId: input.workspaceId,
     });
     const now = new Date().toISOString();
+    if (input.agentId !== undefined)
+      await this.assertAgentAvailable(
+        input.agentId,
+        input.workspaceId,
+        input.subject.orgId,
+      );
     const createdBy = await persistedSubjectActorId(
       this.repository,
       input.subject,
@@ -54,6 +61,7 @@ export class ChatLifecycleService {
       orgId: input.subject.orgId,
       workspaceId: input.workspaceId,
       title: input.title,
+      ...(input.agentId === undefined ? {} : { agentId: input.agentId }),
       ...(input.temporary === true ? { temporary: true } : {}),
       ...(input.expiresAt === undefined
         ? input.temporary === true
@@ -72,6 +80,7 @@ export class ChatLifecycleService {
   }
 
   async update(input: {
+    agentId?: string | null;
     chatId: string;
     subject: AuthSubject;
     title?: string;
@@ -92,9 +101,16 @@ export class ChatLifecycleService {
     if (input.modelId !== undefined && input.modelId !== null) {
       await this.assertModelAvailable(input.modelId, input.subject.orgId);
     }
+    if (input.agentId !== undefined && input.agentId !== null)
+      await this.assertAgentAvailable(
+        input.agentId,
+        chat.workspaceId,
+        input.subject.orgId,
+      );
     const changedFields = [
       ...(input.title === undefined ? [] : ["title"]),
       ...(input.modelId === undefined ? [] : ["modelId"]),
+      ...(input.agentId === undefined ? [] : ["agentId"]),
     ];
     if (changedFields.length === 0) {
       throw new ApiError(
@@ -111,8 +127,14 @@ export class ChatLifecycleService {
           : input.modelId === undefined
             ? chat
             : { ...chat, modelId: input.modelId };
+      const chatWithAgent =
+        input.agentId === null
+          ? withoutChatAgent(chatWithModel)
+          : input.agentId === undefined
+            ? chatWithModel
+            : { ...chatWithModel, agentId: input.agentId };
       const updated = await repository.updateChat({
-        ...chatWithModel,
+        ...chatWithAgent,
         ...(title === undefined ? {} : { title }),
         updatedAt,
       });
@@ -125,6 +147,26 @@ export class ChatLifecycleService {
       );
       return updated;
     });
+  }
+
+  private async assertAgentAvailable(
+    agentId: string,
+    workspaceId: string,
+    orgId: string,
+  ): Promise<void> {
+    const agent = await this.repository.getAgent(agentId);
+    if (
+      agent === undefined ||
+      agent.orgId !== orgId ||
+      agent.workspaceId !== workspaceId ||
+      agent.archivedAt !== undefined ||
+      agent.publishedVersionId === undefined
+    )
+      throw new ApiError(
+        "chat_agent_unavailable",
+        "The selected assistant is not available in this workspace.",
+        400,
+      );
   }
 
   async archive(input: {
@@ -344,7 +386,8 @@ export class ChatLifecycleService {
 
   private async assertModelAvailable(modelId: string, orgId: string) {
     const model = await this.repository.getModel(modelId);
-    if (model === undefined || !model.enabled) throw notFound("Model");
+    if (model === undefined || !model.enabled || model.available === false)
+      throw notFound("Model");
     const provider = await this.repository.getProvider(model.providerId);
     if (
       provider === undefined ||
@@ -383,5 +426,10 @@ function withoutLegalHold(chat: Chat): Chat {
 
 function withoutChatModel(chat: Chat): Chat {
   const { modelId: _modelId, ...rest } = chat;
+  return rest;
+}
+
+function withoutChatAgent(chat: Chat): Chat {
+  const { agentId: _agentId, ...rest } = chat;
   return rest;
 }

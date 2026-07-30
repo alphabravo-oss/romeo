@@ -79,6 +79,7 @@ export function createRomeoApi(
   if (serviceOptions?.startBackgroundWorkers !== false) {
     services.temporaryChatCleanup.start();
     services.runs.startTerminalOutboxWorker();
+    services.providers.startCatalogSyncWorker();
   }
   const requestContextOptions = { devSeededLogin: env.DEV_SEEDED_LOGIN };
   const app = new OpenAPIHono<AppBindings>({

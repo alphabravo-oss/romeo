@@ -20,6 +20,8 @@ export const VoiceProfileSchema = z
     enabled: z.boolean(),
     createdAt: time,
     updatedAt: time,
+    dependentAgentCount: z.number().int().nonnegative().optional(),
+    grantCount: z.number().int().nonnegative().optional(),
   })
   .openapi("VoiceProfile");
 export const CreateVoiceProfileSchema = z

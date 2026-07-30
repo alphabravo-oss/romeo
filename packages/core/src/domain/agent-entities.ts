@@ -24,6 +24,11 @@ export interface AgentMemoryPolicy {
   maxMessages?: number;
 }
 
+export interface AgentPromptSuggestion {
+  title: string;
+  prompt: string;
+}
+
 /** Persistence record; API-facing policy schemas live in @romeo/contracts. */
 export interface ManagedModelCustomizationPolicyRecord {
   orgId: string;
@@ -64,14 +69,20 @@ export interface Agent {
   orgId: string;
   workspaceId: string;
   name: string;
+  description?: string;
+  icon?: string;
+  avatarUrl?: string;
   createdBy: string;
   baseModelId: string;
   systemPrompt: string;
   parameters: AgentParameters;
   memoryPolicy: AgentMemoryPolicy;
+  promptSuggestions?: AgentPromptSuggestion[];
   safetySettings: AgentSafetySettings;
+  tags?: string[];
   voiceProfileId?: string;
   publishedVersionId?: string;
+  grantCount?: number;
   archivedAt?: string;
   updatedAt: string;
 }
@@ -87,7 +98,9 @@ export interface AgentVersion {
   systemPrompt: string;
   parameters: AgentParameters;
   memoryPolicy: AgentMemoryPolicy;
+  promptSuggestions?: AgentPromptSuggestion[];
   safetySettings: AgentSafetySettings;
+  tags?: string[];
   voiceProfileId?: string;
   knowledgeBaseBindings?: Array<{ knowledgeBaseId: string; enabled: boolean }>;
   toolBindings?: Array<{

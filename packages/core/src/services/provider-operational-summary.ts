@@ -123,7 +123,7 @@ export async function summarizeProviderOperations(input: {
       provider.id,
     );
     const enabledModelCount = providerModels.filter(
-      (model) => model.enabled,
+      (model) => model.enabled && model.available !== false,
     ).length;
     const reasons = providerReasons({
       circuit,

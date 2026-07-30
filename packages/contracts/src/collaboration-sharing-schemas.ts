@@ -22,6 +22,7 @@ const resourceType = z.enum([
 
 export const ResourceGrantSchema = z
   .strictObject({
+    createdAt: z.iso.datetime().optional(),
     id: identifier,
     resourceType,
     resourceId: identifier,

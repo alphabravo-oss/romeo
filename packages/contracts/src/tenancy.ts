@@ -136,6 +136,31 @@ export const archiveWorkspaceRoute = createRoute({
   },
 });
 
+export const updateWorkspaceDefaultAgentRoute = createRoute({
+  ...metadata,
+  method: "patch",
+  path: "/api/v1/workspaces/{workspaceId}/default-agent",
+  operationId: "tenancy.updateWorkspaceDefaultAgent",
+  summary: "Set the workspace default assistant",
+  request: {
+    params: workspacePath,
+    body: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: z.strictObject({
+            agentId: z.union([identifier, z.null()]),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: jsonResponse("Updated workspace", dataEnvelope(WorkspaceSchema)),
+    ...errors,
+  },
+});
+
 export const exportWorkspaceRoute = createRoute({
   ...metadata,
   method: "get",
@@ -157,5 +182,6 @@ export const tenancyRoutes = [
   listWorkspacesRoute,
   createWorkspaceRoute,
   archiveWorkspaceRoute,
+  updateWorkspaceDefaultAgentRoute,
   exportWorkspaceRoute,
 ] as const;

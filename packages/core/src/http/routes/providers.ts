@@ -110,16 +110,23 @@ export function registerProviderRoutes(app: RomeoApi): void {
     const query = context.req.valid("query");
     const { limit, offset } = query;
     if (limit !== undefined) {
+      const available =
+        query.available === undefined ? undefined : query.available === "true";
       const enabled =
         query.enabled === undefined ? undefined : query.enabled === "true";
       const page = await context.get("services").providers.modelsPage(subject, {
         limit,
         offset: offset ?? 0,
+        ...(query.direction === undefined
+          ? {}
+          : { direction: query.direction }),
         ...(query.q === undefined ? {} : { query: query.q }),
         ...(query.providerId === undefined
           ? {}
           : { providerId: query.providerId }),
+        ...(available === undefined ? {} : { available }),
         ...(enabled === undefined ? {} : { enabled }),
+        ...(query.sort === undefined ? {} : { sort: query.sort }),
       });
       return context.json(
         {

@@ -57,6 +57,7 @@ describe("chat repository mappers", () => {
       workspaceId: "workspace_1",
       title: "Incident review",
       modelId: null,
+      agentId: null,
       temporary: false,
       expiresAt: null,
       createdBy: "user_1",

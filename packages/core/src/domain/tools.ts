@@ -64,6 +64,8 @@ export interface ToolConnector {
   approvalPolicy: ToolApprovalPolicy;
   visibility: ToolVisibility;
   enabled: boolean;
+  dependentAgentCount?: number;
+  dependentOperationCount?: number;
   createdAt: string;
   updatedAt: string;
 }

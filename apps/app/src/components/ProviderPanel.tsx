@@ -5,32 +5,34 @@ import {
   IconButton,
   StatusBadge,
 } from "@romeo/ui";
-import MoreHorizontal from "lucide-react/dist/esm/icons/ellipsis.mjs";
-import { useMemo, useState } from "react";
+import EllipsisVertical from "lucide-react/dist/esm/icons/ellipsis-vertical.mjs";
+import { useMemo } from "react";
 
 import type {
   BaseModel,
   Provider,
   ProviderOperationalProviderSummary,
-  ProviderOperationalSummary,
   ProviderVerification,
 } from "../features/providers/types";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
-import {
-  ConnectionDialog,
-  type ProviderFormInput,
-} from "./ProviderConnectionDialog";
+import { ConnectionDialog } from "./ProviderConnectionDialog";
 import { DataTable, createColumnHelper, type ColumnDef } from "./DataTable";
 import { PanelStats } from "./PanelStats";
-import { ProviderDetailsSheet } from "./ProviderDetailsSheet";
+import { ProviderCatalogStatus } from "./ProviderCatalogStatus";
+import { ProviderDetailsPage } from "./ProviderDetailsSheet";
+import { useConfirm } from "./ConfirmDialog";
 import { useProviderPanelState } from "./useProviderPanelState";
+import { useProviderModelToggle } from "./useProviderModelToggle";
+import type { ProviderPanelProps } from "./provider-panel-types";
 
 export type { ProviderFormInput } from "./ProviderConnectionDialog";
 
 interface ProviderTableRow {
+  availableModelCount: number;
   chatModelCount: number;
   enabledModelCount: number;
+  dependentAgentCount: number;
   operational: ProviderOperationalProviderSummary | undefined;
   provider: Provider;
   totalModelCount: number;
@@ -40,6 +42,7 @@ interface ProviderTableRow {
 const providerColumn = createColumnHelper<ProviderTableRow>();
 
 export function ProviderPanel({
+  agents,
   isCreating,
   isUpdating,
   pullingProviderId,
@@ -50,40 +53,24 @@ export function ProviderPanel({
   onPullProviderModel,
   onDeleteProviderModel,
   onSyncProvider,
+  onUpdateModel,
   onUpdateProvider,
   onVerifyProvider,
   operationalSummary,
   providers,
   models,
-}: {
-  isCreating: boolean;
-  isUpdating: boolean;
-  pullingProviderId: string | undefined;
-  deletingModelId: string | undefined;
-  syncingProviderId: string | undefined;
-  verifyingProviderId: string | undefined;
-  onCreateProvider: (input: ProviderFormInput) => Promise<void>;
-  onPullProviderModel: (providerId: string, model: string) => Promise<unknown>;
-  onDeleteProviderModel: (
-    providerId: string,
-    modelId: string,
-    model: string,
-  ) => Promise<unknown>;
-  onSyncProvider: (providerId: string) => Promise<void>;
-  onUpdateProvider: (
-    input: Omit<ProviderFormInput, "type"> & {
-      providerId: string;
-      enabled?: boolean;
-      refreshModels?: boolean;
-    },
-  ) => Promise<void>;
-  onVerifyProvider: (providerId: string) => Promise<ProviderVerification>;
-  operationalSummary: ProviderOperationalSummary | undefined;
-  providers: Provider[];
-  models: BaseModel[];
-}) {
+  onProviderSelectionChange,
+  selectedProviderId,
+}: ProviderPanelProps) {
   const { t } = useLocale();
-  const [selectedProviderId, setSelectedProviderId] = useState<string>();
+  const { ask: askDependencyImpact, dialog: dependencyImpactDialog } =
+    useConfirm();
+  const updateModelEnabled = useProviderModelToggle({
+    agents,
+    ask: askDependencyImpact,
+    onUpdateModel,
+    t,
+  });
   const {
     confirmDialog,
     dialog,
@@ -122,19 +109,51 @@ export function ProviderPanel({
           (model) => !model.capabilities.modalities.includes("embeddings"),
         );
         return {
+          availableModelCount: chatModels.filter(
+            (model) => model.available !== false,
+          ).length,
           chatModelCount: chatModels.length,
-          enabledModelCount: chatModels.filter((model) => model.enabled).length,
+          enabledModelCount: chatModels.filter(
+            (model) => model.enabled && model.available !== false,
+          ).length,
+          dependentAgentCount: agents.filter((agent) =>
+            providerModels.some((model) => model.id === agent.baseModelId),
+          ).length,
           operational: operationalByProvider.get(provider.id),
           provider,
           totalModelCount: providerModels.length,
           verification: verification[provider.id],
         };
       }),
-    [modelsByProvider, operationalByProvider, providers, verification],
+    [agents, modelsByProvider, operationalByProvider, providers, verification],
   );
 
-  const updateEnabled = (provider: Provider, enabled: boolean) =>
-    onUpdateProvider({
+  const updateEnabled = async (provider: Provider, enabled: boolean) => {
+    const dependentAgents = agents.filter((agent) =>
+      (modelsByProvider.get(provider.id) ?? []).some(
+        (model) => model.id === agent.baseModelId,
+      ),
+    );
+    if (
+      !enabled &&
+      dependentAgents.length > 0 &&
+      !(await askDependencyImpact({
+        title: t("providerDisableImpactTitle"),
+        body: t("providerDisableImpactDescription", {
+          agents: dependentAgents.length,
+          models: new Set(dependentAgents.map((agent) => agent.baseModelId))
+            .size,
+          names: dependentAgents
+            .slice(0, 5)
+            .map((agent) => agent.name)
+            .join(", "),
+        }),
+        confirmLabel: t("disableProvider"),
+        tone: "danger",
+      }))
+    )
+      return;
+    await onUpdateProvider({
       providerId: provider.id,
       name: provider.name,
       baseUrl: provider.baseUrl,
@@ -143,6 +162,7 @@ export function ProviderPanel({
         : { modelIds: provider.modelIds }),
       enabled,
     });
+  };
 
   const columns = useMemo<ColumnDef<ProviderTableRow, any>[]>(
     () => [
@@ -211,12 +231,31 @@ export function ProviderPanel({
         cell: (context) => {
           const row = context.row.original;
           return (
-            <span>
-              {row.enabledModelCount}/{row.chatModelCount}
+            <span title={`${row.chatModelCount} ${t("cachedModels")}`}>
+              {row.enabledModelCount}/{row.availableModelCount}
             </span>
           );
         },
       }),
+      providerColumn.accessor((row) => row.dependentAgentCount, {
+        id: "dependentAgents",
+        header: t("providerDependentAssistants"),
+      }),
+      providerColumn.accessor(
+        (row) => row.provider.catalogSync?.status ?? "never",
+        {
+          id: "catalog",
+          header: t("catalog"),
+          cell: (context) => {
+            return (
+              <ProviderCatalogStatus
+                compact
+                provider={context.row.original.provider}
+              />
+            );
+          },
+        },
+      ),
       providerColumn.display({
         id: "actions",
         header: "",
@@ -228,7 +267,7 @@ export function ProviderPanel({
           return (
             <div className="flex justify-end gap-1">
               <Button
-                onClick={() => setSelectedProviderId(provider.id)}
+                onClick={() => onProviderSelectionChange(provider.id)}
                 size="sm"
               >
                 {t("manageProvider")}
@@ -263,7 +302,7 @@ export function ProviderPanel({
                     size="sm"
                     variant="ghost"
                   >
-                    <MoreHorizontal aria-hidden size={16} />
+                    <EllipsisVertical aria-hidden size={16} />
                   </IconButton>
                 }
               />
@@ -272,7 +311,15 @@ export function ProviderPanel({
         },
       }),
     ],
-    [setDialog, syncingProviderId, t, verifyingProviderId, verify, sync],
+    [
+      onProviderSelectionChange,
+      setDialog,
+      syncingProviderId,
+      t,
+      verifyingProviderId,
+      verify,
+      sync,
+    ],
   );
 
   const selectedProvider = selectedProviderId
@@ -288,6 +335,65 @@ export function ProviderPanel({
     operationalSummary?.providers.filter(
       (provider) => provider.status === "available",
     ).length ?? providers.filter((provider) => provider.enabled).length;
+
+  if (selectedProvider) {
+    return (
+      <>
+        <ProviderDetailsPage
+          dependentAgents={agents.filter((agent) =>
+            selectedModels.some((model) => model.id === agent.baseModelId),
+          )}
+          deletingModelId={deletingModelId}
+          isUpdating={isUpdating}
+          models={selectedModels}
+          onBack={() => onProviderSelectionChange(null)}
+          onConfigure={() => setDialog(selectedProvider)}
+          onDeleteModel={remove}
+          onPullModel={pull}
+          onRefresh={() => void sync(selectedProvider.id)}
+          onToggle={(enabled) => void updateEnabled(selectedProvider, enabled)}
+          onToggleModel={updateModelEnabled}
+          onVerify={() => void verify(selectedProvider.id)}
+          provider={selectedProvider}
+          pullName={pullNames[selectedProvider.id] ?? ""}
+          pulling={pullingProviderId === selectedProvider.id}
+          setPullName={(value) =>
+            setPullNames((current) => ({
+              ...current,
+              [selectedProvider.id]: value,
+            }))
+          }
+          syncing={syncingProviderId === selectedProvider.id}
+          verification={selectedVerification}
+          verifying={verifyingProviderId === selectedProvider.id}
+        />
+        {dialog ? (
+          <ConnectionDialog
+            busy={isCreating || isUpdating}
+            key={dialog === "new" ? "new" : dialog.id}
+            onClose={() => setDialog(undefined)}
+            onSave={async (value) => {
+              await onUpdateProvider({
+                providerId: selectedProvider.id,
+                name: value.name,
+                baseUrl: value.baseUrl,
+                ...(value.apiKey === undefined ? {} : { apiKey: value.apiKey }),
+                ...(value.modelIds === undefined
+                  ? {}
+                  : { modelIds: value.modelIds }),
+                refreshModels: true,
+              });
+              toast(t("connectionUpdated"), "success");
+              setDialog(undefined);
+            }}
+            provider={selectedProvider}
+          />
+        ) : null}
+        {confirmDialog}
+        {dependencyImpactDialog}
+      </>
+    );
+  }
 
   return (
     <section className="rm-panel p-4">
@@ -322,47 +428,10 @@ export function ProviderPanel({
             columns={columns}
             data={rows}
             getRowId={(row) => row.provider.id}
-            minTableWidth={820}
+            minTableWidth={960}
           />
         )}
       </div>
-
-      <ProviderDetailsSheet
-        deletingModelId={deletingModelId}
-        isUpdating={isUpdating}
-        models={selectedModels}
-        onClose={() => setSelectedProviderId(undefined)}
-        onConfigure={() => {
-          if (selectedProvider) setDialog(selectedProvider);
-        }}
-        onDeleteModel={remove}
-        onPullModel={pull}
-        onRefresh={() => {
-          if (selectedProvider) void sync(selectedProvider.id);
-        }}
-        onToggle={(enabled) => {
-          if (selectedProvider) void updateEnabled(selectedProvider, enabled);
-        }}
-        onVerify={() => {
-          if (selectedProvider) void verify(selectedProvider.id);
-        }}
-        open={selectedProvider !== undefined}
-        provider={selectedProvider}
-        pullName={
-          selectedProvider ? (pullNames[selectedProvider.id] ?? "") : ""
-        }
-        pulling={pullingProviderId === selectedProvider?.id}
-        setPullName={(value) => {
-          if (!selectedProvider) return;
-          setPullNames((current) => ({
-            ...current,
-            [selectedProvider.id]: value,
-          }));
-        }}
-        syncing={syncingProviderId === selectedProvider?.id}
-        verification={selectedVerification}
-        verifying={verifyingProviderId === selectedProvider?.id}
-      />
 
       {dialog ? (
         <ConnectionDialog
@@ -392,6 +461,7 @@ export function ProviderPanel({
         />
       ) : null}
       {confirmDialog}
+      {dependencyImpactDialog}
     </section>
   );
 }

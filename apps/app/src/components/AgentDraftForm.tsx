@@ -18,39 +18,52 @@ import {
   buildModelGroups,
   buildSafetySettings,
   parseBlockedTerms,
+  parseAgentTags,
   parseBoundedNumber,
   parseOptionalInteger,
   parseOptionalNumber,
+  parsePromptSuggestions,
 } from "./agent-draft-model";
 import { shouldResetDraftForm } from "./agent-publish-gate";
+import { ManagedModelIdentityFields } from "./ManagedModelIdentityFields";
 
 export interface AgentDraftInput {
   agentId: string;
+  name: string;
+  description: string;
+  icon: string;
+  avatarUrl: string;
   baseModelId: string;
   systemPrompt: string;
   parameters: Record<string, unknown>;
   memoryPolicy: AgentMemoryPolicy;
   safetySettings: AgentSafetySettings;
+  promptSuggestions: Array<{ title: string; prompt: string }>;
+  tags: string[];
 }
 
 interface AgentDraftFormProps {
   activeAgent: Agent | undefined;
+  formId?: string;
   isSaving: boolean;
   models: BaseModel[];
   providers: Provider[];
   onDirtyChange: (dirty: boolean) => void;
   onNotice: (message: string) => void;
   onSave: (input: AgentDraftInput) => Promise<Agent>;
+  showSubmit?: boolean;
 }
 
 export function AgentDraftForm({
   activeAgent,
+  formId,
   isSaving,
   models,
   providers = [],
   onDirtyChange,
   onNotice,
   onSave,
+  showSubmit = true,
 }: AgentDraftFormProps) {
   const { locale, t } = useLocale();
   const promptPresets = [
@@ -110,13 +123,19 @@ export function AgentDraftForm({
         locale,
       );
       const parsedBlockedTerms = parseBlockedTerms(value.blockedTerms, t);
+      const parsedTags = parseAgentTags(value.tags);
+      const parsedPromptSuggestions = parsePromptSuggestions(
+        value.promptSuggestions,
+      );
       const validationError =
         parsedTemperature.error ??
         parsedTopP.error ??
         parsedMaxOutputTokens.error ??
         parsedMaxMemoryMessages.error ??
         parsedMaxUserInputLength.error ??
-        parsedBlockedTerms.error;
+        parsedBlockedTerms.error ??
+        parsedTags.error ??
+        parsedPromptSuggestions.error;
       if (validationError) {
         onNotice(validationError);
         return;
@@ -136,6 +155,10 @@ export function AgentDraftForm({
       try {
         const saved = await onSave({
           agentId: activeAgent.id,
+          name: value.name.trim(),
+          description: value.description.trim(),
+          icon: value.icon.trim(),
+          avatarUrl: value.avatarUrl.trim(),
           baseModelId: value.baseModelId,
           systemPrompt: value.systemPrompt,
           parameters,
@@ -147,6 +170,8 @@ export function AgentDraftForm({
             parsedMaxUserInputLength.value,
             parsedBlockedTerms.value ?? [],
           ),
+          promptSuggestions: parsedPromptSuggestions.value ?? [],
+          tags: parsedTags.value ?? [],
         });
         form.reset(buildDefaults(saved));
         onNotice(t("agentDraftSaved"));
@@ -206,19 +231,42 @@ export function AgentDraftForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeAgent?.systemPrompt,
+    activeAgent?.name,
+    activeAgent?.description,
+    activeAgent?.icon,
+    activeAgent?.avatarUrl,
     activeAgent?.baseModelId,
+    activeAgent?.promptSuggestions,
+    activeAgent?.tags,
     activeAgent?.updatedAt,
   ]);
 
   return (
     <form
       className="grid gap-3"
+      id={formId}
       onSubmit={(event) => {
         event.preventDefault();
         event.stopPropagation();
         void form.handleSubmit();
       }}
     >
+      <form.Subscribe
+        selector={(state) => ({
+          avatarUrl: state.values.avatarUrl,
+          description: state.values.description,
+          icon: state.values.icon,
+          name: state.values.name,
+        })}
+      >
+        {(values) => (
+          <ManagedModelIdentityFields
+            disabled={!activeAgent || isSaving}
+            onChange={(field, value) => form.setFieldValue(field, value)}
+            values={values}
+          />
+        )}
+      </form.Subscribe>
       <form.Field name="baseModelId">
         {(field) => (
           <Field label={t("agentModel")}>
@@ -279,6 +327,41 @@ export function AgentDraftForm({
           </Button>
         ))}
       </div>
+
+      <form.Field name="tags">
+        {(field) => (
+          <Field label={t("agentTags")}>
+            <Input
+              disabled={!activeAgent || isSaving}
+              name="tags"
+              onBlur={field.handleBlur}
+              onChange={(event) =>
+                field.handleChange(event.currentTarget.value)
+              }
+              placeholder={t("agentTagsPlaceholder")}
+              value={field.state.value}
+            />
+          </Field>
+        )}
+      </form.Field>
+
+      <form.Field name="promptSuggestions">
+        {(field) => (
+          <Field label={t("agentStarterPrompts")}>
+            <Textarea
+              disabled={!activeAgent || isSaving}
+              name="promptSuggestions"
+              onBlur={field.handleBlur}
+              onChange={(event) =>
+                field.handleChange(event.currentTarget.value)
+              }
+              placeholder={t("agentStarterPromptsPlaceholder")}
+              rows={4}
+              value={field.state.value}
+            />
+          </Field>
+        )}
+      </form.Field>
 
       <form.Subscribe
         selector={(state) => ({
@@ -378,14 +461,21 @@ export function AgentDraftForm({
         </form.Field>
       </div>
 
-      <Button
-        disabled={!activeAgent || isSaving || baseModelId.length === 0}
-        pending={isSaving}
-        type="submit"
-        variant="primary"
-      >
-        {t("agentSaveDraft")}
-      </Button>
+      {showSubmit ? (
+        <Button
+          disabled={
+            !activeAgent ||
+            isSaving ||
+            baseModelId.length === 0 ||
+            form.state.values.name.trim().length === 0
+          }
+          pending={isSaving}
+          type="submit"
+          variant="primary"
+        >
+          {t("agentSaveDraft")}
+        </Button>
+      ) : null}
     </form>
   );
 }

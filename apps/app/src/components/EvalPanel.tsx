@@ -15,7 +15,6 @@ import {
 } from "../features";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
-import { LocalizedNumber } from "../lib/locale-format";
 import type { Agent, EvalResultHumanRatingValue } from "../features/types";
 import { PanelState } from "../lib/panel-state";
 import { PanelStats } from "./PanelStats";
@@ -23,6 +22,11 @@ import { EvalDashboardSummary } from "./EvalDashboardSummary";
 import { FormDialog } from "./FormDialog";
 import { resolveActiveSuite } from "./eval-selection";
 import { evalRatingKey, rubricFromInput } from "./eval-form-utils";
+import {
+  EvalResultTable,
+  EvalRunTable,
+  EvalSuiteTable,
+} from "./EvalInventoryTables";
 
 export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
   const { t } = useLocale();
@@ -365,81 +369,25 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
                   },
                 ]}
               />
-              <div className="grid max-h-80 gap-2 overflow-y-auto">
-                {allSuites.map((suite) => (
-                  <Button
-                    aria-current={
-                      activeSuite?.id === suite.id ? "true" : undefined
-                    }
-                    className="w-full justify-start rounded-md p-2 text-left"
-                    key={suite.id}
-                    onClick={() => setSelectedSuiteId(suite.id)}
-                    type="button"
-                  >
-                    <div className="min-w-0 flex-1 whitespace-normal">
-                      <div className="font-medium">{suite.name}</div>
-                      <div className="break-words text-muted">{suite.id}</div>
-                    </div>
-                  </Button>
-                ))}
-              </div>
+              <EvalSuiteTable data={allSuites} onSelect={setSelectedSuiteId} />
             </div>
           )}
         </PanelState>
         <PanelState query={runsQuery} empty={t("evalNoRuns")}>
           {(allRuns) => (
-            <div className="grid max-h-80 gap-2 overflow-y-auto">
-              {allRuns.map((run) => (
-                <Button
-                  aria-current={activeRun?.id === run.id ? "true" : undefined}
-                  className="w-full justify-start rounded-md p-2 text-left"
-                  key={run.id}
-                  onClick={() => {
-                    setSelectedRunId(run.id);
-                    setSelectedResultId(undefined);
-                  }}
-                  type="button"
-                >
-                  <div className="min-w-0 flex-1 whitespace-normal">
-                    <div className="font-medium">
-                      {t(
-                        run.status === "passed"
-                          ? "evalStatusPassed"
-                          : "evalStatusFailed",
-                      )}{" "}
-                      -{" "}
-                      <LocalizedNumber
-                        options={{ maximumFractionDigits: 0, style: "percent" }}
-                        value={run.score}
-                      />
-                    </div>
-                    <div className="break-words text-muted">{run.modelId}</div>
-                  </div>
-                </Button>
-              ))}
-            </div>
+            <EvalRunTable
+              data={allRuns}
+              onSelect={(runId) => {
+                setSelectedRunId(runId);
+                setSelectedResultId(undefined);
+              }}
+            />
           )}
         </PanelState>
         {activeRun === undefined ? null : (
           <PanelState query={resultsQuery} empty={t("evalNoResults")}>
             {(results) => (
-              <div className="grid max-h-80 gap-2 overflow-y-auto">
-                {results.map((result) => (
-                  <Button
-                    aria-current={
-                      activeResult?.id === result.id ? "true" : undefined
-                    }
-                    className="w-full justify-start rounded-md p-2 text-left"
-                    key={result.id}
-                    onClick={() => setSelectedResultId(result.id)}
-                    type="button"
-                  >
-                    <div className="line-clamp-2 min-w-0 flex-1 whitespace-normal break-words">
-                      {result.output}
-                    </div>
-                  </Button>
-                ))}
-              </div>
+              <EvalResultTable data={results} onSelect={setSelectedResultId} />
             )}
           </PanelState>
         )}

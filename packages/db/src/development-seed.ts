@@ -188,18 +188,9 @@ const defaultModels = [
     name: "gpt-compatible",
     displayName: "OpenAI-compatible default",
     enabled: true,
+    available: false,
     capabilities: openAiCapabilities,
     contextWindow: 128000,
-  },
-  {
-    id: "model_ollama_default",
-    orgId: "org_default",
-    providerId: "provider_ollama",
-    name: "llama3.2",
-    displayName: "Ollama llama3.2",
-    enabled: true,
-    capabilities: ollamaCapabilities,
-    contextWindow: 8192,
   },
 ];
 
@@ -379,7 +370,6 @@ function defaultResourceGrants(now: Date) {
     ["tool", "tool_calculator", "use"],
     ["tool", "tool_datetime", "use"],
     ["model", "model_openai_compatible_default", "use"],
-    ["model", "model_ollama_default", "use"],
     ["provider", "provider_openai_compatible", "use"],
     ["provider", "provider_ollama", "use"],
     ["knowledge_base", "kb_default", "read"],

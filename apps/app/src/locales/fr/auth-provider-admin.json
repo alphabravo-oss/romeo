@@ -70,8 +70,6 @@
   "authMembershipsRemoved": "appartenance(s) supprimées",
   "authMembershipsToRemove": "Appartenances à supprimer",
   "authNameAttribute": "Attribut de nom",
-  "authNoActiveProviders": "Aucune méthode de connexion active",
-  "authNoActiveProvidersDescription": "Choisissez un fournisseur ci-dessous pour le configurer. Les membres ne pourront pas se connecter tant qu'aucune méthode n'est active.",
   "authNoProviderSettings": "Aucun paramètre de fournisseur disponible.",
   "authNoProvidersInCatalog": "Aucun fournisseur d’authentification dans le catalogue.",
   "authNotConfigured": "Non configuré",

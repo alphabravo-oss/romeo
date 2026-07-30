@@ -55,6 +55,7 @@ export const WorkspaceSchema = z
     orgId: z.string(),
     name: z.string(),
     slug: z.string(),
+    defaultAgentId: z.string().optional(),
     archivedAt: z.iso.datetime().optional(),
   })
   .openapi("Workspace");

@@ -95,7 +95,6 @@ export function WorkspaceChatNavItem(props: WorkspaceChatNavItemProps) {
           { label: t("delete"), onClick: props.onDelete, tone: "danger" },
         ]}
         label={`${t("chatActionsFor")} ${props.chat.title}`}
-        orientation="vertical"
       />
     </div>
   );

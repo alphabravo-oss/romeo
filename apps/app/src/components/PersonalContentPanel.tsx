@@ -12,11 +12,11 @@ import {
   type WorkspaceContentItem,
 } from "../features/workspace-content";
 import { toast } from "../lib/toast";
-import { LocalizedDateTime } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
 import { CatalogPager } from "./CatalogPager";
 import { useConfirm } from "./ConfirmDialog";
 import { FormDialog } from "./FormDialog";
+import { PersonalContentTable } from "./PersonalContentTable";
 import { useWorkspace } from "./WorkspaceContext";
 
 export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
@@ -177,58 +177,13 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
         />
       </label>
       <div className="mt-4 grid gap-2">
-        {catalog.items.map((item) => (
-          <article className="rm-list-row" key={item.id}>
-            <div className="min-w-0 flex-1">
-              <div className="font-medium">
-                {item.title}
-                {item.expired ? ` · ${t("expired")}` : ""}
-              </div>
-              <div className="truncate text-sm text-muted">{item.body}</div>
-              <div className="text-xs text-muted">
-                {item.scope === "personal" ? t("personal") : t("workspace")} ·{" "}
-                {t("updated")} <LocalizedDateTime value={item.updatedAt} />
-              </div>
-            </div>
-            {kind === "memories" ? (
-              <>
-                <label className="text-sm">
-                  <Input
-                    checked={item.enabled}
-                    onChange={() =>
-                      void patch(item, { enabled: !item.enabled })
-                    }
-                    type="checkbox"
-                  />{" "}
-                  {t("enabled")}
-                </label>
-                <Button
-                  onClick={() => void patch(item, { pinned: !item.pinned })}
-                  type="button"
-                >
-                  {item.pinned ? t("unpin") : t("pin")}
-                </Button>
-              </>
-            ) : (
-              <Button
-                onClick={() => void patch(item, { pinned: !item.pinned })}
-                type="button"
-              >
-                {item.pinned ? t("unpin") : t("pin")}
-              </Button>
-            )}
-            <Button onClick={() => open(item)} type="button">
-              {t("edit")}
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => void remove(item)}
-              type="button"
-            >
-              {t("delete")}
-            </Button>
-          </article>
-        ))}
+        <PersonalContentTable
+          items={catalog.items}
+          kind={kind}
+          onEdit={open}
+          onPatch={patch}
+          onRemove={remove}
+        />
         {contentQuery.isLoading ? <p>{t("loading")}</p> : null}
         {!contentQuery.isLoading && catalog.total === 0 ? (
           <p className="text-sm text-muted">

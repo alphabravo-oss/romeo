@@ -16,6 +16,7 @@ describe("access repository mappers", () => {
     });
 
     expect(grant).toEqual({
+      createdAt: "2026-06-27T00:00:00.000Z",
       id: "grant_1",
       resourceType: "organization",
       resourceId: "org_1",

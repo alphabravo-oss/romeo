@@ -14,6 +14,11 @@ import type { ModelCatalogQuery, RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
+import {
+  ProviderCatalogSyncCoordinator,
+  providerCatalogStaleState,
+  type ProviderCatalogSyncOptions,
+} from "./provider-catalog-sync";
 import { assertManagedSecretRef } from "./secret-refs";
 import type { SecretResolver } from "./secret-resolver";
 import { withTelemetryFetch } from "./telemetry-context";
@@ -28,22 +33,51 @@ export interface CreateProviderInput {
 }
 
 export class ProviderService {
+  private readonly catalogSync: ProviderCatalogSyncCoordinator;
+
   constructor(
     private readonly repository: RomeoRepository,
     private readonly options: {
+      catalogSync?: Omit<
+        ProviderCatalogSyncOptions,
+        "fetchImpl" | "secretResolver"
+      >;
       secretResolver?: SecretResolver;
       fetchImpl?: typeof fetch;
     } = {},
-  ) {}
+  ) {
+    this.catalogSync = new ProviderCatalogSyncCoordinator(repository, {
+      ...options.catalogSync,
+      ...(options.secretResolver === undefined
+        ? {}
+        : { secretResolver: options.secretResolver }),
+      ...(options.fetchImpl === undefined
+        ? {}
+        : { fetchImpl: options.fetchImpl }),
+    });
+  }
 
   list(subject: AuthSubject): Promise<ProviderInstance[]> {
     assertScope(subject, "providers:read");
     return this.repository.listProviders(subject.orgId);
   }
 
-  models(subject: AuthSubject) {
+  async models(subject: AuthSubject) {
     assertScope(subject, "models:read");
+    await this.catalogSync.ensureFreshForOrg(subject.orgId);
     return this.repository.listModels(subject.orgId);
+  }
+
+  startCatalogSyncWorker(): void {
+    this.catalogSync.start();
+  }
+
+  stopCatalogSyncWorker(): void {
+    this.catalogSync.stop();
+  }
+
+  runCatalogSyncOnce(): Promise<number> {
+    return this.catalogSync.runOnce();
   }
 
   async modelsPage(subject: AuthSubject, input: ModelCatalogQuery) {
@@ -141,6 +175,7 @@ export class ProviderService {
         ...(input.modelIds === undefined ? {} : { modelIds: input.modelIds }),
         enabled: true,
         capabilities: defaultProviderCapabilities(input.type),
+        catalogSync: { status: "never", modelCount: 0 },
       });
       await this.audit(
         repository,
@@ -173,6 +208,12 @@ export class ProviderService {
     const current = await this.repository.getProvider(input.providerId);
     if (!current || !canAccessOrg(input.subject, current.orgId))
       throw notFound("Provider");
+    const catalogConfigurationChanged =
+      (input.baseUrl !== undefined && input.baseUrl !== current.baseUrl) ||
+      (input.credentialRef !== undefined &&
+        input.credentialRef !== current.credentialRef) ||
+      (input.modelIds !== undefined &&
+        JSON.stringify(input.modelIds) !== JSON.stringify(current.modelIds));
     return this.repository.transaction(async (repository) => {
       const updated = await repository.updateProvider({
         ...current,
@@ -183,6 +224,11 @@ export class ProviderService {
           : { credentialRef: input.credentialRef }),
         ...(input.modelIds === undefined ? {} : { modelIds: input.modelIds }),
         ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+        ...(catalogConfigurationChanged
+          ? {
+              catalogSync: providerCatalogStaleState(current.catalogSync),
+            }
+          : {}),
       });
       await this.audit(
         repository,
@@ -275,82 +321,7 @@ export class ProviderService {
       throw notFound("Provider");
     }
 
-    const adapter = getProviderAdapter(provider.type);
-    const resolution = await this.resolveCredential(provider);
-    let models: BaseModel[];
-    try {
-      models = await adapter.listModels(provider, {
-        ...(resolution?.value === undefined
-          ? {}
-          : { apiKey: resolution.value }),
-        fetchImpl: withTelemetryFetch(this.options.fetchImpl ?? fetch),
-      });
-    } catch (caught) {
-      throw new ApiError(
-        "provider_model_discovery_failed",
-        caught instanceof Error
-          ? caught.message
-          : "The provider model catalog could not be refreshed.",
-        502,
-      );
-    }
-    if (models.length === 0 && provider.type !== "ollama") {
-      throw new ApiError(
-        "provider_model_discovery_failed",
-        "The provider returned no discoverable models. Configure model IDs if this endpoint does not support GET /models.",
-        502,
-      );
-    }
-    return this.repository.transaction(async (repository) => {
-      const currentProvider = await repository.getProvider(provider.id);
-      if (!currentProvider || !canAccessOrg(subject, currentProvider.orgId)) {
-        throw notFound("Provider");
-      }
-      const currentById = new Map(
-        (await repository.listModels(currentProvider.orgId))
-          .filter((model) => model.providerId === currentProvider.id)
-          .map((model) => [model.id, model]),
-      );
-      const discoveredIds = new Set(models.map((model) => model.id));
-      const guardedModels = models.map((model) => {
-        const current = currentById.get(model.id);
-        if (current === undefined)
-          return { ...model, capabilitiesSource: "detected" as const };
-        return {
-          ...model,
-          enabled: current.enabled,
-          ...(current.capabilitiesSource === "override"
-            ? {
-                capabilities: current.capabilities,
-                contextWindow: current.contextWindow,
-                capabilitiesSource: "override" as const,
-              }
-            : { capabilitiesSource: "detected" as const }),
-        };
-      });
-      const staleModels = [...currentById.values()]
-        .filter((model) => !discoveredIds.has(model.id) && model.enabled)
-        .map((model) => ({ ...model, enabled: false }));
-      const reconciled = await repository.upsertModels([
-        ...guardedModels,
-        ...staleModels,
-      ]);
-      const synced = reconciled.filter((model) => discoveredIds.has(model.id));
-      await this.audit(
-        repository,
-        subject,
-        "provider.models.sync",
-        "provider",
-        currentProvider.id,
-        {
-          providerType: currentProvider.type,
-          modelCount: synced.length,
-          modelIds: synced.map((model) => model.id).sort(),
-          staleModelCount: staleModels.length,
-        },
-      );
-      return synced;
-    });
+    return this.catalogSync.syncProvider(subject, provider);
   }
 
   async pullModel(subject: AuthSubject, providerId: string, model: string) {

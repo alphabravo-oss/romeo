@@ -13,6 +13,7 @@ import {
   toIsoString,
 } from "./repository-mapping";
 export interface ChatRecord {
+  agentId?: string;
   id: string;
   orgId: string;
   workspaceId: string;
@@ -97,6 +98,7 @@ export function toChatRecord(row: typeof chats.$inferSelect): ChatRecord {
     updatedAt: toIsoString(row.updatedAt),
     ...(row.temporary ? { temporary: true } : {}),
   };
+  if (row.agentId !== null) chat.agentId = row.agentId;
   if (row.modelId !== null) chat.modelId = row.modelId;
   const expiresAt = optionalIsoString(row.expiresAt);
   if (expiresAt !== undefined) chat.expiresAt = expiresAt;
@@ -198,6 +200,7 @@ export function toChatInsert(record: ChatRecord): typeof chats.$inferInsert {
     orgId: record.orgId,
     workspaceId: record.workspaceId,
     title: record.title,
+    agentId: record.agentId ?? null,
     modelId: record.modelId ?? null,
     temporary: record.temporary === true,
     expiresAt: optionalDate(record.expiresAt),

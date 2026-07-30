@@ -11,7 +11,6 @@ import type {
 export interface ChatComposerProps {
   attachedUrls: string[];
   canInspectContext: boolean;
-  canOverrideModel: boolean;
   documentAttachments: PendingDocumentAttachment[];
   draft: string;
   error: string | undefined;

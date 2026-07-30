@@ -7,6 +7,7 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages/messages";
 
 import { anthropicCapabilities } from "../capabilities";
+import { MAX_DISCOVERED_MODELS } from "../model-catalog";
 import { normalizeProviderToolCall } from "../tool-calls";
 import type {
   BaseModel,
@@ -46,7 +47,11 @@ export const anthropicAdapter: ModelProviderAdapter = {
 
 async function discoverAnthropicModels(
   provider: Parameters<ModelProviderAdapter["listModels"]>[0],
-  options?: { apiKey?: string; fetchImpl?: typeof fetch },
+  options?: {
+    apiKey?: string;
+    fetchImpl?: typeof fetch;
+    timeoutMs?: number;
+  },
 ): Promise<BaseModel[]> {
   let ids = provider.modelIds?.map((id) => id.trim()).filter(Boolean) ?? [];
   if (ids.length === 0) {
@@ -56,18 +61,19 @@ async function discoverAnthropicModels(
         provider,
         options.apiKey,
         options.fetchImpl,
+        options.timeoutMs,
       );
       ids = [];
       for await (const model of client.models.list({ limit: 100 })) {
         if (model.id.trim()) ids.push(model.id.trim());
-        if (ids.length >= 100) break;
+        if (ids.length >= MAX_DISCOVERED_MODELS) break;
       }
     } catch {
       return [];
     }
   }
   return [...new Set(ids)]
-    .slice(0, 100)
+    .slice(0, MAX_DISCOVERED_MODELS)
     .sort()
     .map((name) => ({
       id: `model_${provider.id}_${modelIdPart(name)}`,
@@ -141,11 +147,13 @@ function createAnthropicClient(
   provider: Pick<ProviderInstance, "baseUrl">,
   apiKey: string,
   fetchImpl: typeof fetch | undefined,
+  timeoutMs?: number,
 ): Anthropic {
   return new Anthropic({
     apiKey,
     baseURL: sdkBaseUrl(provider.baseUrl),
     maxRetries: 0,
+    ...(timeoutMs === undefined ? {} : { timeout: timeoutMs }),
     ...(fetchImpl === undefined ? {} : { fetch: fetchImpl }),
   });
 }

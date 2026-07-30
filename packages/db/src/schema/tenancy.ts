@@ -27,6 +27,7 @@ export const workspaces = pgTable(
       .references(() => organizations.id),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    defaultAgentId: text("default_agent_id"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

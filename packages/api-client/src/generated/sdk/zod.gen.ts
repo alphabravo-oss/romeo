@@ -1573,6 +1573,7 @@ export const zWorkspace = z.object({
   orgId: z.string(),
   name: z.string(),
   slug: z.string(),
+  defaultAgentId: z.string().optional(),
   archivedAt: z.iso.datetime().optional(),
 });
 
@@ -1910,6 +1911,7 @@ export const zHealthResponse = z.object({
 });
 
 export const zInterfacePreferences = z.object({
+  defaultAgentByWorkspace: z.record(z.string(), z.string()),
   theme: z.enum(["system", "light", "dark"]),
   locale: z.enum(["en", "es", "fr"]),
   fontSize: z.enum(["small", "medium", "large"]),
@@ -1922,6 +1924,7 @@ export const zInterfacePreferencesResponse = z.object({
 });
 
 export const zUpdateInterfacePreferencesRequest = z.object({
+  defaultAgentByWorkspace: z.record(z.string(), z.string()).optional(),
   theme: z.enum(["system", "light", "dark"]).optional(),
   locale: z.enum(["en", "es", "fr"]).optional(),
   fontSize: z.enum(["small", "medium", "large"]).optional(),
@@ -2149,14 +2152,28 @@ export const zManagedModel = z.object({
   orgId: z.string().min(1).max(300),
   workspaceId: z.string().min(1).max(300),
   name: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  icon: z.string().max(16).optional(),
+  avatarUrl: z.union([z.enum([""]), z.url().max(2000)]).optional(),
   createdBy: z.string().min(1).max(300),
   baseModelId: z.string().min(1).max(300),
   systemPrompt: z.string(),
   parameters: z.record(z.string(), z.unknown()),
   memoryPolicy: zManagedModelMemoryPolicy,
+  promptSuggestions: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(120),
+        prompt: z.string().min(1).max(2000),
+      }),
+    )
+    .max(12)
+    .optional(),
   safetySettings: zManagedModelSafetySettings,
+  tags: z.array(z.string().min(1).max(60)).max(20).optional(),
   voiceProfileId: z.string().min(1).max(300).optional(),
   publishedVersionId: z.string().min(1).max(300).optional(),
+  grantCount: z.int().gte(0).optional(),
   archivedAt: z.iso.datetime().optional(),
   updatedAt: z.iso.datetime(),
 });
@@ -2164,23 +2181,50 @@ export const zManagedModel = z.object({
 export const zCreateManagedModelRequest = z.object({
   workspaceId: z.string().min(1).max(300),
   name: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  icon: z.string().max(16).optional(),
+  avatarUrl: z.union([z.enum([""]), z.url().max(2000)]).optional(),
   baseModelId: z.string().min(1).max(300),
   systemPrompt: z.string().min(1).max(200000),
   parameters: z.record(z.string(), z.unknown()).optional(),
   memoryPolicy: zManagedModelMemoryPolicy.optional(),
+  promptSuggestions: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(120),
+        prompt: z.string().min(1).max(2000),
+      }),
+    )
+    .max(12)
+    .optional(),
   safetySettings: zManagedModelSafetySettings.optional(),
+  tags: z.array(z.string().min(1).max(60)).max(20).optional(),
 });
 
 export const zUpdateManagedModelRequest = z.object({
   name: z.string().min(1).max(200).optional(),
+  description: z.string().max(1000).optional(),
+  icon: z.string().max(16).optional(),
+  avatarUrl: z.union([z.enum([""]), z.url().max(2000)]).optional(),
   baseModelId: z.string().min(1).max(300).optional(),
   systemPrompt: z.string().min(1).max(200000).optional(),
   parameters: z.record(z.string(), z.unknown()).optional(),
   memoryPolicy: zManagedModelMemoryPolicy.optional(),
+  promptSuggestions: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(120),
+        prompt: z.string().min(1).max(2000),
+      }),
+    )
+    .max(12)
+    .optional(),
   safetySettings: zManagedModelSafetySettings.optional(),
+  tags: z.array(z.string().min(1).max(60)).max(20).optional(),
 });
 
 export const zCloneManagedModelRequest = z.object({
+  includeKnowledgeBindings: z.boolean().optional(),
   name: z.string().min(1).max(200).optional(),
   systemPrompt: z.string().min(1).max(200000).optional(),
 });
@@ -2230,11 +2274,23 @@ export const zManagedModelExportDocument = z.object({
   exportedAt: z.iso.datetime(),
   agent: z.object({
     name: z.string().min(1),
+    description: z.string().max(1000).optional(),
+    icon: z.string().max(16).optional(),
+    avatarUrl: z.union([z.enum([""]), z.url().max(2000)]).optional(),
     baseModelId: z.string().min(1).max(300),
     systemPrompt: z.string().min(1),
     parameters: z.record(z.string(), z.unknown()),
     memoryPolicy: zManagedModelMemoryPolicy,
+    promptSuggestions: z
+      .array(
+        z.object({
+          title: z.string().min(1).max(120),
+          prompt: z.string().min(1).max(2000),
+        }),
+      )
+      .max(12),
     safetySettings: zManagedModelSafetySettings,
+    tags: z.array(z.string().min(1).max(60)).max(20),
     voiceProfileId: z.string().min(1).max(300).optional(),
     accessGrants: z
       .array(
@@ -2278,11 +2334,25 @@ export const zImportManagedModelRequest = z.object({
     exportedAt: z.iso.datetime().optional(),
     agent: z.object({
       name: z.string().min(1),
+      description: z.string().max(1000).optional(),
+      icon: z.string().max(16).optional(),
+      avatarUrl: z.union([z.enum([""]), z.url().max(2000)]).optional(),
       baseModelId: z.string().min(1).max(300),
       systemPrompt: z.string().min(1),
       parameters: z.record(z.string(), z.unknown()).optional().default({}),
       memoryPolicy: zManagedModelMemoryPolicy.optional(),
+      promptSuggestions: z
+        .array(
+          z.object({
+            title: z.string().min(1).max(120),
+            prompt: z.string().min(1).max(2000),
+          }),
+        )
+        .max(12)
+        .optional()
+        .default([]),
       safetySettings: zManagedModelSafetySettings.optional(),
+      tags: z.array(z.string().min(1).max(60)).max(20).optional().default([]),
       voiceProfileId: z.string().min(1).max(300).optional(),
       accessGrants: z
         .array(
@@ -2334,7 +2404,17 @@ export const zManagedModelVersion = z.object({
   systemPrompt: z.string(),
   parameters: z.record(z.string(), z.unknown()),
   memoryPolicy: zManagedModelMemoryPolicy,
+  promptSuggestions: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(120),
+        prompt: z.string().min(1).max(2000),
+      }),
+    )
+    .max(12)
+    .optional(),
   safetySettings: zManagedModelSafetySettings,
+  tags: z.array(z.string().min(1).max(60)).max(20).optional(),
   voiceProfileId: z.string().min(1).max(300).optional(),
   knowledgeBaseBindings: z
     .array(
@@ -2379,6 +2459,7 @@ export const zManagedModelVersion = z.object({
 });
 
 export const zManagedModelGrant = z.object({
+  createdAt: z.iso.datetime().optional(),
   id: z.string().min(1).max(300),
   resourceType: z.enum(["agent"]),
   resourceId: z.string().min(1).max(300),
@@ -2399,8 +2480,54 @@ export const zShareManagedModelRequest = z.object({
 export const zManagedModelGalleryItem = zManagedModel.and(
   z.object({
     favorite: z.boolean(),
+    readinessReason: z.string().max(1000).optional(),
+    readinessStatus: z.enum(["ready", "blocked"]),
   }),
 );
+
+export const zManagedModelReadinessCheck = z.object({
+  key: z.enum([
+    "principal",
+    "workspace",
+    "assistant_access",
+    "published_version",
+    "base_model",
+    "provider",
+    "knowledge",
+    "tools",
+    "voice",
+  ]),
+  status: z.enum(["ready", "warning", "blocked"]),
+  code: z.string().min(1).max(120),
+  message: z.string().min(1).max(1000),
+  issues: z.array(z.string().min(1).max(500)).max(100),
+  resourceType: z
+    .enum([
+      "agent",
+      "knowledge_base",
+      "model",
+      "provider",
+      "tool",
+      "voice_profile",
+      "workspace",
+    ])
+    .optional(),
+  resourceId: z.string().min(1).max(300).optional(),
+});
+
+export const zManagedModelReadiness = z.object({
+  agentId: z.string().min(1).max(300),
+  status: z.enum(["ready", "blocked"]),
+  generatedAt: z.iso.datetime(),
+  principal: z.object({
+    principalType: z.enum(["group", "service_account", "user"]),
+    principalId: z.string().min(1).max(300),
+    label: z.string().min(1).max(500),
+    simulated: z.boolean(),
+  }),
+  checks: z.array(zManagedModelReadinessCheck),
+  blockingCount: z.int().gte(0),
+});
 
 export const zManagedModelKnowledgeBinding = z.object({
   id: z.string().min(1).max(300),
@@ -3608,6 +3735,14 @@ export const zProviderCapabilities = z.object({
   }),
 });
 
+export const zProviderCatalogSync = z.object({
+  status: z.enum(["error", "never", "ready", "stale", "syncing"]),
+  modelCount: z.int().gte(0),
+  lastAttemptAt: z.iso.datetime().optional(),
+  lastSyncedAt: z.iso.datetime().optional(),
+  error: z.string().max(1000).optional(),
+});
+
 export const zProviderConnection = z.object({
   id: z.string().min(1).max(300),
   orgId: z.string().min(1).max(300),
@@ -3622,6 +3757,7 @@ export const zProviderConnection = z.object({
   modelIds: z.array(z.string().min(1).max(300)).optional(),
   enabled: z.boolean(),
   capabilities: zProviderCapabilities,
+  catalogSync: zProviderCatalogSync.optional(),
   credentialConfigured: z.boolean(),
   credentialRefScheme: z.string().optional(),
 });
@@ -3636,14 +3772,14 @@ export const zCreateProviderConnectionRequest = z.object({
   name: z.string().min(1).max(200),
   baseUrl: z.url(),
   credentialRef: z.string().min(1).max(500).optional(),
-  modelIds: z.array(z.string().min(1).max(300)).max(100).optional(),
+  modelIds: z.array(z.string().min(1).max(300)).max(2000).optional(),
 });
 
 export const zUpdateProviderConnectionRequest = z.object({
   name: z.string().min(1).max(200).optional(),
   baseUrl: z.url().optional(),
   credentialRef: z.string().min(1).max(500).optional(),
-  modelIds: z.array(z.string().min(1).max(300)).max(100).optional(),
+  modelIds: z.array(z.string().min(1).max(300)).max(2000).optional(),
   enabled: z.boolean().optional(),
 });
 
@@ -3666,6 +3802,7 @@ export const zProviderModel = z.object({
   name: z.string().min(1),
   displayName: z.string().min(1),
   enabled: z.boolean(),
+  available: z.boolean().optional(),
   capabilities: zProviderCapabilities,
   contextWindow: z.int().gt(0),
   pricing: z
@@ -4724,6 +4861,7 @@ export const zScimGroupRequest = z.object({
 });
 
 export const zChat = z.object({
+  agentId: z.string().min(1).max(300).optional(),
   id: z.string().min(1).max(300),
   orgId: z.string().min(1).max(300),
   workspaceId: z.string().min(1).max(300),
@@ -4785,6 +4923,7 @@ export const zImportChatRequest = z.object({
 });
 
 export const zCreateChatRequest = z.object({
+  agentId: z.string().min(1).max(300).optional(),
   workspaceId: z.string().min(1).max(300),
   title: z.string().min(1).max(200),
   temporary: z.boolean().optional(),
@@ -4828,6 +4967,7 @@ export const zChatExport = z.object({
 });
 
 export const zUpdateChatRequest = z.object({
+  agentId: z.string().min(1).max(300).nullish(),
   title: z.string().min(1).max(200).optional(),
   modelId: z.string().min(1).max(300).nullish(),
 });
@@ -5126,6 +5266,7 @@ export const zShareTarget = z.object({
 });
 
 export const zResourceGrant = z.object({
+  createdAt: z.iso.datetime().optional(),
   id: z.string().min(1).max(300),
   resourceType: z.enum([
     "organization",
@@ -7003,6 +7144,11 @@ export const zKnowledgeBase = z.object({
   createdBy: z.string().min(1).max(300),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  dependentAgentCount: z.int().gte(0).optional(),
+  grantCount: z.int().gte(0).optional(),
+  indexedSourceCount: z.int().gte(0).optional(),
+  sourceCount: z.int().gte(0).optional(),
+  totalSizeBytes: z.int().gte(0).optional(),
 });
 
 export const zCreateKnowledgeBaseRequest = z.object({
@@ -7714,6 +7860,8 @@ export const zToolConnector = z.object({
   ]),
   visibility: z.enum(["private", "workspace", "org"]),
   enabled: z.boolean(),
+  dependentAgentCount: z.int().gte(0).optional(),
+  dependentOperationCount: z.int().gte(0).optional(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -8454,6 +8602,8 @@ export const zVoiceProfile = z.object({
   enabled: z.boolean(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  dependentAgentCount: z.int().gte(0).optional(),
+  grantCount: z.int().gte(0).optional(),
 });
 
 export const zCreateVoiceProfileRequest = z.object({
@@ -9796,6 +9946,21 @@ export const zTenancyArchiveWorkspaceResponse = z.object({
   data: zWorkspace,
 });
 
+export const zTenancyUpdateWorkspaceDefaultAgentBody = z.object({
+  agentId: z.string().min(1).max(300).nullable(),
+});
+
+export const zTenancyUpdateWorkspaceDefaultAgentPath = z.object({
+  workspaceId: z.string().min(1).max(300),
+});
+
+/**
+ * Updated workspace
+ */
+export const zTenancyUpdateWorkspaceDefaultAgentResponse = z.object({
+  data: zWorkspace,
+});
+
 export const zTenancyExportWorkspacePath = z.object({
   workspaceId: z.string().min(1).max(300),
 });
@@ -10274,10 +10439,12 @@ export const zManagedModelsDiffVersionResponse = z.object({
           "baseModelId",
           "knowledgeBaseBindings",
           "memoryPolicy",
+          "promptSuggestions",
           "safetySettings",
           "systemPrompt",
           "parameters",
           "toolBindings",
+          "tags",
           "voiceProfileId",
         ]),
         left: z.unknown().optional(),
@@ -10323,6 +10490,18 @@ export const zManagedModelsShareResponse = z.object({
   data: z.array(zManagedModelGrant),
 });
 
+export const zManagedModelsRevokeGrantPath = z.object({
+  agentId: z.string().min(1).max(300),
+  grantId: z.string().min(1).max(300),
+});
+
+/**
+ * Revoked managed-model access grant
+ */
+export const zManagedModelsRevokeGrantResponse = z.object({
+  data: zManagedModelGrant,
+});
+
 export const zManagedModelsListGalleryQuery = z.object({
   workspaceId: z.string().min(1).max(300).optional(),
 });
@@ -10332,6 +10511,22 @@ export const zManagedModelsListGalleryQuery = z.object({
  */
 export const zManagedModelsListGalleryResponse = z.object({
   data: z.array(zManagedModelGalleryItem),
+});
+
+export const zManagedModelsGetReadinessPath = z.object({
+  agentId: z.string().min(1).max(300),
+});
+
+export const zManagedModelsGetReadinessQuery = z.object({
+  principalType: z.enum(["group", "service_account", "user"]).optional(),
+  principalId: z.string().min(1).max(300).optional(),
+});
+
+/**
+ * Managed-model readiness
+ */
+export const zManagedModelsGetReadinessResponse = z.object({
+  data: zManagedModelReadiness,
 });
 
 export const zManagedModelsListKnowledgeBindingsPath = z.object({
@@ -10748,11 +10943,16 @@ export const zProvidersDeleteOllamaModelResponse = z.object({
 });
 
 export const zProvidersListModelsQuery = z.object({
+  available: z.enum(["true", "false"]).optional(),
   enabled: z.enum(["true", "false"]).optional(),
+  direction: z.enum(["asc", "desc"]).optional(),
   limit: z.int().gte(1).lte(100).optional(),
   offset: z.int().gte(0).lte(1000000).nullish(),
   providerId: z.string().min(1).max(300).optional(),
   q: z.string().max(300).optional(),
+  sort: z
+    .enum(["availability", "contextWindow", "displayName", "enabled", "name"])
+    .optional(),
 });
 
 /**
