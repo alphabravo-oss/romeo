@@ -29,6 +29,7 @@ import type { QuotaCoordinator } from "./quota-coordination";
 import { readRagPolicy } from "./rag-policy-service";
 import { recordSubjectUsage } from "./record-usage";
 import { ensureSystemAuditActor } from "./system-audit-actor";
+import { reportCleanupFailure } from "./telemetry-context";
 import { emitWebhookEvent } from "./webhook-events";
 import type { WebhookEmitter } from "./webhook-service";
 
@@ -382,6 +383,7 @@ export class KnowledgeSourceService {
     try {
       await this.objectStore.deleteObject(objectKey);
     } catch {
+      reportCleanupFailure("knowledge_source.delete_object");
       // Object-store lifecycle expiry is the fallback for cleanup failures.
     }
   }
@@ -402,6 +404,7 @@ export class KnowledgeSourceService {
         });
       }
     } catch {
+      reportCleanupFailure("knowledge_source.restore_content");
       // A later retry can repair object-store content if rollback fails.
     }
   }

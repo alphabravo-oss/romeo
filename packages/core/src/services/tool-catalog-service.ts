@@ -14,6 +14,7 @@ import { notFound } from "../errors";
 import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
 import { createOperationToolDefinition } from "./tool-operation-tooling";
+import { listToolOperationsByConnector } from "./tool-operation-catalog";
 import {
   toAgentToolSummary,
   toToolSummary,
@@ -140,14 +141,12 @@ export class ToolCatalogService {
     subject: AuthSubject,
   ): Promise<OperationToolContext[]> {
     const connectors = await this.repository.listToolConnectors(subject.orgId);
-    const operationGroups = await Promise.all(
-      connectors.map(async (connector) => ({
-        connector,
-        operations: await this.repository.listToolOperations(connector.id),
-      })),
+    const operationsByConnector = await listToolOperationsByConnector(
+      this.repository,
+      connectors,
     );
-    return operationGroups.flatMap(({ connector, operations }) =>
-      operations.map((operation) => ({
+    return connectors.flatMap((connector) =>
+      (operationsByConnector.get(connector.id) ?? []).map((operation) => ({
         connector,
         operation,
         tool: createOperationToolDefinition(connector, operation),

@@ -1,4 +1,4 @@
-import { type AuthSubject, type Scope } from "@romeo/auth";
+import { type Scope } from "@romeo/auth";
 import type { RomeoEnv } from "@romeo/config";
 import { createHmac, timingSafeEqual } from "node:crypto";
 

@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import { toolConnectors, toolOperations } from "./schema";
@@ -113,6 +113,21 @@ export class PgToolConnectorRepository {
       .from(toolOperations)
       .where(eq(toolOperations.connectorId, connectorId))
       .orderBy(asc(toolOperations.operationId));
+    return rows.map(toToolOperationRecord);
+  }
+
+  async listToolOperationsForConnectors(
+    connectorIds: string[],
+  ): Promise<ToolOperationRecord[]> {
+    if (connectorIds.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(toolOperations)
+      .where(inArray(toolOperations.connectorId, connectorIds))
+      .orderBy(
+        asc(toolOperations.connectorId),
+        asc(toolOperations.operationId),
+      );
     return rows.map(toToolOperationRecord);
   }
 

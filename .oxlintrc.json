@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn",
+    "oxc",
+    "import",
+    "react",
+    "jsx-a11y",
+    "vitest",
+    "promise",
+    "node"
+  ],
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/coverage/**",
+    "**/.output/**",
+    "**/routeTree.gen.ts",
+    "packages/api-client/src/generated/**",
+    "tmp/**"
+  ],
+  "rules": {
+    "eslint/no-control-regex": "off",
+    "eslint/require-yield": "off",
+    "jsx-a11y/no-autofocus": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "promise/no-multiple-resolved": "error",
+    "react/jsx-no-constructed-context-values": "error",
+    "react/react-in-jsx-scope": "off",
+    "vitest/expect-expect": "off",
+    "vitest/no-conditional-expect": "off",
+    "vitest/no-conditional-tests": "off",
+    "vitest/no-disabled-tests": "off",
+    "vitest/require-mock-type-parameters": "off"
+  }
+}

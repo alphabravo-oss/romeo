@@ -10,6 +10,7 @@ import {
   isToolDispatchPayloadStoreReference,
   type ToolDispatchPayloadStore,
 } from "./tool-dispatch-payload-store";
+import { reportCleanupFailure } from "./telemetry-context";
 
 export function validateDispatchRequestPayload(job: BackgroundJob): void {
   payloadString(job, "connectorId");
@@ -106,6 +107,7 @@ export async function deleteDispatchPayloadObject(
   try {
     await payloadStore.delete(reference);
   } catch {
+    reportCleanupFailure("tool_dispatch.delete_request_payload");
     // Encrypted payload buckets should also have lifecycle expiry configured.
   }
 }

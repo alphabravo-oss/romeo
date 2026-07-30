@@ -296,9 +296,10 @@ describe("streamRunEvents", () => {
       argumentKeys: ["expression"],
       name: "tool_calculator",
     });
-    expect(
-      (requested?.data as { providerCallIdHash?: string }).providerCallIdHash,
-    ).toMatch(/^[a-f0-9]{64}$/);
+    const requestedData = requested?.data as
+      | { providerCallIdHash?: string }
+      | undefined;
+    expect(requestedData?.providerCallIdHash).toMatch(/^[a-f0-9]{64}$/);
     expect(events.at(-1)?.data).toMatchObject({
       errorCode: "provider_tool_call_dispatch_unavailable",
       toolName: "tool_calculator",

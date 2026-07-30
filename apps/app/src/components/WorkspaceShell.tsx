@@ -40,6 +40,7 @@ export function WorkspaceShell({
     ...(requestedAgentId === undefined ? {} : { requestedAgentId }),
     ...(requestedChatId === undefined ? {} : { requestedChatId }),
   });
+  const { agents, handleNewChat, setActiveAgentId } = workspace;
   const { workspaceId, workspaces, setWorkspaceId } = useWorkspace();
 
   // Publish chat actions to the ⌘K command registry while this screen is mounted.
@@ -50,17 +51,17 @@ export function WorkspaceShell({
         group: t("shellActions"),
         label: t("newChat"),
         icon: SquarePen,
-        run: workspace.handleNewChat,
+        run: handleNewChat,
       },
-      ...workspace.agents.map((agent) => ({
+      ...agents.map((agent) => ({
         id: `switch-agent-${agent.id}`,
         group: t("shellSwitchAgent"),
         label: agent.name,
         icon: Bot,
-        run: () => workspace.setActiveAgentId(agent.id),
+        run: () => setActiveAgentId(agent.id),
       })),
     ],
-    [t, workspace.agents, workspace.handleNewChat, workspace.setActiveAgentId],
+    [agents, handleNewChat, setActiveAgentId, t],
   );
   useRegisterCommands(commands);
 

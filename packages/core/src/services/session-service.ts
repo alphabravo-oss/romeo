@@ -4,7 +4,6 @@ import {
   createSessionToken,
   hashApiKey,
   type AuthSubject,
-  type Scope,
 } from "@romeo/auth";
 
 import type { UserSession } from "../domain/entities";

@@ -23,7 +23,7 @@ export default defineConfig([
     },
     plugins: [
       { name: "@hey-api/client-fetch", includeInEntry: true },
-      "@tanstack/react-query",
+      { name: "@tanstack/react-query", includeInEntry: true },
     ],
   },
 ]);

@@ -2,7 +2,6 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 
 import type {
   Agent,
-  BackgroundJob,
   EvalRun,
   EvalSuite,
   ToolCallRecord,
@@ -14,132 +13,19 @@ import type { JobOperationalSummary } from "./job-service";
 import type { ProviderOperationalSummary } from "./provider-operational-summary";
 import { overallStatus, summarizeJobs } from "./analytics-status";
 import { countToolCall, emptyToolSummary } from "./analytics-tool-summary";
+import type {
+  AdminAnalyticsEvalAgentSummary,
+  AdminAnalyticsEvalModelSummary,
+  AdminAnalyticsEvalSuiteSummary,
+  AdminAnalyticsEvalSummary,
+  AdminAnalyticsProviderSummary,
+  AdminAnalyticsSummary,
+  AdminAnalyticsToolSummary,
+  AdminAnalyticsUsageSummary,
+} from "./analytics-types";
 
 export { formatAdminAnalyticsSummaryCsv } from "./analytics-csv";
-
-export type AdminAnalyticsStatus =
-  | "critical"
-  | "degraded"
-  | "healthy"
-  | "not_required";
-
-export interface AdminAnalyticsEvalSuiteSummary {
-  suiteId: string;
-  agentId: string;
-  workspaceId: string;
-  latestRunId?: string;
-  latestStatus: "failed" | "missing" | "passed";
-  latestScore?: number;
-  latestCompletedAt?: string;
-  runCount: number;
-}
-
-export interface AdminAnalyticsEvalAgentSummary {
-  agentId: string;
-  workspaceId: string;
-  latestCompletedAt?: string;
-  latestRunId?: string;
-  latestScore?: number;
-  latestStatus: "failed" | "missing" | "not_required" | "passed";
-  runCount: number;
-  suiteCount: number;
-}
-
-export interface AdminAnalyticsEvalModelSummary {
-  averageScore: number;
-  failedRunCount: number;
-  latestCompletedAt?: string;
-  latestRunId?: string;
-  modelId: string;
-  passedRunCount: number;
-  runCount: number;
-}
-
-export interface AdminAnalyticsEvalSummary {
-  agentCount: number;
-  agents: AdminAnalyticsEvalAgentSummary[];
-  averageLatestScore: number | null;
-  byModel: AdminAnalyticsEvalModelSummary[];
-  failedSuiteCount: number;
-  generatedRunCount: number;
-  missingSuiteCount: number;
-  passedSuiteCount: number;
-  releaseGate: {
-    failedSuiteCount: number;
-    missingSuiteCount: number;
-    requiredSuiteCount: number;
-    status: "failed" | "missing" | "not_required" | "passed";
-  };
-  status: "failed" | "missing" | "not_required" | "passed";
-  suiteCount: number;
-  suites: AdminAnalyticsEvalSuiteSummary[];
-}
-
-export interface AdminAnalyticsUsageSummary {
-  byProvider: Array<UsageSummaryMetric & { providerId: string }>;
-  eventCount: number;
-  estimatedCostUsd: number;
-  totals: UsageSummaryMetric[];
-}
-
-export interface AdminAnalyticsProviderSummary {
-  alertCount: number;
-  availableProviderCount: number;
-  criticalAlertCount: number;
-  degradedProviderCount: number;
-  providerCount: number;
-  status: ProviderOperationalSummary["status"];
-  unavailableProviderCount: number;
-}
-
-export interface AdminAnalyticsToolSummary {
-  approvalRequiredCount: number;
-  blockedCount: number;
-  byTool: Array<{
-    approvalRequiredCount: number;
-    blockedCount: number;
-    failureCount: number;
-    pendingApprovalCount: number;
-    successCount: number;
-    toolId: string;
-    totalCount: number;
-  }>;
-  failureCount: number;
-  pendingApprovalCount: number;
-  successCount: number;
-  totalCount: number;
-}
-
-export interface AdminAnalyticsJobSummary {
-  alertCount: number;
-  completed: number;
-  criticalAlertCount: number;
-  deadLettered: number;
-  failed: number;
-  queued: number;
-  running: number;
-  status: JobOperationalSummary["status"];
-  total: number;
-}
-
-export interface AdminAnalyticsSummary {
-  evals: AdminAnalyticsEvalSummary;
-  generatedAt: string;
-  jobs: AdminAnalyticsJobSummary;
-  orgId: string;
-  providers: AdminAnalyticsProviderSummary;
-  redaction: {
-    rawEvalInputsReturned: false;
-    rawEvalOutputsReturned: false;
-    rawJobPayloadsReturned: false;
-    rawProviderConfigReturned: false;
-    rawToolInputsReturned: false;
-    rawUsageMetadataReturned: false;
-  };
-  status: Exclude<AdminAnalyticsStatus, "not_required">;
-  tools: AdminAnalyticsToolSummary;
-  usage: AdminAnalyticsUsageSummary;
-}
+export type * from "./analytics-types";
 
 export class AnalyticsService {
   constructor(private readonly repository: RomeoRepository) {}
@@ -195,14 +81,16 @@ export class AnalyticsService {
   ): Promise<AdminAnalyticsEvalSummary> {
     const agentSummaries: AdminAnalyticsEvalAgentSummary[] = [];
     const suiteSummaries: AdminAnalyticsEvalSuiteSummary[] = [];
-    const allRuns: EvalRun[] = [];
+    const [allSuites, allRuns] = await Promise.all([
+      this.repository.listEvalSuitesForAgents(agents.map((agent) => agent.id)),
+      this.repository.listEvalRunsForAgents(agents.map((agent) => agent.id)),
+    ]);
+    const suitesByAgent = groupByAgent(allSuites);
+    const runsByAgent = groupByAgent(allRuns);
 
     for (const agent of agents) {
-      const [suites, runs] = await Promise.all([
-        this.repository.listEvalSuites(agent.id),
-        this.repository.listEvalRuns(agent.id),
-      ]);
-      allRuns.push(...runs);
+      const suites = suitesByAgent.get(agent.id) ?? [];
+      const runs = runsByAgent.get(agent.id) ?? [];
       const agentSuiteSummaries = suites.map((suite) =>
         summarizeSuite(agent, suite, runs),
       );
@@ -456,6 +344,18 @@ function rollupUsage<T extends UsageSummaryMetric>(
 function usageCost(event: UsageEvent): number {
   const value = event.metadata.estimatedCostUsd;
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function groupByAgent<T extends { agentId: string }>(
+  values: T[],
+): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const value of values) {
+    const items = grouped.get(value.agentId) ?? [];
+    items.push(value);
+    grouped.set(value.agentId, items);
+  }
+  return grouped;
 }
 
 function compareRunsNewestFirst(left: EvalRun, right: EvalRun): number {

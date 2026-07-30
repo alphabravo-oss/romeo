@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import {
@@ -9,81 +9,25 @@ import {
   evalSuites,
 } from "./schema";
 import { optionalIsoString, toIsoString } from "./repository-mapping";
+import type {
+  EvalCaseRecord,
+  EvalResultHumanRatingRecord,
+  EvalResultHumanRatingValueRecord,
+  EvalRubricRecord,
+  EvalRunRecord,
+  EvalRunResultRecord,
+  EvalSuiteRecord,
+} from "./eval-records";
 
-export interface EvalSuiteRecord {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  agentId: string;
-  name: string;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface EvalRubricRecord {
-  mustContain?: string[];
-  mustNotContain?: string[];
-  minLength?: number;
-  maxLength?: number;
-  expectedToolCalls?: Array<{
-    name: string;
-    arguments?: Record<string, string | number | boolean | null>;
-  }>;
-  requiredCitations?: string[];
-  [key: string]: unknown;
-}
-
-export interface EvalCaseRecord {
-  id: string;
-  orgId: string;
-  suiteId: string;
-  input: string;
-  expectedContains?: string;
-  rubric?: EvalRubricRecord;
-  requiresCitation: boolean;
-  createdAt: string;
-}
-
-export interface EvalRunRecord {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  agentId: string;
-  suiteId: string;
-  modelId: string;
-  status: "failed" | "passed";
-  score: number;
-  createdBy: string;
-  createdAt: string;
-  completedAt: string;
-}
-
-export interface EvalRunResultRecord {
-  id: string;
-  orgId: string;
-  runId: string;
-  caseId: string;
-  status: "failed" | "passed";
-  score: number;
-  output: string;
-  checks: Record<string, unknown>;
-  createdAt: string;
-}
-
-export type EvalResultHumanRatingValueRecord = "fail" | "neutral" | "pass";
-
-export interface EvalResultHumanRatingRecord {
-  id: string;
-  orgId: string;
-  runId: string;
-  resultId: string;
-  reviewerId: string;
-  rating: EvalResultHumanRatingValueRecord;
-  comment?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type {
+  EvalCaseRecord,
+  EvalResultHumanRatingRecord,
+  EvalResultHumanRatingValueRecord,
+  EvalRubricRecord,
+  EvalRunRecord,
+  EvalRunResultRecord,
+  EvalSuiteRecord,
+} from "./eval-records";
 
 export class PgEvalRepository {
   constructor(private readonly db: RomeoDatabase) {}
@@ -94,6 +38,18 @@ export class PgEvalRepository {
       .from(evalSuites)
       .where(eq(evalSuites.agentId, agentId))
       .orderBy(desc(evalSuites.createdAt));
+    return rows.map(toEvalSuiteRecord);
+  }
+
+  async listEvalSuitesForAgents(
+    agentIds: string[],
+  ): Promise<EvalSuiteRecord[]> {
+    if (agentIds.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(evalSuites)
+      .where(inArray(evalSuites.agentId, agentIds))
+      .orderBy(asc(evalSuites.agentId), desc(evalSuites.createdAt));
     return rows.map(toEvalSuiteRecord);
   }
 
@@ -138,6 +94,16 @@ export class PgEvalRepository {
       .from(evalRuns)
       .where(eq(evalRuns.agentId, agentId))
       .orderBy(desc(evalRuns.createdAt));
+    return rows.map(toEvalRunRecord);
+  }
+
+  async listEvalRunsForAgents(agentIds: string[]): Promise<EvalRunRecord[]> {
+    if (agentIds.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(evalRuns)
+      .where(inArray(evalRuns.agentId, agentIds))
+      .orderBy(asc(evalRuns.agentId), desc(evalRuns.createdAt));
     return rows.map(toEvalRunRecord);
   }
 

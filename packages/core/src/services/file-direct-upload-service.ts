@@ -105,7 +105,7 @@ export class FileDirectUploadService {
         purpose: input.purpose ?? "general",
         status: "uploading",
         metadata: {
-          ...(input.metadata ?? {}),
+          ...input.metadata,
           uploadMode: "direct_presigned_put",
           extraction: initialExtractionState(normalized.mimeType),
         },

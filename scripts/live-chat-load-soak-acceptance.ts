@@ -643,7 +643,7 @@ async function mapConcurrent<T, U>(
   limit: number,
   operation: (value: T, index: number) => Promise<U>,
 ): Promise<U[]> {
-  const output = new Array<U>(values.length);
+  const output: U[] = [];
   let nextIndex = 0;
   await Promise.all(
     Array.from({ length: Math.min(limit, values.length) }, async () => {

@@ -13,6 +13,20 @@ export type ClientOptions = {
     | (string & {});
 };
 
+export type AdminUserPage = {
+  data: Array<AdminUser>;
+  meta: {
+    activeGlobalAdminTotal: number;
+    adminTotal: number;
+    disabledTotal: number;
+    hasMore: boolean;
+    limit: number;
+    offset: number;
+    total: number;
+    userTotal: number;
+  };
+};
+
 export type AdminUser = {
   id: string;
   orgId: string;
@@ -8626,7 +8640,13 @@ export type OpenWebUiUpdateChannelRequest = {
 export type AdministrationListUsersData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    direction?: "asc" | "desc";
+    limit?: number;
+    offset?: number | null;
+    q?: string;
+    sort?: "email" | "name" | "role" | "status";
+  };
   url: "/users";
 };
 
@@ -8668,9 +8688,7 @@ export type AdministrationListUsersResponses = {
   /**
    * Users
    */
-  200: {
-    data: Array<AdminUser>;
-  };
+  200: AdminUserPage;
 };
 
 export type AdministrationListUsersResponse =
@@ -13441,17 +13459,7 @@ export type ManagedModelsDiffVersionResponses = {
       leftVersionId: string;
       rightVersionId: string;
       changes: Array<{
-        field:
-          | "baseModelId"
-          | "knowledgeBaseBindings"
-          | "memoryPolicy"
-          | "promptSuggestions"
-          | "safetySettings"
-          | "systemPrompt"
-          | "parameters"
-          | "toolBindings"
-          | "tags"
-          | "voiceProfileId";
+        field: string;
         left?: unknown;
         right?: unknown;
       }>;

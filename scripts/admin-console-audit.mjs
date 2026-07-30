@@ -18,7 +18,7 @@ const sections = [
   ["analytics", "Analytics"],
   ["audit", "Audit log"],
   ["posture", "System posture"],
-  ["providers", "Providers"],
+  ["providers", "AI models"],
   ["chat-experience", "Chat experience"],
   ["connections", "Connections"],
   ["governance", "Governance"],
@@ -42,8 +42,8 @@ const sections = [
 const routes = [
   ...sections,
   ["usage", "Usage & quotas", "quotas"],
-  ["providers", "Providers", "models"],
-  ["providers", "Providers", "observability"],
+  ["providers", "AI models", "models"],
+  ["providers", "AI models", "observability"],
   ["connections", "Connections", "imports"],
   ["connections", "Connections", "catalog"],
   ["connections", "Connections", "tools"],
@@ -229,9 +229,13 @@ async function inspectTablePreferencePersistence(page, path, title) {
   if ((await table.count()) === 0) {
     return ["table preference audit could not find a framework table"];
   }
+  const serverPaginated =
+    (await table.getAttribute("data-server-paginated")) === "true";
   await table.getByRole("button", { name: "Table options" }).click();
   await page.getByRole("button", { name: "Compact" }).click();
-  await page.getByLabel("Rows per page").selectOption("10");
+  if (!serverPaginated) {
+    await page.getByLabel("Rows per page").selectOption("10");
+  }
   await page.goto(`${baseUrl}/admin?section=overview`, {
     waitUntil: "domcontentloaded",
   });
@@ -245,9 +249,10 @@ async function inspectTablePreferencePersistence(page, path, title) {
     .locator(".rm-table-block")
     .first()
     .evaluate(
-      (block) =>
-        block.dataset.pageSize === "10" &&
+      (block, isServerPaginated) =>
+        (isServerPaginated || block.dataset.pageSize === "10") &&
         block.querySelector(".rm-table-wrap")?.classList.contains("compact"),
+      serverPaginated,
     );
   await page
     .locator(".rm-table-block")
@@ -476,7 +481,8 @@ async function inspectUi(
         if (
           Number.isFinite(rowCount) &&
           rowCount > 8 &&
-          block.querySelector(".rm-table-search") === null
+          block.querySelector(".rm-table-search") === null &&
+          block.closest("section")?.querySelector(".rm-model-search") === null
         )
           blockFailures.push("search");
         if (
@@ -767,7 +773,7 @@ async function inspectUi(
           emptyStates: [...document.querySelectorAll(".rm-empty")].filter(
             visible,
           ).length,
-          leakedIdentifiers: [...new Set(leakedIdentifiers)].length,
+          leakedIdentifiers: new Set(leakedIdentifiers).size,
           primaryActions: primaryButtons.length,
           unguardedDangerActions: unguardedDangerButtons.length,
           formControls: visibleFormControls.length,

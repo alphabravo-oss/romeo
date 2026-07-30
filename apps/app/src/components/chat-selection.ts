@@ -40,3 +40,30 @@ export function shouldAutoSelectChat(state: ChatSelectionState): boolean {
   // is precisely what made "New chat" a no-op.
   return !state.isDraftingNewChat;
 }
+
+export function shouldApplyRequestedChat(state: {
+  activeChatId: string | undefined;
+  isDraftingNewChat: boolean;
+  requestedChatId: string | undefined;
+}): state is {
+  activeChatId: string | undefined;
+  isDraftingNewChat: false;
+  requestedChatId: string;
+} {
+  return (
+    !state.isDraftingNewChat &&
+    state.requestedChatId !== undefined &&
+    state.requestedChatId !== state.activeChatId
+  );
+}
+
+export function isActiveChatRemoval(
+  activeChatId: string | undefined,
+  event: { action: string; chatId: string } | undefined,
+): event is { action: "archived" | "deleted"; chatId: string } {
+  return (
+    activeChatId !== undefined &&
+    event?.chatId === activeChatId &&
+    (event.action === "archived" || event.action === "deleted")
+  );
+}

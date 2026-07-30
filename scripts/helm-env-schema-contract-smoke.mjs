@@ -125,9 +125,9 @@ function parseJson(source) {
 }
 
 function check(name, passed, { code, metadata } = {}) {
-  checks.push({ name, status: passed ? "pass" : "fail", ...(metadata ?? {}) });
+  checks.push({ name, status: passed ? "pass" : "fail", ...metadata });
   if (!passed && !blockers.some((blocker) => blocker.code === code)) {
-    blockers.push({ code, message: name, ...(metadata ?? {}) });
+    blockers.push({ code, message: name, ...metadata });
   }
 }
 

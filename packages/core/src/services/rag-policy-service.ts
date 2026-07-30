@@ -1,27 +1,10 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
 
 import {
-  ragPolicyExternalVectorDrStrategies,
-  ragPolicyExternalVectorExportPolicies,
-  ragPolicyExternalVectorModes,
-  ragPolicyPhysicalVectorIsolationEnforcements,
-  ragPolicyPhysicalVectorIsolationModes,
-  ragPolicyChangeJustificationCodes,
-  ragPolicyChangeRejectReasonCodes,
-  ragPolicyTiers,
-  ragVectorIsolationPolicies,
   type CreateRagPolicyChangeRequest,
-  type RagPolicyChangeEvidenceSummary,
-  type RagPolicyChangeJustificationCode,
   type RagPolicyChangeRejectReasonCode,
   type RagPolicyChangeRequest,
-  type RagPolicyExternalVectorStore,
-  type RagPolicyPhysicalVectorIsolation,
-  type RagPolicyBudgetMap,
-  type RagPolicyKnowledgeBaseTierAssignments,
-  type RagPolicyProviderModel,
   type RagPolicyReport,
-  type RagPolicyTier,
   type UpdateRagPolicyRequest,
 } from "../domain/rag-policy";
 import type { RomeoRepository } from "../domain/repository";

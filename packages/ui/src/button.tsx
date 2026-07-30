@@ -98,13 +98,15 @@ export interface LinkButtonProps
     VariantProps<typeof buttonVariants> {}
 
 export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(
-  function LinkButton({ className, size, variant, ...props }, ref) {
+  function LinkButton({ children, className, size, variant, ...props }, ref) {
     return (
       <a
         className={cn(buttonVariants({ size, variant }), className)}
         ref={ref}
         {...props}
-      />
+      >
+        {children}
+      </a>
     );
   },
 );

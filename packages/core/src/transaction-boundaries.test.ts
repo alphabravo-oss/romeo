@@ -2112,7 +2112,7 @@ describe("durable transaction boundaries", () => {
       new LocalMfaSecretVault(newLocalMfaKey).decrypt(
         afterFactor!.secretEncrypted,
       ),
-    ).toThrow();
+    ).toThrow(/authenticat/iu);
     expect(afterSecretSettings).toEqual(beforeSecretSettings);
     expect(oldResolved).toMatchObject({
       available: true,

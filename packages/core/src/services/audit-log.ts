@@ -30,7 +30,7 @@ export async function writeAuditLog(
     resourceId: input.resourceId,
     outcome: input.outcome ?? "success",
     metadata: {
-      ...(input.metadata ?? {}),
+      ...input.metadata,
       ...currentTelemetryMetadata(),
     },
     createdAt: new Date().toISOString(),

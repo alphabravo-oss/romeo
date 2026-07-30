@@ -9,8 +9,36 @@ import { StartDelegatedOAuthSchema } from "./delegated-oauth";
 import { CreateDeviceAuthorizationSchema } from "./device-authorizations";
 import { EdgeSecurityPostureCheckSchema } from "./edge-security";
 import { LocalLoginSchema, LocalMfaVerifySchema } from "./sessions";
+import { versionDiffSchema } from "./managed-model-schemas";
 
 describe("Romeo HTTP contracts", () => {
+  it("keeps response-side version diff fields forward compatible", () => {
+    expect(
+      versionDiffSchema.safeParse({
+        agentId: "agent_default",
+        leftVersionId: "version_1",
+        rightVersionId: "version_2",
+        changes: [
+          { field: "futureManagedModelField", left: null, right: null },
+        ],
+      }).success,
+    ).toBe(true);
+
+    const document = contractOpenApiDocument() as any;
+    const fieldSchema =
+      document.paths["/api/v1/agents/{agentId}/versions/{versionId}/diff"].get
+        .responses["200"].content["application/json"].schema.properties.data
+        .properties.changes.items.properties.field;
+    expect(fieldSchema).toMatchObject({
+      type: "string",
+      "x-extensible-enum": expect.arrayContaining([
+        "promptSuggestions",
+        "tags",
+      ]),
+    });
+    expect(fieldSchema).not.toHaveProperty("enum");
+  });
+
   it("keeps response and mutation schemas strict", () => {
     expect(
       InterfacePreferencesSchema.safeParse({

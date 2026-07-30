@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { platformEnvShape } from "./platform-env-shape";
+import { validateToolDispatchPayloadStore } from "./env-validation";
 
 export const envSchema = z
   .object({
@@ -131,6 +132,18 @@ export const envSchema = z
     MODEL_PROVIDER_DISABLED_IDS: z.string().default(""),
     MODEL_PROVIDER_FALLBACK_MODEL_ID: z.string().default(""),
     VALKEY_URL: z.string().default("redis://localhost:6379"),
+    REALTIME_EVENT_DRIVER: z.enum(["memory", "valkey"]).default("memory"),
+    REALTIME_EVENT_KEY_PREFIX: z
+      .string()
+      .min(1)
+      .max(120)
+      .regex(/^[A-Za-z0-9:._-]+$/)
+      .default("romeo:chat-events:v1"),
+    REALTIME_EVENT_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(2_000),
     QUOTA_COORDINATION_DRIVER: z
       .enum(["disabled", "valkey"])
       .default("disabled"),
@@ -467,19 +480,7 @@ export const envSchema = z
       .default("true")
       .transform((value) => value === "true"),
   })
-  .superRefine((env, context) => {
-    if (
-      env.TOOL_DISPATCH_PAYLOAD_STORE_DRIVER === "object-store" &&
-      env.TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY.trim().length < 32
-    ) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY must be at least 32 characters when object-store payload storage is enabled.",
-        path: ["TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY"],
-      });
-    }
-  });
+  .superRefine(validateToolDispatchPayloadStore);
 
 export type RomeoEnv = z.infer<typeof envSchema>;
 

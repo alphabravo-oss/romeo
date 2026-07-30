@@ -45,6 +45,9 @@ export interface RepositoryOperationsCapability {
   createToolConnector(connector: ToolConnector): Promise<ToolConnector>;
   updateToolConnector(connector: ToolConnector): Promise<ToolConnector>;
   listToolOperations(connectorId: string): Promise<ToolOperation[]>;
+  listToolOperationsForConnectors(
+    connectorIds: string[],
+  ): Promise<ToolOperation[]>;
   createToolOperations(operations: ToolOperation[]): Promise<ToolOperation[]>;
   updateToolOperation(operation: ToolOperation): Promise<ToolOperation>;
   listAuditLogs(orgId: string): Promise<AuditLog[]>;

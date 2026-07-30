@@ -13,12 +13,26 @@ const storage = new AsyncLocalStorage<TelemetryContext>();
 export const metadataTraceChannel = channel("romeo.telemetry.span");
 
 export interface MetadataTraceSpan {
-  boundary: "object_store";
+  boundary: "cleanup" | "object_store";
   durationMs: number;
-  operation: "delete" | "get" | "presign_put" | "put";
+  operation: string;
   outcome: "failure" | "success";
   requestId?: string;
   traceId?: string;
+}
+
+/** Publishes metadata-only evidence for an intentionally best-effort cleanup.
+ * Object keys, URLs, payloads, and raw error messages are never emitted.
+ */
+export function reportCleanupFailure(operation: string): void {
+  const context = storage.getStore();
+  metadataTraceChannel.publish({
+    boundary: "cleanup",
+    durationMs: 0,
+    operation,
+    outcome: "failure",
+    ...(context === undefined ? {} : context),
+  } satisfies MetadataTraceSpan);
 }
 
 export function runWithTelemetryContext<T>(
@@ -95,7 +109,7 @@ export function withTelemetryObjectStore(
   objectStore: ObjectStore,
 ): ObjectStore {
   const traced = <T>(
-    operation: MetadataTraceSpan["operation"],
+    operation: "delete" | "get" | "presign_put" | "put",
     execute: () => Promise<T>,
   ): Promise<T> => traceObjectStoreOperation(operation, execute);
   return {
@@ -109,7 +123,7 @@ export function withTelemetryObjectStore(
 }
 
 async function traceObjectStoreOperation<T>(
-  operation: MetadataTraceSpan["operation"],
+  operation: "delete" | "get" | "presign_put" | "put",
   execute: () => Promise<T>,
 ): Promise<T> {
   const startedAt = Date.now();
@@ -124,7 +138,7 @@ async function traceObjectStoreOperation<T>(
 }
 
 function publishObjectStoreSpan(
-  operation: MetadataTraceSpan["operation"],
+  operation: "delete" | "get" | "presign_put" | "put",
   startedAt: number,
   outcome: MetadataTraceSpan["outcome"],
 ): void {

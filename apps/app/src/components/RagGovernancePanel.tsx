@@ -16,7 +16,7 @@ import {
   type RagPolicyChangeRequest,
 } from "../features/rag-governance";
 import { PanelState } from "../lib/panel-state";
-import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
+import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { useConfirm } from "./ConfirmDialog";

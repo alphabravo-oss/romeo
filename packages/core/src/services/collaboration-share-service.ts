@@ -367,7 +367,7 @@ export class CollaborationShareService {
       repository,
     );
     const created: ResourceGrant[] = [];
-    for (const permission of [...new Set(input.share.permissions)]) {
+    for (const permission of new Set(input.share.permissions)) {
       const grant = existing.find(
         (item) =>
           item.principalType === input.share.principalType &&

@@ -29,7 +29,7 @@ export function useWorkspaceData(
   // The selected workspace is owned by WorkspaceProvider (persisted +
   // validated). This deduplicates the same ["bootstrap"] query rather than
   // re-fetching. Falls back to nothing while the selection reconciles.
-  const { subject, workspace } = useWorkspace();
+  const { latestChatEvent, subject, workspace } = useWorkspace();
   const agentsQuery = useQuery({
     queryKey: [
       options.includeDrafts ? "agents" : "agentGallery",
@@ -102,6 +102,7 @@ export function useWorkspaceData(
       chatsQuery.data?.pages.flatMap((page) => page.items) ?? [];
     const activeChat = activeChatQuery.data;
     return activeChat !== undefined &&
+      activeChat.archivedAt === undefined &&
       !pagedChats.some((chat) => chat.id === activeChat.id)
       ? [activeChat, ...pagedChats]
       : pagedChats;
@@ -168,6 +169,7 @@ export function useWorkspaceData(
     providerOperationalSummary: providerOperationalSummaryQuery.data,
     providers: providersQuery.data ?? [],
     interfacePreferences: interfacePreferencesQuery.data,
+    latestChatEvent,
     subject,
     tools: toolsQuery.data ?? [],
     workspace,

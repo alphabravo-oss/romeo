@@ -755,13 +755,10 @@ describe("collaboration API", () => {
       "content-type": "application/json",
       "x-romeo-event": "notification.chat_mention",
     });
-    expect(
-      String(
-        (deliveries[0]?.init?.headers as Record<string, string>)[
-          "x-romeo-signature"
-        ],
-      ),
-    ).toMatch(/^v1=/u);
+    const deliveryHeaders = deliveries[0]?.init?.headers as
+      | Record<string, string>
+      | undefined;
+    expect(String(deliveryHeaders?.["x-romeo-signature"])).toMatch(/^v1=/u);
     expect(JSON.stringify(sentBody)).not.toContain(
       "without leaking this sentence",
     );

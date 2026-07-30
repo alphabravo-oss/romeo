@@ -2,7 +2,7 @@ import { StatusBadge, Switch } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import type { Agent } from "../features/managed-models";
 import {
@@ -30,6 +30,28 @@ export function ManagedModelToolPanel({
   });
   const updateMutation = useMutation({ mutationFn: updateAgentToolBinding });
   const tools = toolsQuery.data ?? [];
+  const update = useCallback(
+    async (
+      toolId: string,
+      patch: { enabled?: boolean; approvalRequired?: boolean },
+    ) => {
+      if (!activeAgent) return;
+      try {
+        await updateMutation.mutateAsync({
+          agentId: activeAgent.id,
+          toolId,
+          ...patch,
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["agentTools", activeAgent.id],
+        });
+        toast(t("managedModelToolBindingSaved"), "success");
+      } catch {
+        toast(t("managedModelToolBindingFailed"), "error");
+      }
+    },
+    [activeAgent, queryClient, t, updateMutation],
+  );
   const columns = useMemo(
     () => [
       toolColumn.accessor("name", {
@@ -96,28 +118,8 @@ export function ManagedModelToolPanel({
         ),
       }),
     ],
-    [activeAgent, t, updateMutation.isPending],
+    [activeAgent, t, update, updateMutation.isPending],
   );
-
-  async function update(
-    toolId: string,
-    patch: { enabled?: boolean; approvalRequired?: boolean },
-  ) {
-    if (!activeAgent) return;
-    try {
-      await updateMutation.mutateAsync({
-        agentId: activeAgent.id,
-        toolId,
-        ...patch,
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["agentTools", activeAgent.id],
-      });
-      toast(t("managedModelToolBindingSaved"), "success");
-    } catch {
-      toast(t("managedModelToolBindingFailed"), "error");
-    }
-  }
 
   return (
     <section className="rm-managed-model-section">

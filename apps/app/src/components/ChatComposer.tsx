@@ -348,7 +348,7 @@ export function ChatComposer({
             name="chat-image-attachment"
             accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.docx,.pptx,.xlsx,text/plain,text/markdown,text/csv,application/json,text/html"
             aria-label={t("attach")}
-            className="sr-only"
+            className="rm-ui-visually-hidden"
             disabled={isStreaming}
             id="chat-image-attachment"
             onChange={(event) => {

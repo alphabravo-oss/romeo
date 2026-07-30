@@ -17,7 +17,6 @@ import {
   safeOrigin,
   safeString,
   safeToken,
-  safeTokens,
   sanitizeChecklistTargetProfile,
 } from "./ga-evidence-sanitize-support";
 

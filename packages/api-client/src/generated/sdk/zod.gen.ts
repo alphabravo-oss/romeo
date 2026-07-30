@@ -12,6 +12,20 @@ export const zAdminUser = z.object({
   disabledAt: z.iso.datetime().optional(),
 });
 
+export const zAdminUserPage = z.object({
+  data: z.array(zAdminUser),
+  meta: z.object({
+    activeGlobalAdminTotal: z.int().gte(0),
+    adminTotal: z.int().gte(0),
+    disabledTotal: z.int().gte(0),
+    hasMore: z.boolean(),
+    limit: z.int().gt(0),
+    offset: z.int().gte(0),
+    total: z.int().gte(0),
+    userTotal: z.int().gte(0),
+  }),
+});
+
 export const zApiError = z.object({
   error: z.object({
     code: z.string(),
@@ -9473,12 +9487,18 @@ export const zOpenWebUiUpdateChannelRequest = z.object({
   user_ids: z.array(z.string().min(1).max(300)).max(200).optional(),
 });
 
+export const zAdministrationListUsersQuery = z.object({
+  direction: z.enum(["asc", "desc"]).optional(),
+  limit: z.int().gte(1).lte(100).optional(),
+  offset: z.int().gte(0).lte(1000000).nullish(),
+  q: z.string().max(200).optional(),
+  sort: z.enum(["email", "name", "role", "status"]).optional(),
+});
+
 /**
  * Users
  */
-export const zAdministrationListUsersResponse = z.object({
-  data: z.array(zAdminUser),
-});
+export const zAdministrationListUsersResponse = zAdminUserPage;
 
 export const zAdministrationDisableUserPath = z.object({
   userId: z.string().min(1).max(300),
@@ -10435,18 +10455,7 @@ export const zManagedModelsDiffVersionResponse = z.object({
     rightVersionId: z.string().min(1).max(300),
     changes: z.array(
       z.object({
-        field: z.enum([
-          "baseModelId",
-          "knowledgeBaseBindings",
-          "memoryPolicy",
-          "promptSuggestions",
-          "safetySettings",
-          "systemPrompt",
-          "parameters",
-          "toolBindings",
-          "tags",
-          "voiceProfileId",
-        ]),
+        field: z.string(),
         left: z.unknown().optional(),
         right: z.unknown().optional(),
       }),

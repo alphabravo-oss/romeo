@@ -466,7 +466,7 @@ export class VoiceService {
         quantity: persistedArtifact.durationMs ?? input.text.length,
         unit: persistedArtifact.durationMs === undefined ? "char" : "ms",
         metadata: {
-          ...(input.metadata ?? {}),
+          ...input.metadata,
           artifactId: persistedArtifact.id,
           storageKey: persistedArtifact.storageKey,
           contentType: persistedArtifact.contentType,

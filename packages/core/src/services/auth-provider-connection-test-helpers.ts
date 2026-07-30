@@ -1,5 +1,4 @@
 import type { AuthSubject } from "@romeo/auth";
-import type { RomeoEnv } from "@romeo/config";
 
 import type {
   AuthProviderCatalogEntry,
@@ -11,25 +10,19 @@ import type {
   AuthProviderLdapConnectionSummary,
   AuthProviderOAuth2ConnectionSummary,
   AuthProviderSamlConnectionSummary,
-  EffectiveAuthProviderSetting,
 } from "../domain/auth-provider-settings";
 import { ApiError } from "../errors";
 import {
   applyLdapConnectionPatch,
-  ldapConfigFromProviderConnection,
-  mergeLdapConnection,
   type ResolvedLdapProviderConnection,
   type StoredLdapProviderConnection,
 } from "./auth-provider-ldap-config";
 import {
   oauth2ConfigFromProviderConnection,
-  mergeOAuth2Connection,
-  type ResolvedOAuth2ProviderConnection,
   type StoredOAuth2ProviderConnection,
 } from "./auth-provider-oauth2-config";
 import {
   applySamlConnectionPatch,
-  mergeSamlConnection,
   type ResolvedSamlProviderConnection,
   type StoredSamlProviderConnection,
 } from "./auth-provider-saml-config";
@@ -41,7 +34,6 @@ import {
 import { catalogById } from "./auth-provider-settings-resolution";
 import { assertGlobalAdmin } from "./auth-provider-settings-storage";
 import { stripUndefined } from "./auth-provider-settings-support";
-import type { StoredGlobalProviderSetting } from "./auth-provider-settings-storage-types";
 import type { ResolvedSsoOidcConfig } from "./sso-config";
 import { assertTrustedMetadataUrl, normalizeIssuer } from "./sso-config";
 import { parseManagedSecretRef } from "./secret-refs";
@@ -85,7 +77,7 @@ export function transientOAuth2Connection(
       ? existing?.clientId
       : normalizeConnectionTestClientId(oauth2.clientId);
   return stripUndefined({
-    ...(existing ?? {}),
+    ...existing,
     clientId,
     scopes:
       existing?.scopes ??

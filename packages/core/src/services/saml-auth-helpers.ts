@@ -10,6 +10,9 @@ import type {
   SamlRequestRecord,
   SamlStateCookie,
 } from "./saml-auth-types";
+import { normalizeAppOrigin, sanitizeAuthReturnTo } from "./auth-navigation";
+
+export { normalizeAppOrigin };
 
 const defaultOrgId = "org_default";
 
@@ -159,25 +162,10 @@ export function normalizeOrgId(value: string | undefined): string {
 }
 
 export function sanitizeReturnTo(value: string | undefined): string {
-  if (value === undefined || value.length === 0) return "/";
-  if (
-    value.length > 500 ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    /[\r\n]/u.test(value)
-  ) {
-    throw new ApiError(
-      "invalid_saml_return_to",
-      "SAML return path must be a relative application path.",
-      400,
-    );
-  }
-  return value;
-}
-
-export function normalizeAppOrigin(value: string): string {
-  const url = new URL(value);
-  return `${url.protocol}//${url.host}`;
+  return sanitizeAuthReturnTo(value, {
+    errorCode: "invalid_saml_return_to",
+    flowName: "SAML",
+  });
 }
 
 export function parseLedger(

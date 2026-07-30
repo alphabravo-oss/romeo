@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import type {
   Message,
@@ -10,14 +10,14 @@ import { inspectRunContext, type RunContextPreview } from "../features/chat";
 import { getManagedModelPreferences } from "../features/managed-models";
 import type { QueuedChatTurn } from "../features/runs";
 import { useLocale } from "../lib/i18n";
-import { shouldAutoSelectChat } from "./chat-selection";
+import {
+  isActiveChatRemoval,
+  shouldApplyRequestedChat,
+  shouldAutoSelectChat,
+} from "./chat-selection";
 import { resolveChatModelSelection } from "./chat-model-selection";
 import { useChatMessageState } from "./useChatMessageState";
-import {
-  useChatRunStream,
-  type ChatCitation,
-  type ChatRunActivity,
-} from "./useChatRunStream";
+import { useChatRunStream } from "./useChatRunStream";
 import { useToolExecution } from "./useToolExecution";
 import { useWorkspaceAttachments } from "./useWorkspaceAttachments";
 import { useWorkspaceChatActions } from "./useWorkspaceChatActions";
@@ -49,9 +49,7 @@ export function useWorkspaceController(
   const [activeAgentId, setActiveAgentId] = useState<string | undefined>(
     options.requestedAgentId,
   );
-  const [activeChatId, setActiveChatId] = useState<string | undefined>(
-    options.requestedChatId,
-  );
+  const [activeChatId, setActiveChatId] = useState<string | undefined>();
   // Explicit intent: the user asked for a blank chat and there is no chat row
   // behind it yet. Distinguishes "New chat" from "the active chat vanished",
   // which look identical from activeChatId alone. See ./chat-selection.
@@ -71,8 +69,8 @@ export function useWorkspaceController(
   const [contextPreviewError, setContextPreviewError] = useState<string>();
   const [isInspectingContext, setIsInspectingContext] = useState(false);
   const [error, setError] = useState<string>();
+  const handledChatRemovalEventId = useRef<string | undefined>(undefined);
   const {
-    activeRunId,
     citations,
     consumeRunStream,
     handleCancel,
@@ -103,6 +101,7 @@ export function useWorkspaceController(
     chatExperience,
     hasMoreChats,
     isLoadingMoreChats,
+    latestChatEvent,
     loadMoreChats,
     models,
     providerOperationalSummary,
@@ -196,6 +195,9 @@ export function useWorkspaceController(
     imageAttachments,
     isStreaming,
     messages,
+    ...(options.onChatSelection === undefined
+      ? {}
+      : { onChatCreated: options.onChatSelection }),
     queryClient,
     refreshUsageControls,
     resetRunPresentation,
@@ -267,16 +269,42 @@ export function useWorkspaceController(
     options.onChatSelection?.(undefined);
   };
   const firstChatId = chats[0]?.id;
+  const requestedAgentId = options.requestedAgentId;
+  const requestedChatId = options.requestedChatId;
+  const resolvedActiveAgentId = activeAgent?.id;
+  const selectChatFromEffect = useEffectEvent(
+    async (chatId: string, notifySelection: boolean) => {
+      setModelOverrideId(undefined);
+      await handleSelectChatInternal(chatId);
+      if (notifySelection) options.onChatSelection?.(chatId);
+    },
+  );
+  const notifyAgentSelection = useEffectEvent((agentId: string) => {
+    options.onAgentSelection?.(agentId);
+  });
+  const reconcileRemoteChatRemoval = useEffectEvent(async (chatId: string) => {
+    await handleChatDeleted(chatId);
+    options.onChatSelection?.(undefined);
+  });
 
   useEffect(() => {
-    if (options.requestedAgentId !== undefined)
-      setActiveAgentId(options.requestedAgentId);
-  }, [options.requestedAgentId]);
+    if (requestedAgentId !== undefined) setActiveAgentId(requestedAgentId);
+  }, [requestedAgentId]);
 
   useEffect(() => {
-    if (options.requestedChatId !== undefined)
-      setActiveChatId(options.requestedChatId);
-  }, [options.requestedChatId]);
+    const requestedChat = {
+      activeChatId,
+      isDraftingNewChat,
+      requestedChatId,
+    };
+    if (!shouldApplyRequestedChat(requestedChat)) return;
+    void selectChatFromEffect(requestedChat.requestedChatId, false).catch(
+      (caught) =>
+        setError(
+          caught instanceof Error ? caught.message : "Unable to load chat.",
+        ),
+    );
+  }, [activeChatId, isDraftingNewChat, requestedChatId]);
 
   useEffect(() => {
     setModelOverrideId(undefined);
@@ -284,14 +312,24 @@ export function useWorkspaceController(
 
   useEffect(() => {
     if (
-      activeChatId === undefined ||
-      activeAgent === undefined ||
-      activeAgentId === activeAgent.id
+      !isActiveChatRemoval(activeChatId, latestChatEvent) ||
+      handledChatRemovalEventId.current === latestChatEvent.id
     )
       return;
-    setActiveAgentId(activeAgent.id);
-    options.onAgentSelection?.(activeAgent.id);
-  }, [activeAgent?.id, activeAgentId, activeChatId]);
+    handledChatRemovalEventId.current = latestChatEvent.id;
+    void reconcileRemoteChatRemoval(latestChatEvent.chatId);
+  }, [activeChatId, latestChatEvent]);
+
+  useEffect(() => {
+    if (
+      activeChatId === undefined ||
+      resolvedActiveAgentId === undefined ||
+      activeAgentId === resolvedActiveAgentId
+    )
+      return;
+    setActiveAgentId(resolvedActiveAgentId);
+    notifyAgentSelection(resolvedActiveAgentId);
+  }, [activeAgentId, activeChatId, resolvedActiveAgentId]);
 
   useEffect(() => {
     const key = `romeo:draft:${activeChatId ?? `new:${workspace?.id ?? "none"}`}`;
@@ -320,7 +358,7 @@ export function useWorkspaceController(
       })
     )
       return;
-    void handleSelectChat(firstChatId).catch((caught) =>
+    void selectChatFromEffect(firstChatId, true).catch((caught) =>
       setError(
         caught instanceof Error ? caught.message : "Unable to load chat.",
       ),

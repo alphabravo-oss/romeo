@@ -1,0 +1,9 @@
+{
+  "$schema": "./node_modules/knip/schema-jsonc.json",
+  "ignoreFiles": ["scripts/*.ts"],
+  "workspaces": {
+    "apps/app": {
+      "ignoreDependencies": ["axe-core"],
+    },
+  },
+}

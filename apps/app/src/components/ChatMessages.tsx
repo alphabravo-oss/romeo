@@ -258,6 +258,9 @@ export const ChatMessages = memo(function ChatMessages({
                   <div className="rm-speech-artifact">
                     <span>{formatSpeechArtifact(artifact)}</span>
                     {artifact.playbackUrl ? (
+                      // The assistant message immediately above is the text
+                      // alternative for this generated speech-only artifact.
+                      // oxlint-disable-next-line jsx-a11y/media-has-caption
                       <audio
                         controls
                         preload="metadata"

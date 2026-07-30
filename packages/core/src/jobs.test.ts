@@ -237,4 +237,42 @@ describe("Romeo background job operations", () => {
     );
     expect(JSON.stringify(body)).not.toContain("RAW_API_JOB_SECRET_SENTINEL");
   });
+
+  it("aggregates run execution instances under a bounded job type", () => {
+    const summary = summarizeBackgroundJobs(
+      [
+        backgroundJob("job_run_one", "run.execution:run_one", "completed"),
+        backgroundJob("job_run_two", "run.execution:run_two", "failed"),
+      ],
+      { now: "2026-06-30T01:00:00.000Z" },
+    );
+
+    expect(summary.byType).toEqual([
+      expect.objectContaining({
+        type: "run.execution",
+        total: 2,
+        completed: 1,
+        failed: 1,
+      }),
+    ]);
+    expect(JSON.stringify(summary)).not.toContain("run_one");
+    expect(JSON.stringify(summary)).not.toContain("run_two");
+  });
 });
+
+function backgroundJob(
+  id: string,
+  type: string,
+  status: "completed" | "failed",
+) {
+  return {
+    id,
+    orgId: "org_default",
+    type,
+    status,
+    payload: {},
+    createdAt: "2026-06-30T00:00:00.000Z",
+    updatedAt: "2026-06-30T00:01:00.000Z",
+    completedAt: "2026-06-30T00:01:00.000Z",
+  } as const;
+}

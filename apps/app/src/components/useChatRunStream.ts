@@ -227,10 +227,10 @@ function providerRunFailureMessage(
   if (errorCode === "provider_credential_unavailable") {
     return t("providerCredentialUnavailable");
   }
-  if (/http_401$/u.test(errorType)) return t("providerRejectedKey");
-  if (/http_403$/u.test(errorType)) return t("providerDenied");
-  if (/http_404$/u.test(errorType)) return t("providerNotFound");
-  if (/http_429$/u.test(errorType)) return t("providerRateLimited");
+  if (errorType.endsWith("http_401")) return t("providerRejectedKey");
+  if (errorType.endsWith("http_403")) return t("providerDenied");
+  if (errorType.endsWith("http_404")) return t("providerNotFound");
+  if (errorType.endsWith("http_429")) return t("providerRateLimited");
   if (/http_5\d\d$/u.test(errorType)) return t("providerUnavailable");
   if (errorCode === "provider_stream_aborted") return t("responseStopped");
   return t("providerFailed");

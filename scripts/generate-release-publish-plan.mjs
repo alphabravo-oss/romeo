@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 
 import {
   argValue,

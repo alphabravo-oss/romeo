@@ -7,10 +7,27 @@ import {
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
-export async function listUsers() {
+export async function listUsers(options: {
+  direction?: "asc" | "desc";
+  limit: number;
+  offset: number;
+  query?: string;
+  sort?: "email" | "name" | "role" | "status";
+}) {
   configureBrowserApiClients();
-  const response = await administrationListUsers({ throwOnError: true });
-  return response.data.data;
+  const response = await administrationListUsers({
+    query: {
+      ...(options.direction === undefined
+        ? {}
+        : { direction: options.direction }),
+      limit: options.limit,
+      offset: options.offset,
+      ...(options.query === undefined ? {} : { q: options.query }),
+      ...(options.sort === undefined ? {} : { sort: options.sort }),
+    },
+    throwOnError: true,
+  });
+  return response.data;
 }
 
 export async function listGroups() {

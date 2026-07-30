@@ -15,7 +15,6 @@ import type {
   DataRightsCoverageReport,
   IdentityLifecyclePolicy,
 } from "../domain/entities";
-import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
 import {

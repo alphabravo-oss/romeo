@@ -159,6 +159,7 @@ export function DataTableGrid<T>({
               {padTop > 0 ? (
                 <tr>
                   <td
+                    aria-hidden="true"
                     colSpan={table.getVisibleLeafColumns().length}
                     style={{ height: padTop }}
                   />
@@ -171,6 +172,7 @@ export function DataTableGrid<T>({
               {padBottom > 0 ? (
                 <tr>
                   <td
+                    aria-hidden="true"
                     colSpan={table.getVisibleLeafColumns().length}
                     style={{ height: padBottom }}
                   />

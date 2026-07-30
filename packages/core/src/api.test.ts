@@ -216,7 +216,7 @@ describe("Open WebUI-class governed chat extensions", () => {
       reader as ReadableStreamDefaultReader<Uint8Array>,
     );
     expect(connected).toMatchObject({
-      event: "chats:changed",
+      event: "chats:connected",
       data: {
         type: "connected",
         workspaceId: "workspace_default",
@@ -261,6 +261,54 @@ describe("Open WebUI-class governed chat extensions", () => {
       },
     });
     await reader?.cancel();
+  });
+
+  it("replays chat changes after an SSE reconnect cursor", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const firstResponse = await api.request(
+      "/api/v1/workspaces/workspace_default/chat-events",
+    );
+    const firstReader = firstResponse.body?.getReader();
+    expect(firstReader).toBeDefined();
+    await readSseEvent(firstReader as ReadableStreamDefaultReader<Uint8Array>);
+
+    const createResponse = await api.request("/api/v1/chats", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Reconnect replay sentinel",
+      }),
+    });
+    const createdChat = await createResponse.json();
+    const created = await readSseEvent(
+      firstReader as ReadableStreamDefaultReader<Uint8Array>,
+    );
+    expect(created.id).toBeDefined();
+    await firstReader?.cancel();
+
+    await api.request(`/api/v1/chats/${createdChat.data.id}/archive`, {
+      method: "POST",
+    });
+    const replayResponse = await api.request(
+      "/api/v1/workspaces/workspace_default/chat-events",
+      { headers: { "last-event-id": created.id! } },
+    );
+    const replayReader = replayResponse.body?.getReader();
+    expect(replayReader).toBeDefined();
+    await readSseEvent(replayReader as ReadableStreamDefaultReader<Uint8Array>);
+    const replayed = await readSseEvent(
+      replayReader as ReadableStreamDefaultReader<Uint8Array>,
+    );
+    expect(replayed).toMatchObject({
+      event: "chats:changed",
+      data: {
+        type: "changed",
+        action: "archived",
+        chatId: createdChat.data.id,
+      },
+    });
+    await replayReader?.cancel();
   });
 
   it("creates, controls, and exposes retained memory in context inspection", async () => {
@@ -5871,7 +5919,9 @@ describe("Romeo API thin slice", () => {
         updatedFactor!.secretEncrypted,
       ),
     ).toBe(rawTotpSecret);
-    expect(() => oldMfaVault.decrypt(updatedFactor!.secretEncrypted)).toThrow();
+    expect(() => oldMfaVault.decrypt(updatedFactor!.secretEncrypted)).toThrow(
+      /authenticat/iu,
+    );
     expect(resolved).toMatchObject({
       available: true,
       value: rawManagedSecret,
@@ -6519,6 +6569,10 @@ describe("Romeo API thin slice", () => {
     const api = createRomeoApi(repository);
     const listResponse = await api.request("/api/v1/users");
     const listed = await listResponse.json();
+    const filteredListResponse = await api.request(
+      "/api/v1/users?limit=1&offset=0&q=lifecycle&sort=email&direction=desc",
+    );
+    const filteredList = await filteredListResponse.json();
     const disableResponse = await api.request(
       "/api/v1/users/user_lifecycle_target/disable",
       { method: "POST" },
@@ -6561,6 +6615,19 @@ describe("Romeo API thin slice", () => {
     expect(listed.data.map((user: { id: string }) => user.id)).toContain(
       "user_lifecycle_target",
     );
+    expect(listed.meta).toMatchObject({
+      hasMore: false,
+      limit: 50,
+      offset: 0,
+    });
+    expect(filteredListResponse.status).toBe(200);
+    expect(filteredList.data).toHaveLength(1);
+    expect(filteredList.meta).toMatchObject({
+      hasMore: true,
+      limit: 1,
+      offset: 0,
+      total: 2,
+    });
     expect(disableResponse.status).toBe(200);
     expect(disabled.data.disabledAt).toEqual(expect.any(String));
     expect(selfDisableResponse.status).toBe(403);
@@ -8146,7 +8213,7 @@ describe("Romeo API thin slice", () => {
     const oldSecret = "old-session-secret-32-bytes-long";
     const newSecret = "new-session-secret-32-bytes-long";
     let authorizationNonce = "";
-    const oidcFetch: typeof fetch = async (input, init) => {
+    const oidcFetch: typeof fetch = async (input, _init) => {
       const url =
         typeof input === "string"
           ? input
@@ -18944,7 +19011,7 @@ async function createToolWorkerApiKey(
 
 async function readSseEvent(
   reader: ReadableStreamDefaultReader<Uint8Array>,
-): Promise<{ event: string; data: unknown }> {
+): Promise<{ event: string; id?: string; data: unknown }> {
   const decoder = new TextDecoder();
   let buffer = "";
 
@@ -18965,14 +19032,24 @@ async function readSseEvent(
   }
 }
 
-function parseSseFrame(frame: string): { event: string; data: unknown } {
+function parseSseFrame(frame: string): {
+  event: string;
+  id?: string;
+  data: unknown;
+} {
   let event = "message";
+  let id: string | undefined;
   const data: string[] = [];
   for (const line of frame.split("\n")) {
     if (line.startsWith("event:")) event = line.slice(6).trim();
+    if (line.startsWith("id:")) id = line.slice(3).trim();
     if (line.startsWith("data:")) data.push(line.slice(5).trim());
   }
-  return { event, data: JSON.parse(data.join("\n")) as unknown };
+  return {
+    event,
+    ...(id === undefined ? {} : { id }),
+    data: JSON.parse(data.join("\n")) as unknown,
+  };
 }
 
 function fakeLdapClient(options: {

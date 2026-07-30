@@ -10,9 +10,30 @@ import type { RomeoApi } from "../context";
 export function registerUserRoutes(app: RomeoApi): void {
   app.openapi(listUsersRoute, async (context) => {
     const subject = context.get("subject");
-    const users = await context.get("services").users.list(subject);
-    const data = users.map(withEffectiveRole);
-    return context.json({ data });
+    const query = context.req.valid("query");
+    const limit = query.limit ?? 50;
+    const offset = query.offset ?? 0;
+    const page = await context.get("services").users.listPage(subject, {
+      direction: query.direction ?? "asc",
+      limit,
+      offset,
+      ...(query.q === undefined || query.q === "" ? {} : { query: query.q }),
+      sort: query.sort ?? "name",
+    });
+    const data = page.items.map(withEffectiveRole);
+    return context.json({
+      data,
+      meta: {
+        activeGlobalAdminTotal: page.activeGlobalAdminTotal,
+        adminTotal: page.adminTotal,
+        disabledTotal: page.disabledTotal,
+        hasMore: offset + data.length < page.total,
+        limit,
+        offset,
+        total: page.total,
+        userTotal: page.userTotal,
+      },
+    });
   });
 
   app.openapi(disableUserRoute, async (context) => {

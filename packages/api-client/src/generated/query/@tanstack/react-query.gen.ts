@@ -1995,6 +1995,93 @@ export const administrationListUsersOptions = (
     queryKey: administrationListUsersQueryKey(options),
   });
 
+const createInfiniteParams = <
+  K extends Pick<QueryKey<Options>[0], "body" | "headers" | "path" | "query">,
+>(
+  queryKey: QueryKey<Options>,
+  page: K,
+) => {
+  const params = { ...queryKey[0] };
+  if (page.body) {
+    params.body = {
+      ...(queryKey[0].body as any),
+      ...(page.body as any),
+    };
+  }
+  if (page.headers) {
+    params.headers = {
+      ...queryKey[0].headers,
+      ...page.headers,
+    };
+  }
+  if (page.path) {
+    params.path = {
+      ...(queryKey[0].path as any),
+      ...(page.path as any),
+    };
+  }
+  if (page.query) {
+    params.query = {
+      ...(queryKey[0].query as any),
+      ...(page.query as any),
+    };
+  }
+  return params as unknown as typeof page;
+};
+
+export const administrationListUsersInfiniteQueryKey = (
+  options?: Options<AdministrationListUsersData>,
+): QueryKey<Options<AdministrationListUsersData>> =>
+  createQueryKey("administrationListUsers", options, true);
+
+/**
+ * List organization users
+ */
+export const administrationListUsersInfiniteOptions = (
+  options?: Options<AdministrationListUsersData>,
+) => {
+  const opts = infiniteQueryOptions<
+    AdministrationListUsersResponse,
+    AdministrationListUsersError,
+    InfiniteData<AdministrationListUsersResponse>,
+    QueryKey<Options<AdministrationListUsersData>>,
+    | number
+    | null
+    | Pick<
+        QueryKey<Options<AdministrationListUsersData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<AdministrationListUsersData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  offset: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await administrationListUsers({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: administrationListUsersInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
 /**
  * Disable a user
  */
@@ -5390,40 +5477,6 @@ export const operationalGovernanceListAuditLogsOptions = (
     },
     queryKey: operationalGovernanceListAuditLogsQueryKey(options),
   });
-
-const createInfiniteParams = <
-  K extends Pick<QueryKey<Options>[0], "body" | "headers" | "path" | "query">,
->(
-  queryKey: QueryKey<Options>,
-  page: K,
-) => {
-  const params = { ...queryKey[0] };
-  if (page.body) {
-    params.body = {
-      ...(queryKey[0].body as any),
-      ...(page.body as any),
-    };
-  }
-  if (page.headers) {
-    params.headers = {
-      ...queryKey[0].headers,
-      ...page.headers,
-    };
-  }
-  if (page.path) {
-    params.path = {
-      ...(queryKey[0].path as any),
-      ...(page.path as any),
-    };
-  }
-  if (page.query) {
-    params.query = {
-      ...(queryKey[0].query as any),
-      ...(page.query as any),
-    };
-  }
-  return params as unknown as typeof page;
-};
 
 export const operationalGovernanceListAuditLogsInfiniteQueryKey = (
   options?: Options<OperationalGovernanceListAuditLogsData>,

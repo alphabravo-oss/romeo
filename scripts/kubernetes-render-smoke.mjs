@@ -208,6 +208,7 @@ assertHelmSchemaRejectsInvalidProviderStreamTimeout();
 assertHelmSchemaRejectsInvalidProviderResilience();
 assertHelmSchemaRejectsInvalidProviderRouting();
 assertHelmSchemaRejectsInvalidQuotaCoordination();
+assertHelmSchemaRejectsInvalidRealtimeEvents();
 assertHelmSchemaRejectsInvalidEdgeSecurity();
 assertHelmSchemaRejectsInvalidFileLimits();
 assertHelmSchemaRejectsInvalidHttpRateLimit();
@@ -483,6 +484,35 @@ function assertHelmSchemaRejectsInvalidQuotaCoordination() {
     ["QUOTA_COORDINATION_DRIVER", "redis"],
     ["QUOTA_COORDINATION_KEY_PREFIX", "romeo quota"],
     ["QUOTA_COORDINATION_TIMEOUT_MS", "0"],
+  ]) {
+    const result = spawnSync(
+      "helm",
+      [
+        "template",
+        releaseName,
+        chartPath,
+        "--set-string",
+        `env.${key}=${value}`,
+      ],
+      { encoding: "utf8" },
+    );
+    if (result.status === 0) {
+      throw new Error(`Helm schema accepted invalid env.${key}=${value}.`);
+    }
+    const text = `${result.stdout}\n${result.stderr}`;
+    if (!text.includes(key) && !text.includes(`/env/${key}`)) {
+      throw new Error(
+        `Helm schema rejected invalid values without naming ${key}: ${text}`,
+      );
+    }
+  }
+}
+
+function assertHelmSchemaRejectsInvalidRealtimeEvents() {
+  for (const [key, value] of [
+    ["REALTIME_EVENT_DRIVER", "redis"],
+    ["REALTIME_EVENT_KEY_PREFIX", "romeo events"],
+    ["REALTIME_EVENT_TIMEOUT_MS", "0"],
   ]) {
     const result = spawnSync(
       "helm",
@@ -928,6 +958,15 @@ function assertConfigMap(configMap, variant) {
     throw new Error(
       `${variantName} ConfigMap provider fallback model drifted.`,
     );
+  }
+  if (data.REALTIME_EVENT_DRIVER !== "valkey") {
+    throw new Error(`${variantName} ConfigMap realtime event driver drifted.`);
+  }
+  if (data.REALTIME_EVENT_KEY_PREFIX !== "romeo:chat-events:v1") {
+    throw new Error(`${variantName} ConfigMap realtime event prefix drifted.`);
+  }
+  if (data.REALTIME_EVENT_TIMEOUT_MS !== "2000") {
+    throw new Error(`${variantName} ConfigMap realtime event timeout drifted.`);
   }
   if (data.QUOTA_COORDINATION_DRIVER !== "disabled") {
     throw new Error(

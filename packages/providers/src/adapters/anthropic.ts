@@ -117,9 +117,10 @@ async function* streamAnthropicChat(
   const tools = new AnthropicToolAccumulator();
   let inputTokens: number | undefined;
   try {
-    const stream = await client.messages.create(request, {
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
-    });
+    const stream = await client.messages.create(
+      request,
+      input.signal === undefined ? {} : { signal: input.signal },
+    );
     for await (const event of stream) {
       const usage = usageFromAnthropicEvent(event, inputTokens);
       if (event.type === "message_start")

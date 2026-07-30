@@ -82,14 +82,14 @@ export function mergeOidcConnection(
     groupMap:
       global.groupMap === undefined && override.groupMap === undefined
         ? undefined
-        : { ...(global.groupMap ?? {}), ...(override.groupMap ?? {}) },
+        : { ...global.groupMap, ...override.groupMap },
     workspaceGroupMap:
       global.workspaceGroupMap === undefined &&
       override.workspaceGroupMap === undefined
         ? undefined
         : {
-            ...(global.workspaceGroupMap ?? {}),
-            ...(override.workspaceGroupMap ?? {}),
+            ...global.workspaceGroupMap,
+            ...override.workspaceGroupMap,
           },
   });
 }

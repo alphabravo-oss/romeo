@@ -1,15 +1,6 @@
-import type * as Auth from "@romeo/auth";
-import type * as Ai from "@romeo/ai-runtime";
-
-import type * as OAuth from "../domain/delegated-oauth";
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
-import {
-  append,
-  appendMany,
-  removeById,
-  replaceById,
-} from "./collection-helpers";
+import { append, replaceById } from "./collection-helpers";
 import { purgeTenantData } from "./in-memory-tenant-purge";
 import { InMemoryRepositoryBase } from "./in-memory-base";
 
@@ -22,6 +13,45 @@ export abstract class InMemoryIdentityRepository extends InMemoryRepositoryBase 
     return this.data.users
       .filter((user) => user.orgId === orgId)
       .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async listUsersPage(
+    orgId: string,
+    input: R.UserCatalogQuery,
+  ): Promise<R.UserCatalogPage> {
+    const all = this.data.users.filter((user) => user.orgId === orgId);
+    const query = input.query?.trim().toLocaleLowerCase();
+    const filtered = all.filter(
+      (user) =>
+        query === undefined ||
+        query === "" ||
+        user.name.toLocaleLowerCase().includes(query) ||
+        user.email.toLocaleLowerCase().includes(query),
+    );
+    const direction = input.direction === "desc" ? -1 : 1;
+    const value = (user: E.User): string => {
+      if (input.sort === "email") return user.email;
+      if (input.sort === "role") return user.role ?? "user";
+      if (input.sort === "status") {
+        return user.disabledAt === undefined ? "active" : "disabled";
+      }
+      return user.name;
+    };
+    filtered.sort(
+      (left, right) =>
+        direction * value(left).localeCompare(value(right)) ||
+        direction * left.id.localeCompare(right.id),
+    );
+    return {
+      activeGlobalAdminTotal: all.filter(
+        (user) => user.role === "global_admin" && user.disabledAt === undefined,
+      ).length,
+      adminTotal: all.filter((user) => (user.role ?? "user") !== "user").length,
+      disabledTotal: all.filter((user) => user.disabledAt !== undefined).length,
+      items: filtered.slice(input.offset, input.offset + input.limit),
+      total: filtered.length,
+      userTotal: all.length,
+    };
   }
 
   async createUser(user: E.User): Promise<E.User> {

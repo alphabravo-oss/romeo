@@ -9,7 +9,6 @@ import {
 import type {
   CollaborationChannel,
   CollaborationChannelMember,
-  User,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
@@ -26,7 +25,6 @@ import type {
   AddChannelMembersInput,
   Channel,
   ChannelMember,
-  ChannelType,
   CreateChannelInput,
   CreateDirectMessageChannelInput,
   RemoveChannelMemberResult,
@@ -417,12 +415,14 @@ export class ChannelService extends ChannelMessageService {
           { groupIds: invalidGroupIds },
         );
       }
-      for (const groupId of groupIds) {
-        const memberships = await this.repository.listGroupMemberships(
-          subject.orgId,
-          groupId,
-        );
-        for (const membership of memberships) requested.add(membership.userId);
+      const requestedGroupIds = new Set(groupIds);
+      const memberships = await this.repository.listGroupMemberships(
+        subject.orgId,
+      );
+      for (const membership of memberships) {
+        if (requestedGroupIds.has(membership.groupId)) {
+          requested.add(membership.userId);
+        }
       }
     }
     if (input.requireDmPeer && requested.size < 2) {
@@ -455,17 +455,21 @@ export class ChannelService extends ChannelMessageService {
     userIds: string[],
   ): Promise<CollaborationChannel | undefined> {
     const wanted = [...userIds].sort();
-    const channels = (
-      await this.repository.listCollaborationChannels(subject.orgId)
-    )
+    const [allChannels, allMembers] = await Promise.all([
+      this.repository.listCollaborationChannels(subject.orgId),
+      this.repository.listCollaborationChannelMembers(subject.orgId),
+    ]);
+    const channels = allChannels
       .filter((channel) => nativeChannelType(channel.type) === "dm")
       .filter((channel) => channel.deletedAt === undefined);
+    const membersByChannel = new Map<string, string[]>();
+    for (const member of allMembers) {
+      const members = membersByChannel.get(member.channelId) ?? [];
+      members.push(member.userId);
+      membersByChannel.set(member.channelId, members);
+    }
     for (const channel of channels) {
-      const members = await this.repository.listCollaborationChannelMembers(
-        subject.orgId,
-        channel.id,
-      );
-      const memberIds = members.map((member) => member.userId).sort();
+      const memberIds = (membersByChannel.get(channel.id) ?? []).sort();
       if (
         memberIds.length === wanted.length &&
         memberIds.every((userId, index) => userId === wanted[index])

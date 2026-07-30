@@ -172,6 +172,10 @@ export interface RepositoryContentCapability {
     orgId: string,
     userId: string,
   ): Promise<NotificationDelivery[]>;
+  listFailedNotificationDeliveries(
+    orgId: string,
+    limit: number,
+  ): Promise<NotificationDelivery[]>;
   createNotificationDelivery(
     delivery: NotificationDelivery,
   ): Promise<NotificationDelivery>;

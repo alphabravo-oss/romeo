@@ -270,7 +270,9 @@ export function WorkspaceNavDialogs({
             />
             <datalist id="rm-chat-tag-options">
               {tags.map((tag) => (
-                <option key={tag.id} value={tag.name} />
+                <option key={tag.id} label={tag.name} value={tag.name}>
+                  {tag.name}
+                </option>
               ))}
             </datalist>
           </label>

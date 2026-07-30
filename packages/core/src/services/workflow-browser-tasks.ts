@@ -10,8 +10,6 @@ import type {
 import { ApiError } from "../errors";
 import { isPrivateNetworkHost } from "./network-host-policy";
 import {
-  browserAutomationJobType,
-  browserAutomationMaxAttempts,
   browserAutomationPayloadSchemaVersion,
   browserAutomationWorkerQueue,
   type BrowserAutomationArtifactSummary,

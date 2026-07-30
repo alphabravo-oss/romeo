@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import CircleAlert from "lucide-react/dist/esm/icons/circle-alert.mjs";
 import CircleCheck from "lucide-react/dist/esm/icons/circle-check.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
@@ -153,39 +153,42 @@ export function AgentAccessPanel({
     }
   }
 
-  async function revokeGrants(rows: AgentAccessRow[]) {
-    if (!activeAgent || rows.length === 0) return;
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(t("agentConfirmRevokeAccess"))
-    )
-      return;
-    try {
-      await Promise.all(
-        rows.flatMap((row) =>
-          row.grants.map((grant) =>
-            revokeMutation.mutateAsync({
-              agentId: activeAgent.id,
-              grantId: grant.id,
-            }),
+  const revokeGrants = useCallback(
+    async (rows: AgentAccessRow[]) => {
+      if (!activeAgent || rows.length === 0) return;
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm(t("agentConfirmRevokeAccess"))
+      )
+        return;
+      try {
+        await Promise.all(
+          rows.flatMap((row) =>
+            row.grants.map((grant) =>
+              revokeMutation.mutateAsync({
+                agentId: activeAgent.id,
+                grantId: grant.id,
+              }),
+            ),
           ),
-        ),
-      );
-      toast(t("agentAccessRevoked"), "success");
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["agentShares", activeAgent.id],
-        }),
-        queryClient.invalidateQueries({ queryKey: ["agentGallery"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["agentReadiness", activeAgent.id],
-        }),
-        queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-      ]);
-    } catch {
-      toast(t("agentCouldNotRevokeAccess"), "error");
-    }
-  }
+        );
+        toast(t("agentAccessRevoked"), "success");
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: ["agentShares", activeAgent.id],
+          }),
+          queryClient.invalidateQueries({ queryKey: ["agentGallery"] }),
+          queryClient.invalidateQueries({
+            queryKey: ["agentReadiness", activeAgent.id],
+          }),
+          queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
+        ]);
+      } catch {
+        toast(t("agentCouldNotRevokeAccess"), "error");
+      }
+    },
+    [activeAgent, queryClient, revokeMutation, t],
+  );
 
   function editShare(row: AgentAccessRow) {
     setQuery(row.principalId);
@@ -262,7 +265,7 @@ export function AgentAccessPanel({
         ),
       }),
     ],
-    [revokeMutation.isPending, t, targetsByKey],
+    [revokeGrants, revokeMutation.isPending, t, targetsByKey],
   );
 
   function togglePermission(permission: AgentPermission) {

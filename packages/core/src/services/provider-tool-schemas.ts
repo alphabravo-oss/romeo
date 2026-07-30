@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { RomeoRepository } from "../domain/repository";
 import { buildToolOperationTestPreview } from "./tool-operation-test";
 import { buildOperationProviderToolDefinition } from "./tool-operation-tooling";
+import { listToolOperationsByConnector } from "./tool-operation-catalog";
 
 const providerTools = listBuiltInTools();
 
@@ -35,9 +36,13 @@ export async function buildProviderToolDefinitions(
         hasGrant(subject, grants, "tool", tool.id, "use"),
     )
     .map(toProviderToolDefinition);
+  const operationsByConnector = await listToolOperationsByConnector(
+    repository,
+    connectors,
+  );
   const operationDefinitions: ProviderToolDefinition[] = [];
   for (const connector of connectors) {
-    const operations = await repository.listToolOperations(connector.id);
+    const operations = operationsByConnector.get(connector.id) ?? [];
     for (const operation of operations) {
       if (!enabledToolIds.has(operation.id)) continue;
       const preview = buildToolOperationTestPreview(

@@ -1,9 +1,6 @@
 import type { RomeoEnv } from "@romeo/config";
 
-import type {
-  EdgeSecurityPostureCheck,
-  EdgeSecurityPostureReport,
-} from "./edge-security-types";
+import type { EdgeSecurityPostureCheck } from "./edge-security-types";
 
 export function edgeSecurityChecks(input: {
   allowedOriginRuleCount: number;

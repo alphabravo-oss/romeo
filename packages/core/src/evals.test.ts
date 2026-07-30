@@ -49,12 +49,6 @@ describe("eval API", () => {
       "/api/v1/agents/agent_default/eval-dashboard",
     );
     const dashboard = await dashboardResponse.json();
-    const evidenceResponse = await api.request(
-      "/api/v1/agents/agent_default/eval-release-candidate-evidence",
-    );
-    const evidence = await evidenceResponse.json();
-    const evidenceSerialized = JSON.stringify(evidence);
-
     const publishResponse = await api.request(
       "/api/v1/agents/agent_default/versions",
       { method: "POST" },
@@ -64,6 +58,11 @@ describe("eval API", () => {
       "/api/v1/agents/agent_default/versions",
     );
     const versions = await versionsResponse.json();
+    const evidenceResponse = await api.request(
+      "/api/v1/agents/agent_default/eval-release-candidate-evidence",
+    );
+    const evidence = await evidenceResponse.json();
+    const evidenceSerialized = JSON.stringify(evidence);
 
     expect(createResponse.status).toBe(201);
     expect(created.data.cases).toHaveLength(1);
@@ -425,12 +424,6 @@ describe("eval API", () => {
       `/api/v1/eval-runs/${run.data.run.id}/results`,
     );
     const results = await resultsResponse.json();
-    const evidenceResponse = await api.request(
-      "/api/v1/agents/agent_default/eval-release-candidate-evidence",
-    );
-    const evidence = await evidenceResponse.json();
-    const evidenceSerialized = JSON.stringify(evidence);
-
     expect(createResponse.status).toBe(201);
     expect(created.data.cases[0].rubric.expectedToolCalls).toEqual([
       { name: "search", arguments: { query: "Romeo", limit: 3 } },

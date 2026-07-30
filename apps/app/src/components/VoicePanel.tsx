@@ -274,6 +274,9 @@ export function VoicePanel({
               <div className="mt-3 grid gap-2 text-xs text-muted">
                 <span>{formatSpeechArtifact(previewArtifact, locale)}</span>
                 {previewArtifact.playbackUrl ? (
+                  // The visible preview metadata is the text alternative for
+                  // this generated speech-only artifact.
+                  // oxlint-disable-next-line jsx-a11y/media-has-caption
                   <audio
                     className="w-full"
                     controls

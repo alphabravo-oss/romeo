@@ -172,6 +172,27 @@ export class PgNotificationRepository {
     return rows.map(toNotificationDeliveryRecord);
   }
 
+  async listFailedNotificationDeliveries(
+    orgId: string,
+    limit: number,
+  ): Promise<NotificationDeliveryRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(notificationDeliveries)
+      .where(
+        and(
+          eq(notificationDeliveries.orgId, orgId),
+          eq(notificationDeliveries.status, "failed"),
+        ),
+      )
+      .orderBy(
+        asc(notificationDeliveries.updatedAt),
+        asc(notificationDeliveries.id),
+      )
+      .limit(limit);
+    return rows.map(toNotificationDeliveryRecord);
+  }
+
   async createNotificationDelivery(
     delivery: NotificationDeliveryRecord,
   ): Promise<NotificationDeliveryRecord> {

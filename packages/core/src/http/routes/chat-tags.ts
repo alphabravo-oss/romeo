@@ -21,9 +21,11 @@ export function registerChatTagRoutes(app: RomeoApi): void {
     const { archived } = context.req.valid("query");
     const data = await context
       .get("services")
-      .chatTags.chatsForTag(context.get("subject"), tagSlug, {
-        ...(archived === undefined ? {} : { archived }),
-      });
+      .chatTags.chatsForTag(
+        context.get("subject"),
+        tagSlug,
+        archived === undefined ? {} : { archived },
+      );
     return context.json({ data }, 200);
   });
 

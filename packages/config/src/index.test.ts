@@ -147,6 +147,9 @@ describe("Romeo config", () => {
       MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS: "120000",
       MODEL_PROVIDER_DISABLED_IDS: "provider_primary",
       MODEL_PROVIDER_FALLBACK_MODEL_ID: "model_fallback",
+      REALTIME_EVENT_DRIVER: "valkey",
+      REALTIME_EVENT_KEY_PREFIX: "romeo:chat-events:prod",
+      REALTIME_EVENT_TIMEOUT_MS: "2250",
       QUOTA_COORDINATION_DRIVER: "valkey",
       QUOTA_COORDINATION_KEY_PREFIX: "romeo:quota:prod",
       QUOTA_COORDINATION_TIMEOUT_MS: "2500",
@@ -344,6 +347,9 @@ describe("Romeo config", () => {
     expect(env.MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS).toBe(120000);
     expect(env.MODEL_PROVIDER_DISABLED_IDS).toBe("provider_primary");
     expect(env.MODEL_PROVIDER_FALLBACK_MODEL_ID).toBe("model_fallback");
+    expect(env.REALTIME_EVENT_DRIVER).toBe("valkey");
+    expect(env.REALTIME_EVENT_KEY_PREFIX).toBe("romeo:chat-events:prod");
+    expect(env.REALTIME_EVENT_TIMEOUT_MS).toBe(2250);
     expect(env.QUOTA_COORDINATION_DRIVER).toBe("valkey");
     expect(env.QUOTA_COORDINATION_KEY_PREFIX).toBe("romeo:quota:prod");
     expect(env.QUOTA_COORDINATION_TIMEOUT_MS).toBe(2500);

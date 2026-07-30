@@ -98,12 +98,6 @@ export interface TenantDeletionFinalizationPreview {
   }>;
 }
 
-interface StoredTenantDeletionEvidence {
-  controls: TenantDeletionEvidenceSummary[];
-  orgId: string;
-  schemaVersion: "romeo.tenant-deletion-finalization-evidence.v1";
-}
-
 export async function buildTenantDeletionFinalizationPreview(input: {
   deletionRequest?: TenantDeletionRequestPosture;
   organization: Organization;

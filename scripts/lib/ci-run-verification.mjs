@@ -280,7 +280,7 @@ function baseEvidence({ blockers, checks, config, mode, plan, run, status }) {
 }
 
 function checkBoolean({ blockers, checks, code, details, name, value }) {
-  checks.push({ name, status: value ? "pass" : "fail", ...(details ?? {}) });
+  checks.push({ name, status: value ? "pass" : "fail", ...details });
   if (!value) addBlocker(blockers, code, name, details);
 }
 
@@ -288,7 +288,7 @@ function addBlocker(blockers, code, message, details) {
   if (blockers.some((item) => item.code === code && item.message === message)) {
     return;
   }
-  blockers.push({ code, message, ...(details ?? {}) });
+  blockers.push({ code, message, ...details });
 }
 
 function workflowRunsUrl(config, repository) {

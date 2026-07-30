@@ -10,11 +10,8 @@ import type {
 import {
   dataConnectorLiveEvidenceSchema,
   dataConnectorRequiredLiveEvidenceChecks,
-  type DataConnectorCatalogRuntimePosture,
   type DataConnectorPostureReport,
-  type DataConnectorPostureWarning,
 } from "./data-connector-contracts";
-import { connectorDriverSupports } from "./data-connector-runtime-support";
 
 export function dataConnectorCounts(
   connectors: DataConnector[],

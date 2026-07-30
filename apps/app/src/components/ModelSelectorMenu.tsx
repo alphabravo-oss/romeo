@@ -195,15 +195,13 @@ export default function ModelSelectorMenu({
 
   return (
     <>
-      <div
-        className="rm-assistant-search"
-        onKeyDown={(event) => event.stopPropagation()}
-      >
+      <div className="rm-assistant-search">
         <Search aria-hidden="true" size={15} />
         <Input
           aria-label={t("assistantSearch")}
           autoComplete="off"
           name="assistantSearch"
+          onKeyDown={(event) => event.stopPropagation()}
           onChange={(event) => setQuery(event.currentTarget.value)}
           placeholder={t("assistantSearchPlaceholder")}
           value={query}

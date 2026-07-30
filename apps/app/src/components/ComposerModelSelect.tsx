@@ -257,22 +257,30 @@ export function ComposerModelSelect({
       </Button>
 
       {open ? (
+        // Keyboard handling belongs on the composite dialog so arrows work
+        // consistently from its search, filters, and virtualized listbox.
+        // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
         <div
           className="rm-composer-model-menu rm-model-menu rm-chat-model-menu"
           aria-label={t("chooseModel")}
           onKeyDown={handleModelMenuKeyDown}
           role="dialog"
+          tabIndex={-1}
           style={
             menuMaxHeight === undefined
               ? undefined
               : { maxHeight: menuMaxHeight }
           }
         >
-          <label className="rm-chat-model-search">
+          <label
+            className="rm-chat-model-search"
+            htmlFor="composer-model-search"
+          >
             <Search aria-hidden="true" size={14} />
             <Input
               aria-label={t("searchModels")}
               autoComplete="off"
+              id="composer-model-search"
               name="model-search"
               onChange={(event) => setQuery(event.currentTarget.value)}
               placeholder={t("searchModels")}

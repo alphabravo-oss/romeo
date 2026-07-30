@@ -81,6 +81,7 @@ export function createTenantIdentityRepositoryFragment(
     listGroups: identity.listGroups.bind(identity),
     listOrganizations: tenancy.listOrganizations.bind(tenancy),
     listUsers: identity.listUsers.bind(identity),
+    listUsersPage: identity.listUsersPage.bind(identity),
     listWorkspaces: tenancy.listWorkspaces.bind(tenancy),
     purgeTenantData: purge.purgeTenantData.bind(purge),
     updateGroup: identity.updateGroup.bind(identity),
@@ -185,7 +186,9 @@ export function createAgentEvalRepositoryFragment(
     listEvalResultHumanRatings: evals.listEvalResultHumanRatings.bind(evals),
     listEvalRunResults: evals.listEvalRunResults.bind(evals),
     listEvalRuns: evals.listEvalRuns.bind(evals),
+    listEvalRunsForAgents: evals.listEvalRunsForAgents.bind(evals),
     listEvalSuites: evals.listEvalSuites.bind(evals),
+    listEvalSuitesForAgents: evals.listEvalSuitesForAgents.bind(evals),
     updateAgent: agents.updateAgent.bind(agents),
     deleteManagedModelPreference:
       agents.deleteManagedModelPreference.bind(agents),

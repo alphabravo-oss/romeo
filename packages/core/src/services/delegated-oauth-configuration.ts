@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { RomeoEnv } from "@romeo/config";
 
-import type { DataConnectorType } from "../domain/data-connectors";
 import type {
   DelegatedOAuthProvider,
   DelegatedOAuthProviderId,

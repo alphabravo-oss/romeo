@@ -4,6 +4,9 @@ import type { AuthProviderId } from "../domain/auth-providers";
 import { ApiError } from "../errors";
 import type { OAuth2ProviderLoginConfig } from "./auth-provider-settings-service";
 import type { GitHubOAuth2IdentityPolicy } from "./github-oauth2-auth-provider";
+import { normalizeAppOrigin, sanitizeAuthReturnTo } from "./auth-navigation";
+
+export { normalizeAppOrigin };
 
 export interface OAuth2PkceState {
   clientId: string;
@@ -42,11 +45,6 @@ export function authorizationEndpoint(providerId: AuthProviderId): string {
   );
 }
 
-export function normalizeAppOrigin(value: string): string {
-  const url = new URL(value);
-  return `${url.protocol}//${url.host}`;
-}
-
 export function normalizeOrgId(value: string | undefined): string {
   const normalized = value?.trim();
   if (normalized === undefined || normalized.length === 0) return "org_default";
@@ -61,20 +59,10 @@ export function normalizeOrgId(value: string | undefined): string {
 }
 
 export function sanitizeReturnTo(value: string | undefined): string {
-  if (value === undefined || value.length === 0) return "/";
-  if (
-    value.length > 500 ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    /[\r\n]/u.test(value)
-  ) {
-    throw new ApiError(
-      "invalid_oauth2_return_to",
-      "OAuth2 return path must be a relative application path.",
-      400,
-    );
-  }
-  return value;
+  return sanitizeAuthReturnTo(value, {
+    errorCode: "invalid_oauth2_return_to",
+    flowName: "OAuth2",
+  });
 }
 
 export function hashProviderAccountId(

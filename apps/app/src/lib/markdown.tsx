@@ -222,8 +222,10 @@ export const Markdown = memo(function Markdown({
     <div className="rm-markdown">
       <ReactMarkdown
         components={{
-          a: ({ node: _node, ...props }) => (
-            <a {...props} rel="noreferrer nofollow" target="_blank" />
+          a: ({ children, node: _node, ...props }) => (
+            <a {...props} rel="noreferrer nofollow" target="_blank">
+              {children}
+            </a>
           ),
           pre: ({ children }) => {
             const codeElement = Array.isArray(children)

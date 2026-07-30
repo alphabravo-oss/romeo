@@ -1,4 +1,9 @@
-import type { BackgroundJob, FileObject, PromptTemplate } from "./entities";
+import type {
+  BackgroundJob,
+  FileObject,
+  PromptTemplate,
+  User,
+} from "./entities";
 import type { RepositoryContentCapability } from "./repository-content";
 import type { RepositoryIdentityCapability } from "./repository-identity";
 import type { RepositoryOperationsCapability } from "./repository-operations";
@@ -54,6 +59,23 @@ export interface ModelCatalogQuery {
   providerId?: string;
   query?: string;
   sort?: "availability" | "contextWindow" | "displayName" | "enabled" | "name";
+}
+
+export interface UserCatalogQuery {
+  direction?: "asc" | "desc";
+  limit: number;
+  offset: number;
+  query?: string;
+  sort?: "email" | "name" | "role" | "status";
+}
+
+export interface UserCatalogPage {
+  activeGlobalAdminTotal: number;
+  adminTotal: number;
+  disabledTotal: number;
+  items: User[];
+  total: number;
+  userTotal: number;
 }
 
 export interface AuthorizedPromptCatalogQuery {

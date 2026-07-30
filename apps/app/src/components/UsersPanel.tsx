@@ -1,6 +1,7 @@
 import { Input, LinkButton, NativeSelect, Button } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import Search from "lucide-react/dist/esm/icons/search.mjs";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   disableUser,
@@ -23,35 +24,73 @@ import { canDisableUser } from "./user-disable-guard";
 const userCol = createColumnHelper<User>();
 
 const roleOptions: UserRole[] = ["user", "org_admin", "global_admin"];
+const pageSize = 50;
 
-export function UsersPanel() {
+type UserSort = "email" | "name" | "role" | "status";
+
+interface UsersPanelProps {
+  direction: "asc" | "desc";
+  onNavigationChange: (next: {
+    direction?: "asc" | "desc";
+    page?: number;
+    query?: string;
+    sort?: UserSort;
+  }) => void;
+  page: number;
+  query: string;
+  sort: UserSort;
+}
+
+export function UsersPanel({
+  direction,
+  onNavigationChange,
+  page,
+  query,
+  sort,
+}: UsersPanelProps) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
   const { ask, dialog } = useConfirm();
-  const usersQuery = useQuery({ queryKey: ["users"], queryFn: listUsers });
+  const usersQuery = useQuery({
+    queryKey: ["users", query, sort, direction, page],
+    queryFn: () =>
+      listUsers({
+        direction,
+        limit: pageSize,
+        offset: page * pageSize,
+        ...(query.trim() === "" ? {} : { query }),
+        sort,
+      }),
+    placeholderData: (previous) => previous,
+  });
   const disableMutation = useMutation({ mutationFn: disableUser });
   const [managing, setManaging] = useState<User>();
+  const refresh = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+    [queryClient],
+  );
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["users"] });
-
-  async function handleDisable(user: User) {
-    if (
-      !(await ask({
-        title: t("usersDisableConfirmTitle"),
-        body: t("usersDisableConfirmBody"),
-        confirmLabel: t("userDisable"),
-        tone: confirmTone("medium"),
-      }))
-    )
-      return;
-    try {
-      await disableMutation.mutateAsync(user.id);
-      await refresh();
-      toast(t("userDisabledNotice"), "success");
-    } catch {
-      toast(t("userCouldNotDisable"), "error");
-    }
-  }
+  const handleDisable = useCallback(
+    async (user: User) => {
+      if (
+        !(await ask({
+          title: t("usersDisableConfirmTitle"),
+          body: t("usersDisableConfirmBody"),
+          confirmLabel: t("userDisable"),
+          tone: confirmTone("medium"),
+        }))
+      )
+        return;
+      try {
+        await disableMutation.mutateAsync(user.id);
+        await refresh();
+        toast(t("userDisabledNotice"), "success");
+      } catch {
+        toast(t("userCouldNotDisable"), "error");
+      }
+    },
+    [ask, disableMutation, refresh, t],
+  );
 
   const columns = useMemo<ColumnDef<User, any>[]>(
     () => [
@@ -85,10 +124,9 @@ export function UsersPanel() {
         id: "actions",
         header: "",
         cell: (c) => {
-          const target = disableGuardEntry(c.row.original);
           const canDisable = canDisableUser(
-            target,
-            (usersQuery.data ?? []).map(disableGuardEntry),
+            disableGuardEntry(c.row.original),
+            usersQuery.data?.meta.activeGlobalAdminTotal ?? 0,
           );
           const isDisabled = c.row.original.disabledAt !== undefined;
 
@@ -119,8 +157,16 @@ export function UsersPanel() {
         },
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [disableMutation.isPending, t],
+    [
+      disableMutation.isPending,
+      handleDisable,
+      t,
+      usersQuery.data?.meta.activeGlobalAdminTotal,
+    ],
+  );
+  const sorting = useMemo(
+    () => [{ id: sort, desc: direction === "desc" }],
+    [direction, sort],
   );
 
   return (
@@ -146,27 +192,81 @@ export function UsersPanel() {
           refreshing={usersQuery.isFetching}
         />
       </div>
+      <label className="rm-model-search mt-4" htmlFor="user-search">
+        <Search aria-hidden="true" size={15} />
+        <Input
+          aria-label={t("tableSearch")}
+          id="user-search"
+          name="userSearch"
+          onChange={(event) =>
+            onNavigationChange({
+              page: 0,
+              query: event.currentTarget.value,
+            })
+          }
+          placeholder={t("tableSearchPlaceholder")}
+          value={query}
+        />
+      </label>
       <div className="mt-4">
-        <PanelState query={usersQuery} empty={t("userNoUsers")}>
-          {(users) => (
+        <PanelState
+          query={usersQuery}
+          empty={t("userNoUsers")}
+          isEmpty={() => false}
+        >
+          {(userPage) => (
             <div className="grid gap-4">
               <PanelStats
                 items={[
-                  { label: t("userTotalUsers"), value: users.length },
                   {
-                    label: t("userAdmins"),
-                    value: users.filter((u) => u.role !== "user").length,
+                    label: t("userTotalUsers"),
+                    value: userPage.meta.userTotal,
                   },
+                  { label: t("userAdmins"), value: userPage.meta.adminTotal },
                   {
                     label: t("userDisabled"),
-                    value: users.filter((u) => u.disabledAt).length,
+                    value: userPage.meta.disabledTotal,
                   },
                 ]}
               />
               <DataTable
                 columns={columns}
-                data={users}
+                data={userPage.data}
                 empty={t("userNoUsers")}
+                manualFiltering
+                manualSorting
+                onSortingChange={(updater) => {
+                  const next =
+                    typeof updater === "function" ? updater(sorting) : updater;
+                  const first = next[0];
+                  const nextSort = (
+                    ["email", "name", "role", "status"].includes(
+                      first?.id ?? "",
+                    )
+                      ? first!.id
+                      : "name"
+                  ) as UserSort;
+                  onNavigationChange({
+                    direction: first?.desc === true ? "desc" : "asc",
+                    page: 0,
+                    sort: nextSort,
+                  });
+                }}
+                preferenceKey="admin-users"
+                searchVisibility="hidden"
+                serverPagination={{
+                  pageSize,
+                  hasNextPage: userPage.meta.hasMore,
+                  isFetching: usersQuery.isFetching,
+                  onNextPage: () => onNavigationChange({ page: page + 1 }),
+                  ...(page > 0
+                    ? {
+                        onPrevPage: () =>
+                          onNavigationChange({ page: page - 1 }),
+                      }
+                    : {}),
+                }}
+                sorting={sorting}
               />
             </div>
           )}

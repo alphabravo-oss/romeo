@@ -1,11 +1,7 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { RomeoEnv } from "@romeo/config";
 
-import type {
-  LocalMfaFactor,
-  LocalPasswordCredential,
-  User,
-} from "../domain/entities";
+import type { LocalPasswordCredential, User } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
@@ -17,11 +13,7 @@ import {
   normalizeLocalAuthEmail,
   verifyLocalPassword,
 } from "./local-password";
-import type {
-  CreatedUserSession,
-  SessionService,
-  UserSessionSummary,
-} from "./session-service";
+import type { CreatedUserSession, SessionService } from "./session-service";
 import { createUserAuthSubject } from "./auth-subject";
 import { LocalAuthAudit } from "./local-auth-audit";
 import {

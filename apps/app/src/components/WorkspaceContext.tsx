@@ -13,6 +13,7 @@ import {
   getBootstrap,
   subscribeToChatEvents,
   type AuthSubject,
+  type ChatChangedEvent,
   type ChatEventStreamStatus,
 } from "../features";
 import type { Workspace } from "../features/tenancy";
@@ -30,6 +31,8 @@ interface WorkspaceContextValue {
   retryBootstrap: () => void;
   /** Health of the active workspace's live chat event stream. */
   chatSyncStatus: ChatEventStreamStatus;
+  /** Most recent durable chat mutation observed for the selected workspace. */
+  latestChatEvent: ChatChangedEvent | undefined;
   /** The currently selected workspace, or undefined while the bootstrap query loads. */
   workspace: Workspace | undefined;
   /** Id of the selected workspace, or undefined while loading. */
@@ -85,6 +88,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const [chatSyncStatus, setChatSyncStatus] =
     useState<ChatEventStreamStatus>("connecting");
+  const [latestChatEvent, setLatestChatEvent] = useState<ChatChangedEvent>();
 
   // Once bootstrap resolves, reconcile the selection: keep a still-valid
   // selection, otherwise adopt a validated persisted id, otherwise fall back
@@ -122,9 +126,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (workspaceId === undefined) {
       setChatSyncStatus("connecting");
+      setLatestChatEvent(undefined);
       return;
     }
-    const reconcileChats = () => {
+    setLatestChatEvent(undefined);
+    const reconcileChats: Parameters<typeof subscribeToChatEvents>[1] = (
+      event,
+    ) => {
+      if (event !== undefined) setLatestChatEvent(event);
+      if (event?.action === "deleted") {
+        queryClient.removeQueries({
+          exact: true,
+          queryKey: ["chat", event.chatId],
+        });
+      } else if (
+        event !== undefined &&
+        ["archived", "unarchived", "updated"].includes(event.action)
+      ) {
+        void queryClient.invalidateQueries({
+          exact: true,
+          queryKey: ["chat", event.chatId],
+        });
+      }
       void queryClient.invalidateQueries({
         queryKey: ["chats", workspaceId],
       });
@@ -154,6 +177,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     () => ({
       bootstrapStatus: bootstrapQuery.status,
       chatSyncStatus,
+      latestChatEvent,
       retryBootstrap,
       setWorkspaceId,
       subject: bootstrapQuery.data?.subject,
@@ -165,6 +189,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       bootstrapQuery.data?.subject,
       bootstrapQuery.status,
       chatSyncStatus,
+      latestChatEvent,
       retryBootstrap,
       setWorkspaceId,
       workspace,

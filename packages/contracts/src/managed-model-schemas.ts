@@ -276,24 +276,29 @@ export const versionsResponse = dataEnvelope(
 );
 export const exportResponse = dataEnvelope(ManagedModelExportDocumentSchema);
 
+const managedModelVersionDiffFields = [
+  "baseModelId",
+  "knowledgeBaseBindings",
+  "memoryPolicy",
+  "promptSuggestions",
+  "safetySettings",
+  "systemPrompt",
+  "parameters",
+  "toolBindings",
+  "tags",
+  "voiceProfileId",
+] as const;
+
 export const versionDiffSchema = z.strictObject({
   agentId: managedModelIdentifier,
   leftVersionId: managedModelIdentifier,
   rightVersionId: managedModelIdentifier,
   changes: z.array(
     z.strictObject({
-      field: z.enum([
-        "baseModelId",
-        "knowledgeBaseBindings",
-        "memoryPolicy",
-        "promptSuggestions",
-        "safetySettings",
-        "systemPrompt",
-        "parameters",
-        "toolBindings",
-        "tags",
-        "voiceProfileId",
-      ]),
+      field: z.string().openapi({
+        example: "systemPrompt",
+        "x-extensible-enum": managedModelVersionDiffFields,
+      }),
       left: z.unknown(),
       right: z.unknown(),
     }),

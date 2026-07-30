@@ -175,12 +175,16 @@ export class OpenWebUiChannelAccess {
   ): Promise<string[]> {
     const requested = new Set<string>(input.user_ids ?? []);
     requested.add(subject.id);
-    for (const groupId of input.group_ids ?? []) {
+    const requestedGroupIds = new Set(input.group_ids ?? []);
+    if (requestedGroupIds.size > 0) {
       const memberships = await this.repository.listGroupMemberships(
         subject.orgId,
-        groupId,
       );
-      for (const membership of memberships) requested.add(membership.userId);
+      for (const membership of memberships) {
+        if (requestedGroupIds.has(membership.groupId)) {
+          requested.add(membership.userId);
+        }
+      }
     }
     if (type === "dm" && requested.size < 2) {
       throw new ApiError(
@@ -211,18 +215,22 @@ export class OpenWebUiChannelAccess {
     subject: AuthSubject,
     userIds: string[],
   ): Promise<CollaborationChannel | undefined> {
-    const channels = (
-      await this.repository.listCollaborationChannels(subject.orgId)
-    )
+    const [allChannels, allMembers] = await Promise.all([
+      this.repository.listCollaborationChannels(subject.orgId),
+      this.repository.listCollaborationChannelMembers(subject.orgId),
+    ]);
+    const channels = allChannels
       .filter((channel) => normalizeChannelType(channel.type) === "dm")
       .filter((channel) => channel.deletedAt === undefined);
     const wanted = [...userIds].sort();
+    const membersByChannel = new Map<string, string[]>();
+    for (const member of allMembers) {
+      const members = membersByChannel.get(member.channelId) ?? [];
+      members.push(member.userId);
+      membersByChannel.set(member.channelId, members);
+    }
     for (const channel of channels) {
-      const members = await this.repository.listCollaborationChannelMembers(
-        subject.orgId,
-        channel.id,
-      );
-      const memberIds = members.map((member) => member.userId).sort();
+      const memberIds = (membersByChannel.get(channel.id) ?? []).sort();
       if (
         memberIds.length === wanted.length &&
         memberIds.every((userId, index) => userId === wanted[index])

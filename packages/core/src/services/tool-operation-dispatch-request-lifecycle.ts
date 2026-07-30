@@ -5,10 +5,7 @@ import type {
   ToolOperationDispatchRequestExpiryReason,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
-import {
-  jobPayloadStoreReference,
-  readWorkerLease,
-} from "./tool-operation-dispatch-request-payload";
+import { readWorkerLease } from "./tool-operation-dispatch-request-payload";
 import { auditDispatchRequestReadback } from "./tool-operation-dispatch-request-readback";
 import {
   dispatchRequestMaxAttempts,

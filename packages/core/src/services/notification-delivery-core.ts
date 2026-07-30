@@ -111,7 +111,7 @@ export function baseDelivery(
     metadata: {
       notificationType: notification.type,
       channelType: channel.type,
-      ...(fields.metadata ?? {}),
+      ...fields.metadata,
     },
     createdAt: now,
     updatedAt: now,

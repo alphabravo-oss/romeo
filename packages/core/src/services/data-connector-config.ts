@@ -1,9 +1,4 @@
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-
-import {
-  getDataConnectorCatalogEntry,
-  type DataConnectorCredentialSource,
-} from "../domain/data-connector-catalog";
+import { getDataConnectorCatalogEntry } from "../domain/data-connector-catalog";
 import type { DataConnector, DataConnectorType } from "../domain/entities";
 import { ApiError } from "../errors";
 import {

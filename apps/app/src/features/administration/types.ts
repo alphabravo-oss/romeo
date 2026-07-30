@@ -1,5 +1,6 @@
 import type {
   AdminUser,
+  AdminUserPage,
   ApiKeySummary,
   DirectorySyncRequest,
   DirectorySyncResult,
@@ -19,6 +20,7 @@ export type {
 } from "@romeo/api-client/generated/sdk";
 
 export type UserRole = NonNullable<AdminUser["role"]>;
+export type UserPage = AdminUserPage;
 export type ApiKeyScope = ApiKeySummary["scopes"][number];
 export type DirectorySyncSource = DirectorySyncRequest["source"];
 export type DirectorySyncGroupInventory = NonNullable<

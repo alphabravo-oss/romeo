@@ -1,4 +1,4 @@
-import { eq, inArray, or, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import {
   agentVersions,
@@ -35,7 +35,6 @@ import {
 import {
   deleteByIds,
   deleteWhere,
-  orgScopedSystemSettingKeys,
   type TenantPurgeState,
 } from "./tenant-purge-support";
 

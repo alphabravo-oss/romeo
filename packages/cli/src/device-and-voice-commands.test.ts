@@ -16,14 +16,6 @@ describe("device and voice commands", () => {
         },
       ]),
     ) as never;
-    const legacyFailure = new Proxy(
-      {},
-      {
-        get: () => () => {
-          throw new Error("legacy resource must not be called");
-        },
-      },
-    );
     const io = {
       stdout: { write: () => true },
       stderr: { write: () => true },

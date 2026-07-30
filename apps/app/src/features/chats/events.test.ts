@@ -14,6 +14,14 @@ describe("chat event subscription", () => {
     });
     const onChange = vi.fn();
     const onStatus = vi.fn();
+    const changedEvent = {
+      action: "updated",
+      chatId: "chat_1",
+      createdAt: "2026-07-30T00:00:00.000Z",
+      id: "chat_event_1",
+      type: "changed",
+      workspaceId: "workspace_1",
+    };
 
     const unsubscribe = subscribeToChatEvents("workspace_1", onChange, {
       createEventSource,
@@ -22,17 +30,28 @@ describe("chat event subscription", () => {
     expect(onStatus).toHaveBeenCalledWith("connecting");
 
     listeners.get("open")?.(new Event("open"));
-    listeners.get("chats:changed")?.(new Event("chats:changed"));
+    listeners.get("chats:connected")?.(new Event("chats:connected"));
+    listeners.get("chats:changed")?.(
+      new MessageEvent("chats:changed", {
+        data: JSON.stringify(changedEvent),
+      }),
+    );
     listeners.get("error")?.(new Event("error"));
     expect(onStatus.mock.calls).toEqual([
       ["connecting"],
       ["connected"],
       ["degraded"],
     ]);
-    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange).toHaveBeenCalledTimes(3);
+    expect(onChange).toHaveBeenLastCalledWith(changedEvent);
 
     unsubscribe();
-    expect(removed.sort()).toEqual(["chats:changed", "error", "open"]);
+    expect(removed.sort()).toEqual([
+      "chats:changed",
+      "chats:connected",
+      "error",
+      "open",
+    ]);
     expect(close).toHaveBeenCalledOnce();
   });
 });

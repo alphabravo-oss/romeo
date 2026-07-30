@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, or, sql } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import { groupMemberships, groups, orgSsoOidcSettings, users } from "./schema";
@@ -71,6 +71,77 @@ export class PgIdentityRepository {
       .where(eq(users.orgId, orgId))
       .orderBy(asc(users.name));
     return rows.map(toUserRecord);
+  }
+
+  async listUsersPage(
+    orgId: string,
+    input: {
+      direction?: "asc" | "desc";
+      limit: number;
+      offset: number;
+      query?: string;
+      sort?: "email" | "name" | "role" | "status";
+    },
+  ): Promise<{
+    activeGlobalAdminTotal: number;
+    adminTotal: number;
+    disabledTotal: number;
+    items: UserRecord[];
+    total: number;
+    userTotal: number;
+  }> {
+    const query = input.query?.trim();
+    const predicate = and(
+      eq(users.orgId, orgId),
+      query === undefined || query === ""
+        ? undefined
+        : or(ilike(users.name, `%${query}%`), ilike(users.email, `%${query}%`)),
+    );
+    const sortColumn =
+      input.sort === "email"
+        ? users.email
+        : input.sort === "role"
+          ? users.role
+          : input.sort === "status"
+            ? users.disabledAt
+            : users.name;
+    const order = input.direction === "desc" ? desc : asc;
+    const [rows, totals, stats] = await Promise.all([
+      this.db
+        .select()
+        .from(users)
+        .where(predicate)
+        .orderBy(order(sortColumn), order(users.id))
+        .limit(input.limit)
+        .offset(input.offset),
+      this.db.select({ value: count() }).from(users).where(predicate),
+      this.db
+        .select({
+          activeGlobalAdminTotal:
+            sql<number>`count(*) filter (where ${users.role} = 'global_admin' and ${users.disabledAt} is null)`.mapWith(
+              Number,
+            ),
+          adminTotal:
+            sql<number>`count(*) filter (where ${users.role} <> 'user')`.mapWith(
+              Number,
+            ),
+          disabledTotal:
+            sql<number>`count(*) filter (where ${users.disabledAt} is not null)`.mapWith(
+              Number,
+            ),
+          userTotal: count(),
+        })
+        .from(users)
+        .where(eq(users.orgId, orgId)),
+    ]);
+    return {
+      activeGlobalAdminTotal: stats[0]?.activeGlobalAdminTotal ?? 0,
+      adminTotal: stats[0]?.adminTotal ?? 0,
+      disabledTotal: stats[0]?.disabledTotal ?? 0,
+      items: rows.map(toUserRecord),
+      total: totals[0]?.value ?? 0,
+      userTotal: stats[0]?.userTotal ?? 0,
+    };
   }
 
   async createUser(user: UserRecord): Promise<UserRecord> {

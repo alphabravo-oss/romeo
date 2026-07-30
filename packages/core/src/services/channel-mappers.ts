@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 
 import type {
   OpenWebUiChannelEvent,
-  OpenWebUiChannelInput,
   OpenWebUiChannelListItemResponse,
   OpenWebUiChannelMemberResponse,
   OpenWebUiChannelMessageInput,

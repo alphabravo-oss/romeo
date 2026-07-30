@@ -10,10 +10,7 @@ import {
   liveEdgeEvidenceCheck,
   readLiveEdgeEvidence,
 } from "./edge-security-live-evidence";
-import type {
-  EdgeSecurityPostureCheck,
-  EdgeSecurityPostureReport,
-} from "./edge-security-types";
+import type { EdgeSecurityPostureReport } from "./edge-security-types";
 
 export * from "./edge-security-types";
 

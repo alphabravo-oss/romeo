@@ -1,4 +1,4 @@
-import { Button, StatusBadge } from "@romeo/ui";
+import { StatusBadge } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 
 import {

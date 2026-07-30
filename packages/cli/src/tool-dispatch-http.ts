@@ -29,7 +29,7 @@ export async function executeToolDispatchHttpRequest(
   const method = claim.method?.toUpperCase() ?? "GET";
   const headers: Record<string, string> = {
     accept: "application/json",
-    ...(payload.headers ?? {}),
+    ...payload.headers,
   };
   await applyPayloadAuth(input, claim, url, headers, payload.auth);
   const init: RequestInit = { method, headers, redirect: "error" };

@@ -3,16 +3,21 @@ import { spawn, spawnSync } from "node:child_process";
 const baseUrl = process.env.ROMEO_BASE_URL ?? "http://127.0.0.1:3000";
 const session = `romeo-chat-${process.pid}`;
 const secondSession = `${session}-second`;
+const cleanupSession = `${session}-cleanup`;
 const imageProviderPort = 32_000 + (process.pid % 1_000);
 const imageProvider = startImageProvider(imageProviderPort);
 const createdChatIds = new Set();
 let initialChatIds;
+let initialFixtureResourceIds;
+let originalBrowserModelConfiguration;
 
 try {
   run("open", baseUrl);
   waitForDocumentReady();
   run("wait", "#prompt");
+  originalBrowserModelConfiguration = configureBrowserAcceptanceModel();
   initialChatIds = listWorkspaceChatIds();
+  initialFixtureResourceIds = listFixtureResourceIds();
   const initial = run("snapshot", "-i");
   for (const required of [
     "New chat",
@@ -59,9 +64,14 @@ try {
     "#prompt",
     "Browser acceptance **bold**\n\n```typescript\nconst parity: boolean = true;\n```",
   );
-  run("click", 'button[aria-label="Send message"]');
-  run("wait", "1500");
+  clickSendMessage();
+  run("wait", ".rm-sidebar-item.active[data-chat-id]");
   trackActiveChat();
+  run(
+    "wait",
+    "--fn",
+    `document.querySelectorAll(".rm-codeblock pre").length >= 2 && document.querySelectorAll(".rm-codeblock .token, .rm-codeblock code.hljs").length >= 2`,
+  );
 
   const rendered = JSON.parse(
     evaluate(`JSON.stringify({
@@ -89,7 +99,28 @@ try {
 
   run("reload");
   waitForDocumentReady();
-  run("wait", "--fn", `document.querySelectorAll(".rm-codeblock").length >= 2`);
+  run("wait", "3000");
+  const reloadDiagnostics = JSON.parse(
+    evaluate(`(async () => {
+      const chatId = new URL(location.href).searchParams.get("chat");
+      const response = chatId === null
+        ? undefined
+        : await fetch("/api/v1/chats/" + encodeURIComponent(chatId) + "/messages");
+      const messageBody = response?.ok ? await response.json() : undefined;
+      return JSON.stringify({
+        activeChatId: document.querySelector(".rm-sidebar-item.active[data-chat-id]")?.getAttribute("data-chat-id"),
+        chatId,
+        codeBlocks: document.querySelectorAll(".rm-codeblock").length,
+        messageCount: messageBody?.data?.length,
+        messageStatus: response?.status,
+        url: location.href,
+      });
+    })()`),
+  );
+  assert(
+    reloadDiagnostics.codeBlocks >= 2,
+    `chat messages did not render after reload: ${JSON.stringify(reloadDiagnostics)}`,
+  );
   const persisted = JSON.parse(
     evaluate(`JSON.stringify({
     codeBlocks: document.querySelectorAll(".rm-codeblock").length,
@@ -109,11 +140,18 @@ try {
     `(() => { const items = [...document.querySelectorAll(".rm-pending-attachment")]; return items.some((node) => node.textContent?.includes("browser-source.txt")) && items.some((node) => node.textContent?.includes("browser-image.png") || node.querySelector("img")?.alt === "browser-image.png"); })()`,
   );
   run("fill", "#prompt", "Use both browser acceptance attachments.");
-  run("click", 'button[aria-label="Send message"]');
+  clickSendMessage();
   run(
     "wait",
     "--fn",
-    `document.querySelectorAll(".rm-attachment-with-retention").length >= 2`,
+    `document.querySelectorAll(".rm-attachment-with-retention").length >= 2 || Boolean(document.querySelector(".rm-composer-error"))`,
+  );
+  const attachmentSubmitError = evaluate(
+    `document.querySelector(".rm-composer-error")?.textContent?.trim() ?? ""`,
+  );
+  assert(
+    attachmentSubmitError === "",
+    `attachment turn failed: ${attachmentSubmitError}`,
   );
   const attached = JSON.parse(
     evaluate(`JSON.stringify({
@@ -239,8 +277,8 @@ try {
   );
   run("click", '.rm-ui-dialog button[aria-label="Close"]');
 
-  assertModelPinsAndSelectionSync();
-  assertContextBudgetOverflow();
+  const contextBudgetModelId = assertModelPinsAndSelectionSync();
+  assertContextBudgetOverflow(contextBudgetModelId);
   assertQueuedReloadRecovery();
   assertShareAndExport();
   assertPromptNotesMemoryAndTemporaryChat();
@@ -284,12 +322,88 @@ try {
   console.log("Romeo expanded core chat browser acceptance passed.");
 } finally {
   try {
-    if (initialChatIds !== undefined) cleanupCreatedChats(initialChatIds);
+    // A browser assertion may close or strand the primary target. Perform
+    // teardown in a dedicated application-origin session so cleanup cannot
+    // mask the original failure with an about:blank relative-fetch error.
+    runFor(cleanupSession, "open", baseUrl);
+    runFor(cleanupSession, "wait", "#prompt");
+    if (initialChatIds !== undefined)
+      cleanupCreatedChats(initialChatIds, cleanupSession);
   } finally {
-    run("close", { allowFailure: true });
-    runFor(secondSession, "close", { allowFailure: true });
-    imageProvider.kill("SIGTERM");
+    try {
+      if (initialFixtureResourceIds !== undefined)
+        cleanupCreatedFixtures(initialFixtureResourceIds, cleanupSession);
+    } finally {
+      try {
+        if (originalBrowserModelConfiguration !== undefined) {
+          restoreBrowserAcceptanceModel(
+            originalBrowserModelConfiguration,
+            cleanupSession,
+          );
+        }
+      } finally {
+        run("close", { allowFailure: true });
+        runFor(secondSession, "close", { allowFailure: true });
+        runFor(cleanupSession, "close", { allowFailure: true });
+        imageProvider.kill("SIGTERM");
+      }
+    }
   }
+}
+
+function configureBrowserAcceptanceModel() {
+  return JSON.parse(
+    evaluate(`(async () => {
+      const response = await fetch("/api/v1/models");
+      if (!response.ok) throw new Error(await response.text());
+      const model = (await response.json()).data.find(
+        (item) => item.id === "model_openai_compatible_default",
+      );
+      if (model === undefined) throw new Error("Browser acceptance model is unavailable.");
+      const update = await fetch(
+        "/api/v1/models/" + encodeURIComponent(model.id) + "/capabilities",
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            capabilities: {
+              ...model.capabilities,
+              vision: true,
+              modalities: [...new Set([...model.capabilities.modalities, "vision"])],
+            },
+            contextWindow: model.contextWindow,
+          }),
+        },
+      );
+      if (!update.ok) throw new Error(await update.text());
+      return JSON.stringify({
+        capabilities: model.capabilities,
+        contextWindow: model.contextWindow,
+        id: model.id,
+      });
+    })()`),
+  );
+}
+
+function restoreBrowserAcceptanceModel(model, targetSession = session) {
+  evaluateFor(
+    targetSession,
+    `(async () => {
+    const response = await fetch(
+      "/api/v1/models/" + encodeURIComponent(${JSON.stringify(model.id)}) + "/capabilities",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          capabilities: ${JSON.stringify(model.capabilities)},
+          contextWindow: ${JSON.stringify(model.contextWindow)},
+        }),
+      },
+    );
+    if (!response.ok) throw new Error(await response.text());
+    return true;
+  })()`,
+  );
 }
 
 function seedAndAttachBrowserFixtures() {
@@ -404,32 +518,52 @@ function assertRealtimeChatListSync() {
     `!document.body.innerText.includes(${JSON.stringify(title)})`,
   );
   createdChatIds.delete(chat.id);
-  runFor(secondSession, "close");
 }
 
 function assertModelPinsAndSelectionSync() {
   run("click", ".rm-composer-model-select");
   run("wait", '[role="listbox"]');
-  run(
-    "eval",
-    `([...document.querySelectorAll("button")].find((button) => button.getAttribute("aria-label") === "Pin Ollama llama3.2"))?.click()`,
+  const target = JSON.parse(
+    evaluate(`JSON.stringify((() => {
+      const option = [...document.querySelectorAll('[role="option"]')].find(
+        (candidate) =>
+          candidate.getAttribute("aria-selected") !== "true" &&
+          candidate.closest(".rm-chat-model-row")?.querySelector('button[aria-label^="Pin "]'),
+      );
+      const pin = option?.closest(".rm-chat-model-row")?.querySelector('button[aria-label^="Pin "]');
+      return {
+        displayName: option?.querySelector(".rm-chat-model-name")?.textContent?.trim(),
+        modelId: option?.getAttribute("data-model-id"),
+        pinLabel: pin?.getAttribute("aria-label"),
+      };
+    })())`),
   );
-  run("wait", 'button[aria-label="Unpin Ollama llama3.2"]');
+  assert(
+    target.displayName && target.modelId && target.pinLabel,
+    "no unselected model was available for pin synchronization",
+  );
+  run("click", `button[aria-label=${JSON.stringify(target.pinLabel)}]`);
+  const unpinLabel = `Unpin ${target.displayName}`;
+  run("wait", `button[aria-label=${JSON.stringify(unpinLabel)}]`);
 
   runFor(secondSession, "open", baseUrl);
   waitForDocumentReady(secondSession);
   runFor(secondSession, "click", ".rm-composer-model-select");
   runFor(secondSession, "wait", '[role="listbox"]');
-  runFor(secondSession, "wait", 'button[aria-label="Unpin Ollama llama3.2"]');
+  runFor(
+    secondSession,
+    "wait",
+    `button[aria-label=${JSON.stringify(unpinLabel)}]`,
+  );
   const secondMenu = runFor(secondSession, "snapshot", "-i");
   assert(
-    secondMenu.includes("Unpin Ollama llama3.2"),
+    secondMenu.includes(unpinLabel),
     "model pin did not sync to a second browser session",
   );
   runFor(
     secondSession,
-    "eval",
-    `([...document.querySelectorAll('[role="option"]')].find((button) => button.textContent?.includes("Ollama llama3.2")))?.click()`,
+    "click",
+    `[role="option"][data-model-id=${JSON.stringify(target.modelId)}]`,
   );
   runFor(secondSession, "wait", "500");
   runFor(secondSession, "reload");
@@ -441,7 +575,7 @@ function assertModelPinsAndSelectionSync() {
     ".rm-composer-model-select",
   );
   assert(
-    secondSelected.includes("Ollama llama3.2"),
+    secondSelected.includes(target.displayName),
     "per-chat model selection did not survive reload",
   );
 
@@ -449,44 +583,124 @@ function assertModelPinsAndSelectionSync() {
   waitForDocumentReady();
   const firstSelected = run("get", "text", ".rm-composer-model-select");
   assert(
-    firstSelected.includes("Ollama llama3.2"),
+    firstSelected.includes(target.displayName),
     "per-chat model selection did not sync back to the first browser session",
   );
+  run("click", ".rm-composer-model-select");
+  run("wait", `button[aria-label=${JSON.stringify(unpinLabel)}]`);
+  run("click", `button[aria-label=${JSON.stringify(unpinLabel)}]`);
+  return target.modelId;
 }
 
-function assertContextBudgetOverflow() {
-  run(
-    "eval",
-    `(() => {
-    const input = document.querySelector("#prompt");
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
-    setter.call(input, "overflow ".repeat(7000));
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    return input.value.length;
-  })()`,
+function assertContextBudgetOverflow(modelId) {
+  const original = JSON.parse(
+    evaluate(`(async () => {
+      const response = await fetch("/api/v1/models");
+      if (!response.ok) throw new Error(await response.text());
+      const model = (await response.json()).data.find(
+        (item) => item.id === ${JSON.stringify(modelId)},
+      );
+      if (model === undefined) throw new Error("Context-budget model is unavailable.");
+      const update = await fetch(
+        "/api/v1/models/" + encodeURIComponent(model.id) + "/capabilities",
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            capabilities: model.capabilities,
+            contextWindow: 1024,
+          }),
+        },
+      );
+      if (!update.ok) throw new Error(await update.text());
+      return JSON.stringify({
+        capabilities: model.capabilities,
+        contextWindow: model.contextWindow,
+        id: model.id,
+      });
+    })()`),
   );
-  clickComposerMenuItem("Inspect context");
-  run("wait", ".rm-context-inspector .rm-composer-error");
-  const error = run("get", "text", ".rm-context-inspector .rm-composer-error");
-  assert(
-    error.toLowerCase().includes("context window"),
-    "context budget overflow did not return a clear failure",
-  );
-  run("click", 'button[aria-label="Close context inspector"]');
-  run("fill", "#prompt", "");
+  try {
+    run(
+      "eval",
+      `(() => {
+      const input = document.querySelector("#prompt");
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+      setter.call(input, "overflow ".repeat(7000));
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      return input.value.length;
+    })()`,
+    );
+    clickComposerMenuItem("Inspect context");
+    run("wait", ".rm-context-inspector .rm-composer-error");
+    const error = run(
+      "get",
+      "text",
+      ".rm-context-inspector .rm-composer-error",
+    );
+    assert(
+      error.toLowerCase().includes("context window"),
+      "context budget overflow did not return a clear failure",
+    );
+    run("click", 'button[aria-label="Close context inspector"]');
+  } finally {
+    restoreBrowserAcceptanceModel(original);
+    const cleared = evaluate(`(() => {
+      const input = document.querySelector("#prompt");
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      if (!(input instanceof HTMLTextAreaElement) || setter === undefined) return false;
+      setter.call(input, "");
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, data: null, inputType: "deleteContentBackward" }));
+      return input.value === "";
+    })()`);
+    assert(cleared, "context-budget prompt could not be cleared");
+  }
 }
 
 function assertQueuedReloadRecovery() {
-  run("click", 'button[aria-label="New chat"]');
+  const newChatAction = JSON.parse(
+    evaluate(`JSON.stringify((() => {
+    const buttons = [...document.querySelectorAll('button[aria-label="New chat"]')];
+    const button = buttons[0];
+    button?.click();
+    return {
+      buttonCount: buttons.length,
+      className: button?.className ?? null,
+      disabled: button?.disabled ?? null,
+      found: Boolean(button),
+      location: window.location.href,
+    };
+  })())`),
+  );
+  assert(
+    newChatAction.found && !newChatAction.disabled,
+    `new-chat action was unavailable for queue recovery: ${JSON.stringify(newChatAction)}`,
+  );
+  run("wait", "500");
+  const blankChatState = JSON.parse(
+    evaluate(`JSON.stringify({
+      activeChatId: document.querySelector(".rm-sidebar-item.active[data-chat-id]")?.dataset.chatId ?? null,
+      composerStatus: document.querySelector("#composer-status")?.textContent ?? null,
+      error: document.querySelector(".rm-composer-error")?.textContent ?? null,
+      location: window.location.href,
+      body: document.body?.innerText.slice(0, 500) ?? null,
+      promptLength: document.querySelector("#prompt")?.value.length ?? null,
+      promptPrefix: document.querySelector("#prompt")?.value.slice(0, 80) ?? null,
+    })`),
+  );
+  assert(
+    blankChatState.activeChatId === null && blankChatState.promptLength === 0,
+    `new-chat state did not settle before queue recovery: ${JSON.stringify({ newChatAction, blankChatState })}`,
+  );
   run("fill", "#prompt", "Browser queue recovery anchor");
-  run("click", 'button[aria-label="Send message"]');
+  clickSendMessage();
+  run("wait", ".rm-sidebar-item.active[data-chat-id]");
+  trackActiveChat();
   run(
     "wait",
     "--fn",
     `document.body.innerText.includes("Browser queue recovery anchor") && document.querySelector("#composer-status")?.textContent?.includes("Ready to send")`,
   );
-  trackActiveChat();
-  run("wait", ".rm-sidebar-item.active[data-chat-id]");
   const queuedPersisted = evaluate(`(async () => {
     const chatId = document.querySelector(".rm-sidebar-item.active")?.dataset.chatId;
     if (!chatId) return false;
@@ -686,11 +900,10 @@ function assertPromptNotesMemoryAndTemporaryChat() {
     "--fn",
     `document.body.innerText.includes("Browser controlled memory") && !document.querySelector(".rm-ui-dialog")`,
   );
-  const memoryRow = `.rm-list-row`;
   run(
     "eval",
     `(() => {
-    const row = [...document.querySelectorAll(${JSON.stringify(memoryRow)})]
+    const row = [...document.querySelectorAll("tbody tr")]
       .find((item) => item.textContent?.includes("Browser controlled memory"));
     [...(row?.querySelectorAll("button") ?? [])].find((button) => button.textContent?.trim() === "Pin")?.click();
   })()`,
@@ -698,7 +911,7 @@ function assertPromptNotesMemoryAndTemporaryChat() {
   run(
     "wait",
     "--fn",
-    `Boolean([...document.querySelectorAll(".rm-list-row")].find((item) => item.textContent?.includes("Browser controlled memory"))?.textContent?.includes("Unpin"))`,
+    `Boolean([...document.querySelectorAll("tbody tr")].find((item) => item.textContent?.includes("Browser controlled memory"))?.textContent?.includes("Unpin"))`,
   );
 
   run("open", baseUrl);
@@ -774,7 +987,7 @@ function assertPromptNotesMemoryAndTemporaryChat() {
   assert(temporaryActionFocused, "temporary-chat action was unavailable");
   run("press", "Enter");
   run("fill", "#prompt", "Browser temporary chat sentinel");
-  run("click", 'button[aria-label="Send message"]');
+  clickSendMessage();
   run(
     "wait",
     "--fn",
@@ -805,7 +1018,7 @@ function assertImageGeneration(port) {
       body: JSON.stringify({
         type: "openai-compatible",
         name: "Browser image provider",
-        baseUrl: ${JSON.stringify(`http://127.0.0.1:${imageProviderPort}/v1`)},
+        baseUrl: ${JSON.stringify(`http://127.0.0.1:${port}/v1`)},
         modelIds: ["gpt-image-1"],
       }),
     });
@@ -1116,7 +1329,6 @@ function assertComposerLocalization() {
       admin: "Administración",
       agentAccess: "Acceso",
       agentSaveDraft: "Guardar borrador",
-      agentStudio: "Configuración del asistente",
       agentTestConsole: "Consola de prueba",
       analyticsTitle: "Analítica",
       auditTitle: "Registro de auditoría",
@@ -1155,6 +1367,7 @@ function assertComposerLocalization() {
       addStep: "Añadir paso",
       appearance: "Apariencia",
       apiKeys: "Claves API",
+      authConfigure: "Configurar",
       authProviders: "Proveedores de autenticación",
       billing: "Facturación",
       chatActions: "Acciones del chat",
@@ -1240,7 +1453,6 @@ function assertComposerLocalization() {
       admin: "Administration",
       agentAccess: "Accès",
       agentSaveDraft: "Enregistrer le brouillon",
-      agentStudio: "Configuration de l’assistant",
       agentTestConsole: "Console de test",
       analyticsTitle: "Analytique",
       auditTitle: "Journal d’audit",
@@ -1279,6 +1491,7 @@ function assertComposerLocalization() {
       addStep: "Ajouter une étape",
       appearance: "Apparence",
       apiKeys: "Clés API",
+      authConfigure: "Configurer",
       authProviders: "Fournisseurs d’authentification",
       billing: "Facturation",
       chatActions: "Actions de la discussion",
@@ -1550,10 +1763,6 @@ function assertComposerLocalization() {
     waitForDocumentReady();
     const agentStudio = run("get", "text", "body");
     assert(
-      agentStudio.includes(locale.agentStudio),
-      `${locale.code} did not translate Agent Studio`,
-    );
-    assert(
       agentStudio.includes(locale.agentSaveDraft),
       `${locale.code} did not translate the agent draft form`,
     );
@@ -1561,8 +1770,10 @@ function assertComposerLocalization() {
       agentStudio.includes(locale.agentAccess),
       `${locale.code} did not translate agent access controls`,
     );
+    run("open", `${baseUrl}/workspace?section=agents&tab=capabilities`);
+    waitForDocumentReady();
     assert(
-      agentStudio.includes(locale.agentTestConsole),
+      run("get", "text", "body").includes(locale.agentTestConsole),
       `${locale.code} did not translate the agent test console`,
     );
     run("open", `${baseUrl}/workspace?section=tools`);
@@ -1583,8 +1794,10 @@ function assertComposerLocalization() {
       workspaceVoice.includes(locale.workspaceVoice),
       `${locale.code} did not translate the workspace voice panel`,
     );
+    run("open", `${baseUrl}/workspace?section=voice&resource=voice_default`);
+    waitForDocumentReady();
     assert(
-      workspaceVoice.includes(locale.workspaceBindVoice),
+      run("get", "text", "body").includes(locale.workspaceBindVoice),
       `${locale.code} did not translate workspace voice actions`,
     );
     run("open", `${baseUrl}/workspace?section=collaboration`);
@@ -1614,6 +1827,8 @@ function assertComposerLocalization() {
       `${locale.code} did not translate knowledge-base creation`,
     );
     run("press", "Escape");
+    run("open", `${baseUrl}/workspace?section=knowledge&resource=kb_default`);
+    waitForDocumentReady();
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.knowledgeAddSource)})))?.click()`,
@@ -1624,7 +1839,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate knowledge-source creation`,
     );
     run("press", "Escape");
-    run("open", `${baseUrl}/admin?section=providers`);
+    run("open", `${baseUrl}/admin?section=providers&view=providers`);
     waitForDocumentReady();
     const providerAdmin = run("get", "text", "body");
     assert(
@@ -1645,7 +1860,10 @@ function assertComposerLocalization() {
       providerAdmin.includes(locale.models),
       `${locale.code} did not translate model administration`,
     );
-    run("open", `${baseUrl}/admin?section=providers&view=models`);
+    run(
+      "open",
+      `${baseUrl}/admin?section=providers&view=models&model=model_openai_compatible_default`,
+    );
     waitForDocumentReady();
     const modelAdmin = run("get", "text", "body");
     assert(
@@ -1658,7 +1876,7 @@ function assertComposerLocalization() {
       run("get", "text", "body").includes(locale.readiness),
       `${locale.code} did not translate the admin overview`,
     );
-    run("open", `${baseUrl}/admin?section=providers`);
+    run("open", `${baseUrl}/admin?section=providers&view=providers`);
     waitForDocumentReady();
     run(
       "eval",
@@ -1848,8 +2066,15 @@ function assertComposerLocalization() {
       run("get", "text", "body").includes(locale.authProviders),
       `${locale.code} did not translate authentication provider administration`,
     );
-    run("wait", ".rm-provider-zone__grid--dense button");
-    run("click", ".rm-provider-zone__grid--dense button");
+    run(
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll("button")].some((button) => button.textContent?.trim() === ${JSON.stringify(locale.authConfigure)})`,
+    );
+    run(
+      "eval",
+      `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === ${JSON.stringify(locale.authConfigure)}))?.click()`,
+    );
     run("wait", ".rm-ui-dialog:not(.rm-ui-sheet)");
     assert(
       run("get", "text", ".rm-ui-dialog:not(.rm-ui-sheet)").includes(
@@ -2181,7 +2406,7 @@ function assertProviderSetupAndDiagnostics() {
     run("click", `@${optionRef[1]}`);
   }
 
-  run("open", `${baseUrl}/admin?section=providers`);
+  run("open", `${baseUrl}/admin?section=providers&view=providers`);
   waitForDocumentReady();
   openVllmDialog();
   const preset = JSON.parse(
@@ -2249,27 +2474,31 @@ function assertProviderSetupAndDiagnostics() {
     "eval",
     `(() => { const row = [...document.querySelectorAll("${rowSelector}")].find((item) => item.textContent?.includes(${endpointNameLiteral})); const button = [...(row?.querySelectorAll("button") ?? [])].find((item) => item.textContent?.includes("Manage provider")); if (!button) return false; button.click(); return true; })()`,
   );
-  run("wait", ".rm-ui-sheet");
+  run(
+    "wait",
+    "--fn",
+    `[...document.querySelectorAll("button")].some((button) => button.textContent?.includes("Back to providers"))`,
+  );
   run(
     "eval",
-    `(() => { const button = [...document.querySelectorAll(".rm-ui-sheet button")].find((item) => item.textContent?.includes("Refresh models")); if (!button) return false; button.focus(); return true; })()`,
+    `(() => { const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "Sync now"); if (!button) return false; button.focus(); return true; })()`,
   );
   run("press", "Enter");
   run("wait", "--fn", `document.body.innerText.includes("Models synced")`);
   run(
     "eval",
-    `(() => { const button = [...document.querySelectorAll(".rm-ui-sheet button")].find((item) => item.textContent?.includes("Verify")); if (!button) return false; button.focus(); return true; })()`,
+    `(() => { const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "Verify"); if (!button) return false; button.focus(); return true; })()`,
   );
   run("press", "Enter");
   run(
     "wait",
     "--fn",
-    `Boolean(document.querySelector(".rm-ui-sheet .rm-connection-result"))`,
+    `Boolean(document.querySelector(".rm-connection-result"))`,
   );
   const diagnostics = JSON.parse(
     evaluate(`JSON.stringify((() => {
-    const sheet = document.querySelector(".rm-ui-sheet");
-    return { text: sheet?.textContent, diagnosticClass: sheet?.querySelector(".rm-connection-result")?.className, secretVisible: document.body.innerText.includes(${JSON.stringify(secretSentinel)}) };
+    const result = document.querySelector(".rm-connection-result");
+    return { text: result?.textContent, diagnosticClass: result?.className, secretVisible: document.body.innerText.includes(${JSON.stringify(secretSentinel)}) };
   })())`),
   );
   assert(
@@ -2320,6 +2549,24 @@ function listWorkspaceChatIds() {
   })()`);
 }
 
+function listFixtureResourceIds() {
+  return evaluate(`(async () => {
+    const resources = {
+      files: "/api/v1/files?workspaceId=workspace_default",
+      memories: "/api/v1/memories?workspaceId=workspace_default",
+      notes: "/api/v1/notes?workspaceId=workspace_default",
+      promptTemplates: "/api/v1/prompt-templates?workspaceId=workspace_default",
+    };
+    return Object.fromEntries(await Promise.all(
+      Object.entries(resources).map(async ([kind, url]) => {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(await response.text());
+        return [kind, (await response.json()).data.map((item) => item.id)];
+      }),
+    ));
+  })()`);
+}
+
 function trackChatId(chatId) {
   assert(
     typeof chatId === "string" && chatId.length > 0,
@@ -2351,7 +2598,16 @@ function trackChatByTitle(title) {
   );
 }
 
-function cleanupCreatedChats(baselineChatIds) {
+function clickSendMessage() {
+  run(
+    "wait",
+    "--fn",
+    `document.querySelector('button[aria-label="Send message"]')?.disabled === false`,
+  );
+  run("click", 'button[aria-label="Send message"]');
+}
+
+function cleanupCreatedChats(baselineChatIds, targetSession = session) {
   const fixtureTitles = [
     "Browser acceptance **bold**\n\n```typescript\nconst parity: boolean = true;\n```",
     "Browser imported chat",
@@ -2361,7 +2617,9 @@ function cleanupCreatedChats(baselineChatIds) {
     "Keyboard mobile composer sentinel",
     "Keyboard tablet composer sentinel",
   ];
-  const result = evaluate(`(async () => {
+  const result = evaluateFor(
+    targetSession,
+    `(async () => {
     const listResponse = await fetch("/api/v1/chats?workspaceId=workspace_default");
     if (!listResponse.ok) throw new Error(await listResponse.text());
     const body = await listResponse.json();
@@ -2388,7 +2646,8 @@ function cleanupCreatedChats(baselineChatIds) {
       else failures.push({ id: chat.id, status: response.status });
     }
     return { created: created.length, deleted, failures };
-  })()`);
+  })()`,
+  );
   assert(
     result.failures.length === 0 && result.deleted === result.created,
     `browser acceptance chat cleanup failed: ${JSON.stringify(result)}`,
@@ -2396,8 +2655,73 @@ function cleanupCreatedChats(baselineChatIds) {
   console.log(`Cleaned up ${result.deleted} browser-acceptance chat(s).`);
 }
 
+function cleanupCreatedFixtures(baselineIds, targetSession = session) {
+  const result = evaluateFor(
+    targetSession,
+    `(async () => {
+    const resources = [
+      {
+        kind: "files",
+        listUrl: "/api/v1/files?workspaceId=workspace_default",
+        deleteBase: "/api/v1/files/",
+        matches: (item) => ["browser-source.txt", "browser-image.png"].includes(item.fileName),
+      },
+      {
+        kind: "memories",
+        listUrl: "/api/v1/memories?workspaceId=workspace_default",
+        deleteBase: "/api/v1/memories/",
+        matches: (item) => item.title === "Browser controlled memory",
+      },
+      {
+        kind: "notes",
+        listUrl: "/api/v1/notes?workspaceId=workspace_default",
+        deleteBase: "/api/v1/notes/",
+        matches: (item) => item.title === "Browser reusable note",
+      },
+      {
+        kind: "promptTemplates",
+        listUrl: "/api/v1/prompt-templates?workspaceId=workspace_default",
+        deleteBase: "/api/v1/prompt-templates/",
+        matches: (item) => item.name === "Browser prompt template",
+      },
+    ];
+    const baselineByKind = ${JSON.stringify(baselineIds)};
+    const failures = [];
+    let deleted = 0;
+    for (const resource of resources) {
+      const response = await fetch(resource.listUrl);
+      if (!response.ok) throw new Error(await response.text());
+      const baseline = new Set(baselineByKind[resource.kind] ?? []);
+      const created = (await response.json()).data.filter(
+        (item) => !baseline.has(item.id) && resource.matches(item),
+      );
+      for (const item of created) {
+        const deletion = await fetch(
+          resource.deleteBase + encodeURIComponent(item.id),
+          { method: "DELETE" },
+        );
+        if (deletion.ok || deletion.status === 404) deleted += 1;
+        else failures.push({ kind: resource.kind, id: item.id, status: deletion.status });
+      }
+    }
+    return { deleted, failures };
+  })()`,
+  );
+  assert(
+    result.failures.length === 0,
+    `browser acceptance fixture cleanup failed: ${JSON.stringify(result)}`,
+  );
+  console.log(
+    `Cleaned up ${result.deleted} browser-acceptance fixture resource(s).`,
+  );
+}
+
 function evaluate(script) {
-  const output = run("eval", script);
+  return evaluateFor(session, script);
+}
+
+function evaluateFor(targetSession, script) {
+  const output = runFor(targetSession, "eval", script);
   return JSON.parse(output);
 }
 

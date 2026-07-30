@@ -1,7 +1,7 @@
 import { Switch } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Database from "lucide-react/dist/esm/icons/database.mjs";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import { listKnowledgeBases } from "../features";
 import {
@@ -49,6 +49,28 @@ export function ManagedModelKnowledgePanel({
     [bindingsQuery.data],
   );
   const knowledgeBases = knowledgeQuery.data ?? [];
+  const toggle = useCallback(
+    async (knowledgeBaseId: string, enabled: boolean) => {
+      if (!activeAgent) return;
+      try {
+        await updateMutation.mutateAsync({
+          agentId: activeAgent.id,
+          knowledgeBaseId,
+          enabled,
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["agentKnowledgeBindings", activeAgent.id],
+        });
+        toast(
+          t(enabled ? "knowledgeBoundNotice" : "knowledgeDisabledNotice"),
+          "success",
+        );
+      } catch {
+        toast(t("failed"), "error");
+      }
+    },
+    [activeAgent, queryClient, t, updateMutation],
+  );
   const columns = useMemo(
     () => [
       knowledgeColumn.accessor("name", {
@@ -84,28 +106,8 @@ export function ManagedModelKnowledgePanel({
         enableSorting: false,
       }),
     ],
-    [activeAgent, enabledByKnowledgeBase, t, updateMutation.isPending],
+    [activeAgent, enabledByKnowledgeBase, t, toggle, updateMutation.isPending],
   );
-
-  async function toggle(knowledgeBaseId: string, enabled: boolean) {
-    if (!activeAgent) return;
-    try {
-      await updateMutation.mutateAsync({
-        agentId: activeAgent.id,
-        knowledgeBaseId,
-        enabled,
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["agentKnowledgeBindings", activeAgent.id],
-      });
-      toast(
-        t(enabled ? "knowledgeBoundNotice" : "knowledgeDisabledNotice"),
-        "success",
-      );
-    } catch {
-      toast(t("failed"), "error");
-    }
-  }
 
   return (
     <section className="rm-managed-model-section">

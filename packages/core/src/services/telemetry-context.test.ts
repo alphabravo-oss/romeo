@@ -10,6 +10,7 @@ import {
   runWithTelemetryContext,
   telemetryJobPayload,
   metadataTraceChannel,
+  reportCleanupFailure,
   telemetryTraceId,
   withTelemetryFetch,
   withTelemetryObjectStore,
@@ -182,5 +183,32 @@ describe("metadata-only telemetry context", () => {
       ]),
     );
     expect(JSON.stringify(spans)).not.toContain(rawSentinel);
+  });
+
+  it("publishes redaction-safe evidence for swallowed cleanup failures", () => {
+    const spans: unknown[] = [];
+    const listener = (span: unknown) => spans.push(span);
+    metadataTraceChannel.subscribe(listener);
+    try {
+      runWithTelemetryContext(
+        {
+          requestId: "req_cleanup",
+          traceId: "ffffffffffffffffffffffffffffffff",
+        },
+        () => reportCleanupFailure("knowledge_source.restore_content"),
+      );
+    } finally {
+      metadataTraceChannel.unsubscribe(listener);
+    }
+    expect(spans).toEqual([
+      {
+        boundary: "cleanup",
+        durationMs: 0,
+        operation: "knowledge_source.restore_content",
+        outcome: "failure",
+        requestId: "req_cleanup",
+        traceId: "ffffffffffffffffffffffffffffffff",
+      },
+    ]);
   });
 });

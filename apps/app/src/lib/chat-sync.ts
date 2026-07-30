@@ -4,5 +4,6 @@ export function chatSyncFallbackInterval(
   status: ChatEventStreamStatus,
   online: boolean,
 ): number | undefined {
-  return online && status === "degraded" ? 15_000 : undefined;
+  if (!online) return undefined;
+  return status === "connected" ? 60_000 : 15_000;
 }

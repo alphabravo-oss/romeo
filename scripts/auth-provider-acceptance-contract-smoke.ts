@@ -521,7 +521,7 @@ interface ConnectionTestResponse {
 
 async function authProviderFetch(
   input: RequestInfo | URL,
-  init?: RequestInit,
+  _init?: RequestInit,
 ): Promise<Response> {
   const url = String(input);
   if (url.startsWith("https://api.github.com/meta")) {

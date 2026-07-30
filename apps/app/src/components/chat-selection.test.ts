@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   type ChatSelectionState,
+  isActiveChatRemoval,
+  shouldApplyRequestedChat,
   shouldAutoSelectChat,
 } from "./chat-selection";
 
@@ -138,5 +140,69 @@ describe("shouldAutoSelectChat", () => {
         ),
       ).toBe(false);
     });
+  });
+});
+
+describe("isActiveChatRemoval", () => {
+  it("recognizes a remote deletion or archive of the active chat", () => {
+    expect(
+      isActiveChatRemoval("chat_1", {
+        action: "deleted",
+        chatId: "chat_1",
+      }),
+    ).toBe(true);
+    expect(
+      isActiveChatRemoval("chat_1", {
+        action: "archived",
+        chatId: "chat_1",
+      }),
+    ).toBe(true);
+  });
+
+  it("ignores unrelated and non-removal events", () => {
+    expect(
+      isActiveChatRemoval("chat_1", {
+        action: "deleted",
+        chatId: "chat_2",
+      }),
+    ).toBe(false);
+    expect(
+      isActiveChatRemoval("chat_1", {
+        action: "updated",
+        chatId: "chat_1",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("shouldApplyRequestedChat", () => {
+  it("applies a different chat requested by route state", () => {
+    expect(
+      shouldApplyRequestedChat({
+        activeChatId: "chat_1",
+        isDraftingNewChat: false,
+        requestedChatId: "chat_2",
+      }),
+    ).toBe(true);
+  });
+
+  it("ignores the stale route value while New Chat clears the URL", () => {
+    expect(
+      shouldApplyRequestedChat({
+        activeChatId: undefined,
+        isDraftingNewChat: true,
+        requestedChatId: "chat_1",
+      }),
+    ).toBe(false);
+  });
+
+  it("does not reselect the already-active chat", () => {
+    expect(
+      shouldApplyRequestedChat({
+        activeChatId: "chat_1",
+        isDraftingNewChat: false,
+        requestedChatId: "chat_1",
+      }),
+    ).toBe(false);
   });
 });

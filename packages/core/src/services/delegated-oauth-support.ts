@@ -9,6 +9,9 @@ import { ApiError } from "../errors";
 import { createId } from "../ids";
 import type { DelegatedOAuthState } from "./delegated-oauth-internal-types";
 import type { DelegatedOAuthStoredToken } from "./delegated-oauth-token-vault";
+import { normalizeAppOrigin, sanitizeAuthReturnTo } from "./auth-navigation";
+
+export { normalizeAppOrigin };
 
 const callbackStateJobType = "delegated_oauth.callback_state";
 
@@ -64,26 +67,11 @@ export function isExpiredOrNearExpiry(
   return new Date(token.expiresAt).getTime() <= Date.now() + 60_000;
 }
 
-export function normalizeAppOrigin(value: string): string {
-  const url = new URL(value);
-  return `${url.protocol}//${url.host}`;
-}
-
 export function sanitizeReturnTo(value: string | undefined): string {
-  if (value === undefined || value.length === 0) return "/";
-  if (
-    value.length > 500 ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    /[\r\n]/u.test(value)
-  ) {
-    throw new ApiError(
-      "invalid_delegated_oauth_return_to",
-      "Delegated OAuth return path must be a relative application path.",
-      400,
-    );
-  }
-  return value;
+  return sanitizeAuthReturnTo(value, {
+    errorCode: "invalid_delegated_oauth_return_to",
+    flowName: "Delegated OAuth",
+  });
 }
 
 export function randomToken(byteLength: number): string {

@@ -2,10 +2,8 @@ import { readFile } from "node:fs/promises";
 
 import type { BackgroundJob } from "../domain/entities";
 import {
-  browserAutomationJobType,
   readBrowserAutomationStoredArtifacts,
   readBrowserAutomationWorkerLease,
-  type BrowserAutomationArtifactSummary,
 } from "./workflow-browser-tasks";
 import type { BrowserAutomationPostureReport } from "./browser-automation-service";
 import {
@@ -243,19 +241,6 @@ function liveEvidenceRedactionFrom(
     rawTaskTextReturned: value.rawTaskTextReturned === true,
     secretValuesReturned: value.secretValuesReturned === true,
   };
-}
-
-function allLiveEvidenceRedactionFalse(
-  redaction: BrowserAutomationPostureReport["liveEvidence"]["redaction"],
-): boolean {
-  return (
-    redaction.artifactBytesReturned === false &&
-    redaction.rawEvidencePathsReturned === false &&
-    redaction.rawPageContentReturned === false &&
-    redaction.rawRunnerUrlReturned === false &&
-    redaction.rawTaskTextReturned === false &&
-    redaction.secretValuesReturned === false
-  );
 }
 
 function browserAutomationLiveEvidenceFailureCodes(input: {

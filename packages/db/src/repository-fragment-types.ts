@@ -66,6 +66,7 @@ export type TenantIdentityRepositoryFragment = Pick<
   | "listGroupMemberships"
   | "listGroups"
   | "listUsers"
+  | "listUsersPage"
   | "updateGroup"
   | "updateUser"
   | "upsertSsoOidcSettings"
@@ -164,7 +165,9 @@ export type AgentEvalRepositoryFragment = Pick<
     | "listEvalResultHumanRatings"
     | "listEvalRunResults"
     | "listEvalRuns"
+    | "listEvalRunsForAgents"
     | "listEvalSuites"
+    | "listEvalSuitesForAgents"
     | "upsertEvalResultHumanRating"
   >;
 
@@ -251,6 +254,7 @@ export type ToolConnectorRepositoryFragment = Pick<
   | "createToolOperations"
   | "listToolConnectors"
   | "listToolOperations"
+  | "listToolOperationsForConnectors"
   | "updateToolConnector"
   | "updateToolOperation"
 >;
@@ -335,6 +339,7 @@ export type NotificationRepositoryFragment = Pick<
   | "createNotificationDeliveryChannel"
   | "createUserNotification"
   | "listNotificationDeliveries"
+  | "listFailedNotificationDeliveries"
   | "listNotificationDeliveryChannels"
   | "listUserNotifications"
   | "updateNotificationDelivery"

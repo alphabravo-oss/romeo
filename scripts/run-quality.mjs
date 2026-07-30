@@ -4,8 +4,11 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const commands = [
   ["format:check"],
+  ["lint"],
+  ["audit:prod"],
   ["check:architecture"],
   ["check:dependencies"],
+  ["check:dead-code"],
   ["check:test-contracts"],
   ["check:ui-form-contracts"],
   ["check:openapi-route-coverage"],
@@ -15,6 +18,7 @@ const commands = [
   ["check:sdk-drift"],
   ["check"],
   ["test"],
+  ["test:coverage"],
   ["build"],
   ["check:bundle-budget"],
   ["quality:browser"],

@@ -51,8 +51,6 @@ describe("chat model selection", () => {
 
     expect(composer).toMatch(/<ComposerModelSelect\b/u);
     expect(shell).toMatch(/workspace\.handleSelectModel/u);
-    expect(turnActions).toMatch(
-      /\{\s*modelId: options\.selectedModelId\s*\}/u,
-    );
+    expect(turnActions).toMatch(/\{\s*modelId: options\.selectedModelId\s*\}/u);
   });
 });

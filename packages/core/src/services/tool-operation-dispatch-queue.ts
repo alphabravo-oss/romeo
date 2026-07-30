@@ -22,12 +22,12 @@ import {
 import {
   apiKeyAuthPlacement,
   dispatchBaseHost,
-  toolOperationDispatchTransport,
 } from "./tool-operation-dispatch-request";
 import type {
   DispatchToolOperationInput,
   EnqueueToolOperationDispatchInput,
 } from "./tool-operation-dispatch-types";
+import { reportCleanupFailure } from "./telemetry-context";
 
 export async function assertDispatchApproval(
   input: DispatchToolOperationInput,
@@ -282,6 +282,7 @@ export async function deleteStoredPayload(
   try {
     await input.dispatchPayloadStore.delete(reference);
   } catch {
+    reportCleanupFailure("tool_dispatch.delete_stored_payload");
     // Terminal job state is authoritative; S3 lifecycle policy is the fallback.
   }
 }

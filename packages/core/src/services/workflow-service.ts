@@ -4,7 +4,6 @@ import type {
   BackgroundJob,
   WorkflowDefinition,
   WorkflowRun,
-  WorkflowSchedule,
   WorkflowScheduleRunResult,
   WorkflowStep,
   WorkflowStepRun,

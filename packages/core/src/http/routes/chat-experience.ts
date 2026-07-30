@@ -63,7 +63,7 @@ export function registerChatExperienceRoutes(app: RomeoApi): void {
       chatId,
       title: normalizeGeneratedTitle(generated, firstUserMessage.content),
     });
-    services.chatEvents.publish({
+    await services.chatEvents.publish({
       action: "updated",
       chatId: data.id,
       orgId: subject.orgId,

@@ -24,6 +24,15 @@ export function useWorkflowColumns(input: {
   startPending: boolean;
 }) {
   const { t } = useLocale();
+  const {
+    approvePending,
+    onApprove,
+    onResume,
+    onRun,
+    onSelect,
+    resumePending,
+    startPending,
+  } = input;
   const workflowColumns = useMemo<ColumnDef<Workflow, any>[]>(
     () => [
       workflowCol.accessor("name", {
@@ -53,14 +62,14 @@ export function useWorkflowColumns(input: {
           <div className="flex gap-2">
             <Button
               variant="primary"
-              disabled={input.startPending}
-              onClick={() => input.onRun(cell.row.original.id)}
+              disabled={startPending}
+              onClick={() => onRun(cell.row.original.id)}
               type="button"
             >
               {t("run")}
             </Button>
             <Button
-              onClick={() => input.onSelect(cell.row.original.id)}
+              onClick={() => onSelect(cell.row.original.id)}
               type="button"
             >
               {t("viewRuns")}
@@ -69,7 +78,7 @@ export function useWorkflowColumns(input: {
         ),
       }),
     ],
-    [input.onRun, input.onSelect, input.startPending, t],
+    [onRun, onSelect, startPending, t],
   );
 
   const templateColumns = useMemo<ColumnDef<WorkflowTemplate, any>[]>(
@@ -125,8 +134,8 @@ export function useWorkflowColumns(input: {
             <div className="flex gap-2">
               {run.status === "waiting_approval" ? (
                 <Button
-                  disabled={input.approvePending}
-                  onClick={() => input.onApprove(run.id)}
+                  disabled={approvePending}
+                  onClick={() => onApprove(run.id)}
                   type="button"
                 >
                   {t("approve")}
@@ -134,8 +143,8 @@ export function useWorkflowColumns(input: {
               ) : null}
               {run.status === "waiting_run" ? (
                 <Button
-                  disabled={input.resumePending}
-                  onClick={() => input.onResume(run.id)}
+                  disabled={resumePending}
+                  onClick={() => onResume(run.id)}
                   type="button"
                 >
                   {t("resume")}
@@ -146,13 +155,7 @@ export function useWorkflowColumns(input: {
         },
       }),
     ],
-    [
-      input.approvePending,
-      input.onApprove,
-      input.onResume,
-      input.resumePending,
-      t,
-    ],
+    [approvePending, onApprove, onResume, resumePending, t],
   );
 
   return { runColumns, templateColumns, workflowColumns };

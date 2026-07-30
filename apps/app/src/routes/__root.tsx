@@ -6,6 +6,7 @@ import {
   Scripts,
   createRootRoute,
   useLocation,
+  useRouter,
 } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { ToastViewport } from "@romeo/ui";
@@ -82,14 +83,21 @@ function RootRoute() {
 }
 
 function RootDocument({ children }: { children: ReactNode }) {
+  const nonce = useRouter().options.ssr?.nonce;
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script
+          dangerouslySetInnerHTML={{ __html: themeInitScript }}
+          nonce={nonce}
+          suppressHydrationWarning
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var l=localStorage.getItem('romeo:locale');if(l)document.documentElement.lang=l;var p=JSON.parse(localStorage.getItem('romeo:interface')||'{}');document.documentElement.dataset.density=p.density||'comfortable';document.documentElement.dataset.fontSize=p.fontSize||'medium';if(p.reducedMotion)document.documentElement.classList.add('reduce-motion')}catch(e){}})()`,
           }}
+          nonce={nonce}
+          suppressHydrationWarning
         />
         <HeadContent />
       </head>

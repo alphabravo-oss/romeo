@@ -7,7 +7,10 @@ import {
 import type { ChatEvent } from "@romeo/contracts";
 
 import { createId } from "../ids";
-import { InMemoryRealtimeEventBus } from "./realtime-event-bus";
+import {
+  InMemoryChatEventTransport,
+  type ChatEventTransport,
+} from "./chat-event-transport";
 
 export type ChatChangeAction = Extract<
   ChatEvent,
@@ -21,20 +24,26 @@ export interface ChatEventSubscription {
 
 export class ChatEventService {
   constructor(
-    private readonly events = new InMemoryRealtimeEventBus<ChatEvent>(),
+    private readonly events: ChatEventTransport = new InMemoryChatEventTransport(),
   ) {}
 
-  subscribe(
+  async subscribe(
     subject: AuthSubject,
     workspaceId: string,
     handler: (event: ChatEvent) => void,
-  ): ChatEventSubscription {
+    options: { afterEventId?: string } = {},
+  ): Promise<ChatEventSubscription> {
     assertScope(subject, "chats:read");
     if (!hasWorkspaceAccess(subject, workspaceId)) {
       throw new AuthorizationError(
         "The workspace is outside the caller access.",
       );
     }
+    const unsubscribe = await this.events.subscribe(
+      eventChannel(subject.orgId, workspaceId),
+      handler,
+      options,
+    );
     return {
       connectedEvent: {
         id: createId("chat_event"),
@@ -42,20 +51,17 @@ export class ChatEventService {
         workspaceId,
         createdAt: new Date().toISOString(),
       },
-      unsubscribe: this.events.subscribe(
-        eventChannel(subject.orgId, workspaceId),
-        handler,
-      ),
+      unsubscribe,
     };
   }
 
-  publish(input: {
+  async publish(input: {
     action: ChatChangeAction;
     chatId: string;
     orgId: string;
     workspaceId: string;
-  }): void {
-    this.events.publish(eventChannel(input.orgId, input.workspaceId), {
+  }): Promise<void> {
+    await this.events.publish(eventChannel(input.orgId, input.workspaceId), {
       id: createId("chat_event"),
       type: "changed",
       action: input.action,

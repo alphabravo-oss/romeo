@@ -19,7 +19,7 @@ describe("repository contract inventory", () => {
       ),
     ].flat();
 
-    expect(repositoryMethods).toHaveLength(257);
+    expect(repositoryMethods).toHaveLength(262);
     expect(ROMEO_REPOSITORY_METHOD_NAMES).toEqual(repositoryMethods);
     expect(repositoryContractInventory.map((entry) => entry.method)).toEqual(
       repositoryMethods,

@@ -5,7 +5,7 @@ import Copy from "lucide-react/dist/esm/icons/copy.mjs";
 import Download from "lucide-react/dist/esm/icons/download.mjs";
 import Upload from "lucide-react/dist/esm/icons/upload.mjs";
 import Pin from "lucide-react/dist/esm/icons/pin.mjs";
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 import {
   cloneAgent,
@@ -70,19 +70,58 @@ export function ManagedModelAdminPanel({
     [providers],
   );
 
-  async function handleWorkspaceDefault(agentId: string) {
-    if (!workspaceId) return;
-    try {
-      await defaultMutation.mutateAsync({
-        workspaceId,
-        agentId: workspaceDefaultAgentId === agentId ? null : agentId,
-      });
-      await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
-      toast(t("managedModelDefaultUpdated"), "success");
-    } catch {
-      toast(t("managedModelDefaultFailed"), "error");
-    }
-  }
+  const handleWorkspaceDefault = useCallback(
+    async (agentId: string) => {
+      if (!workspaceId) return;
+      try {
+        await defaultMutation.mutateAsync({
+          workspaceId,
+          agentId: workspaceDefaultAgentId === agentId ? null : agentId,
+        });
+        await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
+        toast(t("managedModelDefaultUpdated"), "success");
+      } catch {
+        toast(t("managedModelDefaultFailed"), "error");
+      }
+    },
+    [defaultMutation, queryClient, t, workspaceDefaultAgentId, workspaceId],
+  );
+  const handleClone = useCallback(
+    async (agent: Agent) => {
+      try {
+        const cloned = await cloneMutation.mutateAsync({
+          agentId: agent.id,
+          includeKnowledgeBindings: true,
+          name: `${agent.name} copy`,
+        });
+        if (workspaceId)
+          await queryClient.invalidateQueries({
+            queryKey: ["agents", workspaceId],
+          });
+        onNavigationChange(cloned.id);
+        toast(t("managedModelCloned"), "success");
+      } catch {
+        toast(t("managedModelCloneFailed"), "error");
+      }
+    },
+    [cloneMutation, onNavigationChange, queryClient, t, workspaceId],
+  );
+  const handleExport = useCallback(
+    async (agent: Agent) => {
+      try {
+        const document = await exportMutation.mutateAsync(agent.id);
+        downloadText(
+          JSON.stringify(document, null, 2),
+          `${portableFileName(agent.name)}.romeo-assistant.json`,
+          "application/json;charset=utf-8",
+        );
+        toast(t("managedModelExported"), "success");
+      } catch {
+        toast(t("managedModelExportFailed"), "error");
+      }
+    },
+    [exportMutation, t],
+  );
 
   const columns = useMemo(
     () => [
@@ -102,7 +141,7 @@ export function ManagedModelAdminPanel({
       }),
       managedModelColumn.accessor(
         (agent) =>
-          modelById.get(agent.baseModelId)?.displayName ?? agent.baseModelId,
+          modelById.get(agent.baseModelId)?.displayName ?? t("unknown"),
         {
           id: "baseModel",
           header: t("managedModelBaseModel"),
@@ -204,30 +243,15 @@ export function ManagedModelAdminPanel({
       cloneMutation.isPending,
       defaultMutation.isPending,
       exportMutation.isPending,
+      handleClone,
+      handleExport,
+      handleWorkspaceDefault,
       modelById,
       providerById,
       t,
       workspaceDefaultAgentId,
     ],
   );
-
-  async function handleClone(agent: Agent) {
-    try {
-      const cloned = await cloneMutation.mutateAsync({
-        agentId: agent.id,
-        includeKnowledgeBindings: true,
-        name: `${agent.name} copy`,
-      });
-      if (workspaceId)
-        await queryClient.invalidateQueries({
-          queryKey: ["agents", workspaceId],
-        });
-      onNavigationChange(cloned.id);
-      toast(t("managedModelCloned"), "success");
-    } catch {
-      toast(t("managedModelCloneFailed"), "error");
-    }
-  }
 
   async function invalidateAgentLists() {
     if (!workspaceId) return;
@@ -237,20 +261,6 @@ export function ManagedModelAdminPanel({
         queryKey: ["agentGallery", workspaceId],
       }),
     ]);
-  }
-
-  async function handleExport(agent: Agent) {
-    try {
-      const document = await exportMutation.mutateAsync(agent.id);
-      downloadText(
-        JSON.stringify(document, null, 2),
-        `${portableFileName(agent.name)}.romeo-assistant.json`,
-        "application/json;charset=utf-8",
-      );
-      toast(t("managedModelExported"), "success");
-    } catch {
-      toast(t("managedModelExportFailed"), "error");
-    }
   }
 
   async function handleImport(file: File) {
@@ -319,7 +329,7 @@ export function ManagedModelAdminPanel({
           <Input
             accept="application/json,.json"
             aria-label={t("managedModelImport")}
-            className="sr-only"
+            className="rm-ui-visually-hidden"
             name="assistantImport"
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];

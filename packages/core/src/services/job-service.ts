@@ -180,8 +180,10 @@ export function summarizeBackgroundJobs(
 
   for (const job of jobs) {
     incrementCounts(totals, job.status);
-    const summary = byType.get(job.type) ?? createTypeSummary(job.type);
-    byType.set(job.type, summary);
+    const operationalType = operationalJobType(job.type);
+    const summary =
+      byType.get(operationalType) ?? createTypeSummary(operationalType);
+    byType.set(operationalType, summary);
     incrementCounts(summary, job.status);
 
     if (job.status === "queued") {
@@ -233,6 +235,14 @@ export function summarizeBackgroundJobs(
     byType: typeSummaries,
     alerts,
   };
+}
+
+function operationalJobType(type: string): string {
+  // Run execution jobs include the run ID in their claim type so workers can
+  // recover one run independently. That suffix is instance identity, not a
+  // job class: aggregating on it would create unbounded metric cardinality and
+  // expose internal IDs in operational summaries.
+  return type.startsWith("run.execution:") ? "run.execution" : type;
 }
 
 function createTypeSummary(type: string): BackgroundJobTypeSummary {

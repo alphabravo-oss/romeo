@@ -6,7 +6,7 @@ import {
   readFileSync,
   rmSync,
 } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
 const tempDir = resolve(root, "tmp", `python-sdk-drift-${process.pid}`);

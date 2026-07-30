@@ -3,10 +3,10 @@ import Search from "lucide-react/dist/esm/icons/search.mjs";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles.mjs";
 import { Button, Input, Select, StatusBadge, Switch } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import { listModelsPage } from "../features/providers/queries";
-import type { BaseModel, Provider } from "../features/providers/types";
+import type { BaseModel } from "../features/providers/types";
 import { LocalizedTokens } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
 import { BaseModelDetails } from "./BaseModelDetails";
@@ -83,38 +83,41 @@ export function ModelCatalogPanel({
     () => [{ id: sort, desc: direction === "desc" }],
     [direction, sort],
   );
-  const updateModelWithImpact = async (
-    input:
-      | { modelId: string; enabled: boolean }
-      | {
-          modelId: string;
-          capabilities: BaseModel["capabilities"];
-          contextWindow: number;
-        },
-  ) => {
-    if ("enabled" in input && !input.enabled) {
-      const dependentAgents = agents.filter(
-        (agent) => agent.baseModelId === input.modelId,
-      );
-      if (
-        dependentAgents.length > 0 &&
-        !(await ask({
-          title: t("modelDisableImpactTitle"),
-          body: t("modelDisableImpactDescription", {
-            agents: dependentAgents.length,
-            names: dependentAgents
-              .slice(0, 5)
-              .map((agent) => agent.name)
-              .join(", "),
-          }),
-          confirmLabel: t("disable"),
-          tone: "danger",
-        }))
-      )
-        return;
-    }
-    await onUpdateModel(input);
-  };
+  const updateModelWithImpact = useCallback(
+    async (
+      input:
+        | { modelId: string; enabled: boolean }
+        | {
+            modelId: string;
+            capabilities: BaseModel["capabilities"];
+            contextWindow: number;
+          },
+    ) => {
+      if ("enabled" in input && !input.enabled) {
+        const dependentAgents = agents.filter(
+          (agent) => agent.baseModelId === input.modelId,
+        );
+        if (
+          dependentAgents.length > 0 &&
+          !(await ask({
+            title: t("modelDisableImpactTitle"),
+            body: t("modelDisableImpactDescription", {
+              agents: dependentAgents.length,
+              names: dependentAgents
+                .slice(0, 5)
+                .map((agent) => agent.name)
+                .join(", "),
+            }),
+            confirmLabel: t("disable"),
+            tone: "danger",
+          }))
+        )
+          return;
+      }
+      await onUpdateModel(input);
+    },
+    [agents, ask, onUpdateModel, t],
+  );
   const updateModelsWithImpact = async (
     modelIds: string[],
     enabled: boolean,
@@ -317,10 +320,11 @@ export function ModelCatalogPanel({
             ]}
           />
           <div className="rm-model-catalog-toolbar">
-            <label className="rm-model-search">
+            <label className="rm-model-search" htmlFor="model-catalog-search">
               <Search aria-hidden="true" size={15} />
               <Input
                 aria-label={t("searchModels")}
+                id="model-catalog-search"
                 name="modelSearch"
                 onChange={(event) =>
                   onNavigationChange({

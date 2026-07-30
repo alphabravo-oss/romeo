@@ -1,6 +1,3 @@
-import type * as Auth from "@romeo/auth";
-import type * as Ai from "@romeo/ai-runtime";
-
 import type * as OAuth from "../domain/delegated-oauth";
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
@@ -61,6 +58,22 @@ export abstract class InMemoryContentRepository extends InMemoryConversationRepo
         (delivery) => delivery.orgId === orgId && delivery.userId === userId,
       )
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  async listFailedNotificationDeliveries(
+    orgId: string,
+    limit: number,
+  ): Promise<E.NotificationDelivery[]> {
+    return this.data.notificationDeliveries
+      .filter(
+        (delivery) => delivery.orgId === orgId && delivery.status === "failed",
+      )
+      .sort(
+        (left, right) =>
+          left.updatedAt.localeCompare(right.updatedAt) ||
+          left.id.localeCompare(right.id),
+      )
+      .slice(0, limit);
   }
 
   async createNotificationDelivery(

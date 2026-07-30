@@ -16,15 +16,13 @@ import { BrowserAutomationService } from "./browser-automation-service";
 import { ChannelService } from "./channel-service";
 import { ChatService } from "./chat-service";
 import { ChatEventService } from "./chat-event-service";
+import type { ChatEventTransport } from "./chat-event-transport";
 import { ChatExperienceService } from "./chat-experience-service";
 import { ChatCommentService } from "./chat-comment-service";
 import { ChatTagService } from "./chat-tag-service";
 import { CollaborationService } from "./collaboration-service";
 import { DataConnectorService } from "./data-connector-service";
-import {
-  createDataConnectorExecutor,
-  parseCsvEnvironmentList,
-} from "./data-connector-executor-factory";
+import { createDataConnectorExecutor } from "./data-connector-executor-factory";
 import { DelegatedOAuthService } from "./delegated-oauth-service";
 import { DirectorySyncService } from "./directory-sync-service";
 import type { DataConnectorExecutor } from "./data-connector-executors";
@@ -78,6 +76,7 @@ import { ServiceAccountService } from "./service-account-service";
 import {
   canResolveExternalVectorStoreSecret,
   createFileOcrProvider,
+  createChatEventTransport,
   createKnowledgeExtractor,
   createObjectStore,
   createOidcAuthenticator,
@@ -199,6 +198,7 @@ export interface CreateServicesOptions {
   providerFetch?: typeof fetch;
   qdrantClientFactory?: QdrantSdkClientFactory;
   quotaCoordinator?: QuotaCoordinator;
+  chatEventTransport?: ChatEventTransport;
   samlClientFactory?: SamlClientFactory;
   secretResolver?: SecretResolver;
   secretWriter?: SecretWriter;
@@ -223,6 +223,8 @@ export function createServices(
       : withTelemetryObjectStore(baseObjectStore);
   const quotaCoordinator =
     options.quotaCoordinator ?? createQuotaCoordinator(env);
+  const chatEventTransport =
+    options.chatEventTransport ?? createChatEventTransport(env);
   const vectorStoreDeployment = vectorStoreDeploymentFromEnv(env);
   const secretWriter = options.secretWriter ?? createSecretWriter(env);
   const managedSecrets = new ManagedSecretService(
@@ -447,7 +449,7 @@ export function createServices(
       ? {}
       : { scanner: options.fileMalwareScanner }),
   });
-  const chatEvents = new ChatEventService();
+  const chatEvents = new ChatEventService(chatEventTransport);
   const temporaryChatCleanup = new TemporaryChatCleanupWorker(
     repository,
     chats,

@@ -74,7 +74,7 @@ function createWebsiteConnector(context: DataConnectorCommandContext) {
     config: {
       url: requiredFlag(context.parsed, "url"),
       ...(maxPages === undefined ? {} : { maxPages }),
-      ...(sourceAccessModeConfig(context.parsed) ?? {}),
+      ...sourceAccessModeConfig(context.parsed),
     },
   });
 }
@@ -87,7 +87,7 @@ function createRssConnector(context: DataConnectorCommandContext) {
     config: {
       url: requiredFlag(context.parsed, "url"),
       ...(maxItems === undefined ? {} : { maxItems }),
-      ...(sourceAccessModeConfig(context.parsed) ?? {}),
+      ...sourceAccessModeConfig(context.parsed),
     },
   });
 }
@@ -104,7 +104,7 @@ function createS3Connector(context: DataConnectorCommandContext) {
       region: flagValue(context.parsed.flags, "region") ?? "us-east-1",
       ...(maxItems === undefined ? {} : { maxItems }),
       ...(secretRef === undefined ? {} : { secretRef }),
-      ...(sourceAccessModeConfig(context.parsed) ?? {}),
+      ...sourceAccessModeConfig(context.parsed),
     },
   });
 }

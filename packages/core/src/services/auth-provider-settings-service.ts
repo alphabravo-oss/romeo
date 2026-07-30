@@ -1,24 +1,11 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { RomeoEnv } from "@romeo/config";
 
-import {
-  authProviderCatalog,
-  authProviderIds,
-  type AuthProviderCatalogEntry,
-  type AuthProviderId,
-} from "../domain/auth-providers";
+import { type AuthProviderId } from "../domain/auth-providers";
 import type {
   AuthProviderConnectionTestReport,
   AuthProviderConnectionTestRequest,
-  AuthProviderGlobalPatch,
-  AuthProviderLdapConnectionSummary,
-  AuthProviderOAuth2ConnectionSummary,
-  AuthProviderOrgOverridePatch,
-  AuthProviderOrgOverrideSummary,
-  AuthProviderSamlConnectionSummary,
   AuthProviderSettingsReport,
-  AuthProviderSettingSummary,
-  EffectiveAuthProviderSetting,
   UpdateAuthProviderSettingsRequest,
 } from "../domain/auth-provider-settings";
 import type { RomeoRepository } from "../domain/repository";
@@ -36,7 +23,6 @@ import {
   catalogById,
   globalProviderSetting,
   mergeEffective,
-  summarizeEffectiveProvider,
   toReport,
 } from "./auth-provider-settings-resolution";
 import {
@@ -51,51 +37,27 @@ import {
   serializeOrg,
 } from "./auth-provider-settings-storage";
 import {
-  applyOidcConnectionPatch,
   hasOidcConnection,
-  mergeOidcConnection,
   oidcConfigFromProviderConnection,
-  oidcConnectionSummary,
-  parseStoredOidcConnection,
-  type StoredOidcProviderConnection,
 } from "./auth-provider-oidc-config";
 import {
-  applyLdapConnectionPatch,
   hasLdapConnection,
   ldapConfigFromProviderConnection,
-  ldapConnectionSummary,
-  mergeLdapConnection,
-  parseStoredLdapConnection,
   type ResolvedLdapProviderConnection,
-  type StoredLdapProviderConnection,
 } from "./auth-provider-ldap-config";
 import {
-  authProviderSettingsChangeSummary,
-  type AuthProviderAuditSettingsMap,
-} from "./auth-provider-settings-audit";
-import {
-  applyOAuth2ConnectionPatch,
   hasOAuth2Connection,
-  mergeOAuth2Connection,
   oauth2ConfigFromProviderConnection,
-  oauth2ConnectionSummary,
-  parseStoredOAuth2Connection,
   type ResolvedOAuth2ProviderConnection,
-  type StoredOAuth2ProviderConnection,
 } from "./auth-provider-oauth2-config";
 import {
-  applySamlConnectionPatch,
   hasSamlConnection,
-  mergeSamlConnection,
-  parseStoredSamlConnection,
   samlConfigFromProviderConnection,
-  samlConnectionSummary,
   type ResolvedSamlProviderConnection,
-  type StoredSamlProviderConnection,
 } from "./auth-provider-saml-config";
 import type { SecretResolver } from "./secret-resolver";
 import type { LdapClientFactory } from "./ldap-directory-client";
-import { resolveSsoOidcConfig, type ResolvedSsoOidcConfig } from "./sso-config";
+import { type ResolvedSsoOidcConfig } from "./sso-config";
 
 export interface OAuth2ProviderLoginConfig extends ResolvedOAuth2ProviderConnection {
   allowedEmailDomains: string[];

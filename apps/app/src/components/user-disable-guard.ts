@@ -3,11 +3,8 @@
  */
 export function canDisableUser(
   target: { id: string; role: string; status: string },
-  all: readonly { id: string; role: string; status: string }[],
+  activeGlobalAdminTotal: number,
 ): boolean {
   if (target.role !== "global_admin") return true;
-  const activeAdmins = all.filter(
-    (entry) => entry.role === "global_admin" && entry.status === "active",
-  );
-  return activeAdmins.length > 1;
+  return activeGlobalAdminTotal > 1;
 }

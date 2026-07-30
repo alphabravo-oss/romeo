@@ -13,10 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@romeo/auth": "workspace:*",
-    "@romeo/providers": "workspace:*",
-    "@romeo/tools": "workspace:*",
-    "zod": "^4.4.3"
+    "@romeo/providers": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

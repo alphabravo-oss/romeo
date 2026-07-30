@@ -259,7 +259,7 @@ export function redactUrl(value) {
     const url = new URL(value);
     if (url.username.length > 0) url.username = "redacted";
     if (url.password.length > 0) url.password = "redacted";
-    for (const key of [...url.searchParams.keys()]) {
+    for (const key of url.searchParams.keys()) {
       if (/secret|signature|token|key|credential|password/iu.test(key))
         url.searchParams.set(key, "redacted");
     }

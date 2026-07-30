@@ -166,6 +166,7 @@ const defaultProviders = [
     type: "openai-compatible" as const,
     name: "OpenAI-compatible",
     baseUrl: "https://api.openai.com/v1",
+    modelIds: ["gpt-compatible"],
     enabled: true,
     capabilities: openAiCapabilities,
   },

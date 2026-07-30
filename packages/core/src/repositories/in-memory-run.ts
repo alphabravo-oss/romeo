@@ -1,15 +1,8 @@
-import type * as Auth from "@romeo/auth";
 import type * as Ai from "@romeo/ai-runtime";
 
-import type * as OAuth from "../domain/delegated-oauth";
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
-import {
-  append,
-  appendMany,
-  removeById,
-  replaceById,
-} from "./collection-helpers";
+import { append, appendMany, replaceById } from "./collection-helpers";
 import { fileTombstoneFields } from "../domain/file-tombstone";
 import { InMemoryContentRepository } from "./in-memory-content";
 
@@ -95,6 +88,15 @@ export abstract class InMemoryRunRepository extends InMemoryContentRepository {
   async listToolOperations(connectorId: string): Promise<E.ToolOperation[]> {
     return this.data.toolOperations.filter(
       (operation) => operation.connectorId === connectorId,
+    );
+  }
+
+  async listToolOperationsForConnectors(
+    connectorIds: string[],
+  ): Promise<E.ToolOperation[]> {
+    const requested = new Set(connectorIds);
+    return this.data.toolOperations.filter((operation) =>
+      requested.has(operation.connectorId),
     );
   }
 

@@ -100,6 +100,8 @@ export function createToolConnectorRepositoryFragment(
     createToolOperations: repository.createToolOperations.bind(repository),
     listToolConnectors: repository.listToolConnectors.bind(repository),
     listToolOperations: repository.listToolOperations.bind(repository),
+    listToolOperationsForConnectors:
+      repository.listToolOperationsForConnectors.bind(repository),
     updateToolConnector: repository.updateToolConnector.bind(repository),
     updateToolOperation: repository.updateToolOperation.bind(repository),
   };
@@ -230,6 +232,8 @@ export function createNotificationRepositoryFragment(
     createUserNotification: repository.createUserNotification.bind(repository),
     listNotificationDeliveries:
       repository.listNotificationDeliveries.bind(repository),
+    listFailedNotificationDeliveries:
+      repository.listFailedNotificationDeliveries.bind(repository),
     listNotificationDeliveryChannels:
       repository.listNotificationDeliveryChannels.bind(repository),
     listUserNotifications: repository.listUserNotifications.bind(repository),

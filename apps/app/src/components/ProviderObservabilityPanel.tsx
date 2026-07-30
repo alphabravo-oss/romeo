@@ -110,8 +110,8 @@ export function ProviderObservabilityPanel({
       circuit: provider.circuit.state,
       enabledModels: provider.enabledModelCount,
       id: provider.providerId,
-      name: providerNames.get(provider.providerId) ?? provider.providerId,
-      reasons: provider.reasons.join(", "),
+      name: providerNames.get(provider.providerId) ?? t("unknown"),
+      reasons: provider.reasons.map(operationalAlertLabel).join(", "),
       status: provider.status,
       totalModels: provider.modelCount,
     })) ?? [];

@@ -3,6 +3,7 @@ import Search from "lucide-react/dist/esm/icons/search.mjs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useEffect,
+  useId,
   useMemo,
   useState,
   type Dispatch,
@@ -431,11 +432,13 @@ function CatalogSearch(props: {
   onChange: (value: string) => void;
   value: string;
 }) {
+  const inputId = useId();
   return (
-    <label className="rm-model-search">
+    <label className="rm-model-search" htmlFor={inputId}>
       <Search aria-hidden="true" size={15} />
       <Input
         aria-label={props.label}
+        id={inputId}
         onChange={(event) => props.onChange(event.currentTarget.value)}
         placeholder={props.label}
         type="search"

@@ -14,6 +14,7 @@ import type { AuthProviderSettingsService } from "./auth-provider-settings-servi
 import { OidcClient, type ResolvedOidcClientConfig } from "./oidc-client";
 import { normalizeIssuer } from "./sso-config";
 import type { CreatedUserSession, SessionService } from "./session-service";
+import { normalizeAppOrigin, sanitizeAuthReturnTo } from "./auth-navigation";
 
 export interface OidcPkceStartResult {
   authorizationUrl: string;
@@ -100,7 +101,10 @@ export class OidcPkceService {
         ? {}
         : { providerId: input.providerId }),
       redirectUri,
-      returnTo: sanitizeReturnTo(input.returnTo),
+      returnTo: sanitizeAuthReturnTo(input.returnTo, {
+        errorCode: "invalid_oidc_return_to",
+        flowName: "OIDC",
+      }),
       expiresAt,
     });
 
@@ -335,11 +339,6 @@ export class OidcPkceService {
   }
 }
 
-function normalizeAppOrigin(value: string): string {
-  const url = new URL(value);
-  return `${url.protocol}//${url.host}`;
-}
-
 function normalizeOrgId(value: string | undefined): string {
   const normalized = value?.trim();
   if (normalized === undefined || normalized.length === 0) return "org_default";
@@ -351,23 +350,6 @@ function normalizeOrgId(value: string | undefined): string {
     );
   }
   return normalized;
-}
-
-function sanitizeReturnTo(value: string | undefined): string {
-  if (value === undefined || value.length === 0) return "/";
-  if (
-    value.length > 500 ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    /[\r\n]/u.test(value)
-  ) {
-    throw new ApiError(
-      "invalid_oidc_return_to",
-      "OIDC return path must be a relative application path.",
-      400,
-    );
-  }
-  return value;
 }
 
 function randomToken(byteLength: number): string {

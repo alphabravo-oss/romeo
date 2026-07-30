@@ -9,7 +9,6 @@ import {
 import type { Workspace } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
-import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
 
 export interface WorkspaceExportDocument {

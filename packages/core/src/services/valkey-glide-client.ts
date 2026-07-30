@@ -40,7 +40,7 @@ export class ValkeyGlideClient {
 
   private client(): Promise<GlideClient> {
     if (this.clientPromise !== undefined) return this.clientPromise;
-    const configuration = glideConfiguration(this.options);
+    const configuration = valkeyGlideConfiguration(this.options);
     const pending = GlideClient.createClient(configuration);
     this.clientPromise = pending;
     void pending.catch(() => {
@@ -50,7 +50,10 @@ export class ValkeyGlideClient {
   }
 }
 
-function glideConfiguration(options: { timeoutMs: number; url: string }) {
+export function valkeyGlideConfiguration(options: {
+  timeoutMs: number;
+  url: string;
+}) {
   const url = new URL(options.url);
   if (url.protocol !== "redis:" && url.protocol !== "rediss:") {
     throw new Error("valkey_url_protocol_invalid");

@@ -52,11 +52,10 @@ export const Route = createFileRoute("/login")({
   head: () => ({
     links: [{ rel: "stylesheet", href: loginCss }],
   }),
-  validateSearch: (search: Record<string, unknown>): LoginSearch => ({
-    ...(typeof search.returnTo === "string"
+  validateSearch: (search: Record<string, unknown>): LoginSearch =>
+    typeof search.returnTo === "string"
       ? { returnTo: safeReturnTo(search.returnTo) }
-      : {}),
-  }),
+      : {},
   component: LoginPage,
 });
 

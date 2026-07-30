@@ -279,7 +279,7 @@ export class DataConnectorService {
             sourceIds,
             summary: {
               connectorType: connector.type,
-              ...(execution.summary ?? {}),
+              ...execution.summary,
               sourceAccessMode: connectorSourceAccessMode(connector.config),
               sourceCount: sourceIds.length,
               createdSourceCount,

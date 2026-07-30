@@ -7,22 +7,18 @@ import {
   jsonResponse,
   standardErrorResponses,
 } from "./common";
+import {
+  adminUserRoleSchema as userRole,
+  AdminUserListQuerySchema,
+  AdminUserPageSchema,
+  AdminUserSchema,
+  administrationIdentifierSchema as identifier,
+} from "./administration-users";
 
-const identifier = z.string().trim().min(1).max(300);
+export { AdminUserPageSchema, AdminUserSchema } from "./administration-users";
+
 const timestamp = z.iso.datetime();
 const scope = z.enum(scopeValues);
-const userRole = z.enum(["user", "org_admin", "global_admin"]);
-
-export const AdminUserSchema = z
-  .strictObject({
-    id: identifier,
-    orgId: identifier,
-    email: z.email(),
-    name: z.string().min(1),
-    role: userRole,
-    disabledAt: timestamp.optional(),
-  })
-  .openapi("AdminUser");
 export const GroupSchema = z
   .strictObject({
     id: identifier,
@@ -234,8 +230,11 @@ export const listUsersRoute = createRoute({
   path: "/api/v1/users",
   operationId: "administration.listUsers",
   summary: "List organization users",
+  request: {
+    query: AdminUserListQuerySchema,
+  },
   responses: {
-    200: jsonResponse("Users", dataEnvelope(z.array(AdminUserSchema))),
+    200: jsonResponse("Users", AdminUserPageSchema),
     ...errors,
   },
 });

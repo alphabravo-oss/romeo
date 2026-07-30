@@ -382,7 +382,7 @@ async function request(config, path, options = {}) {
 function requestHeaders(options) {
   const headers = {
     accept: options.acceptJson ? "application/json" : "*/*",
-    ...(options.extraHeaders ?? {}),
+    ...options.extraHeaders,
   };
   if (options.token !== undefined && options.token.length > 0) {
     headers.authorization = `Bearer ${options.token}`;

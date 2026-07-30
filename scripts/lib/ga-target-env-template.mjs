@@ -261,7 +261,7 @@ function safeEvidencePath(input) {
 
 function safeString(input, fallback) {
   if (typeof input !== "string" || input.length === 0) return fallback;
-  if (!/^[A-Za-z0-9 _./:@,()'\-]{1,180}$/u.test(input)) return fallback;
+  if (!/^[A-Za-z0-9 _./:@,()'-]{1,180}$/u.test(input)) return fallback;
   return input;
 }
 

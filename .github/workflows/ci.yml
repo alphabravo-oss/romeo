@@ -23,7 +23,7 @@ jobs:
   quality:
     name: Quality Gates
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,8 +60,26 @@ jobs:
           fi
           xargs -0 pnpm exec prettier --check --ignore-unknown < /tmp/romeo-prettier-files
 
+      - name: Audit production dependencies
+        run: pnpm audit:prod
+
+      - name: Lint source
+        run: pnpm lint
+
       - name: Check architecture ratchets
         run: pnpm check:architecture
+
+      - name: Check dependency boundaries
+        run: pnpm check:dependencies
+
+      - name: Check dead code and unused dependencies
+        run: pnpm check:dead-code
+
+      - name: Check test contracts
+        run: pnpm check:test-contracts
+
+      - name: Check UI form contracts
+        run: pnpm check:ui-form-contracts
 
       - name: Lint OpenAPI contracts
         run: pnpm contract:lint
@@ -87,8 +105,14 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Enforce coverage ratchets
+        run: pnpm test:coverage
+
       - name: Build
         run: pnpm build
+
+      - name: Enforce application bundle budgets
+        run: pnpm check:bundle-budget
 
       - name: Install browser quality engines
         run: pnpm exec playwright install --with-deps chromium firefox webkit
@@ -358,7 +382,7 @@ jobs:
         run: pnpm containers:scan-plan -- --scanner trivy --output dist/release/container-scan-plan.json
 
       - name: Generate offline security evidence
-        run: pnpm release:security -- --manifest dist/release/release-manifest.json --sbom dist/release/sbom.cdx.json --skip-audit --output dist/release/security-evidence.json
+        run: pnpm release:security -- --manifest dist/release/release-manifest.json --sbom dist/release/sbom.cdx.json --output dist/release/security-evidence.json
 
       - name: Generate release provenance evidence
         run: pnpm release:provenance -- --manifest dist/release/release-manifest.json --channel-file dist/release/release-channel.json --security-evidence dist/release/security-evidence.json --sbom dist/release/sbom.cdx.json --commit-sha "$GITHUB_SHA" --source-repo "$GITHUB_REPOSITORY" --source-ref "$GITHUB_REF" --builder-id "$GITHUB_WORKFLOW" --ci-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --output dist/release/release-provenance.json

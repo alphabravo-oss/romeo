@@ -28,8 +28,6 @@ import {
   stableWebhookDeliveryId,
   summarizeWebhookPayload,
   validateEventTypes,
-  WEBHOOK_DELIVERY_PAGE_DEFAULT_LIMIT,
-  WEBHOOK_DELIVERY_PAGE_MAX_LIMIT,
 } from "./webhook-service-helpers";
 import { deriveWebhookSecret, signWebhookPayload } from "./webhook-signing";
 import { normalizeWebhookUrl } from "./webhook-url";
@@ -287,7 +285,7 @@ export class WebhookService {
     return this.deliver(subscription, "webhook.test", {
       requestedBy: input.subject.id,
       subscriptionId: subscription.id,
-      ...(input.payload ?? {}),
+      ...input.payload,
     });
   }
 

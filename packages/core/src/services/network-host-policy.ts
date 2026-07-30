@@ -9,9 +9,9 @@ export function isPrivateNetworkHost(hostname: string): boolean {
   }
   if (host === "0.0.0.0" || host === "::1" || host === "[::1]") return true;
   if (
-    /^127\./u.test(host) ||
-    /^10\./u.test(host) ||
-    /^192\.168\./u.test(host)
+    host.startsWith("127.") ||
+    host.startsWith("10.") ||
+    host.startsWith("192.168.")
   ) {
     return true;
   }

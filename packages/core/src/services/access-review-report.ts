@@ -12,6 +12,7 @@ import type {
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { accessReviewPolicyPosture } from "./identity-lifecycle-policy";
+import { listToolOperationsByConnector } from "./tool-operation-catalog";
 
 export { accessReviewReportCsv } from "./access-review-report-csv";
 
@@ -61,16 +62,9 @@ export async function buildAccessReviewReport(
       ),
     ),
   );
-  const operationsByConnector = new Map(
-    await Promise.all(
-      toolConnectors.map(
-        async (connector) =>
-          [
-            connector.id,
-            await repository.listToolOperations(connector.id),
-          ] as const,
-      ),
-    ),
+  const operationsByConnector = await listToolOperationsByConnector(
+    repository,
+    toolConnectors,
   );
   const supportAccess = supportAccessPosture(auditLogs, sessionsByUser);
   const activeUserApiKeys = apiKeys.filter(

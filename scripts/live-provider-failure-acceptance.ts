@@ -235,11 +235,12 @@ async function handleRequest(
 }
 
 function closeServer(): Promise<void> {
-  return new Promise((resolveClose, rejectClose) =>
-    server.close((error) =>
-      error === undefined ? resolveClose() : rejectClose(error),
-    ),
-  );
+  return new Promise((resolveClose, rejectClose) => {
+    server.close((error) => {
+      if (error === undefined) resolveClose();
+      else rejectClose(error);
+    });
+  });
 }
 
 function codedError(errorCode: string): { errorCode: string } {

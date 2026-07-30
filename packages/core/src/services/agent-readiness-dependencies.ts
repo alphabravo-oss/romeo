@@ -10,6 +10,7 @@ import { listBuiltInTools } from "@romeo/tools";
 import type { Agent, AgentVersion } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import type { AgentReadinessCheck, AgentReadinessKey } from "./agent-readiness";
+import { listToolOperationsByConnector } from "./tool-operation-catalog";
 
 export async function buildAgentDependencyReadinessChecks(
   repository: RomeoRepository,
@@ -195,8 +196,12 @@ async function toolsCheck(
     string,
     { connectorEnabled: boolean; operationEnabled: boolean }
   >();
+  const operationsByConnector = await listToolOperationsByConnector(
+    repository,
+    connectors,
+  );
   for (const connector of connectors) {
-    for (const operation of await repository.listToolOperations(connector.id)) {
+    for (const operation of operationsByConnector.get(connector.id) ?? []) {
       operations.set(operation.id, {
         connectorEnabled: connector.enabled,
         operationEnabled: operation.enabled,

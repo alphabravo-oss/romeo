@@ -1,4 +1,3 @@
-import { Button } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 
 import { listToolCalls } from "../features/tools";

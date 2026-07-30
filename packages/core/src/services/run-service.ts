@@ -1,26 +1,6 @@
-import {
-  AuthorizationError,
-  assertScope,
-  canAccessOrg,
-  hasGrant,
-  hasWorkspaceAccess,
-  scopeValues,
-  type AuthSubject,
-  type Scope,
-} from "@romeo/auth";
-import {
-  ProviderCircuitBreaker,
-  streamRunEvents,
-  type RunEvent,
-} from "@romeo/ai-runtime";
-import {
-  getProviderAdapter,
-  type BaseModel,
-  type ChatMessage,
-  type ProviderInstance,
-  type ProviderToolDefinition,
-  type ProviderTokenUsage,
-} from "@romeo/providers";
+import { assertScope, type AuthSubject } from "@romeo/auth";
+import { ProviderCircuitBreaker, type RunEvent } from "@romeo/ai-runtime";
+import { type BaseModel } from "@romeo/providers";
 import {
   disabledObjectStore,
   MemoryObjectStore,
@@ -28,131 +8,35 @@ import {
 } from "@romeo/storage";
 
 import type {
-  AgentVersion,
-  BackgroundJob,
-  FileObject,
-  Message,
-  MessagePart,
-  QueuedChatTurn as PersistedQueuedChatTurn,
   RunRecord,
-  ToolOperationDispatchPayloadStoreReference,
   ToolOperationDispatchReadbackResponse,
 } from "../domain/entities";
 import {
   getRomeoRepositoryRuntime,
   type RomeoRepository,
 } from "../domain/repository";
-import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
-import { canReadChat, canWriteChat, getAuthorizedChat } from "./chat-access";
-import {
-  ActiveRunControllers,
-  replayRunEvents,
-  terminalRunEvents,
-} from "./run-events";
+import { replayRunEvents, terminalRunEvents } from "./run-events";
 import type { RunEventSequencer } from "./run-event-sequencer";
-import { historyMessageLimit } from "./agent-memory";
-import {
-  buildRunMessages,
-  historyBefore,
-  orderChatHistory,
-} from "./run-messages";
-import {
-  appendDocumentContext,
-  buildCanonicalRunContext,
-  managedModelSystemPrompt,
-  resolveGovernedRunFiles,
-  resolveManagedModelCustomization,
-  resolveRetainedMessageContext,
-} from "./run-context-builder";
-import {
-  publicQueuedTurn,
-  runUserMessage,
-  type QueuedChatTurn,
-} from "./run-command-service";
-import {
-  executionJobPayload,
-  isTerminalRunStatus,
-  runExecutionCheckpoint,
-  runExecutionCheckpointKey,
-  runExecutionJobType,
-  runWithStatus,
-  type RunExecutionCheckpoint,
-  type RunExecutionJobPayload,
-} from "./run-recovery-service";
-import {
-  assistantContentFromRunEvents,
-  citationsFromRunEvents,
-  providerUsageFromEvent,
-  routedRunTarget,
-  routeServingModel,
-} from "./run-stream-service";
-import {
-  drainRunTerminalOutbox as drainTerminalOutboxEffect,
-  persistTerminalRun as persistTerminalRunEffect,
-  persistTerminalRunInRepository as persistTerminalRunInRepositoryEffect,
-  type PersistTerminalRunInput,
-} from "./run-terminal-effects";
-import {
-  boundedModelToolResultContent,
-  deleteDispatchPayloadObjects,
-  deleteObjectKeys,
-  dispatchContinuationArguments,
-  dispatchPayloadStoreReference,
-  dispatchReadbackToolResult,
-  dispatchRunContext,
-  dispatchWaitEventData,
-  modelToolExecutionResult,
-  objectFromToolInput,
-  payloadString,
-  subjectFromDispatchJob,
-  type DispatchPayloadStorage,
-  type RunToolDispatchWait,
-} from "./run-tool-service";
-import { enforceAgentSafetySettings } from "./agent-safety";
-import { assertAbuseControlsAllow } from "./abuse-control-service";
-import { consumeQuota } from "./consume-quota";
-import { storeMessageAttachments } from "./message-attachments";
-import { resolveRunContext } from "./run-context";
+import { type QueuedChatTurn } from "./run-command-service";
+import { type RunToolDispatchWait } from "./run-tool-service";
 import {
   RunContextInspectionService,
   type RunContextInspectionInput,
 } from "./run-context-inspection-service";
-import {
-  appendRunCitations,
-  buildRunKnowledgeContext,
-  type RunKnowledgeCitation,
-  type RunKnowledgeSafetySummary,
-} from "./run-knowledge";
-import { objectKeys } from "./tool-execution";
-import { recordRunStartedUsage } from "./run-usage";
+import { type RunKnowledgeCitation } from "./run-knowledge";
 import { recordUsage } from "./record-usage";
 import {
-  continueTelemetryContext,
-  currentTelemetryMetadata,
-  withTelemetryFetch,
-} from "./telemetry-context";
-import {
-  createProviderRoutePlan,
   createProviderRoutingPolicy,
-  type ProviderRoutePlan,
   type ProviderRoutingPolicy,
 } from "./provider-routing";
 import {
   summarizeProviderOperations,
   type ProviderOperationalSummary,
 } from "./provider-operational-summary";
-import { buildProviderToolDefinitions } from "./provider-tool-schemas";
-import { persistedSubjectActorId } from "./subject-persisted-actor";
-import { createUserAuthSubject } from "./auth-subject";
-import { isToolDispatchPayloadStoreReference } from "./tool-dispatch-payload-store";
 import type { WebhookEmitter } from "./webhook-service";
-import { writeAuditLog } from "./audit-log";
-import { resolveRunMemories } from "./workspace-content-service";
-import { LocalDocumentTextExtractor } from "./local-document-extractor";
 import type {
   DeferredRunStart,
-  PreparedRunStart,
   RunServiceOptions,
   StartRunInput,
 } from "./run-service-contracts";
@@ -171,13 +55,6 @@ export type {
   RunServiceOptions,
   StartRunInput,
 } from "./run-service-contracts";
-import {
-  appendManagedModelPreferences,
-  getManagedModelCustomizationPolicy,
-  getManagedModelPreferences,
-  type ManagedModelCustomizationPolicy,
-  type ManagedModelPreferences,
-} from "./managed-model-customization";
 
 export class RunService {
   private readonly providerCircuitBreaker: ProviderCircuitBreaker;

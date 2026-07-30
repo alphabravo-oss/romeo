@@ -9,6 +9,7 @@ import type {
 } from "../domain/entities";
 import { isToolDispatchPayloadStoreReference } from "./tool-dispatch-payload-store";
 import type { ToolDispatchPayloadStore } from "./tool-dispatch-payload-store";
+import { reportCleanupFailure } from "./telemetry-context";
 
 export type DispatchPayloadStorage =
   | "external_worker_secret_store_required"
@@ -178,6 +179,7 @@ export async function deleteDispatchPayloadObjects(
       try {
         await payloadStore.delete(reference);
       } catch {
+        reportCleanupFailure("run_tool.delete_dispatch_payload");
         // Object-store lifecycle expiry is the fallback for cleanup failures.
       }
     }),
@@ -194,6 +196,7 @@ export async function deleteObjectKeys(
       try {
         await objectStore.deleteObject(key);
       } catch {
+        reportCleanupFailure("run_tool.delete_object");
         // Object-store lifecycle expiry is the fallback for cleanup failures.
       }
     }),

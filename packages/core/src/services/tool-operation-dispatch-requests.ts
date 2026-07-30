@@ -1,29 +1,14 @@
-import { assertScope, type AuthSubject } from "@romeo/auth";
+import { assertScope } from "@romeo/auth";
 
 import type {
-  BackgroundJob,
-  ToolConnector,
-  ToolOperation,
-  ToolOperationDispatchPayloadStorage,
   ToolOperationDispatchPayloadStoreReference,
   ToolOperationDispatchRequestClaimResult,
   ToolOperationDispatchRequestPayloadResult,
-  ToolOperationDispatchRequestExpiryReason,
   ToolOperationDispatchRequestExpiryResult,
-  ToolOperationDispatchReadbackResponse,
   ToolOperationDispatchRequestReadbackResult,
-  ToolOperationDispatchTransport,
 } from "../domain/entities";
-import type { RomeoRepository } from "../domain/repository";
-import { ApiError, notFound } from "../errors";
-import { createId } from "../ids";
+import { ApiError } from "../errors";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
-import {
-  isToolDispatchPayloadStoreReference,
-  type ToolDispatchPayload,
-  type ToolDispatchPayloadStore,
-} from "./tool-dispatch-payload-store";
-import { writeAuditLog } from "./audit-log";
 import { continueTelemetryContextFromPayload } from "./telemetry-context";
 import { claimResult } from "./tool-operation-dispatch-request-claim";
 import {

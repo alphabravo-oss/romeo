@@ -28,11 +28,20 @@ import type {
   UserSession,
   Workspace,
 } from "./entities";
-import type { ModelCatalogQuery, TenantDataPurgeResult } from "./repository";
+import type {
+  ModelCatalogQuery,
+  TenantDataPurgeResult,
+  UserCatalogPage,
+  UserCatalogQuery,
+} from "./repository";
 
 export interface RepositoryIdentityCapability {
   getCurrentUser(userId: string): Promise<User | undefined>;
   listUsers(orgId: string): Promise<User[]>;
+  listUsersPage(
+    orgId: string,
+    query: UserCatalogQuery,
+  ): Promise<UserCatalogPage>;
   createUser(user: User): Promise<User>;
   updateUser(user: User): Promise<User>;
   listGroups(orgId: string): Promise<Group[]>;
@@ -168,11 +177,13 @@ export interface RepositoryIdentityCapability {
     principalId: string,
   ): Promise<void>;
   listEvalSuites(agentId: string): Promise<EvalSuite[]>;
+  listEvalSuitesForAgents(agentIds: string[]): Promise<EvalSuite[]>;
   getEvalSuite(suiteId: string): Promise<EvalSuite | undefined>;
   createEvalSuite(suite: EvalSuite): Promise<EvalSuite>;
   listEvalCases(suiteId: string): Promise<EvalCase[]>;
   createEvalCases(cases: EvalCase[]): Promise<EvalCase[]>;
   listEvalRuns(agentId: string): Promise<EvalRun[]>;
+  listEvalRunsForAgents(agentIds: string[]): Promise<EvalRun[]>;
   getEvalRun(runId: string): Promise<EvalRun | undefined>;
   createEvalRun(run: EvalRun): Promise<EvalRun>;
   getEvalRunResult(resultId: string): Promise<EvalRunResult | undefined>;

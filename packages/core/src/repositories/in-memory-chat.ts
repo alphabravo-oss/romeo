@@ -1,21 +1,19 @@
-import type * as Auth from "@romeo/auth";
-import type * as Ai from "@romeo/ai-runtime";
-
-import type * as OAuth from "../domain/delegated-oauth";
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
-import {
-  append,
-  appendMany,
-  removeById,
-  replaceById,
-} from "./collection-helpers";
+import { append, appendMany, replaceById } from "./collection-helpers";
 import { InMemoryCatalogRepository } from "./in-memory-catalog";
 
 export abstract class InMemoryChatRepository extends InMemoryCatalogRepository {
   async listEvalSuites(agentId: string): Promise<E.EvalSuite[]> {
     return this.data.evalSuites
       .filter((suite) => suite.agentId === agentId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  async listEvalSuitesForAgents(agentIds: string[]): Promise<E.EvalSuite[]> {
+    const requested = new Set(agentIds);
+    return this.data.evalSuites
+      .filter((suite) => requested.has(suite.agentId))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
@@ -40,6 +38,13 @@ export abstract class InMemoryChatRepository extends InMemoryCatalogRepository {
   async listEvalRuns(agentId: string): Promise<E.EvalRun[]> {
     return this.data.evalRuns
       .filter((run) => run.agentId === agentId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  async listEvalRunsForAgents(agentIds: string[]): Promise<E.EvalRun[]> {
+    const requested = new Set(agentIds);
+    return this.data.evalRuns
+      .filter((run) => requested.has(run.agentId))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 

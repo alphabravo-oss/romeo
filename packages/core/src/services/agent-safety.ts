@@ -99,10 +99,7 @@ export function enforceAgentSafetySettings(
 
   const blockedTerms = settings.blockedTerms ?? [];
   const normalizedContent = content.toLocaleLowerCase();
-  if (
-    blockedTerms.length > 0 &&
-    blockedTerms.some((term) => normalizedContent.includes(term))
-  ) {
+  if (blockedTerms.some((term) => normalizedContent.includes(term))) {
     throw new ApiError(
       "agent_safety_blocked_term",
       "User input violates this agent safety policy.",

@@ -1,7 +1,7 @@
 import { AuthorizationError, assertScope, type AuthSubject } from "@romeo/auth";
 
 import type { RomeoRepository } from "../domain/repository";
-import { ApiError, notFound } from "../errors";
+import { ApiError } from "../errors";
 import { createId } from "../ids";
 import {
   assertTrueAdminUser,

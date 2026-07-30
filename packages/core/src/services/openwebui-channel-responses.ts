@@ -42,7 +42,7 @@ export function toChannelListItem(
       .map(toChannelUserResponse);
   }
   if (callerMember?.isChannelPinned === true) {
-    item.meta = { ...(item.meta ?? {}), is_channel_pinned: true };
+    item.meta = { ...item.meta, is_channel_pinned: true };
   }
   return item;
 }

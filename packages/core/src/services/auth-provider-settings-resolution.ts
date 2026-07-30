@@ -1,5 +1,3 @@
-import type { AuthSubject } from "@romeo/auth";
-
 import {
   authProviderCatalog,
   type AuthProviderCatalogEntry,
@@ -16,25 +14,21 @@ import type {
 import { ApiError } from "../errors";
 import {
   applyLdapConnectionPatch,
-  hasLdapConnection,
   ldapConnectionSummary,
   mergeLdapConnection,
 } from "./auth-provider-ldap-config";
 import {
   applyOAuth2ConnectionPatch,
-  hasOAuth2Connection,
   mergeOAuth2Connection,
   oauth2ConnectionSummary,
 } from "./auth-provider-oauth2-config";
 import {
   applyOidcConnectionPatch,
-  hasOidcConnection,
   mergeOidcConnection,
   oidcConnectionSummary,
 } from "./auth-provider-oidc-config";
 import {
   applySamlConnectionPatch,
-  hasSamlConnection,
   mergeSamlConnection,
   samlConnectionSummary,
 } from "./auth-provider-saml-config";

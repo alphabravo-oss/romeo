@@ -1,49 +1,10 @@
-import {
-  AuthorizationError,
-  assertScope,
-  canAccessOrg,
-  hasGrant,
-  hasWorkspaceAccess,
-  type AuthSubject,
-} from "@romeo/auth";
-import { listBuiltInTools, type ToolDefinition } from "@romeo/tools";
-import { ZodError } from "zod";
+import { assertScope, type AuthSubject } from "@romeo/auth";
 
-import type {
-  Agent,
-  AgentToolBinding,
-  BackgroundJob,
-  ToolCallRecord,
-  ToolConnector,
-  ToolOperation,
-  ToolOperationDispatchRequestResult,
-} from "../domain/entities";
+import type { ToolCallRecord } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
-import { ApiError, notFound } from "../errors";
-import { createId } from "../ids";
-import { assertAbuseControlsAllow } from "./abuse-control-service";
-import { consumeQuota } from "./consume-quota";
-import { recordSubjectUsage } from "./record-usage";
+import { notFound } from "../errors";
 import type { RunEventSequencer } from "./run-event-sequencer";
-import { disabledSecretResolver } from "./secret-resolver";
-import { recordToolCall } from "./tool-call-records";
-import { enqueueToolOperationDispatch } from "./tool-operation-dispatch";
-import {
-  createOperationToolDefinition,
-  type OperationToolInput,
-  parseOperationToolInput,
-} from "./tool-operation-tooling";
-import {
-  toolAuditMetadata,
-  toAgentToolSummary,
-  toToolSummary,
-  withTimeout,
-  type AgentToolSummary,
-  type ToolSummary,
-} from "./tool-execution";
-import { appendToolRunEvent, getToolRun } from "./tool-run-events";
-import { writeAuditLog } from "./audit-log";
-import { emitWebhookEvent } from "./webhook-events";
+import { type AgentToolSummary, type ToolSummary } from "./tool-execution";
 import type { WebhookEmitter } from "./webhook-service";
 import { BuiltInToolExecutionService } from "./built-in-tool-execution-service";
 import { OperationToolExecutionService } from "./operation-tool-execution-service";
@@ -52,43 +13,11 @@ import { ToolApprovalQueryService } from "./tool-approval-query-service";
 import { ToolCatalogService } from "./tool-catalog-service";
 import { ToolExecutionSupport } from "./tool-execution-support";
 import type {
-  OperationToolContext,
   ToolApprovalDecisionResult,
-  ToolApprovalDecisionStatus,
   ToolApprovalRequestSummary,
   ToolServiceOptions,
 } from "./tool-service-contracts";
-import {
-  TOOL_APPROVAL_TTL_MS,
-  assertRunToolExecutionAllowed,
-  isToolExecutionReplayError,
-  isUniqueConstraintError,
-  operationApprovalConsumed,
-  operationApprovalDecision,
-  operationApprovalExpired,
-  operationApprovalRequired,
-  operationDispatchModelOutput,
-  operationToolAuditMetadata,
-  optionalStringProperty,
-  stringArrayPayload,
-  stringDetail,
-  stringPayload,
-  stringPayloadOptional,
-  toolApprovalAuditAction,
-  toolApprovalConsumed,
-  toolApprovalDecision,
-  toolApprovalDecisionActorKey,
-  toolApprovalDecisionErrorCode,
-  toolApprovalDecisionFromJob,
-  toolApprovalDecisionJob,
-  toolApprovalDecisionTimestampKey,
-  toolApprovalDecisionTimestampProperty,
-  toolApprovalExpired,
-  toolExecutionIdempotencyJob,
-  toolExecutionReplayError,
-  toolOperationApprovalAuditAction,
-  toolOperationApprovalDecisionErrorCode,
-} from "./tool-service-helpers";
+import { assertRunToolExecutionAllowed } from "./tool-service-helpers";
 
 export type {
   ToolApprovalDecisionResult,

@@ -306,11 +306,12 @@ async function requestStatus(
   token?: string,
 ): Promise<number> {
   try {
-    const response = await targetApi.request(path, {
-      ...(token === undefined
+    const response = await targetApi.request(
+      path,
+      token === undefined
         ? {}
-        : { headers: { authorization: `Bearer ${token}` } }),
-    });
+        : { headers: { authorization: `Bearer ${token}` } },
+    );
     return response.status;
   } catch (error) {
     return statusFromExpectedError(error);

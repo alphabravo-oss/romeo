@@ -28,7 +28,6 @@ import {
   toWorkspaceFolderItemInsert,
   toWorkspaceFolderItemRecord,
   toWorkspaceFolderRecord,
-  type FavoritableResourceTypeRecord,
   type PromptTemplateRecord,
   type PromptTemplateVisibilityRecord,
   type ResourceFavoriteRecord,

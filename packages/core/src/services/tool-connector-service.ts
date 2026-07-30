@@ -42,6 +42,7 @@ import {
   buildToolOperationTestPreview,
   type ToolOperationTestInput,
 } from "./tool-operation-test";
+import { listToolOperationsByConnector } from "./tool-operation-catalog";
 
 export class ToolConnectorService extends ToolConnectorDispatchService {
   constructor(
@@ -55,16 +56,8 @@ export class ToolConnectorService extends ToolConnectorDispatchService {
   async list(subject: AuthSubject): Promise<ToolConnector[]> {
     assertScope(subject, "tools:manage");
     const connectors = await this.repository.listToolConnectors(subject.orgId);
-    const [operationsByConnector, agentsByWorkspace] = await Promise.all([
-      Promise.all(
-        connectors.map(
-          async (connector) =>
-            [
-              connector.id,
-              await this.repository.listToolOperations(connector.id),
-            ] as const,
-        ),
-      ),
+    const [operationMap, agentsByWorkspace] = await Promise.all([
+      listToolOperationsByConnector(this.repository, connectors),
       Promise.all(
         subject.workspaceIds.map((workspaceId) =>
           this.repository.listAgents(workspaceId),
@@ -82,7 +75,6 @@ export class ToolConnectorService extends ToolConnectorDispatchService {
       ),
     );
     const agentBindings = new Map(bindingsByAgent);
-    const operationMap = new Map(operationsByConnector);
     return connectors.map((connector) => {
       const operationIds = new Set(
         (operationMap.get(connector.id) ?? []).map((operation) => operation.id),

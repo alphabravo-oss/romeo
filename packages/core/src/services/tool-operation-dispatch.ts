@@ -1,19 +1,10 @@
-import { assertScope, type AuthSubject } from "@romeo/auth";
-import { createHash } from "node:crypto";
+import { assertScope } from "@romeo/auth";
 
 import type {
-  BackgroundJob,
-  ToolConnector,
-  ToolOperation,
-  ToolOperationDispatchPayloadStorage,
-  ToolOperationDispatchPayloadStoreReference,
   ToolOperationDispatchRequestResult,
   ToolOperationDispatchResult,
-  ToolOperationDispatchTransport,
 } from "../domain/entities";
-import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
-import { createId } from "../ids";
 import {
   assertAbuseControlsAllow,
   type AbuseControlEnforcementInput,
@@ -24,19 +15,10 @@ import {
   queueBackgroundJob,
   startBackgroundJob,
 } from "./job-service";
-import { resolveOAuthClientCredentialsAccessToken } from "./tool-oauth-client-credentials";
-import type { SecretResolver } from "./secret-resolver";
 import {
   buildToolOperationTestPreview,
   type ToolOperationTestInput,
 } from "./tool-operation-test";
-import { validateToolOperationResponse } from "./tool-response-validation";
-import {
-  type ToolDispatchPayload,
-  type ToolDispatchPayloadAuth,
-  type ToolDispatchPayloadStore,
-} from "./tool-dispatch-payload-store";
-import { writeAuditLog } from "./audit-log";
 import {
   auditDispatch,
   auditDispatchFailure,

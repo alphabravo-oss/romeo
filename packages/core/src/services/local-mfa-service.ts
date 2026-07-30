@@ -3,7 +3,7 @@ import type { RomeoEnv } from "@romeo/config";
 
 import type { LocalMfaFactor, User } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
-import { ApiError, notFound } from "../errors";
+import { ApiError } from "../errors";
 import { createId } from "../ids";
 import { LocalAuthAudit } from "./local-auth-audit";
 import { requireOwnedMfaFactor, requireSubjectUser } from "./local-mfa-access";

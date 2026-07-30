@@ -2,6 +2,7 @@ import { assertScope, type AuthSubject, type UserRole } from "@romeo/auth";
 
 import type { User, UserSession } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import type { UserCatalogPage, UserCatalogQuery } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { normalizeUserRole } from "./auth-subject";
@@ -13,6 +14,14 @@ export class UserLifecycleService {
   async list(subject: AuthSubject): Promise<User[]> {
     assertScope(subject, "admin:read");
     return this.repository.listUsers(subject.orgId);
+  }
+
+  async listPage(
+    subject: AuthSubject,
+    query: UserCatalogQuery,
+  ): Promise<UserCatalogPage> {
+    assertScope(subject, "admin:read");
+    return this.repository.listUsersPage(subject.orgId, query);
   }
 
   async updateCurrentProfile(input: {

@@ -14,6 +14,10 @@ import {
 
 import type { RomeoRepository } from "../domain/repository";
 import {
+  InMemoryChatEventTransport,
+  type ChatEventTransport,
+} from "./chat-event-transport";
+import {
   AwsSecretsManagerResolver,
   AzureKeyVaultResolver,
   CloudSecretResolver,
@@ -50,6 +54,7 @@ import {
   type ToolDispatchPayloadStore,
 } from "./tool-dispatch-payload-store";
 import { ValkeyQuotaCoordinator } from "./valkey-quota-coordinator";
+import { ValkeyChatEventTransport } from "./valkey-chat-event-transport";
 
 export function canResolveExternalVectorStoreSecret(
   env: RomeoEnv,
@@ -95,6 +100,17 @@ export function createQuotaCoordinator(env: RomeoEnv): QuotaCoordinator {
     });
   }
   return createDisabledQuotaCoordinator(env.QUOTA_COORDINATION_KEY_PREFIX);
+}
+
+export function createChatEventTransport(env: RomeoEnv): ChatEventTransport {
+  if (env.REALTIME_EVENT_DRIVER === "valkey") {
+    return new ValkeyChatEventTransport({
+      keyPrefix: env.REALTIME_EVENT_KEY_PREFIX,
+      timeoutMs: env.REALTIME_EVENT_TIMEOUT_MS,
+      url: env.VALKEY_URL,
+    });
+  }
+  return new InMemoryChatEventTransport();
 }
 
 export function createToolDispatchPayloadStore(

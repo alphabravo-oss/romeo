@@ -110,7 +110,7 @@ export class FileResumableUploadService {
         purpose: input.purpose ?? "general",
         status: "uploading",
         metadata: {
-          ...(input.metadata ?? {}),
+          ...input.metadata,
           partCount: resumable.partCount,
           partSizeBytes: resumable.partSizeBytes,
           uploadMode: "resumable_backend_composed",

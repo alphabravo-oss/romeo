@@ -40,10 +40,6 @@ const openApiFiles = sourceFiles(
   resolve(root, "packages/core/src/http/openapi"),
   new Set([".ts"]),
 );
-const coreFiles = sourceFiles(
-  resolve(root, "packages/core/src"),
-  new Set([".ts"]),
-);
 const providerAdapterFiles = sourceFiles(
   resolve(root, "packages/providers/src/adapters"),
   new Set([".ts"]),

@@ -28,7 +28,7 @@ import {
   type PendingImageAttachment,
 } from "./useWorkspaceAttachments";
 import { isMessageActionEnabled, resolveTurnOutcome } from "./turn-rollback";
-import { blobToBase64, clientMessageId } from "./workspace-controller-media";
+import { blobToBase64 } from "./workspace-controller-media";
 
 interface WorkspaceTurnActionsOptions {
   activeAgentId: string | undefined;
@@ -48,6 +48,7 @@ interface WorkspaceTurnActionsOptions {
   imageAttachments: PendingImageAttachment[];
   isStreaming: boolean;
   messages: Message[];
+  onChatCreated?: (chatId: string) => void;
   queryClient: QueryClient;
   refreshUsageControls: () => Promise<void>;
   resetRunPresentation: () => void;
@@ -173,6 +174,7 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
             ...(options.temporaryNextChat ? { temporary: true } : {}),
           });
       options.setActiveChatId(chat.id);
+      if (isNewChat) options.onChatCreated?.(chat.id);
       if (options.selectedModelId !== undefined && isNewChat) {
         await updateChat(chat.id, { modelId: options.selectedModelId });
       }

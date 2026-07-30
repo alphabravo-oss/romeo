@@ -613,6 +613,7 @@ export type {
   AdministrationUpdateUserRoleResponses,
   AdminSetLocalPasswordRequest,
   AdminUser,
+  AdminUserPage,
   AgentToolSummary,
   ApiError,
   ApiKeySummary,

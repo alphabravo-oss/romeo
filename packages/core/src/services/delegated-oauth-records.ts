@@ -2,8 +2,6 @@ import type {
   DelegatedOAuthConnection,
   DelegatedOAuthConnectionPostureCounts,
   DelegatedOAuthConnectionSummary,
-  DelegatedOAuthConnectorTypePosture,
-  DelegatedOAuthProviderPosture,
 } from "../domain/delegated-oauth";
 import { createId } from "../ids";
 import type {

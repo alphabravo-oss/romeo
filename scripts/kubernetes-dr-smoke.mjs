@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import {
-  apiJson,
   argValue,
   assertAttachmentReadable,
   assertDurableSmokeRecords,

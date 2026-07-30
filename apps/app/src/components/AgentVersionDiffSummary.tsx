@@ -11,7 +11,7 @@ export function AgentVersionDiffSummary({ diff }: { diff: AgentVersionDiff }) {
       {diff.changes.map((change) => (
         <div className="rounded-md border border-border p-2" key={change.field}>
           <div className="font-medium">
-            {t(agentDiffFieldKey(change.field))}
+            {formatAgentDiffField(change.field, t)}
           </div>
           <div className="grid gap-1 sm:grid-cols-2">
             <div>
@@ -34,31 +34,23 @@ function formatValue(value: unknown): string {
   return JSON.stringify(value) ?? "—";
 }
 
-function agentDiffFieldKey(
+const agentDiffFieldKeys: Readonly<Record<string, MessageKey>> = {
+  baseModelId: "agentDiffFieldBaseModel",
+  knowledgeBaseBindings: "agentDiffFieldKnowledgeBaseBindings",
+  memoryPolicy: "agentDiffFieldMemoryPolicy",
+  parameters: "agentDiffFieldParameters",
+  promptSuggestions: "agentDiffFieldPromptSuggestions",
+  safetySettings: "agentDiffFieldSafetySettings",
+  systemPrompt: "agentDiffFieldSystemPrompt",
+  tags: "agentDiffFieldTags",
+  toolBindings: "agentDiffFieldToolBindings",
+  voiceProfileId: "agentDiffFieldVoiceProfile",
+};
+
+function formatAgentDiffField(
   field: AgentVersionDiff["changes"][number]["field"],
-): MessageKey {
-  switch (field) {
-    case "baseModelId":
-      return "agentDiffFieldBaseModel";
-    case "knowledgeBaseBindings":
-      return "agentDiffFieldKnowledgeBaseBindings";
-    case "memoryPolicy":
-      return "agentDiffFieldMemoryPolicy";
-    case "parameters":
-      return "agentDiffFieldParameters";
-    case "promptSuggestions":
-      return "agentDiffFieldPromptSuggestions";
-    case "safetySettings":
-      return "agentDiffFieldSafetySettings";
-    case "systemPrompt":
-      return "agentDiffFieldSystemPrompt";
-    case "tags":
-      return "agentDiffFieldTags";
-    case "toolBindings":
-      return "agentDiffFieldToolBindings";
-    case "voiceProfileId":
-      return "agentDiffFieldVoiceProfile";
-    default:
-      return field satisfies never;
-  }
+  t: (key: MessageKey) => string,
+): string {
+  const key = agentDiffFieldKeys[field];
+  return key === undefined ? field : t(key);
 }

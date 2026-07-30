@@ -126,4 +126,32 @@ describe("provider catalog synchronization", () => {
       },
     });
   });
+
+  it("preserves a referenced model id when discovery matches its provider name", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const provider = await repository.getProvider("provider_openai_compatible");
+    if (provider === undefined) throw new Error("Expected seeded provider");
+
+    await repository.updateProvider({
+      ...provider,
+      modelIds: ["gpt-compatible"],
+    });
+    const coordinator = new ProviderCatalogSyncCoordinator(repository);
+    const models = await coordinator.syncProvider(
+      subject,
+      (await repository.getProvider(provider.id))!,
+    );
+
+    expect(models).toHaveLength(1);
+    expect(models[0]).toMatchObject({
+      id: "model_openai_compatible_default",
+      name: "gpt-compatible",
+      available: true,
+    });
+    expect(
+      await repository.getModel(
+        "model_provider_openai_compatible_gpt-compatible",
+      ),
+    ).toBeUndefined();
+  });
 });

@@ -1,5 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "baselineDirectory": "docs/quality/browser-visual-baselines/chromium",
+  "pixelmatchThreshold": 0.2,
+  "maxDiffPixelRatio": 0.02,
   "viewports": [
     { "name": "mobile", "width": 375, "height": 812 },
     { "name": "desktop", "width": 1280, "height": 900 },
@@ -7,7 +10,12 @@
   ],
   "themes": ["light", "dark"],
   "routes": [
-    { "name": "chat", "path": "/", "requiredSelector": "#main-content" },
+    {
+      "name": "chat",
+      "path": "/",
+      "requiredSelector": "#main-content",
+      "visualReadySelector": ".rm-suggestion"
+    },
     {
       "name": "login",
       "path": "/login",
@@ -38,7 +46,12 @@
       "path": "/settings?section=security",
       "requiredSelector": "#console-content"
     },
-    { "name": "ui-gallery", "path": "/ui", "requiredSelector": "main" }
+    {
+      "name": "ui-gallery",
+      "path": "/ui",
+      "requiredSelector": "main",
+      "allowPersistentSkeletons": true
+    }
   ],
   "maxHorizontalOverflowPx": 0,
   "reducedMotion": "reduce"

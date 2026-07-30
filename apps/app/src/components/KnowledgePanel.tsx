@@ -334,7 +334,7 @@ export function KnowledgePanel({
             <Input
               name="knowledge-file-picker"
               accept=".txt,.md,.markdown,.json,.jsonl,.ndjson,.csv,.html,.htm,text/*,application/json,application/x-ndjson"
-              className="sr-only"
+              className="rm-ui-visually-hidden"
               id="knowledge-file-picker"
               onChange={(event) =>
                 void handleSourceFileChange(event.currentTarget.files?.[0])

@@ -159,12 +159,16 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
           {kind === "memories" ? t("addMemory") : t("addNote")}
         </Button>
       </div>
-      <label className="rm-model-search mt-4">
+      <label
+        className="rm-model-search mt-4"
+        htmlFor={`${kind}-catalog-search`}
+      >
         <Search aria-hidden="true" size={15} />
         <Input
           aria-label={
             kind === "memories" ? t("searchMemories") : t("searchNotes")
           }
+          id={`${kind}-catalog-search`}
           onChange={(event) => {
             setCatalogQuery(event.currentTarget.value);
             setPage(0);

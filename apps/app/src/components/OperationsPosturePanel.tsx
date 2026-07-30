@@ -22,7 +22,6 @@ import { PanelStats } from "./PanelStats";
 import { humanizeWarningCode } from "./posture-warning-text";
 import { Tabs } from "./Tabs";
 import {
-  humanizeOperationalCode,
   jobStatusDot,
   OperationalStatusDot,
   operationalStatusLabel,
@@ -293,7 +292,11 @@ function jobTypeColumns(
   return [
     jobTypeCol.accessor("type", {
       header: t("opType"),
-      cell: (c) => <span className="font-medium">{c.getValue()}</span>,
+      cell: (c) => (
+        <span className="font-medium">
+          {humanizeOperationalType(c.getValue())}
+        </span>
+      ),
     }),
     jobTypeCol.accessor("total", {
       header: t("opTotal"),
@@ -342,7 +345,11 @@ function jobAlertColumns(t: Translate): ColumnDef<JobOperationalAlert, any>[] {
     }),
     jobAlertCol.accessor("type", {
       header: t("opType"),
-      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
+      cell: (c) => (
+        <span className="rm-cell-muted">
+          {humanizeOperationalType(c.getValue())}
+        </span>
+      ),
     }),
     jobAlertCol.accessor((row) => `${row.value} / ${row.threshold}`, {
       id: "valueThreshold",
@@ -350,6 +357,13 @@ function jobAlertColumns(t: Translate): ColumnDef<JobOperationalAlert, any>[] {
       cell: (c) => <span>{c.getValue()}</span>,
     }),
   ];
+}
+
+function humanizeOperationalType(type: string): string {
+  const words = type.replace(/[._:-]+/gu, " ").trim();
+  return words.length === 0
+    ? ""
+    : words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function JobsSection(): React.ReactNode {

@@ -6,6 +6,7 @@ import { ConsoleLayout } from "../components/ConsoleLayout";
 import { AdminViewNav } from "../components/AdminViewNav";
 import { PageHeader } from "../components/PageHeader";
 import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
+import { AdminUsersRoutePanel } from "../components/AdminUsersRoutePanel";
 import {
   ADMIN_GROUPS,
   ADMIN_META,
@@ -49,7 +50,6 @@ import {
   ServiceAccountPanel,
   ToolConnectorPanel,
   UsagePanel,
-  UsersPanel,
   WebhooksPanel,
   WebSearchPanel,
   WorkflowsPanel,
@@ -464,7 +464,14 @@ function AdminPage() {
         {section === "prompt-templates" ? <PromptTemplatePanel /> : null}
         {section === "web-search" ? <WebSearchPanel /> : null}
 
-        {section === "users" ? <UsersPanel /> : null}
+        {section === "users" ? (
+          <AdminUsersRoutePanel
+            direction={search.direction}
+            page={search.page}
+            query={search.query}
+            sort={search.sort}
+          />
+        ) : null}
 
         {section === "groups" ? <GroupsPanel /> : null}
 

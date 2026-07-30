@@ -6,6 +6,7 @@ import {
   forwardRef,
   useContext,
   useId,
+  useMemo,
   type HTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -44,7 +45,10 @@ export function Field({
   const inputId = id ?? generatedInputId;
   const descriptionId = description ? `${inputId}-description` : undefined;
   const errorId = error ? `${inputId}-error` : undefined;
-  const context = { descriptionId, errorId, inputId, invalid: Boolean(error) };
+  const context = useMemo(
+    () => ({ descriptionId, errorId, inputId, invalid: Boolean(error) }),
+    [descriptionId, error, errorId, inputId],
+  );
   return (
     <FieldContext.Provider value={context}>
       <div className={cn("rm-ui-field", className)}>

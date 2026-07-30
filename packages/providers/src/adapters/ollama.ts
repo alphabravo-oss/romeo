@@ -167,7 +167,7 @@ async function discoverOllamaModel(
   const info = recordFromMap(payload.model_info);
   const contextWindow = Object.entries(info).find(
     ([key, value]) =>
-      /\.context_length$/u.test(key) &&
+      key.endsWith(".context_length") &&
       typeof value === "number" &&
       Number.isFinite(value) &&
       value > 0,
@@ -192,7 +192,7 @@ async function mapConcurrent<T, R>(
   limit: number,
   fn: (item: T) => Promise<R>,
 ): Promise<R[]> {
-  const results = new Array<R>(items.length);
+  const results: R[] = [];
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(limit, items.length) }, async () => {

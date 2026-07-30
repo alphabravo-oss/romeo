@@ -4,7 +4,6 @@ import type { RomeoEnv } from "@romeo/config";
 import type { DataConnectorType } from "../domain/data-connectors";
 import type {
   DelegatedOAuthCallbackResult,
-  DelegatedOAuthConnectionPostureCounts,
   DelegatedOAuthConnectionSummary,
   DelegatedOAuthConnectorTypePosture,
   DelegatedOAuthPostureReport,

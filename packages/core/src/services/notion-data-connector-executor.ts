@@ -21,12 +21,6 @@ interface NotionConnectorConfig {
   secretRef: string;
 }
 
-interface NotionSecret {
-  accessToken?: unknown;
-  bearerToken?: unknown;
-  token?: unknown;
-}
-
 export class NotionDataConnectorExecutor implements DataConnectorExecutor {
   private readonly allowedHosts: string[];
   private readonly egressPolicy: WebsiteConnectorEgressPolicy;

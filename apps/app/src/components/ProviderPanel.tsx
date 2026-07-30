@@ -6,10 +6,9 @@ import {
   StatusBadge,
 } from "@romeo/ui";
 import EllipsisVertical from "lucide-react/dist/esm/icons/ellipsis-vertical.mjs";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import type {
-  BaseModel,
   Provider,
   ProviderOperationalProviderSummary,
   ProviderVerification,
@@ -128,41 +127,44 @@ export function ProviderPanel({
     [agents, modelsByProvider, operationalByProvider, providers, verification],
   );
 
-  const updateEnabled = async (provider: Provider, enabled: boolean) => {
-    const dependentAgents = agents.filter((agent) =>
-      (modelsByProvider.get(provider.id) ?? []).some(
-        (model) => model.id === agent.baseModelId,
-      ),
-    );
-    if (
-      !enabled &&
-      dependentAgents.length > 0 &&
-      !(await askDependencyImpact({
-        title: t("providerDisableImpactTitle"),
-        body: t("providerDisableImpactDescription", {
-          agents: dependentAgents.length,
-          models: new Set(dependentAgents.map((agent) => agent.baseModelId))
-            .size,
-          names: dependentAgents
-            .slice(0, 5)
-            .map((agent) => agent.name)
-            .join(", "),
-        }),
-        confirmLabel: t("disableProvider"),
-        tone: "danger",
-      }))
-    )
-      return;
-    await onUpdateProvider({
-      providerId: provider.id,
-      name: provider.name,
-      baseUrl: provider.baseUrl,
-      ...(provider.modelIds === undefined
-        ? {}
-        : { modelIds: provider.modelIds }),
-      enabled,
-    });
-  };
+  const updateEnabled = useCallback(
+    async (provider: Provider, enabled: boolean) => {
+      const dependentAgents = agents.filter((agent) =>
+        (modelsByProvider.get(provider.id) ?? []).some(
+          (model) => model.id === agent.baseModelId,
+        ),
+      );
+      if (
+        !enabled &&
+        dependentAgents.length > 0 &&
+        !(await askDependencyImpact({
+          title: t("providerDisableImpactTitle"),
+          body: t("providerDisableImpactDescription", {
+            agents: dependentAgents.length,
+            models: new Set(dependentAgents.map((agent) => agent.baseModelId))
+              .size,
+            names: dependentAgents
+              .slice(0, 5)
+              .map((agent) => agent.name)
+              .join(", "),
+          }),
+          confirmLabel: t("disableProvider"),
+          tone: "danger",
+        }))
+      )
+        return;
+      await onUpdateProvider({
+        providerId: provider.id,
+        name: provider.name,
+        baseUrl: provider.baseUrl,
+        ...(provider.modelIds === undefined
+          ? {}
+          : { modelIds: provider.modelIds }),
+        enabled,
+      });
+    },
+    [agents, askDependencyImpact, modelsByProvider, onUpdateProvider, t],
+  );
 
   const columns = useMemo<ColumnDef<ProviderTableRow, any>[]>(
     () => [
@@ -319,6 +321,7 @@ export function ProviderPanel({
       verifyingProviderId,
       verify,
       sync,
+      updateEnabled,
     ],
   );
 

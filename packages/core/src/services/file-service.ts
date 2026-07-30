@@ -211,7 +211,7 @@ export class FileService {
           purpose: input.purpose ?? "general",
           status: "available",
           metadata: {
-            ...(input.metadata ?? {}),
+            ...input.metadata,
             ...duplicateMetadata,
             extraction,
           },

@@ -106,13 +106,10 @@ describe("webhook API", () => {
       "user-agent": "Romeo-Webhooks/0.1",
       "x-romeo-event": "webhook.test",
     });
-    expect(
-      String(
-        (calls[0]?.init?.headers as Record<string, string>)[
-          "x-romeo-signature"
-        ],
-      ),
-    ).toMatch(/^v1=/);
+    const requestHeaders = calls[0]?.init?.headers as
+      | Record<string, string>
+      | undefined;
+    expect(String(requestHeaders?.["x-romeo-signature"])).toMatch(/^v1=/);
     expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
       id: delivery.data.id,
       type: "webhook.test",

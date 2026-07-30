@@ -145,6 +145,7 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
       type: "openai-compatible",
       name: "OpenAI-compatible",
       baseUrl: "https://api.openai.com/v1",
+      modelIds: ["gpt-compatible"],
       enabled: true,
       capabilities: defaultProviderCapabilities("openai-compatible"),
     },

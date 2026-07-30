@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 
+import pixelmatch from "pixelmatch";
 import { chromium } from "playwright";
+import { PNG } from "pngjs";
 
 const root = resolve(import.meta.dirname, "..");
 const baseUrl = process.env.ROMEO_BASE_URL ?? "http://127.0.0.1:3000";
+const updateBaselines = process.env.ROMEO_UPDATE_VISUAL_BASELINES === "true";
 const contractPath = resolve(
   root,
   "docs/quality/browser-visual-baseline-contract.json",
@@ -13,6 +16,7 @@ const contractPath = resolve(
 const artifactDirectory = resolve(root, "dist/ci/browser-visual-baselines");
 const evidencePath = resolve(root, "dist/ci/browser-visual-baselines.json");
 const contract = JSON.parse(await readFile(contractPath, "utf8"));
+const baselineDirectory = resolve(root, contract.baselineDirectory);
 const browser = await chromium.launch({ headless: true });
 const browserVersion = browser.version();
 const results = [];
@@ -31,9 +35,10 @@ try {
 
 const failures = results.filter((result) => result.status !== "passed");
 const evidence = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   generatedAt: new Date().toISOString(),
   status: failures.length === 0 ? "passed" : "failed",
+  baselineMode: updateBaselines ? "update" : "compare",
   contract: {
     path: "docs/quality/browser-visual-baseline-contract.json",
     schemaVersion: contract.schemaVersion,
@@ -53,7 +58,9 @@ if (failures.length > 0) {
   );
 }
 console.log(
-  `Romeo visual baselines passed for ${results.length} light/dark viewport-route scenarios.`,
+  updateBaselines
+    ? `Updated ${results.length} committed visual baselines.`
+    : `Romeo visual baselines matched for ${results.length} light/dark viewport-route scenarios.`,
 );
 console.log(`Wrote visual baseline evidence to ${evidencePath}`);
 
@@ -82,6 +89,7 @@ async function captureScenario({ route, theme, viewport }) {
       waitUntil: "domcontentloaded",
     });
     await page.locator(route.requiredSelector).first().waitFor();
+    await waitForStableVisualState(page, route);
     await page.evaluate(() => document.fonts.ready);
     await page.addStyleTag({
       content:
@@ -128,18 +136,21 @@ async function captureScenario({ route, theme, viewport }) {
       path: screenshotPath,
     });
     const screenshot = await readFile(screenshotPath);
+    const comparison = await compareScreenshot(id, screenshot);
     return {
       id,
-      status: "passed",
+      status: comparison.passed ? "passed" : "failed",
+      ...(comparison.passed ? {} : { failure: comparison.failure }),
       route: route.path,
       theme,
       viewport,
       metrics,
       screenshot: {
         bytes: screenshot.byteLength,
-        path: `dist/ci/browser-visual-baselines/${id}.png`,
-        sha256: createHash("sha256").update(screenshot).digest("hex"),
+        path: relative(root, screenshotPath),
+        sha256: sha256(screenshot),
       },
+      baseline: comparison,
     };
   } catch (error) {
     return {
@@ -153,6 +164,110 @@ async function captureScenario({ route, theme, viewport }) {
   } finally {
     await context.close();
   }
+}
+
+async function waitForStableVisualState(page, route) {
+  const requireNoSkeletons = route.allowPersistentSkeletons !== true;
+  const visualReadySelector = route.visualReadySelector;
+  await page.waitForFunction(
+    ({ readySelector, requireNoSkeletons }) =>
+      (!requireNoSkeletons ||
+        document.querySelector(".rm-ui-skeleton") === null) &&
+      (readySelector === undefined ||
+        document.querySelector(readySelector) !== null),
+    { readySelector: visualReadySelector, requireNoSkeletons },
+  );
+  // Query boundaries can swap their skeleton and resolved content in adjacent
+  // React commits. Require the ready state to survive a paint before capture.
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => resolve(true))),
+  );
+  await page.waitForFunction(
+    ({ readySelector, requireNoSkeletons }) =>
+      (!requireNoSkeletons ||
+        document.querySelector(".rm-ui-skeleton") === null) &&
+      (readySelector === undefined ||
+        document.querySelector(readySelector) !== null),
+    { readySelector: visualReadySelector, requireNoSkeletons },
+  );
+}
+
+async function compareScreenshot(id, screenshot) {
+  const baselinePath = resolve(baselineDirectory, `${id}.png`);
+  if (updateBaselines) {
+    await mkdir(baselineDirectory, { recursive: true });
+    await writeFile(baselinePath, screenshot);
+    return {
+      passed: true,
+      updated: true,
+      path: relative(root, baselinePath),
+      sha256: sha256(screenshot),
+      mismatchedPixels: 0,
+      diffPixelRatio: 0,
+      maxDiffPixelRatio: contract.maxDiffPixelRatio,
+    };
+  }
+
+  let baseline;
+  try {
+    baseline = await readFile(baselinePath);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return {
+        passed: false,
+        failure: `missing committed baseline ${relative(root, baselinePath)}; run pnpm test:browser:visual:update`,
+        path: relative(root, baselinePath),
+      };
+    }
+    throw error;
+  }
+
+  const expected = PNG.sync.read(baseline);
+  const actual = PNG.sync.read(screenshot);
+  if (expected.width !== actual.width || expected.height !== actual.height) {
+    return {
+      passed: false,
+      failure: `image dimensions changed from ${expected.width}x${expected.height} to ${actual.width}x${actual.height}`,
+      path: relative(root, baselinePath),
+      sha256: sha256(baseline),
+    };
+  }
+
+  const diff = new PNG({ width: actual.width, height: actual.height });
+  const mismatchedPixels = pixelmatch(
+    expected.data,
+    actual.data,
+    diff.data,
+    actual.width,
+    actual.height,
+    { threshold: contract.pixelmatchThreshold },
+  );
+  const totalPixels = actual.width * actual.height;
+  const diffPixelRatio = mismatchedPixels / totalPixels;
+  const passed = diffPixelRatio <= contract.maxDiffPixelRatio;
+  let diffPath;
+  if (!passed) {
+    diffPath = resolve(artifactDirectory, `${id}.diff.png`);
+    await writeFile(diffPath, PNG.sync.write(diff));
+  }
+  return {
+    passed,
+    ...(passed
+      ? {}
+      : {
+          failure: `visual difference ${(diffPixelRatio * 100).toFixed(3)}% exceeds ${(contract.maxDiffPixelRatio * 100).toFixed(3)}%`,
+        }),
+    path: relative(root, baselinePath),
+    sha256: sha256(baseline),
+    mismatchedPixels,
+    diffPixelRatio,
+    maxDiffPixelRatio: contract.maxDiffPixelRatio,
+    ...(diffPath === undefined ? {} : { diffPath: relative(root, diffPath) }),
+  };
+}
+
+function sha256(contents) {
+  return createHash("sha256").update(contents).digest("hex");
 }
 
 function assert(condition, message) {

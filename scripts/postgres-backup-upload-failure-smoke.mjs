@@ -13,7 +13,6 @@ import { tmpdir } from "node:os";
 import {
   argValue,
   ensureParentDirectory,
-  printPlan,
   redactedRemoteUrl,
   repoPath,
 } from "./lib/postgres-maintenance.mjs";

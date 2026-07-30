@@ -92,14 +92,14 @@ export function mergeOAuth2Connection(
     groupMap:
       global.groupMap === undefined && override.groupMap === undefined
         ? undefined
-        : { ...(global.groupMap ?? {}), ...(override.groupMap ?? {}) },
+        : { ...global.groupMap, ...override.groupMap },
     workspaceTeamMap:
       global.workspaceTeamMap === undefined &&
       override.workspaceTeamMap === undefined
         ? undefined
         : {
-            ...(global.workspaceTeamMap ?? {}),
-            ...(override.workspaceTeamMap ?? {}),
+            ...global.workspaceTeamMap,
+            ...override.workspaceTeamMap,
           },
   });
 }

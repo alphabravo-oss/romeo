@@ -81,7 +81,7 @@ for (const [name, browserType] of engines) {
     await page.goto(`${baseUrl}/admin?section=providers`, {
       waitUntil: "domcontentloaded",
     });
-    await page.getByRole("heading", { name: "Providers" }).waitFor();
+    await page.getByRole("heading", { name: "AI models" }).waitFor();
     result.routes.push(
       await auditRoute(page, "admin-providers", "/admin?section=providers"),
     );
@@ -141,6 +141,7 @@ async function assertCoreChat(page, engine) {
   const modelSelector = page.locator(".rm-model-select");
   await modelSelector.click();
   await page.getByRole("menu").waitFor();
+  await page.getByRole("menuitemradio").first().waitFor();
   assert(
     (await page.getByRole("menuitemradio").count()) > 0,
     "model selector has no agent options",

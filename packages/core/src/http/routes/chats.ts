@@ -143,7 +143,7 @@ export function registerChatRoutes(app: RomeoApi): void {
           : { createdAt: message.createdAt }),
       })),
     });
-    publishChatChange(context.get("services"), subject, data, "imported");
+    await publishChatChange(context.get("services"), subject, data, "imported");
     return context.json({ data }, 201);
   });
 
@@ -158,7 +158,7 @@ export function registerChatRoutes(app: RomeoApi): void {
       ...(body.temporary === undefined ? {} : { temporary: body.temporary }),
       ...(body.expiresAt === undefined ? {} : { expiresAt: body.expiresAt }),
     });
-    publishChatChange(context.get("services"), subject, data, "created");
+    await publishChatChange(context.get("services"), subject, data, "created");
     return context.json({ data }, 201);
   });
 
@@ -199,7 +199,7 @@ export function registerChatRoutes(app: RomeoApi): void {
       ...(body.title !== undefined ? { title: body.title } : {}),
       ...(body.modelId !== undefined ? { modelId: body.modelId } : {}),
     });
-    publishChatChange(context.get("services"), subject, data, "updated");
+    await publishChatChange(context.get("services"), subject, data, "updated");
     return context.json({ data });
   });
 
@@ -223,7 +223,7 @@ export function registerChatRoutes(app: RomeoApi): void {
       chatId: context.req.valid("param").chatId,
       confirmChatId: body.confirmChatId,
     });
-    publishChatChange(context.get("services"), subject, chat, "deleted");
+    await publishChatChange(context.get("services"), subject, chat, "deleted");
     return context.json({ data });
   });
 
@@ -336,7 +336,7 @@ export function registerChatRoutes(app: RomeoApi): void {
     const data = await context
       .get("services")
       .chats.archive({ subject, chatId: context.req.valid("param").chatId });
-    publishChatChange(context.get("services"), subject, data, "archived");
+    await publishChatChange(context.get("services"), subject, data, "archived");
     return context.json({ data });
   });
 
@@ -354,7 +354,7 @@ export function registerChatRoutes(app: RomeoApi): void {
         ? { includeAttachments: body.includeAttachments }
         : {}),
     });
-    publishChatChange(context.get("services"), subject, data, "forked");
+    await publishChatChange(context.get("services"), subject, data, "forked");
     return context.json({ data }, 201);
   });
 
@@ -364,7 +364,12 @@ export function registerChatRoutes(app: RomeoApi): void {
       subject,
       chatId: context.req.valid("param").chatId,
     });
-    publishChatChange(context.get("services"), subject, data, "unarchived");
+    await publishChatChange(
+      context.get("services"),
+      subject,
+      data,
+      "unarchived",
+    );
     return context.json({ data });
   });
 
@@ -409,8 +414,8 @@ function publishChatChange(
   subject: AuthSubject,
   chat: { id: string; workspaceId: string },
   action: import("../../services/chat-event-service").ChatChangeAction,
-): void {
-  services.chatEvents.publish({
+): Promise<void> {
+  return services.chatEvents.publish({
     action,
     chatId: chat.id,
     orgId: subject.orgId,

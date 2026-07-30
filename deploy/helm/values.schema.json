@@ -598,6 +598,20 @@
           "type": "string",
           "pattern": "^$|^[A-Za-z0-9_:-]+$"
         },
+        "REALTIME_EVENT_DRIVER": {
+          "type": "string",
+          "enum": ["memory", "valkey"]
+        },
+        "REALTIME_EVENT_KEY_PREFIX": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:._-]+$"
+        },
+        "REALTIME_EVENT_TIMEOUT_MS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+          ]
+        },
         "QUOTA_COORDINATION_DRIVER": {
           "type": "string",
           "enum": ["disabled", "valkey"]

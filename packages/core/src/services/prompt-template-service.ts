@@ -262,7 +262,7 @@ export class PromptTemplateService {
         repository,
       );
       const grants: ResourceGrant[] = [];
-      for (const permission of [...new Set(input.share.permissions)]) {
+      for (const permission of new Set(input.share.permissions)) {
         const grant = existing.find(
           (candidate) =>
             candidate.principalType === input.share.principalType &&

@@ -216,23 +216,26 @@ export class NotificationService {
         this.repository,
         subject.orgId,
       );
-      const users = await this.repository.listUsers(subject.orgId);
-      for (const user of users) {
-        if (user.disabledAt !== undefined) continue;
-        const userDeliveries = await this.repository.listNotificationDeliveries(
-          subject.orgId,
-          user.id,
+      const [users, failedDeliveries] = await Promise.all([
+        this.repository.listUsers(subject.orgId),
+        this.repository.listFailedNotificationDeliveries(subject.orgId, 1_000),
+      ]);
+      const userById = new Map(
+        users
+          .filter((user) => user.disabledAt === undefined)
+          .map((user) => [user.id, user]),
+      );
+      for (const delivery of failedDeliveries.filter((item) =>
+        isDueRetry(item, now),
+      )) {
+        const user = userById.get(delivery.userId);
+        if (user === undefined) continue;
+        const retried = await this.retryDeliveryForUser(
+          user,
+          delivery,
+          policy.policy,
         );
-        for (const delivery of userDeliveries.filter((item) =>
-          isDueRetry(item, now),
-        )) {
-          const retried = await this.retryDeliveryForUser(
-            user,
-            delivery,
-            policy.policy,
-          );
-          if (retried !== undefined) deliveries.push(retried);
-        }
+        if (retried !== undefined) deliveries.push(retried);
       }
       return {
         job: await completeBackgroundJob(this.repository, job),

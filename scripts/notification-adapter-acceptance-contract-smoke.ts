@@ -691,28 +691,6 @@ function assertNoRawContent(
   }
 }
 
-function jsonResponse(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-function headerValue(
-  headers: HeadersInit | undefined,
-  key: string,
-): string | undefined {
-  if (headers === undefined) return undefined;
-  if (headers instanceof Headers) return headers.get(key) ?? undefined;
-  if (Array.isArray(headers)) {
-    const match = headers.find(
-      ([name]) => name.toLowerCase() === key.toLowerCase(),
-    );
-    return match?.[1];
-  }
-  return headers[key];
-}
-
 function argValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   if (index < 0) return undefined;

@@ -78,7 +78,7 @@ describe("RomeoRepository conformance", () => {
   }
 
   for (const subject of subjects) {
-    describe(subject.name, () => {
+    describe(`${subject.name}`, () => {
       it("rolls back failed repository transactions", async () => {
         await withRepository(subject, async (repository) => {
           await expect(
@@ -3149,7 +3149,6 @@ describe("live Postgres API readiness smoke", () => {
           body.data.checks.filter(
             (check: { status: string }) => check.status !== "pass",
           ),
-          JSON.stringify(body.data.checks),
         ).toEqual([]);
         expect(body.data.status).toBe("ready");
         expect(

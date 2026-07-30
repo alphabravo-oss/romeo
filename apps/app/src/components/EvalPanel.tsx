@@ -69,10 +69,9 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
   const createMutation = useMutation({ mutationFn: createEvalSuite });
   const runMutation = useMutation({ mutationFn: runEvalSuite });
   const rateMutation = useMutation({ mutationFn: rateEvalResult });
-  const suites = suitesQuery.data ?? [];
   const activeSuite = useMemo(
-    () => resolveActiveSuite(suites, selectedSuiteId),
-    [selectedSuiteId, suites],
+    () => resolveActiveSuite(suitesQuery.data ?? [], selectedSuiteId),
+    [selectedSuiteId, suitesQuery.data],
   );
   const activeResult = useMemo(
     () => resolveActiveSuite(resultsQuery.data ?? [], selectedResultId),

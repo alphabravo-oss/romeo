@@ -225,9 +225,16 @@ export class ProviderCatalogSyncCoordinator {
           .filter((model) => model.providerId === currentProvider.id)
           .map((model) => [model.id, model]),
       );
-      const discoveredIds = new Set(models.map((model) => model.id));
+      const currentByName = new Map(
+        [...currentById.values()].map((model) => [model.name, model]),
+      );
       const discoveredModels = models.map((model) => {
-        const current = currentById.get(model.id);
+        // Catalog adapters derive deterministic IDs, but older installations
+        // may already reference a stable model ID created before that scheme.
+        // Preserve the referenced record when provider + provider model name
+        // match instead of duplicating the model and breaking agent bindings.
+        const current =
+          currentById.get(model.id) ?? currentByName.get(model.name);
         if (current === undefined) {
           return {
             ...model,
@@ -237,6 +244,7 @@ export class ProviderCatalogSyncCoordinator {
         }
         return {
           ...model,
+          id: current.id,
           available: true,
           enabled: current.enabled,
           ...(current.capabilitiesSource === "override"
@@ -248,6 +256,7 @@ export class ProviderCatalogSyncCoordinator {
             : { capabilitiesSource: "detected" as const }),
         };
       });
+      const discoveredIds = new Set(discoveredModels.map((model) => model.id));
       const unavailableModels = [...currentById.values()]
         .filter(
           (model) => !discoveredIds.has(model.id) && model.available !== false,
