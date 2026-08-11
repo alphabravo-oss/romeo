@@ -76,6 +76,13 @@ export interface StartRunInput {
    * being replaced; ordinary turns omit it to include the full chat history.
    */
   historyBoundaryMessageId?: string;
+  /**
+   * Attaches the new turn under an existing message instead of extending the
+   * active branch: `null` forks from the chat root (needed to re-answer the
+   * first turn), absent extends `chat.activeLeafMessageId` so ordinary sends
+   * stay linear.
+   */
+  parentMessageId?: string | null;
   webSearch?: boolean;
   urls?: string[];
 }

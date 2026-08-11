@@ -4543,6 +4543,7 @@ export const zStartRunRequest = z.object({
   content: z.string().min(1).max(200000),
   modelId: z.string().min(1).max(300).optional(),
   historyBoundaryMessageId: z.string().min(1).max(300).optional(),
+  parentMessageId: z.string().min(1).max(300).nullish(),
   fileIds: z.array(z.string().min(1).max(160)).max(8).optional(),
   webSearch: z.boolean().optional(),
   urls: z.array(z.url()).max(5).optional(),
@@ -4887,6 +4888,7 @@ export const zChat = z.object({
   archivedAt: z.iso.datetime().optional(),
   legalHoldUntil: z.iso.datetime().optional(),
   legalHoldReason: z.string().max(500).optional(),
+  activeLeafMessageId: z.string().min(1).max(300).optional(),
   updatedAt: z.iso.datetime(),
 });
 
@@ -4966,6 +4968,7 @@ export const zChatExport = z.object({
       role: z.enum(["system", "user", "assistant", "tool"]),
       content: z.string(),
       citations: z.array(zMessageCitation).max(100).optional(),
+      parentId: z.string().min(1).max(300).optional(),
       createdAt: z.iso.datetime(),
       attachments: z
         .array(
@@ -4984,6 +4987,7 @@ export const zUpdateChatRequest = z.object({
   agentId: z.string().min(1).max(300).nullish(),
   title: z.string().min(1).max(200).optional(),
   modelId: z.string().min(1).max(300).nullish(),
+  activeLeafMessageId: z.string().min(1).max(300).optional(),
 });
 
 export const zDataDeletionCounts = z.object({
@@ -5054,6 +5058,7 @@ export const zMessage = z.object({
   content: z.string(),
   citations: z.array(zMessageCitation).max(100).optional(),
   attachments: z.array(zMessageAttachment).max(100).optional(),
+  parentId: z.string().min(1).max(300).optional(),
   createdAt: z.iso.datetime(),
 });
 

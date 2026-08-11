@@ -2,7 +2,7 @@ import type { ObjectStore } from "@romeo/storage";
 
 import type { Message, RunRecord } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
-import { ApiError } from "../errors";
+import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { enforceAgentSafetySettings } from "./agent-safety";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
@@ -12,6 +12,7 @@ import {
   createProviderRoutePlan,
   type ProviderRoutingPolicy,
 } from "./provider-routing";
+import { advanceChatLeaf } from "./run-command-service";
 import { recordRunStartedUsage } from "./run-usage";
 import {
   appendDocumentContext,
@@ -22,7 +23,11 @@ import {
 } from "./run-context-builder";
 import { resolveRunContext } from "./run-context";
 import { buildRunKnowledgeContext } from "./run-knowledge";
-import { historyBefore, orderChatHistory } from "./run-messages";
+import {
+  historyBefore,
+  orderChatHistory,
+  pathThroughMessage,
+} from "./run-messages";
 import type { RunEventSequencer } from "./run-event-sequencer";
 import type {
   DeferredRunStart,
@@ -93,6 +98,27 @@ export class RunStartService {
         ? routePlan.fallback
         : { model, provider };
     const chatMessages = await repository.listMessages(chat.id);
+    if (
+      input.parentMessageId !== undefined &&
+      input.parentMessageId !== null &&
+      !chatMessages.some((message) => message.id === input.parentMessageId)
+    )
+      throw notFound("Message");
+    // Explicit null is a deliberate fork from the chat root — the only way to re-answer the first
+    // turn — and must stay distinguishable from "no parent could be resolved".
+    const rootFork = input.parentMessageId === null;
+    const requestedParentId = rootFork
+      ? undefined
+      : (input.parentMessageId ?? chat.activeLeafMessageId);
+    const branch =
+      requestedParentId === undefined
+        ? []
+        : pathThroughMessage(orderChatHistory(chatMessages), requestedParentId);
+    const parentId = branch.length === 0 ? undefined : requestedParentId;
+    // A root fork replays nothing. A pointer that resolves to nothing — its message was deleted, or
+    // the chat predates parent links — degrades to the pre-branching behaviour of replaying it all.
+    const branchMessages =
+      rootFork || branch.length > 0 ? branch : chatMessages;
     const customization = await resolveManagedModelCustomization(
       repository,
       input.subject,
@@ -101,7 +127,8 @@ export class RunStartService {
     );
     const [retainedAttachments, governedFiles, memories] = await Promise.all([
       resolveRetainedMessageContext({
-        messages: chatMessages,
+        // Branch, not chat: a sibling's attachments must not leak into a variant that never saw them.
+        messages: branchMessages,
         objectStore: this.objectStore,
         repository,
       }),
@@ -178,9 +205,9 @@ export class RunStartService {
     });
     const history =
       input.historyBoundaryMessageId === undefined
-        ? chatMessages
+        ? branchMessages
         : historyBefore(
-            orderChatHistory(chatMessages),
+            orderChatHistory(branchMessages),
             input.historyBoundaryMessageId,
           );
     const userMessageId = createId("msg");
@@ -214,6 +241,7 @@ export class RunStartService {
       chatId: chat.id,
       role: "user",
       content: input.content,
+      ...(parentId === undefined ? {} : { parentId }),
       createdAt: new Date().toISOString(),
     };
     const run: Omit<RunRecord, "createdBy"> = {
@@ -314,6 +342,11 @@ export class RunStartService {
       },
     );
     await repository.createMessage(prepared.userMessage);
+    await advanceChatLeaf(
+      repository,
+      prepared.run.chatId,
+      prepared.userMessage.id,
+    );
     if (prepared.messageParts.length > 0)
       await repository.createMessageParts(prepared.messageParts);
     const createdBy = await persistedSubjectActorId(

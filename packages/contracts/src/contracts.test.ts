@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { MessageSchema, UpdateChatSchema } from "./chat-schemas";
 import { contractOpenApiDocument } from "./document";
+import { EnqueueChatTurnSchema, StartRunSchema } from "./runs";
 import {
   InterfacePreferencesSchema,
   UpdateInterfacePreferencesSchema,
@@ -107,6 +109,48 @@ describe("Romeo HTTP contracts", () => {
       UpdateInterfacePreferencesSchema.safeParse({
         theme: "dark",
         uncontracted: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("keeps message-tree fields additive on the chat and run contracts", () => {
+    expect(
+      MessageSchema.safeParse({
+        id: "msg_2",
+        chatId: "chat_1",
+        role: "assistant",
+        content: "Second answer",
+        parentId: "msg_1",
+        createdAt: "2026-07-16T12:00:00.000Z",
+      }).success,
+    ).toBe(true);
+    expect(
+      UpdateChatSchema.safeParse({ activeLeafMessageId: "msg_2" }).success,
+    ).toBe(true);
+
+    // historyBoundaryMessageId keeps working on its own; parentMessageId is additive
+    // and accepts null to fork from the chat root.
+    expect(
+      StartRunSchema.safeParse({
+        chatId: "chat_1",
+        agentId: "agent_1",
+        content: "Retry",
+        historyBoundaryMessageId: "msg_1",
+      }).success,
+    ).toBe(true);
+    expect(
+      StartRunSchema.safeParse({
+        chatId: "chat_1",
+        agentId: "agent_1",
+        content: "Retry",
+        parentMessageId: null,
+      }).success,
+    ).toBe(true);
+    expect(
+      EnqueueChatTurnSchema.safeParse({
+        agentId: "agent_1",
+        content: "Retry",
+        parentMessageId: "msg_1",
       }).success,
     ).toBe(false);
   });

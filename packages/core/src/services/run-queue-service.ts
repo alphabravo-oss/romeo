@@ -76,7 +76,7 @@ export class RunQueueService {
   async enqueue(
     input: Omit<
       StartRunInput,
-      "attachments" | "fileIds" | "historyBoundaryMessageId"
+      "attachments" | "fileIds" | "historyBoundaryMessageId" | "parentMessageId"
     > & { idempotencyKey?: string },
   ): Promise<QueuedChatTurn> {
     const chat = await getAuthorizedChat(this.repository, {

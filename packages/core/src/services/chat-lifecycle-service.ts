@@ -80,6 +80,7 @@ export class ChatLifecycleService {
   }
 
   async update(input: {
+    activeLeafMessageId?: string;
     agentId?: string | null;
     chatId: string;
     subject: AuthSubject;
@@ -107,10 +108,20 @@ export class ChatLifecycleService {
         chat.workspaceId,
         input.subject.orgId,
       );
+    if (input.activeLeafMessageId !== undefined) {
+      // The pointer is a plain text column with no foreign key, so this is the only place that can
+      // stop a caller aiming one chat's branch pointer at another chat's message.
+      const leaf = await this.repository.getMessage(input.activeLeafMessageId);
+      if (leaf === undefined || leaf.chatId !== chat.id)
+        throw notFound("Message");
+    }
     const changedFields = [
       ...(input.title === undefined ? [] : ["title"]),
       ...(input.modelId === undefined ? [] : ["modelId"]),
       ...(input.agentId === undefined ? [] : ["agentId"]),
+      ...(input.activeLeafMessageId === undefined
+        ? []
+        : ["activeLeafMessageId"]),
     ];
     if (changedFields.length === 0) {
       throw new ApiError(
@@ -136,6 +147,9 @@ export class ChatLifecycleService {
       const updated = await repository.updateChat({
         ...chatWithAgent,
         ...(title === undefined ? {} : { title }),
+        ...(input.activeLeafMessageId === undefined
+          ? {}
+          : { activeLeafMessageId: input.activeLeafMessageId }),
         updatedAt,
       });
       await this.audit(

@@ -1,16 +1,4 @@
-import { Textarea, Button } from "@romeo/ui";
-import BotMessageSquare from "lucide-react/dist/esm/icons/bot-message-square.mjs";
-import Check from "lucide-react/dist/esm/icons/check.mjs";
-import Copy from "lucide-react/dist/esm/icons/copy.mjs";
-import GitBranch from "lucide-react/dist/esm/icons/git-branch.mjs";
-import Pencil from "lucide-react/dist/esm/icons/pencil.mjs";
-import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
-import ThumbsDown from "lucide-react/dist/esm/icons/thumbs-down.mjs";
-import ThumbsUp from "lucide-react/dist/esm/icons/thumbs-up.mjs";
-import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
-import User from "lucide-react/dist/esm/icons/user.mjs";
-import Volume2 from "lucide-react/dist/esm/icons/volume-2.mjs";
-import { memo, useState } from "react";
+import { memo, useCallback, useState } from "react";
 
 import type {
   Message,
@@ -19,23 +7,19 @@ import type {
   SpeechArtifact,
 } from "../features/types";
 import { writeTextToClipboard } from "../lib/clipboard";
-import { Markdown } from "../lib/markdown";
 import { useLocale } from "../lib/i18n";
-import { formatDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import type { ChatCitation, ChatRunActivity } from "./useWorkspaceController";
-import {
-  CitationList,
-  formatSpeechArtifact,
-  RunActivityList,
-} from "./ChatMessageMetadata";
 import { FormDialog } from "./FormDialog";
-import {
-  Action,
-  MessageActions,
-  MessageAttachments,
-  previewUrlForAttachment,
-} from "./ChatMessageActions";
+import { previewUrlForAttachment } from "./ChatMessageActions";
+import { ChatMessageRow } from "./ChatMessageRow";
+import type { MessageVariants } from "./message-tree";
+
+// Frozen empties handed to every row but the last. Run state (activities,
+// citations) belongs to the streaming answer alone, and a fresh [] per row
+// would defeat ChatMessageRow's memo on every token.
+const noActivities: ChatRunActivity[] = [];
+const noCitations: ChatCitation[] = [];
 
 export const ChatMessages = memo(function ChatMessages({
   activeVoiceProfileId,
@@ -53,9 +37,11 @@ export const ChatMessages = memo(function ChatMessages({
   onGenerateSpeech,
   onRate,
   onRegenerate,
+  onSelectVariant,
   runActivities,
   speechArtifacts,
   speechMessageId,
+  variantsByMessageId,
 }: {
   activeVoiceProfileId: string | undefined;
   agentName: string;
@@ -76,297 +62,102 @@ export const ChatMessages = memo(function ChatMessages({
   onGenerateSpeech: (messageId: string) => void;
   onRate: (messageId: string, rating: "negative" | "none" | "positive") => void;
   onRegenerate: () => void;
+  onSelectVariant: (messageId: string) => void;
   runActivities: ChatRunActivity[];
   speechArtifacts: Record<string, SpeechArtifact>;
   speechMessageId: string | undefined;
+  variantsByMessageId: Record<string, MessageVariants>;
 }) {
-  const { locale, t } = useLocale();
+  const { t } = useLocale();
   const [editingId, setEditingId] = useState<string>();
   const [editValue, setEditValue] = useState("");
   const [copiedId, setCopiedId] = useState<string>();
   const [previewAttachment, setPreviewAttachment] =
     useState<MessageAttachment>();
 
-  async function copy(message: Message) {
-    if (!(await writeTextToClipboard(message.content))) {
-      toast(t("copyFailed"), "error");
-      return;
-    }
-    setCopiedId(message.id);
-    window.setTimeout(() => setCopiedId(undefined), 1_500);
-  }
+  // Stable identities, or the per-row memo never holds: a new closure per
+  // render is a changed prop on every row.
+  const handleCopy = useCallback(
+    (message: Message) => {
+      void (async () => {
+        if (!(await writeTextToClipboard(message.content))) {
+          toast(t("copyFailed"), "error");
+          return;
+        }
+        setCopiedId(message.id);
+        window.setTimeout(() => setCopiedId(undefined), 1_500);
+      })();
+    },
+    [t],
+  );
+  const handleStartEdit = useCallback((message: Message) => {
+    setEditingId(message.id);
+    setEditValue(message.content);
+  }, []);
+  const handleCancelEdit = useCallback(() => setEditingId(undefined), []);
+  // Takes the draft as an argument rather than closing over it: a dependency on
+  // editValue would change this identity on every keystroke, which is a changed
+  // prop on every row in the transcript.
+  const handleSubmitEdit = useCallback(
+    (messageId: string, content: string) => {
+      void (async () => {
+        if (await onEditAndResend(messageId, content)) {
+          setEditingId(undefined);
+        }
+      })();
+    },
+    [onEditAndResend],
+  );
 
   return (
     <>
       <div className="rm-message-list">
         {messages.map((message, index) => {
-          const isAssistant = message.role === "assistant";
           const isLast = index === messages.length - 1;
           const isThinking =
-            isAssistant && message.content.length === 0 && isStreaming;
-          const artifact = speechArtifacts[message.id];
-          const messageFeedback = feedback[message.id];
-          const attachments = (
-            <MessageAttachments
-              isStreaming={isStreaming}
-              message={message}
-              onRetentionChange={onAttachmentRetention}
-              onPreview={setPreviewAttachment}
-            />
-          );
-
-          if (!isAssistant) {
-            const editing = editingId === message.id;
-            return (
-              <article className="rm-message-row user" key={message.id}>
-                <div className="rm-message-body">
-                  {editing ? (
-                    <div className="rm-message-edit">
-                      <Textarea
-                        aria-label={t("editResend")}
-                        autoFocus
-                        onChange={(event) =>
-                          setEditValue(event.currentTarget.value)
-                        }
-                        rows={Math.min(
-                          12,
-                          Math.max(3, editValue.split("\n").length),
-                        )}
-                        value={editValue}
-                      />
-                      <div className="rm-message-edit-actions">
-                        <Button
-                          onClick={() => setEditingId(undefined)}
-                          type="button"
-                        >
-                          {t("cancel")}
-                        </Button>
-                        <Button
-                          className="primary"
-                          disabled={
-                            isStreaming || editValue.trim().length === 0
-                          }
-                          onClick={() => {
-                            void (async () => {
-                              const ok = await onEditAndResend(
-                                message.id,
-                                editValue,
-                              );
-                              if (ok) setEditingId(undefined);
-                            })();
-                          }}
-                          title={
-                            isStreaming ? t("waitForResponse") : t("saveSubmit")
-                          }
-                          type="button"
-                        >
-                          {t("saveSubmit")}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rm-message-content">
-                      <Markdown content={message.content} />
-                    </div>
-                  )}
-                  {attachments}
-                  {editing ? null : (
-                    <MessageActions>
-                      <Action
-                        label={
-                          copiedId === message.id ? t("copied") : t("copy")
-                        }
-                        onClick={() => void copy(message)}
-                      >
-                        {copiedId === message.id ? (
-                          <Check size={15} />
-                        ) : (
-                          <Copy size={15} />
-                        )}
-                      </Action>
-                      <Action
-                        disabled={isStreaming}
-                        label={t("editResend")}
-                        onClick={() => {
-                          setEditingId(message.id);
-                          setEditValue(message.content);
-                        }}
-                        title={
-                          isStreaming ? t("waitForResponse") : t("editResend")
-                        }
-                      >
-                        <Pencil size={15} />
-                      </Action>
-                      <Action
-                        disabled={isStreaming}
-                        label={t("branch")}
-                        onClick={() => onBranch(message.id)}
-                        title={isStreaming ? t("waitForResponse") : t("branch")}
-                      >
-                        <GitBranch size={15} />
-                      </Action>
-                      <Action
-                        disabled={isStreaming}
-                        label={t("deleteMessage")}
-                        onClick={() => onDelete(message.id)}
-                        title={
-                          isStreaming
-                            ? t("waitForResponse")
-                            : t("deleteMessage")
-                        }
-                      >
-                        <Trash2 size={15} />
-                      </Action>
-                    </MessageActions>
-                  )}
-                </div>
-                <div className="rm-message-avatar user">
-                  <User aria-hidden="true" size={16} />
-                </div>
-              </article>
-            );
-          }
-
+            message.role === "assistant" &&
+            message.content.length === 0 &&
+            isStreaming;
+          // Flattened to scalars: variantsByMessageId is rebuilt whenever the
+          // transcript is, which during a stream is once per token.
+          const variants = variantsByMessageId[message.id];
           return (
-            <article className="rm-message-row assistant" key={message.id}>
-              <div className="rm-message-avatar">
-                <BotMessageSquare aria-hidden="true" size={16} />
-              </div>
-              <div className="rm-message-body">
-                <div className="rm-message-heading">
-                  <span>{agentName}</span>
-                </div>
-                <div className="rm-message-content">
-                  {isThinking ? (
-                    <span className="rm-skeleton" />
-                  ) : (
-                    <Markdown
-                      content={message.content}
-                      streaming={isLast && isStreaming}
-                    />
-                  )}
-                </div>
-                {isLast && isStreaming ? (
-                  <RunActivityList activities={runActivities} />
-                ) : null}
-                {(message.citations?.length ??
-                  (isLast ? citations.length : 0)) > 0 ? (
-                  <CitationList citations={message.citations ?? citations} />
-                ) : null}
-                {attachments}
-                {artifact ? (
-                  <div className="rm-speech-artifact">
-                    <span>{formatSpeechArtifact(artifact)}</span>
-                    {artifact.playbackUrl ? (
-                      // The assistant message immediately above is the text
-                      // alternative for this generated speech-only artifact.
-                      // oxlint-disable-next-line jsx-a11y/media-has-caption
-                      <audio
-                        controls
-                        preload="metadata"
-                        src={artifact.playbackUrl}
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
-                {isThinking ? null : (
-                  <>
-                    <MessageActions>
-                      <Action
-                        label={
-                          copiedId === message.id ? t("copied") : t("copy")
-                        }
-                        onClick={() => copy(message)}
-                      >
-                        {copiedId === message.id ? (
-                          <Check size={15} />
-                        ) : (
-                          <Copy size={15} />
-                        )}
-                      </Action>
-                      <Action
-                        active={messageFeedback?.rating === "positive"}
-                        label={t("goodResponse")}
-                        onClick={() =>
-                          onRate(
-                            message.id,
-                            messageFeedback?.rating === "positive"
-                              ? "none"
-                              : "positive",
-                          )
-                        }
-                        pressed={messageFeedback?.rating === "positive"}
-                      >
-                        <ThumbsUp size={15} />
-                      </Action>
-                      <Action
-                        active={messageFeedback?.rating === "negative"}
-                        label={t("poorResponse")}
-                        onClick={() =>
-                          onRate(
-                            message.id,
-                            messageFeedback?.rating === "negative"
-                              ? "none"
-                              : "negative",
-                          )
-                        }
-                        pressed={messageFeedback?.rating === "negative"}
-                      >
-                        <ThumbsDown size={15} />
-                      </Action>
-                      <Action
-                        disabled={
-                          isStreaming ||
-                          activeVoiceProfileId === undefined ||
-                          (isGeneratingSpeech && speechMessageId === message.id)
-                        }
-                        label={t("readAloud")}
-                        onClick={() => onGenerateSpeech(message.id)}
-                      >
-                        <Volume2 size={15} />
-                      </Action>
-                      <Action
-                        disabled={isStreaming}
-                        label={t("branch")}
-                        onClick={() => onBranch(message.id)}
-                        title={isStreaming ? t("waitForResponse") : t("branch")}
-                      >
-                        <GitBranch size={15} />
-                      </Action>
-                      <Action
-                        disabled={isStreaming}
-                        label={t("deleteMessage")}
-                        onClick={() => onDelete(message.id)}
-                        title={
-                          isStreaming
-                            ? t("waitForResponse")
-                            : t("deleteMessage")
-                        }
-                      >
-                        <Trash2 size={15} />
-                      </Action>
-                      {!isStreaming && isLast ? (
-                        <Action label={t("regenerate")} onClick={onRegenerate}>
-                          <RefreshCw size={15} />
-                        </Action>
-                      ) : null}
-                    </MessageActions>
-                    {!isStreaming && isLast ? (
-                      <Button
-                        className="rm-continue-button"
-                        onClick={onContinue}
-                        type="button"
-                      >
-                        {t("continue")}
-                      </Button>
-                    ) : null}
-                  </>
-                )}
-                <div className="rm-message-meta" suppressHydrationWarning>
-                  {formatDateTime(message.createdAt, locale)}
-                </div>
-              </div>
-            </article>
+            <ChatMessageRow
+              activeVoiceProfileId={activeVoiceProfileId}
+              agentName={agentName}
+              artifact={speechArtifacts[message.id]}
+              citations={isLast ? citations : noCitations}
+              copied={copiedId === message.id}
+              editing={editingId === message.id}
+              editValue={editingId === message.id ? editValue : ""}
+              isGeneratingSpeech={isGeneratingSpeech}
+              isLast={isLast}
+              isSpeechTarget={speechMessageId === message.id}
+              isStreaming={isStreaming}
+              isThinking={isThinking}
+              key={message.id}
+              message={message}
+              nextVariantId={variants?.siblingIds[variants.index + 1]}
+              onAttachmentRetention={onAttachmentRetention}
+              onBranch={onBranch}
+              onCancelEdit={handleCancelEdit}
+              onContinue={onContinue}
+              onCopy={handleCopy}
+              onDelete={onDelete}
+              onEditValueChange={setEditValue}
+              onGenerateSpeech={onGenerateSpeech}
+              onPreview={setPreviewAttachment}
+              onRate={onRate}
+              onRegenerate={onRegenerate}
+              onSelectVariant={onSelectVariant}
+              onStartEdit={handleStartEdit}
+              onSubmitEdit={handleSubmitEdit}
+              previousVariantId={variants?.siblingIds[variants.index - 1]}
+              rating={feedback[message.id]?.rating}
+              runActivities={isLast ? runActivities : noActivities}
+              variantIndex={variants?.index}
+              variantTotal={variants?.total}
+            />
           );
         })}
       </div>

@@ -291,6 +291,7 @@ export class ChatService {
   }
 
   update(input: {
+    activeLeafMessageId?: string;
     chatId: string;
     subject: AuthSubject;
     title?: string;

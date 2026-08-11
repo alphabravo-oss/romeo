@@ -1,14 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import type {
-  Message,
-  MessageFeedbackState,
-  SpeechArtifact,
-} from "../features/types";
+import { listMessageFeedback } from "../features";
+import type { MessageFeedbackState, SpeechArtifact } from "../features/types";
 import { inspectRunContext, type RunContextPreview } from "../features/chat";
 import { getManagedModelPreferences } from "../features/managed-models";
-import type { QueuedChatTurn } from "../features/runs";
+import { listQueuedTurns, type QueuedChatTurn } from "../features/runs";
 import { useLocale } from "../lib/i18n";
 import {
   isActiveChatRemoval,
@@ -16,8 +13,8 @@ import {
   shouldAutoSelectChat,
 } from "./chat-selection";
 import { resolveChatModelSelection } from "./chat-model-selection";
+import { useActiveRun } from "./useActiveRun";
 import { useChatMessageState } from "./useChatMessageState";
-import { useChatRunStream } from "./useChatRunStream";
 import { useToolExecution } from "./useToolExecution";
 import { useWorkspaceAttachments } from "./useWorkspaceAttachments";
 import { useWorkspaceChatActions } from "./useWorkspaceChatActions";
@@ -27,12 +24,16 @@ import { useWorkspaceTurnActions } from "./useWorkspaceTurnActions";
 import { useWorkspaceVoiceActions } from "./useWorkspaceVoiceActions";
 
 const initialDraft = "";
+// Stable identities for "this chat has nothing yet", so an idle chat does not
+// hand the panel a fresh empty value on every render. Mirrors useWorkspaceData.
+const noQueuedTurns: QueuedChatTurn[] = [];
+const noFeedback: Record<string, MessageFeedbackState> = {};
 export type {
   PendingDocumentAttachment,
   PendingImageAttachment,
 } from "./useWorkspaceAttachments";
 
-export type { ChatCitation, ChatRunActivity } from "./useChatRunStream";
+export type { ChatCitation, ChatRunActivity } from "../lib/run-registry";
 
 export function useWorkspaceController(
   options: {
@@ -45,7 +46,6 @@ export function useWorkspaceController(
   const queryClient = useQueryClient();
   const { t } = useLocale();
   const [draft, setDraft] = useState(initialDraft);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | undefined>(
     options.requestedAgentId,
   );
@@ -57,28 +57,44 @@ export function useWorkspaceController(
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [attachedUrls, setAttachedUrls] = useState<string[]>([]);
   const [temporaryNextChat, setTemporaryNextChat] = useState(false);
-  const [queuedTurns, setQueuedTurns] = useState<QueuedChatTurn[]>([]);
   const [modelOverrideId, setModelOverrideId] = useState<string>();
   const [speechArtifacts, setSpeechArtifacts] = useState<
     Record<string, SpeechArtifact>
   >({});
-  const [messageFeedback, setMessageFeedback] = useState<
-    Record<string, MessageFeedbackState>
-  >({});
+  // Keyed per chat like the transcript, and for the same reason: a run settles
+  // in the chat it started in, which is no longer necessarily the chat on
+  // screen. A shared slot let a background run overwrite the visible queue and
+  // the visible ratings.
+  const queuedTurnsQuery = useQuery({
+    queryKey: ["queuedTurns", activeChatId],
+    queryFn: () => listQueuedTurns(activeChatId!),
+    enabled: activeChatId !== undefined,
+  });
+  const messageFeedbackQuery = useQuery({
+    queryKey: ["messageFeedback", activeChatId],
+    queryFn: async () =>
+      Object.fromEntries(
+        (await listMessageFeedback(activeChatId!)).map((item) => [
+          item.messageId,
+          item,
+        ]),
+      ),
+    enabled: activeChatId !== undefined,
+  });
   const [contextPreview, setContextPreview] = useState<RunContextPreview>();
   const [contextPreviewError, setContextPreviewError] = useState<string>();
   const [isInspectingContext, setIsInspectingContext] = useState(false);
   const [error, setError] = useState<string>();
   const handledChatRemovalEventId = useRef<string | undefined>(undefined);
+  // Streaming state is per chat and lives outside React, so a run that started
+  // here keeps going while the user reads or writes somewhere else.
   const {
+    activities: runActivities,
     citations,
-    consumeRunStream,
+    error: runError,
     handleCancel,
     isStreaming,
-    resetRunPresentation,
-    runActivities,
-    setActiveRunId,
-  } = useChatRunStream({ setError, setMessages, t });
+  } = useActiveRun(activeChatId);
   const {
     appendMessage,
     handleAttachmentRetention,
@@ -89,13 +105,13 @@ export function useWorkspaceController(
   } = useChatMessageState({
     activeChatId,
     isStreaming,
+    queryClient,
     setError,
-    setMessageFeedback,
-    setMessages,
   });
   const {
     activeAgent,
     agents,
+    allMessages,
     chats,
     chatsTotal,
     chatExperience,
@@ -103,11 +119,13 @@ export function useWorkspaceController(
     isLoadingMoreChats,
     latestChatEvent,
     loadMoreChats,
+    messages,
     models,
     providerOperationalSummary,
     providers,
     subject,
     tools,
+    variantsByMessageId,
     workspace,
   } = useWorkspaceData(activeAgentId, {
     ...(activeChatId === undefined ? {} : { activeChatId }),
@@ -182,14 +200,15 @@ export function useWorkspaceController(
     handleEditAndResend,
     handleSubmit,
     regenerateLast,
+    trackChatRun,
   } = useWorkspaceTurnActions({
     activeAgentId: activeAgent?.id,
     activeChatId,
+    allMessages,
     autoTitleEnabled: chatExperience?.autoTitleEnabled ?? true,
     appendMessage,
     attachedUrls,
     clearPendingAttachments,
-    consumeRunStream,
     documentAttachments,
     draft,
     imageAttachments,
@@ -200,18 +219,14 @@ export function useWorkspaceController(
       : { onChatCreated: options.onChatSelection }),
     queryClient,
     refreshUsageControls,
-    resetRunPresentation,
     restoreMessages,
     restorePendingAttachments,
     selectedModelId,
     setActiveChatId,
-    setActiveRunId,
     setAttachedUrls,
     setDraft,
     setError,
     setIsDraftingNewChat,
-    setMessages,
-    setQueuedTurns,
     setTemporaryNextChat,
     syncPersistedMessages,
     t,
@@ -229,28 +244,25 @@ export function useWorkspaceController(
     handleNewTemporaryChat: handleNewTemporaryChatInternal,
     handleSelectChat: handleSelectChatInternal,
     handleSelectModel,
+    handleSelectVariant,
     handleWorkspaceArchived,
     renameChat,
   } = useWorkspaceChatActions({
     activeChatId,
-    appendMessage,
-    consumeRunStream,
+    allMessages,
     followQueuedRuns,
-    isStreaming,
     queryClient,
     setActiveAgentId,
     setActiveChatId,
-    setActiveRunId,
     setAttachedUrls,
     setError,
     setIsDraftingNewChat,
-    setMessages,
     setModelOverrideId,
-    setQueuedTurns,
     setSpeechArtifacts,
     setTemporaryNextChat,
     syncPersistedMessages,
     t,
+    trackChatRun,
     workspaceId: workspace?.id,
   });
   const handleSelectChat = async (chatId: string) => {
@@ -420,7 +432,9 @@ export function useWorkspaceController(
     deleteChat,
     documentAttachments,
     draft,
-    error,
+    // A local failure is always the newer signal: every handler clears it
+    // before acting, so a lingering provider error must not mask it.
+    error: error ?? runError,
     handleCancel,
     handleCancelQueuedTurn,
     handleChatArchived,
@@ -454,6 +468,7 @@ export function useWorkspaceController(
     handleTranscribeAudio,
     handleSelectChat,
     handleSelectModel,
+    handleSelectVariant,
     handleSubmit,
     handleSyncProvider,
     handleUpdateModelPricing,
@@ -466,7 +481,7 @@ export function useWorkspaceController(
     isTranscribingVoice,
     isUpdatingModelPricing,
     isStreaming,
-    queuedTurns,
+    queuedTurns: queuedTurnsQuery.data ?? noQueuedTurns,
     loadMoreChats,
     attachedUrls,
     webSearchEnabled,
@@ -474,7 +489,7 @@ export function useWorkspaceController(
     temporaryNextChat,
     imageAttachments,
     messages,
-    messageFeedback,
+    messageFeedback: messageFeedbackQuery.data ?? noFeedback,
     models,
     pendingToolApproval: toolExecution.pendingApproval,
     providers,
@@ -494,6 +509,7 @@ export function useWorkspaceController(
     runActivities,
     toolResult: toolExecution.toolResult,
     tools,
+    variantsByMessageId,
     workspace,
   };
 }

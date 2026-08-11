@@ -48,6 +48,33 @@ export function historyBefore(
   return index === -1 ? [] : ordered.slice(0, index);
 }
 
+export function pathThroughMessage(
+  ordered: Message[],
+  messageId: string,
+): Message[] {
+  // Same chat-scoping property historyBefore documents: only ids present in `ordered` are followed,
+  // so a parent pointer aimed at another chat (or at a deleted row) truncates the branch instead of
+  // splicing in foreign turns. The seen set makes a cycle terminate — parent ids are plain text with
+  // no foreign key, so nothing at write time guarantees the graph is acyclic.
+  const byId = new Map(ordered.map((message) => [message.id, message]));
+  const path: Message[] = [];
+  const seen = new Set<string>();
+  let current = byId.get(messageId);
+  while (current !== undefined && !seen.has(current.id)) {
+    seen.add(current.id);
+    path.push(current);
+    current =
+      current.parentId === undefined ? undefined : byId.get(current.parentId);
+  }
+  return path.reverse();
+}
+
+export function hasMessageTree(messages: Message[]): boolean {
+  // Chats imported or persisted before parent links existed are flat, and their whole prefix is the
+  // branch. Asking "does any row carry a parent?" is the only signal that separates the two shapes.
+  return messages.some((message) => message.parentId !== undefined);
+}
+
 export function toHistoryChatMessages(messages: Message[]): ChatMessage[] {
   // Whitelist, not a map: persisted 'system' rows are user-authored via import (privilege escalation)
   // and persisted 'tool' rows would serialize without a tool_call_id, which providers reject with a 400.

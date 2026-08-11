@@ -7,8 +7,10 @@ import { ApiError } from "../errors";
 import { appendRunCitations } from "./run-knowledge";
 import {
   buildRunMessages,
+  hasMessageTree,
   historyBefore,
   orderChatHistory,
+  pathThroughMessage,
   toHistoryChatMessages,
 } from "./run-messages";
 
@@ -283,6 +285,113 @@ describe("ordering and boundary", () => {
         "msg_missing",
       ),
     ).toEqual([]);
+  });
+});
+
+describe("branch path", () => {
+  // u1 -> a1 forks into u2a -> a2a and the later sibling u2b -> a2b.
+  const branched = [
+    message({
+      id: "u1",
+      role: "user",
+      content: "First question",
+      createdAt: "2026-07-15T10:00:00.000Z",
+    }),
+    message({
+      id: "a1",
+      role: "assistant",
+      content: "First answer",
+      parentId: "u1",
+      createdAt: "2026-07-15T10:00:01.000Z",
+    }),
+    message({
+      id: "u2a",
+      role: "user",
+      content: "Branch A",
+      parentId: "a1",
+      createdAt: "2026-07-15T10:00:02.000Z",
+    }),
+    message({
+      id: "a2a",
+      role: "assistant",
+      content: "Answer A",
+      parentId: "u2a",
+      createdAt: "2026-07-15T10:00:03.000Z",
+    }),
+    message({
+      id: "u2b",
+      role: "user",
+      content: "Branch B",
+      parentId: "a1",
+      createdAt: "2026-07-15T10:00:04.000Z",
+    }),
+    message({
+      id: "a2b",
+      role: "assistant",
+      content: "Answer B",
+      parentId: "u2b",
+      createdAt: "2026-07-15T10:00:05.000Z",
+    }),
+  ];
+
+  it("returns the root-to-message chain in order", () => {
+    expect(
+      pathThroughMessage(orderChatHistory(branched), "a2a").map(
+        (item) => item.id,
+      ),
+    ).toEqual(["u1", "a1", "u2a", "a2a"]);
+  });
+
+  it("excludes the sibling branch, which historyBefore would have spliced in", () => {
+    // u2b/a2b sort before a2a is regenerated in wall-clock order, so an index cut would leak them.
+    const path = pathThroughMessage(orderChatHistory(branched), "a2b");
+    expect(path.map((item) => item.id)).toEqual(["u1", "a1", "u2b", "a2b"]);
+    expect(JSON.stringify(path)).not.toContain("Answer A");
+  });
+
+  it("returns nothing for an id outside the supplied messages", () => {
+    expect(
+      pathThroughMessage(orderChatHistory(branched), "msg_other_chat"),
+    ).toEqual([]);
+  });
+
+  it("truncates the branch at a parent id that no longer exists", () => {
+    const orphan = message({
+      id: "orphan",
+      role: "user",
+      content: "Parent was deleted",
+      parentId: "msg_deleted",
+    });
+
+    expect(
+      pathThroughMessage([orphan], "orphan").map((item) => item.id),
+    ).toEqual(["orphan"]);
+  });
+
+  it("terminates on a parent cycle instead of walking forever", () => {
+    const left = message({
+      id: "left",
+      role: "user",
+      content: "left",
+      parentId: "right",
+    });
+    const right = message({
+      id: "right",
+      role: "assistant",
+      content: "right",
+      parentId: "left",
+    });
+
+    expect(
+      pathThroughMessage([left, right], "left").map((item) => item.id),
+    ).toEqual(["right", "left"]);
+  });
+
+  it("reports a tree only once some message carries a parent", () => {
+    expect(hasMessageTree(branched)).toBe(true);
+    expect(
+      hasMessageTree([message({ id: "u1", role: "user", content: "flat" })]),
+    ).toBe(false);
   });
 });
 

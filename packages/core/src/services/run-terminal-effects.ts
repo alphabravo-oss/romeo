@@ -2,6 +2,7 @@ import type { BaseModel, ProviderTokenUsage } from "@romeo/providers";
 
 import type { RunRecord } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import { advanceChatLeaf, runUserMessage } from "./run-command-service";
 import type { RunEventSequencer } from "./run-event-sequencer";
 import type { RunKnowledgeCitation } from "./run-knowledge";
 import { recordRunTerminalUsage } from "./run-usage";
@@ -99,16 +100,26 @@ export async function persistTerminalRunInRepository(
     createdAt: completedAt,
   });
   if (input.assistantContent.length > 0) {
+    // The parent is the run's own user message, never the chat's leaf pointer: switching variants
+    // while this run streams would otherwise graft the answer onto the branch the reader is looking
+    // at rather than the one that asked the question.
+    const parent = runUserMessage(
+      finalized,
+      await repository.listMessages(finalized.chatId),
+    );
+    const assistantId = `msg_run_terminal_${finalized.id}`;
     await repository.createMessage({
-      id: `msg_run_terminal_${finalized.id}`,
+      id: assistantId,
       chatId: finalized.chatId,
       role: "assistant",
       content: input.assistantContent,
       ...(input.citations === undefined || input.citations.length === 0
         ? {}
         : { citations: input.citations }),
+      ...(parent === undefined ? {} : { parentId: parent.id }),
       createdAt: completedAt,
     });
+    await advanceChatLeaf(repository, finalized.chatId, assistantId);
   }
   const eventType = terminalWebhookEventType(input.status);
   await repository.createBackgroundJob({

@@ -82,13 +82,34 @@ export abstract class InMemoryConversationRepository extends InMemoryChatReposit
   }
 
   async deleteMessage(messageId: string): Promise<void> {
-    const index = this.data.messages.findIndex(
-      (message) => message.id === messageId,
-    );
-    if (index >= 0) this.data.messages.splice(index, 1);
+    const message = this.data.messages.find((item) => item.id === messageId);
+    if (message === undefined) return;
+    // Splice, don't sever: children adopt their grandparent. Left dangling, every turn above the
+    // deleted row falls off the branch and silently stops being replayed to the provider.
+    this.data.messages = this.data.messages
+      .filter((item) => item.id !== messageId)
+      .map((item) => {
+        if (item.parentId !== messageId) return item;
+        const child = { ...item };
+        if (message.parentId === undefined) delete child.parentId;
+        else child.parentId = message.parentId;
+        return child;
+      });
     this.data.messageParts = this.data.messageParts.filter(
       (part) => part.messageId !== messageId,
     );
+    const chat = this.data.chats.find((item) => item.id === message.chatId);
+    if (chat === undefined || chat.activeLeafMessageId !== messageId) return;
+    // A pointer still naming the deleted row resolves to no branch, so the next turn would persist
+    // as a fresh root and collapse the transcript. Its parent is the tip of what is left; a deleted
+    // root has none, so fall back to the newest surviving row — a child is always written after its
+    // parent, which makes the newest row a branch tip.
+    const replacement =
+      message.parentId ?? (await this.listMessages(message.chatId)).at(-1)?.id;
+    const repaired = { ...chat };
+    if (replacement === undefined) delete repaired.activeLeafMessageId;
+    else repaired.activeLeafMessageId = replacement;
+    await this.updateChat(repaired);
   }
 
   async listMessageParts(messageId: string): Promise<E.MessagePart[]> {

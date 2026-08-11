@@ -103,6 +103,9 @@ export const StartRunSchema = z
     content: z.string().min(1).max(200_000),
     modelId: identifier.optional(),
     historyBoundaryMessageId: identifier.optional(),
+    // Attaches the new turn under an existing message instead of extending the
+    // active branch: `null` forks from the chat root, absent extends the leaf.
+    parentMessageId: z.union([identifier, z.null()]).optional(),
     fileIds: z.array(z.string().min(1).max(160)).max(8).optional(),
     webSearch: z.boolean().optional(),
     urls: z.array(z.url()).max(5).optional(),
@@ -115,6 +118,7 @@ export const EnqueueChatTurnSchema = StartRunSchema.omit({
   attachments: true,
   fileIds: true,
   historyBoundaryMessageId: true,
+  parentMessageId: true,
 })
   .extend({ idempotencyKey: z.string().min(1).max(200).optional() })
   .openapi("EnqueueChatTurnRequest");

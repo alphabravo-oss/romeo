@@ -459,7 +459,7 @@ export function ChatComposer({
                 </span>
                 <Button
                   aria-label={`${t("removeQueued")}: ${turn.content}`}
-                  onClick={() => onCancelQueuedTurn(turn.id)}
+                  onClick={() => onCancelQueuedTurn(turn)}
                   type="button"
                 >
                   <X aria-hidden="true" size={12} />

@@ -12,10 +12,18 @@ export async function* streamRunEvents(
 ): AsyncIterable<RunEvent> {
   configureBrowserApiClients();
   const idleController = new AbortController();
-  const idleTimer = window.setTimeout(
-    () => idleController.abort("run stream idle timeout"),
-    streamIdleTimeoutMs,
-  );
+  // Re-armed on every reset, so the window measures the gap between events. A
+  // timer armed once would instead cap the whole answer, dropping a model that
+  // streams for longer than the window even while tokens keep arriving.
+  let idleHandle: number | undefined;
+  const resetIdle = () => {
+    window.clearTimeout(idleHandle);
+    idleHandle = window.setTimeout(
+      () => idleController.abort("run stream idle timeout"),
+      streamIdleTimeoutMs,
+    );
+  };
+  resetIdle();
   const forwardAbort = () => idleController.abort(signal?.reason);
   signal?.addEventListener("abort", forwardAbort, { once: true });
   let streamError: unknown;
@@ -33,10 +41,13 @@ export async function* streamRunEvents(
     });
     for await (const value of result.stream) {
       if (isRunEvent(value)) yield value;
+      // Any traffic -- events and keep-alives alike -- means the stream is
+      // alive, so the window measures silence rather than total duration.
+      resetIdle();
     }
     if (!signal?.aborted && streamError !== undefined) throw streamError;
   } finally {
-    window.clearTimeout(idleTimer);
+    window.clearTimeout(idleHandle);
     signal?.removeEventListener("abort", forwardAbort);
     idleController.abort();
   }

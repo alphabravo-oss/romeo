@@ -1,54 +1,42 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 
-import {
-  archiveChat,
-  updateChat,
-  type Message,
-  type SpeechArtifact,
-} from "../features";
-import {
-  cancelQueuedTurn,
-  getActiveChatRun,
-  listQueuedTurns,
-} from "../features/runs";
+import { archiveChat, updateChat, type SpeechArtifact } from "../features";
+import { cancelQueuedTurn, getActiveChatRun } from "../features/runs";
 import type { QueuedChatTurn } from "../features/runs";
+import type { Chat, Message } from "../features/types";
 import type { MessageKey } from "../lib/i18n";
+import { deepestLeaf } from "./message-tree";
 
 interface WorkspaceChatActionsOptions {
   activeChatId: string | undefined;
-  appendMessage: (
-    chatId: string,
-    role: Message["role"],
-    content: string,
-    attachments?: Message["attachments"],
-  ) => void;
-  consumeRunStream: (runId: string) => Promise<void>;
+  allMessages: Message[];
   followQueuedRuns: (chatId: string, previousRunId?: string) => Promise<void>;
-  isStreaming: boolean;
   queryClient: QueryClient;
   setActiveAgentId: Dispatch<SetStateAction<string | undefined>>;
   setActiveChatId: Dispatch<SetStateAction<string | undefined>>;
-  setActiveRunId: Dispatch<SetStateAction<string | undefined>>;
   setAttachedUrls: Dispatch<SetStateAction<string[]>>;
   setError: Dispatch<SetStateAction<string | undefined>>;
   setIsDraftingNewChat: Dispatch<SetStateAction<boolean>>;
-  setMessages: Dispatch<SetStateAction<Message[]>>;
   setModelOverrideId: Dispatch<SetStateAction<string | undefined>>;
-  setQueuedTurns: Dispatch<SetStateAction<QueuedChatTurn[]>>;
   setSpeechArtifacts: Dispatch<SetStateAction<Record<string, SpeechArtifact>>>;
   setTemporaryNextChat: Dispatch<SetStateAction<boolean>>;
   syncPersistedMessages: (chatId: string) => Promise<void>;
   t: (key: MessageKey) => string;
+  trackChatRun: (chatId: string, runId: string) => void;
   workspaceId: string | undefined;
 }
 
 export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
-  async function handleCancelQueuedTurn(turnId: string) {
-    if (options.activeChatId === undefined) return;
+  // Addressed by the turn's own chat, not by the chat on screen: the two agree
+  // today only because each chat renders its own queue, and a cancel sent to
+  // the wrong chat is a 404 rather than a visible failure.
+  async function handleCancelQueuedTurn(turn: QueuedChatTurn) {
     try {
-      await cancelQueuedTurn(options.activeChatId, turnId);
-      options.setQueuedTurns(await listQueuedTurns(options.activeChatId));
+      await cancelQueuedTurn(turn.chatId, turn.id);
+      await options.queryClient.invalidateQueries({
+        queryKey: ["queuedTurns", turn.chatId],
+      });
     } catch (caught) {
       options.setError(
         caught instanceof Error
@@ -58,35 +46,52 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     }
   }
 
+  // No streaming lock on either entry point: the registry owns the stream, so
+  // a run started in this chat keeps writing to its own cache key while the
+  // user reads or starts another conversation.
   async function handleSelectChat(chatId: string) {
-    if (options.isStreaming) return;
     options.setActiveChatId(chatId);
     options.setIsDraftingNewChat(false);
     options.setError(undefined);
-    const [activeRun, serverQueue] = await Promise.all([
+    // The queue is a per-chat query keyed off the chat now on screen, so it
+    // reloads itself rather than being pushed in from here.
+    const [activeRun] = await Promise.all([
       getActiveChatRun(chatId),
-      listQueuedTurns(chatId),
       options.syncPersistedMessages(chatId),
-    ]).then(([run, queue]) => [run, queue] as const);
-    options.setQueuedTurns(serverQueue);
-    if (activeRun !== null) {
-      options.setActiveRunId(activeRun.id);
-      options.appendMessage(chatId, "assistant", "");
-      await options.consumeRunStream(activeRun.id);
-      await options.syncPersistedMessages(chatId);
-    }
+    ]);
+    // Selecting a chat mid-answer rejoins the run instead of refusing to move.
+    if (activeRun !== null) options.trackChatRun(chatId, activeRun.id);
     await options.followQueuedRuns(chatId, activeRun?.id);
   }
 
   function handleNewChat() {
-    if (options.isStreaming) return;
     options.setActiveChatId(undefined);
     options.setIsDraftingNewChat(true);
-    options.setMessages([]);
     options.setSpeechArtifacts({});
     options.setError(undefined);
     options.setTemporaryNextChat(false);
-    options.setQueuedTurns([]);
+  }
+
+  // Switching variants moves the chat's leaf pointer to the bottom of the
+  // chosen sibling's branch; the displayed path is derived from that pointer,
+  // so writing the fresh chat straight into its cache re-renders immediately
+  // instead of waiting for a refetch.
+  async function handleSelectVariant(messageId: string) {
+    const chatId = options.activeChatId;
+    if (chatId === undefined) return;
+    options.setError(undefined);
+    try {
+      const updated = await updateChat(chatId, {
+        activeLeafMessageId: deepestLeaf(options.allMessages, messageId),
+      });
+      options.queryClient.setQueryData<Chat>(["chat", chatId], updated);
+    } catch (caught) {
+      options.setError(
+        caught instanceof Error
+          ? caught.message
+          : options.t("unableSwitchVariant"),
+      );
+    }
   }
 
   function handleNewTemporaryChat() {
@@ -183,7 +188,6 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     options.setActiveChatId(undefined);
     options.setIsDraftingNewChat(false);
     options.setActiveAgentId(undefined);
-    options.setMessages([]);
     options.setSpeechArtifacts({});
     await Promise.all([
       options.queryClient.invalidateQueries({ queryKey: ["bootstrap"] }),
@@ -214,6 +218,7 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     handleNewTemporaryChat,
     handleSelectChat,
     handleSelectModel,
+    handleSelectVariant,
     handleWorkspaceArchived,
     renameChat,
   };
@@ -226,7 +231,6 @@ function resetRemovedActiveChat(
   if (options.activeChatId !== chatId) return;
   options.setActiveChatId(undefined);
   options.setIsDraftingNewChat(false);
-  options.setMessages([]);
   options.setSpeechArtifacts({});
 }
 

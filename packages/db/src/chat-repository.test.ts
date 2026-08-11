@@ -64,6 +64,7 @@ describe("chat repository mappers", () => {
       archivedAt: null,
       legalHoldUntil: new Date("2026-07-01T00:00:00.000Z"),
       legalHoldReason: "investigation",
+      activeLeafMessageId: null,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
       updatedAt: new Date("2026-06-27T00:05:00.000Z"),
     });
@@ -78,6 +79,44 @@ describe("chat repository mappers", () => {
       legalHoldReason: "investigation",
       updatedAt: "2026-06-27T00:05:00.000Z",
     });
+    expect("activeLeafMessageId" in chat).toBe(false);
+  });
+
+  it("maps message tree pointers and omits absent ones", () => {
+    const row = {
+      id: "msg_2",
+      chatId: "chat_1",
+      role: "assistant" as const,
+      content: "Branch answer",
+      citations: null,
+      createdAt: new Date("2026-07-16T12:00:01.000Z"),
+    };
+
+    expect(toMessageRecord({ ...row, parentId: "msg_1" })).toMatchObject({
+      parentId: "msg_1",
+    });
+    expect("parentId" in toMessageRecord({ ...row, parentId: null })).toBe(
+      false,
+    );
+    expect(
+      toChatRecord({
+        id: "chat_1",
+        orgId: "org_1",
+        workspaceId: "workspace_1",
+        title: "Branched",
+        modelId: null,
+        agentId: null,
+        temporary: false,
+        expiresAt: null,
+        createdBy: "user_1",
+        archivedAt: null,
+        legalHoldUntil: null,
+        legalHoldReason: null,
+        activeLeafMessageId: "msg_2",
+        createdAt: new Date("2026-06-27T00:00:00.000Z"),
+        updatedAt: new Date("2026-06-27T00:05:00.000Z"),
+      }),
+    ).toMatchObject({ activeLeafMessageId: "msg_2" });
   });
 
   it("maps message parts without exposing internal ordering columns", () => {
@@ -129,6 +168,7 @@ describe("chat repository mappers", () => {
           publishedAt: "2026-07-15T12:00:00.000Z",
         },
       ],
+      parentId: null,
       createdAt: new Date("2026-07-16T12:00:01.000Z"),
     });
 

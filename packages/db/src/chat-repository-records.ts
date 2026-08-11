@@ -25,6 +25,7 @@ export interface ChatRecord {
   archivedAt?: string;
   legalHoldUntil?: string;
   legalHoldReason?: string;
+  activeLeafMessageId?: string;
   updatedAt: string;
 }
 
@@ -39,6 +40,7 @@ export interface MessageRecord {
     title: string;
     sourceUri?: string;
   }>;
+  parentId?: string;
   createdAt: string;
 }
 
@@ -108,6 +110,8 @@ export function toChatRecord(row: typeof chats.$inferSelect): ChatRecord {
   if (legalHoldUntil !== undefined) chat.legalHoldUntil = legalHoldUntil;
   const legalHoldReason = optionalIsoString(row.legalHoldReason);
   if (legalHoldReason !== undefined) chat.legalHoldReason = legalHoldReason;
+  if (row.activeLeafMessageId !== null)
+    chat.activeLeafMessageId = row.activeLeafMessageId;
   return chat;
 }
 
@@ -121,6 +125,7 @@ export function toMessageRecord(
     role: row.role,
     content: row.content,
     ...(citations.length === 0 ? {} : { citations }),
+    ...(row.parentId === null ? {} : { parentId: row.parentId }),
     createdAt: toIsoString(row.createdAt),
   };
 }
@@ -208,6 +213,7 @@ export function toChatInsert(record: ChatRecord): typeof chats.$inferInsert {
     archivedAt: optionalDate(record.archivedAt),
     legalHoldUntil: optionalDate(record.legalHoldUntil),
     legalHoldReason: record.legalHoldReason ?? null,
+    activeLeafMessageId: record.activeLeafMessageId ?? null,
     updatedAt: new Date(record.updatedAt),
   };
 }
@@ -221,6 +227,7 @@ export function toMessageInsert(
     role: record.role,
     content: record.content,
     citations: record.citations ?? null,
+    parentId: record.parentId ?? null,
     createdAt: new Date(record.createdAt),
   };
 }

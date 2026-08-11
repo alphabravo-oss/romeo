@@ -40,10 +40,17 @@ export function useStickToBottom(dep: unknown) {
     return () => node.removeEventListener("scroll", onScroll);
   }, [dep]);
 
+  // Deferred to the next frame rather than written inline: reading
+  // scrollHeight and assigning scrollTop forces a synchronous layout, and a
+  // streaming answer changes `dep` once per token. Cancelling the pending
+  // handle collapses a whole frame's worth of deltas into one layout.
   useEffect(() => {
     const node = ref.current;
     if (node === null || !stick.current) return;
-    node.scrollTop = node.scrollHeight;
+    const handle = requestAnimationFrame(() => {
+      node.scrollTop = node.scrollHeight;
+    });
+    return () => cancelAnimationFrame(handle);
   }, [dep]);
 
   return ref;

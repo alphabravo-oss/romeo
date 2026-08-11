@@ -227,8 +227,10 @@ function migrationSummary() {
   return {
     count: files.length,
     files,
+    // Position, not count: additive migrations now stack on top of the reviewed
+    // baseline, so what matters for support is that the baseline is still
+    // migration 0. `count` and `files` report the rest.
     greenfieldBaselineOnly:
-      files.length === 1 &&
       files[0]?.path === "packages/db/migrations/0000_greenfield_baseline.sql",
   };
 }

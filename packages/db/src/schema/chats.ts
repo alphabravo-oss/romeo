@@ -35,6 +35,17 @@ export const chats = pgTable(
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     legalHoldUntil: timestamp("legal_hold_until", { withTimezone: true }),
     legalHoldReason: text("legal_hold_reason"),
+    // ponytail: message-tree pointers (chats.active_leaf_message_id,
+    // messages.parent_id) are deliberately unconstrained text, not foreign
+    // keys. Integrity on the app's own delete path is enforced in code instead
+    // -- deleteMessage splices children onto their grandparent and retargets
+    // this pointer -- so do not read the missing constraint as permission to
+    // drop that repair. Ceiling: a write that bypasses the repository (a manual
+    // DELETE, a future bulk purge) can still strand a pointer or a child, and
+    // only the readers' dangling-pointer fallbacks catch it. Upgrade path: a
+    // self reference with ON DELETE SET NULL, once integrity is worth the
+    // circular-FK and purge-ordering cost.
+    activeLeafMessageId: text("active_leaf_message_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -64,6 +75,7 @@ export const messages = pgTable(
     role: messageRole("role").notNull(),
     content: text("content").notNull(),
     citations: jsonb("citations"),
+    parentId: text("parent_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

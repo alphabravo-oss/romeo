@@ -234,7 +234,7 @@ export class RunService {
   enqueueTurn(
     input: Omit<
       StartRunInput,
-      "attachments" | "fileIds" | "historyBoundaryMessageId"
+      "attachments" | "fileIds" | "historyBoundaryMessageId" | "parentMessageId"
     > & { idempotencyKey?: string },
   ): Promise<QueuedChatTurn> {
     return this.runQueue.enqueue(input);

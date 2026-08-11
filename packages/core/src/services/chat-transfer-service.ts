@@ -14,6 +14,7 @@ import {
   readMessageAttachment,
   storeMessageAttachments,
 } from "./message-attachments";
+import { advanceChatLeaf } from "./run-command-service";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
 import { assertWorkspaceActive } from "./workspace-guard";
 
@@ -125,6 +126,9 @@ export class ChatTransferService {
             modelId: input.modelId,
             subject: input.subject,
           });
+    // An export carries no parent links, so the import is chained: without one the first turn sent
+    // afterwards would attach at the root and hide the whole imported conversation.
+    let previousId: string | undefined;
     await this.repository.transaction(async (repository) => {
       for (const message of input.messages) {
         const created = await repository.createMessage({
@@ -135,8 +139,10 @@ export class ChatTransferService {
           ...(message.citations === undefined
             ? {}
             : { citations: message.citations }),
+          ...(previousId === undefined ? {} : { parentId: previousId }),
           createdAt: message.createdAt ?? new Date().toISOString(),
         });
+        previousId = created.id;
         const parts = await storeMessageAttachments({
           messageId: created.id,
           objectStore: this.objectStore,
@@ -149,6 +155,8 @@ export class ChatTransferService {
         });
         if (parts.length > 0) await repository.createMessageParts(parts);
       }
+      if (previousId !== undefined)
+        await advanceChatLeaf(repository, chat.id, previousId);
       await this.audit(
         input.subject,
         "chat.import",
@@ -157,7 +165,9 @@ export class ChatTransferService {
         repository,
       );
     });
-    return importedChat;
+    return previousId === undefined
+      ? importedChat
+      : { ...importedChat, activeLeafMessageId: previousId };
   }
 
   async fork(input: {
@@ -212,10 +222,14 @@ export class ChatTransferService {
         repository,
       );
       let copiedAttachmentCount = 0;
+      // A branched source would otherwise copy as a parentless heap, which renders every branch
+      // flattened into one thread. Remapping keeps the fork's tree the same shape as the source's.
+      const copiedIds = new Map<string, string>();
       for (const message of messagesToCopy) {
         const copiedMessage = await repository.createMessage(
-          copyMessage(message, chat.id),
+          copyMessage(message, chat.id, copiedIds),
         );
+        copiedIds.set(message.id, copiedMessage.id);
         if (!includeAttachments) continue;
         const copiedParts = copyAttachmentParts(
           await repository.listMessageParts(message.id),
@@ -226,6 +240,16 @@ export class ChatTransferService {
           await repository.createMessageParts(copiedParts);
         }
       }
+      // Forking through a mid-conversation message leaves the source leaf outside the copied slice,
+      // so its remap misses. Without the fallback the fork gets no leaf and its first follow-up
+      // parents at the root, hiding everything just copied behind a sibling arrow.
+      const forkedLeafId =
+        (source.activeLeafMessageId === undefined
+          ? undefined
+          : copiedIds.get(source.activeLeafMessageId)) ??
+        copiedIds.get(messagesToCopy.at(-1)?.id ?? "");
+      if (forkedLeafId !== undefined)
+        await advanceChatLeaf(repository, chat.id, forkedLeafId);
       await this.audit(
         input.subject,
         "chat.fork",
@@ -239,7 +263,9 @@ export class ChatTransferService {
         },
         repository,
       );
-      return chat;
+      return forkedLeafId === undefined
+        ? chat
+        : { ...chat, activeLeafMessageId: forkedLeafId };
     });
   }
 
@@ -273,12 +299,23 @@ function selectedMessageIndex(messages: Message[], messageId: string): number {
   return index;
 }
 
-function copyMessage(message: Message, chatId: string): Message {
+function copyMessage(
+  message: Message,
+  chatId: string,
+  copiedIds: Map<string, string>,
+): Message {
+  // A parent outside the copied slice (throughMessageId cut above it) drops, re-rooting the branch
+  // rather than pointing at a message this chat does not contain.
+  const parentId =
+    message.parentId === undefined
+      ? undefined
+      : copiedIds.get(message.parentId);
   return {
     id: createId("msg"),
     chatId,
     role: message.role,
     content: message.content,
+    ...(parentId === undefined ? {} : { parentId }),
     createdAt: message.createdAt,
   };
 }

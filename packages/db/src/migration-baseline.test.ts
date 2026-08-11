@@ -13,7 +13,10 @@ describe("database migrations", () => {
       .filter((file) => file.endsWith(".sql"))
       .sort();
 
-    expect(sqlFiles).toEqual(["0000_greenfield_baseline.sql"]);
+    expect(sqlFiles).toEqual([
+      "0000_greenfield_baseline.sql",
+      "0001_message_tree.sql",
+    ]);
 
     const sql = readFileSync(join(migrationsDir, sqlFiles[0] ?? ""), "utf8");
     expect(sql).toContain('CREATE EXTENSION IF NOT EXISTS "vector"');
@@ -56,6 +59,25 @@ describe("database migrations", () => {
     expect(sql).toContain(
       'CREATE TRIGGER "managed_model_preferences_service_account_cleanup"',
     );
+  });
+
+  it("backfills the message tree so existing chats render unchanged", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "0001_message_tree.sql"),
+      "utf8",
+    );
+
+    expect(sql).toContain('ADD COLUMN "parent_id"');
+    expect(sql).toContain('ADD COLUMN "active_leaf_message_id"');
+
+    // The backfill is what makes every pre-existing chat keep rendering, and
+    // nothing else covers it: the conformance suite applies migrations to an
+    // empty database and only then inserts fixtures, so a migration that adds
+    // the columns and populates neither passes every other test in this repo.
+    // Asserted as "these columns get written", not as the SQL that writes them,
+    // so a recursive-CTE rewrite producing the same rows still passes.
+    expect(sql).toMatch(/UPDATE\s+"messages"[\s\S]*"parent_id"\s*=/u);
+    expect(sql).toMatch(/UPDATE\s+"chats"[\s\S]*"active_leaf_message_id"\s*=/u);
   });
 
   it("keeps generated baseline identifiers within PostgreSQL limits", () => {

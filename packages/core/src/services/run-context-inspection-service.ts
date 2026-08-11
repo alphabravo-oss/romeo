@@ -11,6 +11,7 @@ import {
 } from "./run-context-builder";
 import { resolveRunContext } from "./run-context";
 import { buildRunKnowledgeContext } from "./run-knowledge";
+import { orderChatHistory, pathThroughMessage } from "./run-messages";
 import type { RunServiceOptions } from "./run-service-contracts";
 import { resolveRunMemories } from "./workspace-content-service";
 
@@ -45,7 +46,7 @@ export class RunContextInspectionService {
       input.agentId,
       this.options,
     );
-    const [history, governedFiles, memories] = await Promise.all([
+    const [chatMessages, governedFiles, memories] = await Promise.all([
       this.repository.listMessages(chat.id),
       resolveGovernedRunFiles({
         fileIds: input.fileIds ?? [],
@@ -64,6 +65,17 @@ export class RunContextInspectionService {
           customization.preferences.personalMemoryEnabled === true,
       }),
     ]);
+    // ponytail: the preview always previews the chat's active branch. InspectRunContextSchema has
+    // no parentMessageId, so a variant cannot be costed before it is sent. Add one to the schema
+    // and mirror run-start-service's resolution here if that ever matters.
+    const branch =
+      chat.activeLeafMessageId === undefined
+        ? []
+        : pathThroughMessage(
+            orderChatHistory(chatMessages),
+            chat.activeLeafMessageId,
+          );
+    const history = branch.length === 0 ? chatMessages : branch;
     const retained = await resolveRetainedMessageContext({
       messages: history,
       objectStore: this.objectStore,

@@ -1393,6 +1393,45 @@ describe("RomeoRepository conformance", () => {
             }),
           ).toMatchObject({ content: "s3://bucket/one-updated" });
 
+          const firstVariant = await repository.createMessage({
+            id: "message_variant_one",
+            chatId: chat.id,
+            role: "assistant",
+            content: "variant one",
+            parentId: firstMessage.id,
+            createdAt: "2026-06-30T11:02:30.000Z",
+          });
+          await repository.createMessage({
+            id: "message_variant_two",
+            chatId: chat.id,
+            role: "assistant",
+            content: "variant two",
+            parentId: firstMessage.id,
+            createdAt: "2026-06-30T11:02:40.000Z",
+          });
+          expect(
+            (await repository.listMessages(chat.id)).map((item) => [
+              item.id,
+              item.parentId,
+            ]),
+          ).toEqual([
+            ["message_first", undefined],
+            ["message_variant_one", firstMessage.id],
+            ["message_variant_two", firstMessage.id],
+            ["message_second", undefined],
+          ]);
+          await repository.updateChat({
+            ...chat,
+            title: "Conformance Chat Updated",
+            activeLeafMessageId: firstVariant.id,
+            updatedAt: "2026-06-30T11:02:45.000Z",
+          });
+          expect(await repository.getChat(chat.id)).toMatchObject({
+            activeLeafMessageId: firstVariant.id,
+          });
+          await repository.deleteMessage("message_variant_one");
+          await repository.deleteMessage("message_variant_two");
+
           await repository.deleteMessage("message_second");
           expect(
             (await repository.listMessages(chat.id)).map((item) => item.id),
@@ -1673,6 +1712,86 @@ describe("RomeoRepository conformance", () => {
               collaborationChannel.id,
             ),
           ).toEqual(updatedCollaborationChannel);
+        });
+      });
+
+      it("splices children onto the grandparent and repairs a dangling active leaf", async () => {
+        await withRepository(subject, async (repository) => {
+          const chat = await repository.createChat({
+            id: "chat_delete_splice",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            title: "Delete Splice",
+            createdBy: "user_dev_admin",
+            updatedAt: "2026-06-30T12:00:00.000Z",
+          });
+          await repository.createMessage({
+            id: "message_u1",
+            chatId: chat.id,
+            role: "user",
+            content: "u1",
+            createdAt: "2026-06-30T12:00:00.000Z",
+          });
+          await repository.createMessage({
+            id: "message_a1",
+            chatId: chat.id,
+            role: "assistant",
+            content: "a1",
+            parentId: "message_u1",
+            createdAt: "2026-06-30T12:01:00.000Z",
+          });
+          await repository.createMessage({
+            id: "message_u2",
+            chatId: chat.id,
+            role: "user",
+            content: "u2",
+            parentId: "message_a1",
+            createdAt: "2026-06-30T12:02:00.000Z",
+          });
+          await repository.createMessage({
+            id: "message_a2",
+            chatId: chat.id,
+            role: "assistant",
+            content: "a2",
+            parentId: "message_u2",
+            createdAt: "2026-06-30T12:03:00.000Z",
+          });
+          await repository.updateChat({
+            ...chat,
+            activeLeafMessageId: "message_a2",
+          });
+
+          await repository.deleteMessage("message_u2");
+          // Severing here would leave a2 an orphan root and drop u1 and a1 off the branch entirely.
+          expect(
+            (await repository.listMessages(chat.id)).map((item) => [
+              item.id,
+              item.parentId,
+            ]),
+          ).toEqual([
+            ["message_u1", undefined],
+            ["message_a1", "message_u1"],
+            ["message_a2", "message_a1"],
+          ]);
+          expect(await repository.getChat(chat.id)).toMatchObject({
+            activeLeafMessageId: "message_a2",
+          });
+
+          await repository.deleteMessage("message_a2");
+          expect(await repository.getChat(chat.id)).toMatchObject({
+            activeLeafMessageId: "message_a1",
+          });
+
+          await repository.deleteMessage("message_a1");
+          expect(await repository.getChat(chat.id)).toMatchObject({
+            activeLeafMessageId: "message_u1",
+          });
+
+          // The last message leaves the pointer with nothing to name.
+          await repository.deleteMessage("message_u1");
+          expect(
+            (await repository.getChat(chat.id))?.activeLeafMessageId,
+          ).toBeUndefined();
         });
       });
 

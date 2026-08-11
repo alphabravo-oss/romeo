@@ -25,7 +25,7 @@ export interface ChatComposerProps {
   onAttachExistingFile: (file: FileObject) => void;
   onAttachFiles: (files: File[]) => void;
   onCancel: () => void;
-  onCancelQueuedTurn: (turnId: string) => void;
+  onCancelQueuedTurn: (turn: QueuedChatTurn) => void;
   onDraftChange: (value: string) => void;
   onGenerateImages: (input: {
     modelId: string;

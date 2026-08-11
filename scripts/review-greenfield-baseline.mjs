@@ -32,7 +32,7 @@ if (dryRun) {
     strict,
     output,
     checks: [
-      "single_migration_file",
+      "baseline_migration_first",
       "journal_matches_baseline",
       "pgvector_before_vector_tables",
       "pgvector_partitioned_by_org",
@@ -89,7 +89,7 @@ function reviewBaseline() {
   const foreignKeys = extractForeignKeys(sql);
 
   const failures = [
-    ...singleMigrationFailures(sqlFiles),
+    ...baselineMigrationFailures(sqlFiles),
     ...journalFailures(journal),
     ...pgvectorFailures(statements),
     ...requiredValueFailures("missing_table", REQUIRED_TABLES, [
@@ -163,8 +163,10 @@ function splitStatements(sql) {
     .filter(Boolean);
 }
 
-function singleMigrationFailures(sqlFiles) {
-  if (sqlFiles.length === 1 && sqlFiles[0] === GREENFIELD_BASELINE_MIGRATION) {
+function baselineMigrationFailures(sqlFiles) {
+  // The baseline must stay first and untouched; later migrations are additive on
+  // top of it, so this reviews position, not migration count.
+  if (sqlFiles[0] === GREENFIELD_BASELINE_MIGRATION) {
     return [];
   }
   return [
@@ -175,12 +177,11 @@ function singleMigrationFailures(sqlFiles) {
 function journalFailures(journal) {
   const entries = Array.isArray(journal.entries) ? journal.entries : [];
   if (
-    entries.length === 1 &&
     entries[0]?.tag === GREENFIELD_BASELINE_MIGRATION.replace(/\.sql$/u, "")
   ) {
     return [];
   }
-  return ["journal_does_not_match_single_greenfield_baseline"];
+  return ["journal_does_not_start_with_greenfield_baseline"];
 }
 
 function pgvectorFailures(statements) {

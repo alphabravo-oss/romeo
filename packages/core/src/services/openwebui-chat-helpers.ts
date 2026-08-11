@@ -20,6 +20,7 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import { createId } from "../ids";
 import { openWebUiTagsFromChat } from "./openwebui-tags";
+import { advanceChatLeaf } from "./run-command-service";
 import {
   arrayRecords,
   asRecord,
@@ -37,15 +38,22 @@ export async function createImportedMessages(
   messages: Array<Pick<Message, "content" | "createdAt" | "role">>,
   fallbackCreatedAt: string,
 ): Promise<void> {
+  // Chained, not flat: the first turn sent after an import defaults its parent to the chat's leaf,
+  // so an unlinked import would leave the new turn rooted beside the imported history and hide it.
+  let previousId: string | undefined;
   for (const [index, message] of messages.entries()) {
-    await repository.createMessage({
+    const created = await repository.createMessage({
       id: createId("message"),
       chatId,
       role: message.role,
       content: message.content,
+      ...(previousId === undefined ? {} : { parentId: previousId }),
       createdAt: message.createdAt || offsetIso(fallbackCreatedAt, index),
     });
+    previousId = created.id;
   }
+  if (previousId !== undefined)
+    await advanceChatLeaf(repository, chatId, previousId);
 }
 
 export async function createImportedChatTags(

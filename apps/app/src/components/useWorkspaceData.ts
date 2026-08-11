@@ -1,8 +1,10 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { getChat, listChatsPage } from "../features";
+import { getChat, listChatsPage, listMessages } from "../features";
 import { getChatExperience } from "../features/chat-experience";
+import type { Message } from "../features/types";
+import { messagesQueryKey } from "../lib/run-registry";
 import {
   listAgentGallery,
   listAgents,
@@ -16,7 +18,12 @@ import {
 } from "../features/providers/queries";
 import { listAgentTools } from "../features/tools";
 import { resolveActiveAssistant } from "./assistant-selection";
+import { chatPath, messageVariants } from "./message-tree";
 import { useWorkspace } from "./WorkspaceContext";
+
+// Stable identity for "this chat has no transcript yet", so an idle chat does
+// not invalidate every memo that depends on the message list.
+const noMessages: Message[] = [];
 
 export function useWorkspaceData(
   activeAgentId: string | undefined,
@@ -63,6 +70,22 @@ export function useWorkspaceData(
     queryKey: ["chat", options.activeChatId],
     queryFn: () => getChat(options.activeChatId!),
     enabled: options.activeChatId !== undefined,
+  });
+  // Never auto-refetched: the run registry streams deltas into this exact key
+  // from outside React, and a background refresh would replace a half-written
+  // answer with the empty row the server still has. Refreshes are explicit
+  // invalidations, issued once a run has settled.
+  //
+  // ponytail: the guard is unconditional rather than scoped to a live run, so a
+  // transcript changed in another tab or device, or by an admin deletion, never
+  // refreshes for the life of this mount. Upgrade path: restore the default
+  // refetch behaviour and gate it on getActiveRun(chatId)?.isStreaming.
+  const messagesQuery = useQuery({
+    queryKey: messagesQueryKey(options.activeChatId ?? ""),
+    queryFn: () => listMessages(options.activeChatId!),
+    enabled: options.activeChatId !== undefined,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
   const chatExperienceQuery = useQuery({
     queryKey: ["chatExperience"],
@@ -156,9 +179,24 @@ export function useWorkspaceData(
     enabled: activeAgent !== undefined,
   });
 
+  // The transcript is a tree; what the reader sees is the one branch ending at
+  // the chat's active leaf. Both derivations are local, so switching variants
+  // is a pointer PATCH and a re-render rather than another round trip.
+  const allMessages = messagesQuery.data ?? noMessages;
+  const activeLeafMessageId = activeChatQuery.data?.activeLeafMessageId;
+  const messages = useMemo(
+    () => chatPath(allMessages, activeLeafMessageId),
+    [activeLeafMessageId, allMessages],
+  );
+  const variantsByMessageId = useMemo(
+    () => messageVariants(allMessages, messages),
+    [allMessages, messages],
+  );
+
   return {
     activeAgent,
     agents,
+    allMessages,
     chats,
     chatExperience: chatExperienceQuery.data,
     chatsTotal: chatsQuery.data?.pages[0]?.total ?? 0,
@@ -170,8 +208,10 @@ export function useWorkspaceData(
     providers: providersQuery.data ?? [],
     interfacePreferences: interfacePreferencesQuery.data,
     latestChatEvent,
+    messages,
     subject,
     tools: toolsQuery.data ?? [],
+    variantsByMessageId,
     workspace,
   };
 }

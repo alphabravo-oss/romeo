@@ -3,6 +3,7 @@ import type {
   QueuedChatTurn as PersistedQueuedChatTurn,
   RunRecord,
 } from "../domain/entities";
+import type { RomeoRepository } from "../domain/repository";
 import { compareChatMessages } from "./run-messages";
 
 export interface QueuedChatTurn {
@@ -28,6 +29,18 @@ export function runUserMessage(
       )
       .at(-1) ?? sorted.filter((message) => message.role === "user").at(-1)
   );
+}
+
+export async function advanceChatLeaf(
+  repository: RomeoRepository,
+  chatId: string,
+  messageId: string,
+): Promise<void> {
+  const chat = await repository.getChat(chatId);
+  // Spreading the stored chat keeps updatedAt, so moving the branch pointer never reorders the
+  // sidebar the way a real edit does.
+  if (chat !== undefined)
+    await repository.updateChat({ ...chat, activeLeafMessageId: messageId });
 }
 
 export function publicQueuedTurn(

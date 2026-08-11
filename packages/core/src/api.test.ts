@@ -18286,7 +18286,10 @@ describe("Romeo chat history", () => {
     api: ReturnType<typeof createRomeoApi>,
     chatId: string,
     content: string,
-    options: { historyBoundaryMessageId?: string } = {},
+    options: {
+      historyBoundaryMessageId?: string;
+      parentMessageId?: string | null;
+    } = {},
   ) {
     const response = await api.request("/api/v1/runs", {
       method: "POST",
@@ -18315,12 +18318,47 @@ describe("Romeo chat history", () => {
     );
   }
 
-  async function userMessageId(
+  type BranchMessage = {
+    id: string;
+    role: string;
+    content: string;
+    parentId?: string;
+  };
+
+  // waitForAssistantMessage is satisfied by turn one's answer, so a branch assertion has to wait on
+  // the row count it actually needs.
+  async function waitForMessages(
+    api: ReturnType<typeof createRomeoApi>,
+    chatId: string,
+    count: number,
+  ): Promise<BranchMessage[]> {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const response = await api.request(`/api/v1/chats/${chatId}/messages`);
+      const body = await response.json();
+      if (body.data.length >= count) return body.data as BranchMessage[];
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`Timed out waiting for ${count} messages.`);
+  }
+
+  async function activeLeaf(
     api: ReturnType<typeof createRomeoApi>,
     chatId: string,
   ) {
+    const response = await api.request(`/api/v1/chats/${chatId}`);
+    const body = await response.json();
+    return body.data.activeLeafMessageId as string | undefined;
+  }
+
+  async function userMessageId(
+    api: ReturnType<typeof createRomeoApi>,
+    chatId: string,
+    position = 0,
+  ) {
     const messages = await waitForAssistantMessage(api, chatId);
-    const user = messages.find((message) => message.role === "user");
+    const user = messages.filter((message) => message.role === "user")[
+      position
+    ];
     if (user === undefined)
       throw new Error("Expected a persisted user message");
     return user.id;
@@ -18637,6 +18675,312 @@ describe("Romeo chat history", () => {
     ]);
     expect(bodies[2]?.messages.at(-1)?.content).toBe("Second question.");
     expect(JSON.stringify(bodies[2])).not.toContain("Other chat secret");
+  });
+
+  it("chains an ordinary turn under the active leaf instead of forking to the root", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
+    const chatId = await createChat(api, "Linear");
+
+    await runTurn(api, chatId, "First question.");
+    await runTurn(api, chatId, "Second question.");
+    await waitForBodies(bodies, 2);
+    const messages = await waitForMessages(api, chatId, 4);
+
+    // The load-bearing default: without it every ordinary send would become a root sibling and the
+    // reader would lose the conversation above it.
+    expect(messages.map((message) => message.parentId)).toEqual([
+      undefined,
+      messages[0]?.id,
+      messages[1]?.id,
+      messages[2]?.id,
+    ]);
+    expect(await activeLeaf(api, chatId)).toBe(messages[3]?.id);
+  });
+
+  it("regenerates as a sibling branch, leaving the replaced answer reachable", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
+    const chatId = await createChat(api, "Variants");
+
+    await runTurn(api, chatId, "First question.");
+    await waitForBodies(bodies, 1);
+    const [firstUser, firstAssistant] = await waitForMessages(api, chatId, 2);
+
+    // Regenerating the first turn forks from the root, which is what parentMessageId: null means.
+    await runTurn(api, chatId, "First question.", { parentMessageId: null });
+    await waitForBodies(bodies, 2);
+    const messages = await waitForMessages(api, chatId, 4);
+
+    // Nothing was deleted: the previous pair is still there for the variant picker to walk back to.
+    expect(messages.map((message) => message.id)).toContain(firstAssistant?.id);
+    const users = messages.filter((message) => message.role === "user");
+    const rebuilt = users.find((message) => message.id !== firstUser?.id);
+    expect(users).toHaveLength(2);
+    expect(rebuilt?.parentId).toBeUndefined();
+    const rebuiltAnswer = messages.find(
+      (message) => message.parentId === rebuilt?.id,
+    );
+    expect(rebuiltAnswer?.role).toBe("assistant");
+    expect(await activeLeaf(api, chatId)).toBe(rebuiltAnswer?.id);
+    // The replaced branch is not replayed to the model.
+    expect(bodies[1]?.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+    ]);
+    expect(JSON.stringify(bodies[1])).not.toContain("First answer.");
+  });
+
+  it("continues the branch a chat pointer was switched back to", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
+    const chatId = await createChat(api, "Switch");
+
+    await runTurn(api, chatId, "First question.");
+    await waitForBodies(bodies, 1);
+    const [, firstAssistant] = await waitForMessages(api, chatId, 2);
+    await runTurn(api, chatId, "First question.", { parentMessageId: null });
+    await waitForBodies(bodies, 2);
+    await waitForMessages(api, chatId, 4);
+
+    const patch = await api.request(`/api/v1/chats/${chatId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ activeLeafMessageId: firstAssistant?.id }),
+    });
+    await runTurn(api, chatId, "Follow-up.");
+    await waitForBodies(bodies, 3);
+
+    expect(patch.status).toBe(200);
+    expect((await patch.json()).data.activeLeafMessageId).toBe(
+      firstAssistant?.id,
+    );
+    // The follow-up replays the branch the pointer names, not the newest one by wall clock.
+    expect(bodies[2]?.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "user",
+    ]);
+    expect(await activeLeaf(api, chatId)).not.toBe(firstAssistant?.id);
+  });
+
+  it("rejects a parent message and a leaf pointer that belong to another chat", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
+    const otherChatId = await createChat(api, "Other chat");
+    const chatId = await createChat(api, "Target chat");
+
+    await runTurn(api, otherChatId, "Other chat secret question.");
+    await waitForBodies(bodies, 1);
+    const foreignMessageId = await userMessageId(api, otherChatId);
+
+    // Both columns are plain text with no foreign key, so these two checks are the only thing
+    // standing between a caller and another chat's branch.
+    const run = await api.request("/api/v1/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId,
+        agentId: "agent_default",
+        content: "First question.",
+        parentMessageId: foreignMessageId,
+      }),
+    });
+    const patch = await api.request(`/api/v1/chats/${chatId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ activeLeafMessageId: foreignMessageId }),
+    });
+
+    expect(run.status).toBe(404);
+    expect(patch.status).toBe(404);
+    expect(await activeLeaf(api, chatId)).toBeUndefined();
+  });
+
+  it("cuts at historyBoundaryMessageId exactly as before now that a default parent exists", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
+    const chatId = await createChat(api, "Boundary regression");
+
+    await runTurn(api, chatId, "First question.");
+    await waitForBodies(bodies, 1);
+    await runTurn(api, chatId, "Second question.");
+    await waitForBodies(bodies, 2);
+    const boundary = await userMessageId(api, chatId, 1);
+
+    // The pre-branching regenerate call shape: a boundary, no parentMessageId. The branch now
+    // resolved from the leaf pointer must not widen or narrow what the boundary cuts.
+    await runTurn(api, chatId, "Second question.", {
+      historyBoundaryMessageId: boundary,
+    });
+    await waitForBodies(bodies, 3);
+
+    expect(bodies[2]?.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "user",
+    ]);
+    expect(bodies[2]?.messages[1]?.content).toBe("First question.");
+    expect(bodies[2]?.messages[2]?.content).toBe("First answer.");
+    expect(
+      bodies[2]?.messages.filter(
+        (message) => message.content === "Second question.",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("keeps the turns above a deleted message on the branch and in context", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
+    const chatId = await createChat(api, "Delete middle");
+
+    await runTurn(api, chatId, "First question.");
+    await runTurn(api, chatId, "Second question.");
+    await waitForBodies(bodies, 2);
+    const before = await waitForMessages(api, chatId, 4);
+
+    const deleted = await api.request(
+      `/api/v1/chats/${chatId}/messages/${before[2]?.id}`,
+      { method: "DELETE" },
+    );
+    await runTurn(api, chatId, "Third question.");
+    await waitForBodies(bodies, 3);
+
+    expect(deleted.status).toBe(200);
+    // Severing instead of splicing orphans the second answer, and the next turn replays that one
+    // row alone — the whole conversation above the deletion silently gone from model context.
+    const after = await waitForMessages(api, chatId, 5);
+    expect(after.slice(0, 3).map((message) => message.parentId)).toEqual([
+      undefined,
+      before[0]?.id,
+      before[1]?.id,
+    ]);
+    expect(bodies[2]?.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "assistant",
+      "user",
+    ]);
+    expect(bodies[2]?.messages[1]?.content).toBe("First question.");
+  });
+
+  it("retargets the chat pointer when the active leaf is deleted", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
+    const chatId = await createChat(api, "Delete leaf");
+
+    await runTurn(api, chatId, "First question.");
+    await runTurn(api, chatId, "Second question.");
+    await waitForBodies(bodies, 2);
+    const before = await waitForMessages(api, chatId, 4);
+
+    await api.request(`/api/v1/chats/${chatId}/messages/${before[3]?.id}`, {
+      method: "DELETE",
+    });
+    // A pointer left naming the deleted row resolves to no branch at all, which sends the next turn
+    // to the root and collapses the transcript to two messages behind a variant picker.
+    expect(await activeLeaf(api, chatId)).toBe(before[2]?.id);
+
+    await runTurn(api, chatId, "Third question.");
+    await waitForBodies(bodies, 3);
+
+    const after = await waitForMessages(api, chatId, 5);
+    expect(
+      after.find((message) => message.content === "Third question.")?.parentId,
+    ).toBe(before[2]?.id);
+    expect(bodies[2]?.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "user",
+      "user",
+    ]);
+  });
+
+  it("continues the branched-in conversation after forking through a mid-chat message", async () => {
+    const bodies: ProviderBody[] = [];
+    const repository = new InMemoryRomeoRepository();
+    const api = await historyApi({
+      repository,
+      bodies,
+      reply: "First answer.",
+    });
+    const chatId = await createChat(api, "Fork source");
+
+    await runTurn(api, chatId, "First question.");
+    await runTurn(api, chatId, "Second question.");
+    await waitForBodies(bodies, 2);
+    const source = await waitForMessages(api, chatId, 4);
+
+    // The branch button forks through the first answer, so the source leaf (the second answer) is
+    // not in the copied slice and has no counterpart to remap onto.
+    const forkResponse = await api.request(`/api/v1/chats/${chatId}/fork`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ throughMessageId: source[1]?.id }),
+    });
+    const forked = await forkResponse.json();
+    const forkedId = forked.data.id as string;
+    const copied = await waitForMessages(api, forkedId, 2);
+    const forkedLeaf = await activeLeaf(api, forkedId);
+
+    await runTurn(api, forkedId, "Follow-up.");
+    await waitForBodies(bodies, 3);
+
+    expect(forkResponse.status).toBe(201);
+    // A leafless fork sends its first follow-up to the root, orphaning both copied turns behind a
+    // sibling arrow — the exact conversation the user branched in to keep.
+    expect(forked.data.activeLeafMessageId).toBe(copied[1]?.id);
+    expect(forkedLeaf).toBe(copied[1]?.id);
+    const after = await waitForMessages(api, forkedId, 4);
+    expect(
+      after.find((message) => message.content === "Follow-up.")?.parentId,
+    ).toBe(copied[1]?.id);
+    expect(bodies[2]?.messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "user",
+    ]);
+    expect(bodies[2]?.messages[1]?.content).toBe("First question.");
   });
 });
 

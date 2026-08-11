@@ -202,6 +202,7 @@ export class PgChatRepository {
         modelId: chat.modelId ?? null,
         temporary: chat.temporary === true,
         expiresAt: optionalDate(chat.expiresAt),
+        activeLeafMessageId: chat.activeLeafMessageId ?? null,
         updatedAt: new Date(chat.updatedAt),
       })
       .where(eq(chats.id, chat.id))
@@ -301,9 +302,44 @@ export class PgChatRepository {
   }
 
   async deleteMessage(messageId: string): Promise<void> {
+    const [row] = await this.db
+      .select({ chatId: messages.chatId, parentId: messages.parentId })
+      .from(messages)
+      .where(eq(messages.id, messageId))
+      .limit(1);
+    if (row === undefined) return;
+    // Splice, don't sever: children adopt their grandparent. Left dangling, every turn above the
+    // deleted row falls off the branch and silently stops being replayed to the provider.
+    await this.db
+      .update(messages)
+      .set({ parentId: row.parentId })
+      .where(eq(messages.parentId, messageId));
     // message_parts.message_id has ON DELETE CASCADE, so this also removes
     // any attachment parts for the message.
     await this.db.delete(messages).where(eq(messages.id, messageId));
+    // A pointer still naming the deleted row resolves to no branch, so the next turn would persist
+    // as a fresh root and collapse the transcript. Its parent is the tip of what is left; a deleted
+    // root has none, so fall back to the newest surviving row — a child is always written after its
+    // parent, which makes the newest row a branch tip.
+    const replacement =
+      row.parentId ?? (await this.newestMessageId(row.chatId));
+    await this.db
+      .update(chats)
+      .set({ activeLeafMessageId: replacement })
+      .where(
+        and(eq(chats.id, row.chatId), eq(chats.activeLeafMessageId, messageId)),
+      );
+  }
+
+  private async newestMessageId(chatId: string): Promise<string | null> {
+    // Reverse of listMessages' ordering, so both backends pick the same row.
+    const [row] = await this.db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.chatId, chatId))
+      .orderBy(desc(messages.createdAt), desc(messages.id))
+      .limit(1);
+    return row?.id ?? null;
   }
 
   async listMessageParts(messageId: string): Promise<MessagePartRecord[]> {

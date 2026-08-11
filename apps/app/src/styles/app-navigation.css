@@ -678,6 +678,28 @@ html.dark .rm-message-tool:hover:not(:disabled) {
   justify-content: flex-end;
 }
 
+/* Sibling switcher, on any turn that was regenerated or edited. Same muted
+ * weight and the same hover reveal as the action row directly below it: it is
+ * navigation between answers the reader already asked for, not a new feature
+ * announcing itself on every branched message in the thread. */
+
+.rm-message-variants {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rm-message-row.user .rm-message-variants {
+  justify-self: end;
+  justify-content: flex-end;
+}
+
+.rm-message-variant-count {
+  color: var(--rm-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums; /* the count must not jitter on ‹ › */
+}
+
 /* ChatGPT-style reveal: the icon row is transparent until its message is
  * hovered or one of its buttons takes focus, so a long thread reads as prose
  * instead of a column of lit icons. Deliberately opacity and never
@@ -690,20 +712,24 @@ html.dark .rm-message-tool:hover:not(:disabled) {
  * would otherwise be left with a permanently invisible action row. */
 
 @media (hover: hover) {
-  .rm-message-actions {
+  .rm-message-actions,
+  .rm-message-variants {
     opacity: 0;
     transition: opacity 120ms ease;
   }
 
   .rm-message-row:hover .rm-message-actions,
-  .rm-message-actions:focus-within {
+  .rm-message-row:hover .rm-message-variants,
+  .rm-message-actions:focus-within,
+  .rm-message-variants:focus-within {
     opacity: 1;
   }
 
   /* The newest message keeps its actions lit: regenerate and continue live
    * there, and they are the two a reader reaches for without aiming first. */
 
-  .rm-message-row:last-child .rm-message-actions {
+  .rm-message-row:last-child .rm-message-actions,
+  .rm-message-row:last-child .rm-message-variants {
     opacity: 1;
   }
 }

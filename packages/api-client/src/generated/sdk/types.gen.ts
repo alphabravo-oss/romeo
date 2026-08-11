@@ -3998,6 +3998,7 @@ export type StartRunRequest = {
   content: string;
   modelId?: string;
   historyBoundaryMessageId?: string;
+  parentMessageId?: string | null;
   fileIds?: Array<string>;
   webSearch?: boolean;
   urls?: Array<string>;
@@ -4326,6 +4327,7 @@ export type Chat = {
   archivedAt?: string;
   legalHoldUntil?: string;
   legalHoldReason?: string;
+  activeLeafMessageId?: string;
   updatedAt: string;
 };
 
@@ -4384,6 +4386,7 @@ export type ChatExport = {
     role: "system" | "user" | "assistant" | "tool";
     content: string;
     citations?: Array<MessageCitation>;
+    parentId?: string;
     createdAt: string;
     attachments?: Array<
       MessageAttachment & {
@@ -4408,6 +4411,7 @@ export type UpdateChatRequest = {
   agentId?: string | null;
   title?: string;
   modelId?: string | null;
+  activeLeafMessageId?: string;
 };
 
 export type DataDeletionPreview = {
@@ -4474,6 +4478,7 @@ export type Message = {
   content: string;
   citations?: Array<MessageCitation>;
   attachments?: Array<MessageAttachment>;
+  parentId?: string;
   createdAt: string;
 };
 

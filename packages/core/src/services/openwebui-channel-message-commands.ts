@@ -51,6 +51,8 @@ export class OpenWebUiChannelMessageCommands {
     const content = normalizeChannelMessageContent(input.content);
     const result = await this.repository.transaction(async (repository) => {
       const chat = await ensureChannelBackingChat(repository, channel, now);
+      // Deliberately parentless: a channel's backing chat is a flat message log, never rendered by
+      // the branch/variant UI, and its own threading lives in replyToId on the metadata part below.
       const message = await repository.createMessage({
         id: createId("message"),
         chatId: chat.id,

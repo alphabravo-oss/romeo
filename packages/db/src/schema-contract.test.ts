@@ -104,6 +104,8 @@ describe("durable baseline schema contract", () => {
       "message_parts_message_position_idx",
     );
     expect(columnNames(messageParts)).toContain("position");
+    expect(columnNames(messages)).toContain("parent_id");
+    expect(columnNames(chats)).toContain("active_leaf_message_id");
   });
 
   it("keeps object-record upload indexes and lifecycle columns explicit", () => {

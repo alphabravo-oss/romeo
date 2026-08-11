@@ -17,8 +17,10 @@ import {
 } from "./run-knowledge";
 import {
   buildRunMessages,
+  hasMessageTree,
   historyBefore,
   orderChatHistory,
+  pathThroughMessage,
 } from "./run-messages";
 import type { ProviderRoutePlan } from "./provider-routing";
 import type { RunServiceOptions } from "./run-service-contracts";
@@ -151,10 +153,13 @@ export class RunContinuationContextBuilder {
         409,
         { runId: input.run.id },
       );
-    const priorMessages = historyBefore(
-      orderChatHistory(chatMessages),
-      userMessage.id,
-    );
+    const ordered = orderChatHistory(chatMessages);
+    // Resuming after a tool approval must replay the branch the run was started on, not everything
+    // that happened to precede it — a sibling variant sits earlier in createdAt order but is not
+    // this run's history. Flat chats have no branch to walk, so they keep the index cut.
+    const priorMessages = hasMessageTree(ordered)
+      ? pathThroughMessage(ordered, userMessage.id).slice(0, -1)
+      : historyBefore(ordered, userMessage.id);
     const knowledge = await buildRunKnowledgeContext(this.repository, {
       agentId: input.run.agentId,
       subject: input.subject,

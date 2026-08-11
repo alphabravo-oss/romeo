@@ -2,7 +2,7 @@ import { NativeSelect } from "@romeo/ui";
 import Bot from "lucide-react/dist/esm/icons/bot.mjs";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid.mjs";
 import SquarePen from "lucide-react/dist/esm/icons/square-pen.mjs";
-import { useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { type AppCommand, useRegisterCommands } from "../lib/commands";
 import { useLocale } from "../lib/i18n";
@@ -42,6 +42,65 @@ export function WorkspaceShell({
   });
   const { agents, handleNewChat, setActiveAgentId } = workspace;
   const { workspaceId, workspaces, setWorkspaceId } = useWorkspace();
+
+  // ChatMessageRow is memoised, and a memo only holds if its function props
+  // keep their identity -- a fresh arrow per render is a changed prop on every
+  // row, and this component re-renders once per streamed token. The controller
+  // rebuilds its handlers every render (they close over the draft, the active
+  // chat, the transcript), so the wrappers below are pinned to [] and read the
+  // current controller through a ref instead of capturing the first one.
+  //
+  // ponytail: a ref written during render, which a render React then throws
+  // away (StrictMode, offscreen or suspended trees) still writes -- the pinned
+  // callbacks can read a controller from a render that never committed.
+  // Upgrade path: hoist these nine handlers into useWorkspaceController, where
+  // they can be memoised against their real dependencies.
+  const latest = useRef(workspace);
+  latest.current = workspace;
+  const handleAttachmentRetention = useCallback(
+    (messageId: string, attachmentId: string, retained: boolean) =>
+      void latest.current.handleAttachmentRetention(
+        messageId,
+        attachmentId,
+        retained,
+      ),
+    [],
+  );
+  const handleBranch = useCallback(
+    (messageId: string) =>
+      void latest.current.handleBranchFromMessage(messageId),
+    [],
+  );
+  const handleContinue = useCallback(
+    () => void latest.current.handleContinueResponse(),
+    [],
+  );
+  const handleDeleteMessage = useCallback(
+    (messageId: string) => void latest.current.handleDeleteMessage(messageId),
+    [],
+  );
+  const handleEditAndResend = useCallback(
+    (messageId: string, content: string) =>
+      latest.current.handleEditAndResend(messageId, content),
+    [],
+  );
+  const handleGenerateSpeech = useCallback(
+    (messageId: string) => void latest.current.handleGenerateSpeech(messageId),
+    [],
+  );
+  const handleRateMessage = useCallback(
+    (messageId: string, rating: "negative" | "none" | "positive") =>
+      void latest.current.handleRateMessage(messageId, rating),
+    [],
+  );
+  const handleRegenerate = useCallback(
+    () => void latest.current.regenerateLast(),
+    [],
+  );
+  const handleSelectVariant = useCallback(
+    (messageId: string) => void latest.current.handleSelectVariant(messageId),
+    [],
+  );
 
   // Publish chat actions to the ⌘K command registry while this screen is mounted.
   const commands = useMemo<AppCommand[]>(
@@ -204,45 +263,32 @@ export function WorkspaceShell({
           messageFeedback={workspace.messageFeedback}
           webSearchEnabled={workspace.webSearchEnabled}
           workspaceId={workspace.workspace?.id}
-          onBranch={(messageId) =>
-            void workspace.handleBranchFromMessage(messageId)
-          }
+          onBranch={handleBranch}
           onCancel={workspace.handleCancel}
-          onCancelQueuedTurn={(turnId) =>
-            void workspace.handleCancelQueuedTurn(turnId)
+          onCancelQueuedTurn={(turn) =>
+            void workspace.handleCancelQueuedTurn(turn)
           }
-          onContinue={() => void workspace.handleContinueResponse()}
-          onDeleteMessage={(messageId) =>
-            void workspace.handleDeleteMessage(messageId)
-          }
-          onAttachmentRetention={(messageId, attachmentId, retained) =>
-            void workspace.handleAttachmentRetention(
-              messageId,
-              attachmentId,
-              retained,
-            )
-          }
+          onContinue={handleContinue}
+          onDeleteMessage={handleDeleteMessage}
+          onAttachmentRetention={handleAttachmentRetention}
           onAttachFiles={(files) => void workspace.handleAttachFiles(files)}
           onAttachExistingFile={(file) =>
             void workspace.handleAttachExistingFile(file)
           }
           onAddUrl={workspace.handleAddUrl}
           onDraftChange={workspace.setDraft}
-          onGenerateSpeech={(messageId) =>
-            void workspace.handleGenerateSpeech(messageId)
-          }
+          onGenerateSpeech={handleGenerateSpeech}
           onGenerateImages={(input) =>
             void workspace.handleGenerateImages(input)
           }
           onInspectContext={() => void workspace.handleInspectContext()}
-          onEditAndResend={workspace.handleEditAndResend}
-          onRateMessage={(messageId, rating) =>
-            void workspace.handleRateMessage(messageId, rating)
-          }
-          onRegenerate={() => void workspace.regenerateLast()}
+          onEditAndResend={handleEditAndResend}
+          onRateMessage={handleRateMessage}
+          onRegenerate={handleRegenerate}
           onRemoveImageAttachment={workspace.handleRemoveImageAttachment}
           onRemoveDocumentAttachment={workspace.handleRemoveDocumentAttachment}
           onRemoveUrl={workspace.handleRemoveUrl}
+          onSelectVariant={handleSelectVariant}
           onToggleWebSearch={workspace.setWebSearchEnabled}
           onTranscribeAudio={(blob) => workspace.handleTranscribeAudio(blob)}
           onTranscriptionError={workspace.handleTranscriptionError}
@@ -250,6 +296,7 @@ export function WorkspaceShell({
           runActivities={workspace.runActivities}
           speechArtifacts={workspace.speechArtifacts}
           speechMessageId={workspace.speechMessageId}
+          variantsByMessageId={workspace.variantsByMessageId}
         />
       </section>
     </main>

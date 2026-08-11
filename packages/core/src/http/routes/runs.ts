@@ -80,6 +80,9 @@ export function registerRunRoutes(app: RomeoApi): void {
       ...(body.historyBoundaryMessageId === undefined
         ? {}
         : { historyBoundaryMessageId: body.historyBoundaryMessageId }),
+      ...(body.parentMessageId === undefined
+        ? {}
+        : { parentMessageId: body.parentMessageId }),
       ...(body.fileIds === undefined ? {} : { fileIds: body.fileIds }),
       ...(body.webSearch === undefined ? {} : { webSearch: body.webSearch }),
       ...(body.urls === undefined ? {} : { urls: body.urls }),

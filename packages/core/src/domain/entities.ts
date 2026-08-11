@@ -17,6 +17,7 @@ export interface Chat {
   archivedAt?: string;
   legalHoldUntil?: string;
   legalHoldReason?: string;
+  activeLeafMessageId?: string;
   updatedAt: string;
 }
 
@@ -88,6 +89,7 @@ export interface Message {
   content: string;
   citations?: MessageCitation[];
   attachments?: MessageAttachment[];
+  parentId?: string;
   createdAt: string;
 }
 

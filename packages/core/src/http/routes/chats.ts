@@ -198,6 +198,9 @@ export function registerChatRoutes(app: RomeoApi): void {
       ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
       ...(body.title !== undefined ? { title: body.title } : {}),
       ...(body.modelId !== undefined ? { modelId: body.modelId } : {}),
+      ...(body.activeLeafMessageId !== undefined
+        ? { activeLeafMessageId: body.activeLeafMessageId }
+        : {}),
     });
     await publishChatChange(context.get("services"), subject, data, "updated");
     return context.json({ data });

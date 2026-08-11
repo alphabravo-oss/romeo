@@ -18,6 +18,10 @@ export const ChatSchema = z
     archivedAt: chatTimestamp.optional(),
     legalHoldUntil: chatTimestamp.optional(),
     legalHoldReason: z.string().max(500).optional(),
+    // Leaf of the message branch the client should render; absent means "the
+    // whole chat is one linear path", which is how every chat behaves until it
+    // is branched.
+    activeLeafMessageId: chatIdentifier.optional(),
     updatedAt: chatTimestamp,
   })
   .openapi("Chat");
@@ -57,6 +61,9 @@ export const MessageSchema = z
     content: z.string(),
     citations: z.array(MessageCitationSchema).max(100).optional(),
     attachments: z.array(MessageAttachmentSchema).max(100).optional(),
+    // Absent means "root of the chat". Siblings are the messages that share a
+    // parent, which is what the variant picker counts.
+    parentId: chatIdentifier.optional(),
     createdAt: chatTimestamp,
   })
   .openapi("Message");
@@ -159,6 +166,7 @@ export const UpdateChatSchema = z
     agentId: z.union([chatIdentifier, z.null()]).optional(),
     title: z.string().min(1).max(200).optional(),
     modelId: z.union([chatIdentifier, z.null()]).optional(),
+    activeLeafMessageId: chatIdentifier.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one chat field is required.",

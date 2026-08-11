@@ -19,6 +19,7 @@ import { ChatMessages } from "./ChatMessages";
 import { ChatComposer } from "./ChatComposer";
 import { ContextInspector } from "./ContextInspector";
 import { isDragOverlayVisible, nextDragDepth } from "./drag-depth";
+import type { MessageVariants } from "./message-tree";
 import type {
   ChatCitation,
   ChatRunActivity,
@@ -74,6 +75,7 @@ export function ChatPanel({
   onRemoveImageAttachment,
   onRemoveDocumentAttachment,
   onRemoveUrl,
+  onSelectVariant,
   onToggleWebSearch,
   onTranscribeAudio,
   onTranscriptionError,
@@ -81,6 +83,7 @@ export function ChatPanel({
   runActivities,
   speechArtifacts,
   speechMessageId,
+  variantsByMessageId,
 }: {
   activeVoiceProfileId: string | undefined;
   agentName: string;
@@ -114,7 +117,7 @@ export function ChatPanel({
   onAttachExistingFile: (file: FileObject) => void;
   onAddUrl: (url: string) => void;
   onCancel: () => void;
-  onCancelQueuedTurn: (turnId: string) => void;
+  onCancelQueuedTurn: (turn: QueuedChatTurn) => void;
   onBranch: (messageId: string) => void;
   onContinue: () => void;
   onDeleteMessage: (messageId: string) => void;
@@ -140,6 +143,7 @@ export function ChatPanel({
   onRemoveImageAttachment: (attachmentId: string) => void;
   onRemoveDocumentAttachment: (attachmentId: string) => void;
   onRemoveUrl: (url: string) => void;
+  onSelectVariant: (messageId: string) => void;
   onToggleWebSearch: (enabled: boolean) => void;
   onTranscribeAudio: (blob: Blob) => Promise<void>;
   onTranscriptionError: (message: string) => void;
@@ -147,6 +151,7 @@ export function ChatPanel({
   runActivities: ChatRunActivity[];
   speechArtifacts: Record<string, SpeechArtifact>;
   speechMessageId: string | undefined;
+  variantsByMessageId: Record<string, MessageVariants>;
 }) {
   const [dragActive, setDragActive] = useState(false);
   const dragDepth = useRef(0);
@@ -317,9 +322,11 @@ export function ChatPanel({
           onGenerateSpeech={onGenerateSpeech}
           onRate={onRateMessage}
           onRegenerate={onRegenerate}
+          onSelectVariant={onSelectVariant}
           runActivities={runActivities}
           speechArtifacts={speechArtifacts}
           speechMessageId={speechMessageId}
+          variantsByMessageId={variantsByMessageId}
         />
       </div>
 
