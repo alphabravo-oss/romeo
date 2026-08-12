@@ -225,6 +225,22 @@ async function* streamOllamaChat(
       model: input.model.name,
       messages: input.messages.map(toOllamaMessage),
       stream: true,
+      // Ollama carries sampling under `options`, and names the output cap num_predict.
+      ...(input.sampling === undefined
+        ? {}
+        : {
+            options: {
+              ...(input.sampling.temperature === undefined
+                ? {}
+                : { temperature: input.sampling.temperature }),
+              ...(input.sampling.topP === undefined
+                ? {}
+                : { top_p: input.sampling.topP }),
+              ...(input.sampling.maxTokens === undefined
+                ? {}
+                : { num_predict: input.sampling.maxTokens }),
+            },
+          }),
       ...(input.tools?.length ? { tools: input.tools.map(toOllamaTool) } : {}),
     });
     const abort = () => stream.abort();

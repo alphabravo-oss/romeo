@@ -105,8 +105,17 @@ async function* streamAnthropicChat(
     .join("\n\n");
   const request: MessageCreateParamsStreaming = {
     model: input.model.name,
-    max_tokens: outputTokenLimit(input.model.contextWindow),
+    // max_tokens is required here, so a pinned cap overrides the context-derived default rather
+    // than being spread in alongside it.
+    max_tokens:
+      input.sampling?.maxTokens ?? outputTokenLimit(input.model.contextWindow),
     stream: true,
+    ...(input.sampling?.temperature === undefined
+      ? {}
+      : { temperature: input.sampling.temperature }),
+    ...(input.sampling?.topP === undefined
+      ? {}
+      : { top_p: input.sampling.topP }),
     ...(system ? { system } : {}),
     messages: input.messages
       .filter((message) => message.role !== "system")

@@ -3,6 +3,7 @@ import type {
   BaseModel,
   ChatMessage,
   ProviderInstance,
+  ProviderSampling,
   ProviderToolDefinition,
 } from "@romeo/providers";
 import type { RetrievalHit } from "@romeo/rag";
@@ -111,5 +112,7 @@ export interface PreparedRunStart {
   };
   routePlan: ProviderRoutePlan;
   run: Omit<RunRecord, "createdBy">;
+  /** Sampling pinned by the agent version, already narrowed to what a provider request accepts. */
+  sampling?: ProviderSampling;
   userMessage: Message;
 }

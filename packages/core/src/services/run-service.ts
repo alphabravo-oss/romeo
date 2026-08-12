@@ -140,6 +140,9 @@ export class RunService {
           citations: prepared.citations,
           routePlan: prepared.routePlan,
           providerTools: prepared.providerTools,
+          ...(prepared.sampling === undefined
+            ? {}
+            : { sampling: prepared.sampling }),
           subject: prepared.input.subject,
         });
       },

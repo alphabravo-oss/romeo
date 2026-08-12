@@ -9,6 +9,7 @@ import {
   type BaseModel,
   ChatMessage,
   ProviderInstance,
+  type ProviderSampling,
   ProviderToolDefinition,
 } from "@romeo/providers";
 
@@ -38,6 +39,7 @@ export interface RunStreamingExecutionInput {
   subject: AuthSubject;
   assistantContentPrefix?: string;
   emitRunStarted?: boolean;
+  sampling?: ProviderSampling;
 }
 
 export class RunStreamingExecutionService {
@@ -137,6 +139,7 @@ export class RunStreamingExecutionService {
             }),
         runId: input.run.id,
         messages: input.messages,
+        ...(input.sampling === undefined ? {} : { sampling: input.sampling }),
         ...(this.options.providerStreamTimeoutMs === undefined
           ? {}
           : { providerTimeoutMs: this.options.providerStreamTimeoutMs }),

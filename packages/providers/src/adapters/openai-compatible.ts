@@ -173,6 +173,15 @@ async function* streamOpenAiCompatibleChat(
         messages: input.messages.map(toOpenAiMessage),
         stream: true,
         stream_options: { include_usage: true },
+        ...(input.sampling?.temperature === undefined
+          ? {}
+          : { temperature: input.sampling.temperature }),
+        ...(input.sampling?.topP === undefined
+          ? {}
+          : { top_p: input.sampling.topP }),
+        ...(input.sampling?.maxTokens === undefined
+          ? {}
+          : { max_tokens: input.sampling.maxTokens }),
         ...(input.tools === undefined || input.tools.length === 0
           ? {}
           : {

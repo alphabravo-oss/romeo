@@ -11,6 +11,45 @@ import type { RunEvent } from "./events";
 import { ProviderCircuitBreaker, streamRunEvents } from "./run-executor";
 
 describe("streamRunEvents", () => {
+  // Sampling pinned on a managed model version reached the executor and stopped there for a long
+  // while: StreamChatInput had no field for it, so temperature was stored, versioned and audited
+  // while every request went out with the provider's own default.
+  it("hands the pinned sampling to the adapter, and again after a retry", async () => {
+    const seen: (StreamChatInput["sampling"] | undefined)[] = [];
+    const model = { id: "model_s", providerId: "provider_s", name: "m" } as BaseModel;
+    const provider = { id: "provider_s", name: "p" } as ProviderInstance;
+    const adapter: ModelProviderAdapter = {
+      kind: "openai-compatible",
+      async health() {
+        return { ok: true, message: "ok" };
+      },
+      async listModels() {
+        return [model];
+      },
+      async *streamChat(input) {
+        seen.push(input.sampling);
+        if (seen.length === 1) throw new Error("transient");
+        yield "ok";
+      },
+    };
+
+    await collectRunEvents(
+      streamRunEvents({
+        adapter,
+        provider,
+        model,
+        runId: "run_sampling",
+        messages: [{ role: "user", content: "hi" }],
+        sampling: { temperature: 0.2, maxTokens: 512 },
+        providerRetryPolicy: { maxRetries: 1, backoffMs: 0 },
+      }),
+    );
+
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toEqual({ temperature: 0.2, maxTokens: 512 });
+    expect(seen[1]).toEqual({ temperature: 0.2, maxTokens: 512 });
+  });
+
   it("redacts provider exception messages from failed run events", async () => {
     const rawPrompt = "raw-provider-outage-prompt-secret";
     const adapter: ModelProviderAdapter = {

@@ -4,6 +4,7 @@ import type { Message, RunRecord } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
+import { samplingFromParameters } from "./run-sampling";
 import { enforceAgentSafetySettings } from "./agent-safety";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import { assistantsEnabledForOrg } from "./chat-experience-service";
@@ -291,6 +292,9 @@ export class RunStartService {
       knowledgeHits: [...webHits, ...knowledge.hits],
       model: servingModel,
     });
+    // The sampling a version pins belongs to the run, not to whichever provider answers it, so it
+    // is resolved once here and carried through retries and fallback.
+    const sampling = samplingFromParameters(agentVersion.parameters);
     const providerTools = await buildProviderToolDefinitions(
       repository,
       input.subject,
@@ -320,6 +324,7 @@ export class RunStartService {
       quotaTarget,
       routePlan,
       run,
+      ...(sampling === undefined ? {} : { sampling }),
       userMessage,
     };
   }

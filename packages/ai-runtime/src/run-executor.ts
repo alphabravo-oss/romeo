@@ -128,6 +128,9 @@ export async function* streamRunEvents(
           messages,
           model: active.model,
           provider: active.provider,
+          // Carried across retries and provider fallback: the pinned sampling belongs to the
+          // managed model version, not to whichever provider ends up answering.
+          ...(input.sampling === undefined ? {} : { sampling: input.sampling }),
           ...(activeApiKey === undefined ? {} : { apiKey: activeApiKey }),
           ...(input.fetchImpl === undefined
             ? {}

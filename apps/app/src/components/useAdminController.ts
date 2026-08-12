@@ -23,7 +23,10 @@ import { useWorkspaceData } from "./useWorkspaceData";
  */
 export function useAdminController() {
   const queryClient = useQueryClient();
-  const data = useWorkspaceData(undefined);
+  // Drafts included: the admin curated table is where a model is created, and the gallery query
+  // lists published models only -- so a model created here was invisible the moment it was made,
+  // and the "drafts" tile above the table could only ever read zero.
+  const data = useWorkspaceData(undefined, { includeDrafts: true });
   const [error, setError] = useState<string>();
   const [syncingProviderId, setSyncingProviderId] = useState<string>();
   const [pullingProviderId, setPullingProviderId] = useState<string>();

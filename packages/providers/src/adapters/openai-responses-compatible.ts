@@ -18,6 +18,49 @@ import { createOpenAiClient, normalizeProviderSdkError } from "./provider-sdk";
 
 type ResponsesInputItem = ResponseInputItem;
 
+/**
+ * Model discovery cannot tell these two adapters apart: `/models` exists on every OpenAI-shaped
+ * endpoint, so a connection typed `openai-responses-compatible` but pointed at a server that only
+ * implements `/chat/completions` reports "available (N models)" and then 404s on the first message.
+ * This probes the verb the adapter will actually use.
+ *
+ * Only a 404 fails the check. A 401/429/500 means the route exists and something else is wrong,
+ * which discovery already proved is not a connectivity problem — failing on those would turn a rate
+ * limit into "your connection is broken".
+ *
+ * ponytail: the openai-compatible adapter has no matching probe. CEILING: the mirror-image mistake
+ * (a Responses-only endpoint typed openai-compatible) still passes verification. UPGRADE PATH: the
+ * same probe against /chat/completions, once an endpoint that is Responses-only shows up in practice.
+ */
+async function probeResponsesEndpoint(
+  provider: Parameters<ModelProviderAdapter["health"]>[0],
+  model: BaseModel,
+  options: Parameters<ModelProviderAdapter["health"]>[1],
+): Promise<{ ok: boolean; message: string } | undefined> {
+  try {
+    const client = createOpenAiClient(
+      provider,
+      options?.apiKey,
+      options?.fetchImpl,
+    );
+    await client.responses.create({
+      model: model.name,
+      input: "ping",
+      max_output_tokens: 16,
+      store: false,
+    });
+    return undefined;
+  } catch (caught) {
+    const status = (caught as { status?: number } | undefined)?.status;
+    if (status !== 404) return undefined;
+    return {
+      ok: false,
+      message:
+        "The endpoint lists models but has no /responses route. It most likely implements /chat/completions — recreate this connection as openai-compatible.",
+    };
+  }
+}
+
 export const openAiResponsesCompatibleAdapter: ModelProviderAdapter = {
   kind: "openai-responses-compatible",
   async health(provider, options) {
@@ -26,12 +69,16 @@ export const openAiResponsesCompatibleAdapter: ModelProviderAdapter = {
       openAiResponsesCompatibleCapabilities,
       options,
     );
-    return models.length > 0
-      ? {
-          ok: true,
-          message: `Connection available (${models.length} model${models.length === 1 ? "" : "s"}).`,
-        }
-      : { ok: false, message: "The endpoint returned no discoverable models." };
+    if (models.length === 0)
+      return {
+        ok: false,
+        message: "The endpoint returned no discoverable models.",
+      };
+    const verb = await probeResponsesEndpoint(provider, models[0]!, options);
+    return verb ?? {
+      ok: true,
+      message: `Connection available (${models.length} model${models.length === 1 ? "" : "s"}).`,
+    };
   },
   async listModels(provider, options): Promise<BaseModel[]> {
     return discoverCompatibleModels(
@@ -71,6 +118,16 @@ async function* streamOpenAiResponsesCompatible(
     input: input.messages.flatMap(toResponsesInputItems),
     stream: true,
     store: false,
+    // The Responses API renames the output cap; temperature and top_p keep their names.
+    ...(input.sampling?.temperature === undefined
+      ? {}
+      : { temperature: input.sampling.temperature }),
+    ...(input.sampling?.topP === undefined
+      ? {}
+      : { top_p: input.sampling.topP }),
+    ...(input.sampling?.maxTokens === undefined
+      ? {}
+      : { max_output_tokens: input.sampling.maxTokens }),
     ...(input.tools === undefined || input.tools.length === 0
       ? {}
       : {

@@ -115,12 +115,24 @@ export interface ProviderToolDefinition {
   parameters: Record<string, unknown>;
 }
 
+/**
+ * The sampling knobs a managed model version may pin. Deliberately three named numbers rather than
+ * the open `AgentParameters` record it is derived from: that record allows arbitrary keys, and
+ * forwarding an unrecognised one to a provider is how a saved preference turns into a 400.
+ */
+export interface ProviderSampling {
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+}
+
 export interface StreamChatInput {
   apiKey?: string;
   fetchImpl?: typeof fetch;
   provider: ProviderInstance;
   model: BaseModel;
   messages: ChatMessage[];
+  sampling?: ProviderSampling;
   signal?: AbortSignal;
   tools?: ProviderToolDefinition[];
 }
