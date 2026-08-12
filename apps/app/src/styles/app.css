@@ -4,4 +4,7 @@
 @import "./app-sidebar-controls.css";
 @import "./app-navigation.css";
 @import "./app-conversation.css";
+@import "./app-message-detail.css";
+@import "./app-composer-extras.css";
+@import "./app-artifacts.css";
 @import "./app-content.css";

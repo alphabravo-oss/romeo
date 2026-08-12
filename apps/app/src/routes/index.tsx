@@ -23,19 +23,26 @@ function ChatRoute() {
   const navigate = Route.useNavigate();
   return (
     <WorkspaceShell
+      // Stays a replace: the agent is derived from whichever chat is open and
+      // is re-announced on every chat switch, so pushing here would bury each
+      // real navigation under a duplicate entry and make Back need two presses.
       onAgentSelection={(agent) =>
         void navigate({
           search: (previous) => ({ ...previous, agent }),
           replace: true,
         })
       }
-      onChatSelection={(chat) =>
+      // Pushes by default, so Back and Forward walk the chats the reader
+      // actually opened. Only automatic corrections ask to replace: the chat
+      // row a first send just created, and a chat that vanished server-side,
+      // both describe the entry the reader is already standing on.
+      onChatSelection={(chat, options) =>
         void navigate({
           search: (previous) => {
             const { chat: _chat, ...rest } = previous;
             return { ...rest, ...(chat === undefined ? {} : { chat }) };
           },
-          replace: true,
+          replace: options?.replace === true,
         })
       }
       {...(search.agent === undefined

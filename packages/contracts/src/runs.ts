@@ -67,6 +67,7 @@ export const RunEventSchema = z
       "run.started",
       "message.started",
       "message.delta",
+      "message.reasoning",
       "message.completed",
       "retrieval.completed",
       "tool.requested",

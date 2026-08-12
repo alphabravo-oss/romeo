@@ -1,3 +1,4 @@
+export type { RunEvent, RunEventType } from "@romeo/ai-runtime";
 export * from "./api";
 export * from "./domain/data-connectors";
 export * from "./domain/delegated-oauth";

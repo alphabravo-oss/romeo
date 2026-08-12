@@ -5,13 +5,16 @@ import {
   getActiveRun,
   subscribeToRuns,
   type ChatCitation,
+  type ChatReasoning,
   type ChatRunActivity,
 } from "../lib/run-registry";
+import type { ChatToolCall } from "../lib/run-tool-calls";
 
 // Frozen singletons: the hook returns them whenever the chat has no run, so a
 // chat sitting idle never hands its consumers a fresh array identity.
 const noActivities: ChatRunActivity[] = [];
 const noCitations: ChatCitation[] = [];
+const noToolCalls: ChatToolCall[] = [];
 
 /**
  * Read-only view of the module-level run registry for one chat. The registry
@@ -24,6 +27,8 @@ export function useActiveRun(chatId: string | undefined): {
   error: string | undefined;
   isStreaming: boolean;
   handleCancel: () => void;
+  reasoning: ChatReasoning | undefined;
+  toolCalls: ChatToolCall[];
 } {
   const run = useSyncExternalStore(
     subscribeToRuns,
@@ -38,5 +43,7 @@ export function useActiveRun(chatId: string | undefined): {
     handleCancel: () => {
       if (chatId !== undefined) cancelActiveRun(chatId);
     },
+    reasoning: run?.reasoning,
+    toolCalls: run?.toolCalls ?? noToolCalls,
   };
 }

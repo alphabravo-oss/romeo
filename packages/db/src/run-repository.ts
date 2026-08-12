@@ -1,3 +1,4 @@
+import type { RunEventType } from "@romeo/core";
 import { and, asc, desc, eq, notInArray } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
@@ -32,22 +33,7 @@ export interface RunRecord {
   completedAt?: string;
 }
 
-export type RunEventTypeRecord =
-  | "message.completed"
-  | "message.delta"
-  | "message.started"
-  | "retrieval.completed"
-  | "run.cancelled"
-  | "run.completed"
-  | "run.failed"
-  | "run.started"
-  | "run.waiting_tool_approval"
-  | "run.waiting_tool_dispatch"
-  | "tool.requested"
-  | "tool.approval_required"
-  | "tool.completed"
-  | "tool.failed"
-  | "tool.started";
+export type RunEventTypeRecord = RunEventType;
 
 export interface RunEventRecord<TData = unknown> {
   id: string;
@@ -304,27 +290,34 @@ function asRunStatus(value: string): RunStatusRecord {
   return "failed";
 }
 
+// Exhaustive by construction: a new RunEventType without a key here now fails `pnpm check` instead
+// of reading back as "run.failed", which ends replay early and closes the SSE stream mid-run. That
+// is not hypothetical — "run.continuing" was persisted but missing from the previous hand-written
+// allowlist, so every resume-after-tool event replayed as a terminal failure on Postgres.
+const runEventTypes: Record<RunEventTypeRecord, true> = {
+  "message.completed": true,
+  "message.delta": true,
+  "message.reasoning": true,
+  "message.started": true,
+  "retrieval.completed": true,
+  "run.cancelled": true,
+  "run.completed": true,
+  "run.continuing": true,
+  "run.failed": true,
+  "run.started": true,
+  "run.waiting_tool_approval": true,
+  "run.waiting_tool_dispatch": true,
+  "tool.requested": true,
+  "tool.approval_required": true,
+  "tool.completed": true,
+  "tool.failed": true,
+  "tool.started": true,
+};
+
 function asRunEventType(value: string): RunEventTypeRecord {
-  if (
-    value === "message.completed" ||
-    value === "message.delta" ||
-    value === "message.started" ||
-    value === "retrieval.completed" ||
-    value === "run.cancelled" ||
-    value === "run.completed" ||
-    value === "run.failed" ||
-    value === "run.started" ||
-    value === "run.waiting_tool_approval" ||
-    value === "run.waiting_tool_dispatch" ||
-    value === "tool.requested" ||
-    value === "tool.approval_required" ||
-    value === "tool.completed" ||
-    value === "tool.failed" ||
-    value === "tool.started"
-  ) {
-    return value;
-  }
-  return "run.failed";
+  return Object.hasOwn(runEventTypes, value)
+    ? (value as RunEventTypeRecord)
+    : "run.failed";
 }
 
 function asToolCallStatus(value: string): ToolCallStatusRecord {

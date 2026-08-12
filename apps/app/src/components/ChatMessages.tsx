@@ -9,17 +9,23 @@ import type {
 import { writeTextToClipboard } from "../lib/clipboard";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
-import type { ChatCitation, ChatRunActivity } from "./useWorkspaceController";
+import type { ChatToolCall } from "../lib/run-tool-calls";
+import type {
+  ChatCitation,
+  ChatReasoning,
+  ChatRunActivity,
+} from "./useWorkspaceController";
 import { FormDialog } from "./FormDialog";
 import { previewUrlForAttachment } from "./ChatMessageActions";
 import { ChatMessageRow } from "./ChatMessageRow";
 import type { MessageVariants } from "./message-tree";
 
 // Frozen empties handed to every row but the last. Run state (activities,
-// citations) belongs to the streaming answer alone, and a fresh [] per row
-// would defeat ChatMessageRow's memo on every token.
+// citations, tool calls) belongs to the streaming answer alone, and a fresh []
+// per row would defeat ChatMessageRow's memo on every token.
 const noActivities: ChatRunActivity[] = [];
 const noCitations: ChatCitation[] = [];
+const noToolCalls: ChatToolCall[] = [];
 
 export const ChatMessages = memo(function ChatMessages({
   activeVoiceProfileId,
@@ -38,9 +44,11 @@ export const ChatMessages = memo(function ChatMessages({
   onRate,
   onRegenerate,
   onSelectVariant,
+  reasoning,
   runActivities,
   speechArtifacts,
   speechMessageId,
+  toolCalls,
   variantsByMessageId,
 }: {
   activeVoiceProfileId: string | undefined;
@@ -63,9 +71,11 @@ export const ChatMessages = memo(function ChatMessages({
   onRate: (messageId: string, rating: "negative" | "none" | "positive") => void;
   onRegenerate: () => void;
   onSelectVariant: (messageId: string) => void;
+  reasoning: ChatReasoning | undefined;
   runActivities: ChatRunActivity[];
   speechArtifacts: Record<string, SpeechArtifact>;
   speechMessageId: string | undefined;
+  toolCalls: ChatToolCall[];
   variantsByMessageId: Record<string, MessageVariants>;
 }) {
   const { t } = useLocale();
@@ -154,7 +164,9 @@ export const ChatMessages = memo(function ChatMessages({
               onSubmitEdit={handleSubmitEdit}
               previousVariantId={variants?.siblingIds[variants.index - 1]}
               rating={feedback[message.id]?.rating}
+              reasoning={isLast ? reasoning : undefined}
               runActivities={isLast ? runActivities : noActivities}
+              toolCalls={isLast ? toolCalls : noToolCalls}
               variantIndex={variants?.index}
               variantTotal={variants?.total}
             />

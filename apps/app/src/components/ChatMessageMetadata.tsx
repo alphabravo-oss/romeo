@@ -1,6 +1,11 @@
+import Brain from "lucide-react/dist/esm/icons/brain.mjs";
+import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
+
 import type { SpeechArtifact } from "../features/types";
-import { useLocale, type Locale } from "../lib/i18n";
+import { useLocale, type Locale, type MessageKey } from "../lib/i18n";
 import { formatDateTime } from "../lib/locale-format";
+import type { ChatReasoning } from "../lib/run-registry";
+import type { ChatToolCall } from "../lib/run-tool-calls";
 import type { ChatCitation, ChatRunActivity } from "./useWorkspaceController";
 
 export function RunActivityList({
@@ -18,6 +23,136 @@ export function RunActivityList({
       ))}
     </div>
   );
+}
+
+/**
+ * What the model worked through before it started answering. Collapsed by
+ * default and a plain <details>, so it is keyboard operable, announced as a
+ * disclosure, and costs nothing when the provider sends no reasoning at all --
+ * ChatMessageRow simply does not render it.
+ *
+ * The body is text, not markdown: reasoning is a scratchpad, and rendering it
+ * as rich content invites a half-written fence to reflow the transcript on
+ * every token.
+ */
+export function ReasoningPanel({
+  reasoning,
+  streaming,
+}: {
+  reasoning: ChatReasoning;
+  streaming: boolean;
+}) {
+  const { t } = useLocale();
+  return (
+    <details className="rm-reasoning">
+      <summary>
+        <Brain aria-hidden="true" size={13} />
+        {streaming
+          ? t("reasoningThinking")
+          : t("reasoningThoughtFor", { seconds: reasoning.seconds })}
+      </summary>
+      <div className="rm-reasoning-text">{reasoning.text}</div>
+    </details>
+  );
+}
+
+const toolCallStateLabels: Record<ChatToolCall["state"], MessageKey> = {
+  awaiting_approval: "chatActivityToolApprovalRequired",
+  completed: "chatActivityToolCompleted",
+  failed: "chatActivityToolFailed",
+  requested: "toolCallRequested",
+  running: "chatActivityRunningTool",
+};
+
+const toolCallDotStates: Record<
+  ChatToolCall["state"],
+  ChatRunActivity["state"]
+> = {
+  awaiting_approval: "active",
+  completed: "complete",
+  failed: "error",
+  requested: "active",
+  running: "active",
+};
+
+export function ToolCallList({ calls }: { calls: ChatToolCall[] }) {
+  if (calls.length === 0) return null;
+  return (
+    <div className="rm-tool-calls" aria-live="polite">
+      {calls.map((call) => (
+        <ToolCallCard call={call} key={call.id} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One tool call, expandable in place. Argument and result KEYS only: run event
+ * data reaches every reader of the chat, and the redaction boundary that keeps
+ * tool inputs and outputs off that wire is the reason this card can exist at
+ * all without a policy change.
+ */
+function ToolCallCard({ call }: { call: ChatToolCall }) {
+  const { t } = useLocale();
+  return (
+    <details className="rm-tool-call">
+      <summary>
+        <span className={`rm-run-activity ${toolCallDotStates[call.state]}`}>
+          <span className="rm-run-activity-dot" />
+        </span>
+        <Wrench aria-hidden="true" size={13} />
+        <span className="rm-tool-call-name">{call.name}</span>
+        <span className="rm-tool-call-state">
+          {t(toolCallStateLabels[call.state])}
+        </span>
+        {call.durationMs === undefined ? null : (
+          <span className="rm-tool-call-duration">
+            {formatToolDuration(call.durationMs)}
+          </span>
+        )}
+      </summary>
+      <dl className="rm-tool-call-detail">
+        <ToolCallField
+          label={t("toolCallArguments")}
+          value={call.argumentKeys.join(", ")}
+        />
+        <ToolCallField
+          label={t("toolCallResultFields")}
+          value={call.outputKeys.join(", ")}
+        />
+        <ToolCallField label={t("toolCallRisk")} value={call.riskLevel} />
+        <ToolCallField
+          label={t("toolCallApproval")}
+          value={
+            call.approvalRequired ? t("toolCallApprovalRequired") : undefined
+          }
+        />
+        <ToolCallField label={t("toolCallError")} value={call.errorCode} />
+      </dl>
+    </details>
+  );
+}
+
+function ToolCallField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | undefined;
+}) {
+  if (value === undefined || value.length === 0) return null;
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </>
+  );
+}
+
+function formatToolDuration(durationMs: number): string {
+  return durationMs < 1_000
+    ? `${durationMs}ms`
+    : `${(durationMs / 1_000).toFixed(1)}s`;
 }
 
 export function CitationList({ citations }: { citations: ChatCitation[] }) {

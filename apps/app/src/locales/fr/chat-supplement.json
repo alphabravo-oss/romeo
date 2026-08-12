@@ -42,5 +42,22 @@
   "suggested": "Suggestions",
   "tools": "Outils",
   "trimmed": "réduit",
-  "usableBudget": "Budget utilisable"
+  "usableBudget": "Budget utilisable",
+  "reasoningThinking": "Réflexion…",
+  "reasoningThoughtFor": "A réfléchi pendant {{seconds}} s",
+  "toolCallApproval": "Approbation",
+  "toolCallApprovalRequired": "Obligatoire",
+  "toolCallArguments": "Arguments",
+  "toolCallError": "Erreur",
+  "toolCallRequested": "Outil demandé",
+  "toolCallResultFields": "Champs du résultat",
+  "toolCallRisk": "Risque",
+  "composerMentionKnowledge": "Base de connaissances",
+  "composerMentions": "Fichiers et bases de connaissances",
+  "contextMeterFiles": "{{files}} fichier(s) conservé(s)",
+  "contextMeterLabel": "Ouvrir l'inspecteur de contexte",
+  "contextMeterUsage": "{{used}} / {{total}} de contexte",
+  "scrollToLatest": "Aller au message le plus récent",
+  "contextMeterUsageOnly": "{{used}} de contexte",
+  "citationMarkerLabel": "Source : {{title}}"
 }

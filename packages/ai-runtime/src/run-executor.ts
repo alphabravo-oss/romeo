@@ -12,6 +12,7 @@ import {
   createProviderStreamRuntime,
 } from "./provider-stream-runtime";
 import {
+  isReasoningChunk,
   isToolCallChunk,
   isUsageChunk,
   providerApiKeyFor,
@@ -111,6 +112,9 @@ export async function* streamRunEvents(
     }
 
     let chunks: AsyncIterator<StreamChatChunk> | undefined;
+    // Per attempt, deliberately not per run: it decides whether abandoning this attempt leaves
+    // orphaned thinking on the wire that the client has to be told to drop.
+    let attemptEmittedReasoning = false;
     const runtime = createProviderStreamRuntime(
       input.signal,
       input.providerTimeoutMs,
@@ -255,6 +259,14 @@ export async function* streamRunEvents(
           continue providerAttempt;
         }
 
+        // Reasoning is not committed output: it must not touch emittedContent/content, or a provider
+        // that thinks before it speaks would lose its retry and fallback budget for free.
+        if (isReasoningChunk(chunk)) {
+          attemptEmittedReasoning = true;
+          yield event("message.reasoning", { text: chunk.text });
+          continue;
+        }
+
         const token = chunk;
         emittedContent = true;
         content += token;
@@ -303,11 +315,22 @@ export async function* streamRunEvents(
           return;
         }
         usage = undefined;
+        // Reasoning is exempt from emittedContent (above), so an attempt can be abandoned after
+        // streaming thinking that belongs to nothing. Re-announcing the message is the reset
+        // marker: it already means "the assistant message starts here" -- core rebuilds content
+        // from the last one -- so a client can drop the dead attempt's thinking and re-base its
+        // timer instead of showing two attempts' scratchpads as one thought. It is emitted only
+        // when there is orphaned thinking to disown, so every other retry looks as it always did.
+        if (attemptEmittedReasoning)
+          yield event("message.started", { role: "assistant" });
         continue;
       }
 
       if (!emittedContent && tryFallback(failure.errorCode)) {
         usage = undefined;
+        // Same marker, and it matters more here: the next attempt is a different model.
+        if (attemptEmittedReasoning)
+          yield event("message.started", { role: "assistant" });
         continue;
       }
 

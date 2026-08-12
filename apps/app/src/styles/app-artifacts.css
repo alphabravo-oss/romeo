@@ -1,0 +1,176 @@
+/*
+ * Canvas pane: long code and diagrams promoted out of the scrolling transcript
+ * into a column of their own.
+ *
+ * A grid column rather than an overlay on wide screens, so the transcript keeps
+ * its own scrollport and its 48rem reading column simply re-centres in what is
+ * left -- .rm-message-list and .rm-composer-wrap are already `width: min(100%,
+ * 48rem); margin: 0 auto`, so nothing in the transcript needs to know this pane
+ * exists.
+ */
+
+.rm-chat-panel {
+  --rm-artifact-width: clamp(340px, 38vw, 720px);
+}
+
+.rm-chat-panel.with-artifact {
+  grid-template-columns: minmax(0, 1fr) var(--rm-artifact-width);
+}
+
+/* Rows as well as the column, because below 1024px the pane moves into row 1
+   alongside the transcript: sparse auto-placement refuses to put an auto-row
+   item in a cell an explicitly placed one already holds, so leaving these rows
+   automatic would push the transcript down a row the moment the pane arrives. */
+
+.rm-chat-panel.with-artifact > .rm-conversation {
+  grid-area: 1 / 1;
+}
+
+.rm-chat-panel.with-artifact > .rm-composer-wrap {
+  grid-area: 2 / 1;
+}
+
+.rm-artifact-pane {
+  display: grid;
+  grid-row: 1 / -1;
+  grid-column: 2;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  /* .rm-topbar is absolutely positioned over .rm-main, so the pane has to step
+     out from under it the way .rm-conversation's top padding does. */
+  margin-top: var(--rm-shell-header-height);
+  border-left: 1px solid var(--rm-border);
+  background: var(--rm-surface);
+}
+
+.rm-artifact-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  border-bottom: 1px solid var(--rm-border);
+}
+
+.rm-artifact-title {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 7px;
+  color: var(--rm-muted);
+}
+
+.rm-artifact-title strong {
+  overflow: hidden;
+  color: var(--rm-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-artifact-versions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.rm-artifact-version {
+  min-width: 4.5rem;
+  color: var(--rm-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.rm-artifact-body {
+  overflow: auto;
+  padding: 12px 14px 24px;
+}
+
+/* The pane is the block's frame here, so the block does not need a second one. */
+
+.rm-artifact-body .rm-codeblock {
+  margin: 0;
+}
+
+/* Version badge on the transcript block that is also an artifact. */
+
+.rm-codeblock-version {
+  margin-left: 2px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--rm-gray-800);
+  color: var(--rm-gray-300);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rm-codeblock.promoted {
+  border-color: color-mix(in srgb, var(--rm-accent) 55%, var(--rm-border));
+}
+
+/* One more action in the row than it was designed for, and the pane can make
+   the transcript narrow enough to need the second line. */
+
+.rm-codeblock-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/*
+ * Narrow viewports: an overlay instead of a second column. Splitting 700px of
+ * width between a transcript and a canvas leaves neither readable, and the
+ * transcript is the thing the reader can always get back to.
+ *
+ * The overlay is still a grid item, parked in the transcript's own cell, and
+ * row 1 is the whole of what it is allowed to cover. `position: fixed` is what
+ * it must not be: fixed anchors to the viewport, whose right edge is also where
+ * .rm-composer-actions-end puts voice / send / stop, so the pane sat on top of
+ * the only control that can cancel a running answer. Staying in the grid means
+ * the composer row is unreachable to the pane by construction rather than by a
+ * z-index or an inset that has to be kept in step with the composer's height.
+ */
+
+@media (max-width: 1024px) {
+  .rm-chat-panel.with-artifact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rm-artifact-pane {
+    grid-area: 1 / 1;
+    z-index: 45;
+    justify-self: end;
+    width: min(var(--rm-artifact-width), 100%);
+    /* Only the overlay needs a shadow; docked, the border does the separating. */
+    box-shadow: -12px 0 32px rgb(0 0 0 / 14%);
+  }
+
+  html.dark .rm-artifact-pane {
+    box-shadow: -12px 0 32px rgb(0 0 0 / 50%);
+  }
+}
+
+/* Below 900px app-conversation.css drops .rm-workspace to `height: auto` and
+   lets the body scroll, so this panel's grid loses its definite height and
+   row 1's `minmax(0, 1fr)` resolves to max-content. The pane then never hits
+   its own scrollport: it grows to the full height of the artifact and pushes
+   the composer -- and with it the stop button -- far below the fold, which is
+   the same "cannot cancel a running answer" failure the docked layout was
+   introduced to remove, reached from the opposite direction.
+   Capping the pane is what keeps row 1 finite; .rm-artifact-body scrolls again
+   and the composer stays on screen.
+
+   ponytail: a fixed 70svh rather than a measured "viewport minus composer".
+   Ceiling: a composer grown tall by several attachment rows can still crowd the
+   pane on a short phone in landscape. Upgrade path: publish the composer height
+   as a custom property from ChatComposer and subtract it here. */
+
+@media (max-width: 900px) {
+  .rm-artifact-pane {
+    max-height: 70svh;
+  }
+}

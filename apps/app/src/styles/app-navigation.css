@@ -380,6 +380,45 @@ html.dark .rm-topbar-button:hover {
 }
 
 /*
+ * Jump-to-latest pill: the last child of the scroll container, stuck to the
+ * foot of the scrollport.
+ *
+ * Sticky rather than absolute on purpose. .rm-chat-panel is deliberately not a
+ * positioned ancestor -- giving it position: relative would silently re-anchor
+ * .rm-context-inspector, which is absolutely positioned against .rm-main --
+ * and sticky needs no containing block at all: it parks against the scrollport
+ * it already lives in. It also costs nothing when unmounted, which is how the
+ * button disappears the moment the reader is following again.
+ */
+
+.rm-scroll-to-bottom {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  /* Block-level, so margin-inline: auto actually centres it; the button's own
+     inline-flex would otherwise leave it sitting at the start of the line. */
+  display: flex;
+  border: 1px solid var(--rm-border);
+  border-radius: 999px;
+  margin-inline: auto;
+  background: var(--rm-surface);
+  color: var(--rm-text);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 12%);
+}
+
+.rm-scroll-to-bottom:hover {
+  background: var(--rm-gray-50);
+}
+
+html.dark .rm-scroll-to-bottom {
+  box-shadow: 0 4px 14px rgb(0 0 0 / 45%);
+}
+
+html.dark .rm-scroll-to-bottom:hover {
+  background: var(--rm-gray-850);
+}
+
+/*
  * Empty state mirrors Open WebUI's ChatPlaceholder: left-aligned, vertically
  * centered (m-auto), wide container; agent name as the heading, a muted
  * "How can I help you today?" subtitle, a "Suggested" label, and a 2-col
@@ -471,24 +510,56 @@ html.dark .rm-topbar-button:hover {
 
 .rm-suggestion-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 2px;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 8px;
 }
 
 .rm-suggestion {
   display: flex;
+  align-items: start;
   justify-content: start;
-  border: 0;
-  border-radius: var(--rm-radius-item);
+  gap: 10px;
+  min-width: 0;
+  height: 100%;
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius-lg);
   background: transparent;
-  padding: 8px 12px;
+  padding: 10px 12px;
   text-align: left;
   font: inherit;
   cursor: pointer;
 }
 
 .rm-suggestion:hover {
+  border-color: var(--rm-gray-300);
   background: color-mix(in srgb, var(--rm-text) 6%, transparent);
+}
+
+html.dark .rm-suggestion:hover {
+  border-color: var(--rm-gray-700);
+}
+
+.rm-suggestion svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--rm-accent);
+}
+
+.rm-suggestion-text {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.rm-suggestion-subtitle {
+  /* Two lines, then ellipsis: the prompt behind a card is often a paragraph. */
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--rm-muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .rm-chat-mode {

@@ -1,0 +1,194 @@
+/* Per-message detail that sits around the answer itself: the reasoning
+ * disclosure, the tool-call cards that replaced the grey activity lines, the
+ * inline citation markers, and the streaming caret. Its own file because
+ * app-conversation.css has no headroom left. */
+
+/* ---------- Reasoning ---------- */
+
+.rm-reasoning {
+  margin-bottom: 8px;
+  border: 1px solid var(--rm-border);
+  border-radius: 10px;
+  background: var(--rm-surface-soft);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.rm-reasoning summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--rm-muted);
+}
+
+.rm-reasoning-text {
+  margin-top: 8px;
+  border-top: 1px solid var(--rm-border);
+  padding-top: 8px;
+  max-height: 22rem;
+  overflow-y: auto;
+  color: var(--rm-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- Tool calls ---------- */
+
+.rm-tool-calls {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.rm-tool-call {
+  border: 1px solid var(--rm-border);
+  border-radius: 10px;
+  background: var(--rm-surface-soft);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.rm-tool-call summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  color: var(--rm-muted);
+}
+
+.rm-tool-call-name {
+  color: var(--rm-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.rm-tool-call-duration {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums; /* a ticking duration must not jitter */
+}
+
+.rm-tool-call-detail {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 3px 10px;
+  margin: 8px 0 0;
+  border-top: 1px solid var(--rm-border);
+  padding-top: 8px;
+}
+
+.rm-tool-call-detail dt {
+  color: var(--rm-muted);
+}
+
+.rm-tool-call-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+/* ---------- Inline citation markers ---------- */
+
+.rm-citation-sup {
+  position: relative;
+  line-height: 0; /* a marker must not open up the line it sits in */
+}
+
+/* An <a> (or a <span>, for a citation with nowhere to go) rather than the
+ * shared Button, so this is the marker's own look and not a list of properties
+ * undoing a 2.25rem-tall control that was never going to fit inside a line of
+ * prose. */
+
+.rm-citation-marker {
+  border-radius: 99px;
+  background: var(--rm-surface-soft);
+  padding: 0 0.3rem;
+  color: var(--rm-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-decoration: none;
+}
+
+a.rm-citation-marker:hover {
+  background: var(--rm-accent);
+  color: #ffffff;
+}
+
+/* An outline, not just the hover fill: a background swap between two brand
+ * colours is not guaranteed 3:1 against its surroundings, and the ring is. */
+
+a.rm-citation-marker:focus-visible {
+  outline: 2px solid var(--rm-accent);
+  outline-offset: 2px;
+}
+
+/* Revealed by :hover and :focus-within, so a pointer and a keyboard reach the
+ * same card with no script and no focus management. */
+
+.rm-citation-card {
+  display: none;
+  position: absolute;
+  inset-block-end: calc(100% + 8px);
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  z-index: 20;
+  border: 1px solid var(--rm-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  background: var(--rm-surface);
+  padding: 7px 10px;
+  width: max-content;
+  max-width: min(22rem, 60vw);
+  color: var(--rm-text);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: start;
+}
+
+.rm-citation-sup:hover .rm-citation-card,
+.rm-citation-sup:focus-within .rm-citation-card {
+  display: grid;
+  gap: 3px;
+}
+
+.rm-citation-card span {
+  color: var(--rm-muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Streaming caret ---------- */
+
+/* The token frontier, as a pseudo-element on the last block the answer has
+ * rendered so far: no extra node, no prop, and nothing for the drain loop to
+ * keep in sync. The keyframe only drops opacity at the midpoint, so when
+ * reduced motion collapses the animation (app-foundation.css) the caret settles
+ * visible and steady rather than disappearing.
+ *
+ * ponytail: the last BLOCK, not the last character -- while the frontier is
+ * inside a fenced code block the caret sits under the block rather than in it.
+ * Upgrade path: a rehype plugin that appends a marker node to the deepest text
+ * position, which is the only way to reach inside the highlighted tree. */
+
+.rm-markdown.streaming > :last-child::after {
+  content: "";
+  display: inline-block;
+  transform: translateY(0.12em);
+  margin-inline-start: 2px;
+  border-radius: 1px;
+  background: var(--rm-accent);
+  width: 0.5em;
+  height: 1em;
+  vertical-align: baseline;
+  animation: rm-caret-blink 1.05s steps(1, end) infinite;
+}
+
+@keyframes rm-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}

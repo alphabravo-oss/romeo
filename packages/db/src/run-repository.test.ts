@@ -59,6 +59,21 @@ describe("run repository mappers", () => {
     });
   });
 
+  it("preserves resume and reasoning event types instead of replaying them as terminal failures", () => {
+    for (const type of ["run.continuing", "message.reasoning"]) {
+      const event = toRunEventRecord({
+        id: "evt_2",
+        runId: "run_1",
+        sequence: 4,
+        type,
+        data: {},
+        createdAt: new Date("2026-06-27T00:00:00.000Z"),
+      });
+
+      expect(event.type).toBe(type);
+    }
+  });
+
   it("maps tool calls without raw tool payloads", () => {
     const call = toToolCallRecord({
       id: "tool_call_1",

@@ -649,6 +649,59 @@ describe("streamRunEvents", () => {
     expect(JSON.stringify(events)).not.toContain(rawPrompt);
   });
 
+  it("emits reasoning without marking content emitted", async () => {
+    let calls = 0;
+    const adapter: ModelProviderAdapter = {
+      kind: "openai-compatible",
+      async health() {
+        return { ok: true, message: "ok" };
+      },
+      async listModels() {
+        return [model];
+      },
+      async *streamChat() {
+        calls += 1;
+        if (calls === 1) {
+          yield { type: "reasoning" as const, text: "a" };
+          throw new Error("temporary provider failure while thinking");
+        }
+        yield { type: "reasoning" as const, text: "b" };
+      },
+    };
+
+    const events = await collectRunEvents(
+      streamRunEvents({
+        adapter,
+        provider,
+        model,
+        runId: "run_provider_reasoning",
+        messages: [{ role: "user", content: "think first" }],
+        providerRetryPolicy: { maxRetries: 1, backoffMs: 0 },
+      }),
+    );
+
+    expect(calls).toBe(2);
+    // The second "message.started" is the reset marker for the abandoned attempt: without it the
+    // client concatenates "a" and "b" into one thought, and times it from the dead attempt.
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "message.started",
+      "message.reasoning",
+      "message.started",
+      "message.reasoning",
+      "message.completed",
+      "run.completed",
+    ]);
+    expect(
+      events
+        .filter((event) => event.type === "message.reasoning")
+        .map((event) => event.data),
+    ).toEqual([{ text: "a" }, { text: "b" }]);
+    expect(
+      events.find((event) => event.type === "message.completed")?.data,
+    ).toEqual({ role: "assistant", content: "" });
+  });
+
   it("does not retry after provider content has been emitted", async () => {
     const rawText = "raw-partial-provider-secret";
     let calls = 0;
@@ -807,6 +860,93 @@ describe("streamRunEvents", () => {
       "message.delta",
       "message.completed",
       "run.completed",
+    ]);
+    expect(events.at(-1)?.data).toEqual({
+      providerFallback: {
+        fromModelId: model.id,
+        fromProviderId: provider.id,
+        reason: "provider_stream_error",
+        toModelId: fallbackModel.id,
+        toProviderId: fallbackProvider.id,
+      },
+    });
+  });
+
+  it("restarts the message when a thinking provider is abandoned for the fallback", async () => {
+    let primaryCalls = 0;
+    let fallbackCalls = 0;
+    const primaryAdapter: ModelProviderAdapter = {
+      kind: "openai-compatible",
+      async health() {
+        return { ok: true, message: "ok" };
+      },
+      async listModels() {
+        return [model];
+      },
+      async *streamChat() {
+        primaryCalls += 1;
+        yield { type: "reasoning" as const, text: "primary thinking" };
+        throw new Error("primary unavailable mid-thought");
+      },
+    };
+    const fallbackAdapter: ModelProviderAdapter = {
+      kind: "ollama",
+      async health() {
+        return { ok: true, message: "ok" };
+      },
+      async listModels() {
+        return [fallbackModel];
+      },
+      async *streamChat() {
+        fallbackCalls += 1;
+        yield { type: "reasoning" as const, text: "fallback thinking" };
+        yield "fallback answer";
+      },
+    };
+
+    const events = await collectRunEvents(
+      streamRunEvents({
+        adapter: primaryAdapter,
+        provider,
+        model,
+        runId: "run_provider_fallback_reasoning",
+        messages: [{ role: "user", content: "think, then fall back" }],
+        providerFallback: {
+          adapter: fallbackAdapter,
+          provider: fallbackProvider,
+          model: fallbackModel,
+        },
+      }),
+    );
+
+    // Reasoning still does not spend the fallback budget: the primary thought out loud and the
+    // fallback ran anyway, exactly once.
+    expect(primaryCalls).toBe(1);
+    expect(fallbackCalls).toBe(1);
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "message.started",
+      "message.reasoning",
+      "message.started",
+      "message.reasoning",
+      "message.delta",
+      "message.completed",
+      "run.completed",
+    ]);
+    // The marker sits between the two models' thinking, so the second attempt's panel starts empty.
+    expect(
+      events
+        .filter(
+          (event) =>
+            event.type === "message.started" ||
+            event.type === "message.reasoning",
+        )
+        .map((event) => event.data),
+    ).toEqual([
+      { role: "assistant" },
+      { text: "primary thinking" },
+      { role: "assistant" },
+      { text: "fallback thinking" },
     ]);
     expect(events.at(-1)?.data).toEqual({
       providerFallback: {

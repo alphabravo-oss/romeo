@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { listMessageFeedback } from "../features";
 import type { MessageFeedbackState, SpeechArtifact } from "../features/types";
@@ -7,11 +7,6 @@ import { inspectRunContext, type RunContextPreview } from "../features/chat";
 import { getManagedModelPreferences } from "../features/managed-models";
 import { listQueuedTurns, type QueuedChatTurn } from "../features/runs";
 import { useLocale } from "../lib/i18n";
-import {
-  isActiveChatRemoval,
-  shouldApplyRequestedChat,
-  shouldAutoSelectChat,
-} from "./chat-selection";
 import { resolveChatModelSelection } from "./chat-model-selection";
 import { useActiveRun } from "./useActiveRun";
 import { useChatMessageState } from "./useChatMessageState";
@@ -20,6 +15,7 @@ import { useWorkspaceAttachments } from "./useWorkspaceAttachments";
 import { useWorkspaceChatActions } from "./useWorkspaceChatActions";
 import { useWorkspaceData } from "./useWorkspaceData";
 import { useWorkspaceProviderActions } from "./useWorkspaceProviderActions";
+import { useWorkspaceSelectionSync } from "./useWorkspaceSelectionSync";
 import { useWorkspaceTurnActions } from "./useWorkspaceTurnActions";
 import { useWorkspaceVoiceActions } from "./useWorkspaceVoiceActions";
 
@@ -33,12 +29,19 @@ export type {
   PendingImageAttachment,
 } from "./useWorkspaceAttachments";
 
-export type { ChatCitation, ChatRunActivity } from "../lib/run-registry";
+export type {
+  ChatCitation,
+  ChatReasoning,
+  ChatRunActivity,
+} from "../lib/run-registry";
 
 export function useWorkspaceController(
   options: {
     onAgentSelection?: (agentId: string) => void;
-    onChatSelection?: (chatId: string | undefined) => void;
+    onChatSelection?: (
+      chatId: string | undefined,
+      options?: { replace: boolean },
+    ) => void;
     requestedAgentId?: string;
     requestedChatId?: string;
   } = {},
@@ -85,15 +88,19 @@ export function useWorkspaceController(
   const [contextPreviewError, setContextPreviewError] = useState<string>();
   const [isInspectingContext, setIsInspectingContext] = useState(false);
   const [error, setError] = useState<string>();
-  const handledChatRemovalEventId = useRef<string | undefined>(undefined);
   // Streaming state is per chat and lives outside React, so a run that started
-  // here keeps going while the user reads or writes somewhere else.
+  // here keeps going while the user reads or writes somewhere else. Everything
+  // the transcript needs comes out of this one subscription: a second
+  // useActiveRun elsewhere in the tree would key off its own idea of the active
+  // chat, and during a switch the two disagree for a render.
   const {
     activities: runActivities,
     citations,
     error: runError,
     handleCancel,
     isStreaming,
+    reasoning,
+    toolCalls,
   } = useActiveRun(activeChatId);
   const {
     appendMessage,
@@ -216,7 +223,13 @@ export function useWorkspaceController(
     messages,
     ...(options.onChatSelection === undefined
       ? {}
-      : { onChatCreated: options.onChatSelection }),
+      : {
+          // Replaces: the chat row is minted by the first send, so this URL
+          // describes the blank entry the user is already standing on. Pushing
+          // would put an unreachable "no chat yet" state behind them.
+          onChatCreated: (chatId: string) =>
+            options.onChatSelection?.(chatId, { replace: true }),
+        }),
     queryClient,
     refreshUsageControls,
     restoreMessages,
@@ -265,83 +278,57 @@ export function useWorkspaceController(
     trackChatRun,
     workspaceId: workspace?.id,
   });
+  // The three direct selections below all PUSH: they are the navigations Back
+  // and Forward are supposed to walk. Each one first checks that the selection
+  // actually moves, because re-opening the chat already on screen (or pressing
+  // "New chat" on an already-blank one) leaves the URL identical, and stacking
+  // duplicate entries would make Back need several presses to go anywhere.
   const handleSelectChat = async (chatId: string) => {
     setModelOverrideId(undefined);
+    const moved = chatId !== activeChatId;
     await handleSelectChatInternal(chatId);
-    options.onChatSelection?.(chatId);
+    if (moved) options.onChatSelection?.(chatId);
   };
   const handleNewChat = () => {
     setModelOverrideId(undefined);
+    const moved = activeChatId !== undefined;
     handleNewChatInternal();
-    options.onChatSelection?.(undefined);
+    if (moved) options.onChatSelection?.(undefined);
   };
   const handleNewTemporaryChat = () => {
     setModelOverrideId(undefined);
+    const moved = activeChatId !== undefined;
     handleNewTemporaryChatInternal();
-    options.onChatSelection?.(undefined);
+    if (moved) options.onChatSelection?.(undefined);
   };
-  const firstChatId = chats[0]?.id;
-  const requestedAgentId = options.requestedAgentId;
-  const requestedChatId = options.requestedChatId;
-  const resolvedActiveAgentId = activeAgent?.id;
-  const selectChatFromEffect = useEffectEvent(
-    async (chatId: string, notifySelection: boolean) => {
-      setModelOverrideId(undefined);
-      await handleSelectChatInternal(chatId);
-      if (notifySelection) options.onChatSelection?.(chatId);
-    },
-  );
-  const notifyAgentSelection = useEffectEvent((agentId: string) => {
-    options.onAgentSelection?.(agentId);
+  useWorkspaceSelectionSync({
+    activeAgentId,
+    activeChatId,
+    firstChatId: chats[0]?.id,
+    handleChatDeleted,
+    isDraftingNewChat,
+    isStreaming,
+    latestChatEvent,
+    ...(options.onAgentSelection === undefined
+      ? {}
+      : { onAgentSelection: options.onAgentSelection }),
+    ...(options.onChatSelection === undefined
+      ? {}
+      : { onChatSelection: options.onChatSelection }),
+    requestedAgentId: options.requestedAgentId,
+    requestedChatId: options.requestedChatId,
+    resolvedActiveAgentId: activeAgent?.id,
+    selectChat: handleSelectChatInternal,
+    setActiveAgentId,
+    setActiveChatId,
+    setError,
+    setIsDraftingNewChat,
+    setModelOverrideId,
   });
-  const reconcileRemoteChatRemoval = useEffectEvent(async (chatId: string) => {
-    await handleChatDeleted(chatId);
-    options.onChatSelection?.(undefined);
-  });
-
-  useEffect(() => {
-    if (requestedAgentId !== undefined) setActiveAgentId(requestedAgentId);
-  }, [requestedAgentId]);
-
-  useEffect(() => {
-    const requestedChat = {
-      activeChatId,
-      isDraftingNewChat,
-      requestedChatId,
-    };
-    if (!shouldApplyRequestedChat(requestedChat)) return;
-    void selectChatFromEffect(requestedChat.requestedChatId, false).catch(
-      (caught) =>
-        setError(
-          caught instanceof Error ? caught.message : "Unable to load chat.",
-        ),
-    );
-  }, [activeChatId, isDraftingNewChat, requestedChatId]);
 
   useEffect(() => {
     setModelOverrideId(undefined);
   }, [activeAgent?.id]);
-
-  useEffect(() => {
-    if (
-      !isActiveChatRemoval(activeChatId, latestChatEvent) ||
-      handledChatRemovalEventId.current === latestChatEvent.id
-    )
-      return;
-    handledChatRemovalEventId.current = latestChatEvent.id;
-    void reconcileRemoteChatRemoval(latestChatEvent.chatId);
-  }, [activeChatId, latestChatEvent]);
-
-  useEffect(() => {
-    if (
-      activeChatId === undefined ||
-      resolvedActiveAgentId === undefined ||
-      activeAgentId === resolvedActiveAgentId
-    )
-      return;
-    setActiveAgentId(resolvedActiveAgentId);
-    notifyAgentSelection(resolvedActiveAgentId);
-  }, [activeAgentId, activeChatId, resolvedActiveAgentId]);
 
   useEffect(() => {
     const key = `romeo:draft:${activeChatId ?? `new:${workspace?.id ?? "none"}`}`;
@@ -354,28 +341,6 @@ export function useWorkspaceController(
     if (draft.length === 0) localStorage.removeItem(key);
     else localStorage.setItem(key, draft);
   }, [activeChatId, draft, workspace?.id]);
-
-  // Fall back to the most recent chat whenever the active one goes away, so an
-  // archive/delete lands the user somewhere real instead of on a dead view.
-  // It must NOT fire when the user asked for a blank chat -- see
-  // ./chat-selection for why activeChatId alone cannot tell those apart.
-  useEffect(() => {
-    if (firstChatId === undefined) return;
-    if (
-      !shouldAutoSelectChat({
-        activeChatId,
-        firstChatId,
-        isDraftingNewChat,
-        isStreaming,
-      })
-    )
-      return;
-    void selectChatFromEffect(firstChatId, true).catch((caught) =>
-      setError(
-        caught instanceof Error ? caught.message : "Unable to load chat.",
-      ),
-    );
-  }, [activeChatId, firstChatId, isDraftingNewChat, isStreaming]);
 
   async function handleInspectContext() {
     if (activeChatId === undefined || activeAgent === undefined) return;
@@ -494,6 +459,7 @@ export function useWorkspaceController(
     pendingToolApproval: toolExecution.pendingApproval,
     providers,
     providerOperationalSummary,
+    reasoning,
     regenerateLast,
     renameChat,
     selectedModelId,
@@ -507,6 +473,7 @@ export function useWorkspaceController(
     subject,
     syncingProviderId,
     runActivities,
+    toolCalls,
     toolResult: toolExecution.toolResult,
     tools,
     variantsByMessageId,

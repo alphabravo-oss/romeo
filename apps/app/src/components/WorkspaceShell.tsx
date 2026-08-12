@@ -4,6 +4,7 @@ import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid.mjs";
 import SquarePen from "lucide-react/dist/esm/icons/square-pen.mjs";
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 
+import type { QueuedChatTurn } from "../features/runs";
 import { type AppCommand, useRegisterCommands } from "../lib/commands";
 import { useLocale } from "../lib/i18n";
 import { ChatPanel } from "./ChatPanel";
@@ -24,7 +25,10 @@ export function WorkspaceShell({
   requestedChatId,
 }: {
   onAgentSelection?: (agentId: string) => void;
-  onChatSelection?: (chatId: string | undefined) => void;
+  onChatSelection?: (
+    chatId: string | undefined,
+    options?: { replace: boolean },
+  ) => void;
   requestedAgentId?: string;
   requestedChatId?: string;
 }) {
@@ -69,6 +73,10 @@ export function WorkspaceShell({
   const handleBranch = useCallback(
     (messageId: string) =>
       void latest.current.handleBranchFromMessage(messageId),
+    [],
+  );
+  const handleCancelQueuedTurn = useCallback(
+    (turn: QueuedChatTurn) => void latest.current.handleCancelQueuedTurn(turn),
     [],
   );
   const handleContinue = useCallback(
@@ -265,9 +273,7 @@ export function WorkspaceShell({
           workspaceId={workspace.workspace?.id}
           onBranch={handleBranch}
           onCancel={workspace.handleCancel}
-          onCancelQueuedTurn={(turn) =>
-            void workspace.handleCancelQueuedTurn(turn)
-          }
+          onCancelQueuedTurn={handleCancelQueuedTurn}
           onContinue={handleContinue}
           onDeleteMessage={handleDeleteMessage}
           onAttachmentRetention={handleAttachmentRetention}
@@ -293,9 +299,11 @@ export function WorkspaceShell({
           onTranscribeAudio={(blob) => workspace.handleTranscribeAudio(blob)}
           onTranscriptionError={workspace.handleTranscriptionError}
           onSubmit={workspace.handleSubmit}
+          reasoning={workspace.reasoning}
           runActivities={workspace.runActivities}
           speechArtifacts={workspace.speechArtifacts}
           speechMessageId={workspace.speechMessageId}
+          toolCalls={workspace.toolCalls}
           variantsByMessageId={workspace.variantsByMessageId}
         />
       </section>

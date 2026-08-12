@@ -40,6 +40,14 @@ export function isUsageChunk(
   return typeof chunk === "object" && chunk !== null && chunk.type === "usage";
 }
 
+export function isReasoningChunk(
+  chunk: StreamChatChunk,
+): chunk is { type: "reasoning"; text: string } {
+  return (
+    typeof chunk === "object" && chunk !== null && chunk.type === "reasoning"
+  );
+}
+
 export function isToolCallChunk(chunk: StreamChatChunk): chunk is {
   type: "tool_call";
   toolCall: ProviderToolCallRequest;

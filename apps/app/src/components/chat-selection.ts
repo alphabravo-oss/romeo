@@ -57,6 +57,38 @@ export function shouldApplyRequestedChat(state: {
   );
 }
 
+/**
+ * Whether a `?chat`-less URL should close the chat that is currently open.
+ *
+ * This is the other half of `shouldApplyRequestedChat`, and it exists because
+ * Back was asymmetric without it. "New chat" pushes a blank entry; opening a
+ * chat pushes one that names it. Walking forward off the blank entry works
+ * because the URL names a chat and `shouldApplyRequestedChat` picks it up.
+ * Walking BACK onto the blank entry used to do nothing at all -- the URL lost
+ * its chat, but nothing was watching for a chat to disappear -- so Back looked
+ * broken while Forward worked.
+ *
+ * Callers must only consult this when `?chat` has actually CHANGED. The URL
+ * trails our own selections by a tick, so "the URL has no chat right now" is
+ * also what the moment just after auto-selecting the most recent chat looks
+ * like, and clearing there would close the chat the app just opened.
+ */
+export function shouldClearActiveChat(state: {
+  activeChatId: string | undefined;
+  isDraftingNewChat: boolean;
+  isStreaming: boolean;
+  requestedChatId: string | undefined;
+}): boolean {
+  // The URL names a chat, so this is a move between chats, not a clear.
+  if (state.requestedChatId !== undefined) return false;
+  // Nothing open to close -- "New chat" already left the app in this state.
+  if (state.activeChatId === undefined) return false;
+  // A blank composer is already what the user asked for.
+  if (state.isDraftingNewChat) return false;
+  // Same rule as auto-select: never move the selection under an in-flight run.
+  return !state.isStreaming;
+}
+
 export function isActiveChatRemoval(
   activeChatId: string | undefined,
   event: { action: string; chatId: string } | undefined,

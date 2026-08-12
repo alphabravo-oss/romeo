@@ -300,12 +300,6 @@ html.reduce-motion *::after {
   color: var(--rm-accent);
 }
 
-.rm-queued-turns {
-  padding: 0.25rem 0.65rem;
-  font-size: 0.75rem;
-  color: var(--rm-muted);
-}
-
 /* Open WebUI forces bare <pre> into the UI sans stack */
 
 pre {

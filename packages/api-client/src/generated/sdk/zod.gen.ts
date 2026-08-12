@@ -4582,6 +4582,7 @@ export const zRunEvent = z.object({
     "run.started",
     "message.started",
     "message.delta",
+    "message.reasoning",
     "message.completed",
     "retrieval.completed",
     "tool.requested",

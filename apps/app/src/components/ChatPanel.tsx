@@ -1,8 +1,10 @@
 import { Button } from "@romeo/ui";
+import ArrowDown from "lucide-react/dist/esm/icons/arrow-down.mjs";
 import BotMessageSquare from "lucide-react/dist/esm/icons/bot-message-square.mjs";
+import Sparkles from "lucide-react/dist/esm/icons/sparkles.mjs";
 import Zap from "lucide-react/dist/esm/icons/zap.mjs";
 import type { DragEvent, FormEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   BaseModel,
@@ -14,14 +16,21 @@ import type {
 import type { RunContextPreview } from "../features/chat";
 import type { ChatSuggestion } from "../features/chat-experience";
 import type { QueuedChatTurn } from "../features/runs";
+import { ArtifactContext, type ArtifactBinding } from "../lib/markdown";
 import { useStickToBottom } from "../lib/use-stick-to-bottom";
+import { ArtifactPane } from "./ArtifactPane";
+import { collectArtifacts, findArtifactVersion } from "./chat-artifacts";
 import { ChatMessages } from "./ChatMessages";
 import { ChatComposer } from "./ChatComposer";
+import { suggestionSubtitle } from "./chat-suggestions";
 import { ContextInspector } from "./ContextInspector";
 import { isDragOverlayVisible, nextDragDepth } from "./drag-depth";
+import { QueuedTurnGhosts } from "./QueuedTurnGhosts";
 import type { MessageVariants } from "./message-tree";
+import type { ChatToolCall } from "../lib/run-tool-calls";
 import type {
   ChatCitation,
+  ChatReasoning,
   ChatRunActivity,
   PendingDocumentAttachment,
   PendingImageAttachment,
@@ -80,9 +89,11 @@ export function ChatPanel({
   onTranscribeAudio,
   onTranscriptionError,
   onSubmit,
+  reasoning,
   runActivities,
   speechArtifacts,
   speechMessageId,
+  toolCalls,
   variantsByMessageId,
 }: {
   activeVoiceProfileId: string | undefined;
@@ -148,9 +159,11 @@ export function ChatPanel({
   onTranscribeAudio: (blob: Blob) => Promise<void>;
   onTranscriptionError: (message: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  reasoning: ChatReasoning | undefined;
   runActivities: ChatRunActivity[];
   speechArtifacts: Record<string, SpeechArtifact>;
   speechMessageId: string | undefined;
+  toolCalls: ChatToolCall[];
   variantsByMessageId: Record<string, MessageVariants>;
 }) {
   const [dragActive, setDragActive] = useState(false);
@@ -159,7 +172,47 @@ export function ChatPanel({
   const [contextInspectorOpen, setContextInspectorOpen] = useState(false);
   // Re-runs on every token: messages is a new array each delta, so the effect
   // fires throughout the stream, not just on message boundaries.
-  const conversationRef = useStickToBottom(messages);
+  const {
+    atBottom,
+    ref: conversationRef,
+    scrollToBottom,
+  } = useStickToBottom(messages);
+  // The messages go in as they are: `messages` is a new array on every delta,
+  // but the rows it holds are the same objects a delta did not touch, and that
+  // is what collectArtifacts caches on. Copying them into fresh source objects
+  // here is what defeated it -- every token re-prepared and re-scanned the whole
+  // conversation, and handed every code block in the transcript a new context.
+  const artifacts = useMemo(
+    () => collectArtifacts(messages, citations.length),
+    [citations, messages],
+  );
+  const [artifactState, setArtifactState] = useState<{
+    key: string;
+    version: number;
+  }>();
+  // Derived, not synchronised: switching chat or flipping a variant drops the
+  // artifact out of the list and closes the pane with no effect to run.
+  const openArtifact = artifacts.find(
+    (artifact) => artifact.key === artifactState?.key,
+  );
+  const artifactVersion = Math.min(
+    artifactState?.version ?? 0,
+    (openArtifact?.versions.length ?? 1) - 1,
+  );
+  const artifactBinding = useMemo<ArtifactBinding | undefined>(
+    () =>
+      artifacts.length === 0
+        ? undefined
+        : {
+            lookup: (messageId, offset) =>
+              findArtifactVersion(artifacts, messageId, offset),
+            open: (key, version) => setArtifactState({ key, version }),
+            shownKey: openArtifact?.key,
+            shownVersion:
+              openArtifact === undefined ? undefined : artifactVersion,
+          },
+    [artifactVersion, artifacts, openArtifact],
+  );
 
   useEffect(() => {
     const reset = () => {
@@ -199,6 +252,7 @@ export function ChatPanel({
     <ChatComposer
       attachedUrls={attachedUrls}
       canInspectContext={canInspectContext}
+      contextPreview={contextPreview}
       documentAttachments={documentAttachments}
       draft={draft}
       error={error}
@@ -213,7 +267,6 @@ export function ChatPanel({
       onAttachExistingFile={onAttachExistingFile}
       onAttachFiles={onAttachFiles}
       onCancel={onCancel}
-      onCancelQueuedTurn={onCancelQueuedTurn}
       onDraftChange={onDraftChange}
       onGenerateImages={onGenerateImages}
       onInspectContext={() => {
@@ -229,7 +282,6 @@ export function ChatPanel({
       onTranscribeAudio={onTranscribeAudio}
       onTranscriptionError={onTranscriptionError}
       providers={providers}
-      queuedTurns={queuedTurns}
       selectedModelId={selectedModelId}
       webSearchEnabled={webSearchEnabled}
       workspaceId={workspaceId}
@@ -263,19 +315,36 @@ export function ChatPanel({
                   <span>{t("suggested")}</span>
                 </div>
                 <div className="rm-suggestion-grid">
-                  {promptSuggestions.map((suggestion, index) => (
-                    <Button
-                      className="rm-suggestion"
-                      key={`${suggestion.title}-${index}`}
-                      onClick={() => onDraftChange(suggestion.prompt)}
-                      title={suggestion.title}
-                      type="button"
-                    >
-                      <span className="rm-suggestion-title">
-                        {suggestion.title}
-                      </span>
-                    </Button>
-                  ))}
+                  {promptSuggestions.map((suggestion, index) => {
+                    const subtitle = suggestionSubtitle(suggestion.prompt);
+                    return (
+                      <Button
+                        className="rm-suggestion"
+                        key={`${suggestion.title}-${index}`}
+                        onClick={() => onDraftChange(suggestion.prompt)}
+                        title={suggestion.title}
+                        type="button"
+                      >
+                        {/* One glyph for every card: picking a themed one meant
+                            matching English keywords, so two of the three
+                            shipped locales got the neutral fallback anyway. */}
+                        <Sparkles aria-hidden="true" size={16} />
+                        <span className="rm-suggestion-text">
+                          <span className="rm-suggestion-title">
+                            {suggestion.title}
+                          </span>
+                          {/* The prompt itself, so the card says what pressing
+                              it will actually ask — not a second label. */}
+                          {subtitle === "" ||
+                          subtitle === suggestion.title ? null : (
+                            <span className="rm-suggestion-subtitle">
+                              {subtitle}
+                            </span>
+                          )}
+                        </span>
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
             ) : null}
@@ -299,38 +368,68 @@ export function ChatPanel({
 
   return (
     <section
-      className={`rm-chat-panel ${dragActive ? "drag-active" : ""}`}
+      className={`rm-chat-panel ${openArtifact === undefined ? "" : "with-artifact"} ${dragActive ? "drag-active" : ""}`}
       {...dropTargetProps}
     >
       {dragActive ? (
         <div className="rm-drop-overlay">{t("dropFilesToAttach")}</div>
       ) : null}
-      <div className="rm-conversation" ref={conversationRef}>
-        <ChatMessages
-          activeVoiceProfileId={activeVoiceProfileId}
-          agentName={agentName}
-          citations={citations}
-          feedback={messageFeedback}
-          isGeneratingSpeech={isGeneratingSpeech}
-          isStreaming={isStreaming}
-          messages={messages}
-          onBranch={onBranch}
-          onContinue={onContinue}
-          onDelete={onDeleteMessage}
-          onAttachmentRetention={onAttachmentRetention}
-          onEditAndResend={onEditAndResend}
-          onGenerateSpeech={onGenerateSpeech}
-          onRate={onRateMessage}
-          onRegenerate={onRegenerate}
-          onSelectVariant={onSelectVariant}
-          runActivities={runActivities}
-          speechArtifacts={speechArtifacts}
-          speechMessageId={speechMessageId}
-          variantsByMessageId={variantsByMessageId}
-        />
-      </div>
+      <ArtifactContext.Provider value={artifactBinding}>
+        <div className="rm-conversation" ref={conversationRef}>
+          <ChatMessages
+            activeVoiceProfileId={activeVoiceProfileId}
+            agentName={agentName}
+            citations={citations}
+            feedback={messageFeedback}
+            isGeneratingSpeech={isGeneratingSpeech}
+            isStreaming={isStreaming}
+            messages={messages}
+            onBranch={onBranch}
+            onContinue={onContinue}
+            onDelete={onDeleteMessage}
+            onAttachmentRetention={onAttachmentRetention}
+            onEditAndResend={onEditAndResend}
+            onGenerateSpeech={onGenerateSpeech}
+            onRate={onRateMessage}
+            onRegenerate={onRegenerate}
+            onSelectVariant={onSelectVariant}
+            reasoning={reasoning}
+            runActivities={runActivities}
+            speechArtifacts={speechArtifacts}
+            speechMessageId={speechMessageId}
+            toolCalls={toolCalls}
+            variantsByMessageId={variantsByMessageId}
+          />
+          <QueuedTurnGhosts onCancel={onCancelQueuedTurn} turns={queuedTurns} />
+          {/* Unmounted rather than faded out while the reader is already at the
+            bottom: a transparent-but-present button still takes a tab stop and
+            still reads out to a screen reader as an action that, from here,
+            does nothing. */}
+          {atBottom ? null : (
+            <Button
+              aria-label={t("scrollToLatest")}
+              className="rm-scroll-to-bottom"
+              onClick={scrollToBottom}
+              size="icon"
+              variant="secondary"
+            >
+              <ArrowDown aria-hidden="true" size={16} />
+            </Button>
+          )}
+        </div>
+      </ArtifactContext.Provider>
 
       {composer}
+      {openArtifact === undefined ? null : (
+        <ArtifactPane
+          artifact={openArtifact}
+          onClose={() => setArtifactState(undefined)}
+          onSelectVersion={(version) =>
+            setArtifactState({ key: openArtifact.key, version })
+          }
+          version={artifactVersion}
+        />
+      )}
       {contextInspectorOpen ? (
         <ContextInspector
           {...(contextPreviewError === undefined

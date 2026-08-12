@@ -6,13 +6,24 @@ import Copy from "lucide-react/dist/esm/icons/copy.mjs";
 import Download from "lucide-react/dist/esm/icons/download.mjs";
 import Eye from "lucide-react/dist/esm/icons/eye.mjs";
 import EyeOff from "lucide-react/dist/esm/icons/eye-off.mjs";
+import PanelRight from "lucide-react/dist/esm/icons/panel-right.mjs";
 import type { ComponentProps, ReactNode } from "react";
-import { memo, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  memo,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { writeTextToClipboard } from "./clipboard";
+import { citationHrefPrefix, renderableContent } from "./chat-citations";
 import { useLocale } from "./i18n";
 import { downloadText } from "./download";
+import { drainFrames } from "./markdown-stream";
+import type { ChatCitation } from "./run-registry";
 import { toast } from "./toast";
 
 type RehypePlugins = NonNullable<
@@ -23,6 +34,30 @@ type RemarkPlugins = NonNullable<
 >;
 const fencedCodePattern = /(^|\n)\s*(?:```|~~~)/u;
 const mathPattern = /(^|[^\\])(?:\$\$|\\\(|\\\[)/u;
+
+/**
+ * How a fenced block reaches the canvas pane. Supplied by ChatPanel and read
+ * from context rather than passed down, because the alternative is a prop on
+ * Markdown that every transcript row would have to forward on every token.
+ *
+ * Left undefined everywhere else -- including inside the pane itself, where the
+ * block on screen IS the artifact -- so the default rendering is unchanged and
+ * the pane cannot recurse into itself.
+ */
+export interface ArtifactBinding {
+  lookup: (
+    messageId: string,
+    offset: number,
+  ) => { key: string; total: number; version: number } | undefined;
+  open: (key: string, version: number) => void;
+  /** The revision on screen, so only that one block yields to the pane. */
+  shownKey: string | undefined;
+  shownVersion: number | undefined;
+}
+
+export const ArtifactContext = createContext<ArtifactBinding | undefined>(
+  undefined,
+);
 
 function extractText(node: ReactNode): string {
   if (typeof node === "string") return node;
@@ -36,47 +71,69 @@ function extractText(node: ReactNode): string {
   return "";
 }
 
+/**
+ * Holds a rendered LENGTH rather than a copy of the text, so the drain can only
+ * ever lag the cache the run registry writes into -- it never forks from it,
+ * and a shorter or replaced `content` (a sibling variant, a retry) is adopted
+ * on the spot instead of being treated as arrears: a length past the end of the
+ * text below reads as the whole of it.
+ *
+ * The drain runs on the frame loop for as long as the answer is streaming and
+ * reaches the arriving text through a ref, so an incoming delta cannot disturb
+ * it -- deltas arrive faster than frames do, and a drain that restarted on each
+ * one advanced only in the gaps between chunks, which is precisely backwards.
+ */
 function useStreamingContent(content: string, streaming: boolean): string {
-  const [rendered, setRendered] = useState(content);
-  const frameRef = useRef<number | undefined>(undefined);
+  const [rendered, setRendered] = useState(content.length);
+  const latest = useRef(content);
 
   useEffect(() => {
-    if (!streaming) {
-      if (frameRef.current !== undefined)
-        cancelAnimationFrame(frameRef.current);
-      frameRef.current = undefined;
-      setRendered(content);
-      return;
-    }
-    if (frameRef.current !== undefined) return;
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = undefined;
-      setRendered(content);
-    });
-    return () => {
-      if (frameRef.current !== undefined)
-        cancelAnimationFrame(frameRef.current);
-      frameRef.current = undefined;
-    };
+    latest.current = content;
+    // The settled render is never delayed: the last frame of an answer is a
+    // direct write, not a queued one.
+    if (!streaming) setRendered(content.length);
   }, [content, streaming]);
 
-  return rendered;
+  useEffect(() => {
+    if (!streaming) return;
+    return drainFrames(() => latest.current.length, setRendered);
+  }, [streaming]);
+
+  return rendered >= content.length ? content : content.slice(0, rendered);
 }
 
 function CodeBlock({
   code,
   highlighted,
   language,
+  messageId,
+  offset,
+  previewDiagrams,
 }: {
   code: string;
   highlighted: ReactNode;
   language: string;
+  messageId: string | undefined;
+  /** Character offset of the fence, which is what makes this block addressable. */
+  offset: number | undefined;
+  previewDiagrams: boolean;
 }) {
   const { t } = useLocale();
+  const artifacts = useContext(ArtifactContext);
+  const canPreview = language === "mermaid";
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [preview, setPreview] = useState(false);
-  const canPreview = language === "mermaid";
+  const [preview, setPreview] = useState(canPreview && previewDiagrams);
+  const placement =
+    messageId === undefined || offset === undefined
+      ? undefined
+      : artifacts?.lookup(messageId, offset);
+  // Promotion, not removal: only the one revision the pane is showing steps
+  // aside, and it comes straight back when the pane closes.
+  const promoted =
+    placement !== undefined &&
+    placement.key === artifacts?.shownKey &&
+    placement.version === artifacts.shownVersion;
 
   async function copyCode() {
     if (!(await writeTextToClipboard(code))) {
@@ -93,19 +150,45 @@ function CodeBlock({
   }
 
   return (
-    <div className="rm-codeblock">
+    <div className={promoted ? "rm-codeblock promoted" : "rm-codeblock"}>
       <div className="rm-codeblock-head">
-        <Button
-          aria-label={collapsed ? t("expandCode") : t("collapseCode")}
-          className="rm-codeblock-label"
-          onClick={() => setCollapsed((value) => !value)}
-          type="button"
-        >
-          {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-          <span>{language}</span>
-        </Button>
+        {promoted ? (
+          // No dead control: while the block is in the pane there is nothing
+          // left here to collapse.
+          <span className="rm-codeblock-label">
+            <PanelRight aria-hidden="true" size={13} />
+            <span>{language}</span>
+          </span>
+        ) : (
+          <Button
+            aria-label={collapsed ? t("expandCode") : t("collapseCode")}
+            className="rm-codeblock-label"
+            onClick={() => setCollapsed((value) => !value)}
+            type="button"
+          >
+            {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+            <span>{language}</span>
+          </Button>
+        )}
         <div className="rm-codeblock-actions">
-          {canPreview ? (
+          {placement === undefined || artifacts === undefined ? null : (
+            <Button
+              onClick={() => artifacts.open(placement.key, placement.version)}
+              type="button"
+            >
+              <PanelRight size={13} />
+              {promoted ? t("artifactInCanvas") : t("openInCanvas")}
+              {placement.total > 1 ? (
+                <span className="rm-codeblock-version">
+                  {t("artifactVersion", {
+                    total: placement.total,
+                    version: placement.version + 1,
+                  })}
+                </span>
+              ) : null}
+            </Button>
+          )}
+          {canPreview && !promoted ? (
             <Button onClick={() => setPreview((value) => !value)} type="button">
               {preview ? <EyeOff size={13} /> : <Eye size={13} />}
               {preview ? t("hidePreview") : t("preview")}
@@ -120,8 +203,8 @@ function CodeBlock({
           </Button>
         </div>
       </div>
-      {collapsed ? null : <pre>{highlighted}</pre>}
-      {preview && language === "mermaid" ? (
+      {collapsed || promoted ? null : <pre>{highlighted}</pre>}
+      {preview && canPreview && !promoted ? (
         <MermaidPreview code={code} />
       ) : null}
     </div>
@@ -169,13 +252,25 @@ function MermaidPreview({ code }: { code: string }) {
  * fences remain inert text. Mermaid diagrams use the strict renderer only.
  */
 export const Markdown = memo(function Markdown({
+  citations = noCitations,
   content,
+  messageId,
+  previewDiagrams = false,
   streaming = false,
 }: {
+  /** Stable identity required: this component is memoised. */
+  citations?: ChatCitation[];
   content: string;
+  /** Half of a fenced block's canvas identity; omitted, nothing is promotable. */
+  messageId?: string;
+  previewDiagrams?: boolean;
   streaming?: boolean;
 }) {
-  const renderedContent = useStreamingContent(content, streaming);
+  const drained = useStreamingContent(content, streaming);
+  // The server appends a "Citations:" footer to a grounded answer and the
+  // prompt asks the model to cite by bracket number. Both become the inline
+  // markers below, with CitationList left mounted as the full list.
+  const renderedContent = renderableContent(drained, citations.length);
   const usesFencedCode = fencedCodePattern.test(renderedContent);
   const usesMath = mathPattern.test(renderedContent);
   const [rehypePlugins, setRehypePlugins] = useState<RehypePlugins>([]);
@@ -219,15 +314,25 @@ export const Markdown = memo(function Markdown({
   }, [usesFencedCode, usesMath]);
 
   return (
-    <div className="rm-markdown">
+    // The streaming class alone drives the caret at the token frontier: it is a
+    // ::after on the last block, so it costs no element, no prop and no render.
+    <div className={streaming ? "rm-markdown streaming" : "rm-markdown"}>
       <ReactMarkdown
         components={{
-          a: ({ children, node: _node, ...props }) => (
-            <a {...props} rel="noreferrer nofollow" target="_blank">
-              {children}
-            </a>
-          ),
-          pre: ({ children }) => {
+          a: ({ children, node: _node, ...props }) => {
+            const citation = citationForHref(props.href, citations);
+            if (citation !== undefined) {
+              return (
+                <CitationMarker citation={citation}>{children}</CitationMarker>
+              );
+            }
+            return (
+              <a {...props} rel="noreferrer nofollow" target="_blank">
+                {children}
+              </a>
+            );
+          },
+          pre: ({ children, node }) => {
             const codeElement = Array.isArray(children)
               ? children[0]
               : children;
@@ -247,6 +352,9 @@ export const Markdown = memo(function Markdown({
                 code={extractText(children).replace(/\n$/u, "")}
                 highlighted={children}
                 language={language}
+                messageId={messageId}
+                offset={node?.position?.start.offset}
+                previewDiagrams={previewDiagrams}
               />
             );
           },
@@ -259,6 +367,73 @@ export const Markdown = memo(function Markdown({
     </div>
   );
 });
+
+const noCitations: ChatCitation[] = [];
+
+function citationForHref(
+  href: string | undefined,
+  citations: ChatCitation[],
+): ChatCitation | undefined {
+  if (href === undefined || !href.startsWith(citationHrefPrefix)) {
+    return undefined;
+  }
+  return citations[Number(href.slice(citationHrefPrefix.length))];
+}
+
+/**
+ * The source, at the point the answer used it. The card is revealed by CSS
+ * alone -- :hover for a pointer, :focus-within for a keyboard -- because a
+ * scripted popover here fights itself: every popover library moves focus into
+ * the panel when it opens, so opening on focus and closing on blur loops, and
+ * the alternative (open on click only) is exactly the affordance a reader
+ * skimming an answer will not use.
+ *
+ * The card is a preview, not a destination: it holds no link, which is what
+ * lets it vanish the instant the pointer leaves. The reachable copy of every
+ * source is the CitationList below the answer, kept mounted for that reason.
+ *
+ * The marker is a plain anchor, and a bare <span> when the citation has no URI
+ * to go to. It was a Button, which announced itself as a control and then did
+ * nothing on Enter -- there was never a handler to write, because opening the
+ * source is exactly what an <a> already does. The anchor is also what makes
+ * :focus-within above real: a keyboard reaches the card by tabbing to a link
+ * that goes somewhere, so nothing has to fake a tab stop. A citation with only
+ * a chunkId has no destination, so it gets no tab stop and no announced role;
+ * its title still reads out from the CitationList.
+ */
+function CitationMarker({
+  children,
+  citation,
+}: {
+  children: ReactNode;
+  citation: ChatCitation;
+}) {
+  const { t } = useLocale();
+  return (
+    <sup className="rm-citation-sup">
+      {citation.sourceUri === undefined ? (
+        <span className="rm-citation-marker">{children}</span>
+      ) : (
+        <a
+          aria-label={t("citationMarkerLabel", { title: citation.title })}
+          className="rm-citation-marker"
+          href={citation.sourceUri}
+          rel="noreferrer nofollow"
+          target="_blank"
+        >
+          {children}
+        </a>
+      )}
+      <span aria-hidden="true" className="rm-citation-card">
+        <strong>{citation.title}</strong>
+        <span>
+          {citation.sourceUri ?? citation.chunkId}
+          {citation.provider === undefined ? "" : ` · ${citation.provider}`}
+        </span>
+      </span>
+    </sup>
+  );
+}
 
 function languageExtension(language: string): string {
   const aliases: Record<string, string> = {

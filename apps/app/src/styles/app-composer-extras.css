@@ -1,0 +1,106 @@
+/* Composer context meter and queued-turn ghost bubbles. */
+
+/* ---- Context meter ---- */
+
+.rm-context-meter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  color: var(--rm-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+}
+
+.rm-context-meter:hover:not(:disabled) {
+  background: var(--rm-hover);
+  color: var(--rm-text);
+}
+
+.rm-context-meter:disabled {
+  opacity: 0.55;
+}
+
+.rm-context-meter-track {
+  display: block;
+  overflow: hidden;
+  width: 28px;
+  height: 4px;
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--rm-text) 14%, transparent);
+}
+
+.rm-context-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--rm-accent);
+}
+
+.rm-context-meter-usage {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The file count is the first thing to go when the action row runs out of
+   room; the token budget is the part that changes a decision. */
+
+.rm-context-meter-files::before {
+  content: "·";
+  margin-right: 4px;
+}
+
+@media (width <= 640px) {
+  .rm-context-meter-files {
+    display: none;
+  }
+}
+
+/* ---- Queued turns, shown where they will land ---- */
+
+/* Pulls back the transcript's own bottom gutter so the queue reads as the next
+   turns in the thread, spaced like every other message, not as a second list. */
+
+.rm-message-list-queued {
+  margin-top: -28px;
+}
+
+/* The ghosting is the dashed border and the missing fill, never `opacity`.
+   Opacity composites the whole subtree, so it cannot spare the text the way a
+   fill can: at 0.72 over --rm-bg it took .rm-message-queued-meta from 4.83:1 to
+   2.83:1 in light and 7.76:1 to 4.41:1 in dark, both under the 4.5:1 floor, put
+   the failed variant at 3.32:1 / 4.13:1, and faded the cancel IconButton's
+   focus ring toward the 3:1 non-text floor with it. Everything below is a
+   colour that still measures on its own. */
+
+.rm-message-row.pending .rm-message-content {
+  border: 1px dashed var(--rm-border);
+  background: transparent;
+}
+
+.rm-message-row.pending .rm-message-avatar {
+  border: 1px dashed var(--rm-border);
+  background: transparent;
+}
+
+.rm-message-queued-meta {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 6px;
+  color: var(--rm-muted);
+  font-size: 11px;
+}
+
+.rm-message-row.pending.failed .rm-message-content {
+  border-color: var(--rm-danger);
+}
+
+.rm-message-row.pending.failed .rm-message-queued-meta {
+  color: var(--rm-danger);
+}

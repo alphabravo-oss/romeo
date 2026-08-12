@@ -5,6 +5,7 @@ import {
   isActiveChatRemoval,
   shouldApplyRequestedChat,
   shouldAutoSelectChat,
+  shouldClearActiveChat,
 } from "./chat-selection";
 
 // A user with existing chats -- the population the "New chat" no-op affected.
@@ -202,6 +203,71 @@ describe("shouldApplyRequestedChat", () => {
         activeChatId: "chat_1",
         isDraftingNewChat: false,
         requestedChatId: "chat_1",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("shouldClearActiveChat", () => {
+  // Pressing Back off a chat and onto the blank entry that "New chat" pushed.
+  it("closes the open chat when the URL loses its chat", () => {
+    expect(
+      shouldClearActiveChat({
+        activeChatId: "chat_1",
+        isDraftingNewChat: false,
+        isStreaming: false,
+        requestedChatId: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  it("leaves the chat alone while a run is streaming", () => {
+    // Same rule as shouldAutoSelectChat: history must not pull the transcript
+    // out from under an answer that is still being written.
+    expect(
+      shouldClearActiveChat({
+        activeChatId: "chat_1",
+        isDraftingNewChat: false,
+        isStreaming: true,
+        requestedChatId: undefined,
+      }),
+    ).toBe(false);
+  });
+
+  it("does nothing while the user is already drafting a blank chat", () => {
+    // This is the state "New chat" itself produces, one tick before its own
+    // navigation lands. Clearing again would be a no-op at best, and would
+    // fight the auto-select fallback at worst.
+    expect(
+      shouldClearActiveChat({
+        activeChatId: "chat_1",
+        isDraftingNewChat: true,
+        isStreaming: false,
+        requestedChatId: undefined,
+      }),
+    ).toBe(false);
+  });
+
+  it("does nothing when no chat is open", () => {
+    expect(
+      shouldClearActiveChat({
+        activeChatId: undefined,
+        isDraftingNewChat: false,
+        isStreaming: false,
+        requestedChatId: undefined,
+      }),
+    ).toBe(false);
+  });
+
+  it("does nothing when the URL still names a chat", () => {
+    // Back landing on another chat is shouldApplyRequestedChat's job; clearing
+    // here would blank the transcript for a frame on every history step.
+    expect(
+      shouldClearActiveChat({
+        activeChatId: "chat_1",
+        isDraftingNewChat: false,
+        isStreaming: false,
+        requestedChatId: "chat_2",
       }),
     ).toBe(false);
   });

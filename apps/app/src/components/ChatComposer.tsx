@@ -13,8 +13,8 @@ import Search from "lucide-react/dist/esm/icons/search.mjs";
 import Square from "lucide-react/dist/esm/icons/square.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
 import Zap from "lucide-react/dist/esm/icons/zap.mjs";
-import { useQuery } from "@tanstack/react-query";
 import {
+  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -22,20 +22,19 @@ import {
   type KeyboardEvent,
 } from "react";
 
-import { listPromptTemplatesPage } from "../features/prompts";
 import { useLocale } from "../lib/i18n";
 import { ChatComposerDialogs } from "./ChatComposerDialogs";
+import { composerMenuId, useComposerMenu } from "./ChatComposerMenus";
 import type { ChatComposerProps } from "./chat-composer-props";
-import {
-  listImageGenerationModels,
-  materializePrompt,
-} from "./chat-composer-utils";
+import { listImageGenerationModels } from "./chat-composer-utils";
 import { ComposerModelSelect } from "./ComposerModelSelect";
+import { ContextMeter } from "./ContextMeter";
 import { VoiceInputButton } from "./VoiceInputButton";
 
 export function ChatComposer({
   attachedUrls,
   canInspectContext,
+  contextPreview,
   documentAttachments,
   draft,
   error,
@@ -50,7 +49,6 @@ export function ChatComposer({
   onAttachExistingFile,
   onAttachFiles,
   onCancel,
-  onCancelQueuedTurn,
   onDraftChange,
   onGenerateImages,
   onInspectContext,
@@ -63,7 +61,6 @@ export function ChatComposer({
   onTranscribeAudio,
   onTranscriptionError,
   providers,
-  queuedTurns,
   selectedModelId,
   webSearchEnabled,
   workspaceId,
@@ -74,37 +71,36 @@ export function ChatComposer({
   const [noteLibraryOpen, setNoteLibraryOpen] = useState(false);
   const [urlDialogOpen, setUrlDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
-  const [activeCommandIndex, setActiveCommandIndex] = useState(0);
-  const commandQuery = draft.startsWith("/") ? draft.slice(1).trim() : "";
-  const commandPromptsQuery = useQuery({
-    queryKey: ["promptTemplates", workspaceId, "command", commandQuery],
-    queryFn: () =>
-      listPromptTemplatesPage({
-        workspaceId: workspaceId!,
-        limit: 8,
-        offset: 0,
-        ...(commandQuery === "" ? {} : { query: commandQuery }),
-      }),
-    enabled: workspaceId !== undefined && draft.startsWith("/"),
-  });
+  const [caret, setCaret] = useState(0);
   const imageModels = useMemo(
     () => listImageGenerationModels(models, providers),
     [models, providers],
   );
-  const commandPrompts = useMemo(
-    () =>
-      (commandPromptsQuery.data?.items ?? [])
-        .filter((prompt) =>
-          prompt.name.toLowerCase().includes(commandQuery.toLowerCase()),
-        )
-        .slice(0, 8),
-    [commandPromptsQuery.data?.items, commandQuery],
-  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingCaret = useRef<number | undefined>(undefined);
 
-  // ponytail: replace this whole effect with `field-sizing: content` in
-  // app.css once Safari/Firefox support is broad enough. Until then CSS cannot
+  // A menu selection can land mid-sentence, and React writing .value on a
+  // controlled textarea drops the caret at the end. The write is deferred to the
+  // layout effect below, which runs after the new value is in the DOM.
+  const replaceDraft = useCallback(
+    (value: string, nextCaret: number) => {
+      pendingCaret.current = nextCaret;
+      setCaret(nextCaret);
+      onDraftChange(value);
+    },
+    [onDraftChange],
+  );
+  const composerMenu = useComposerMenu({
+    caret,
+    draft,
+    onAttachExistingFile,
+    onReplaceDraft: replaceDraft,
+    workspaceId,
+  });
+
+  // ponytail: replace the sizing half of this effect with `field-sizing: content`
+  // in app.css once Safari/Firefox support is broad enough. Until then CSS cannot
   // measure content, so the height comes from scrollHeight. Keyed on `draft`
   // rather than an onInput handler because React fires no input event for the
   // programmatic writes (prompt library, notes, "/" menu, voice transcript).
@@ -113,42 +109,17 @@ export function ChatComposer({
     if (el === null) return;
     el.style.height = "auto"; // reset first, or it can only ever grow
     el.style.height = `${el.scrollHeight}px`;
+    const restore = pendingCaret.current;
+    if (restore === undefined) return;
+    pendingCaret.current = undefined;
+    el.setSelectionRange(restore, restore);
   }, [draft]);
 
   function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // Japanese/Chinese/Korean IMEs commit the candidate word with Enter. Without
     // this guard that keystroke submits a half-composed message.
     if (event.nativeEvent.isComposing) return;
-    if (draft.startsWith("/") && commandPrompts.length > 0) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onDraftChange("");
-        setActiveCommandIndex(0);
-        return;
-      }
-      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-        event.preventDefault();
-        setActiveCommandIndex((current) => {
-          if (event.key === "Home") return 0;
-          if (event.key === "End") return commandPrompts.length - 1;
-          if (event.key === "ArrowDown")
-            return (current + 1) % commandPrompts.length;
-          return (current - 1 + commandPrompts.length) % commandPrompts.length;
-        });
-        return;
-      }
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        const selected =
-          commandPrompts[
-            Math.min(activeCommandIndex, commandPrompts.length - 1)
-          ];
-        if (selected !== undefined)
-          onDraftChange(materializePrompt(selected.body));
-        setActiveCommandIndex(0);
-        return;
-      }
-    }
+    if (composerMenu.handleKeyDown(event)) return;
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
@@ -293,17 +264,16 @@ export function ChatComposer({
         <div className="rm-composer">
           <Textarea
             name="prompt"
-            aria-activedescendant={
-              draft.startsWith("/") && commandPrompts.length > 0
-                ? `composer-command-${commandPrompts[Math.min(activeCommandIndex, commandPrompts.length - 1)]?.id}`
-                : undefined
-            }
+            aria-activedescendant={composerMenu.activeOptionId}
             aria-autocomplete="list"
-            aria-controls="composer-command-menu"
+            aria-controls={composerMenuId}
             id="prompt"
-            aria-expanded={draft.startsWith("/") && commandPrompts.length > 0}
+            aria-expanded={composerMenu.open}
             aria-haspopup="listbox"
-            onChange={(event) => onDraftChange(event.currentTarget.value)}
+            onChange={(event) => {
+              setCaret(event.currentTarget.selectionStart);
+              onDraftChange(event.currentTarget.value);
+            }}
             onKeyDown={handleDraftKeyDown}
             onPaste={(event) => {
               const files = Array.from(event.clipboardData.files);
@@ -316,32 +286,7 @@ export function ChatComposer({
             aria-describedby="composer-status"
             role="combobox"
           />
-          {draft.startsWith("/") && commandPrompts.length > 0 ? (
-            <div
-              className="rm-composer-command-menu"
-              id="composer-command-menu"
-              role="listbox"
-              aria-label={t("promptTemplates")}
-            >
-              {commandPrompts.map((prompt, index) => (
-                <Button
-                  aria-selected={index === activeCommandIndex}
-                  id={`composer-command-${prompt.id}`}
-                  key={prompt.id}
-                  onClick={() => {
-                    onDraftChange(materializePrompt(prompt.body));
-                    setActiveCommandIndex(0);
-                  }}
-                  onMouseEnter={() => setActiveCommandIndex(index)}
-                  role="option"
-                  type="button"
-                >
-                  <strong>/{prompt.name}</strong>
-                  <span>{prompt.description ?? prompt.body.slice(0, 80)}</span>
-                </Button>
-              ))}
-            </div>
-          ) : null}
+          {composerMenu.listbox}
           {/* Stays mounted outside the menu: the menu item only forwards a click
               here, and the input itself remains a labelled keyboard target. */}
           <Input
@@ -392,6 +337,21 @@ export function ChatComposer({
             >
               <Search aria-hidden="true" size={17} />
             </Button>
+            {canInspectContext ? (
+              <ContextMeter
+                contextWindow={
+                  models.find((model) => model.id === selectedModelId)
+                    ?.contextWindow
+                }
+                // Deliberately not disabled while inspecting: the click that
+                // starts an inspection would then disable the control under the
+                // keyboard user who pressed it, dropping focus to the body.
+                disabled={isStreaming}
+                draft={draft}
+                onInspect={onInspectContext}
+                preview={contextPreview}
+              />
+            ) : null}
             <div className="rm-composer-actions-end">
               <VoiceInputButton
                 disabled={isStreaming}
@@ -441,25 +401,6 @@ export function ChatComposer({
                   aria-label={`${t("removeAttachment")}: ${url}`}
                   onClick={() => onRemoveUrl(url)}
                   title={`${t("removeAttachment")}: ${url}`}
-                  type="button"
-                >
-                  <X aria-hidden="true" size={12} />
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {queuedTurns.length > 0 ? (
-          <div className="rm-queued-turns grid gap-1" aria-live="polite">
-            {queuedTurns.map((turn) => (
-              <div className="flex items-center gap-2" key={turn.id}>
-                <span className="min-w-0 flex-1 truncate">
-                  {turn.status === "failed" ? t("failed") : t("queued")}:{" "}
-                  {turn.content}
-                </span>
-                <Button
-                  aria-label={`${t("removeQueued")}: ${turn.content}`}
-                  onClick={() => onCancelQueuedTurn(turn)}
                   type="button"
                 >
                   <X aria-hidden="true" size={12} />

@@ -22,11 +22,18 @@ import type {
 import { Markdown } from "../lib/markdown";
 import { useLocale } from "../lib/i18n";
 import { formatDateTime } from "../lib/locale-format";
-import type { ChatCitation, ChatRunActivity } from "../lib/run-registry";
+import type {
+  ChatCitation,
+  ChatReasoning,
+  ChatRunActivity,
+} from "../lib/run-registry";
+import type { ChatToolCall } from "../lib/run-tool-calls";
 import {
   CitationList,
   formatSpeechArtifact,
+  ReasoningPanel,
   RunActivityList,
+  ToolCallList,
 } from "./ChatMessageMetadata";
 import {
   Action,
@@ -73,7 +80,9 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onSubmitEdit,
   previousVariantId,
   rating,
+  reasoning,
   runActivities,
+  toolCalls,
   variantIndex,
   variantTotal,
 }: {
@@ -111,7 +120,9 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onSubmitEdit: (messageId: string, content: string) => void;
   previousVariantId: string | undefined;
   rating: "negative" | "positive" | undefined;
+  reasoning: ChatReasoning | undefined;
   runActivities: ChatRunActivity[];
+  toolCalls: ChatToolCall[];
   /** Sibling position, spread into scalars so the memo survives a stream. */
   variantIndex: number | undefined;
   variantTotal: number | undefined;
@@ -229,12 +240,18 @@ export const ChatMessageRow = memo(function ChatMessageRow({
         <div className="rm-message-heading">
           <span>{agentName}</span>
         </div>
+        {reasoning === undefined ? null : (
+          <ReasoningPanel reasoning={reasoning} streaming={isThinking} />
+        )}
+        <ToolCallList calls={toolCalls} />
         <div className="rm-message-content">
           {isThinking ? (
             <span className="rm-skeleton" />
           ) : (
             <Markdown
+              citations={message.citations ?? citations}
               content={message.content}
+              messageId={message.id}
               streaming={isLast && isStreaming}
             />
           )}

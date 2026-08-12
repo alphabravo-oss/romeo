@@ -4017,6 +4017,7 @@ export type RunEvent = {
     | "run.started"
     | "message.started"
     | "message.delta"
+    | "message.reasoning"
     | "message.completed"
     | "retrieval.completed"
     | "tool.requested"

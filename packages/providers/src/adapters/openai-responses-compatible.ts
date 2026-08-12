@@ -97,6 +97,8 @@ async function* streamOpenAiResponsesCompatible(
       const usage = usageFromOpenAiResponsesPayload(event);
       if (usage !== undefined) yield { type: "usage", usage };
 
+      for (const text of reasoningDeltas(event))
+        yield { type: "reasoning", text };
       for (const token of textDeltas(event)) yield token;
       const calls = toolCalls.merge(event);
       if (calls.length === 1) yield { type: "tool_call", toolCall: calls[0]! };
@@ -172,6 +174,21 @@ function toResponsesFunctionCall(
     name: toolCall.name,
     arguments: JSON.stringify(toolCall.arguments),
   };
+}
+
+// Read-only: the request never sets `reasoning`, because non-OpenAI responses-compatible endpoints
+// reject unknown request params. Endpoints that volunteer reasoning get a panel; the rest are untouched.
+function reasoningDeltas(payload: unknown): string[] {
+  const record = asRecord(payload);
+  if (
+    record?.type !== "response.reasoning_summary_text.delta" &&
+    record?.type !== "response.reasoning_text.delta"
+  ) {
+    return [];
+  }
+  return typeof record.delta === "string" && record.delta.length > 0
+    ? [record.delta]
+    : [];
 }
 
 function textDeltas(payload: unknown): string[] {

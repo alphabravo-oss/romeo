@@ -135,6 +135,7 @@ export interface ProviderTokenUsage {
 export type StreamChatChunk =
   | string
   | ProviderToolCallChunk
+  | { type: "reasoning"; text: string }
   | { type: "usage"; usage: ProviderTokenUsage };
 
 export interface ModelProviderAdapter {

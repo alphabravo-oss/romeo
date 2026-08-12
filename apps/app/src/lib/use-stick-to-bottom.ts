@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // Slack in px. A user within this distance of the bottom is "following" the
 // stream and wants to keep following; beyond it they are reading history and
@@ -22,6 +22,13 @@ export function shouldStickToBottom(metrics: {
 export function useStickToBottom(dep: unknown) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  // The same intent, published for rendering. It stays a *second* copy rather
+  // than replacing the ref: the ref is read from a rAF callback once per token
+  // and must never schedule a render, while the jump-to-latest button has to
+  // appear the moment the reader stops following. React bails out on an equal
+  // value, so the setState below is free for every scroll event but the two
+  // that cross the threshold.
+  const [atBottom, setAtBottom] = useState(true);
 
   // Record intent on every user scroll, before the next append changes metrics.
   //
@@ -35,6 +42,7 @@ export function useStickToBottom(dep: unknown) {
     if (node === null) return;
     const onScroll = () => {
       stick.current = shouldStickToBottom(node);
+      setAtBottom(stick.current);
     };
     node.addEventListener("scroll", onScroll, { passive: true });
     return () => node.removeEventListener("scroll", onScroll);
@@ -53,5 +61,17 @@ export function useStickToBottom(dep: unknown) {
     return () => cancelAnimationFrame(handle);
   }, [dep]);
 
-  return ref;
+  // Jumps rather than animates: the button exists to rejoin an answer that is
+  // still being written, and a smooth scroll would spend its whole duration
+  // racing the next token's own jump to the bottom. Nothing here to gate on
+  // prefers-reduced-motion, because nothing here moves over time.
+  const scrollToBottom = useCallback(() => {
+    const node = ref.current;
+    if (node === null) return;
+    stick.current = true;
+    setAtBottom(true);
+    node.scrollTop = node.scrollHeight;
+  }, []);
+
+  return { atBottom, ref, scrollToBottom };
 }

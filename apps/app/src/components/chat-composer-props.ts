@@ -1,7 +1,7 @@
 import type { FormEvent } from "react";
 
+import type { RunContextPreview } from "../features/chat";
 import type { FileObject } from "../features/files";
-import type { QueuedChatTurn } from "../features/runs";
 import type { BaseModel, Provider } from "../features/types";
 import type {
   PendingDocumentAttachment,
@@ -11,6 +11,7 @@ import type {
 export interface ChatComposerProps {
   attachedUrls: string[];
   canInspectContext: boolean;
+  contextPreview: RunContextPreview | undefined;
   documentAttachments: PendingDocumentAttachment[];
   draft: string;
   error: string | undefined;
@@ -25,7 +26,6 @@ export interface ChatComposerProps {
   onAttachExistingFile: (file: FileObject) => void;
   onAttachFiles: (files: File[]) => void;
   onCancel: () => void;
-  onCancelQueuedTurn: (turn: QueuedChatTurn) => void;
   onDraftChange: (value: string) => void;
   onGenerateImages: (input: {
     modelId: string;
@@ -42,7 +42,6 @@ export interface ChatComposerProps {
   onTranscribeAudio: (blob: Blob) => Promise<void>;
   onTranscriptionError: (message: string) => void;
   providers: Provider[];
-  queuedTurns: QueuedChatTurn[];
   selectedModelId: string | undefined;
   webSearchEnabled: boolean;
   workspaceId: string | undefined;

@@ -1,7 +1,7 @@
 import { useMutation, type QueryClient } from "@tanstack/react-query";
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 
-import { createChat, fileContentUrl, forkChat, updateChat } from "../features";
+import { createChat, forkChat, updateChat } from "../features";
 import type { Chat, Message } from "../features/types";
 import {
   enqueueChatTurn,
@@ -16,6 +16,7 @@ import {
   generateAutomaticChatTitle,
 } from "../lib/chat-titles";
 import { trackRun } from "../lib/run-registry";
+import { optimisticTurnAttachments } from "./optimistic-turn-attachments";
 import { resolveAttachmentsForResend } from "./resend-attachments";
 import type {
   PendingDocumentAttachment,
@@ -258,11 +259,10 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           : { urls: options.attachedUrls }),
       });
       accepted = true;
-      const userMessageId = appendOptimisticTurn(
+      const userMessageId = appendTurnRow(
         chat.id,
         content,
-        images,
-        documents,
+        optimisticTurnAttachments(images, documents),
         options.messages.at(-1)?.id,
       );
       options.setAttachedUrls([]);
@@ -296,42 +296,6 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
         options.restorePendingAttachments(images, documents);
       }
     }
-  }
-
-  function appendOptimisticTurn(
-    chatId: string,
-    content: string,
-    images: PendingImageAttachment[],
-    documents: PendingDocumentAttachment[],
-    parentMessageId: string | undefined,
-  ): string {
-    return appendTurnRow(
-      chatId,
-      content,
-      [
-        ...images.map((attachment) => ({
-          id: attachment.id,
-          messageId: attachment.id,
-          fileName: attachment.fileName,
-          mimeType: attachment.mimeType,
-          sizeBytes: attachment.sizeBytes,
-          kind: "image" as const,
-          retainedInContext: true,
-          previewUrl: attachment.previewUrl,
-        })),
-        ...documents.map((attachment) => ({
-          id: attachment.id,
-          messageId: attachment.id,
-          fileName: attachment.fileName,
-          mimeType: attachment.mimeType,
-          sizeBytes: attachment.sizeBytes,
-          kind: "document" as const,
-          retainedInContext: true,
-          previewUrl: fileContentUrl(attachment.fileId),
-        })),
-      ],
-      parentMessageId,
-    );
   }
 
   async function regenerateLast(): Promise<void> {

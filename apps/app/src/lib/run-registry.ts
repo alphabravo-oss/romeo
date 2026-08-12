@@ -8,6 +8,7 @@ import {
 } from "../features/runs";
 import type { Message } from "../features/types";
 import type { MessageKey } from "./i18n";
+import { reduceToolCalls, type ChatToolCall } from "./run-tool-calls";
 
 // A run outlives the panel that started it. Keeping the stream in React state
 // meant unmounting the chat (switching chats, opening a settings route) killed
@@ -29,6 +30,20 @@ export interface ChatRunActivity {
 
 export type ChatCitation = NonNullable<Message["citations"]>[number];
 
+/**
+ * What the model worked through before answering, and how long it spent there.
+ *
+ * ponytail: live only. `message.reasoning` is persisted as a run event and
+ * replays by sequence, but it is not on the Message contract, so re-reading the
+ * transcript after a reload brings back the answer without the thinking that
+ * produced it. Upgrade path: a `reasoning` field on Message, written by the
+ * same terminal persist that writes the content.
+ */
+export interface ChatReasoning {
+  seconds: number;
+  text: string;
+}
+
 export interface ActiveRun {
   activities: ChatRunActivity[];
   assistantMessageId: string;
@@ -36,13 +51,25 @@ export interface ActiveRun {
   citations: ChatCitation[];
   error?: string;
   isStreaming: boolean;
+  reasoning?: ChatReasoning;
   runId: string;
+  toolCalls: ChatToolCall[];
 }
 
 interface TrackedRun extends ActiveRun {
   controller: AbortController;
   parentMessageId?: string;
+  /** First reasoning event of the attempt: the other end of "thought for Ns". */
+  reasoningStartedAt?: string;
   t: (key: MessageKey) => string;
+}
+
+/** Whole seconds of thinking, floored at 1 so a fast model still reports one. */
+export function reasoningSeconds(firstAt: string, lastAt: string): number {
+  const elapsed = Date.parse(lastAt) - Date.parse(firstAt);
+  return Number.isFinite(elapsed)
+    ? Math.max(1, Math.round(elapsed / 1_000))
+    : 1;
 }
 
 export interface TrackRunInput {
@@ -103,6 +130,7 @@ export function trackRun(input: TrackRunInput): void {
       : { parentMessageId: input.parentMessageId }),
     runId: input.runId,
     t: input.t,
+    toolCalls: [],
   };
   runs.set(input.chatId, run);
   // Emptied, not just ensured: a re-attach replays the run's events from
@@ -156,7 +184,7 @@ function notify(): void {
 function publish(
   chatId: string,
   runId: string,
-  patch: Partial<ActiveRun>,
+  patch: Partial<TrackedRun>,
 ): void {
   const current = runs.get(chatId);
   // A newer run already owns this chat; a straggler must not resurrect itself.
@@ -194,7 +222,7 @@ async function consumeRun(
                 (event.data as { text?: string }).text ?? "",
               );
             }
-            consumeRunActivity(event, chatId, runId, t);
+            consumeRunDetail(event, chatId, runId, t);
             if (event.type === "run.failed") {
               publish(chatId, runId, {
                 error: providerRunFailureMessage(event.data, t),
@@ -288,12 +316,19 @@ function appendAssistantDelta(
   );
 }
 
-function consumeRunActivity(
+function consumeRunDetail(
   event: RunEvent,
   chatId: string,
   runId: string,
   t: (key: MessageKey) => string,
 ): void {
+  if (event.type === "message.reasoning" || event.type === "message.started")
+    return trackReasoning(event, chatId, runId);
+  const toolRun = runs.get(chatId);
+  if (toolRun !== undefined && toolRun.runId === runId) {
+    const toolCalls = reduceToolCalls(toolRun.toolCalls, event);
+    if (toolCalls !== toolRun.toolCalls) publish(chatId, runId, { toolCalls });
+  }
   if (event.type === "retrieval.completed") {
     const eventCitations = (event.data as { citations?: unknown }).citations;
     if (Array.isArray(eventCitations)) {
@@ -318,6 +353,35 @@ function consumeRunActivity(
       ...current.activities.filter((item) => item.id !== activity.id),
       activity,
     ],
+  });
+}
+
+// Reasoning arrives one delta at a time, exactly like the answer, so the panel
+// is built by concatenation rather than replacement -- until the executor
+// re-announces the message, which is how it disowns an abandoned attempt (a
+// retry, a fallback to another model, a re-executed run). That thinking goes
+// with it, clock included: it belongs to output the server threw away.
+function trackReasoning(event: RunEvent, chatId: string, runId: string): void {
+  const current = runs.get(chatId);
+  if (current === undefined || current.runId !== runId) return;
+  if (event.type === "message.started") {
+    if (current.reasoning === undefined) return;
+    const restarted = { ...current };
+    delete restarted.reasoning;
+    delete restarted.reasoningStartedAt;
+    runs.set(chatId, restarted);
+    notify();
+    return;
+  }
+  const startedAt = current.reasoningStartedAt ?? event.createdAt;
+  publish(chatId, runId, {
+    reasoning: {
+      seconds: reasoningSeconds(startedAt, event.createdAt),
+      text:
+        (current.reasoning?.text ?? "") +
+        ((event.data as { text?: string }).text ?? ""),
+    },
+    reasoningStartedAt: startedAt,
   });
 }
 
@@ -403,22 +467,9 @@ function activityFromEvent(
       label: t("chatActivitySourcesRetrieved"),
       state: "complete",
     },
-    "tool.started": {
-      label: t("chatActivityRunningTool"),
-      state: "active",
-    },
-    "tool.approval_required": {
-      label: t("chatActivityToolApprovalRequired"),
-      state: "active",
-    },
-    "tool.completed": {
-      label: t("chatActivityToolCompleted"),
-      state: "complete",
-    },
-    "tool.failed": {
-      label: t("chatActivityToolFailed"),
-      state: "error",
-    },
+    // tool.* is deliberately absent: a per-call card carries the tool's name,
+    // arguments, result shape and duration, which one grey "Running tool" line
+    // never could, and two renderings of the same event read as two calls.
     "run.continuing": {
       label: t("chatActivityContinuingAfterTool"),
       state: "active",
