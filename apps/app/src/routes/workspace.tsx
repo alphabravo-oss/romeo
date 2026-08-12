@@ -48,9 +48,9 @@ export const Route = createFileRoute("/workspace")({
   component: WorkspacePage,
 });
 
+// Flat workspace nav (was "workspaceBuild" / "workspaceShare").
 const GROUPS = [
   {
-    labelKey: "workspaceBuild" as MessageKey,
     items: [
       { key: "agents", labelKey: "workspaceAgents" as MessageKey, icon: Bot },
       {
@@ -61,11 +61,6 @@ const GROUPS = [
       { key: "tools", labelKey: "workspaceTools" as MessageKey, icon: Wrench },
       { key: "voice", labelKey: "workspaceVoice" as MessageKey, icon: Mic },
       { key: "evals", labelKey: "evals" as MessageKey, icon: FlaskConical },
-    ],
-  },
-  {
-    labelKey: "workspaceShare" as MessageKey,
-    items: [
       {
         key: "collaboration",
         labelKey: "workspaceCollaboration" as MessageKey,
@@ -138,7 +133,6 @@ function WorkspacePage() {
     <ConsoleLayout
       active={section}
       groups={GROUPS.map((group) => ({
-        label: t(group.labelKey),
         items: group.items.map((item) => ({
           key: item.key,
           label: t(item.labelKey),
@@ -146,7 +140,7 @@ function WorkspacePage() {
         })),
       }))}
       route="/workspace"
-      title={t("workspaceSettings")}
+      title={t("workspace")}
       userMenu={
         <WorkspaceUserMenu
           isAdmin={data.subject?.isAdmin === true}
@@ -164,7 +158,7 @@ function WorkspacePage() {
           description={t(META[section]!.descriptionKey)}
           title={t(META[section]!.titleKey)}
         />
-        {section !== "collaboration" ? agentPicker : null}
+        {agentPicker}
       </div>
 
       {section === "agents" ? (
@@ -193,6 +187,7 @@ function WorkspacePage() {
       {section === "knowledge" ? (
         <KnowledgePanel
           activeAgent={data.activeAgent}
+          isAdmin={data.subject?.isAdmin === true}
           onSelectionChange={(resource) =>
             void navigate({
               search: (previous) => {
@@ -211,7 +206,7 @@ function WorkspacePage() {
       ) : null}
 
       {section === "tools" ? (
-        <div className="grid gap-4">
+        <div className="rm-console-page">
           <ToolPanel
             isExecuting={tools.isExecutingTool}
             onApproveTool={() => void tools.approvePendingTool()}

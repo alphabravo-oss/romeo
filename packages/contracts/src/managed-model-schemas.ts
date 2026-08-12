@@ -27,6 +27,15 @@ export const ManagedModelSafetySettingsSchema = z
       .array(z.string().trim().min(1).max(120))
       .max(100)
       .optional(),
+    /**
+     * How hard the model is forced onto retrieved knowledge.
+     * - optional: inject context when found; otherwise normal LLM answer
+     * - prefer: stronger "use context when present" wording
+     * - required: answer only from knowledge; if none matches, refuse
+     */
+    knowledgeGroundingMode: z
+      .enum(["optional", "prefer", "required"])
+      .optional(),
     promptInjectionGuard: z
       .strictObject({
         mode: z.enum(["disabled", "block"]),

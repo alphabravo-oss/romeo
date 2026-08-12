@@ -4,7 +4,7 @@ import type { Message, RunRecord } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
-import { samplingFromParameters } from "./run-sampling";
+import { samplingForModel, samplingFromParameters } from "./run-sampling";
 import { enforceAgentSafetySettings } from "./agent-safety";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import { assistantsEnabledForOrg } from "./chat-experience-service";
@@ -24,12 +24,15 @@ import {
   resolveRetainedMessageContext,
 } from "./run-context-builder";
 import { resolveRunContext } from "./run-context";
+import { resolveRunAgentic } from "./knowledge-agentic";
 import { buildRunKnowledgeContext } from "./run-knowledge";
 import {
   historyBefore,
   orderChatHistory,
+  linearParentId,
   pathThroughMessage,
 } from "./run-messages";
+import { isTerminalRunStatus } from "./run-recovery-service";
 import type { RunEventSequencer } from "./run-event-sequencer";
 import type {
   DeferredRunStart,
@@ -111,7 +114,8 @@ export class RunStartService {
     const rootFork = input.parentMessageId === null;
     const requestedParentId = rootFork
       ? undefined
-      : (input.parentMessageId ?? chat.activeLeafMessageId);
+      : (input.parentMessageId ??
+        linearParentId(chatMessages, chat.activeLeafMessageId));
     const branch =
       requestedParentId === undefined
         ? []
@@ -258,12 +262,21 @@ export class RunStartService {
       status: "running",
       createdAt: new Date().toISOString(),
     };
+    const agentic = await resolveRunAgentic(
+      repository,
+      input.subject.orgId,
+      input.agenticRag,
+    );
     const [knowledge, webHits] = await Promise.all([
       buildRunKnowledgeContext(repository, {
         agentId: agent.id,
         subject: input.subject,
         query: runContent,
         safetySettings: agentVersion.safetySettings,
+        ...(input.knowledgeBaseIds === undefined
+          ? {}
+          : { knowledgeBaseIds: input.knowledgeBaseIds }),
+        ...(agentic ? { agentic: true } : {}),
         ...(this.embeddingFetch === undefined
           ? {}
           : { fetchImpl: this.embeddingFetch }),
@@ -294,7 +307,18 @@ export class RunStartService {
     });
     // The sampling a version pins belongs to the run, not to whichever provider answers it, so it
     // is resolved once here and carried through retries and fallback.
-    const sampling = samplingFromParameters(agentVersion.parameters);
+    const sampling = {
+      ...samplingFromParameters(
+        servingModel.defaultParameters as
+          | import("../domain/agent-entities").AgentParameters
+          | undefined,
+      ),
+      ...samplingFromParameters(agentVersion.parameters),
+    };
+    const resolvedSampling = samplingForModel(
+      servingModel,
+      Object.keys(sampling).length === 0 ? undefined : sampling,
+    );
     const providerTools = await buildProviderToolDefinitions(
       repository,
       input.subject,
@@ -324,7 +348,7 @@ export class RunStartService {
       quotaTarget,
       routePlan,
       run,
-      ...(sampling === undefined ? {} : { sampling }),
+      ...(resolvedSampling === undefined ? {} : { sampling: resolvedSampling }),
       userMessage,
     };
   }
@@ -333,6 +357,16 @@ export class RunStartService {
     repository: RomeoRepository,
     prepared: PreparedRunStart,
   ): Promise<DeferredRunStart> {
+    const active = (await repository.listRuns(prepared.run.chatId)).find(
+      (run) => !isTerminalRunStatus(run.status),
+    );
+    if (active !== undefined) {
+      throw new ApiError(
+        "chat_run_in_progress",
+        "This chat is already generating a response.",
+        409,
+      );
+    }
     await consumeQuota(
       repository,
       prepared.input.subject,

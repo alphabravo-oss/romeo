@@ -42,6 +42,10 @@ export const deferredExtractionMimeTypes = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
 ]);
 
 export const disabledKnowledgeBinaryExtractor: KnowledgeBinaryExtractor = {

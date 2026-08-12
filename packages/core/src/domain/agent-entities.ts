@@ -7,9 +7,17 @@ export interface AgentParameters {
   [key: string]: unknown;
 }
 
+export type KnowledgeGroundingMode = "optional" | "prefer" | "required";
+
 export interface AgentSafetySettings {
   maxUserInputLength?: number;
   blockedTerms?: string[];
+  /**
+   * optional — inject context when found; otherwise normal LLM answer
+   * prefer — stronger preference for context when present
+   * required — answer only from knowledge; refuse when nothing matches
+   */
+  knowledgeGroundingMode?: KnowledgeGroundingMode;
   promptInjectionGuard?: AgentPromptInjectionGuard;
 }
 

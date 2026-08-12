@@ -15,12 +15,12 @@ import { LocalizedDate, LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import type { ApiKeyScope, ApiKeySummary } from "../features/administration";
+import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { Drawer } from "./Drawer";
 import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
-import { PanelStats } from "./PanelStats";
 import { SecretRevealCard } from "./SecretRevealCard";
 
 const col = createColumnHelper<ApiKeySummary>();
@@ -197,20 +197,16 @@ export function ApiKeyPanel() {
   );
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("apiKeys")}</div>
-        {(apiKeysQuery.data?.length ?? 0) > 0 ? (
-          <Button
-            variant="primary"
-            onClick={() => setAddOpen(true)}
-            type="button"
-          >
-            + {t("addApiKey")}
-          </Button>
-        ) : null}
-      </div>
-
+    <Section
+      actions={
+        (apiKeysQuery.data?.length ?? 0) > 0 ? (
+          <AddButton onClick={() => setAddOpen(true)}>
+            {t("addApiKey")}
+          </AddButton>
+        ) : null
+      }
+      title={t("apiKeys")}
+    >
       {createdToken ? (
         <SecretRevealCard
           label={t("token")}
@@ -219,56 +215,50 @@ export function ApiKeyPanel() {
         />
       ) : null}
 
-      <div className="mt-4">
-        <PanelState
-          empty={t("noApiKeys")}
-          emptyAction={
-            <Button
-              onClick={() => setAddOpen(true)}
-              type="button"
-              variant="primary"
-            >
-              + {t("addApiKey")}
-            </Button>
-          }
-          emptyDescription={t("noApiKeysDescription")}
-          emptyIcon={<KeyRound aria-hidden size={24} />}
-          query={apiKeysQuery}
-        >
-          {(apiKeys) => (
-            <div className="grid gap-4">
-              <PanelStats
-                items={[
-                  { label: t("totalKeys"), value: apiKeys.length },
-                  {
-                    label: t("revokedStatus"),
-                    value: apiKeys.filter((k) => k.revokedAt).length,
-                  },
-                ]}
-              />
-              <DataTable
-                columns={columns}
-                data={apiKeys}
-                empty={t("noApiKeys")}
-                enableRowSelection
-                getRowId={(row) => row.id}
-                bulkActions={(ids, clear) => (
-                  <Button
-                    variant="danger"
-                    disabled={bulkRevokeMutation.isPending}
-                    onClick={() => void handleBulkRevoke(ids, clear)}
-                    type="button"
-                  >
-                    {bulkRevokeMutation.isPending
-                      ? t("revoking")
-                      : `${t("revoke")} ${ids.length}`}
-                  </Button>
-                )}
-              />
-            </div>
-          )}
-        </PanelState>
-      </div>
+      <PanelState
+        empty={t("noApiKeys")}
+        emptyAction={
+          <AddButton onClick={() => setAddOpen(true)}>
+            {t("addApiKey")}
+          </AddButton>
+        }
+        emptyDescription={t("noApiKeysDescription")}
+        emptyIcon={<KeyRound aria-hidden size={24} />}
+        query={apiKeysQuery}
+      >
+        {(apiKeys) => (
+          <div className="grid gap-4">
+            <StatRow
+              items={[
+                { label: t("totalKeys"), value: apiKeys.length },
+                {
+                  label: t("revokedStatus"),
+                  value: apiKeys.filter((k) => k.revokedAt).length,
+                },
+              ]}
+            />
+            <DataTable
+              columns={columns}
+              data={apiKeys}
+              empty={t("noApiKeys")}
+              enableRowSelection
+              getRowId={(row) => row.id}
+              bulkActions={(ids, clear) => (
+                <Button
+                  variant="danger"
+                  disabled={bulkRevokeMutation.isPending}
+                  onClick={() => void handleBulkRevoke(ids, clear)}
+                  type="button"
+                >
+                  {bulkRevokeMutation.isPending
+                    ? t("revoking")
+                    : `${t("revoke")} ${ids.length}`}
+                </Button>
+              )}
+            />
+          </div>
+        )}
+      </PanelState>
 
       <FormDialog
         open={addOpen}
@@ -420,6 +410,6 @@ export function ApiKeyPanel() {
         ) : null}
       </Drawer>
       {dialog}
-    </section>
+    </Section>
   );
 }

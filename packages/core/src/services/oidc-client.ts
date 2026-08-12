@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import type { Configuration as OpenidClientConfiguration } from "openid-client";
 
 import type { RomeoRepository } from "../domain/repository";
+import { createId } from "../ids";
 import {
   normalizeIssuer,
   oidcConfigStatus,
@@ -181,11 +182,10 @@ export class OidcClient {
     orgId: string,
     claims: Record<string, unknown>,
   ): Promise<OidcMappedSubject> {
-    const workspaces = await this.repository.listWorkspaces(orgId);
     const subject = mapOidcClaimsToSubject(claims, {
       orgId,
       userId: oidcUserId(discovery.issuer, String(claims.sub)),
-      defaultWorkspaceIds: workspaces.map((workspace) => workspace.id),
+      defaultWorkspaceIds: [],
       clientId: config.clientId,
       groupClaim: config.groupClaim,
       adminGroups: config.adminGroups,
@@ -199,6 +199,11 @@ export class OidcClient {
       groupIds: subject.groupIds,
       orgId,
       userId: subject.id,
+    });
+    await persistMappedWorkspaceMemberships(this.repository, {
+      orgId,
+      userId: subject.id,
+      workspaceIds: subject.workspaceIds,
     });
     return {
       ...(await createUserAuthSubject(this.repository, user, {
@@ -216,6 +221,38 @@ const defaultOidcScopes: Scope[] = [
   "organizations:read",
   "workspaces:read",
 ];
+
+async function persistMappedWorkspaceMemberships(
+  repository: RomeoRepository,
+  input: { orgId: string; userId: string; workspaceIds: string[] },
+): Promise<void> {
+  if (input.workspaceIds.length === 0) return;
+  const [workspaces, grants] = await Promise.all([
+    repository.listWorkspaces(input.orgId),
+    repository.listResourceGrants(input.orgId),
+  ]);
+  const knownWorkspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+  for (const workspaceId of input.workspaceIds) {
+    if (!knownWorkspaceIds.has(workspaceId)) continue;
+    const exists = grants.some(
+      (grant) =>
+        grant.resourceType === "workspace" &&
+        grant.resourceId === workspaceId &&
+        grant.principalType === "user" &&
+        grant.principalId === input.userId &&
+        grant.permission === "read",
+    );
+    if (exists) continue;
+    await repository.createResourceGrant({
+      id: createId("grant"),
+      resourceType: "workspace",
+      resourceId: workspaceId,
+      principalType: "user",
+      principalId: input.userId,
+      permission: "read",
+    });
+  }
+}
 
 export function oidcUserId(issuer: string, subject: string): string {
   return `user_oidc_${createHash("sha256").update(`${issuer}\0${subject}`).digest("hex").slice(0, 24)}`;

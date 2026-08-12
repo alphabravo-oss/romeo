@@ -8,6 +8,7 @@ import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 const col = createColumnHelper<KnowledgeSource>();
 
 export function KnowledgeSourceList({
+  canUpload = true,
   isDeleting,
   isExtracting,
   isReindexing,
@@ -16,6 +17,7 @@ export function KnowledgeSourceList({
   onReindex,
   sources,
 }: {
+  canUpload?: boolean;
   isDeleting: boolean;
   isExtracting: boolean;
   isReindexing: boolean;
@@ -58,14 +60,18 @@ export function KnowledgeSourceList({
         cell: (c) => (
           <div className="flex gap-2">
             <Button
-              disabled={isReindexing}
+              disabled={!canUpload || isReindexing}
               onClick={() => onReindex(c.row.original.id)}
               type="button"
             >
               {t("knowledgeReindex")}
             </Button>
             <Button
-              disabled={isExtracting || c.row.original.status !== "pending"}
+              disabled={
+                !canUpload ||
+                isExtracting ||
+                c.row.original.status !== "pending"
+              }
               onClick={() => onExtract(c.row.original.id)}
               type="button"
             >
@@ -83,7 +89,16 @@ export function KnowledgeSourceList({
         ),
       }),
     ],
-    [isDeleting, isExtracting, isReindexing, onDelete, onExtract, onReindex, t],
+    [
+      canUpload,
+      isDeleting,
+      isExtracting,
+      isReindexing,
+      onDelete,
+      onExtract,
+      onReindex,
+      t,
+    ],
   );
 
   return (

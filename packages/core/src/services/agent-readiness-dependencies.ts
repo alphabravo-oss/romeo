@@ -25,31 +25,31 @@ export async function buildAgentDependencyReadinessChecks(
         "base_model",
         "model_not_evaluated",
         "Base model readiness cannot be evaluated without a published version.",
-        ["Publish the assistant first."],
+        ["Publish the custom model first."],
       ),
       blocked(
         "provider",
         "provider_not_evaluated",
         "Provider readiness cannot be evaluated without a published version.",
-        ["Publish the assistant first."],
+        ["Publish the custom model first."],
       ),
       warning(
         "knowledge",
         "knowledge_not_evaluated",
         "Knowledge access has not been evaluated.",
-        ["Publish the assistant to snapshot knowledge bindings."],
+        ["Publish the custom model to snapshot knowledge bindings."],
       ),
       warning(
         "tools",
         "tools_not_evaluated",
         "Tool access has not been evaluated.",
-        ["Publish the assistant to snapshot tool bindings."],
+        ["Publish the custom model to snapshot tool bindings."],
       ),
       warning(
         "voice",
         "voice_not_evaluated",
         "Voice access has not been evaluated.",
-        ["Publish the assistant to snapshot its voice."],
+        ["Publish the custom model to snapshot its voice."],
       ),
     ];
   }

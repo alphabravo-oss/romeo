@@ -45,17 +45,26 @@ afterEach(() => {
 describe("analytics-client — admin analytics summary", () => {
   it("getAdminAnalyticsSummary GETs the summary route and unwraps the envelope", async () => {
     const fn = mockFetch({ data: { orgId: "o1", status: "healthy" } });
-    const summary = await getAdminAnalyticsSummary();
-    expect(lastCall(fn).url).toBe("/api/v1/admin/analytics/summary");
+    const summary = await getAdminAnalyticsSummary({
+      from: "2026-08-01T00:00:00.000Z",
+      to: "2026-08-12T00:00:00.000Z",
+    });
+    expect(lastCall(fn).url).toBe(
+      "/api/v1/admin/analytics/summary?from=2026-08-01T00%3A00%3A00.000Z&to=2026-08-12T00%3A00%3A00.000Z",
+    );
     expect(lastCall(fn).method).toBe("GET");
     expect(summary.orgId).toBe("o1");
   });
 
   it("exportAdminAnalyticsSummaryCsv fetches the .csv route with a text/csv accept header", async () => {
     const fn = mockFetch("category,dimension,id,metric,value\n");
-    const csv = await exportAdminAnalyticsSummaryCsv();
+    const csv = await exportAdminAnalyticsSummaryCsv({
+      from: "2026-08-01T00:00:00.000Z",
+    });
     const call = fn.mock.calls.at(-1);
-    expect(call?.[0]).toBe("/api/v1/admin/analytics/summary.csv");
+    expect(call?.[0]).toBe(
+      "/api/v1/admin/analytics/summary.csv?from=2026-08-01T00%3A00%3A00.000Z",
+    );
     expect(new Headers(call?.[1]?.headers).get("accept")).toBe("text/csv");
     expect(csv).toBe("category,dimension,id,metric,value\n");
   });

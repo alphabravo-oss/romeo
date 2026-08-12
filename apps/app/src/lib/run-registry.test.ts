@@ -323,7 +323,7 @@ describe("run registry", () => {
     );
   });
 
-  it("records a provider failure on the chat's run instead of losing it", async () => {
+  it("records a provider failure inline on the assistant turn", async () => {
     const queryClient = loadedChat("chat_2");
     trackRun({
       chatId: "chat_2",
@@ -336,12 +336,27 @@ describe("run registry", () => {
       type: "run.failed",
       runId: "run_2",
       sequence: 1,
-      data: { errorType: "provider.http_429" },
+      data: {
+        errorCode: "provider_stream_timeout",
+        errorType: "provider.http_429",
+      },
     });
     await emit(null);
 
-    expect(getActiveRun("chat_2")?.error).toBe("providerRateLimited");
+    // Composer banner stays clear — the transcript owns the failure.
+    expect(getActiveRun("chat_2")?.error).toBeUndefined();
     expect(getActiveRun("chat_2")?.isStreaming).toBe(false);
+    const messages = queryClient.getQueryData<Message[]>(
+      messagesQueryKey("chat_2"),
+    );
+    expect(messages?.at(-1)).toMatchObject({
+      id: "msg_run_terminal_run_2",
+      role: "assistant",
+      error: {
+        code: "provider_stream_timeout",
+        message: "providerStreamTimeout",
+      },
+    });
   });
 });
 

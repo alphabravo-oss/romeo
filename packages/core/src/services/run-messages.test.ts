@@ -9,6 +9,7 @@ import {
   buildRunMessages,
   hasMessageTree,
   historyBefore,
+  linearParentId,
   orderChatHistory,
   pathThroughMessage,
   toHistoryChatMessages,
@@ -53,6 +54,35 @@ const baseInput = {
   knowledgeHits: [] as RetrievalHit[],
   model: largeModel,
 };
+
+describe("linearParentId", () => {
+  it("follows the newest child of the leaf so a follow-up stays on the same branch", () => {
+    const messages = [
+      message({
+        id: "a1",
+        role: "assistant",
+        content: "first",
+        createdAt: "2026-07-15T10:00:00.000Z",
+      }),
+      message({
+        id: "u2",
+        role: "user",
+        content: "more",
+        parentId: "a1",
+        createdAt: "2026-07-15T10:01:00.000Z",
+      }),
+      message({
+        id: "u3",
+        role: "user",
+        content: "more",
+        parentId: "a1",
+        createdAt: "2026-07-15T10:02:00.000Z",
+      }),
+    ];
+    expect(linearParentId(messages, "a1")).toBe("u3");
+    expect(linearParentId(messages, undefined)).toBe("u3");
+  });
+});
 
 describe("buildRunMessages shape", () => {
   it("emits [system, ...history, user] with the raw system prompt and a single current user turn", () => {

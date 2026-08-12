@@ -13,12 +13,12 @@ import type { User, UserRole } from "../features/administration";
 import { PanelState } from "../lib/panel-state";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { confirmTone } from "./danger-tier";
 import { FormDialog } from "./FormDialog";
 import { PageActions } from "./PageActions";
-import { PanelStats } from "./PanelStats";
 import { canDisableUser } from "./user-disable-guard";
 
 const userCol = createColumnHelper<User>();
@@ -170,29 +170,23 @@ export function UsersPanel({
   );
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("userUsers")}</div>
+    <Section
+      actions={
         <PageActions
           onRefresh={() => void usersQuery.refetch()}
           primary={
-            <div className="grid justify-items-end gap-1">
-              <LinkButton
-                href="/admin?section=auth-providers"
-                variant="primary"
-              >
-                {t("usersAddViaSso")}
-              </LinkButton>
-              <span className="text-xs text-muted">
-                {t("usersAddViaSsoHint")}
-              </span>
-            </div>
+            <LinkButton href="/admin?section=auth-providers" variant="primary">
+              {t("usersAddViaSso")}
+            </LinkButton>
           }
           refreshLabel={t("refresh")}
           refreshing={usersQuery.isFetching}
         />
-      </div>
-      <label className="rm-model-search mt-4" htmlFor="user-search">
+      }
+      description={t("usersAddViaSsoHint")}
+      title={t("userDirectory")}
+    >
+      <label className="rm-model-search" htmlFor="user-search">
         <Search aria-hidden="true" size={15} />
         <Input
           aria-label={t("tableSearch")}
@@ -208,70 +202,65 @@ export function UsersPanel({
           value={query}
         />
       </label>
-      <div className="mt-4">
-        <PanelState
-          query={usersQuery}
-          empty={t("userNoUsers")}
-          isEmpty={() => false}
-        >
-          {(userPage) => (
-            <div className="grid gap-4">
-              <PanelStats
-                items={[
-                  {
-                    label: t("userTotalUsers"),
-                    value: userPage.meta.userTotal,
-                  },
-                  { label: t("userAdmins"), value: userPage.meta.adminTotal },
-                  {
-                    label: t("userDisabled"),
-                    value: userPage.meta.disabledTotal,
-                  },
-                ]}
-              />
-              <DataTable
-                columns={columns}
-                data={userPage.data}
-                empty={t("userNoUsers")}
-                manualFiltering
-                manualSorting
-                onSortingChange={(updater) => {
-                  const next =
-                    typeof updater === "function" ? updater(sorting) : updater;
-                  const first = next[0];
-                  const nextSort = (
-                    ["email", "name", "role", "status"].includes(
-                      first?.id ?? "",
-                    )
-                      ? first!.id
-                      : "name"
-                  ) as UserSort;
-                  onNavigationChange({
-                    direction: first?.desc === true ? "desc" : "asc",
-                    page: 0,
-                    sort: nextSort,
-                  });
-                }}
-                preferenceKey="admin-users"
-                searchVisibility="hidden"
-                serverPagination={{
-                  pageSize,
-                  hasNextPage: userPage.meta.hasMore,
-                  isFetching: usersQuery.isFetching,
-                  onNextPage: () => onNavigationChange({ page: page + 1 }),
-                  ...(page > 0
-                    ? {
-                        onPrevPage: () =>
-                          onNavigationChange({ page: page - 1 }),
-                      }
-                    : {}),
-                }}
-                sorting={sorting}
-              />
-            </div>
-          )}
-        </PanelState>
-      </div>
+      <PanelState
+        query={usersQuery}
+        empty={t("userNoUsers")}
+        isEmpty={() => false}
+      >
+        {(userPage) => (
+          <div className="grid gap-4">
+            <StatRow
+              items={[
+                {
+                  label: t("userTotalUsers"),
+                  value: userPage.meta.userTotal,
+                },
+                { label: t("userAdmins"), value: userPage.meta.adminTotal },
+                {
+                  label: t("userDisabled"),
+                  value: userPage.meta.disabledTotal,
+                },
+              ]}
+            />
+            <DataTable
+              columns={columns}
+              data={userPage.data}
+              empty={t("userNoUsers")}
+              manualFiltering
+              manualSorting
+              onSortingChange={(updater) => {
+                const next =
+                  typeof updater === "function" ? updater(sorting) : updater;
+                const first = next[0];
+                const nextSort = (
+                  ["email", "name", "role", "status"].includes(first?.id ?? "")
+                    ? first!.id
+                    : "name"
+                ) as UserSort;
+                onNavigationChange({
+                  direction: first?.desc === true ? "desc" : "asc",
+                  page: 0,
+                  sort: nextSort,
+                });
+              }}
+              preferenceKey="admin-users"
+              searchVisibility="hidden"
+              serverPagination={{
+                pageSize,
+                hasNextPage: userPage.meta.hasMore,
+                isFetching: usersQuery.isFetching,
+                onNextPage: () => onNavigationChange({ page: page + 1 }),
+                ...(page > 0
+                  ? {
+                      onPrevPage: () => onNavigationChange({ page: page - 1 }),
+                    }
+                  : {}),
+              }}
+              sorting={sorting}
+            />
+          </div>
+        )}
+      </PanelState>
       {managing !== undefined ? (
         <UserManageDialog
           key={managing.id}
@@ -281,7 +270,7 @@ export function UsersPanel({
         />
       ) : null}
       {dialog}
-    </section>
+    </Section>
   );
 }
 

@@ -255,7 +255,7 @@ export const envSchema = z
     DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: z.string().default(""),
     KNOWLEDGE_EXTRACTION_DRIVER: z
       .enum(["disabled", "local-pdftotext", "local-documents"])
-      .default("disabled"),
+      .default("local-documents"),
     EXTERNAL_VECTOR_STORE_DRIVER: z
       .enum(["disabled", "qdrant"])
       .default("disabled"),
@@ -296,7 +296,7 @@ export const envSchema = z
     PDFTOTEXT_PATH: z.string().min(1).default("pdftotext"),
     FILE_OCR_DRIVER: z
       .enum(["disabled", "local-tesseract"])
-      .default("disabled"),
+      .default("local-tesseract"),
     FILE_OCR_TESSERACT_PATH: z.string().min(1).default("tesseract"),
     FILE_OCR_PDFTOPPM_PATH: z.string().min(1).default("pdftoppm"),
     FILE_OCR_LANGUAGE: z

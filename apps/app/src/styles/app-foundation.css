@@ -86,6 +86,25 @@
   --rm-radius-lg: 10px;
   --rm-radius-bubble: 12px;
   --rm-shell-header-height: 60px;
+
+  /* Measure system. Console surfaces have no intrinsic width, so without a cap
+     every child stretches to the monitor: 1100px text inputs, 120-character
+     description lines, and containers whose edges never line up. One scale,
+     used everywhere, is what makes the console read as finished.
+       console — the content column itself
+       field   — a single-line input (name, URL, number)
+       wide    — a textarea or anything holding a paragraph
+       search  — a filter box; wider than this reads as a form field
+       prose   — descriptions and helper copy */
+  --rm-measure-console: 66rem;
+  /* Inventories earn more room than forms. A settings page capped at the width
+     of a data grid wastes half the screen; a data grid squeezed to the width of
+     a settings page clips its last column. */
+  --rm-measure-console-wide: 82rem;
+  --rm-measure-field: 30rem;
+  --rm-measure-wide: 44rem;
+  --rm-measure-search: 20rem;
+  --rm-measure-prose: 68ch;
   /* Sidebar row rhythm. Every interactive row in the rail is exactly one of
      these tall, with one inset. Matches Open WebUI's px-2 py-[6px] over a 20px
      line box. See the row contract in app-navigation.css. */
@@ -103,33 +122,37 @@
 
 html.dark {
   color-scheme: dark;
-  --rm-bg: #09090b;
-  --rm-sidebar: #0c0c0f;
-  --rm-surface: #111114;
-  --rm-surface-soft: #18181b;
-  --rm-hover: rgb(255 255 255 / 5%);
-  --rm-bubble: #18181b;
-  --rm-text: #fafafa;
-  --rm-muted: #a1a1aa;
-  --rm-border: #27272a;
+  /*
+   * Soft ChatGPT-range charcoal — not zinc-950 pure black.
+   * Page, surfaces, and text sit in one family so code cards, bubbles, and
+   * chrome don't fight each other with pure black vs pure white.
+   */
+  --rm-bg: #1e1e22;
+  --rm-sidebar: #19191d;
+  --rm-surface: #25252a;
+  --rm-surface-soft: #2c2c32;
+  --rm-hover: rgb(255 255 255 / 6%);
+  --rm-bubble: #2f2f36;
+  --rm-text: #e8e8ed;
+  --rm-muted: #9b9ba7;
+  --rm-border: #35353d;
   --rm-accent: #3b82f6;
   --rm-accent-hover: #60a5fa;
   --rm-on-accent: #ffffff;
   --rm-accent-strong: #60a5fa;
   --rm-accent-secondary: #8b5cf6;
-  /* The 400 ramp against #09090b — measured 10.35:1, 11.92:1, 7.19:1. The
-     light-mode 700 values would invert to roughly 2:1 here. */
+  /* Status ramp against soft charcoal (~#1e1e22). */
   --rm-success: #34d399;
   --rm-warning: #fbbf24;
   --rm-danger: #f87171;
-  --rm-shadow: 0 2px 8px rgb(0 0 0 / 35%), 0 18px 54px rgb(0 0 0 / 48%);
+  --rm-shadow: 0 2px 8px rgb(0 0 0 / 28%), 0 16px 48px rgb(0 0 0 / 36%);
 
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 5.5%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --border: 240 3.7% 15.9%;
+  --background: 240 6% 12.5%;
+  --foreground: 240 6% 92%;
+  --card: 240 6% 15.5%;
+  --muted: 240 5% 18%;
+  --muted-foreground: 240 5% 63%;
+  --border: 240 5% 22%;
 }
 
 .rm-connectivity-banner {
@@ -170,9 +193,14 @@ body {
   margin: 0;
   background: var(--rm-bg);
   color: var(--rm-text);
-  /* 14px default UI text (Tailwind text-* stay anchored to the 16px html root). */
+  /* 14px default UI chrome; chat prose scales from the message content rules. */
   font-size: 14px;
-  /* Astronomer leads with Inter Variable for consistent cross-platform rhythm. */
+  /*
+   * Inter is the open stand-in for ChatGPT's Söhne/OpenAI Sans family:
+   * geometric neo-grotesque, excellent variable weights, already bundled.
+   * Vazirmatn covers Persian/Arabic. System UI is the fallback, not the lead,
+   * so Windows/Linux don't jump to a different product face mid-session.
+   */
   font-family:
     "Inter",
     "Vazirmatn",
@@ -192,13 +220,18 @@ body {
     "Segoe UI Emoji",
     "Segoe UI Symbol",
     "Noto Color Emoji";
+  font-optical-sizing: auto;
   font-feature-settings:
     "rlig" 1,
     "calt" 1,
-    "cv01",
-    "cv03",
-    "cv04";
-  letter-spacing: -0.006em;
+    "ss01" 0,
+    "cv01" 1,
+    "cv03" 1,
+    "cv04" 1;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   overflow: hidden;
 }
 
@@ -215,8 +248,31 @@ html[data-density="compact"] {
   --rm-radius-lg: 10px;
 }
 
+html[data-density="compact"] .rm-message-list {
+  gap: 0.65rem;
+}
+
 html[data-density="compact"] .rm-message-row {
-  padding-block: 0.45rem;
+  padding-block: 0.2rem;
+}
+
+html[data-density="compact"] .rm-message-row.assistant {
+  padding-block: 0;
+}
+
+html[data-density="compact"] .rm-message-content {
+  font-size: 0.875rem; /* 14px */
+  line-height: 1.55;
+}
+
+html[data-density="compact"] .rm-markdown {
+  line-height: inherit;
+}
+
+html[data-density="compact"] .rm-markdown p,
+html[data-density="compact"] .rm-markdown ul,
+html[data-density="compact"] .rm-markdown ol {
+  margin-block: 0.45em;
 }
 
 html.reduce-motion *,
@@ -403,19 +459,21 @@ body {
 }
 
 .rm-icon-button:hover:not(:disabled),
-.rm-sidebar-item:hover,
 .rm-new-chat-button:hover {
   background: var(--rm-hover);
 }
 
-/* Open WebUI dark hovers: chat rows gray-950, New Chat/Search gray-900 */
+/* Chat rows: soft wash that matches light/dark surfaces (not near-black). */
+.rm-sidebar-item:hover {
+  background: color-mix(in srgb, var(--rm-text) 6%, transparent);
+}
 
 html.dark .rm-sidebar-item:hover {
-  background: var(--rm-gray-950);
+  background: color-mix(in srgb, var(--rm-text) 8%, transparent);
 }
 
 html.dark .rm-new-chat-button:hover {
-  background: var(--rm-gray-900);
+  background: color-mix(in srgb, var(--rm-text) 8%, transparent);
 }
 
 .rm-icon-button:disabled,
@@ -499,6 +557,34 @@ html.dark .rm-new-chat-button:hover {
 
 .rm-connection-result.error {
   color: var(--rm-danger);
+}
+
+.rm-connection-result.warning {
+  color: var(--rm-warning);
+}
+
+.rm-attention-note {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--rm-warning) 45%, var(--rm-border));
+  border-radius: var(--rm-ui-radius, 0.5rem);
+  background: color-mix(in srgb, var(--rm-warning) 10%, transparent);
+}
+
+.rm-attention-note strong {
+  font-size: 0.8125rem;
+}
+
+.rm-attention-note p,
+.rm-attention-note ul {
+  margin: 0;
+  color: var(--rm-ui-muted, var(--rm-muted));
+  font-size: 0.75rem;
+}
+
+.rm-attention-note ul {
+  padding-left: 1.1rem;
 }
 
 .rm-model-catalog-toolbar {

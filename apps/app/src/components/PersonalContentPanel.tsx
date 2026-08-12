@@ -13,6 +13,7 @@ import {
 } from "../features/workspace-content";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
+import { AddButton, Section } from "./console";
 import { CatalogPager } from "./CatalogPager";
 import { useConfirm } from "./ConfirmDialog";
 import { FormDialog } from "./FormDialog";
@@ -145,20 +146,19 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
 
   const label = kind === "memories" ? t("memory") : t("note");
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div>
-          <div className="rm-card-title">{label}</div>
-          <p className="text-sm text-muted">
-            {kind === "memories"
-              ? t("memoryLibraryDescription")
-              : t("noteLibraryDescription")}
-          </p>
-        </div>
-        <Button variant="primary" onClick={() => open("new")} type="button">
+    <Section
+      actions={
+        <AddButton onClick={() => open("new")}>
           {kind === "memories" ? t("addMemory") : t("addNote")}
-        </Button>
-      </div>
+        </AddButton>
+      }
+      description={
+        kind === "memories"
+          ? t("memoryLibraryDescription")
+          : t("noteLibraryDescription")
+      }
+      title={label}
+    >
       <label
         className="rm-model-search mt-4"
         htmlFor={`${kind}-catalog-search`}
@@ -302,7 +302,7 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
         </form>
       </FormDialog>
       {dialog}
-    </section>
+    </Section>
   );
 }
 

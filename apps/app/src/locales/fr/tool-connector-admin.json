@@ -50,8 +50,8 @@
   "toolUnableUpdate": "Impossible de mettre à jour le connecteur.",
   "toolUnavailable": "indisponible",
   "toolVisibility": "Visibilité",
-  "toolDependentAssistants": "Assistants dépendants",
+  "toolDependentAssistants": "Modèles personnalisés dépendants",
   "toolDependentOperations": "Opérations liées",
   "toolDisableImpactTitle": "Désactiver ce connecteur ?",
-  "toolDisableImpactDescription": "Cela bloquera {{agents}} assistants utilisant {{operations}} opérations. Leurs prochaines exécutions peuvent échouer jusqu’à ce qu’un remplacement soit lié."
+  "toolDisableImpactDescription": "Cela bloquera {{agents}} modèles personnalisés utilisant {{operations}} opérations. Leurs prochaines exécutions peuvent échouer jusqu’à ce qu’un remplacement soit lié."
 }

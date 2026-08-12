@@ -87,6 +87,7 @@ export const baseModels = pgTable(
       .default("detected"),
     contextWindow: integer("context_window").notNull(),
     pricing: jsonb("pricing"),
+    defaultParameters: jsonb("default_parameters"),
     enabled: boolean("enabled").notNull().default(true),
     available: boolean("available").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })

@@ -11,6 +11,7 @@ import {
   resolveRetainedMessageContext,
 } from "./run-context-builder";
 import { resolveRunContext } from "./run-context";
+import { resolveRunAgentic } from "./knowledge-agentic";
 import { buildRunKnowledgeContext } from "./run-knowledge";
 import { orderChatHistory, pathThroughMessage } from "./run-messages";
 import type { RunServiceOptions } from "./run-service-contracts";
@@ -26,6 +27,7 @@ export interface RunContextInspectionInput {
   imageCount: number;
   webSearch?: boolean;
   urls?: string[];
+  agenticRag?: boolean;
 }
 
 export class RunContextInspectionService {
@@ -100,12 +102,18 @@ export class RunContextInspectionService {
       ),
     ];
     const runContent = appendDocumentContext(input.content, documents);
+    const agentic = await resolveRunAgentic(
+      this.repository,
+      input.subject.orgId,
+      input.agenticRag,
+    );
     const [knowledge, webHits] = await Promise.all([
       buildRunKnowledgeContext(this.repository, {
         agentId: input.agentId,
         subject: input.subject,
         query: runContent,
         safetySettings: agentVersion.safetySettings,
+        ...(agentic ? { agentic: true } : {}),
         ...(this.embeddingFetch === undefined
           ? {}
           : { fetchImpl: this.embeddingFetch }),

@@ -1,9 +1,183 @@
+/* Progressive disclosure + overview launchpad for the admin console. */
+.rm-admin-disclosure {
+  border: 0;
+  border-top: 1px solid var(--rm-ui-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.rm-admin-disclosure__summary {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.625rem;
+  padding: 0.85rem 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.rm-admin-disclosure__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A disclosure has to look disclosable. Without a marker these read as inert
+   headings and nobody discovers the settings underneath. */
+
+.rm-admin-disclosure__summary::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  margin: 0.35rem 0 0 0.2rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: var(--rm-ui-muted);
+  transform: rotate(-45deg);
+  transition: transform 140ms ease;
+}
+
+.rm-admin-disclosure[open] > .rm-admin-disclosure__summary::before {
+  transform: rotate(45deg);
+}
+
+.rm-admin-disclosure__summary:hover {
+  color: var(--rm-ui-accent);
+}
+
+.rm-admin-disclosure__summary:hover .rm-admin-disclosure__description {
+  color: var(--rm-ui-muted);
+}
+
+.rm-admin-disclosure__summary:focus-visible {
+  outline: 2px solid var(--rm-ui-accent);
+  outline-offset: -2px;
+}
+
+.rm-admin-disclosure__copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.rm-admin-disclosure__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.rm-admin-disclosure__description {
+  color: var(--rm-ui-muted);
+  font-size: 0.8125rem;
+  max-width: 64ch;
+}
+
+.rm-admin-disclosure__badge {
+  color: var(--rm-ui-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.rm-admin-disclosure__body {
+  display: grid;
+  gap: 1rem;
+  /* Indented to the summary's text column so the disclosed controls read as
+     belonging to the row that opened them. */
+  padding: 0.25rem 0 1.25rem 1.625rem;
+}
+
+.rm-admin-launch {
+  display: grid;
+  gap: 1.5rem;
+}
+
+/* The one rule per group: a full-width hairline under the section label. It is
+   the only divider on the page, so it always spans the whole column. */
+
+.rm-admin-launch__heading {
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--rm-ui-border);
+  color: var(--rm-ui-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rm-admin-launch__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+  gap: 0.25rem 1.5rem;
+}
+
+/* No per-item rule. A partly-filled last row drew its border only across the
+   occupied columns, so every section ended in a hairline that stopped
+   mid-width. The section heading already separates groups; the tiles just need
+   air and a hover target. */
+
+.rm-admin-launch__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 0.7rem;
+  margin-inline: -0.7rem;
+  border: 0;
+  border-radius: var(--rm-ui-radius);
+  background: transparent;
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.rm-admin-launch__item:hover {
+  background: var(--rm-hover);
+}
+
+.rm-admin-launch__item:hover .rm-admin-launch__icon {
+  color: var(--rm-ui-accent);
+}
+
+.rm-admin-launch__item:focus-visible {
+  outline: 2px solid var(--rm-ui-accent);
+  outline-offset: 2px;
+}
+
+.rm-admin-launch__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.4rem;
+  background: var(--rm-ui-soft);
+  color: var(--rm-ui-muted);
+}
+
+.rm-admin-launch__copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.rm-admin-launch__copy strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.rm-admin-launch__copy span {
+  color: var(--rm-ui-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 /* Settings section: a labelled group of related controls. Two-column on wide
    viewports (label rail + control body), stacked on narrow. */
 .rm-settings-section {
   display: grid;
-  gap: 1rem;
-  padding-block: 1.5rem;
+  gap: 1.5rem;
+  padding-block: 1.75rem;
   border-top: 1px solid var(--rm-ui-border);
 }
 
@@ -20,14 +194,14 @@
 }
 
 .rm-settings-section__title {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   margin: 0;
 }
 
 .rm-settings-section__description {
   color: var(--rm-ui-muted);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   margin: 0.25rem 0 0;
   max-width: 60ch;
 }
@@ -64,16 +238,149 @@
   }
 }
 
+/* Linear-style inventory: title + meta, hover actions, no boxed tiles. */
+
+.rm-console-page {
+  display: grid;
+}
+
+.rm-console-page > .rm-settings-section:first-child,
+.rm-console-page > .rm-panel:first-child {
+  border-top: 0;
+  padding-block-start: 0;
+}
+
+.rm-console-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.rm-console-toolbar > :only-child {
+  margin-left: auto;
+}
+
+.rm-resource-list {
+  display: grid;
+}
+
+.rm-resource-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--rm-ui-border);
+}
+
+.rm-resource-row:last-child {
+  border-bottom: 0;
+}
+
+.rm-resource-row:hover,
+.rm-resource-row[data-selected="true"] {
+  background: color-mix(in srgb, var(--rm-hover) 80%, transparent);
+}
+
+.rm-resource-row[data-disabled="true"] {
+  opacity: 0.55;
+}
+
+.rm-resource-row__main {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.rm-resource-row__main {
+  cursor: pointer;
+}
+
+button.rm-resource-row__main:focus-visible {
+  outline: 2px solid var(--rm-ui-accent);
+  outline-offset: 2px;
+}
+
+.rm-resource-row__copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.rm-resource-row__title-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.rm-resource-row__title {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-resource-row__meta {
+  overflow: hidden;
+  color: var(--rm-ui-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-resource-row__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.rm-resource-row__actions--start {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.rm-list-empty {
+  color: var(--rm-ui-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  padding: 0.85rem 0 0.25rem;
+}
+
+.rm-console-output {
+  margin: 0;
+  padding: 0.85rem 0 0;
+  border-top: 1px solid var(--rm-ui-border);
+  color: var(--rm-text);
+  font-family: var(--rm-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* Danger zone: destructive actions are separated from routine settings by a
    visible boundary so they are never adjacent to a Save. */
 .rm-danger-zone {
   display: grid;
   gap: 0.75rem;
   margin-block-start: 2rem;
-  padding: 1rem;
-  border: 1px solid color-mix(in srgb, var(--rm-ui-danger) 40%, transparent);
-  border-radius: var(--rm-ui-radius);
-  background: color-mix(in srgb, var(--rm-ui-danger) 6%, transparent);
+  padding: 1.25rem 0 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--rm-ui-danger) 40%, transparent);
+  border-radius: 0;
+  background: transparent;
 }
 
 .rm-danger-zone__title {
@@ -119,10 +426,11 @@
 .rm-provider-card {
   display: grid;
   gap: 0.75rem;
-  padding: 1rem;
-  border: 1px solid var(--rm-ui-border);
-  border-radius: var(--rm-ui-radius);
-  background: var(--rm-ui-surface);
+  padding: 0.9rem 0;
+  border: 0;
+  border-top: 1px solid var(--rm-ui-border);
+  border-radius: 0;
+  background: transparent;
 }
 
 .rm-provider-card__head {
@@ -133,58 +441,81 @@
 }
 
 .rm-starter-prompt {
-  border: 1px solid var(--rm-ui-border);
-  border-radius: var(--rm-ui-radius);
-  background: var(--rm-ui-surface);
+  border: 0;
+  border-top: 1px solid var(--rm-ui-border);
+  border-radius: 0;
+  background: transparent;
 }
 
-.rm-starter-prompt__summary {
-  cursor: pointer;
+.rm-starter-prompt__header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.625rem 0.75rem;
-  font-weight: 500;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--rm-ui-border);
 }
 
-.rm-starter-prompt__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.rm-starter-prompt__index {
+  color: var(--rm-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .rm-starter-prompt__body {
   display: grid;
   gap: 0.75rem;
   padding: 0.75rem;
-  border-top: 1px solid var(--rm-ui-border);
 }
 
 /* Contextual save bar: present only while the form is dirty, so a settings
-   page has no permanently-parked Save competing with the page's real work. */
-.rm-save-bar {
+   page has no permanently-parked Save competing with the page's real work.
+   One rule serves every editor in the console — a second, near-identical bar
+   was the reason Save looked different on models than it did on settings. */
+.rm-save-bar,
+.rm-managed-model-savebar {
   position: sticky;
-  bottom: 0;
-  z-index: 5;
+  bottom: 0.75rem;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   margin-block-start: 1.5rem;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 0.625rem 0.625rem 1rem;
   border: 1px solid var(--rm-ui-border);
-  border-radius: var(--rm-ui-radius);
-  background: var(--rm-ui-soft);
+  border-radius: var(--rm-ui-radius-lg);
+  /* Translucent so the page reads as continuing underneath the bar rather than
+     ending at it. */
+  background: color-mix(in srgb, var(--rm-ui-surface) 88%, transparent);
   box-shadow: var(--rm-ui-shadow);
+  backdrop-filter: blur(12px);
 }
 
-.rm-save-bar__label {
+
+.rm-save-bar__label,
+.rm-managed-model-savebar__label {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
   color: var(--rm-ui-muted);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
-.rm-save-bar__actions {
+.rm-save-bar__label strong,
+.rm-managed-model-savebar__label strong {
+  color: var(--rm-ui-text, var(--rm-text));
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Cancel then Save, always in that order, always right-aligned. Cancel is
+   quiet; the primary action is the only filled button in the bar. */
+
+.rm-save-bar__actions,
+.rm-managed-model-savebar__actions {
   display: flex;
+  flex-shrink: 0;
   gap: 0.5rem;
 }
 
@@ -238,30 +569,22 @@
 
 .rm-managed-model-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-  gap: 0.875rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 
 .rm-managed-model-card {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid var(--rm-ui-border);
-  border-radius: var(--rm-ui-radius);
-  background: var(--rm-ui-surface);
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    transform 140ms ease;
+  border: 0;
+  border-top: 1px solid var(--rm-ui-border);
+  border-radius: 0;
+  background: transparent;
+  transition: background-color 120ms ease;
 }
 
 .rm-managed-model-card:hover {
-  border-color: color-mix(
-    in srgb,
-    var(--rm-ui-accent) 42%,
-    var(--rm-ui-border)
-  );
-  box-shadow: var(--rm-ui-shadow);
-  transform: translateY(-1px);
+  background: var(--rm-hover);
 }
 
 .rm-managed-model-card__main {
@@ -340,43 +663,50 @@
   border-bottom: 1px solid var(--rm-ui-border);
 }
 
+/* Editor sections use the same underline tabs as the rest of the console. The
+   previous filled pill bar stretched the full column and read as a toolbar
+   rather than navigation — and it was the only tab style in the product that
+   looked like this. */
 .rm-agent-editor-tabs {
   display: flex;
   gap: 0.25rem;
   max-width: 100%;
-  padding: 0.25rem;
   overflow-x: auto;
-  border: 1px solid var(--rm-ui-border);
-  border-radius: var(--rm-ui-radius);
-  background: var(--rm-ui-soft);
-  scrollbar-width: thin;
+  border: 0;
+  border-bottom: 1px solid var(--rm-ui-border);
+  border-radius: 0;
+  background: transparent;
+  scrollbar-width: none;
+}
+
+.rm-agent-editor-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .rm-agent-editor-tabs .rm-ui-button {
   flex: 0 0 auto;
+  min-height: 2.25rem;
+  padding: 0 0.15rem 0.6rem;
+  margin-right: 1.25rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--rm-ui-muted);
+  font-size: 0.8125rem;
   white-space: nowrap;
 }
 
-.rm-agent-editor-tabs .rm-ui-button[aria-current="page"] {
-  color: var(--rm-ui-text);
-  background: var(--rm-ui-surface);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+.rm-agent-editor-tabs .rm-ui-button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--rm-ui-fg);
 }
 
-.rm-managed-model-savebar {
-  position: sticky;
-  z-index: 10;
-  bottom: 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem;
-  border: 1px solid var(--rm-ui-border);
-  border-radius: var(--rm-ui-radius);
-  background: color-mix(in srgb, var(--rm-ui-surface) 94%, transparent);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 24%);
-  backdrop-filter: blur(12px);
+.rm-agent-editor-tabs .rm-ui-button[aria-current="page"] {
+  border-bottom-color: var(--rm-ui-accent);
+  color: var(--rm-ui-fg);
+  font-weight: 600;
 }
 
 .rm-managed-model-section {
@@ -384,19 +714,30 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   min-width: 0;
-  padding: 1.125rem;
-  border: 1px solid var(--rm-ui-border);
-  border-radius: var(--rm-ui-radius);
-  background: var(--rm-ui-surface);
+  padding: 1.25rem 0;
+  border: 0;
+  border-top: 1px solid var(--rm-ui-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+/* The tab strip already draws the line that opens this pane; a section rule
+   directly beneath it produced two hairlines a few pixels apart. */
+
+.rm-agent-editor-tabs + * .rm-managed-model-section:first-child,
+.rm-agent-editor-tabs + .rm-managed-model-section,
+.rm-managed-model-editor > *:first-child .rm-managed-model-section:first-child {
+  border-top: 0;
+  padding-block-start: 0.5rem;
 }
 
 .rm-managed-model-editor > .rm-panel {
   display: grid;
   gap: 1rem;
-  padding: 1.125rem;
-  border: 1px solid var(--rm-ui-border);
-  border-radius: var(--rm-ui-radius);
-  background: var(--rm-ui-surface);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .rm-managed-model-section__header {
@@ -580,6 +921,20 @@
   .rm-managed-model-card:hover {
     transform: none;
   }
+}
+
+.rm-console-content .rm-ui-tabs__list {
+  gap: 0.15rem;
+}
+
+.rm-console-content .rm-ui-tabs__trigger {
+  padding: 0.55rem 0.15rem 0.65rem;
+  margin-right: 1rem;
+  font-size: 0.8125rem;
+}
+
+.rm-console-content .rm-ui-tabs__content {
+  padding-block-start: 1.25rem;
 }
 
 @media (max-width: 40rem) {

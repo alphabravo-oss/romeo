@@ -178,7 +178,7 @@ export class ChatLifecycleService {
     )
       throw new ApiError(
         "chat_agent_unavailable",
-        "The selected assistant is not available in this workspace.",
+        "The selected custom model is not available in this workspace.",
         400,
       );
   }

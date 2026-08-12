@@ -28,6 +28,11 @@ export interface PersistTerminalRunInput {
   model?: BaseModel;
   providerUsage?: ProviderTokenUsage;
   citations?: RunKnowledgeCitation[];
+  /** Inline error shown as the assistant turn when the model run fails. */
+  error?: {
+    code: string;
+    message?: string;
+  };
   terminalEvent?: {
     type: "run.cancelled" | "run.failed";
     data: Record<string, unknown>;
@@ -99,7 +104,10 @@ export async function persistTerminalRunInRepository(
     },
     createdAt: completedAt,
   });
-  if (input.assistantContent.length > 0) {
+  const error = terminalRunError(input);
+  // Failures and cancels always mint an assistant row so the transcript keeps
+  // an inline error in place of the missing answer, even when no tokens arrived.
+  if (input.assistantContent.length > 0 || error !== undefined) {
     // The parent is the run's own user message, never the chat's leaf pointer: switching variants
     // while this run streams would otherwise graft the answer onto the branch the reader is looking
     // at rather than the one that asked the question.
@@ -116,6 +124,8 @@ export async function persistTerminalRunInRepository(
       ...(input.citations === undefined || input.citations.length === 0
         ? {}
         : { citations: input.citations }),
+      ...(error === undefined ? {} : { error }),
+      modelId: finalized.modelId,
       ...(parent === undefined ? {} : { parentId: parent.id }),
       createdAt: completedAt,
     });
@@ -217,6 +227,43 @@ function terminalWebhookEventType(
 ): RunTerminalOutboxPayload["eventType"] {
   if (status === "cancelled") return "run.cancelled";
   return status === "completed" ? "run.completed" : "run.failed";
+}
+
+function terminalRunError(
+  input: PersistTerminalRunInput,
+): PersistTerminalRunInput["error"] | undefined {
+  if (input.error !== undefined) return normalizeRunError(input.error);
+  if (input.status === "cancelled")
+    return {
+      code: "run_cancelled",
+      message: "The response was stopped.",
+    };
+  if (input.status !== "failed") return undefined;
+  const data = input.terminalEvent?.data ?? {};
+  const code =
+    typeof data.errorCode === "string" && data.errorCode.trim().length > 0
+      ? data.errorCode.trim()
+      : "provider_run_failed";
+  const message =
+    typeof data.message === "string" && data.message.trim().length > 0
+      ? data.message.trim()
+      : undefined;
+  return normalizeRunError({
+    code,
+    ...(message === undefined ? {} : { message }),
+  });
+}
+
+function normalizeRunError(error: {
+  code: string;
+  message?: string;
+}): NonNullable<PersistTerminalRunInput["error"]> {
+  return {
+    code: error.code.trim().slice(0, 120) || "provider_run_failed",
+    ...(error.message !== undefined && error.message.trim().length > 0
+      ? { message: error.message.trim().slice(0, 2_000) }
+      : {}),
+  };
 }
 
 function runTerminalOutboxPayload(

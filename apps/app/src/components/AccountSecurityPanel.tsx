@@ -18,6 +18,7 @@ import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import { downloadText } from "../lib/download";
 import { writeTextToClipboard } from "../lib/clipboard";
+import { Section } from "./console";
 import { FormDialog } from "./FormDialog";
 import { AccountMfaDialogs, type RecoveryStep } from "./AccountMfaDialogs";
 import { isLockoutRisk, recoveryCodesRemaining } from "./mfa-recovery";
@@ -165,7 +166,7 @@ export function AccountSecurityPanel() {
   const hasPassword = statusQuery.data?.hasPassword ?? false;
 
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <div className="rm-card-title">{t("security")}</div>
       <PanelState query={statusQuery} isEmpty={() => false} empty="">
         {(status) => (
@@ -431,6 +432,6 @@ export function AccountSecurityPanel() {
         recoveryTotpCode={recoveryTotpCode}
         totpCode={totpCode}
       />
-    </section>
+    </Section>
   );
 }

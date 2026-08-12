@@ -1,5 +1,11 @@
 import type { RunContextPreview } from "../features/chat";
 
+export interface ContextMeterMessage {
+  content: string;
+  error?: { code: string } | null;
+  role: string;
+}
+
 export interface ContextMeterValue {
   contextWindow: number | undefined;
   /** False whenever any part of the number came from the local estimate. */
@@ -29,33 +35,55 @@ export function estimateTokens(text: string): number {
   return Math.max(1, Math.ceil(trimmed.length / 4));
 }
 
+/** Per-message framing cost mirrored from the server budget builder. */
+const messageFramingTokens = 4;
+
 /**
- * The context preview is a snapshot the reader asked for; the draft is live.
- * Nothing here calls the inspect endpoint — it costs an embedding request, a
- * vector search and an object-store fan-out per call, which is not something a
- * keystroke may trigger.
- *
- * ponytail: the ceiling is that a preview taken with text already in the box
- * counted that text, so while the same draft is still there the meter counts it
- * twice; `exact: false` (the leading "~") is the honest signal, and the error is
- * bounded by the draft itself. Upgrade path: have the inspect response report
- * the draft's token cost separately from the conversation's.
+ * Live estimate of conversation history the next send will carry. Skips
+ * failed/cancelled assistant rows (error-only) so they do not inflate the bar.
+ */
+export function estimateHistoryTokens(
+  messages: ContextMeterMessage[] | undefined,
+): number {
+  if (messages === undefined || messages.length === 0) return 0;
+  let total = 0;
+  for (const message of messages) {
+    if (message.role !== "user" && message.role !== "assistant") continue;
+    if (message.error !== undefined && message.error !== null) continue;
+    const content = message.content.trim();
+    if (content.length === 0) continue;
+    total += estimateTokens(content) + messageFramingTokens;
+  }
+  return total;
+}
+
+/**
+ * The draft is always live. History is estimated from the visible transcript so
+ * the meter moves when replies land without waiting for an inspect click.
+ * An inspect preview still supplies retained-file counts and a model window when
+ * present; its token total is not mixed in (it would double-count the draft).
  */
 export function contextMeterValue(input: {
   contextWindow: number | undefined;
   draft: string;
+  messages?: ContextMeterMessage[];
   preview: RunContextPreview | undefined;
+  systemPrompt?: string;
 }): ContextMeterValue {
   const draftTokens = estimateTokens(input.draft);
-  const usedTokens =
-    (input.preview?.budget.estimatedInputTokens ?? 0) + draftTokens;
-  // The preview names the model that actually answered, which beats the picker
-  // when the two disagree (a managed override, or a model swapped mid-chat).
+  const historyTokens = estimateHistoryTokens(input.messages);
+  const systemTokens =
+    input.systemPrompt === undefined || input.systemPrompt.trim().length === 0
+      ? 0
+      : estimateTokens(input.systemPrompt) + messageFramingTokens;
+  const usedTokens = historyTokens + systemTokens + draftTokens;
+  // Prefer the model window from a recent inspect, else the composer's selection.
   const contextWindow =
     input.preview?.model.contextWindow ?? input.contextWindow;
   return {
     contextWindow,
-    exact: input.preview !== undefined && draftTokens === 0,
+    // Local estimator only — never claim exact without a dedicated budget API.
+    exact: false,
     percent:
       contextWindow === undefined || contextWindow <= 0
         ? undefined

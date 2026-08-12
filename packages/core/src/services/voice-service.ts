@@ -428,7 +428,7 @@ export class VoiceService {
     if (message.role !== "assistant")
       throw new ApiError(
         "message_speech_role_unsupported",
-        "Speech can only be generated for assistant messages.",
+        "Speech can only be generated for model messages.",
         400,
       );
     return message;

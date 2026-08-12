@@ -86,6 +86,12 @@ export interface StartRunInput {
   parentMessageId?: string | null;
   webSearch?: boolean;
   urls?: string[];
+  /**
+   * Optional per-turn knowledge bases. When set, overrides the agent bindings
+   * for retrieval (subject to grants and org RAG policy). Empty disables RAG.
+   */
+  knowledgeBaseIds?: string[];
+  agenticRag?: boolean;
 }
 
 export interface PreparedRunStart {

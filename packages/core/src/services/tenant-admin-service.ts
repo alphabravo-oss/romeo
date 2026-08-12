@@ -140,6 +140,16 @@ export class TenantAdminService {
               orgSlug: slug,
               ...(passwordHash === undefined ? {} : { passwordHash }),
             });
+      if (createdAdmin !== undefined) {
+        await repository.createResourceGrant({
+          id: createId("grant"),
+          resourceType: "workspace",
+          resourceId: defaultWorkspace.id,
+          principalType: "user",
+          principalId: createdAdmin.id,
+          permission: "read",
+        });
+      }
 
       await writeAuditLog(repository, {
         subject: input.subject,

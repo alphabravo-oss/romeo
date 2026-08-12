@@ -141,6 +141,36 @@ describe("service authorization", () => {
     });
   });
 
+  it("blocks org and shared knowledge-base creation for non-admins", async () => {
+    const knowledge = new KnowledgeService(new InMemoryRomeoRepository());
+    const member: AuthSubject = {
+      id: "user_without_kb_grant",
+      type: "user",
+      orgId: "org_default",
+      workspaceIds: ["workspace_default"],
+      groupIds: [],
+      scopes: ["knowledge:write"],
+      isAdmin: false,
+    };
+
+    await expect(
+      knowledge.create({
+        subject: member,
+        workspaceId: "workspace_default",
+        name: "Org collection",
+        scope: "org",
+      }),
+    ).rejects.toMatchObject({ code: "knowledge_scope_forbidden" });
+    await expect(
+      knowledge.create({
+        subject: member,
+        workspaceId: "workspace_default",
+        name: "Shared collection",
+        scope: "shared",
+      }),
+    ).rejects.toMatchObject({ code: "knowledge_scope_forbidden" });
+  });
+
   it("blocks knowledge queries when the caller lacks KB grants", async () => {
     const subject: AuthSubject = {
       id: "user_without_kb_grant",

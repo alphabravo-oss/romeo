@@ -1,3 +1,4 @@
+import { Section } from "./console";
 import { Input, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -41,7 +42,7 @@ export function ProfileEditPanel({
   });
 
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <div className="rm-card-title">{t("profile")}</div>
       <p className="mt-1 text-xs text-muted">{t("profileEditDescription")}</p>
       <form
@@ -116,6 +117,6 @@ export function ProfileEditPanel({
           )}
         </form.Subscribe>
       </form>
-    </section>
+    </Section>
   );
 }

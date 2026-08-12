@@ -47,6 +47,7 @@ describe("provider catalog synchronization", () => {
     const oneId = "model_provider_catalog_sync_test_one";
     const one = await repository.getModel(oneId);
     if (one === undefined) throw new Error("Expected discovered model");
+    expect(one.enabled).toBe(false);
     await repository.updateModel({ ...one, enabled: false });
 
     remoteModels = ["two"];
@@ -118,13 +119,19 @@ describe("provider catalog synchronization", () => {
       await repository.getModel(
         "model_provider_catalog_error_test_known_model",
       ),
-    ).toMatchObject({ available: true, enabled: true });
+    ).toMatchObject({ available: true, enabled: false });
     expect(await repository.getProvider(provider.id)).toMatchObject({
       catalogSync: {
         status: "error",
         modelCount: 1,
       },
     });
+    expect(
+      (await repository.listAuditLogs(subject.orgId)).some(
+        (log) =>
+          log.action === "provider.models.sync" && log.outcome === "failure",
+      ),
+    ).toBe(true);
   });
 
   it("preserves a referenced model id when discovery matches its provider name", async () => {

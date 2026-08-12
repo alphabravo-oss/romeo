@@ -75,6 +75,9 @@ export const messages = pgTable(
     role: messageRole("role").notNull(),
     content: text("content").notNull(),
     citations: jsonb("citations"),
+    // { code, message? } when a model run fails/cancels without a final answer.
+    error: jsonb("error"),
+    modelId: text("model_id"),
     parentId: text("parent_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -109,6 +112,7 @@ export const queuedChatTurns = pgTable(
     modelId: text("model_id"),
     content: text("content").notNull(),
     webSearch: boolean("web_search").notNull().default(false),
+    agenticRag: boolean("agentic_rag").notNull().default(false),
     urls: jsonb("urls").$type<string[]>().notNull().default([]),
     createdBy: text("created_by")
       .notNull()

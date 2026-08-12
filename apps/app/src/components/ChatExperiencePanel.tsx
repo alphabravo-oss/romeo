@@ -1,7 +1,7 @@
+import { Section } from "./console";
 import { Button, Field, Input, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 
 import {
   getChatExperience,
@@ -20,26 +20,19 @@ export function ChatExperiencePanel() {
   const { t } = useLocale();
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div>
-          <div className="rm-card-title">{t("chatExperienceSettings")}</div>
-          <p className="text-sm text-muted">
-            {t("chatExperienceSettingsDescription")}
-          </p>
-        </div>
-      </div>
-      <div className="mt-4">
-        <PanelState query={query} isEmpty={() => false}>
-          {(settings) => (
-            <ChatExperienceForm
-              initial={settings}
-              key={JSON.stringify(settings)}
-            />
-          )}
-        </PanelState>
-      </div>
-    </section>
+    <Section
+      description={t("chatExperienceSettingsDescription")}
+      title={t("chatExperienceSettings")}
+    >
+      <PanelState query={query} isEmpty={() => false}>
+        {(settings) => (
+          <ChatExperienceForm
+            initial={settings}
+            key={JSON.stringify(settings)}
+          />
+        )}
+      </PanelState>
+    </Section>
   );
 }
 
@@ -47,14 +40,11 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
   const mutation = useMutation({ mutationFn: updateChatExperience });
-  const [openPromptIndexes, setOpenPromptIndexes] = useState<Set<number>>(
-    () => new Set(),
-  );
   const form = useForm({
-    defaultValues: initial,
+    defaultValues: { ...initial, assistantsEnabled: true },
     onSubmit: async ({ value }) => {
       try {
-        await mutation.mutateAsync(value);
+        await mutation.mutateAsync({ ...value, assistantsEnabled: true });
         await queryClient.invalidateQueries({ queryKey: ["chatExperience"] });
         toast(t("chatExperienceSaved"), "success");
       } catch (caught) {
@@ -77,33 +67,7 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
         void form.handleSubmit();
       }}
     >
-      <form.Field name="assistantsEnabled">
-        {(field) => (
-          <label
-            className="flex items-start gap-3 rounded-md border border-border p-3"
-            htmlFor="chat-assistants-enabled"
-          >
-            <Input
-              checked={field.state.value}
-              id="chat-assistants-enabled"
-              name="assistantsEnabled"
-              onBlur={field.handleBlur}
-              onChange={(event) =>
-                field.handleChange(event.currentTarget.checked)
-              }
-              type="checkbox"
-            />
-            <span>
-              <strong className="block text-sm">
-                {t("chatAssistantsLabel")}
-              </strong>
-              <span className="mt-1 block text-sm text-muted">
-                {t("chatAssistantsDescription")}
-              </span>
-            </span>
-          </label>
-        )}
-      </form.Field>
+      {/* assistantsEnabled is always on server-side; dual bare/assistant mode removed. */}
 
       <form.Field name="autoTitleEnabled">
         {(field) => (
@@ -145,15 +109,9 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
               </div>
               <Button
                 disabled={suggestionsField.state.value.length >= 8}
-                onClick={() => {
-                  const nextIndex = suggestionsField.state.value.length;
-                  setOpenPromptIndexes((current) => {
-                    const next = new Set(current);
-                    next.add(nextIndex);
-                    return next;
-                  });
-                  suggestionsField.pushValue({ title: "", prompt: "" });
-                }}
+                onClick={() =>
+                  suggestionsField.pushValue({ title: "", prompt: "" })
+                }
                 type="button"
               >
                 {t("chatAddStarter")}
@@ -164,33 +122,22 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
               <div className="rm-empty">{t("chatNoStarters")}</div>
             ) : null}
 
-            {suggestionsField.state.value.map((suggestion, index) => (
-              <details
-                className="rm-starter-prompt"
-                key={index}
-                onToggle={(event) => {
-                  const open = event.currentTarget.open;
-                  setOpenPromptIndexes((current) => {
-                    if (current.has(index) === open) return current;
-                    const next = new Set(current);
-                    if (open) next.add(index);
-                    else next.delete(index);
-                    return next;
-                  });
-                }}
-                open={openPromptIndexes.has(index)}
-              >
-                <summary className="rm-starter-prompt__summary">
-                  <span className="rm-starter-prompt__label">
-                    {suggestion.title.trim() === ""
-                      ? t("chatStarterUntitled")
-                      : suggestion.title}
-                  </span>
-                </summary>
-                <div className="rm-starter-prompt__body">
-                  <span className="sr-only">
+            {suggestionsField.state.value.map((_, index) => (
+              <div className="rm-starter-prompt" key={index}>
+                <div className="rm-starter-prompt__header">
+                  <span className="rm-starter-prompt__index">
                     {t("chatStarterPrompt")} {index + 1}
                   </span>
+                  <Button
+                    onClick={() => suggestionsField.removeValue(index)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    {t("remove")}
+                  </Button>
+                </div>
+                <div className="rm-starter-prompt__body">
                   <form.Field
                     name={`suggestions[${index}].title`}
                     validators={{
@@ -238,32 +185,14 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
                             field.handleChange(event.currentTarget.value)
                           }
                           placeholder={t("chatStarterContentPlaceholder")}
-                          rows={4}
+                          rows={3}
                           value={field.state.value}
                         />
                       </Field>
                     )}
                   </form.Field>
-                  <Button
-                    onClick={() => {
-                      suggestionsField.removeValue(index);
-                      setOpenPromptIndexes((current) => {
-                        const next = new Set<number>();
-                        for (const openIndex of current) {
-                          if (openIndex < index) next.add(openIndex);
-                          if (openIndex > index) next.add(openIndex - 1);
-                        }
-                        return next;
-                      });
-                    }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    {t("remove")}
-                  </Button>
                 </div>
-              </details>
+              </div>
             ))}
           </div>
         )}

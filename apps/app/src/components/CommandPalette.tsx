@@ -61,7 +61,7 @@ export function CommandPalette({
       {
         id: "nav-ws",
         group: t("goTo"),
-        label: t("workspaceSettings"),
+        label: t("workspace"),
         icon: LayoutGrid,
         run: go("/workspace"),
       },

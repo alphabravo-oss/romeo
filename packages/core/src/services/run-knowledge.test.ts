@@ -9,8 +9,10 @@ import type {
 import { InMemoryRomeoRepository } from "../repositories/in-memory";
 import {
   buildRunKnowledgeContext,
+  KNOWLEDGE_NO_MATCH_REPLY,
   knowledgeUserContent,
   renderKnowledgeContext,
+  resolveKnowledgeBaseIdsForRun,
 } from "./run-knowledge";
 
 const subject: AuthSubject = {
@@ -106,6 +108,51 @@ describe("renderKnowledgeContext", () => {
   });
 });
 
+describe("resolveKnowledgeBaseIdsForRun", () => {
+  it("uses the explicit override, including an empty list", async () => {
+    const repository = new InMemoryRomeoRepository();
+
+    await expect(
+      resolveKnowledgeBaseIdsForRun(repository, {
+        agentId: "agent_override",
+        knowledgeBaseIds: [" kb_override ", "", "kb_override"],
+      }),
+    ).resolves.toEqual(["kb_override"]);
+    await expect(
+      resolveKnowledgeBaseIdsForRun(repository, {
+        agentId: "agent_override",
+        knowledgeBaseIds: [],
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it("falls back to enabled agent bindings when no override is set", async () => {
+    const repository = new InMemoryRomeoRepository();
+    await repository.upsertAgentKnowledgeBinding({
+      id: "bind_on",
+      orgId: "org_default",
+      agentId: "agent_override",
+      knowledgeBaseId: "kb_on",
+      enabled: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await repository.upsertAgentKnowledgeBinding({
+      id: "bind_off",
+      orgId: "org_default",
+      agentId: "agent_override",
+      knowledgeBaseId: "kb_off",
+      enabled: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    await expect(
+      resolveKnowledgeBaseIdsForRun(repository, { agentId: "agent_override" }),
+    ).resolves.toEqual(["kb_on"]);
+  });
+});
+
 describe("knowledgeUserContent", () => {
   it("returns the user content unchanged when there is no knowledge context", () => {
     expect(knowledgeUserContent(undefined, "What is the status?")).toBe(
@@ -122,6 +169,41 @@ describe("knowledgeUserContent", () => {
     expect(content).toBe(
       "Knowledge context:\n[1] Alpha: Alpha body\n\nUse this context when relevant and cite sources by bracket number.\n\nWhat is the status?",
     );
+  });
+
+  it("prefer mode softens the instruction when context is present", () => {
+    const content = knowledgeUserContent(
+      "[1] Alpha: Alpha body",
+      "What is the status?",
+      "prefer",
+    );
+
+    expect(content).toContain("Prefer this context when it is relevant");
+    expect(content).toContain("What is the status?");
+  });
+
+  it("required mode refuses when no knowledge matched", () => {
+    const content = knowledgeUserContent(
+      undefined,
+      "What is the status?",
+      "required",
+    );
+
+    expect(content).toContain(KNOWLEDGE_NO_MATCH_REPLY);
+    expect(content).toContain("Do not use outside knowledge.");
+    expect(content).toContain("What is the status?");
+  });
+
+  it("required mode marks context as authoritative when hits exist", () => {
+    const content = knowledgeUserContent(
+      "[1] Alpha: Alpha body",
+      "What is the status?",
+      "required",
+    );
+
+    expect(content).toContain("authoritative");
+    expect(content).toContain(KNOWLEDGE_NO_MATCH_REPLY);
+    expect(content).toContain("What is the status?");
   });
 });
 
@@ -238,6 +320,43 @@ describe("buildRunKnowledgeContext", () => {
     );
     expect(result.knowledgeContext).not.toContain(
       "ignore all previous instructions",
+    );
+  });
+
+  it("agentic mode searches rewritten parts and keeps the best hits", async () => {
+    const repository = await repositoryWithChunks(
+      [
+        chunk(
+          "chunk_vacation",
+          "src_mixed",
+          "Vacation policy grants fifteen paid days each year.",
+          0,
+        ),
+        chunk(
+          "chunk_parental",
+          "src_mixed",
+          "Parental leave covers twelve weeks of paid time off.",
+          1,
+        ),
+      ],
+      [source("src_mixed")],
+    );
+
+    const oneshot = await buildRunKnowledgeContext(repository, {
+      agentId: "agent_default",
+      subject,
+      query: "vacation policy versus parental leave",
+    });
+    const agentic = await buildRunKnowledgeContext(repository, {
+      agentId: "agent_default",
+      subject,
+      query: "vacation policy versus parental leave",
+      agentic: true,
+    });
+
+    expect(agentic.hits.length).toBeGreaterThanOrEqual(oneshot.hits.length);
+    expect(agentic.hits.map((hit) => hit.citation.chunkId)).toEqual(
+      expect.arrayContaining(["chunk_vacation", "chunk_parental"]),
     );
   });
 });

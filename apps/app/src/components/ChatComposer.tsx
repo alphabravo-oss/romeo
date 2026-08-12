@@ -1,5 +1,6 @@
 import { Button, DropdownMenu, Input, Textarea } from "@romeo/ui";
 import ArrowUp from "lucide-react/dist/esm/icons/arrow-up.mjs";
+import BookOpen from "lucide-react/dist/esm/icons/book-open.mjs";
 import Clock3 from "lucide-react/dist/esm/icons/clock-3.mjs";
 import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
 import Globe2 from "lucide-react/dist/esm/icons/globe-2.mjs";
@@ -21,8 +22,11 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
 
+import { listKnowledgeBases } from "../features/knowledge";
 import { useLocale } from "../lib/i18n";
+import { canPerformChatWriteAction } from "./chat-enterprise";
 import { ChatComposerDialogs } from "./ChatComposerDialogs";
 import { composerMenuId, useComposerMenu } from "./ChatComposerMenus";
 import type { ChatComposerProps } from "./chat-composer-props";
@@ -33,6 +37,7 @@ import { VoiceInputButton } from "./VoiceInputButton";
 
 export function ChatComposer({
   attachedUrls,
+  chatAccess = "owner",
   canInspectContext,
   contextPreview,
   documentAttachments,
@@ -43,8 +48,13 @@ export function ChatComposer({
   isStreaming,
   isTemporaryChat,
   isTranscribingVoice,
+  knowledgeBaseIdsOverride,
   messageCount,
+  messages,
   models,
+  systemPrompt,
+  defaultModelId,
+  lastReplyModelId,
   onAddUrl,
   onAttachExistingFile,
   onAttachFiles,
@@ -52,25 +62,58 @@ export function ChatComposer({
   onDraftChange,
   onGenerateImages,
   onInspectContext,
+  onKnowledgeBaseIdsChange,
   onRemoveDocumentAttachment,
   onRemoveImageAttachment,
   onRemoveUrl,
+  customModels,
+  selectedCustomModelId,
+  onSelectCustomModel,
   onSelectModel,
+  onToggleDefaultModel,
   onSubmit,
   onToggleWebSearch,
+  onToggleAgenticRag,
   onTranscribeAudio,
   onTranscriptionError,
   providers,
   selectedModelId,
+  enterToSend,
   webSearchEnabled,
+  agenticRagAvailable,
+  agenticRagForced,
+  agenticRagEnabled,
   workspaceId,
 }: ChatComposerProps) {
   const { t } = useLocale();
+  const canSend = canPerformChatWriteAction(chatAccess, "send");
+  const canAttach = canPerformChatWriteAction(chatAccess, "attach");
   const [promptLibraryOpen, setPromptLibraryOpen] = useState(false);
   const [fileLibraryOpen, setFileLibraryOpen] = useState(false);
+  const [knowledgeLibraryOpen, setKnowledgeLibraryOpen] = useState(false);
   const [noteLibraryOpen, setNoteLibraryOpen] = useState(false);
   const [urlDialogOpen, setUrlDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const knowledgeBasesQuery = useQuery({
+    queryKey: ["knowledgeBases", workspaceId],
+    queryFn: () => listKnowledgeBases(workspaceId!),
+    enabled:
+      workspaceId !== undefined && knowledgeBaseIdsOverride !== undefined,
+  });
+  const knowledgeOverrideLabel = useMemo(() => {
+    if (knowledgeBaseIdsOverride === undefined) return undefined;
+    if (knowledgeBaseIdsOverride.length === 0) {
+      return t("composerKnowledgeNoneActive");
+    }
+    const names = knowledgeBaseIdsOverride.map(
+      (id) =>
+        knowledgeBasesQuery.data?.find((base) => base.id === id)?.name ?? id,
+    );
+    if (names.length === 1) return names[0];
+    return t("composerKnowledgeSelectedCount", {
+      count: String(names.length),
+    });
+  }, [knowledgeBaseIdsOverride, knowledgeBasesQuery.data, t]);
   const [caret, setCaret] = useState(0);
   const imageModels = useMemo(
     () => listImageGenerationModels(models, providers),
@@ -120,18 +163,26 @@ export function ChatComposer({
     // this guard that keystroke submits a half-composed message.
     if (event.nativeEvent.isComposing) return;
     if (composerMenu.handleKeyDown(event)) return;
-    if (event.key !== "Enter" || event.shiftKey) return;
+    if (event.key !== "Enter") return;
+    if (!canSend) return;
+    const submitWithModifier = event.metaKey || event.ctrlKey;
+    if (enterToSend) {
+      if (event.shiftKey) return;
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+      return;
+    }
+    // Enter inserts a newline; only Ctrl/Cmd+Enter sends.
+    if (!submitWithModifier) return;
     event.preventDefault();
     event.currentTarget.form?.requestSubmit();
   }
 
-  // ponytail: the visible menu text replaces the icon-only aria-label/title pair
-  // these actions used to carry, so only the inspect hint (which said something
-  // the label does not) keeps a title. Upgrade path if a second action needs a
-  // hint: give DropdownMenuItem a real `description` slot in @romeo/ui.
+  // Consolidated capabilities surface (E3): attach, libraries, web/url, image,
+  // and context inspect live in one menu so the composer stays clean.
   const composerMenuItems = [
     {
-      disabled: isStreaming,
+      disabled: isStreaming || !canAttach,
       label: (
         <span className="rm-composer-menu-item">
           <Paperclip aria-hidden="true" size={16} />
@@ -141,6 +192,7 @@ export function ChatComposer({
       onSelect: () => fileInputRef.current?.click(),
     },
     {
+      disabled: !canSend,
       label: (
         <span className="rm-composer-menu-item">
           <Zap aria-hidden="true" size={16} />
@@ -150,6 +202,7 @@ export function ChatComposer({
       onSelect: () => setPromptLibraryOpen(true),
     },
     {
+      disabled: !canAttach,
       label: (
         <span className="rm-composer-menu-item">
           <Library aria-hidden="true" size={16} />
@@ -159,6 +212,17 @@ export function ChatComposer({
       onSelect: () => setFileLibraryOpen(true),
     },
     {
+      disabled: !canSend,
+      label: (
+        <span className="rm-composer-menu-item">
+          <BookOpen aria-hidden="true" size={16} />
+          {t("composerKnowledgePicker")}
+        </span>
+      ),
+      onSelect: () => setKnowledgeLibraryOpen(true),
+    },
+    {
+      disabled: !canSend,
       label: (
         <span className="rm-composer-menu-item">
           <NotebookPen aria-hidden="true" size={16} />
@@ -168,6 +232,7 @@ export function ChatComposer({
       onSelect: () => setNoteLibraryOpen(true),
     },
     {
+      disabled: !canAttach,
       label: (
         <span className="rm-composer-menu-item">
           <Globe2 aria-hidden="true" size={16} />
@@ -177,7 +242,7 @@ export function ChatComposer({
       onSelect: () => setUrlDialogOpen(true),
     },
     {
-      disabled: imageModels.length === 0,
+      disabled: imageModels.length === 0 || !canSend,
       label: (
         <span className="rm-composer-menu-item">
           <Images aria-hidden="true" size={16} />
@@ -194,7 +259,7 @@ export function ChatComposer({
           title={canInspectContext ? t("inspectNext") : t("inspectFirst")}
         >
           <ScanSearch aria-hidden="true" size={16} />
-          {t("inspect")}
+          {t("inspectContextCapability")}
         </span>
       ),
       onSelect: onInspectContext,
@@ -203,7 +268,7 @@ export function ChatComposer({
 
   return (
     <>
-      {isTemporaryChat ? (
+      {isTemporaryChat && messageCount === 0 ? (
         <div className="rm-chat-mode" role="status">
           <Clock3 aria-hidden="true" size={14} />
           <strong>{t("temporaryChat")}</strong>
@@ -211,7 +276,16 @@ export function ChatComposer({
           <span>{t("temporaryChatDescription")}</span>
         </div>
       ) : null}
-      <form className="rm-composer-wrap" onSubmit={onSubmit}>
+      <form
+        className="rm-composer-wrap"
+        onSubmit={(event) => {
+          if (!canSend) {
+            event.preventDefault();
+            return;
+          }
+          onSubmit(event);
+        }}
+      >
         <label className="sr-only" htmlFor="prompt">
           {t("message")}
         </label>
@@ -261,6 +335,23 @@ export function ChatComposer({
             ))}
           </div>
         ) : null}
+        {knowledgeOverrideLabel !== undefined ? (
+          <div className="rm-pending-attachments">
+            <div className="rm-pending-attachment document">
+              <BookOpen aria-hidden="true" size={16} />
+              <span className="truncate">{knowledgeOverrideLabel}</span>
+              <Button
+                aria-label={t("composerKnowledgeClearOverride")}
+                disabled={isStreaming}
+                onClick={() => onKnowledgeBaseIdsChange(undefined)}
+                title={t("composerKnowledgeClearOverride")}
+                type="button"
+              >
+                <X aria-hidden="true" size={12} />
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <div className="rm-composer">
           <Textarea
             name="prompt"
@@ -271,15 +362,24 @@ export function ChatComposer({
             aria-expanded={composerMenu.open}
             aria-haspopup="listbox"
             onChange={(event) => {
+              if (!canSend) return;
               setCaret(event.currentTarget.selectionStart);
               onDraftChange(event.currentTarget.value);
             }}
             onKeyDown={handleDraftKeyDown}
             onPaste={(event) => {
+              if (!canAttach) return;
               const files = Array.from(event.clipboardData.files);
               if (files.length > 0) onAttachFiles(files);
             }}
-            placeholder={messageCount === 0 ? t("prompt") : t("sendMessage")}
+            placeholder={
+              !canSend
+                ? t("readOnlyChat")
+                : messageCount === 0
+                  ? t("prompt")
+                  : t("sendMessage")
+            }
+            readOnly={!canSend}
             ref={textareaRef}
             rows={1}
             value={draft}
@@ -311,9 +411,9 @@ export function ChatComposer({
               items={composerMenuItems}
               trigger={
                 <Button
-                  aria-label={t("moreActions")}
+                  aria-label={t("capabilitiesMenu")}
                   className="rm-icon-button"
-                  title={t("moreActions")}
+                  title={t("capabilitiesMenu")}
                   type="button"
                 >
                   <Plus aria-hidden="true" size={18} />
@@ -321,22 +421,49 @@ export function ChatComposer({
               }
             />
             <ComposerModelSelect
+              customModels={customModels ?? []}
+              defaultModelId={defaultModelId}
               disabled={isStreaming}
               models={models}
               providers={providers}
+              {...(onSelectCustomModel === undefined
+                ? {}
+                : { onSelectCustomModel })}
               onSelectModel={onSelectModel}
+              onToggleDefaultModel={onToggleDefaultModel}
+              {...(selectedCustomModelId === undefined
+                ? {}
+                : { selectedCustomModelId })}
               selectedModelId={selectedModelId}
             />
             <Button
               aria-pressed={webSearchEnabled}
               aria-label={t("search")}
               className={`rm-icon-button ${webSearchEnabled ? "active" : ""}`}
+              disabled={!canSend}
               onClick={() => onToggleWebSearch(!webSearchEnabled)}
               title={t("search")}
               type="button"
             >
               <Search aria-hidden="true" size={17} />
             </Button>
+            {agenticRagAvailable ? (
+              <Button
+                aria-pressed={agenticRagEnabled}
+                aria-label={t("agenticRag")}
+                className={`rm-icon-button ${agenticRagEnabled ? "active" : ""}`}
+                disabled={!canSend || agenticRagForced}
+                onClick={() => onToggleAgenticRag(!agenticRagEnabled)}
+                title={
+                  agenticRagForced
+                    ? t("agenticRagForcedHelp")
+                    : t("agenticRagHelp")
+                }
+                type="button"
+              >
+                <ScanSearch aria-hidden="true" size={17} />
+              </Button>
+            ) : null}
             {canInspectContext ? (
               <ContextMeter
                 contextWindow={
@@ -348,13 +475,15 @@ export function ChatComposer({
                 // keyboard user who pressed it, dropping focus to the body.
                 disabled={isStreaming}
                 draft={draft}
+                messages={messages}
                 onInspect={onInspectContext}
                 preview={contextPreview}
+                systemPrompt={systemPrompt}
               />
             ) : null}
             <div className="rm-composer-actions-end">
               <VoiceInputButton
-                disabled={isStreaming}
+                disabled={isStreaming || !canSend}
                 isTranscribing={isTranscribingVoice}
                 onAudio={onTranscribeAudio}
                 onError={onTranscriptionError}
@@ -374,13 +503,20 @@ export function ChatComposer({
                 aria-label={isStreaming ? t("queue") : t("send")}
                 className="rm-send-button"
                 disabled={
-                  isStreaming
+                  !canSend ||
+                  (isStreaming
                     ? draft.trim() === ""
                     : draft.trim() === "" &&
                       imageAttachments.length === 0 &&
-                      documentAttachments.length === 0
+                      documentAttachments.length === 0)
                 }
-                title={isStreaming ? t("queue") : t("send")}
+                title={
+                  !canSend
+                    ? t("readOnlyChat")
+                    : isStreaming
+                      ? t("queue")
+                      : t("send")
+                }
                 type="submit"
               >
                 <ArrowUp aria-hidden="true" size={16} />
@@ -409,23 +545,38 @@ export function ChatComposer({
             ))}
           </div>
         ) : null}
+        {lastReplyModelId !== undefined &&
+        selectedModelId !== undefined &&
+        lastReplyModelId !== selectedModelId ? (
+          <div className="rm-composer-model-hint">
+            {t("nextMessageUsesModel", {
+              model:
+                models.find((model) => model.id === selectedModelId)
+                  ?.displayName ?? selectedModelId,
+            })}
+          </div>
+        ) : null}
         {error ? <div className="rm-composer-error">{error}</div> : null}
       </form>
       <ChatComposerDialogs
         draft={draft}
         fileLibraryOpen={fileLibraryOpen}
         imageDialogOpen={imageDialogOpen}
+        knowledgeBaseIdsOverride={knowledgeBaseIdsOverride}
+        knowledgeLibraryOpen={knowledgeLibraryOpen}
         models={models}
         noteLibraryOpen={noteLibraryOpen}
         onAddUrl={onAddUrl}
         onAttachExistingFile={onAttachExistingFile}
         onDraftChange={onDraftChange}
         onGenerateImages={onGenerateImages}
+        onKnowledgeBaseIdsChange={onKnowledgeBaseIdsChange}
         promptLibraryOpen={promptLibraryOpen}
         providers={providers}
         selectedModelId={selectedModelId}
         setFileLibraryOpen={setFileLibraryOpen}
         setImageDialogOpen={setImageDialogOpen}
+        setKnowledgeLibraryOpen={setKnowledgeLibraryOpen}
         setNoteLibraryOpen={setNoteLibraryOpen}
         setPromptLibraryOpen={setPromptLibraryOpen}
         setUrlDialogOpen={setUrlDialogOpen}

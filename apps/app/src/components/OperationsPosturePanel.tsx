@@ -17,8 +17,8 @@ import type {
 import { PanelState } from "../lib/panel-state";
 import { type MessageKey, useLocale } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
+import { Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
-import { PanelStats } from "./PanelStats";
 import { humanizeWarningCode } from "./posture-warning-text";
 import { Tabs } from "./Tabs";
 import {
@@ -41,7 +41,7 @@ import {
 export function OperationsPosturePanel(): React.ReactNode {
   const { t } = useLocale();
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <div className="mb-3 text-sm text-muted">{t("opSystemPosture")}</div>
       <Tabs
         tabs={[
@@ -59,7 +59,7 @@ export function OperationsPosturePanel(): React.ReactNode {
           { id: "quotas", label: t("opQuotas"), content: <QuotasSection /> },
         ]}
       />
-    </section>
+    </Section>
   );
 }
 
@@ -127,7 +127,7 @@ function GaEvidenceSection(): React.ReactNode {
         ).length;
         return (
           <div className="grid gap-4">
-            <PanelStats
+            <StatRow
               items={[
                 {
                   label: t("opStatus"),
@@ -214,7 +214,7 @@ function PostgresSection(): React.ReactNode {
         const warningRows = report.warnings.map((code) => ({ code }));
         return (
           <div className="grid gap-4">
-            <PanelStats
+            <StatRow
               items={[
                 {
                   label: t("opStatus"),
@@ -377,7 +377,7 @@ function JobsSection(): React.ReactNode {
     <PanelState query={query} isEmpty={() => false}>
       {(summary) => (
         <div className="grid gap-4">
-          <PanelStats
+          <StatRow
             items={[
               {
                 label: t("opStatus"),
@@ -444,7 +444,7 @@ function QuotasSection(): React.ReactNode {
     <PanelState query={query} isEmpty={() => false}>
       {(status) => (
         <div className="grid gap-4">
-          <PanelStats
+          <StatRow
             items={[
               {
                 label: t("opHealth"),

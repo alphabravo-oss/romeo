@@ -83,7 +83,7 @@
   "value": "Value",
   "providers": "Providers",
   "backToProviders": "Back to providers",
-  "providerDependentAssistants": "Dependent assistants",
+  "providerDependentAssistants": "Dependent custom models",
   "providerDisableImpactTitle": "Disable this provider?",
-  "providerDisableImpactDescription": "This will block {{agents}} assistants across {{models}} base models ({{names}}). Configure replacements before disabling to avoid failed runs."
+  "providerDisableImpactDescription": "This will block {{agents}} custom models across {{models}} base models ({{names}}). Configure replacements before disabling to avoid failed runs."
 }

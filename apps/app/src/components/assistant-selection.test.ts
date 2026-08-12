@@ -67,8 +67,6 @@ describe("assistant resolution", () => {
   });
 
   it("resolves the assistant a management surface is standing on", () => {
-    // Agent Studio addresses an assistant by id and lists drafts, so the pick
-    // is whatever it opened rather than the first publishable row.
     expect(
       resolveActiveAssistant({
         activeAgentId: "blocked",
@@ -79,115 +77,82 @@ describe("assistant resolution", () => {
   });
 });
 
-describe("chat author names", () => {
-  it("names the assistant in both places when assistants are enabled", () => {
+describe("chat author names (base model + custom model)", () => {
+  it("treats a custom model as the selected model, not a separate assistant", () => {
     expect(
       resolveChatAuthorNames({
-        agentName: "Sales Coach",
+        agentName: "Support bot",
         assistantsEnabled: true,
-        fallbackName: "Romeo Assistant",
-        modelDisplayName: "GPT-4o mini",
+        fallbackName: "Custom model",
+        modelDisplayName: "Kimi K2.5",
       }),
-    ).toEqual({ nextTurn: "Sales Coach", transcript: "Sales Coach" });
+    ).toEqual({ nextTurn: "Support bot", transcript: "Support bot" });
   });
 
-  it("uses the placeholder when enabled but nothing has resolved", () => {
+  it("never surfaces Romeo Assistant as a transcript label", () => {
+    expect(
+      resolveChatAuthorNames({
+        agentName: "Romeo Assistant",
+        assistantsEnabled: true,
+        fallbackName: "Custom model",
+        modelDisplayName: "Kimi K2.5",
+      }),
+    ).toEqual({ nextTurn: "Kimi K2.5", transcript: undefined });
+  });
+
+  it("omits custom model when it matches the base model name", () => {
+    expect(
+      resolveChatAuthorNames({
+        agentName: "Kimi K2.5",
+        assistantsEnabled: true,
+        fallbackName: "Custom model",
+        modelDisplayName: "Kimi K2.5",
+      }),
+    ).toEqual({ nextTurn: "Kimi K2.5", transcript: undefined });
+  });
+
+  it("uses custom model when no base model display name is known", () => {
+    expect(
+      resolveChatAuthorNames({
+        agentName: "Support bot",
+        assistantsEnabled: true,
+        fallbackName: "Custom model",
+        modelDisplayName: undefined,
+      }),
+    ).toEqual({ nextTurn: "Support bot", transcript: "Support bot" });
+  });
+
+  it("stays quiet when nothing is resolved", () => {
     expect(
       resolveChatAuthorNames({
         agentName: undefined,
         assistantsEnabled: true,
-        fallbackName: "Romeo Assistant",
-        modelDisplayName: "GPT-4o mini",
-      }),
-    ).toEqual({ nextTurn: "Romeo Assistant", transcript: "Romeo Assistant" });
-  });
-
-  it("names the model for the next turn and nothing for existing rows", () => {
-    // Which model wrote a row already on screen is not knowable here, and the
-    // picker moves between turns: the same transcript must not be relabelled
-    // by choosing a different model for the next send.
-    expect(
-      resolveChatAuthorNames({
-        agentName: "Direct model",
-        assistantsEnabled: false,
-        fallbackName: "Romeo Assistant",
-        modelDisplayName: "GPT-4o mini",
-      }),
-    ).toEqual({ nextTurn: "GPT-4o mini", transcript: undefined });
-    expect(
-      resolveChatAuthorNames({
-        agentName: "Direct model",
-        assistantsEnabled: false,
-        fallbackName: "Romeo Assistant",
-        modelDisplayName: "Claude Haiku",
-      }),
-    ).toEqual({ nextTurn: "Claude Haiku", transcript: undefined });
-  });
-
-  it("never names the assistant when assistants are off", () => {
-    // An older chat, or one opened from a ?agent= link, stays pinned to an
-    // assistant that carries a persona. The server withholds that persona's
-    // prompt, so the surface must not print its name over the answer.
-    expect(
-      resolveChatAuthorNames({
-        agentName: "Sales Coach",
-        assistantsEnabled: false,
-        fallbackName: "Romeo Assistant",
-        modelDisplayName: "GPT-4o mini",
-      }),
-    ).toEqual({ nextTurn: "GPT-4o mini", transcript: undefined });
-  });
-
-  it("says nothing rather than a product name when the model is unknown", () => {
-    expect(
-      resolveChatAuthorNames({
-        agentName: "Direct model",
-        assistantsEnabled: false,
-        fallbackName: "Romeo Assistant",
+        fallbackName: "Custom model",
         modelDisplayName: undefined,
       }),
     ).toEqual({ nextTurn: undefined, transcript: undefined });
-    expect(
-      resolveChatAuthorNames({
-        agentName: undefined,
-        assistantsEnabled: false,
-        fallbackName: "Romeo Assistant",
-        modelDisplayName: "   ",
-      }),
-    ).toEqual({ nextTurn: undefined, transcript: undefined });
   });
 
-  it("says nothing until the setting has loaded", () => {
-    // Holding beats guessing: the bare rule applied to an assistants-on
-    // workspace would put a model's name over a persona's answer for a paint.
+  it("ignores dual-mode flag for labeling", () => {
     expect(
       resolveChatAuthorNames({
-        agentName: "Sales Coach",
-        assistantsEnabled: undefined,
-        fallbackName: "Romeo Assistant",
-        modelDisplayName: "GPT-4o mini",
+        agentName: "Support bot",
+        assistantsEnabled: false,
+        fallbackName: "Custom model",
+        modelDisplayName: "DeepSeek V3",
       }),
-    ).toEqual({ nextTurn: undefined, transcript: undefined });
+    ).toEqual({ nextTurn: "Support bot", transcript: "Support bot" });
   });
 });
 
 function assistant(
   id: string,
-  readinessStatus: "blocked" | "ready",
+  readinessStatus: AgentGalleryItem["readinessStatus"],
 ): AgentGalleryItem {
   return {
     id,
-    orgId: "org",
-    workspaceId: "workspace",
     name: id,
-    createdBy: "admin",
-    baseModelId: "base",
-    systemPrompt: "Be helpful.",
-    parameters: {},
-    memoryPolicy: { mode: "disabled" },
-    safetySettings: {},
-    updatedAt: "2026-07-29T00:00:00.000Z",
-    favorite: false,
     readinessStatus,
-  };
+    publishedVersionId: readinessStatus === "ready" ? `ver_${id}` : undefined,
+  } as AgentGalleryItem;
 }

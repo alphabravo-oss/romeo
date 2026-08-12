@@ -112,7 +112,7 @@ export function ManagedModelAdminPanel({
         const document = await exportMutation.mutateAsync(agent.id);
         downloadText(
           JSON.stringify(document, null, 2),
-          `${portableFileName(agent.name)}.romeo-assistant.json`,
+          `${portableFileName(agent.name)}.romeo-custom-model.json`,
           "application/json;charset=utf-8",
         );
         toast(t("managedModelExported"), "success");
@@ -272,7 +272,7 @@ export function ManagedModelAdminPanel({
     try {
       const parsed: unknown = JSON.parse(await file.text());
       if (!isManagedModelExportDocument(parsed))
-        throw new Error("Invalid assistant export");
+        throw new Error("Invalid custom model export");
       const imported = await importMutation.mutateAsync({
         workspaceId,
         document: parsed,
@@ -330,7 +330,7 @@ export function ManagedModelAdminPanel({
             accept="application/json,.json"
             aria-label={t("managedModelImport")}
             className="rm-ui-visually-hidden"
-            name="assistantImport"
+            name="customModelImport"
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = "";
@@ -409,6 +409,6 @@ function portableFileName(value: string): string {
       .replace(/[^\p{L}\p{N}]+/gu, "-")
       .replace(/^-+|-+$/gu, "")
       .toLocaleLowerCase()
-      .slice(0, 80) || "assistant"
+      .slice(0, 80) || "custom-model"
   );
 }

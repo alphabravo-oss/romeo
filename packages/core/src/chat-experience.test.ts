@@ -26,7 +26,7 @@ describe("chat experience", () => {
     ).toBe(false);
   });
 
-  it("reads a settings row saved before assistants were switchable as bare chat", async () => {
+  it("always reports custom models on, including legacy rows without the field", async () => {
     const repository = new InMemoryRomeoRepository();
     await repository.upsertSystemSetting({
       key: "chat_experience.v1:org_default",
@@ -40,10 +40,11 @@ describe("chat experience", () => {
 
     expect(response.status).toBe(200);
     expect(body.data.autoTitleEnabled).toBe(true);
-    expect(body.data.assistantsEnabled).toBe(false);
+    // Dual bare/assistant mode is retired.
+    expect(body.data.assistantsEnabled).toBe(true);
   });
 
-  it("keeps the stored assistants control when a settings write omits it", async () => {
+  it("ignores client attempts to turn custom models off", async () => {
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, { startBackgroundWorkers: false });
     const put = (body: Record<string, unknown>) =>
@@ -52,29 +53,18 @@ describe("chat experience", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-    const readAssistantsEnabled = async () => {
-      const response = await api.request("/api/v1/chat-experience");
-      return (await response.json()).data.assistantsEnabled;
-    };
-    // The body a client written against the pre-toggle contract still sends.
     const legacyBody = { autoTitleEnabled: true, suggestions: [] };
 
-    await put({ ...legacyBody, assistantsEnabled: true });
-    const keptOn = await put(legacyBody);
+    const off = await put({ ...legacyBody, assistantsEnabled: false });
+    expect(off.status).toBe(200);
+    expect((await off.json()).data.assistantsEnabled).toBe(true);
 
-    expect(keptOn.status).toBe(200);
-    expect((await keptOn.json()).data.assistantsEnabled).toBe(true);
-    expect(await readAssistantsEnabled()).toBe(true);
-
-    await put({ ...legacyBody, assistantsEnabled: false });
-    const keptOff = await put(legacyBody);
-
-    expect(keptOff.status).toBe(200);
-    expect((await keptOff.json()).data.assistantsEnabled).toBe(false);
-    expect(await readAssistantsEnabled()).toBe(false);
+    const omitted = await put(legacyBody);
+    expect(omitted.status).toBe(200);
+    expect((await omitted.json()).data.assistantsEnabled).toBe(true);
   });
 
-  it("audits both directions of the assistants switch", async () => {
+  it("audits chat-experience updates without reintroducing bare mode", async () => {
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, { startBackgroundWorkers: false });
     const read = async () => {
@@ -96,13 +86,9 @@ describe("chat experience", () => {
       .filter((event) => event.action === "chat_experience.update")
       .map((event) => event.metadata.assistantsEnabled);
 
-    // Switching back off has to be as auditable as switching on: a `false` recorded as absent
-    // would leave "who made this workspace bare" unanswerable. Order is not asserted — both
-    // writes land in the same millisecond, and the audit list sorts on that timestamp alone.
     expect(recorded).toHaveLength(2);
-    expect(recorded).toContain(true);
-    expect(recorded).toContain(false);
-    // The toggle rewrites the whole settings row, so it must not reset the rest of it.
+    expect(recorded.every((value) => value === true)).toBe(true);
+    expect(settled.assistantsEnabled).toBe(true);
     expect(settled.suggestions).toEqual(initial.suggestions);
   });
 
@@ -143,7 +129,7 @@ describe("chat experience", () => {
     const defaults = await defaultsResponse.json();
     expect(defaultsResponse.status).toBe(200);
     expect(defaults.data.autoTitleEnabled).toBe(true);
-    expect(defaults.data.assistantsEnabled).toBe(false);
+    expect(defaults.data.assistantsEnabled).toBe(true);
     expect(defaults.data.suggestions).toHaveLength(3);
 
     const settingsResponse = await api.request(

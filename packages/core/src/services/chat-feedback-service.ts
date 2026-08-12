@@ -77,7 +77,7 @@ export class ChatFeedbackService {
     if (message.role !== "assistant") {
       throw new ApiError(
         "message_feedback_unsupported_role",
-        "Only assistant messages can be rated.",
+        "Only model messages can be rated.",
         409,
       );
     }

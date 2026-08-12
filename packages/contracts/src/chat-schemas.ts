@@ -53,6 +53,13 @@ export const MessageAttachmentSchema = z
   })
   .openapi("MessageAttachment");
 
+export const MessageRunErrorSchema = z
+  .strictObject({
+    code: z.string().trim().min(1).max(120),
+    message: z.string().trim().min(1).max(2_000).optional(),
+  })
+  .openapi("MessageRunError");
+
 export const MessageSchema = z
   .strictObject({
     id: chatIdentifier,
@@ -61,6 +68,13 @@ export const MessageSchema = z
     content: z.string(),
     citations: z.array(MessageCitationSchema).max(100).optional(),
     attachments: z.array(MessageAttachmentSchema).max(100).optional(),
+    // Present when the model run failed or was cancelled without a usable
+    // answer. Content may still hold any partial stream; the UI treats this as
+    // an inline error in place of a normal assistant reply.
+    error: MessageRunErrorSchema.optional(),
+    // Model that produced this assistant turn. Absent on user turns and on
+    // answers written before provenance was persisted.
+    modelId: chatIdentifier.optional(),
     // Absent means "root of the chat". Siblings are the messages that share a
     // parent, which is what the variant picker counts.
     parentId: chatIdentifier.optional(),

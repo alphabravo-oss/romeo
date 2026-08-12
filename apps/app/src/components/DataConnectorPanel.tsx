@@ -16,6 +16,7 @@ import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { AddButton, Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { resolveKnowledgeBaseBinding } from "./data-connector-binding";
 import {
@@ -25,7 +26,6 @@ import {
 } from "./DataConnectorCatalog";
 import { DataConnectorImportsTab } from "./DataConnectorImportsTab";
 import { FormDialog } from "./FormDialog";
-import { PanelStats } from "./PanelStats";
 
 const col = createColumnHelper<DataConnector>();
 
@@ -196,26 +196,18 @@ export function DataConnectorPanel({
       <div className="rm-card-header">
         <div className="rm-card-title">{t("connectorListTitle")}</div>
         {(connectorsQuery.data?.length ?? 0) > 0 ? (
-          <Button
-            variant="primary"
-            onClick={() => openAdd("local_import")}
-            type="button"
-          >
-            + {t("connectorAdd")}
-          </Button>
+          <AddButton onClick={() => openAdd("local_import")}>
+            {t("connectorAdd")}
+          </AddButton>
         ) : null}
       </div>
 
       <PanelState
         empty={t("connectorNone")}
         emptyAction={
-          <Button
-            onClick={() => openAdd("local_import")}
-            type="button"
-            variant="primary"
-          >
-            + {t("connectorAdd")}
-          </Button>
+          <AddButton onClick={() => openAdd("local_import")}>
+            {t("connectorAdd")}
+          </AddButton>
         }
         emptyDescription={t("connectorNoneDescription")}
         emptyIcon={<Plug aria-hidden size={24} />}
@@ -223,7 +215,7 @@ export function DataConnectorPanel({
       >
         {(rows) => (
           <div className="grid gap-4">
-            <PanelStats
+            <StatRow
               items={[
                 { label: t("connectorTotal"), value: rows.length },
                 {
@@ -261,11 +253,7 @@ export function DataConnectorPanel({
   );
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("connectorTitle")}</div>
-      </div>
-
+    <Section title={t("connectorTitle")}>
       <FormDialog
         open={addOpen}
         title={t("connectorNew")}
@@ -396,31 +384,29 @@ export function DataConnectorPanel({
         </form>
       </FormDialog>
 
-      <div className="mt-4">
-        <PanelState
-          empty={t("dataConnectorNeedsKb")}
-          emptyAction={
-            <Button asChild variant="primary">
-              <Link search={{ section: "knowledge" }} to="/workspace">
-                {t("knowledgeAddBase")}
-              </Link>
-            </Button>
-          }
-          emptyDescription={t("dataConnectorNeedsKbDescription")}
-          emptyIcon={<Plug aria-hidden size={24} />}
-          query={knowledgeBasesQuery}
-        >
-          {() =>
-            view === "sources" ? (
-              sourcesTab
-            ) : view === "imports" ? (
-              <DataConnectorImportsTab connector={activeConnector} />
-            ) : (
-              catalogTab
-            )
-          }
-        </PanelState>
-      </div>
-    </section>
+      <PanelState
+        empty={t("dataConnectorNeedsKb")}
+        emptyAction={
+          <Button asChild variant="primary">
+            <Link search={{ section: "knowledge" }} to="/workspace">
+              {t("knowledgeAddBase")}
+            </Link>
+          </Button>
+        }
+        emptyDescription={t("dataConnectorNeedsKbDescription")}
+        emptyIcon={<Plug aria-hidden size={24} />}
+        query={knowledgeBasesQuery}
+      >
+        {() =>
+          view === "sources" ? (
+            sourcesTab
+          ) : view === "imports" ? (
+            <DataConnectorImportsTab connector={activeConnector} />
+          ) : (
+            catalogTab
+          )
+        }
+      </PanelState>
+    </Section>
   );
 }

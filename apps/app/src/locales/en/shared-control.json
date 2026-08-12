@@ -1,7 +1,7 @@
 {
-  "assistantClearDefault": "Clear default assistant",
-  "assistantDefaultFailed": "Could not update the default assistant.",
-  "assistantMakeDefault": "Make default assistant",
+  "assistantClearDefault": "Clear default custom model",
+  "assistantDefaultFailed": "Could not update the default custom model.",
+  "assistantMakeDefault": "Make default custom model",
   "assistantUnavailable": "Unavailable",
   "adminConsole": "Admin console",
   "catalogPages": "Catalog pages",
@@ -67,5 +67,12 @@
   "tableTotal": "total",
   "theme": "Theme",
   "useSystemTheme": "Use system theme",
-  "workspace": "Workspace"
+  "workspace": "Workspace",
+  "accessGrant": "Grant access",
+  "accessGrantSaved": "Access granted",
+  "accessGrantFailed": "Could not grant access",
+  "accessGrantRevoked": "Access revoked",
+  "accessRevoke": "Revoke",
+  "accessRevokeFailed": "Could not revoke access",
+  "accessNoGrants": "No grants yet."
 }

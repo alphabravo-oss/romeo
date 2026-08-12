@@ -15,10 +15,10 @@ import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDate } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
-import { PanelStats } from "./PanelStats";
 
 const col = createColumnHelper<DeviceAuthorization>();
 
@@ -164,18 +164,14 @@ export function DeviceTokensPanel() {
   );
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("deviceTokensTitle")}</div>
-        <Button
-          variant="primary"
-          onClick={() => setAddOpen(true)}
-          type="button"
-        >
-          + {t("deviceTokensAdd")}
-        </Button>
-      </div>
-
+    <Section
+      actions={
+        <AddButton onClick={() => setAddOpen(true)}>
+          {t("deviceTokensAdd")}
+        </AddButton>
+      }
+      title={t("deviceTokensTitle")}
+    >
       {created ? (
         <div className="mt-3 grid gap-2 rounded-md border border-border p-2 text-sm">
           <div className="text-muted">{t("deviceTokensStoreNow")}</div>
@@ -190,42 +186,35 @@ export function DeviceTokensPanel() {
         </div>
       ) : null}
 
-      <div className="mt-4">
-        <PanelState
-          query={tokensQuery}
-          empty={t("deviceTokensNone")}
-          emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setAddOpen(true)}
-              type="button"
-            >
-              + {t("deviceTokensAdd")}
-            </Button>
-          }
-        >
-          {(rows) => (
-            <div className="grid gap-4">
-              <PanelStats
-                items={[
-                  { label: t("deviceTokensTotal"), value: rows.length },
-                  {
-                    label: t("deviceTokensRevokedExpired"),
-                    value: rows.filter(
-                      (r) => authorizationStatus(r) !== "active",
-                    ).length,
-                  },
-                ]}
-              />
-              <DataTable
-                columns={columns}
-                data={rows}
-                empty={t("deviceTokensNone")}
-              />
-            </div>
-          )}
-        </PanelState>
-      </div>
+      <PanelState
+        query={tokensQuery}
+        empty={t("deviceTokensNone")}
+        emptyAction={
+          <AddButton onClick={() => setAddOpen(true)}>
+            {t("deviceTokensAdd")}
+          </AddButton>
+        }
+      >
+        {(rows) => (
+          <div className="grid gap-4">
+            <StatRow
+              items={[
+                { label: t("deviceTokensTotal"), value: rows.length },
+                {
+                  label: t("deviceTokensRevokedExpired"),
+                  value: rows.filter((r) => authorizationStatus(r) !== "active")
+                    .length,
+                },
+              ]}
+            />
+            <DataTable
+              columns={columns}
+              data={rows}
+              empty={t("deviceTokensNone")}
+            />
+          </div>
+        )}
+      </PanelState>
 
       <FormDialog
         open={addOpen}
@@ -334,7 +323,7 @@ export function DeviceTokensPanel() {
         </form>
       </FormDialog>
       {dialog}
-    </section>
+    </Section>
   );
 }
 

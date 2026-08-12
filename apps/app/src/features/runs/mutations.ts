@@ -33,6 +33,7 @@ export async function enqueueChatTurn(input: {
   modelId?: string;
   webSearch?: boolean;
   urls?: string[];
+  knowledgeBaseIds?: string[];
 }): Promise<QueuedChatTurn> {
   configureBrowserApiClients();
   const { chatId, ...body } = input;

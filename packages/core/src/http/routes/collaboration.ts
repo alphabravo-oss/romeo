@@ -13,16 +13,23 @@ import {
   listFolderSharesRoute,
   listFoldersRoute,
   listKnowledgeBaseSharesRoute,
+  listModelSharesRoute,
   listManagedModelGalleryRoute,
   listManagedModelGrantsRoute,
   listShareTargetsRoute,
+  listWorkspaceMembersRoute,
   revokeChatShareRoute,
+  revokeKnowledgeBaseShareRoute,
   revokeManagedModelGrantRoute,
+  revokeModelShareRoute,
+  revokeWorkspaceMemberRoute,
   shareChatRoute,
   shareFileRoute,
   shareFolderRoute,
   shareKnowledgeBaseRoute,
   shareManagedModelRoute,
+  shareModelRoute,
+  shareWorkspaceRoute,
   updateFolderRoute,
 } from "@romeo/contracts";
 
@@ -86,6 +93,76 @@ export function registerCollaborationRoutes(app: RomeoApi): void {
         share: context.req.valid("json"),
       });
     return context.json({ data }, 201);
+  });
+
+  app.openapi(revokeKnowledgeBaseShareRoute, async (context) => {
+    const { knowledgeBaseId, grantId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.revokeKnowledgeBaseGrant({
+        subject: context.get("subject"),
+        knowledgeBaseId,
+        grantId,
+      });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listModelSharesRoute, async (context) => {
+    const { modelId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.listModelShares(context.get("subject"), modelId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(shareModelRoute, async (context) => {
+    const { modelId } = context.req.valid("param");
+    const data = await context.get("services").collaboration.shareModel({
+      subject: context.get("subject"),
+      modelId,
+      share: context.req.valid("json"),
+    });
+    return context.json({ data }, 201);
+  });
+
+  app.openapi(revokeModelShareRoute, async (context) => {
+    const { modelId, grantId } = context.req.valid("param");
+    const data = await context.get("services").collaboration.revokeModelGrant({
+      subject: context.get("subject"),
+      modelId,
+      grantId,
+    });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listWorkspaceMembersRoute, async (context) => {
+    const { workspaceId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.listWorkspaceMembers(context.get("subject"), workspaceId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(shareWorkspaceRoute, async (context) => {
+    const { workspaceId } = context.req.valid("param");
+    const data = await context.get("services").collaboration.shareWorkspace({
+      subject: context.get("subject"),
+      workspaceId,
+      share: context.req.valid("json"),
+    });
+    return context.json({ data }, 201);
+  });
+
+  app.openapi(revokeWorkspaceMemberRoute, async (context) => {
+    const { workspaceId, grantId } = context.req.valid("param");
+    const data = await context
+      .get("services")
+      .collaboration.revokeWorkspaceMember({
+        subject: context.get("subject"),
+        workspaceId,
+        grantId,
+      });
+    return context.json({ data }, 200);
   });
 
   app.openapi(listChatSharesRoute, async (context) => {

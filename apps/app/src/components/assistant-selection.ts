@@ -43,44 +43,46 @@ export function resolveActiveAssistant(input: {
 }
 
 /**
- * Who the chat surface says is answering, split by tense because the two
- * questions stop agreeing the moment assistants are off.
+ * Product identity: provider → base model → custom model.
  *
- * `nextTurn` heads a chat with no transcript yet: it names who will answer the
- * message being composed. That has not happened, so the current selection is
- * exactly right.
- *
- * `transcript` heads each assistant row that is already on screen. With
- * assistants off it is undefined, because which model produced a given row is
- * not knowable from here: a Message carries no model, agent or run id, and the
- * composer's picker can move between turns. Naming the current selection would
- * relabel the whole history every time it moves, and no heading beats a wrong
- * one.
- *
- * Undefined generally means "say nothing" rather than "say something generic":
- * printing a product name over a base model's answer is the lie this setting
- * exists to stop.
+ * A custom model is the selected model (a tweaked base), not a persona sitting
+ * on top of it. `nextTurn` labels the empty chat / picker with that name.
+ * `transcript` is the same custom name for rows already on screen when it
+ * differs from the base model's display name.
  */
 export function resolveChatAuthorNames(input: {
+  /** Custom model (managed) name, if one is selected. */
   agentName: string | undefined;
-  /** Undefined until the chat-experience setting has loaded. */
+  /** Kept for call-site compatibility; dual mode is retired. */
   assistantsEnabled: boolean | undefined;
-  /** Stands in for an assistant that has not resolved yet. */
   fallbackName: string;
+  /** Base model display name for the next turn. */
   modelDisplayName: string | undefined;
 }): { nextTurn: string | undefined; transcript: string | undefined } {
-  // Not known yet, so claim nothing. Guessing costs a visible relabel a moment
-  // later, and in an assistants-on workspace the guess is wrong in the worst
-  // direction: a model's name over an answer a persona is about to write.
-  if (input.assistantsEnabled === undefined)
-    return { nextTurn: undefined, transcript: undefined };
-  if (input.assistantsEnabled) {
-    const name = input.agentName ?? input.fallbackName;
-    return { nextTurn: name, transcript: name };
-  }
   const model = input.modelDisplayName?.trim() ?? "";
-  return {
-    nextTurn: model.length === 0 ? undefined : model,
-    transcript: undefined,
-  };
+  const customRaw = input.agentName?.trim() ?? "";
+  // Suppress product defaults like "Romeo Assistant" — they are not identity.
+  const generic =
+    customRaw.length === 0 ||
+    ["romeo assistant", "custom model", "assistant", "default"].includes(
+      customRaw.toLowerCase(),
+    );
+  const custom = generic ? "" : customRaw;
+
+  // A custom model is the selected model. Do not treat it as a separate
+  // assistant identity sitting on top of the base model.
+  if (custom.length > 0) {
+    return {
+      nextTurn: custom,
+      transcript: custom === model ? undefined : custom,
+    };
+  }
+  if (model.length > 0) {
+    return { nextTurn: model, transcript: undefined };
+  }
+  // No model/custom model resolved yet — stay quiet rather than invent a brand.
+  if (input.assistantsEnabled === undefined) {
+    return { nextTurn: undefined, transcript: undefined };
+  }
+  return { nextTurn: undefined, transcript: undefined };
 }

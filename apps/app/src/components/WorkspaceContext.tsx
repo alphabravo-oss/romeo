@@ -19,6 +19,11 @@ import {
 import type { Workspace } from "../features/tenancy";
 import { chatSyncFallbackInterval } from "../lib/chat-sync";
 import { useOnlineStatus } from "../lib/connectivity";
+import {
+  canSelectWorkspace,
+  resolveWorkspaceSelection,
+  visibleWorkspaces,
+} from "./workspace-selection";
 
 const STORAGE_KEY = "hm.workspaceId";
 
@@ -79,10 +84,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   });
 
   const workspaces = useMemo<Workspace[]>(
-    () => bootstrapQuery.data?.workspaces ?? [],
-    [bootstrapQuery.data?.workspaces],
+    () =>
+      visibleWorkspaces(
+        bootstrapQuery.data?.workspaces ?? [],
+        bootstrapQuery.data?.subject.workspaceIds,
+      ),
+    [
+      bootstrapQuery.data?.subject.workspaceIds,
+      bootstrapQuery.data?.workspaces,
+    ],
   );
-  const allowedIds = bootstrapQuery.data?.subject.workspaceIds;
 
   // Explicit user selection (from click or restored-and-validated storage).
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
@@ -92,30 +103,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   // Once bootstrap resolves, reconcile the selection: keep a still-valid
   // selection, otherwise adopt a validated persisted id, otherwise fall back
-  // to the first workspace. Validation guards against a stale/tampered
+  // to the first allowed workspace. Validation guards against a stale/tampered
   // localStorage id pointing at a workspace the subject can no longer access.
   useEffect(() => {
-    if (allowedIds === undefined) return;
-    const allowed = new Set(allowedIds);
-    const isAllowed = (id: string | undefined): id is string =>
-      id !== undefined &&
-      allowed.has(id) &&
-      workspaces.some((workspace) => workspace.id === id);
+    if (bootstrapQuery.data?.subject.workspaceIds === undefined) return;
+    const nextId = resolveWorkspaceSelection({
+      persistedId: readPersistedWorkspaceId(),
+      selectedId,
+      workspaces,
+    });
+    if (nextId === selectedId) return;
+    setSelectedId(nextId);
+  }, [bootstrapQuery.data?.subject.workspaceIds, selectedId, workspaces]);
 
-    if (isAllowed(selectedId)) return;
-
-    const persisted = readPersistedWorkspaceId();
-    if (isAllowed(persisted)) {
-      setSelectedId(persisted);
-      return;
-    }
-    setSelectedId(workspaces[0]?.id);
-  }, [allowedIds, workspaces, selectedId]);
-
-  const setWorkspaceId = useCallback((id: string) => {
-    setSelectedId(id);
-    persistWorkspaceId(id);
-  }, []);
+  const setWorkspaceId = useCallback(
+    (id: string) => {
+      if (!canSelectWorkspace(id, workspaces)) return;
+      setSelectedId(id);
+      persistWorkspaceId(id);
+    },
+    [workspaces],
+  );
 
   const workspaceId = selectedId;
   const workspace = useMemo(

@@ -9,7 +9,7 @@ export function hasWorkspaceAccess(
 
 export function hasGrant(
   subject: AuthSubject,
-  grants: ResourceGrant[],
+  grants: readonly ResourceGrant[],
   resourceType: ResourceType,
   resourceId: string,
   permission: ResourceGrant["permission"],

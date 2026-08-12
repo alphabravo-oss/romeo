@@ -340,6 +340,7 @@ export function registerAgentRoutes(app: RomeoApi): void {
 function compactSafetySettings(input: {
   maxUserInputLength?: number | undefined;
   blockedTerms?: string[] | undefined;
+  knowledgeGroundingMode?: "optional" | "prefer" | "required" | undefined;
   promptInjectionGuard?:
     | {
         mode: "disabled" | "block";
@@ -353,6 +354,13 @@ function compactSafetySettings(input: {
     settings.maxUserInputLength = input.maxUserInputLength;
   if (input.blockedTerms !== undefined)
     settings.blockedTerms = input.blockedTerms;
+  if (
+    input.knowledgeGroundingMode === "optional" ||
+    input.knowledgeGroundingMode === "prefer" ||
+    input.knowledgeGroundingMode === "required"
+  ) {
+    settings.knowledgeGroundingMode = input.knowledgeGroundingMode;
+  }
   if (
     input.promptInjectionGuard !== undefined &&
     input.promptInjectionGuard.mode === "block"

@@ -3,7 +3,9 @@ import type {
   RagPolicyExternalVectorStore,
   RagPolicyKnowledgeBaseTierAssignments,
   RagPolicyPhysicalVectorIsolation,
+  RagPolicyAgenticSettings,
   RagPolicyProviderModel,
+  RagPolicyRetrievalSettings,
   RagPolicyTier,
 } from "../domain/rag-policy";
 
@@ -21,6 +23,18 @@ export const defaultMaxBudget: RagPolicyBudgetMap = {
   shared: 20,
 };
 
+export const defaultRetrievalSettings: RagPolicyRetrievalSettings = {
+  topK: 5,
+  similarityThreshold: 0.35,
+  hybridSearch: true,
+  hybridBm25Weight: 0.35,
+};
+
+export const defaultAgenticSettings: RagPolicyAgenticSettings = {
+  enabled: false,
+  userMode: "optional",
+};
+
 export interface StoredRagPolicy {
   version: 1;
   orgId: string;
@@ -28,6 +42,8 @@ export interface StoredRagPolicy {
   defaultMaxResultsPerTier: RagPolicyBudgetMap;
   maxResultsPerTier: RagPolicyBudgetMap;
   allowedEmbeddingProviderModels: RagPolicyProviderModel[];
+  retrieval: RagPolicyRetrievalSettings;
+  agentic: RagPolicyAgenticSettings;
   knowledgeBaseTierAssignments: RagPolicyKnowledgeBaseTierAssignments;
   dataResidencyTags: string[];
   externalVectorStore: StoredExternalVectorStorePolicy;

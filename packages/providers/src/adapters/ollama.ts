@@ -61,7 +61,7 @@ export const ollamaAdapter: ModelProviderAdapter = {
       providerId: provider.id,
       name: model.name,
       displayName: `Ollama ${model.name}`,
-      enabled: !model.embeddingOnly,
+      enabled: false,
       capabilities: model.embeddingOnly
         ? {
             ...model.capabilities,

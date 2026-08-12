@@ -29,12 +29,13 @@ import type {
 export async function shareKnowledgeBase(input: {
   knowledgeBaseId: string;
   principalId: string;
+  principalType?: ShareTarget["principalType"];
 }): Promise<CollaborationResourceGrant[]> {
   configureBrowserApiClients();
   const response = await collaborationShareKnowledgeBase({
     path: { knowledgeBaseId: input.knowledgeBaseId },
     body: {
-      principalType: "group",
+      principalType: input.principalType ?? "group",
       principalId: input.principalId,
       permissions: ["read", "use"],
     },
@@ -46,10 +47,12 @@ export async function shareKnowledgeBase(input: {
 export async function shareChat(input: {
   chatId: string;
   principalId: string;
+  principalType?: ShareTarget["principalType"];
 }): Promise<CollaborationResourceGrant[]> {
   return shareChatAccess({
-    ...input,
-    principalType: "group",
+    chatId: input.chatId,
+    principalId: input.principalId,
+    principalType: input.principalType ?? "group",
     permissions: ["read", "write"],
   });
 }
@@ -157,12 +160,13 @@ export async function deleteFolder(folderId: string): Promise<WorkspaceFolder> {
 export async function shareFolder(input: {
   folderId: string;
   principalId: string;
+  principalType?: ShareTarget["principalType"];
 }): Promise<CollaborationResourceGrant[]> {
   configureBrowserApiClients();
   const response = await collaborationShareFolder({
     path: { folderId: input.folderId },
     body: {
-      principalType: "group",
+      principalType: input.principalType ?? "group",
       principalId: input.principalId,
       permissions: ["read"],
     },

@@ -12,6 +12,17 @@ import { EnvironmentSecretResolver } from "./services/secret-resolver";
 import { qdrantSdkClientFactoryFromFetch } from "./test-support/qdrant-sdk-client.test-helper";
 
 describe("Romeo knowledge ingestion", () => {
+  it("reports ingest as blocked until an embedding model is configured", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const response = await api.request("/api/v1/knowledge/ingest-readiness");
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.data).toEqual({
+      ready: false,
+      reason: "embedding_unset",
+    });
+  });
+
   it("indexes inline text sources and returns cited retrieval hits", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
     const content =
@@ -782,6 +793,14 @@ describe("Romeo knowledge ingestion", () => {
       hashedToken: await hashApiKey(token),
       scopes: ["knowledge:query"],
       createdAt: now,
+    });
+    await repository.createResourceGrant({
+      id: "grant_ws_rag_denied",
+      resourceType: "workspace",
+      resourceId: "workspace_default",
+      principalType: "user",
+      principalId: "user_rag_denied",
+      permission: "read",
     });
     await repository.createKnowledgeBase({
       id: "kb_denied_secret",

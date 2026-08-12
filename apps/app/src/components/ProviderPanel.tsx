@@ -15,9 +15,9 @@ import type {
 } from "../features/providers/types";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { AddButton, Section, StatRow } from "./console";
 import { ConnectionDialog } from "./ProviderConnectionDialog";
 import { DataTable, createColumnHelper, type ColumnDef } from "./DataTable";
-import { PanelStats } from "./PanelStats";
 import { ProviderCatalogStatus } from "./ProviderCatalogStatus";
 import { ProviderDetailsPage } from "./ProviderDetailsSheet";
 import { useConfirm } from "./ConfirmDialog";
@@ -399,42 +399,38 @@ export function ProviderPanel({
   }
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div>
-          <div className="rm-card-title">{t("providerCredentials")}</div>
-          <p className="text-sm text-muted">{t("connectionsDescription")}</p>
-        </div>
-        <Button onClick={() => setDialog("new")} variant="primary">
-          + {t("addProvider")}
-        </Button>
-      </div>
+    <Section
+      actions={
+        <AddButton onClick={() => setDialog("new")}>
+          {t("addProvider")}
+        </AddButton>
+      }
+      description={t("connectionsDescription")}
+      title={t("providerCredentials")}
+    >
+      <StatRow
+        items={[
+          { label: t("connections"), value: providers.length },
+          { label: t("availability"), value: availableProviders },
+          {
+            label: t("operationalAlerts"),
+            value: operationalSummary?.alerts.length ?? 0,
+          },
+        ]}
+      />
 
-      <div className="mt-4 grid gap-4">
-        <PanelStats
-          items={[
-            { label: t("connections"), value: providers.length },
-            { label: t("availability"), value: availableProviders },
-            {
-              label: t("operationalAlerts"),
-              value: operationalSummary?.alerts.length ?? 0,
-            },
-          ]}
+      {providers.length === 0 ? (
+        <EmptyState title={t("connectEndpoint")}>
+          {t("connectionsDescription")}
+        </EmptyState>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={rows}
+          getRowId={(row) => row.provider.id}
+          minTableWidth={960}
         />
-
-        {providers.length === 0 ? (
-          <EmptyState title={t("connectEndpoint")}>
-            {t("connectionsDescription")}
-          </EmptyState>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={rows}
-            getRowId={(row) => row.provider.id}
-            minTableWidth={960}
-          />
-        )}
-      </div>
+      )}
 
       {dialog ? (
         <ConnectionDialog
@@ -465,6 +461,6 @@ export function ProviderPanel({
       ) : null}
       {confirmDialog}
       {dependencyImpactDialog}
-    </section>
+    </Section>
   );
 }

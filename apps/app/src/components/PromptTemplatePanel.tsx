@@ -18,10 +18,10 @@ import type {
 import { PanelState } from "../lib/panel-state";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
-import { PanelStats } from "./PanelStats";
 import { PromptTemplateEditDialog } from "./PromptTemplateEditDialog";
 import { parsePromptTemplateTags } from "./prompt-template-fields";
 import {
@@ -180,190 +180,189 @@ export function PromptTemplatePanel() {
   }
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("promptTemplates")}</div>
-        {(templatesQuery.data?.length ?? 0) > 0 ? (
-          <Button
-            variant="primary"
-            onClick={() => setAddOpen(true)}
-            type="button"
-          >
-            + {t("promptAddTemplate")}
-          </Button>
-        ) : null}
-      </div>
-      <FormDialog
-        open={addOpen}
-        title={t("promptNewTemplate")}
-        onClose={() => setAddOpen(false)}
+    <>
+      {/* No title: the page header already reads "Prompt templates", and a
+          section repeating it produced two competing headings. */}
+      <Section
+        actions={
+          (templatesQuery.data?.length ?? 0) > 0 ? (
+            <AddButton onClick={() => setAddOpen(true)}>
+              {t("promptAddTemplate")}
+            </AddButton>
+          ) : null
+        }
       >
-        <form
-          className="mt-3 grid gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void form.handleSubmit();
-          }}
+        <FormDialog
+          open={addOpen}
+          title={t("promptNewTemplate")}
+          onClose={() => setAddOpen(false)}
         >
-          <form.Field
-            name="name"
-            validators={{
-              onChange: ({ value }: { value: string }) =>
-                !value?.trim() ? t("promptNameRequired") : undefined,
+          <form
+            className="mt-3 grid gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void form.handleSubmit();
             }}
           >
-            {(field) => (
-              <>
-                <Input
-                  name="name"
-                  aria-label={t("promptTemplateName")}
-                  onBlur={field.handleBlur}
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value)
-                  }
-                  placeholder={t("promptTemplateName")}
-                  value={field.state.value}
-                />
-                {field.state.meta.errors.length ? (
-                  <div className="rm-composer-error">
-                    {field.state.meta.errors.join(", ")}
-                  </div>
-                ) : null}
-              </>
-            )}
-          </form.Field>
-          <form.Field name="description">
-            {(field) => (
-              <Field label={t("promptDescription")}>
-                <Textarea
-                  name="description"
-                  maxLength={500}
-                  onBlur={field.handleBlur}
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value)
-                  }
-                  rows={2}
-                  value={field.state.value}
-                />
-              </Field>
-            )}
-          </form.Field>
-          <form.Field name="tags">
-            {(field) => (
-              <Field description={t("promptTagsHelp")} label={t("promptTags")}>
-                <Input
-                  name="tags"
-                  onBlur={field.handleBlur}
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value)
-                  }
-                  value={field.state.value}
-                />
-              </Field>
-            )}
-          </form.Field>
-          <form.Field
-            name="body"
-            validators={{
-              onChange: ({ value }: { value: string }) =>
-                !value?.trim() ? t("promptBodyRequired") : undefined,
-            }}
-          >
-            {(field) => (
-              <>
-                <Textarea
-                  name="body"
-                  aria-label={t("promptTemplateBody")}
-                  onBlur={field.handleBlur}
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value)
-                  }
-                  placeholder={t("promptTemplateBody")}
-                  rows={4}
-                  value={field.state.value}
-                />
-                {field.state.meta.errors.length ? (
-                  <div className="rm-composer-error">
-                    {field.state.meta.errors.join(", ")}
-                  </div>
-                ) : null}
-              </>
-            )}
-          </form.Field>
-          <form.Field name="visibility">
-            {(field) => (
-              <Field label={t("promptVisibility")}>
-                <NativeSelect
-                  name="visibility"
-                  onBlur={field.handleBlur}
-                  onChange={(event) =>
-                    field.handleChange(
-                      event.currentTarget.value as PromptTemplateVisibility,
-                    )
-                  }
-                  value={field.state.value}
+            <form.Field
+              name="name"
+              validators={{
+                onChange: ({ value }: { value: string }) =>
+                  !value?.trim() ? t("promptNameRequired") : undefined,
+              }}
+            >
+              {(field) => (
+                <>
+                  <Input
+                    name="name"
+                    aria-label={t("promptTemplateName")}
+                    onBlur={field.handleBlur}
+                    onChange={(event) =>
+                      field.handleChange(event.currentTarget.value)
+                    }
+                    placeholder={t("promptTemplateName")}
+                    value={field.state.value}
+                  />
+                  {field.state.meta.errors.length ? (
+                    <div className="rm-composer-error">
+                      {field.state.meta.errors.join(", ")}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </form.Field>
+            <form.Field name="description">
+              {(field) => (
+                <Field label={t("promptDescription")}>
+                  <Textarea
+                    name="description"
+                    maxLength={500}
+                    onBlur={field.handleBlur}
+                    onChange={(event) =>
+                      field.handleChange(event.currentTarget.value)
+                    }
+                    rows={2}
+                    value={field.state.value}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            <form.Field name="tags">
+              {(field) => (
+                <Field
+                  description={t("promptTagsHelp")}
+                  label={t("promptTags")}
                 >
-                  {promptTemplateVisibilities.map((option) => (
-                    <option key={option} value={option}>
-                      {t(promptTemplateVisibilityKey(option))}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </Field>
-            )}
-          </form.Field>
-          <form.Subscribe
-            selector={(state) => ({
-              canSubmit: state.canSubmit,
-              isSubmitting: state.isSubmitting,
-            })}
-          >
-            {({ canSubmit, isSubmitting }) => (
-              <Button disabled={!canSubmit || isSubmitting} type="submit">
-                {isSubmitting ? t("promptCreating") : t("promptCreateTemplate")}
-              </Button>
-            )}
-          </form.Subscribe>
-        </form>
-      </FormDialog>
-      {editing !== null && workspaceId !== undefined ? (
-        <PromptTemplateEditDialog
-          key={editing.id}
-          template={editing}
-          onClose={() => setEditing(null)}
-          onSaved={async () => {
-            await Promise.all([
-              queryClient.invalidateQueries({
-                queryKey: ["promptTemplates", workspaceId],
-              }),
-              queryClient.invalidateQueries({
-                queryKey: ["promptMarketplace", workspaceId],
-              }),
-            ]);
-            setEditing(null);
-          }}
-        />
-      ) : null}
-      <div className="mt-4">
+                  <Input
+                    name="tags"
+                    onBlur={field.handleBlur}
+                    onChange={(event) =>
+                      field.handleChange(event.currentTarget.value)
+                    }
+                    value={field.state.value}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            <form.Field
+              name="body"
+              validators={{
+                onChange: ({ value }: { value: string }) =>
+                  !value?.trim() ? t("promptBodyRequired") : undefined,
+              }}
+            >
+              {(field) => (
+                <>
+                  <Textarea
+                    name="body"
+                    aria-label={t("promptTemplateBody")}
+                    onBlur={field.handleBlur}
+                    onChange={(event) =>
+                      field.handleChange(event.currentTarget.value)
+                    }
+                    placeholder={t("promptTemplateBody")}
+                    rows={4}
+                    value={field.state.value}
+                  />
+                  {field.state.meta.errors.length ? (
+                    <div className="rm-composer-error">
+                      {field.state.meta.errors.join(", ")}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </form.Field>
+            <form.Field name="visibility">
+              {(field) => (
+                <Field label={t("promptVisibility")}>
+                  <NativeSelect
+                    name="visibility"
+                    onBlur={field.handleBlur}
+                    onChange={(event) =>
+                      field.handleChange(
+                        event.currentTarget.value as PromptTemplateVisibility,
+                      )
+                    }
+                    value={field.state.value}
+                  >
+                    {promptTemplateVisibilities.map((option) => (
+                      <option key={option} value={option}>
+                        {t(promptTemplateVisibilityKey(option))}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              )}
+            </form.Field>
+            <form.Subscribe
+              selector={(state) => ({
+                canSubmit: state.canSubmit,
+                isSubmitting: state.isSubmitting,
+              })}
+            >
+              {({ canSubmit, isSubmitting }) => (
+                <Button disabled={!canSubmit || isSubmitting} type="submit">
+                  {isSubmitting
+                    ? t("promptCreating")
+                    : t("promptCreateTemplate")}
+                </Button>
+              )}
+            </form.Subscribe>
+          </form>
+        </FormDialog>
+        {editing !== null && workspaceId !== undefined ? (
+          <PromptTemplateEditDialog
+            key={editing.id}
+            template={editing}
+            onClose={() => setEditing(null)}
+            onSaved={async () => {
+              await Promise.all([
+                queryClient.invalidateQueries({
+                  queryKey: ["promptTemplates", workspaceId],
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: ["promptMarketplace", workspaceId],
+                }),
+              ]);
+              setEditing(null);
+            }}
+          />
+        ) : null}
         <PanelState
           query={templatesQuery}
           empty={t("promptNoTemplates")}
           emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setAddOpen(true)}
-              type="button"
-            >
-              + {t("promptAddTemplate")}
-            </Button>
+            <AddButton onClick={() => setAddOpen(true)}>
+              {t("promptAddTemplate")}
+            </AddButton>
           }
           emptyDescription={t("promptNoTemplatesDescription")}
           emptyIcon={<FileText aria-hidden size={24} />}
         >
           {(rows) => (
-            <div className="grid gap-4">
-              <PanelStats
+            <>
+              <StatRow
                 items={[
                   { label: t("promptTotalTemplates"), value: rows.length },
                   {
@@ -375,22 +374,27 @@ export function PromptTemplatePanel() {
                 ]}
               />
               <DataTable columns={columns} data={rows} />
-            </div>
+            </>
           )}
         </PanelState>
-      </div>
-      <div className="rm-card-title mt-6">{t("promptMarketplace")}</div>
-      <div className="mt-3">
+        {dialog}
+      </Section>
+
+      {/* Marketplace is a peer group, not a stray heading inside the one above.
+          As its own section it gets the divider and rhythm every other group
+          on the page gets. */}
+      <Section
+        description={t("promptNoMarketplaceTemplatesDescription")}
+        title={t("promptMarketplace")}
+      >
         <PanelState
           query={marketplaceQuery}
           empty={t("promptNoMarketplaceTemplates")}
-          emptyDescription={t("promptNoMarketplaceTemplatesDescription")}
           emptyIcon={<FileText aria-hidden size={24} />}
         >
           {(rows) => <DataTable columns={marketplaceColumns} data={rows} />}
         </PanelState>
-      </div>
-      {dialog}
-    </section>
+      </Section>
+    </>
   );
 }

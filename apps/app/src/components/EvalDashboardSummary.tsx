@@ -19,7 +19,7 @@ export function EvalDashboardSummary({
       />
     );
   return (
-    <div className="rounded-md border border-border p-3">
+    <div>
       <div className="rm-card-header">
         <div>
           <div className="font-medium">{t("evalDashboard")}</div>

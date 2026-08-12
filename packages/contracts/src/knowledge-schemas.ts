@@ -304,11 +304,20 @@ export const KnowledgeRetrievalReplayComparisonReportSchema = z
   })
   .openapi("KnowledgeRetrievalReplayComparisonReport");
 
+export const KnowledgeBaseScopeSchema = z
+  .enum(["user_private", "workspace", "org", "shared"])
+  .openapi("KnowledgeBaseScope");
+
 export const CreateKnowledgeBaseSchema = z
   .strictObject({
     workspaceId: knowledgeIdentifier,
     name: z.string().min(1),
     description: z.string().min(1).optional(),
+    /**
+     * Retrieval/governance scope. Defaults to workspace-visible collection.
+     * org/shared also assign the base in org RAG policy tier lists.
+     */
+    scope: KnowledgeBaseScopeSchema.optional(),
   })
   .openapi("CreateKnowledgeBaseRequest");
 export const UpdateKnowledgeBaseSchema = z

@@ -10,6 +10,7 @@ import type {
 } from "../features/managed-models/types";
 import type { BaseModel, Provider } from "../features/providers/types";
 import { useLocale } from "../lib/i18n";
+import { AdminDisclosure } from "./AdminDisclosure";
 import { AgentParameterControls } from "./AgentParameterControls";
 import {
   applyOptionalParameter,
@@ -169,6 +170,10 @@ export function AgentDraftForm({
           safetySettings: buildSafetySettings(
             parsedMaxUserInputLength.value,
             parsedBlockedTerms.value ?? [],
+            value.knowledgeGroundingMode === "prefer" ||
+              value.knowledgeGroundingMode === "required"
+              ? value.knowledgeGroundingMode
+              : "optional",
           ),
           promptSuggestions: parsedPromptSuggestions.value ?? [],
           tags: parsedTags.value ?? [],
@@ -288,16 +293,13 @@ export function AgentDraftForm({
         )}
       </form.Field>
       {selectedModel ? (
-        <div className="flex flex-wrap gap-2 text-xs text-muted">
+        <ul className="rm-meta-chips">
           {selectedModel.badges.map((badge) => (
-            <span
-              className="rounded-md border border-border px-2 py-1"
-              key={badge}
-            >
+            <li className="rm-meta-chip" key={badge}>
               {badge}
-            </span>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : null}
 
       <form.Field name="systemPrompt">
@@ -328,64 +330,80 @@ export function AgentDraftForm({
         ))}
       </div>
 
-      <form.Field name="tags">
-        {(field) => (
-          <Field label={t("agentTags")}>
-            <Input
-              disabled={!activeAgent || isSaving}
-              name="tags"
-              onBlur={field.handleBlur}
-              onChange={(event) =>
-                field.handleChange(event.currentTarget.value)
-              }
-              placeholder={t("agentTagsPlaceholder")}
-              value={field.state.value}
-            />
-          </Field>
-        )}
-      </form.Field>
-
-      <form.Field name="promptSuggestions">
-        {(field) => (
-          <Field label={t("agentStarterPrompts")}>
-            <Textarea
-              disabled={!activeAgent || isSaving}
-              name="promptSuggestions"
-              onBlur={field.handleBlur}
-              onChange={(event) =>
-                field.handleChange(event.currentTarget.value)
-              }
-              placeholder={t("agentStarterPromptsPlaceholder")}
-              rows={4}
-              value={field.state.value}
-            />
-          </Field>
-        )}
-      </form.Field>
-
-      <form.Subscribe
-        selector={(state) => ({
-          temperature: state.values.temperature,
-          topP: state.values.topP,
-          maxOutputTokens: state.values.maxOutputTokens,
-        })}
+      {/* Everything above is the everyday path: who the model is, which base
+          model runs it, and what it is told to do. The groups below are tuned
+          once and revisited rarely, so they stay collapsed until asked for. */}
+      <AdminDisclosure
+        description={t("agentGroupDiscoveryHelp")}
+        title={t("agentGroupDiscovery")}
       >
-        {({ temperature, topP, maxOutputTokens }) => (
-          <AgentParameterControls
-            disabled={!activeAgent || isSaving}
-            maxOutputTokens={maxOutputTokens}
-            onMaxOutputTokensChange={(v) =>
-              form.setFieldValue("maxOutputTokens", v)
-            }
-            onTemperatureChange={(v) => form.setFieldValue("temperature", v)}
-            onTopPChange={(v) => form.setFieldValue("topP", v)}
-            temperature={temperature}
-            topP={topP}
-          />
-        )}
-      </form.Subscribe>
+        <form.Field name="tags">
+          {(field) => (
+            <Field label={t("agentTags")}>
+              <Input
+                disabled={!activeAgent || isSaving}
+                name="tags"
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
+                placeholder={t("agentTagsPlaceholder")}
+                value={field.state.value}
+              />
+            </Field>
+          )}
+        </form.Field>
 
-      <div className="grid gap-3 rounded-md border border-border p-3">
+        <form.Field name="promptSuggestions">
+          {(field) => (
+            <Field label={t("agentStarterPrompts")}>
+              <Textarea
+                disabled={!activeAgent || isSaving}
+                name="promptSuggestions"
+                onBlur={field.handleBlur}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
+                placeholder={t("agentStarterPromptsPlaceholder")}
+                rows={4}
+                value={field.state.value}
+              />
+            </Field>
+          )}
+        </form.Field>
+      </AdminDisclosure>
+
+      <AdminDisclosure
+        description={t("agentGroupGenerationHelp")}
+        title={t("agentGroupGeneration")}
+      >
+        <form.Subscribe
+          selector={(state) => ({
+            temperature: state.values.temperature,
+            topP: state.values.topP,
+            maxOutputTokens: state.values.maxOutputTokens,
+          })}
+        >
+          {({ temperature, topP, maxOutputTokens }) => (
+            <AgentParameterControls
+              disabled={!activeAgent || isSaving}
+              maxOutputTokens={maxOutputTokens}
+              onMaxOutputTokensChange={(v) =>
+                form.setFieldValue("maxOutputTokens", v)
+              }
+              onTemperatureChange={(v) => form.setFieldValue("temperature", v)}
+              onTopPChange={(v) => form.setFieldValue("topP", v)}
+              temperature={temperature}
+              topP={topP}
+            />
+          )}
+        </form.Subscribe>
+      </AdminDisclosure>
+
+      <AdminDisclosure
+        description={t("agentGroupGuardrailsHelp")}
+        title={t("agentGroupGuardrails")}
+      >
         <form.Field name="memoryMode">
           {(field) => (
             <Field label={t("agentConversationHistory")}>
@@ -459,7 +477,40 @@ export function AgentDraftForm({
             </Field>
           )}
         </form.Field>
-      </div>
+        <form.Field name="knowledgeGroundingMode">
+          {(field) => (
+            <Field
+              label={t("agentKnowledgeGrounding")}
+              description={t("agentKnowledgeGroundingHelp")}
+            >
+              <Select
+                disabled={!activeAgent || isSaving}
+                name="knowledgeGroundingMode"
+                onValueChange={(value) =>
+                  field.handleChange(
+                    value as "optional" | "prefer" | "required",
+                  )
+                }
+                options={[
+                  {
+                    label: t("agentKnowledgeOptional"),
+                    value: "optional",
+                  },
+                  {
+                    label: t("agentKnowledgePrefer"),
+                    value: "prefer",
+                  },
+                  {
+                    label: t("agentKnowledgeRequired"),
+                    value: "required",
+                  },
+                ]}
+                value={field.state.value}
+              />
+            </Field>
+          )}
+        </form.Field>
+      </AdminDisclosure>
 
       {showSubmit ? (
         <Button

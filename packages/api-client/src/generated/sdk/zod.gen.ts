@@ -832,6 +832,23 @@ export const zUsageSummaryMetric = z.object({
 });
 
 export const zAdminAnalyticsSummary = z.object({
+  attention: z.object({
+    models: z.array(
+      z.object({
+        displayName: z.string().min(1).max(300),
+        issues: z.array(
+          z.enum([
+            "invalid_context_window",
+            "missing_max_output",
+            "missing_pricing",
+            "unavailable",
+          ]),
+        ),
+        modelId: z.string().min(1).max(300),
+        providerId: z.string().min(1).max(300),
+      }),
+    ),
+  }),
   evals: z.object({
     agentCount: z.int().gte(0),
     agents: z.array(
@@ -934,6 +951,7 @@ export const zAdminAnalyticsSummary = z.object({
     totalCount: z.int().gte(0),
   }),
   usage: z.object({
+    activityEventCount: z.int().gte(0),
     byProvider: z.array(
       zUsageSummaryMetric.and(
         z.object({
@@ -943,7 +961,16 @@ export const zAdminAnalyticsSummary = z.object({
     ),
     eventCount: z.int().gte(0),
     estimatedCostUsd: z.number(),
+    runsCompleted: z.int().gte(0),
+    runsFailed: z.int().gte(0),
+    runsStarted: z.int().gte(0),
+    totalTokens: z.number().gte(0),
     totals: z.array(zUsageSummaryMetric),
+    unpricedTokenQuantity: z.number().gte(0),
+  }),
+  window: z.object({
+    from: z.iso.datetime().nullable(),
+    to: z.iso.datetime(),
   }),
 });
 
@@ -1926,11 +1953,21 @@ export const zHealthResponse = z.object({
 
 export const zInterfacePreferences = z.object({
   defaultAgentByWorkspace: z.record(z.string(), z.string()),
+  defaultModelByWorkspace: z.record(z.string(), z.string()),
+  lastModelByWorkspace: z.record(z.string(), z.string()),
   theme: z.enum(["system", "light", "dark"]),
   locale: z.enum(["en", "es", "fr"]),
   fontSize: z.enum(["small", "medium", "large"]),
   density: z.enum(["comfortable", "compact"]),
   reducedMotion: z.boolean(),
+  showFollowUps: z.boolean(),
+  showStarterPrompts: z.boolean(),
+  showContinueButton: z.boolean(),
+  enterToSend: z.boolean(),
+  stickToBottom: z.boolean(),
+  showRunStatus: z.boolean(),
+  showMessageModelLabel: z.boolean(),
+  showMessageTimestamps: z.boolean(),
 });
 
 export const zInterfacePreferencesResponse = z.object({
@@ -1939,11 +1976,21 @@ export const zInterfacePreferencesResponse = z.object({
 
 export const zUpdateInterfacePreferencesRequest = z.object({
   defaultAgentByWorkspace: z.record(z.string(), z.string()).optional(),
+  defaultModelByWorkspace: z.record(z.string(), z.string()).optional(),
+  lastModelByWorkspace: z.record(z.string(), z.string()).optional(),
   theme: z.enum(["system", "light", "dark"]).optional(),
   locale: z.enum(["en", "es", "fr"]).optional(),
   fontSize: z.enum(["small", "medium", "large"]).optional(),
   density: z.enum(["comfortable", "compact"]).optional(),
   reducedMotion: z.boolean().optional(),
+  showFollowUps: z.boolean().optional(),
+  showStarterPrompts: z.boolean().optional(),
+  showContinueButton: z.boolean().optional(),
+  enterToSend: z.boolean().optional(),
+  stickToBottom: z.boolean().optional(),
+  showRunStatus: z.boolean().optional(),
+  showMessageModelLabel: z.boolean().optional(),
+  showMessageTimestamps: z.boolean().optional(),
 });
 
 export const zAuthSubject = z.object({
@@ -3738,6 +3785,7 @@ export const zProviderCapabilities = z.object({
   audioInput: z.boolean(),
   structuredJson: z.boolean(),
   reasoning: z.boolean(),
+  temperature: z.boolean().optional(),
   imageGeneration: z.boolean().optional(),
   modalities: z.array(
     z.enum(["audio-input", "audio-output", "embeddings", "text", "vision"]),
@@ -4220,6 +4268,12 @@ export const zRagPolicyReport = z.object({
       model: z.string().min(1).max(200),
     }),
   ),
+  agentic: z
+    .object({
+      enabled: z.boolean(),
+      userMode: z.enum(["optional", "required"]),
+    })
+    .optional(),
   knowledgeBaseTierAssignments: z.object({
     org: z.array(z.string().min(1).max(120)).max(500),
     shared: z.array(z.string().min(1).max(120)).max(500),
@@ -4288,6 +4342,12 @@ export const zUpdateRagPolicyRequest = z.object({
       }),
     )
     .max(100)
+    .optional(),
+  agentic: z
+    .object({
+      enabled: z.boolean().optional(),
+      userMode: z.enum(["optional", "required"]).optional(),
+    })
     .optional(),
   knowledgeBaseTierAssignments: z
     .object({
@@ -4494,6 +4554,7 @@ export const zInspectRunContextRequest = z.object({
   imageCount: z.int().gte(0).lte(4).optional(),
   webSearch: z.boolean().optional(),
   urls: z.array(z.url()).max(5).optional(),
+  agenticRag: z.boolean().optional(),
 });
 
 export const zRunRecord = z.object({
@@ -4534,6 +4595,8 @@ export const zEnqueueChatTurnRequest = z.object({
   modelId: z.string().min(1).max(300).optional(),
   webSearch: z.boolean().optional(),
   urls: z.array(z.url()).max(5).optional(),
+  knowledgeBaseIds: z.array(z.string().min(1).max(300)).max(25).optional(),
+  agenticRag: z.boolean().optional(),
   idempotencyKey: z.string().min(1).max(200).optional(),
 });
 
@@ -4547,6 +4610,8 @@ export const zStartRunRequest = z.object({
   fileIds: z.array(z.string().min(1).max(160)).max(8).optional(),
   webSearch: z.boolean().optional(),
   urls: z.array(z.url()).max(5).optional(),
+  knowledgeBaseIds: z.array(z.string().min(1).max(300)).max(25).optional(),
+  agenticRag: z.boolean().optional(),
   attachments: z
     .array(
       z.object({

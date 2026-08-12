@@ -1,27 +1,34 @@
-import { Button, Field, Input, Select } from "@romeo/ui";
+import { Button, Field, Input, Select, StatusBadge } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   addFolderItem,
   createFolder,
   favoriteResource,
+  listChats,
   listFavorites,
   listFolderItems,
   listFolders,
   listKnowledgeBases,
+  listShareTargets,
   shareChat,
   shareFolder,
   shareKnowledgeBase,
+  type ShareTarget,
 } from "../features";
 import { listAgentGallery, shareAgent } from "../features/managed-models";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
 import type { Agent } from "../features/types";
+import { AddButton } from "./AddButton";
 import { resolveKnowledgeBaseBinding } from "./data-connector-binding";
+import { FormDialog } from "./FormDialog";
+import { ResourceRow } from "./ResourceRow";
+import { SettingsSection } from "./SettingsSection";
 
 export function CollaborationPanel({
   activeAgent,
@@ -34,9 +41,17 @@ export function CollaborationPanel({
 }) {
   const queryClient = useQueryClient();
   const { t } = useLocale();
-  const [principalId, setPrincipalId] = useState("group_reviewers");
+  const [targetKey, setTargetKey] = useState("");
   const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] =
     useState<string>();
+  const [selectedFolderId, setSelectedFolderId] = useState<string>();
+  const [selectedChatId, setSelectedChatId] = useState<string>();
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+
+  const targetsQuery = useQuery({
+    queryKey: ["shareTargets", "collaboration"],
+    queryFn: () => listShareTargets(),
+  });
   const galleryQuery = useQuery({
     queryKey: ["agentGallery", workspaceId],
     queryFn: () => listAgentGallery(workspaceId),
@@ -56,6 +71,12 @@ export function CollaborationPanel({
     queryFn: () => listFolders(workspaceId!),
     enabled: workspaceId !== undefined,
   });
+  const chatsQuery = useQuery({
+    queryKey: ["chats", workspaceId, "collaboration"],
+    queryFn: () => listChats(workspaceId!),
+    enabled: workspaceId !== undefined,
+  });
+
   const shareAgentMutation = useMutation({ mutationFn: shareAgent });
   const shareChatMutation = useMutation({ mutationFn: shareChat });
   const shareKnowledgeMutation = useMutation({
@@ -65,12 +86,26 @@ export function CollaborationPanel({
   const shareFolderMutation = useMutation({ mutationFn: shareFolder });
   const addFolderItemMutation = useMutation({ mutationFn: addFolderItem });
   const favoriteMutation = useMutation({ mutationFn: favoriteResource });
-  const activeFolder = foldersQuery.data?.[0];
+
+  const targets = targetsQuery.data ?? [];
+  const folders = foldersQuery.data ?? [];
+  const chats = chatsQuery.data ?? [];
+  const knowledgeBases = knowledgeBasesQuery.data ?? [];
+  const gallery = galleryQuery.data ?? [];
+
+  const selectedTarget = useMemo(
+    () => targets.find((target) => shareTargetKey(target) === targetKey),
+    [targetKey, targets],
+  );
+  const activeFolder =
+    folders.find((folder) => folder.id === selectedFolderId) ?? folders[0];
   const folderItemsQuery = useQuery({
     queryKey: ["folderItems", activeFolder?.id],
     queryFn: () => listFolderItems(activeFolder!.id),
     enabled: activeFolder !== undefined,
   });
+  const chatId = selectedChatId ?? activeChatId ?? chats[0]?.id;
+  const selectedChat = chats.find((chat) => chat.id === chatId);
   const activeAgentFavorite = (favoritesQuery.data ?? []).find(
     (favorite) =>
       favorite.resourceType === "agent" &&
@@ -78,11 +113,12 @@ export function CollaborationPanel({
   );
 
   async function handleShareAgent() {
-    if (!activeAgent) return;
+    if (!activeAgent || selectedTarget === undefined) return;
     try {
       await shareAgentMutation.mutateAsync({
         agentId: activeAgent.id,
-        principalId,
+        principalId: selectedTarget.principalId,
+        principalType: selectedTarget.principalType,
       });
       await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
       toast(t("workspaceShared"), "success");
@@ -94,13 +130,14 @@ export function CollaborationPanel({
   async function handleShareKnowledgeBase() {
     const binding = resolveKnowledgeBaseBinding({
       selectedKnowledgeBaseId,
-      availableIds: (knowledgeBasesQuery.data ?? []).map((base) => base.id),
+      availableIds: knowledgeBases.map((base) => base.id),
     });
-    if (!binding.ok) return;
+    if (!binding.ok || selectedTarget === undefined) return;
     try {
       await shareKnowledgeMutation.mutateAsync({
         knowledgeBaseId: binding.knowledgeBaseId,
-        principalId,
+        principalId: selectedTarget.principalId,
+        principalType: selectedTarget.principalType,
       });
       await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
       toast(t("workspaceShared"), "success");
@@ -110,11 +147,12 @@ export function CollaborationPanel({
   }
 
   async function handleShareChat() {
-    if (!activeChatId) return;
+    if (chatId === undefined || selectedTarget === undefined) return;
     try {
       await shareChatMutation.mutateAsync({
-        chatId: activeChatId,
-        principalId,
+        chatId,
+        principalId: selectedTarget.principalId,
+        principalType: selectedTarget.principalType,
       });
       await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
       toast(t("workspaceShared"), "success");
@@ -143,11 +181,12 @@ export function CollaborationPanel({
   }
 
   async function handleShareFolder() {
-    if (!activeFolder) return;
+    if (!activeFolder || selectedTarget === undefined) return;
     try {
       await shareFolderMutation.mutateAsync({
         folderId: activeFolder.id,
-        principalId,
+        principalId: selectedTarget.principalId,
+        principalType: selectedTarget.principalType,
       });
       await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
       toast(t("workspaceShared"), "success");
@@ -184,13 +223,16 @@ export function CollaborationPanel({
     onSubmit: async ({ value }) => {
       if (!workspaceId) return;
       try {
-        await createFolderMutation.mutateAsync({
+        const folder = await createFolderMutation.mutateAsync({
           workspaceId,
           name: value.name.trim(),
         });
         await queryClient.invalidateQueries({
           queryKey: ["folders", workspaceId],
         });
+        setSelectedFolderId(folder.id);
+        setFolderDialogOpen(false);
+        folderForm.reset();
         toast(t("workspaceFolderCreated"), "success");
       } catch {
         toast(t("workspaceCouldNotCreateFolder"), "error");
@@ -198,97 +240,280 @@ export function CollaborationPanel({
     },
   });
 
+  const canShare = selectedTarget !== undefined;
+  const selectedKnowledgeBase = knowledgeBases.find(
+    (base) => base.id === selectedKnowledgeBaseId,
+  );
+
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-title">{t("workspaceCollaboration")}</div>
-      <div className="grid gap-2 text-sm">
-        <Input
-          aria-label={t("workspaceSharePrincipal")}
-          onChange={(event) => setPrincipalId(event.currentTarget.value)}
-          value={principalId}
-        />
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Button
-            disabled={!activeAgent || shareAgentMutation.isPending}
-            onClick={() => void handleShareAgent()}
-            type="button"
-          >
-            {t("workspaceShareAgent")}
-          </Button>
-          <Button
-            disabled={!activeChatId || shareChatMutation.isPending}
-            onClick={() => void handleShareChat()}
-            type="button"
-          >
-            {t("workspaceShareChat")}
-          </Button>
-        </div>
-        <PanelState
-          empty={t("dataConnectorNeedsKb")}
-          emptyAction={
-            <Button asChild variant="primary">
-              <Link search={{ section: "knowledge" }} to="/workspace">
-                {t("knowledgeAddBase")}
-              </Link>
-            </Button>
-          }
-          query={knowledgeBasesQuery}
-        >
-          {(knowledgeBases) => (
-            <div className="grid gap-2">
-              <Field label={t("knowledgeBase")} required>
-                <Select
-                  onValueChange={setSelectedKnowledgeBaseId}
-                  options={knowledgeBases.map((base) => ({
-                    label: base.name,
-                    value: base.id,
-                  }))}
-                  placeholder={t("knowledgeBase")}
-                  {...(selectedKnowledgeBaseId === undefined
-                    ? {}
-                    : { value: selectedKnowledgeBaseId })}
-                />
-              </Field>
+    <div className="rm-console-page">
+      <SettingsSection
+        description={t("workspaceShareSectionHelp")}
+        title={t("workspaceShareSection")}
+      >
+        <Field label={t("personOrGroup")}>
+          <Select
+            onValueChange={setTargetKey}
+            options={targets.map((target) => ({
+              label: `${target.label} (${target.principalType})`,
+              value: shareTargetKey(target),
+            }))}
+            placeholder={t("selectShareTarget")}
+            {...(targetKey === "" ? {} : { value: targetKey })}
+          />
+        </Field>
+        {!targetsQuery.isPending && targets.length === 0 ? (
+          <p className="rm-list-empty">{t("workspaceShareNoTargets")}</p>
+        ) : null}
+
+        <div className="rm-resource-list">
+          <ResourceRow
+            actions={
               <Button
                 disabled={
-                  selectedKnowledgeBaseId === undefined ||
-                  shareKnowledgeMutation.isPending
+                  !activeAgent || !canShare || shareAgentMutation.isPending
                 }
-                onClick={() => void handleShareKnowledgeBase()}
+                onClick={() => void handleShareAgent()}
+                size="sm"
                 type="button"
               >
-                {t("workspaceShareKnowledge")}
+                {t("workspaceShare")}
               </Button>
+            }
+            disabled={!activeAgent}
+            meta={
+              activeAgent
+                ? t("workspaceShareSelectedModel")
+                : t("workspaceShareSelectModel")
+            }
+            title={activeAgent?.name ?? t("workspaceAgent")}
+          />
+          <ResourceRow
+            actions={
+              <Button
+                disabled={
+                  chatId === undefined ||
+                  !canShare ||
+                  shareChatMutation.isPending
+                }
+                onClick={() => void handleShareChat()}
+                size="sm"
+                type="button"
+              >
+                {t("workspaceShare")}
+              </Button>
+            }
+            disabled={chats.length === 0}
+            meta={
+              chats.length === 0
+                ? t("workspaceShareNoChats")
+                : t("workspaceShareRecentChat")
+            }
+            title={selectedChat?.title ?? t("workspaceShareChat")}
+          />
+          {chats.length > 1 ? (
+            <Field label={t("workspaceRecentChats")}>
+              <Select
+                onValueChange={setSelectedChatId}
+                options={chats.slice(0, 12).map((chat) => ({
+                  label: chat.title,
+                  value: chat.id,
+                }))}
+                {...(chatId === undefined ? {} : { value: chatId })}
+              />
+            </Field>
+          ) : null}
+          <PanelState
+            empty={t("dataConnectorNeedsKb")}
+            emptyAction={
+              <Button asChild variant="primary">
+                <Link search={{ section: "knowledge" }} to="/workspace">
+                  {t("knowledgeAddBase")}
+                </Link>
+              </Button>
+            }
+            query={knowledgeBasesQuery}
+          >
+            {(bases) => (
+              <>
+                <Field label={t("knowledgeBase")}>
+                  <Select
+                    onValueChange={setSelectedKnowledgeBaseId}
+                    options={bases.map((base) => ({
+                      label: base.name,
+                      value: base.id,
+                    }))}
+                    placeholder={t("knowledgeBase")}
+                    {...(selectedKnowledgeBaseId === undefined
+                      ? {}
+                      : { value: selectedKnowledgeBaseId })}
+                  />
+                </Field>
+                <ResourceRow
+                  actions={
+                    <Button
+                      disabled={
+                        selectedKnowledgeBaseId === undefined ||
+                        !canShare ||
+                        shareKnowledgeMutation.isPending
+                      }
+                      onClick={() => void handleShareKnowledgeBase()}
+                      size="sm"
+                      type="button"
+                    >
+                      {t("workspaceShare")}
+                    </Button>
+                  }
+                  disabled={selectedKnowledgeBaseId === undefined}
+                  meta={
+                    selectedKnowledgeBase
+                      ? t("workspaceShareSelectedKnowledge")
+                      : t("workspaceShareSelectKnowledge")
+                  }
+                  title={
+                    selectedKnowledgeBase?.name ?? t("workspaceShareKnowledge")
+                  }
+                />
+              </>
+            )}
+          </PanelState>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        actions={
+          <AddButton onClick={() => setFolderDialogOpen(true)}>
+            {t("workspaceNewFolder")}
+          </AddButton>
+        }
+        description={t("workspaceFoldersHelp")}
+        title={t("workspaceFolders")}
+      >
+        <PanelState
+          empty={t("workspaceNoFolders")}
+          emptyAction={
+            <Button
+              onClick={() => setFolderDialogOpen(true)}
+              type="button"
+              variant="primary"
+            >
+              {t("workspaceNewFolder")}
+            </Button>
+          }
+          query={foldersQuery}
+        >
+          {(allFolders) => (
+            <div className="rm-resource-list">
+              {allFolders.map((folder) => (
+                <ResourceRow
+                  actions={
+                    folder.id === activeFolder?.id ? (
+                      <Button
+                        data-testid="folder-share"
+                        disabled={!canShare || shareFolderMutation.isPending}
+                        onClick={() => void handleShareFolder()}
+                        size="sm"
+                        type="button"
+                      >
+                        {t("workspaceShare")}
+                      </Button>
+                    ) : null
+                  }
+                  key={folder.id}
+                  meta={
+                    folder.id === activeFolder?.id
+                      ? t("workspaceFolderSelected")
+                      : t("workspaceFolderOpen")
+                  }
+                  onSelect={() => setSelectedFolderId(folder.id)}
+                  selected={folder.id === activeFolder?.id}
+                  title={folder.name}
+                />
+              ))}
             </div>
           )}
         </PanelState>
-        <Button
-          disabled={
-            !activeAgent ||
-            favoriteMutation.isPending ||
-            activeAgentFavorite !== undefined
-          }
-          onClick={() => void handleFavoriteAgent()}
-          type="button"
-        >
-          {activeAgentFavorite
-            ? t("workspaceFavorited")
-            : t("workspaceFavoriteAgent")}
-        </Button>
-      </div>
-      <form
-        className="mt-4 grid gap-2 text-sm"
-        data-testid="folder-controls"
-        onSubmit={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void folderForm.handleSubmit();
-        }}
+        {activeFolder ? (
+          <div className="grid gap-3" data-testid="folder-controls">
+            <div className="rm-resource-row__actions rm-resource-row__actions--start">
+              <Button
+                data-testid="folder-add-chat"
+                disabled={
+                  chatId === undefined || addFolderItemMutation.isPending
+                }
+                onClick={() => void handleAddFolderItem("chat", chatId)}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                {t("workspaceAddChat")}
+              </Button>
+              <Button
+                data-testid="folder-add-agent"
+                disabled={!activeAgent || addFolderItemMutation.isPending}
+                onClick={() =>
+                  void handleAddFolderItem("agent", activeAgent?.id)
+                }
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                {t("workspaceAddAgent")}
+              </Button>
+              <Button
+                data-testid="folder-add-kb"
+                disabled={
+                  selectedKnowledgeBaseId === undefined ||
+                  addFolderItemMutation.isPending
+                }
+                onClick={() =>
+                  void handleAddFolderItem(
+                    "knowledge_base",
+                    selectedKnowledgeBaseId,
+                  )
+                }
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                {t("workspaceAddKnowledge")}
+              </Button>
+            </div>
+            {(folderItemsQuery.data ?? []).length === 0 ? (
+              <p className="rm-list-empty">{t("workspaceFolderEmpty")}</p>
+            ) : (
+              <div className="rm-resource-list">
+                {(folderItemsQuery.data ?? []).map((item) => (
+                  <ResourceRow
+                    key={item.id}
+                    meta={resolveFolderItemName(item, {
+                      chats,
+                      gallery,
+                      knowledgeBases,
+                    })}
+                    title={t(resourceTypeMessageKey(item.resourceType))}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </SettingsSection>
+
+      <FormDialog
+        description={t("workspaceFoldersHelp")}
+        onClose={() => setFolderDialogOpen(false)}
+        open={folderDialogOpen}
+        title={t("workspaceNewFolder")}
       >
-        <div className="text-xs font-medium uppercase tracking-wide text-muted">
-          {t("workspaceFolders")}
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <form
+          className="grid gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void folderForm.handleSubmit();
+          }}
+        >
           <folderForm.Field
             name="name"
             validators={{
@@ -297,7 +522,7 @@ export function CollaborationPanel({
             }}
           >
             {(field) => (
-              <>
+              <Field label={t("workspaceFolderName")} required>
                 <Input
                   name="name"
                   aria-label={t("workspaceFolderName")}
@@ -312,7 +537,7 @@ export function CollaborationPanel({
                     {field.state.meta.errors.join(", ")}
                   </div>
                 ) : null}
-              </>
+              </Field>
             )}
           </folderForm.Field>
           <folderForm.Subscribe
@@ -322,95 +547,115 @@ export function CollaborationPanel({
             })}
           >
             {({ canSubmit, isSubmitting }) => (
-              <Button
-                data-testid="folder-create"
-                disabled={
-                  !canSubmit ||
-                  isSubmitting ||
-                  !workspaceId ||
-                  createFolderMutation.isPending
-                }
-                type="submit"
-              >
-                {t("workspaceCreateFolder")}
-              </Button>
+              <div className="rm-form-actions">
+                <Button
+                  onClick={() => setFolderDialogOpen(false)}
+                  type="button"
+                  variant="ghost"
+                >
+                  {t("cancel")}
+                </Button>
+                <Button
+                  data-testid="folder-create"
+                  disabled={
+                    !canSubmit ||
+                    isSubmitting ||
+                    !workspaceId ||
+                    createFolderMutation.isPending
+                  }
+                  type="submit"
+                  variant="primary"
+                >
+                  {t("workspaceCreateFolder")}
+                </Button>
+              </div>
             )}
           </folderForm.Subscribe>
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Button
-            data-testid="folder-share"
-            disabled={!activeFolder || shareFolderMutation.isPending}
-            onClick={() => void handleShareFolder()}
-            type="button"
-          >
-            {t("workspaceShareFolder")}
-          </Button>
-          <Button
-            data-testid="folder-add-chat"
-            disabled={
-              !activeFolder || !activeChatId || addFolderItemMutation.isPending
-            }
-            onClick={() => void handleAddFolderItem("chat", activeChatId)}
-            type="button"
-          >
-            {t("workspaceAddChat")}
-          </Button>
-          <Button
-            data-testid="folder-add-agent"
-            disabled={
-              !activeFolder || !activeAgent || addFolderItemMutation.isPending
-            }
-            onClick={() => void handleAddFolderItem("agent", activeAgent?.id)}
-            type="button"
-          >
-            {t("workspaceAddAgent")}
-          </Button>
-          <Button
-            data-testid="folder-add-kb"
-            disabled={
-              !activeFolder ||
-              selectedKnowledgeBaseId === undefined ||
-              addFolderItemMutation.isPending
-            }
-            onClick={() =>
-              void handleAddFolderItem(
-                "knowledge_base",
-                selectedKnowledgeBaseId,
-              )
-            }
-            type="button"
-          >
-            {t("workspaceAddKnowledge")}
-          </Button>
-        </div>
-        {activeFolder ? (
-          <div className="text-muted">{activeFolder.name}</div>
-        ) : null}
-        <div className="grid gap-2">
-          {(folderItemsQuery.data ?? []).slice(0, 4).map((item) => (
-            <div className="rounded-md border border-border p-2" key={item.id}>
-              <div className="font-medium">
-                {t(resourceTypeMessageKey(item.resourceType))}
-              </div>
-              <div className="break-all text-muted">{item.resourceId}</div>
+        </form>
+      </FormDialog>
+
+      <SettingsSection
+        description={t("workspaceDiscoverableHelp")}
+        title={t("workspaceDiscoverableModels")}
+      >
+        <PanelState empty={t("workspaceNoDiscoverable")} query={galleryQuery}>
+          {(agents) => (
+            <div className="rm-resource-list">
+              {agents.map((agent) => {
+                const isActiveFavorite =
+                  agent.id === activeAgent?.id &&
+                  activeAgentFavorite !== undefined;
+                return (
+                  <ResourceRow
+                    actions={
+                      agent.id === activeAgent?.id ? (
+                        <Button
+                          disabled={
+                            favoriteMutation.isPending || isActiveFavorite
+                          }
+                          onClick={() => void handleFavoriteAgent()}
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          {isActiveFavorite
+                            ? t("workspaceFavorited")
+                            : t("workspaceFavoriteAgent")}
+                        </Button>
+                      ) : null
+                    }
+                    badge={
+                      <StatusBadge
+                        tone={agent.favorite ? "success" : "neutral"}
+                      >
+                        {agent.favorite
+                          ? t("workspaceFavorite")
+                          : t("workspaceDiscoverable")}
+                      </StatusBadge>
+                    }
+                    key={agent.id}
+                    title={agent.name}
+                  />
+                );
+              })}
             </div>
-          ))}
-        </div>
-      </form>
-      <div className="mt-4 grid gap-2 text-sm">
-        {(galleryQuery.data ?? []).slice(0, 4).map((agent) => (
-          <div className="rounded-md border border-border p-2" key={agent.id}>
-            <div className="font-medium">{agent.name}</div>
-            <div className="text-muted">
-              {agent.favorite
-                ? t("workspaceFavorite")
-                : t("workspaceDiscoverable")}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
+          )}
+        </PanelState>
+      </SettingsSection>
+    </div>
+  );
+}
+
+function shareTargetKey(target: ShareTarget): string {
+  return `${target.principalType}:${target.principalId}`;
+}
+
+function resolveFolderItemName(
+  item: {
+    resourceType: "agent" | "chat" | "knowledge_base";
+    resourceId: string;
+  },
+  catalogs: {
+    chats: Array<{ id: string; title: string }>;
+    gallery: Array<{ id: string; name: string }>;
+    knowledgeBases: Array<{ id: string; name: string }>;
+  },
+): string {
+  if (item.resourceType === "agent") {
+    return (
+      catalogs.gallery.find((agent) => agent.id === item.resourceId)?.name ??
+      item.resourceId
+    );
+  }
+  if (item.resourceType === "chat") {
+    return (
+      catalogs.chats.find((chat) => chat.id === item.resourceId)?.title ??
+      item.resourceId
+    );
+  }
+  return (
+    catalogs.knowledgeBases.find((base) => base.id === item.resourceId)?.name ??
+    item.resourceId
   );
 }
 

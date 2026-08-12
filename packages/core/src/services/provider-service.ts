@@ -14,6 +14,7 @@ import type { ModelCatalogQuery, RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
+import { canUseProvider, canUseProviderModel } from "./access-visibility";
 import {
   ProviderCatalogSyncCoordinator,
   providerCatalogStaleState,
@@ -57,15 +58,17 @@ export class ProviderService {
     });
   }
 
-  list(subject: AuthSubject): Promise<ProviderInstance[]> {
+  async list(subject: AuthSubject): Promise<ProviderInstance[]> {
     assertScope(subject, "providers:read");
-    return this.repository.listProviders(subject.orgId);
+    const providers = await this.repository.listProviders(subject.orgId);
+    return this.visibleProviders(subject, providers);
   }
 
   async models(subject: AuthSubject) {
     assertScope(subject, "models:read");
     await this.catalogSync.ensureFreshForOrg(subject.orgId);
-    return this.repository.listModels(subject.orgId);
+    const models = await this.repository.listModels(subject.orgId);
+    return this.visibleModels(subject, models);
   }
 
   startCatalogSyncWorker(): void {
@@ -82,8 +85,22 @@ export class ProviderService {
 
   async modelsPage(subject: AuthSubject, input: ModelCatalogQuery) {
     assertScope(subject, "models:read");
-    const page = await this.repository.listModelsPage(subject.orgId, input);
-    return { ...page, limit: input.limit, offset: input.offset };
+    if (subject.isAdmin === true) {
+      const page = await this.repository.listModelsPage(subject.orgId, input);
+      return { ...page, limit: input.limit, offset: input.offset };
+    }
+    const catalog = await this.repository.listModelsPage(subject.orgId, {
+      ...input,
+      limit: 2_000,
+      offset: 0,
+    });
+    const visible = await this.visibleModels(subject, catalog.items);
+    return {
+      items: visible.slice(input.offset, input.offset + input.limit),
+      total: visible.length,
+      limit: input.limit,
+      offset: input.offset,
+    };
   }
 
   async updateModelPricing(input: {
@@ -123,6 +140,7 @@ export class ProviderService {
     enabled?: boolean;
     capabilities?: BaseModel["capabilities"];
     contextWindow?: number;
+    defaultParameters?: BaseModel["defaultParameters"] | null;
   }): Promise<BaseModel> {
     assertScope(input.subject, "admin:write");
     const model = await this.repository.getModel(input.modelId);
@@ -131,7 +149,7 @@ export class ProviderService {
     if (!provider || !canAccessOrg(input.subject, provider.orgId))
       throw notFound("Model");
     return this.repository.transaction(async (repository) => {
-      const updated = await repository.updateModel({
+      const nextModel = {
         ...model,
         ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
         ...(input.capabilities === undefined
@@ -143,7 +161,15 @@ export class ProviderService {
         ...(input.contextWindow === undefined
           ? {}
           : { contextWindow: input.contextWindow }),
-      });
+        ...(input.defaultParameters === undefined ||
+        input.defaultParameters === null
+          ? {}
+          : { defaultParameters: input.defaultParameters }),
+      };
+      if (input.defaultParameters === null) {
+        delete nextModel.defaultParameters;
+      }
+      const updated = await repository.updateModel(nextModel);
       await this.audit(
         repository,
         input.subject,
@@ -306,6 +332,28 @@ export class ProviderService {
         },
       ],
     };
+  }
+
+  private async visibleModels(
+    subject: AuthSubject,
+    models: BaseModel[],
+  ): Promise<BaseModel[]> {
+    if (subject.isAdmin === true) return models;
+    const grants = await this.repository.listResourceGrants(subject.orgId);
+    return models.filter((model) =>
+      canUseProviderModel(subject, grants, model),
+    );
+  }
+
+  private async visibleProviders(
+    subject: AuthSubject,
+    providers: ProviderInstance[],
+  ): Promise<ProviderInstance[]> {
+    if (subject.isAdmin === true) return providers;
+    const grants = await this.repository.listResourceGrants(subject.orgId);
+    return providers.filter((provider) =>
+      canUseProvider(subject, grants, provider.id),
+    );
   }
 
   async syncModels(

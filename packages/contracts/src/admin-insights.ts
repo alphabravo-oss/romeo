@@ -116,15 +116,47 @@ export const AdminAnalyticsSummarySchema = z
       totalCount: nonnegative,
     }),
     usage: z.strictObject({
+      activityEventCount: nonnegative,
       byProvider: z.array(
         UsageSummaryMetricSchema.extend({ providerId: identifier }),
       ),
       eventCount: nonnegative,
       estimatedCostUsd: z.number(),
+      runsCompleted: nonnegative,
+      runsFailed: nonnegative,
+      runsStarted: nonnegative,
+      totalTokens: z.number().nonnegative(),
       totals: z.array(UsageSummaryMetricSchema),
+      unpricedTokenQuantity: z.number().nonnegative(),
+    }),
+    attention: z.strictObject({
+      models: z.array(
+        z.strictObject({
+          displayName: identifier,
+          issues: z.array(
+            z.enum([
+              "invalid_context_window",
+              "missing_max_output",
+              "missing_pricing",
+              "unavailable",
+            ]),
+          ),
+          modelId: identifier,
+          providerId: identifier,
+        }),
+      ),
+    }),
+    window: z.strictObject({
+      from: timestamp.nullable(),
+      to: timestamp,
     }),
   })
   .openapi("AdminAnalyticsSummary");
+
+const analyticsWindowQuery = z.strictObject({
+  from: timestamp.optional(),
+  to: timestamp.optional(),
+});
 
 const billingStatus = z.enum(["active", "canceled", "past_due", "trialing"]);
 const blockReason = z.enum([
@@ -219,6 +251,7 @@ export const getAdminAnalyticsSummaryRoute = createRoute({
   path: "/api/v1/admin/analytics/summary",
   operationId: "adminInsights.getAnalyticsSummary",
   summary: "Get admin analytics summary",
+  request: { query: analyticsWindowQuery },
   responses: {
     200: jsonResponse(
       "Admin analytics summary",
@@ -233,6 +266,7 @@ export const exportAdminAnalyticsSummaryRoute = createRoute({
   path: "/api/v1/admin/analytics/summary.csv",
   operationId: "adminInsights.exportAnalyticsSummary",
   summary: "Export admin analytics summary",
+  request: { query: analyticsWindowQuery },
   responses: { 200: csvResponse, ...errors },
 });
 export const getAbuseControlsRoute = createRoute({

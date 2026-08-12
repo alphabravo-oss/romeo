@@ -1,5 +1,5 @@
 {
-  "overviewAgents": "Asistentes",
+  "overviewAgents": "Modelos personalizados",
   "overviewAgentsConfigured": "configurados en el espacio de trabajo",
   "overviewAlerts": "alertas",
   "overviewBackgroundJobs": "Trabajos en segundo plano",
@@ -32,5 +32,7 @@
   "jobsStatusCompleted": "completado",
   "jobsStatusFailed": "fallido",
   "jobsStatusRunning": "en ejecución",
-  "jobsStatusQueued": "en cola"
+  "jobsStatusQueued": "en cola",
+  "overviewOperationsDetail": "Preparación y trabajos en segundo plano",
+  "overviewOperationsDetailHelp": "Ábrelo si algo falla. La navegación diaria está en el directorio de arriba."
 }

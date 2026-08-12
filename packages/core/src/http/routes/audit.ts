@@ -35,17 +35,29 @@ export function registerAuditRoutes(app: RomeoApi): void {
 function auditFilter(input: {
   action?: string | undefined;
   actorId?: string | undefined;
+  category?: AuditLogFilter["category"];
+  from?: string | undefined;
+  includeNoise?: "true" | "false" | undefined;
   outcome?: "failure" | "success" | undefined;
+  q?: string | undefined;
   resourceId?: string | undefined;
   resourceType?: string | undefined;
+  to?: string | undefined;
 }): AuditLogFilter {
   return {
     ...(input.action === undefined ? {} : { action: input.action }),
     ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
+    ...(input.category === undefined ? {} : { category: input.category }),
+    ...(input.from === undefined ? {} : { from: input.from }),
+    ...(input.includeNoise === undefined
+      ? {}
+      : { includeNoise: input.includeNoise === "true" }),
     ...(input.outcome === undefined ? {} : { outcome: input.outcome }),
+    ...(input.q === undefined ? {} : { q: input.q }),
     ...(input.resourceId === undefined ? {} : { resourceId: input.resourceId }),
     ...(input.resourceType === undefined
       ? {}
       : { resourceType: input.resourceType }),
+    ...(input.to === undefined ? {} : { to: input.to }),
   };
 }

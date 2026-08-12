@@ -1,0 +1,526 @@
+/* ============================================================
+ * Console design system — admin + workspace chrome.
+ *
+ * Every rule here styles a primitive in components/console/. Nothing in this
+ * file exists to *undo* a panel's markup; if a panel needs correcting, the fix
+ * belongs in the primitive, not in a new selector here. That distinction is
+ * what the previous stylesheet lost, and it is why it grew a dozen rules whose
+ * only job was flattening `.rm-panel` and stripping borders off `.rounded-md`.
+ *
+ * The chat surface has its own language and is untouched by this file.
+ * ============================================================ */
+
+.cs-page {
+  display: grid;
+  align-content: start;
+  gap: 24px;
+  min-width: 0;
+}
+
+.cs-page__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  min-width: 0;
+}
+
+.cs-page__copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cs-page__title {
+  margin: 0;
+  color: var(--rm-text);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.024em;
+  line-height: 1.2;
+}
+
+.cs-page__description {
+  max-width: var(--rm-measure-prose, 68ch);
+  margin: 0;
+  color: var(--rm-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.cs-page__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.cs-page__body {
+  display: grid;
+  align-content: start;
+  gap: 0;
+  min-width: 0;
+}
+
+/* ---------- Tabs: peer views of one subject ---------- */
+
+.cs-tabs {
+  display: flex;
+  gap: 24px;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--rm-border);
+  scrollbar-width: none;
+}
+
+.cs-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.cs-tab {
+  flex: 0 0 auto;
+  padding: 0 1px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--rm-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 120ms ease;
+}
+
+.cs-tab:hover {
+  color: var(--rm-text);
+}
+
+.cs-tab.is-active {
+  border-bottom-color: var(--rm-accent);
+  color: var(--rm-text);
+  font-weight: 600;
+}
+
+.cs-tab:focus-visible {
+  outline: 2px solid var(--rm-accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* ---------- Sections ---------- */
+
+.cs-section {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding-block: 28px;
+}
+
+/* The divider is drawn by the section below, so the first one never opens with
+   a stray rule under the page header. */
+
+.cs-section + .cs-section {
+  border-top: 1px solid var(--rm-border);
+}
+
+.cs-page__body > .cs-section:first-child {
+  padding-block-start: 4px;
+}
+
+.cs-page__body > .cs-section:last-child {
+  padding-block-end: 0;
+}
+
+.cs-section__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.cs-section__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cs-section__title {
+  margin: 0;
+  color: var(--rm-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  line-height: 1.4;
+}
+
+.cs-section__description {
+  max-width: var(--rm-measure-prose, 68ch);
+  margin: 0;
+  color: var(--rm-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.cs-section__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.cs-section__body {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Destructive controls are fenced off so they are never adjacent to a Save. */
+
+.cs-section--danger {
+  border-top: 1px solid color-mix(in srgb, var(--rm-danger) 38%, transparent);
+}
+
+.cs-section--danger .cs-section__title {
+  color: var(--rm-danger);
+}
+
+/* ---------- Progressive disclosure ---------- */
+
+.cs-disclosure {
+  border-top: 1px solid var(--rm-border);
+}
+
+.cs-disclosure:first-of-type {
+  border-top: 0;
+}
+
+.cs-disclosure__summary {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding-block: 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.cs-disclosure__summary::-webkit-details-marker {
+  display: none;
+}
+
+.cs-disclosure__summary:focus-visible {
+  outline: 2px solid var(--rm-accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+/* A disclosure has to look disclosable, or it reads as an inert heading and
+   nobody finds the settings underneath it. */
+
+.cs-disclosure__marker {
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-right: 1.5px solid var(--rm-muted);
+  border-bottom: 1.5px solid var(--rm-muted);
+  transform: rotate(-45deg);
+  transition: transform 140ms ease;
+}
+
+.cs-disclosure[open] > .cs-disclosure__summary .cs-disclosure__marker {
+  transform: rotate(45deg);
+}
+
+.cs-disclosure__summary:hover .cs-disclosure__marker {
+  border-color: var(--rm-text);
+}
+
+.cs-disclosure__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cs-disclosure__title {
+  color: var(--rm-text);
+  font-size: 0.875rem;
+  font-weight: 550;
+}
+
+.cs-disclosure__description {
+  max-width: var(--rm-measure-prose, 68ch);
+  color: var(--rm-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.cs-disclosure__badge {
+  color: var(--rm-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* Indented to the summary's text column, so disclosed controls read as
+   belonging to the row that opened them. */
+
+.cs-disclosure__body {
+  display: grid;
+  gap: 16px;
+  padding: 2px 0 20px 24px;
+}
+
+/* ---------- Stats ---------- */
+
+.cs-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0;
+  margin: 0;
+  border-block: 1px solid var(--rm-border);
+}
+
+.cs-stat {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 20px;
+  border-left: 1px solid var(--rm-border);
+}
+
+/* First stat sits flush on the page's text column. */
+
+.cs-stat:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.cs-stat__label {
+  color: var(--rm-muted);
+  font-size: 0.6875rem;
+  font-weight: 550;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cs-stat__value {
+  margin: 0;
+  color: var(--rm-text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.cs-stat__value.is-success {
+  color: var(--rm-success);
+}
+.cs-stat__value.is-warning {
+  color: var(--rm-warning);
+}
+.cs-stat__value.is-danger {
+  color: var(--rm-danger);
+}
+
+/* ---------- Toolbar ---------- */
+
+.cs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cs-toolbar__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cs-toolbar__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Search is a filter, not a form field. Capping it here is what stops a lone
+   magnifier sitting at one end of a 1000px trough. */
+
+.cs-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(100%, 18rem);
+  padding: 0 10px;
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  background: var(--rm-surface);
+  color: var(--rm-muted);
+}
+
+.cs-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--rm-text);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+.cs-search input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.cs-search:focus-within {
+  border-color: var(--rm-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rm-accent) 18%, transparent);
+}
+
+.cs-icon-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--rm-muted);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.cs-icon-button:hover:not(:disabled) {
+  background: var(--rm-hover);
+  color: var(--rm-text);
+}
+
+.cs-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ---------- Empty states ---------- */
+
+.cs-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 40px 24px;
+  border: 1px dashed var(--rm-border);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.cs-empty__icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 4px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--rm-surface-soft);
+  color: var(--rm-muted);
+}
+
+.cs-empty__title {
+  margin: 0;
+  color: var(--rm-text);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.cs-empty__description {
+  max-width: 46ch;
+  margin: 0;
+  color: var(--rm-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.cs-empty__action {
+  margin-top: 8px;
+}
+
+/* ---------- Save bar ---------- */
+
+.cs-savebar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 10px 10px 10px 16px;
+  border: 1px solid var(--rm-border);
+  border-radius: 12px;
+  /* Translucent so the page reads as continuing underneath the bar rather than
+     ending at it. */
+  background: color-mix(in srgb, var(--rm-surface) 88%, transparent);
+  box-shadow: var(--rm-shadow);
+  backdrop-filter: blur(12px);
+}
+
+.cs-savebar__summary {
+  min-width: 0;
+  color: var(--rm-muted);
+  font-size: 0.8125rem;
+}
+
+.cs-savebar__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 40rem) {
+  .cs-page__head,
+  .cs-section__head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cs-stats {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .cs-stat {
+    padding-inline: 12px;
+  }
+
+  .cs-savebar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cs-savebar__actions > * {
+    flex: 1 1 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-disclosure__marker,
+  .cs-tab,
+  .cs-icon-button {
+    transition: none;
+  }
+}

@@ -8,6 +8,7 @@ import {
   type ExtractedKnowledgeText,
   type IndexedChunk,
   type RetrievalHit,
+  type RetrieveFromChunksOptions,
 } from "@romeo/rag";
 
 import type { KnowledgeChunk, KnowledgeSource } from "../domain/entities";
@@ -87,11 +88,13 @@ export function retrieveKnowledgeChunks(
   sources: KnowledgeSource[],
   query: string,
   maxResults?: number,
+  options?: RetrieveFromChunksOptions,
 ): RetrievalHit[] {
   return retrieveFromChunks(
     toIndexedKnowledgeChunks(chunks, sources),
     query,
     maxResults,
+    options,
   );
 }
 

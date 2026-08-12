@@ -31,7 +31,10 @@ import {
 } from "./workspace-content-service";
 
 export interface CanonicalRunContextInput {
-  agentVersion: Pick<AgentVersion, "memoryPolicy" | "systemPrompt">;
+  agentVersion: Pick<
+    AgentVersion,
+    "memoryPolicy" | "systemPrompt" | "safetySettings"
+  >;
   /**
    * The org chat-experience setting. False means BARE: the assembled system prompt is withheld
    * from the provider, so the model answers as itself. The agent row is still selected and its
@@ -78,6 +81,8 @@ export function buildCanonicalRunContext(input: CanonicalRunContextInput) {
     history: input.history,
     userContent: input.userContent,
     knowledgeHits: input.knowledgeHits,
+    knowledgeGroundingMode:
+      input.agentVersion.safetySettings.knowledgeGroundingMode,
     model: input.model,
     ...(input.userImages === undefined ? {} : { userImages: input.userImages }),
     ...(input.tail === undefined ? {} : { tail: input.tail }),

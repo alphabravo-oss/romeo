@@ -1,4 +1,5 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
+import type { BaseModel } from "@romeo/providers";
 
 import type {
   Agent,
@@ -13,6 +14,11 @@ import type { JobOperationalSummary } from "./job-service";
 import type { ProviderOperationalSummary } from "./provider-operational-summary";
 import { overallStatus, summarizeJobs } from "./analytics-status";
 import { countToolCall, emptyToolSummary } from "./analytics-tool-summary";
+import {
+  collectModelConfigAttention,
+  isAnalyticsNoiseMetric,
+  usageMetricQuantity,
+} from "./model-config-attention";
 import type {
   AdminAnalyticsEvalAgentSummary,
   AdminAnalyticsEvalModelSummary,
@@ -33,35 +39,50 @@ export class AnalyticsService {
   async summary(
     subject: AuthSubject,
     input: {
+      from?: string;
       jobSummary: JobOperationalSummary;
       providerSummary: ProviderOperationalSummary;
+      to?: string;
     },
   ): Promise<AdminAnalyticsSummary> {
     assertScope(subject, "admin:read");
     assertScope(subject, "usage:read");
     const generatedAt = new Date().toISOString();
-    const [workspaces, usageEvents, toolCalls] = await Promise.all([
+    const window = {
+      from: input.from ?? null,
+      to: input.to ?? generatedAt,
+    };
+    const [workspaces, usageEvents, toolCalls, models] = await Promise.all([
       this.repository.listWorkspaces(subject.orgId),
       this.repository.listUsageEvents(subject.orgId),
       this.repository.listToolCalls(subject.orgId),
+      this.repository.listModels(subject.orgId),
     ]);
+    const rangedUsage = usageEvents.filter((event) =>
+      inWindow(event.createdAt, window.from, window.to),
+    );
+    const rangedTools = toolCalls.filter((call) =>
+      inWindow(call.startedAt, window.from, window.to),
+    );
     const agents = (
       await Promise.all(
         workspaces.map((workspace) => this.repository.listAgents(workspace.id)),
       )
     ).flat();
     const evals = await this.evalSummary(agents);
-    const usage = summarizeUsage(usageEvents);
+    const usage = summarizeUsage(rangedUsage, models);
     const providers = summarizeProviders(input.providerSummary);
-    const tools = summarizeTools(toolCalls);
+    const tools = summarizeTools(rangedTools);
     const jobs = summarizeJobs(input.jobSummary);
 
     return {
+      attention: { models: collectModelConfigAttention(models) },
       evals,
       generatedAt,
       jobs,
       orgId: subject.orgId,
       providers,
+      window,
       redaction: {
         rawEvalInputsReturned: false,
         rawEvalOutputsReturned: false,
@@ -244,14 +265,30 @@ function summarizeEvalModels(
     .sort((left, right) => left.modelId.localeCompare(right.modelId));
 }
 
-function summarizeUsage(events: UsageEvent[]): AdminAnalyticsUsageSummary {
-  const totals = rollupUsage(events, (event) => ({
+function summarizeUsage(
+  events: UsageEvent[],
+  models: readonly BaseModel[],
+): AdminAnalyticsUsageSummary {
+  const modelsById = new Map(models.map((model) => [model.id, model]));
+  const totals = rollupUsage(events, modelsById, (event) => ({
     metric: event.metric,
     unit: event.unit,
   }));
+  const activity = events.filter(
+    (event) => !isAnalyticsNoiseMetric(event.metric),
+  );
+  const reportedTokens = usageMetricQuantity(
+    events,
+    "llm.total_token.reported",
+  );
+  const estimatedTokens =
+    usageMetricQuantity(events, "llm.input_token.estimated") +
+    usageMetricQuantity(events, "llm.output_token.estimated");
   return {
+    activityEventCount: activity.length,
     byProvider: rollupUsage(
       events.filter((event) => typeof event.metadata.providerId === "string"),
+      modelsById,
       (event) => ({
         metric: event.metric,
         providerId: String(event.metadata.providerId),
@@ -263,7 +300,17 @@ function summarizeUsage(events: UsageEvent[]): AdminAnalyticsUsageSummary {
       (total, metric) => total + metric.estimatedCostUsd,
       0,
     ),
+    runsCompleted: usageMetricQuantity(events, "run.completed"),
+    runsFailed: usageMetricQuantity(events, "run.failed"),
+    runsStarted: usageMetricQuantity(events, "run.started"),
+    totalTokens: reportedTokens > 0 ? reportedTokens : estimatedTokens,
     totals,
+    unpricedTokenQuantity: events
+      .filter(
+        (event) =>
+          event.unit === "token" && usageCost(event, modelsById) === 0,
+      )
+      .reduce((total, event) => total + event.quantity, 0),
   };
 }
 
@@ -321,6 +368,7 @@ function summarizeTools(calls: ToolCallRecord[]): AdminAnalyticsToolSummary {
 
 function rollupUsage<T extends UsageSummaryMetric>(
   events: UsageEvent[],
+  modelsById: ReadonlyMap<string, BaseModel>,
   keyFor: (event: UsageEvent) => Omit<T, "estimatedCostUsd" | "quantity">,
 ): T[] {
   const byKey = new Map<string, T>();
@@ -331,7 +379,7 @@ function rollupUsage<T extends UsageSummaryMetric>(
       byKey.get(key) ??
       ({ ...keyFields, estimatedCostUsd: 0, quantity: 0 } as T);
     current.quantity += event.quantity;
-    current.estimatedCostUsd += usageCost(event);
+    current.estimatedCostUsd += usageCost(event, modelsById);
     byKey.set(key, current);
   }
   return Array.from(byKey.values()).sort((left, right) =>
@@ -341,9 +389,36 @@ function rollupUsage<T extends UsageSummaryMetric>(
   );
 }
 
-function usageCost(event: UsageEvent): number {
-  const value = event.metadata.estimatedCostUsd;
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+function usageCost(
+  event: UsageEvent,
+  modelsById: ReadonlyMap<string, BaseModel>,
+): number {
+  const recorded = event.metadata.estimatedCostUsd;
+  if (typeof recorded === "number" && Number.isFinite(recorded)) return recorded;
+  if (event.unit !== "token") return 0;
+  const modelId =
+    typeof event.metadata.modelId === "string"
+      ? event.metadata.modelId
+      : undefined;
+  if (modelId === undefined) return 0;
+  const model = modelsById.get(modelId);
+  if (model?.pricing === undefined) return 0;
+  if (event.metric.includes("input_token")) {
+    return model.pricing.inputTokenUsd * event.quantity;
+  }
+  if (event.metric.includes("output_token")) {
+    return model.pricing.outputTokenUsd * event.quantity;
+  }
+  return 0;
+}
+
+function inWindow(
+  timestamp: string,
+  from: string | null,
+  to: string,
+): boolean {
+  if (timestamp > to) return false;
+  return from === null || timestamp >= from;
 }
 
 function groupByAgent<T extends { agentId: string }>(

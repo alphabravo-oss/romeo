@@ -105,6 +105,11 @@ export async function updateModelCapabilities(input: {
   modelId: string;
   capabilities: ProviderCapabilities;
   contextWindow: number;
+  defaultParameters?: {
+    temperature?: number;
+    topP?: number;
+    maxOutputTokens?: number;
+  };
 }): Promise<BaseModel> {
   configureBrowserApiClients();
   const response = await providersUpdateModelCapabilities({
@@ -112,6 +117,9 @@ export async function updateModelCapabilities(input: {
     body: {
       capabilities: input.capabilities,
       contextWindow: input.contextWindow,
+      ...(input.defaultParameters === undefined
+        ? {}
+        : { defaultParameters: input.defaultParameters }),
     },
     throwOnError: true,
   });

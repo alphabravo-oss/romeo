@@ -2,37 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { drainFrames, nextDrainLength } from "./markdown-stream";
 
-/** Frames the drain needs to reach `target`, or -1 if it never does. */
-function framesToSettle(from: number, target: number): number {
-  let rendered = from;
-  for (let frame = 1; frame <= 10_000; frame += 1) {
-    rendered = nextDrainLength(rendered, target);
-    if (rendered === target) return frame;
-  }
-  return -1;
-}
-
 describe("nextDrainLength", () => {
-  it("always converges on the full text", () => {
-    for (const target of [1, 4, 17, 200, 5_000, 120_000]) {
-      expect(framesToSettle(0, target)).toBeGreaterThan(0);
-    }
+  it("paints the full arrived text immediately (ChatGPT-like)", () => {
+    expect(nextDrainLength(0, 1)).toBe(1);
+    expect(nextDrainLength(0, 17)).toBe(17);
+    expect(nextDrainLength(0, 20_000)).toBe(20_000);
+    expect(nextDrainLength(50, 200)).toBe(200);
   });
 
   it("never renders text that has not arrived", () => {
     expect(nextDrainLength(0, 2)).toBe(2);
     expect(nextDrainLength(5, 6)).toBe(6);
-  });
-
-  it("advances by at least three characters so the tail never crawls", () => {
-    expect(nextDrainLength(0, 100) - 0).toBeGreaterThanOrEqual(3);
-    expect(nextDrainLength(97, 100)).toBe(100);
-  });
-
-  // A reconnect replays from sequence 0, so the drain can start thousands of
-  // characters behind. A fixed rate would take minutes to catch up.
-  it("catches up on a large backlog in a handful of frames", () => {
-    expect(framesToSettle(0, 20_000)).toBeLessThan(120);
   });
 
   it("jumps straight down when the content is replaced by something shorter", () => {
@@ -72,7 +52,7 @@ describe("drainFrames", () => {
     vi.unstubAllGlobals();
   });
 
-  it("keeps draining while deltas arrive faster than frames do", () => {
+  it("settles the full backlog on the first frame", () => {
     const clock = frameClock();
     let arrived = 0;
     let rendered = 0;
@@ -83,18 +63,13 @@ describe("drainFrames", () => {
       },
     );
 
-    // Three 20-character chunks per frame: the burst a fast provider produces,
-    // and the shape that used to cancel the pending frame before it ever ran.
-    for (let frame = 0; frame < 100; frame += 1) {
-      arrived += 60;
-      clock.tick();
-      expect(rendered).toBeLessThanOrEqual(arrived);
-    }
-    expect(rendered).toBeGreaterThan(0);
+    arrived = 180;
+    clock.tick();
+    expect(rendered).toBe(180);
 
-    // The provider stops; the tail is a tail, not a loss.
-    for (let frame = 0; frame < 60; frame += 1) clock.tick();
-    expect(rendered).toBe(arrived);
+    arrived = 240;
+    clock.tick();
+    expect(rendered).toBe(240);
     stop();
   });
 

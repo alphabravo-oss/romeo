@@ -31,7 +31,7 @@
   "usersLastAdminHint": "Vous ne pouvez pas désactiver le dernier administrateur.",
   "userUpdateRole": "Mettre à jour le rôle",
   "userUser": "Utilisateur",
-  "userUsers": "Utilisateurs",
+  "userDirectory": "Répertoire",
   "usersAddViaSso": "Configurer la connexion",
   "usersAddViaSsoHint": "Les membres rejoignent via un fournisseur de connexion configuré."
 }

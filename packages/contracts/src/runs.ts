@@ -111,6 +111,13 @@ export const StartRunSchema = z
     webSearch: z.boolean().optional(),
     urls: z.array(z.url()).max(5).optional(),
     attachments: z.array(imageAttachment).max(4).optional(),
+    /**
+     * Optional per-turn knowledge bases. When set, retrieval uses these ids
+     * (still subject to grants + org RAG policy) instead of only the agent's
+     * enabled bindings. Empty array means "no knowledge for this turn".
+     */
+    knowledgeBaseIds: z.array(identifier).max(25).optional(),
+    agenticRag: z.boolean().optional(),
   })
   .openapi("StartRunRequest");
 
@@ -134,6 +141,7 @@ export const InspectRunContextSchema = z
     imageCount: z.number().int().min(0).max(4).optional(),
     webSearch: z.boolean().optional(),
     urls: z.array(z.url()).max(5).optional(),
+    agenticRag: z.boolean().optional(),
   })
   .openapi("InspectRunContextRequest");
 

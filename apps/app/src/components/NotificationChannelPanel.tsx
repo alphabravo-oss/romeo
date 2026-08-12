@@ -20,10 +20,10 @@ import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useLocale, type MessageKey } from "../lib/i18n";
+import { AddButton, Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { PageActions } from "./PageActions";
-import { PanelStats } from "./PanelStats";
 import { NotificationPolicyForm } from "./NotificationPolicyForm";
 import { Tabs } from "./Tabs";
 
@@ -73,7 +73,7 @@ function notificationChannelInput(value: {
 export function NotificationChannelPanel() {
   const { t } = useLocale();
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <Tabs
         tabs={[
           { id: "channels", label: t("channels"), content: <ChannelsTab /> },
@@ -84,7 +84,7 @@ export function NotificationChannelPanel() {
           },
         ]}
       />
-    </section>
+    </Section>
   );
 }
 
@@ -208,13 +208,9 @@ function ChannelsTab() {
             onRefresh={() => void channelsQuery.refetch()}
             primary={
               (channelsQuery.data?.length ?? 0) > 0 ? (
-                <Button
-                  variant="primary"
-                  onClick={() => setAddOpen(true)}
-                  type="button"
-                >
-                  + {t("addChannel")}
-                </Button>
+                <AddButton onClick={() => setAddOpen(true)}>
+                  {t("addChannel")}
+                </AddButton>
               ) : undefined
             }
             refreshLabel={t("refresh")}
@@ -398,38 +394,32 @@ function ChannelsTab() {
         </form>
       </FormDialog>
 
-      <div className="mt-4">
-        <PanelState
-          empty={t("noChannels")}
-          emptyAction={
-            <Button
-              onClick={() => setAddOpen(true)}
-              type="button"
-              variant="primary"
-            >
-              + {t("addChannel")}
-            </Button>
-          }
-          emptyDescription={t("noChannelsDescription")}
-          emptyIcon={<Bell aria-hidden size={24} />}
-          query={channelsQuery}
-        >
-          {(rows) => (
-            <div className="grid gap-4">
-              <PanelStats
-                items={[
-                  { label: t("totalChannels"), value: rows.length },
-                  {
-                    label: t("enabled"),
-                    value: rows.filter((row) => row.enabled).length,
-                  },
-                ]}
-              />
-              <DataTable columns={channelColumns} data={rows} />
-            </div>
-          )}
-        </PanelState>
-      </div>
+      <PanelState
+        empty={t("noChannels")}
+        emptyAction={
+          <AddButton onClick={() => setAddOpen(true)}>
+            {t("addChannel")}
+          </AddButton>
+        }
+        emptyDescription={t("noChannelsDescription")}
+        emptyIcon={<Bell aria-hidden size={24} />}
+        query={channelsQuery}
+      >
+        {(rows) => (
+          <div className="grid gap-4">
+            <StatRow
+              items={[
+                { label: t("totalChannels"), value: rows.length },
+                {
+                  label: t("enabled"),
+                  value: rows.filter((row) => row.enabled).length,
+                },
+              ]}
+            />
+            <DataTable columns={channelColumns} data={rows} />
+          </div>
+        )}
+      </PanelState>
 
       <div className="rm-card-header mt-4">
         <div className="rm-card-title">{t("deliveries")}</div>
@@ -439,13 +429,11 @@ function ChannelsTab() {
           refreshing={deliveriesQuery.isFetching}
         />
       </div>
-      <div className="mt-2">
-        <DataTable
-          columns={deliveryColumns}
-          data={deliveriesQuery.data ?? []}
-          empty={t("noDeliveries")}
-        />
-      </div>
+      <DataTable
+        columns={deliveryColumns}
+        data={deliveriesQuery.data ?? []}
+        empty={t("noDeliveries")}
+      />
     </div>
   );
 }

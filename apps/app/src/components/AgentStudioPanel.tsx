@@ -1,8 +1,7 @@
 import { useBlocker } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { AlertDialog, Button } from "@romeo/ui";
-import Download from "lucide-react/dist/esm/icons/download.mjs";
+import { Button } from "@romeo/ui";
 
 import {
   diffAgentVersions,
@@ -27,6 +26,7 @@ import { AgentDraftForm, type AgentDraftInput } from "./AgentDraftForm";
 import { canPublishAgent } from "./agent-publish-gate";
 import { useConfirm } from "./ConfirmDialog";
 import { CreateManagedModelDialog } from "./CreateManagedModelDialog";
+import { OverflowMenu } from "./OverflowMenu";
 import { AgentTestConsole } from "./AgentTestConsole";
 import { AgentVersionPanel } from "./AgentVersionPanel";
 import { ManagedModelCustomizationPanel } from "./ManagedModelCustomizationPanel";
@@ -79,6 +79,7 @@ export function AgentStudioPanel({
   const [diff, setDiff] = useState<AgentVersionDiff>();
   const [notice, setNotice] = useState<string>();
   const [isDraftDirty, setIsDraftDirty] = useState(false);
+  const [draftGeneration, setDraftGeneration] = useState(0);
   const { ask, dialog } = useConfirm();
 
   const versionsQuery = useQuery({
@@ -193,6 +194,36 @@ export function AgentStudioPanel({
     setDiff(result);
   }
 
+  // Discarding remounts the draft form, which reseeds every field from the
+  // saved agent. Cheaper and harder to get wrong than threading a reset
+  // handler through the form's own state.
+  async function handleDiscard() {
+    if (
+      !(await ask({
+        title: t("agentUnsavedChangesTitle"),
+        body: t("agentUnsavedChangesDescription"),
+        confirmLabel: t("agentDiscardChanges"),
+        tone: "danger",
+      }))
+    )
+      return;
+    setDraftGeneration((generation) => generation + 1);
+    setIsDraftDirty(false);
+  }
+
+  async function confirmDelete() {
+    if (
+      !(await ask({
+        title: t("agentDeleteTitle"),
+        body: t("agentDeleteDescription"),
+        confirmLabel: t("agentDelete"),
+        tone: "danger",
+      }))
+    )
+      return;
+    await handleDelete();
+  }
+
   async function handleDelete() {
     if (!activeAgent || !workspaceId) return;
     try {
@@ -213,7 +244,7 @@ export function AgentStudioPanel({
       const document = await exportMutation.mutateAsync(activeAgent.id);
       downloadText(
         JSON.stringify(document, null, 2),
-        `${portableFileName(activeAgent.name)}.romeo-assistant.json`,
+        `${portableFileName(activeAgent.name)}.romeo-custom-model.json`,
         "application/json;charset=utf-8",
       );
       toast(t("managedModelExported"), "success");
@@ -253,38 +284,35 @@ export function AgentStudioPanel({
             </p>
           </div>
         </div>
+        {/* One primary action. Export is a utility and Delete is destructive,
+            so both live in the overflow rather than sitting a few pixels from
+            the button people press every day. */}
         <div className="flex items-center gap-2">
-          {activeAgent ? (
-            <Button
-              onClick={() => void handleExport()}
-              pending={exportMutation.isPending}
-              variant="secondary"
-            >
-              <Download aria-hidden="true" size={15} />
-              {t("managedModelExport")}
-            </Button>
-          ) : null}
-          {activeAgent ? (
-            <AlertDialog
-              actionLabel={t("agentDelete")}
-              actionProps={{
-                pending: deleteMutation.isPending,
-                variant: "danger",
-              }}
-              cancelLabel={t("cancel")}
-              onConfirm={handleDelete}
-              title={t("agentDeleteTitle")}
-              trigger={<Button variant="danger">{t("agentDelete")}</Button>}
-            >
-              {t("agentDeleteDescription")}
-            </AlertDialog>
-          ) : null}
           {showCreateAction ? (
             <CreateManagedModelDialog
               models={models}
               onCreated={onAgentCreated}
               providers={providers}
               workspaceId={workspaceId}
+            />
+          ) : null}
+          {activeAgent ? (
+            <OverflowMenu
+              items={[
+                {
+                  label: t("managedModelExport"),
+                  onClick: () => void handleExport(),
+                  disabled: exportMutation.isPending,
+                },
+                {
+                  label: t("agentDelete"),
+                  description: t("agentDeleteDescription"),
+                  onClick: () => void confirmDelete(),
+                  disabled: deleteMutation.isPending,
+                  tone: "danger",
+                },
+              ]}
+              label={t("moreActions")}
             />
           ) : null}
         </div>
@@ -319,6 +347,7 @@ export function AgentStudioPanel({
               activeAgent={activeAgent}
               formId="managed-model-draft-form"
               isSaving={saveMutation.isPending}
+              key={`${activeAgent?.id ?? "none"}:${draftGeneration}`}
               models={models}
               onDirtyChange={setIsDraftDirty}
               onNotice={setNotice}
@@ -412,11 +441,11 @@ export function AgentStudioPanel({
       {notice ? <div className="mt-3 text-sm text-muted">{notice}</div> : null}
 
       <div className="rm-managed-model-savebar">
-        <div className="min-w-0 text-sm">
+        <div className="rm-managed-model-savebar__label">
           <strong>
             {isDraftDirty ? t("agentUnsavedChanges") : t("agentDraftSaved")}
           </strong>
-          <span className="ml-2 text-muted">
+          <span>
             {isDraftDirty
               ? t("agentPublishBlockedByDraft")
               : publishedVersion && draftChanges.length === 0
@@ -424,7 +453,18 @@ export function AgentStudioPanel({
                 : t("agentDraftReadyToPublish")}
           </span>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="rm-managed-model-savebar__actions">
+          {/* Cancel is only offered while there is something to cancel. */}
+          {isDraftDirty ? (
+            <Button
+              disabled={saveMutation.isPending}
+              onClick={() => void handleDiscard()}
+              type="button"
+              variant="ghost"
+            >
+              {t("cancel")}
+            </Button>
+          ) : null}
           <Button
             disabled={!activeAgent || !isDraftDirty || saveMutation.isPending}
             form="managed-model-draft-form"
@@ -481,6 +521,6 @@ function portableFileName(value: string): string {
       .replace(/[^\p{L}\p{N}]+/gu, "-")
       .replace(/^-+|-+$/gu, "")
       .toLocaleLowerCase()
-      .slice(0, 80) || "assistant"
+      .slice(0, 80) || "custom-model"
   );
 }

@@ -50,8 +50,8 @@
   "toolUnableUpdate": "No se puede actualizar el conector.",
   "toolUnavailable": "no disponible",
   "toolVisibility": "Visibilidad",
-  "toolDependentAssistants": "Asistentes dependientes",
+  "toolDependentAssistants": "Modelos personalizados dependientes",
   "toolDependentOperations": "Operaciones vinculadas",
   "toolDisableImpactTitle": "¿Desactivar este conector?",
-  "toolDisableImpactDescription": "Esto bloqueará {{agents}} asistentes que usan {{operations}} operaciones. Las próximas ejecuciones pueden fallar hasta vincular un reemplazo."
+  "toolDisableImpactDescription": "Esto bloqueará {{agents}} modelos personalizados que usan {{operations}} operaciones. Las próximas ejecuciones pueden fallar hasta vincular un reemplazo."
 }

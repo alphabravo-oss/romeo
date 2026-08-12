@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -7,6 +8,8 @@ import { listProviders } from "../features/providers/queries";
 import type { ProviderOperationalSummary } from "../features/providers/types";
 import { useLocale } from "../lib/i18n";
 import { formatNumber, LocalizedNumber } from "../lib/locale-format";
+import { ADMIN_GROUPS, ADMIN_META } from "./admin-console-navigation";
+import { AdminDisclosure } from "./AdminDisclosure";
 import { JobPanel } from "./JobPanel";
 import { ReadinessPanel } from "./ReadinessPanel";
 import { summarizeReadinessChecks } from "./readiness-presentation";
@@ -72,7 +75,7 @@ export function AdminOverview({
   const providerHealthy = providerSummary?.status === "healthy";
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-8">
       <div className="rm-stat-grid">
         <StatCard
           label={t("overviewReadiness")}
@@ -113,8 +116,54 @@ export function AdminOverview({
         />
       </div>
 
-      <ReadinessPanel />
-      <JobPanel />
+      <div className="rm-admin-launch">
+        {ADMIN_GROUPS.filter((group) => group.labelKey !== undefined).map(
+          (group) => (
+            <section className="rm-admin-launch__group" key={group.labelKey}>
+              <h3 className="rm-admin-launch__heading">{t(group.labelKey!)}</h3>
+              <div className="rm-admin-launch__grid">
+                {group.items
+                  .filter((item) => item.key !== "overview")
+                  .map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        className="rm-admin-launch__item"
+                        key={item.key}
+                        search={{ section: item.key }}
+                        to="/admin"
+                      >
+                        <span className="rm-admin-launch__icon">
+                          <Icon aria-hidden size={16} />
+                        </span>
+                        <span className="rm-admin-launch__copy">
+                          <strong>{t(item.labelKey)}</strong>
+                          <span>
+                            {t(
+                              ADMIN_META[item.key]?.descriptionKey ??
+                                item.labelKey,
+                            )}
+                          </span>
+                        </span>
+                      </Link>
+                    );
+                  })}
+              </div>
+            </section>
+          ),
+        )}
+      </div>
+
+      <AdminDisclosure
+        defaultOpen={readinessSummary.tone !== "pass" || activeJobs > 0}
+        description={t("overviewOperationsDetailHelp")}
+        title={t("overviewOperationsDetail")}
+      >
+        <div className="grid gap-6">
+          <ReadinessPanel />
+          <JobPanel />
+        </div>
+      </AdminDisclosure>
     </div>
   );
 }

@@ -234,6 +234,20 @@ interface RagPolicyPatchBody {
   defaultMaxResultsPerTier?: RagPolicyBudgetPatchBody | undefined;
   maxResultsPerTier?: RagPolicyBudgetPatchBody | undefined;
   allowedEmbeddingProviderModels?: RagPolicyProviderModel[] | undefined;
+  retrieval?:
+    | {
+        topK?: number | undefined;
+        similarityThreshold?: number | undefined;
+        hybridSearch?: boolean | undefined;
+        hybridBm25Weight?: number | undefined;
+      }
+    | undefined;
+  agentic?:
+    | {
+        enabled?: boolean | undefined;
+        userMode?: "optional" | "required" | undefined;
+      }
+    | undefined;
   knowledgeBaseTierAssignments?: RagPolicyTierAssignmentsPatchBody | undefined;
   dataResidencyTags?: string[] | undefined;
   externalVectorStore?: RagPolicyExternalVectorStorePatchBody | undefined;
@@ -269,6 +283,36 @@ function cleanRagPolicyPatch(body: RagPolicyPatchBody): UpdateRagPolicyRequest {
       ? {}
       : {
           allowedEmbeddingProviderModels: body.allowedEmbeddingProviderModels,
+        }),
+    ...(body.retrieval === undefined
+      ? {}
+      : {
+          retrieval: {
+            ...(body.retrieval.topK === undefined
+              ? {}
+              : { topK: body.retrieval.topK }),
+            ...(body.retrieval.similarityThreshold === undefined
+              ? {}
+              : { similarityThreshold: body.retrieval.similarityThreshold }),
+            ...(body.retrieval.hybridSearch === undefined
+              ? {}
+              : { hybridSearch: body.retrieval.hybridSearch }),
+            ...(body.retrieval.hybridBm25Weight === undefined
+              ? {}
+              : { hybridBm25Weight: body.retrieval.hybridBm25Weight }),
+          },
+        }),
+    ...(body.agentic === undefined
+      ? {}
+      : {
+          agentic: {
+            ...(body.agentic.enabled === undefined
+              ? {}
+              : { enabled: body.agentic.enabled }),
+            ...(body.agentic.userMode === undefined
+              ? {}
+              : { userMode: body.agentic.userMode }),
+          },
         }),
     ...(knowledgeBaseTierAssignments === undefined
       ? {}

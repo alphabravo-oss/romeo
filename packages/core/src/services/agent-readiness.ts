@@ -12,6 +12,7 @@ import type { Agent } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { notFound } from "../errors";
 import { buildAgentDependencyReadinessChecks } from "./agent-readiness-dependencies";
+import { workspaceIdsFromGrants } from "./access-visibility";
 import { createUserAuthSubject, localUserScopes } from "./auth-subject";
 
 export type AgentReadinessKey =
@@ -93,7 +94,7 @@ export async function buildAgentReadinessReport(
           "principal_disabled",
           `${principal.label} is disabled.`,
           [
-            "The selected principal must be enabled before it can run assistants.",
+            "The selected principal must be enabled before it can run custom models.",
           ],
         ),
     hasWorkspaceAccess(principal.subject, agent.workspaceId)
@@ -108,7 +109,7 @@ export async function buildAgentReadinessReport(
           "workspace",
           "workspace_access_missing",
           "The principal cannot access this workspace.",
-          ["Grant workspace access before sharing the assistant."],
+          ["Grant workspace access before sharing the custom model."],
           "workspace",
           agent.workspaceId,
         ),
@@ -119,11 +120,11 @@ export async function buildAgentReadinessReport(
           agent.publishedVersionId === undefined
             ? "assistant_not_published"
             : "published_version_missing",
-          "The assistant has no runnable published version.",
+          "The custom model has no runnable published version.",
           [
             agent.publishedVersionId === undefined
-              ? "Save and publish the assistant."
-              : "Republish the assistant to replace its missing version snapshot.",
+              ? "Save and publish the custom model."
+              : "Republish the custom model to replace its missing version snapshot.",
           ],
           "agent",
           agent.id,
@@ -240,7 +241,11 @@ async function resolvePrincipal(
       type: "user",
       name: group?.name ?? principalId,
       orgId: input.caller.orgId,
-      workspaceIds: workspaces.map((workspace) => workspace.id),
+      workspaceIds: workspaceIdsFromGrants(workspaces, grants, {
+        id: principalId,
+        type: "user",
+        groupIds: [principalId],
+      }),
       groupIds: [principalId],
       scopes: localUserScopes,
       isAdmin: false,
@@ -259,19 +264,19 @@ function assistantAccessCheck(
 ): AgentReadinessCheck {
   const issues = missingScopes(subject, ["agents:run", "runs:create"]);
   if (!hasGrant(subject, grants, "agent", agent.id, "run"))
-    issues.push("Missing run permission for this assistant.");
+    issues.push("Missing run permission for this custom model.");
   return issues.length === 0
     ? ready(
         "assistant_access",
         "assistant_access_ready",
-        "The principal can run this assistant.",
+        "The principal can run this custom model.",
         "agent",
         agent.id,
       )
     : blocked(
         "assistant_access",
         "assistant_access_missing",
-        "The principal cannot run this assistant.",
+        "The principal cannot run this custom model.",
         issues,
         "agent",
         agent.id,

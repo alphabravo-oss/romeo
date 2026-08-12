@@ -31,6 +31,7 @@ import {
   isEmbeddingProviderModelAllowed,
   readRagPolicy,
 } from "./rag-policy-service";
+import { defaultRetrievalSettings } from "./rag-policy-types";
 import type { KnowledgeVectorStore } from "./knowledge-vector-store";
 
 export interface PersistedVectorRetrievalInput {
@@ -133,7 +134,8 @@ export async function retrievePersistedVectorHitsWithRoute(
     };
   }
 
-  const maxResults = input.maxResults ?? defaultMaxResults;
+  const retrieval = selection.policy.retrieval ?? defaultRetrievalSettings;
+  const maxResults = input.maxResults ?? retrieval.topK ?? defaultMaxResults;
   const externalVectorSearch = await searchExternalVectorStore(input, {
     dimensions: result.dimensions,
     maxResults,
@@ -161,6 +163,7 @@ export async function retrievePersistedVectorHitsWithRoute(
     ]),
   );
   const persistedHits = vectorHits.flatMap((hit) => {
+    if (hit.score < retrieval.similarityThreshold) return [];
     const chunk = indexedByChunkId.get(hit.embedding.chunkId);
     return chunk === undefined
       ? []
@@ -171,6 +174,11 @@ export async function retrievePersistedVectorHitsWithRoute(
     input.sources,
     input.query,
     maxResults,
+    {
+      hybrid: retrieval.hybridSearch,
+      bm25Weight: retrieval.hybridBm25Weight,
+      similarityThreshold: retrieval.similarityThreshold,
+    },
   );
   const vectorStoreDriver =
     externalVectorSearch.status === "used" ? "qdrant" : "pgvector";
@@ -193,11 +201,29 @@ export async function retrievePersistedVectorHitsWithRoute(
     };
   }
 
+  if (!retrieval.hybridSearch) {
+    return {
+      hits: persistedHits.slice(0, maxResults),
+      route: routeForSelectedIndex(selection, {
+        ...(fallbackReason === undefined ? {} : { fallbackReason }),
+        mode:
+          externalVectorSearch.status === "used"
+            ? "external_vector"
+            : "pgvector",
+        vectorStoreDriver,
+        externalVectorStoreAttempted:
+          externalVectorSearch.status !== "not_configured",
+        externalVectorStoreUsed: externalVectorSearch.status === "used",
+      }),
+    };
+  }
+
   return {
     hits: mergeHybridRetrievalHits({
       vectorHits: persistedHits,
       lexicalHits,
       maxResults,
+      bm25Weight: retrieval.hybridBm25Weight,
     }),
     route: routeForSelectedIndex(selection, {
       ...(fallbackReason === undefined ? {} : { fallbackReason }),
@@ -260,15 +286,25 @@ async function selectEmbeddingIndex(
     input.repository,
     input.knowledgeBase.orgId,
   );
-  const bestGroup = bestEmbeddingGroup(
-    embeddings.filter((embedding) =>
-      isEmbeddingProviderModelAllowed(
-        ragPolicy,
-        embedding.embeddingProvider,
-        embedding.embeddingModel,
-      ),
+  const allowed = embeddings.filter((embedding) =>
+    isEmbeddingProviderModelAllowed(
+      ragPolicy,
+      embedding.embeddingProvider,
+      embedding.embeddingModel,
     ),
   );
+  const preferred = ragPolicy.allowedEmbeddingProviderModels[0];
+  const preferredGroup =
+    preferred === undefined
+      ? undefined
+      : bestEmbeddingGroup(
+          allowed.filter(
+            (embedding) =>
+              embedding.embeddingProvider === preferred.providerId &&
+              embedding.embeddingModel === preferred.model,
+          ),
+        );
+  const bestGroup = preferredGroup ?? bestEmbeddingGroup(allowed);
   if (bestGroup === undefined)
     return { fallbackReason: "no_allowed_embedding_index" };
 

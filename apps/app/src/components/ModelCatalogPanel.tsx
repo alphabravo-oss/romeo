@@ -9,9 +9,10 @@ import { listModelsPage } from "../features/providers/queries";
 import type { BaseModel } from "../features/providers/types";
 import { LocalizedTokens } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
+import { modelConfigIssues } from "../lib/model-config-attention";
+import { Section, StatRow } from "./console";
 import { BaseModelDetails } from "./BaseModelDetails";
 import { createColumnHelper, DataTable } from "./DataTable";
-import { PanelStats } from "./PanelStats";
 import { CreateManagedModelDialog } from "./CreateManagedModelDialog";
 import { useConfirm } from "./ConfirmDialog";
 import type {
@@ -91,6 +92,7 @@ export function ModelCatalogPanel({
             modelId: string;
             capabilities: BaseModel["capabilities"];
             contextWindow: number;
+            defaultParameters?: BaseModel["defaultParameters"];
           },
     ) => {
       if ("enabled" in input && !input.enabled) {
@@ -207,6 +209,18 @@ export function ModelCatalogPanel({
           ),
         },
       ),
+      columnHelper.accessor((model) => modelConfigIssues(model).length, {
+        id: "attention",
+        header: t("modelNeedsAttention"),
+        enableSorting: false,
+        cell: ({ row }) => {
+          const issues = modelConfigIssues(row.original);
+          if (issues.length === 0) return <span className="text-muted">—</span>;
+          return (
+            <StatusBadge tone="warning">{t("modelNeedsAttention")}</StatusBadge>
+          );
+        },
+      }),
       columnHelper.accessor("enabled", {
         header: t("enabled"),
         cell: ({ row }) => (
@@ -238,7 +252,7 @@ export function ModelCatalogPanel({
           <ArrowLeft aria-hidden="true" size={16} />
           {t("backToBaseModels")}
         </Button>
-        <section className="rm-panel p-4">
+        <Section>
           {catalogQuery.isLoading ? (
             <div className="rm-empty-state-text" role="status">
               {t("loadingModels")}
@@ -285,7 +299,7 @@ export function ModelCatalogPanel({
           ) : (
             <div className="rm-empty-state-text">{t("baseModelNotFound")}</div>
           )}
-        </section>
+        </Section>
         {dialog}
       </div>
     );
@@ -299,7 +313,7 @@ export function ModelCatalogPanel({
           <p className="text-sm text-muted">{t("modelCatalogDescription")}</p>
         </div>
         <div className="mt-4 grid gap-4">
-          <PanelStats
+          <StatRow
             items={[
               { label: t("discovered"), value: models.length },
               {
@@ -315,6 +329,12 @@ export function ModelCatalogPanel({
                 label: t("overridden"),
                 value: models.filter(
                   (model) => model.capabilitiesSource === "override",
+                ).length,
+              },
+              {
+                label: t("modelNeedsAttention"),
+                value: models.filter(
+                  (model) => modelConfigIssues(model).length > 0,
                 ).length,
               },
             ]}

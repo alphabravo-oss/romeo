@@ -1,4 +1,4 @@
-import { Input, NativeSelect, Button } from "@romeo/ui";
+import { Input, NativeSelect, Button, Checkbox, StatusBadge } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -9,8 +9,8 @@ import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { Section, StatRow } from "./console";
 import { DateRangeSelect } from "./DateRangeSelect";
-import { PanelStats } from "./PanelStats";
 import { PageActions } from "./PageActions";
 import { rangeToBounds, type RangePreset } from "./date-range";
 import {
@@ -21,7 +21,19 @@ import {
 } from "./DataTable";
 
 const col = createColumnHelper<AuditLog>();
+const AUDIT_PAGE_SIZE = 50;
 
+const AUDIT_CATEGORIES = [
+  "security",
+  "admin",
+  "access",
+  "data",
+  "chat",
+  "run",
+  "system",
+] as const;
+
+type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
 type Translate = (key: MessageKey) => string;
 
 function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
@@ -37,9 +49,23 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
     col.accessor("action", {
       header: t("auditAction"),
       cell: (c) => (
-        <span className="rm-mono" translate="no">
-          {c.getValue()}
+        <span className="grid min-w-0">
+          <span className="truncate font-medium">
+            {humanizeAuditAction(c.getValue())}
+          </span>
+          <span className="rm-mono truncate text-xs text-muted" translate="no">
+            {c.getValue()}
+          </span>
         </span>
+      ),
+    }),
+    col.accessor((row) => classifyAuditAction(row.action), {
+      id: "category",
+      header: t("auditCategory"),
+      cell: (c) => (
+        <StatusBadge tone={categoryTone(c.getValue())}>
+          {t(categoryMessageKey(c.getValue()))}
+        </StatusBadge>
       ),
     }),
     col.accessor("outcome", {
@@ -65,40 +91,37 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
       header: t("auditActor"),
       cell: (c) => (
         <span className="rm-cell-muted">
-          {humanizeAuditActor(c.getValue())}
+          {displayAuditActor(c.getValue(), t)}
         </span>
       ),
     }),
   ];
 }
 
-const AUDIT_PAGE_SIZE = 50;
-
-function humanizeAuditActor(actorId: string): string {
-  const words = actorId.replace(/[._-]+/gu, " ").trim();
-  if (words.length === 0) return "";
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
 export function AuditPanel() {
   const { t } = useLocale();
   const [range, setRange] = useState<RangePreset>("7d");
-  const [action, setAction] = useState("");
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<AuditCategory | "">("");
   const [outcome, setOutcome] = useState<AuditLogFilter["outcome"] | "">("");
+  const [includeNoise, setIncludeNoise] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>();
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string>();
-  // Cursor stack: cursorStack[i] is the cursor used to fetch page i.
-  // The first page uses `undefined`; each subsequent entry is a nextCursor.
   const [cursorStack, setCursorStack] = useState<(string | undefined)[]>([
     undefined,
   ]);
-  const filter: AuditLogFilter = {};
-  if (action.trim().length > 0) filter.action = action.trim();
-  if (outcome === "success" || outcome === "failure") filter.outcome = outcome;
-  const cursor = cursorStack[cursorStack.length - 1];
   const bounds = rangeToBounds(range, new Date());
+  const filter = buildAuditFilter({
+    bounds,
+    category,
+    includeNoise,
+    outcome,
+    query,
+  });
+  const cursor = cursorStack[cursorStack.length - 1];
   const auditQuery = useQuery({
-    queryKey: ["auditLogs", filter, cursor ?? null, range],
+    queryKey: ["auditLogs", filter, cursor ?? null],
     queryFn: () =>
       listAuditLogs(
         filter,
@@ -110,6 +133,7 @@ export function AuditPanel() {
 
   function resetPaging() {
     setCursorStack([undefined]);
+    setSelectedId(undefined);
   }
 
   async function handleExport() {
@@ -144,9 +168,8 @@ export function AuditPanel() {
   }
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="text-sm text-muted">{t("auditTitle")}</div>
+    <Section
+      actions={
         <div className="flex gap-2">
           <PageActions
             onRefresh={() => void auditQuery.refetch()}
@@ -161,7 +184,10 @@ export function AuditPanel() {
             {isExporting ? t("analyticsExporting") : t("analyticsExportCsv")}
           </Button>
         </div>
-      </div>
+      }
+      description={t("auditIncludeBackgroundHelp")}
+      title={t("auditTitle")}
+    >
       {exportError ? (
         <div className="rm-composer-error mb-3" role="alert">
           {exportError}
@@ -177,14 +203,30 @@ export function AuditPanel() {
         />
         <Input
           onChange={(event) => {
-            setAction(event.currentTarget.value);
+            setQuery(event.currentTarget.value);
             resetPaging();
           }}
           aria-label={t("auditFilterAction")}
-          placeholder={t("auditFilterAction")}
-          style={{ maxWidth: 260 }}
-          value={action}
+          placeholder={t("auditSearch")}
+          style={{ maxWidth: 280 }}
+          value={query}
         />
+        <NativeSelect
+          aria-label={t("auditCategory")}
+          onChange={(event) => {
+            setCategory(event.currentTarget.value as AuditCategory | "");
+            resetPaging();
+          }}
+          style={{ maxWidth: 180 }}
+          value={category}
+        >
+          <option value="">{t("auditCategoryAll")}</option>
+          {AUDIT_CATEGORIES.map((value) => (
+            <option key={value} value={value}>
+              {t(categoryMessageKey(value))}
+            </option>
+          ))}
+        </NativeSelect>
         <NativeSelect
           aria-label={t("auditOutcome")}
           onChange={(event) => {
@@ -200,57 +242,192 @@ export function AuditPanel() {
           <option value="success">{t("auditSuccess")}</option>
           <option value="failure">{t("auditFailure")}</option>
         </NativeSelect>
+        <Checkbox
+          checked={includeNoise}
+          label={t("auditIncludeBackground")}
+          onCheckedChange={(checked) => {
+            setIncludeNoise(checked === true);
+            resetPaging();
+          }}
+        />
       </div>
       <PanelState
         query={auditQuery}
         empty={t("auditNoEvents")}
-        isEmpty={() => false}
+        isEmpty={(page) => page.data.length === 0}
       >
         {(page) => {
-          // ponytail: client-side range filter; move to a server parameter
-          // when the audit dataset outgrows one page.
-          const visibleEvents = page.data.filter((event) =>
-            isWithinBounds(event.createdAt, bounds),
-          );
-          const failureCount = visibleEvents.filter(
+          const events = page.data;
+          const failureCount = events.filter(
             (event) => event.outcome === "failure",
           ).length;
+          const selected =
+            events.find((event) => event.id === selectedId) ?? events[0];
 
           return (
             <div
               className="grid gap-4"
-              data-audit-event-count={visibleEvents.length}
+              data-audit-event-count={events.length}
               data-audit-failure-count={failureCount}
             >
-              <PanelStats
+              <StatRow
                 items={[
-                  { label: t("auditEvents"), value: visibleEvents.length },
+                  { label: t("auditEvents"), value: events.length },
                   { label: t("auditFailures"), value: failureCount },
+                  {
+                    label: t("auditBackgroundHidden"),
+                    value: includeNoise
+                      ? t("auditCategoryAll")
+                      : t("auditCategorySystem"),
+                  },
                 ]}
               />
               <DataTable
                 columns={auditColumns(t)}
-                data={visibleEvents}
+                data={events}
                 empty={t("auditNoEvents")}
+                getRowId={(row) => row.id}
                 maxBodyHeight={620}
+                onRowActivate={(row) => setSelectedId(row.id)}
+                rowAriaLabel={(row) => humanizeAuditAction(row.action)}
                 serverPagination={serverPagination}
               />
+              <div className="rm-attention-note">
+                <strong>{t("auditSelectedEvent")}</strong>
+                {selected ? (
+                  <pre className="mt-2 overflow-auto text-xs" translate="no">
+                    {JSON.stringify(
+                      {
+                        action: selected.action,
+                        actorId: selected.actorId,
+                        category: classifyAuditAction(selected.action),
+                        createdAt: selected.createdAt,
+                        metadata: selected.metadata,
+                        outcome: selected.outcome,
+                        resourceId: selected.resourceId,
+                        resourceType: selected.resourceType,
+                      },
+                      null,
+                      2,
+                    )}
+                  </pre>
+                ) : (
+                  <p>{t("auditNoSelection")}</p>
+                )}
+              </div>
             </div>
           );
         }}
       </PanelState>
-    </section>
+    </Section>
   );
 }
 
-function isWithinBounds(
-  value: string,
-  bounds: { from: Date | undefined; to: Date },
-): boolean {
-  const instant = new Date(value).getTime();
-  return (
-    Number.isFinite(instant) &&
-    instant <= bounds.to.getTime() &&
-    (bounds.from === undefined || instant >= bounds.from.getTime())
-  );
+function buildAuditFilter(input: {
+  bounds: { from: Date | undefined; to: Date };
+  category: AuditCategory | "";
+  includeNoise: boolean;
+  outcome: AuditLogFilter["outcome"] | "";
+  query: string;
+}): AuditLogFilter {
+  const filter: AuditLogFilter = {
+    includeNoise: input.includeNoise ? "true" : "false",
+    to: input.bounds.to.toISOString(),
+  };
+  if (input.bounds.from !== undefined)
+    filter.from = input.bounds.from.toISOString();
+  if (input.query.trim().length > 0) filter.q = input.query.trim();
+  if (input.category !== "") filter.category = input.category;
+  if (input.outcome === "success" || input.outcome === "failure") {
+    filter.outcome = input.outcome;
+  }
+  return filter;
+}
+
+function humanizeAuditAction(action: string): string {
+  const words = action.replaceAll(".", " ").replaceAll("_", " ").trim();
+  if (words.length === 0) return action;
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function displayAuditActor(actorId: string, t: Translate): string {
+  if (
+    actorId.startsWith("system_") ||
+    actorId.includes("service_account_audit")
+  ) {
+    return t("auditActorSystem");
+  }
+  const words = actorId.replace(/[._-]+/gu, " ").trim();
+  if (words.length === 0) return actorId;
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function classifyAuditAction(action: string): AuditCategory {
+  if (
+    action === "provider.models.sync" ||
+    action === "worker.enqueue" ||
+    action === "model.request" ||
+    action.startsWith("worker.")
+  ) {
+    return "system";
+  }
+  if (
+    action.startsWith("local_auth.") ||
+    action.startsWith("auth.") ||
+    action.startsWith("support.") ||
+    action.startsWith("scim.") ||
+    action.startsWith("directory_sync.")
+  ) {
+    return "security";
+  }
+  if (
+    action.includes("share") ||
+    action.includes("favorite") ||
+    action.startsWith("group.") ||
+    action.startsWith("api_key.") ||
+    action.startsWith("service_account.")
+  ) {
+    return "access";
+  }
+  if (
+    action.startsWith("knowledge.") ||
+    action.startsWith("file.") ||
+    action.startsWith("connector.") ||
+    action.startsWith("folder.")
+  ) {
+    return "data";
+  }
+  if (action.startsWith("chat.") || action.startsWith("chat_experience.")) {
+    return "chat";
+  }
+  if (
+    action.startsWith("run.") ||
+    action.startsWith("tool.") ||
+    action.startsWith("eval.") ||
+    action.startsWith("workflow.") ||
+    action.startsWith("voice.")
+  ) {
+    return "run";
+  }
+  return "admin";
+}
+
+function categoryMessageKey(category: AuditCategory): MessageKey {
+  if (category === "security") return "auditCategorySecurity";
+  if (category === "admin") return "auditCategoryAdmin";
+  if (category === "access") return "auditCategoryAccess";
+  if (category === "data") return "auditCategoryData";
+  if (category === "chat") return "auditCategoryChat";
+  if (category === "run") return "auditCategoryRun";
+  return "auditCategorySystem";
+}
+
+function categoryTone(
+  category: AuditCategory,
+): "danger" | "info" | "neutral" | "success" | "warning" {
+  if (category === "security") return "danger";
+  if (category === "admin") return "info";
+  if (category === "system") return "neutral";
+  if (category === "run") return "success";
+  return "warning";
 }

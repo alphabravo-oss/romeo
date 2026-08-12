@@ -9,11 +9,14 @@ import {
   createKnowledgeSource,
   deleteKnowledgeSource,
   extractKnowledgeSource,
+  getKnowledgeIngestReadiness,
   listKnowledgeBases,
   listKnowledgeSources,
   queryKnowledgeBase,
   reindexKnowledgeSource,
 } from "../features";
+import { Section } from "./console";
+import { ingestKnowledgeFile } from "./knowledge-file-ingest";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import { formatNumber } from "../lib/locale-format";
@@ -25,20 +28,32 @@ import { KnowledgeSourcesTab } from "./KnowledgeSourcesTab";
 import { KnowledgeQueryTab } from "./KnowledgeQueryTab";
 import { KnowledgeCatalogPage } from "./KnowledgeCatalogPage";
 import { KnowledgeBaseSummary } from "./KnowledgeBaseSummary";
+import { KnowledgeIngestNotice } from "./KnowledgeIngestNotice";
 import {
-  canInlineUpload,
+  isSupportedKnowledgeMime,
   knowledgeJobStatusKey,
+  KNOWLEDGE_FILE_ACCEPT,
   mimeTypeFor,
+  shouldInlineKnowledgeFile,
 } from "./knowledge-file-utils";
 import { isReindexPayloadCoherent } from "./knowledge-reindex";
+import {
+  listKnowledgeShares,
+  revokeKnowledgeShare,
+  shareKnowledge,
+} from "../features/access/api";
+import { ResourceGrantEditor } from "./ResourceGrantEditor";
+import { SettingsSection } from "./SettingsSection";
 
 export function KnowledgePanel({
   activeAgent,
+  isAdmin = false,
   onSelectionChange,
   selectedKnowledgeBaseId,
   workspaceId,
 }: {
   activeAgent: Agent | undefined;
+  isAdmin?: boolean;
   onSelectionChange: (knowledgeBaseId: string | null) => void;
   selectedKnowledgeBaseId: string | undefined;
   workspaceId: string | undefined;
@@ -48,6 +63,7 @@ export function KnowledgePanel({
   const [hits, setHits] = useState<RetrievalHit[]>([]);
   const [notice, setNotice] = useState<string>();
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File>();
   const [reindexing, setReindexing] = useState<KnowledgeSource>();
   const { ask, dialog } = useConfirm();
 
@@ -68,9 +84,22 @@ export function KnowledgePanel({
     queryFn: () => listKnowledgeSources(activeKnowledgeBase!.id),
     enabled: activeKnowledgeBase !== undefined,
   });
+  const sharesQuery = useQuery({
+    queryKey: ["knowledgeShares", activeKnowledgeBase?.id],
+    queryFn: () => listKnowledgeShares(activeKnowledgeBase!.id),
+    enabled: isAdmin && activeKnowledgeBase !== undefined,
+  });
+  const ingestQuery = useQuery({
+    queryKey: ["knowledgeIngestReadiness"],
+    queryFn: getKnowledgeIngestReadiness,
+  });
+  const canUpload = ingestQuery.data?.ready === true;
 
   const createSourceMutation = useMutation({
     mutationFn: createKnowledgeSource,
+  });
+  const ingestFileMutation = useMutation({
+    mutationFn: ingestKnowledgeFile,
   });
   const deleteSourceMutation = useMutation({
     mutationFn: deleteKnowledgeSource,
@@ -89,19 +118,26 @@ export function KnowledgePanel({
       sourceContent: "",
     },
     onSubmit: async ({ value }) => {
-      if (!activeKnowledgeBase) return;
-
+      if (!activeKnowledgeBase || !canUpload) return;
       const content = value.sourceContent.trim();
-      const input = {
-        knowledgeBaseId: activeKnowledgeBase.id,
-        fileName: value.fileName,
-        mimeType: mimeTypeFor(value.fileName),
-        sizeBytes: Math.max(1, content.length || value.fileName.length * 16),
-      };
       try {
-        await createSourceMutation.mutateAsync(
-          content.length > 0 ? { ...input, content } : input,
-        );
+        if (pendingFile !== undefined) {
+          await ingestFileMutation.mutateAsync({
+            file: pendingFile,
+            knowledgeBaseId: activeKnowledgeBase.id,
+          });
+        } else {
+          await createSourceMutation.mutateAsync({
+            knowledgeBaseId: activeKnowledgeBase.id,
+            fileName: value.fileName,
+            mimeType: mimeTypeFor(value.fileName),
+            sizeBytes: Math.max(
+              1,
+              content.length || value.fileName.length * 16,
+            ),
+            ...(content.length > 0 ? { content } : {}),
+          });
+        }
         setNotice(t("knowledgeSourceRegistered"));
         await Promise.all([
           queryClient.invalidateQueries({
@@ -113,6 +149,7 @@ export function KnowledgePanel({
           queryClient.invalidateQueries({ queryKey: ["quotas"] }),
         ]);
         toast(t("knowledgeSourceAdded"), "success");
+        setPendingFile(undefined);
         setSourceDialogOpen(false);
       } catch {
         toast(t("knowledgeCouldNotAddSource"), "error");
@@ -126,7 +163,7 @@ export function KnowledgePanel({
       payloadSourceId: undefined as string | undefined,
     },
     onSubmit: async ({ value }) => {
-      if (!activeKnowledgeBase || !reindexing) return;
+      if (!activeKnowledgeBase || !reindexing || !canUpload) return;
       const content = value.content.trim();
       if (
         content.length === 0 ||
@@ -179,23 +216,27 @@ export function KnowledgePanel({
   async function handleSourceFileChange(file: File | undefined) {
     if (file === undefined) return;
     const mimeType = mimeTypeFor(file.name, file.type);
-    SourceForm.setFieldValue("fileName", file.name);
-    if (!canInlineUpload(mimeType)) {
+    if (!isSupportedKnowledgeMime(mimeType)) {
+      setPendingFile(undefined);
+      SourceForm.setFieldValue("fileName", "");
       SourceForm.setFieldValue("sourceContent", "");
       setNotice(t("knowledgeFileWorkerRequired"));
       return;
     }
-    if (file.size > 200_000) {
-      SourceForm.setFieldValue("sourceContent", "");
-      setNotice(t("knowledgeInlineLimit"));
+    SourceForm.setFieldValue("fileName", file.name);
+    if (shouldInlineKnowledgeFile(file, mimeType)) {
+      setPendingFile(undefined);
+      SourceForm.setFieldValue("sourceContent", await file.text());
+      setNotice(t("knowledgeFileLoaded"));
       return;
     }
-    SourceForm.setFieldValue("sourceContent", await file.text());
-    setNotice(t("knowledgeFileLoaded"));
+    SourceForm.setFieldValue("sourceContent", "");
+    setPendingFile(file);
+    setNotice(t("knowledgeFileQueuedForUpload"));
   }
 
   async function handleQuery(query: string) {
-    if (!activeKnowledgeBase) return;
+    if (!activeKnowledgeBase || !canUpload) return;
     const results = await queryMutation.mutateAsync({
       knowledgeBaseId: activeKnowledgeBase.id,
       query,
@@ -252,7 +293,7 @@ export function KnowledgePanel({
   }
 
   async function handleExtractSource(sourceId: string) {
-    if (!activeKnowledgeBase) return;
+    if (!activeKnowledgeBase || !canUpload) return;
     try {
       const result = await extractSourceMutation.mutateAsync({
         knowledgeBaseId: activeKnowledgeBase.id,
@@ -280,6 +321,10 @@ export function KnowledgePanel({
   if (activeKnowledgeBase === undefined) {
     return (
       <KnowledgeCatalogPage
+        {...(ingestQuery.data === undefined
+          ? {}
+          : { ingestReadiness: ingestQuery.data })}
+        isAdmin={isAdmin}
         isLoading={knowledgeBasesQuery.isLoading}
         knowledgeBases={knowledgeBases}
         onCreated={(knowledgeBaseId) => {
@@ -302,14 +347,35 @@ export function KnowledgePanel({
         <ArrowLeft aria-hidden="true" size={16} />
         {t("knowledgeBackToBases")}
       </Button>
-      <section className="rm-panel p-4">
+      <Section>
         <KnowledgeBaseSummary
+          canUpload={canUpload}
           knowledgeBase={activeKnowledgeBase}
           onAddSource={() => setSourceDialogOpen(true)}
         />
+        <KnowledgeIngestNotice isAdmin={isAdmin} readiness={ingestQuery.data} />
+        {isAdmin ? (
+          <SettingsSection
+            description={t("knowledgeAccessHelp")}
+            title={t("knowledgeAccess")}
+          >
+            <ResourceGrantEditor
+              grants={sharesQuery.data ?? []}
+              onGrant={(share) => shareKnowledge(activeKnowledgeBase.id, share)}
+              onRevoke={(grantId) =>
+                revokeKnowledgeShare(activeKnowledgeBase.id, grantId)
+              }
+              permissionOptions={["read", "use", "write"]}
+              queryKey={["knowledgeShares", activeKnowledgeBase.id]}
+            />
+          </SettingsSection>
+        ) : null}
 
         <FormDialog
-          onClose={() => setSourceDialogOpen(false)}
+          onClose={() => {
+            setSourceDialogOpen(false);
+            setPendingFile(undefined);
+          }}
           open={sourceDialogOpen}
           title={t("knowledgeAddSource")}
         >
@@ -333,7 +399,7 @@ export function KnowledgePanel({
             </label>
             <Input
               name="knowledge-file-picker"
-              accept=".txt,.md,.markdown,.json,.jsonl,.ndjson,.csv,.html,.htm,text/*,application/json,application/x-ndjson"
+              accept={KNOWLEDGE_FILE_ACCEPT}
               className="rm-ui-visually-hidden"
               id="knowledge-file-picker"
               onChange={(event) =>
@@ -376,11 +442,16 @@ export function KnowledgePanel({
               )}
             </SourceForm.Field>
             <Button
-              disabled={!activeKnowledgeBase || createSourceMutation.isPending}
+              disabled={
+                !activeKnowledgeBase ||
+                !canUpload ||
+                createSourceMutation.isPending ||
+                ingestFileMutation.isPending
+              }
               type="submit"
             >
-              {createSourceMutation.isPending
-                ? t("knowledgeRegistering")
+              {createSourceMutation.isPending || ingestFileMutation.isPending
+                ? t("knowledgeUploading")
                 : t("knowledgeRegisterSource")}
             </Button>
           </form>
@@ -452,6 +523,7 @@ export function KnowledgePanel({
                 <KnowledgeSourcesTab
                   activeAgent={activeAgent}
                   activeKnowledgeBase={activeKnowledgeBase}
+                  canUpload={canUpload}
                   isDeleting={deleteSourceMutation.isPending}
                   isExtracting={extractSourceMutation.isPending}
                   isReindexing={reindexSourceMutation.isPending}
@@ -468,7 +540,7 @@ export function KnowledgePanel({
               label: t("knowledgeQuery"),
               content: (
                 <KnowledgeQueryTab
-                  enabled={activeKnowledgeBase !== undefined}
+                  enabled={activeKnowledgeBase !== undefined && canUpload}
                   hits={hits}
                   isPending={queryMutation.isPending}
                   notice={notice}
@@ -479,7 +551,7 @@ export function KnowledgePanel({
           ]}
         />
         {dialog}
-      </section>
+      </Section>
     </div>
   );
 }

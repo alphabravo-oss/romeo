@@ -2,6 +2,11 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 
 import type { AuditLog } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import {
+  classifyAuditAction,
+  isAuditNoise,
+  type AuditCategory,
+} from "./audit-classification";
 
 export class AuditService {
   constructor(private readonly repository: RomeoRepository) {}
@@ -43,6 +48,7 @@ export class AuditService {
         "createdAt",
         "actorId",
         "action",
+        "category",
         "resourceType",
         "resourceId",
         "outcome",
@@ -55,6 +61,7 @@ export class AuditService {
         log.createdAt,
         log.actorId,
         log.action,
+        classifyAuditAction(log.action),
         log.resourceType,
         log.resourceId,
         log.outcome,
@@ -68,9 +75,14 @@ export class AuditService {
 export interface AuditLogFilter {
   action?: string;
   actorId?: string;
+  category?: AuditCategory;
+  from?: string;
+  includeNoise?: boolean;
   outcome?: "failure" | "success";
+  q?: string;
   resourceId?: string;
   resourceType?: string;
+  to?: string;
 }
 
 export const AUDIT_LOG_PAGE_DEFAULT_LIMIT = 50;
@@ -120,6 +132,11 @@ function indexAfterCursor(logs: AuditLog[], cursor: string): number {
 }
 
 function filterAuditLogs(logs: AuditLog[], filter: AuditLogFilter): AuditLog[] {
+  const hideNoise =
+    filter.includeNoise === false &&
+    filter.action === undefined &&
+    filter.category !== "system";
+  const query = filter.q?.trim().toLocaleLowerCase();
   return logs.filter((log) => {
     if (filter.action !== undefined && log.action !== filter.action)
       return false;
@@ -134,6 +151,20 @@ function filterAuditLogs(logs: AuditLog[], filter: AuditLogFilter): AuditLog[] {
       log.resourceType !== filter.resourceType
     )
       return false;
+    if (filter.from !== undefined && log.createdAt < filter.from) return false;
+    if (filter.to !== undefined && log.createdAt > filter.to) return false;
+    if (hideNoise && isAuditNoise(log)) return false;
+    if (
+      filter.category !== undefined &&
+      classifyAuditAction(log.action) !== filter.category
+    ) {
+      return false;
+    }
+    if (query !== undefined && query.length > 0) {
+      const haystack =
+        `${log.action} ${log.actorId} ${log.resourceType} ${log.resourceId}`.toLocaleLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
     return true;
   });
 }

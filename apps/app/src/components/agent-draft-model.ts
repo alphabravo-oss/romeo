@@ -42,6 +42,8 @@ export function buildDefaults(activeAgent: Agent | undefined) {
     maxMemoryMessages: readMemoryNumber(activeAgent, "maxMessages", "6"),
     maxUserInputLength: readSafetyNumber(activeAgent, "maxUserInputLength", ""),
     blockedTerms: activeAgent?.safetySettings.blockedTerms?.join("\n") ?? "",
+    knowledgeGroundingMode:
+      activeAgent?.safetySettings.knowledgeGroundingMode ?? "optional",
     tags: activeAgent?.tags?.join(", ") ?? "",
     promptSuggestions:
       activeAgent?.promptSuggestions
@@ -328,11 +330,19 @@ export function parseBlockedTerms(
 export function buildSafetySettings(
   maxUserInputLength: number | undefined,
   blockedTerms: string[],
+  knowledgeGroundingMode?: AgentSafetySettings["knowledgeGroundingMode"],
 ): AgentSafetySettings {
   const safetySettings: AgentSafetySettings = {};
   if (maxUserInputLength !== undefined)
     safetySettings.maxUserInputLength = maxUserInputLength;
   if (blockedTerms.length > 0) safetySettings.blockedTerms = blockedTerms;
+  if (
+    knowledgeGroundingMode === "optional" ||
+    knowledgeGroundingMode === "prefer" ||
+    knowledgeGroundingMode === "required"
+  ) {
+    safetySettings.knowledgeGroundingMode = knowledgeGroundingMode;
+  }
   return safetySettings;
 }
 

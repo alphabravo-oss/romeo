@@ -83,7 +83,7 @@
   "value": "Valor",
   "providers": "Proveedores",
   "backToProviders": "Volver a proveedores",
-  "providerDependentAssistants": "Asistentes dependientes",
+  "providerDependentAssistants": "Modelos personalizados dependientes",
   "providerDisableImpactTitle": "¿Desactivar este proveedor?",
-  "providerDisableImpactDescription": "Esto bloqueará {{agents}} asistentes en {{models}} modelos base ({{names}}). Configura reemplazos antes de desactivarlo para evitar ejecuciones fallidas."
+  "providerDisableImpactDescription": "Esto bloqueará {{agents}} modelos personalizados en {{models}} modelos base ({{names}}). Configura reemplazos antes de desactivarlo para evitar ejecuciones fallidas."
 }

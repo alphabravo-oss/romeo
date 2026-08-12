@@ -6,6 +6,8 @@ export function formatAdminAnalyticsSummaryCsv(
   const rows: string[][] = [
     ["category", "dimension", "id", "metric", "value"],
     ["overall", "org", summary.orgId, "status", summary.status],
+    ["window", "org", summary.orgId, "from", summary.window.from ?? ""],
+    ["window", "org", summary.orgId, "to", summary.window.to],
     ["eval", "org", summary.orgId, "status", summary.evals.status],
     [
       "eval",
@@ -29,6 +31,48 @@ export function formatAdminAnalyticsSummaryCsv(
       String(summary.usage.estimatedCostUsd),
     ],
     [
+      "usage",
+      "org",
+      summary.orgId,
+      "runs_started",
+      String(summary.usage.runsStarted),
+    ],
+    [
+      "usage",
+      "org",
+      summary.orgId,
+      "runs_completed",
+      String(summary.usage.runsCompleted),
+    ],
+    [
+      "usage",
+      "org",
+      summary.orgId,
+      "runs_failed",
+      String(summary.usage.runsFailed),
+    ],
+    [
+      "usage",
+      "org",
+      summary.orgId,
+      "total_tokens",
+      String(summary.usage.totalTokens),
+    ],
+    [
+      "usage",
+      "org",
+      summary.orgId,
+      "activity_event_count",
+      String(summary.usage.activityEventCount),
+    ],
+    [
+      "usage",
+      "org",
+      summary.orgId,
+      "unpriced_token_quantity",
+      String(summary.usage.unpricedTokenQuantity),
+    ],
+    [
       "provider",
       "org",
       summary.orgId,
@@ -43,11 +87,25 @@ export function formatAdminAnalyticsSummaryCsv(
       String(summary.jobs.criticalAlertCount),
     ],
     [
+      "job",
+      "org",
+      summary.orgId,
+      "failed",
+      String(summary.jobs.failed),
+    ],
+    [
       "tool",
       "org",
       summary.orgId,
       "failure_count",
       String(summary.tools.failureCount),
+    ],
+    [
+      "attention",
+      "org",
+      summary.orgId,
+      "model_count",
+      String(summary.attention.models.length),
     ],
   ];
 
@@ -76,6 +134,22 @@ export function formatAdminAnalyticsSummaryCsv(
       `${metric.metric}:${metric.unit}`,
       "quantity",
       String(metric.quantity),
+    ]);
+  }
+  for (const model of summary.attention.models) {
+    rows.push([
+      "attention",
+      "model",
+      model.modelId,
+      "display_name",
+      model.displayName,
+    ]);
+    rows.push([
+      "attention",
+      "model",
+      model.modelId,
+      "issues",
+      model.issues.join("|"),
     ]);
   }
   for (const tool of summary.tools.byTool) {

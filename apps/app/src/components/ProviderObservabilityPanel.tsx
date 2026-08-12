@@ -11,8 +11,8 @@ import {
   LocalizedNumber,
   LocalizedTokens,
 } from "../lib/locale-format";
+import { Section, StatRow } from "./console";
 import { DataTable, createColumnHelper, type ColumnDef } from "./DataTable";
-import { PanelStats } from "./PanelStats";
 
 interface MetricRow {
   id: string;
@@ -167,10 +167,10 @@ export function ProviderObservabilityPanel({
   ];
 
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <div className="rm-card-title">{t("observability")}</div>
       <div className="mt-4 grid gap-5">
-        <PanelStats
+        <StatRow
           items={[
             {
               label: t("posture"),
@@ -214,6 +214,6 @@ export function ProviderObservabilityPanel({
           />
         </div>
       </div>
-    </section>
+    </Section>
   );
 }

@@ -9,10 +9,10 @@ import type { QuotaBucket } from "../features/types";
 import { PanelState } from "../lib/panel-state";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
-import { PanelStats } from "./PanelStats";
 import { PageActions } from "./PageActions";
 import { QuotaEditDialog } from "./QuotaEditDialog";
 import { LocalizedDate } from "../lib/locale-format";
@@ -167,28 +167,23 @@ export function QuotaPanel() {
   }
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="text-sm text-muted">{t("quotaBuckets")}</div>
-        <div className="flex items-center gap-2">
-          <PageActions
-            onRefresh={() => void quotasQuery.refetch()}
-            primary={
-              (quotasQuery.data?.length ?? 0) > 0 ? (
-                <Button
-                  variant="primary"
-                  onClick={() => setAddOpen(true)}
-                  type="button"
-                >
-                  + {t("addQuota")}
-                </Button>
-              ) : undefined
-            }
-            refreshLabel={t("refresh")}
-            refreshing={quotasQuery.isFetching}
-          />
-        </div>
-      </div>
+    <Section
+      actions={
+        <PageActions
+          onRefresh={() => void quotasQuery.refetch()}
+          primary={
+            (quotasQuery.data?.length ?? 0) > 0 ? (
+              <AddButton onClick={() => setAddOpen(true)}>
+                {t("addQuota")}
+              </AddButton>
+            ) : undefined
+          }
+          refreshLabel={t("refresh")}
+          refreshing={quotasQuery.isFetching}
+        />
+      }
+      title={t("quotaBuckets")}
+    >
       <FormDialog
         open={addOpen}
         title={t("newQuota")}
@@ -340,41 +335,35 @@ export function QuotaPanel() {
           }}
         />
       ) : null}
-      <div className="mt-4">
-        <PanelState
-          query={quotasQuery}
-          empty={t("noQuotasYet")}
-          emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setAddOpen(true)}
-              type="button"
-            >
-              + {t("addQuota")}
-            </Button>
-          }
-          emptyDescription={t("noQuotasYetDescription")}
-          emptyIcon={<BarChart3 aria-hidden size={24} />}
-        >
-          {(rows) => (
-            <div className="grid gap-4">
-              <PanelStats
-                items={[
-                  { label: t("totalQuotaBuckets"), value: rows.length },
-                  {
-                    label: t("quotaWithReset"),
-                    value: rows.filter((row) => row.resetInterval !== "none")
-                      .length,
-                  },
-                ]}
-              />
-              <DataTable columns={columns} data={rows} />
-            </div>
-          )}
-        </PanelState>
-      </div>
+      <PanelState
+        query={quotasQuery}
+        empty={t("noQuotasYet")}
+        emptyAction={
+          <AddButton onClick={() => setAddOpen(true)}>
+            {t("addQuota")}
+          </AddButton>
+        }
+        emptyDescription={t("noQuotasYetDescription")}
+        emptyIcon={<BarChart3 aria-hidden size={24} />}
+      >
+        {(rows) => (
+          <div className="grid gap-4">
+            <StatRow
+              items={[
+                { label: t("totalQuotaBuckets"), value: rows.length },
+                {
+                  label: t("quotaWithReset"),
+                  value: rows.filter((row) => row.resetInterval !== "none")
+                    .length,
+                },
+              ]}
+            />
+            <DataTable columns={columns} data={rows} />
+          </div>
+        )}
+      </PanelState>
       {dialog}
-    </section>
+    </Section>
   );
 }
 

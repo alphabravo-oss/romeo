@@ -109,6 +109,9 @@ export class RunQueueService {
       updatedAt: now,
       ...(input.modelId === undefined ? {} : { modelId: input.modelId }),
       ...(input.webSearch === undefined ? {} : { webSearch: input.webSearch }),
+      ...(input.agenticRag === undefined
+        ? {}
+        : { agenticRag: input.agenticRag }),
       ...(input.urls === undefined ? {} : { urls: input.urls }),
     };
     const created = await this.repository.transaction(async (repository) => {
@@ -221,6 +224,9 @@ export class RunQueueService {
           ...(next.webSearch === undefined
             ? {}
             : { webSearch: next.webSearch }),
+          ...(next.agenticRag === undefined
+            ? {}
+            : { agenticRag: next.agenticRag }),
           ...(next.urls === undefined ? {} : { urls: next.urls }),
         });
         await recordUsage(this.repository, {

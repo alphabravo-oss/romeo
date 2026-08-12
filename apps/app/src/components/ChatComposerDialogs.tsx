@@ -17,6 +17,7 @@ import {
   retryFileExtraction,
   type FileObject,
 } from "../features/files";
+import { listKnowledgeBases } from "../features/knowledge";
 import { listWorkspaceContentPage } from "../features/workspace-content";
 import { ingestWebUrls } from "../features/web";
 import { formatBytes } from "../lib/locale-format";
@@ -34,10 +35,12 @@ type ImageSize = "1024x1024" | "1024x1536" | "1536x1024";
 export interface ChatComposerDialogState {
   fileLibraryOpen: boolean;
   imageDialogOpen: boolean;
+  knowledgeLibraryOpen: boolean;
   noteLibraryOpen: boolean;
   promptLibraryOpen: boolean;
   setFileLibraryOpen: Dispatch<SetStateAction<boolean>>;
   setImageDialogOpen: Dispatch<SetStateAction<boolean>>;
+  setKnowledgeLibraryOpen: Dispatch<SetStateAction<boolean>>;
   setNoteLibraryOpen: Dispatch<SetStateAction<boolean>>;
   setPromptLibraryOpen: Dispatch<SetStateAction<boolean>>;
   setUrlDialogOpen: Dispatch<SetStateAction<boolean>>;
@@ -46,6 +49,7 @@ export interface ChatComposerDialogState {
 
 interface ChatComposerDialogsProps extends ChatComposerDialogState {
   draft: string;
+  knowledgeBaseIdsOverride: string[] | undefined;
   models: BaseModel[];
   onAddUrl: (url: string) => void;
   onAttachExistingFile: (file: FileObject) => void;
@@ -55,6 +59,7 @@ interface ChatComposerDialogsProps extends ChatComposerDialogState {
     prompt: string;
     size: ImageSize;
   }) => void;
+  onKnowledgeBaseIdsChange: (knowledgeBaseIds: string[] | undefined) => void;
   providers: Provider[];
   selectedModelId: string | undefined;
   workspaceId: string | undefined;
@@ -74,6 +79,7 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageModelId, setImageModelId] = useState("");
   const [imageSize, setImageSize] = useState<ImageSize>("1024x1024");
+  const [draftKnowledgeIds, setDraftKnowledgeIds] = useState<string[]>([]);
 
   const promptsQuery = useQuery({
     queryKey: [
@@ -111,6 +117,15 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
       }),
     enabled: props.workspaceId !== undefined && props.noteLibraryOpen,
   });
+  const knowledgeBasesQuery = useQuery({
+    queryKey: ["knowledgeBases", props.workspaceId],
+    queryFn: () => listKnowledgeBases(props.workspaceId!),
+    enabled: props.workspaceId !== undefined && props.knowledgeLibraryOpen,
+  });
+  useEffect(() => {
+    if (!props.knowledgeLibraryOpen) return;
+    setDraftKnowledgeIds(props.knowledgeBaseIdsOverride ?? []);
+  }, [props.knowledgeBaseIdsOverride, props.knowledgeLibraryOpen]);
   const retryExtraction = useMutation({
     mutationFn: retryFileExtraction,
     onSuccess: async () => {
@@ -304,6 +319,84 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
           pageSize={20}
           total={notesQuery.data?.total ?? 0}
         />
+      </FormDialog>
+
+      <FormDialog
+        open={props.knowledgeLibraryOpen}
+        title={t("composerKnowledgePicker")}
+        onClose={() => props.setKnowledgeLibraryOpen(false)}
+      >
+        <p className="text-sm text-muted">{t("composerKnowledgePickerHelp")}</p>
+        {knowledgeBasesQuery.isSuccess &&
+        knowledgeBasesQuery.data.length === 0 ? (
+          <p className="text-sm text-muted">{t("knowledgeNoBases")}</p>
+        ) : null}
+        <div className="grid gap-2">
+          {(knowledgeBasesQuery.data ?? []).map((base) => {
+            const checked = draftKnowledgeIds.includes(base.id);
+            return (
+              <label
+                className="flex items-start gap-2 text-sm"
+                htmlFor={`composer-kb-${base.id}`}
+                key={base.id}
+              >
+                <Input
+                  checked={checked}
+                  id={`composer-kb-${base.id}`}
+                  name={`composer-kb-${base.id}`}
+                  onChange={() => {
+                    setDraftKnowledgeIds((current) =>
+                      checked
+                        ? current.filter((id) => id !== base.id)
+                        : [...current, base.id],
+                    );
+                  }}
+                  type="checkbox"
+                />
+                <span>
+                  <strong className="block">{base.name}</strong>
+                  {base.description ? (
+                    <small className="block text-muted">
+                      {base.description}
+                    </small>
+                  ) : null}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => {
+              props.onKnowledgeBaseIdsChange(undefined);
+              props.setKnowledgeLibraryOpen(false);
+            }}
+            type="button"
+            variant="ghost"
+          >
+            {t("composerKnowledgeUseDefaults")}
+          </Button>
+          <Button
+            onClick={() => {
+              props.onKnowledgeBaseIdsChange([]);
+              props.setKnowledgeLibraryOpen(false);
+            }}
+            type="button"
+            variant="ghost"
+          >
+            {t("composerKnowledgeNone")}
+          </Button>
+          <Button
+            onClick={() => {
+              props.onKnowledgeBaseIdsChange(draftKnowledgeIds);
+              props.setKnowledgeLibraryOpen(false);
+            }}
+            type="button"
+            variant="primary"
+          >
+            {t("composerKnowledgeApply")}
+          </Button>
+        </div>
       </FormDialog>
 
       <FormDialog

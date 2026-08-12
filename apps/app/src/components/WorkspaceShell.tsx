@@ -1,21 +1,34 @@
 import { NativeSelect } from "@romeo/ui";
-import Bot from "lucide-react/dist/esm/icons/bot.mjs";
+import Box from "lucide-react/dist/esm/icons/box.mjs";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid.mjs";
 import SquarePen from "lucide-react/dist/esm/icons/square-pen.mjs";
-import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
+import { listChatShares } from "../features/collaboration";
 import type { QueuedChatTurn } from "../features/runs";
 import { type AppCommand, useRegisterCommands } from "../lib/commands";
 import { useLocale } from "../lib/i18n";
 import { resolveChatAuthorNames } from "./assistant-selection";
+import { isGenericCustomModelName, resolveChatAccess } from "./chat-enterprise";
+import { ChatHeaderTitle } from "./ChatHeaderTitle";
 import { ChatPanel } from "./ChatPanel";
-import { ModelSelector } from "./ModelSelector";
+import { downloadChatMarkdown } from "./workspace-nav-portability";
 import { useWorkspaceController } from "./useWorkspaceController";
 import { useWorkspace } from "./WorkspaceContext";
 import { WorkspaceNav } from "./WorkspaceNav";
+import {
+  WorkspaceNavDialogs,
+  type WorkspaceNavDialog,
+} from "./WorkspaceNavDialogs";
 import { WorkspaceUserMenu } from "./WorkspaceUserMenu";
 import { ThemeToggle } from "./ThemeToggle";
-import { ManagedModelPersonalization } from "./ManagedModelPersonalization";
 
 const subscribeToHydration = () => () => {};
 
@@ -46,22 +59,94 @@ export function WorkspaceShell({
     ...(requestedChatId === undefined ? {} : { requestedChatId }),
   });
   const { agents, handleNewChat, setActiveAgentId } = workspace;
+  const namedCustomModels = useMemo(
+    () =>
+      agents.filter(
+        (agent) =>
+          agent.readinessStatus === "ready" &&
+          !isGenericCustomModelName(agent.name),
+      ),
+    [agents],
+  );
+  const passthroughAgentId = useMemo(
+    () =>
+      agents.find(
+        (agent) =>
+          agent.readinessStatus === "ready" &&
+          isGenericCustomModelName(agent.name),
+      )?.id,
+    [agents],
+  );
+  const handleSelectCustomModel = useCallback(
+    (agentId: string, baseModelId: string) => {
+      setActiveAgentId(agentId);
+      void workspace.handleSelectModel(baseModelId, agentId);
+    },
+    [setActiveAgentId, workspace],
+  );
+  const handleSelectBaseModel = useCallback(
+    (modelId: string) => {
+      const current = workspace.activeAgent;
+      const leavingCustom =
+        current !== undefined && !isGenericCustomModelName(current.name);
+      if (leavingCustom && passthroughAgentId !== undefined) {
+        setActiveAgentId(passthroughAgentId);
+        void workspace.handleSelectModel(modelId, passthroughAgentId);
+        return;
+      }
+      void workspace.handleSelectModel(modelId);
+    },
+    [passthroughAgentId, setActiveAgentId, workspace],
+  );
+  const [sessionDialog, setSessionDialog] = useState<WorkspaceNavDialog>(null);
   const { workspaceId, workspaces, setWorkspaceId } = useWorkspace();
-  // The single read of the toggle in the chat tree: everything below this
-  // component receives already-resolved names, not the flag. It stays undefined
-  // until the setting loads, and every use here reads that as "not yet" -- a
-  // name is withheld rather than guessed, and the assistant-only controls stay
-  // out until they are known to belong. Guessing would label an assistants-on
-  // workspace by the bare rule for a paint, then flip.
-  const assistantsEnabled = workspace.chatExperience?.assistantsEnabled;
+  // Product stack: provider → base model → custom model. Custom models are
+  // picker entries, not a separate assistant identity.
   const authorNames = resolveChatAuthorNames({
     agentName: workspace.activeAgent?.name,
-    assistantsEnabled,
-    fallbackName: t("shellRomeoAssistant"),
+    assistantsEnabled: true,
+    fallbackName: t("shellCustomModel"),
     modelDisplayName: workspace.models.find(
       (model) => model.id === workspace.selectedModelId,
     )?.displayName,
   });
+  const activeChat = workspace.chats.find(
+    (chat) => chat.id === workspace.activeChatId,
+  );
+  const subject = workspace.subject;
+  const isOwnerOrAdmin =
+    subject?.isAdmin === true ||
+    (subject?.id !== undefined &&
+      activeChat?.createdBy !== undefined &&
+      activeChat.createdBy === subject.id);
+  // Shares are only needed when the viewer is not already the owner/admin —
+  // otherwise we would hit the list endpoint on every owned chat open.
+  const chatSharesQuery = useQuery({
+    queryKey: ["chatShares", "access", workspace.activeChatId],
+    queryFn: () => listChatShares(workspace.activeChatId!),
+    enabled:
+      workspace.activeChatId !== undefined &&
+      subject !== undefined &&
+      !isOwnerOrAdmin,
+    staleTime: 30_000,
+  });
+  const chatAccess = useMemo(
+    () =>
+      resolveChatAccess({
+        subjectId: subject?.id,
+        isAdmin: subject?.isAdmin,
+        groupIds: subject?.groupIds,
+        chatCreatedBy: activeChat?.createdBy,
+        grants: chatSharesQuery.data ?? [],
+      }),
+    [
+      activeChat?.createdBy,
+      chatSharesQuery.data,
+      subject?.groupIds,
+      subject?.id,
+      subject?.isAdmin,
+    ],
+  );
 
   // ChatMessageRow is memoised, and a memo only holds if its function props
   // keep their identity -- a fresh arrow per render is a changed prop on every
@@ -113,8 +198,11 @@ export function WorkspaceShell({
     [],
   );
   const handleRateMessage = useCallback(
-    (messageId: string, rating: "negative" | "none" | "positive") =>
-      void latest.current.handleRateMessage(messageId, rating),
+    (
+      messageId: string,
+      rating: "negative" | "none" | "positive",
+      reasonCode?: string,
+    ) => void latest.current.handleRateMessage(messageId, rating, reasonCode),
     [],
   );
   const handleRegenerate = useCallback(
@@ -136,20 +224,15 @@ export function WorkspaceShell({
         icon: SquarePen,
         run: handleNewChat,
       },
-      // Dropped wholesale when assistants are off: there is nothing to switch
-      // between, and the group heading is one of the strings that names the
-      // wrapper the setting exists to hide.
-      ...(assistantsEnabled
-        ? agents.map((agent) => ({
-            id: `switch-agent-${agent.id}`,
-            group: t("shellSwitchAgent"),
-            label: agent.name,
-            icon: Bot,
-            run: () => setActiveAgentId(agent.id),
-          }))
-        : []),
+      ...namedCustomModels.map((agent) => ({
+        id: `switch-model-${agent.id}`,
+        group: t("modelGroupCustom"),
+        label: agent.name,
+        icon: Box,
+        run: () => handleSelectCustomModel(agent.id, agent.baseModelId),
+      })),
     ],
-    [agents, assistantsEnabled, handleNewChat, setActiveAgentId, t],
+    [handleNewChat, handleSelectCustomModel, namedCustomModels, t],
   );
   useRegisterCommands(commands);
 
@@ -194,32 +277,14 @@ export function WorkspaceShell({
       <section className="rm-main" id="main-content" tabIndex={-1}>
         <header className="rm-topbar">
           <div className="rm-main-context">
-            {/*
-             * Both controls act on the assistant wrapper, so with assistants
-             * off neither has a subject the reader can see: the composer's own
-             * model picker is what chooses who answers. Personalization is
-             * gated explicitly rather than left to its all-locked-policy
-             * self-hide, which is an accident of the default policy and not a
-             * promise.
-             */}
-            {assistantsEnabled ? (
-              <>
-                <ModelSelector
-                  activeAgentId={
-                    workspace.activeAgentId ?? workspace.activeAgent?.id
-                  }
-                  activeAgentName={
-                    workspace.activeAgent?.name ?? t("shellRomeoAssistant")
-                  }
-                  agents={workspace.agents}
-                  onSelectAgent={workspace.setActiveAgentId}
-                  workspaceId={workspace.workspace?.id}
-                />
-                <ManagedModelPersonalization
-                  agentId={workspace.activeAgent?.id}
-                />
-              </>
-            ) : null}
+            <ChatHeaderTitle
+              canRename={chatAccess !== "read"}
+              chatId={workspace.activeChatId}
+              onRename={(chatId, title) =>
+                void workspace.renameChat(chatId, title)
+              }
+              title={activeChat?.title}
+            />
             {/*
              * Rendered only when there is somewhere to switch to. Previously the
              * single-workspace case fell back to a plain <span> holding the
@@ -273,6 +338,24 @@ export function WorkspaceShell({
 
         <ChatPanel
           activeVoiceProfileId={workspace.activeVoiceProfileId}
+          activeChatId={workspace.activeChatId}
+          activeAgent={
+            workspace.activeAgent === undefined
+              ? undefined
+              : {
+                  name: workspace.activeAgent.name,
+                  ...(workspace.activeAgent.avatarUrl === undefined
+                    ? {}
+                    : { avatarUrl: workspace.activeAgent.avatarUrl }),
+                  ...(workspace.activeAgent.icon === undefined
+                    ? {}
+                    : { icon: workspace.activeAgent.icon }),
+                }
+          }
+          chatTitle={
+            workspace.chats.find((chat) => chat.id === workspace.activeChatId)
+              ?.title
+          }
           nextTurnAuthorName={authorNames.nextTurn}
           transcriptAuthorName={authorNames.transcript}
           attachedUrls={workspace.attachedUrls}
@@ -288,7 +371,20 @@ export function WorkspaceShell({
               : (workspace.chatExperience?.suggestions ?? [])
           }
           selectedModelId={workspace.selectedModelId}
-          onSelectModel={(modelId) => void workspace.handleSelectModel(modelId)}
+          systemPrompt={workspace.activeAgent?.systemPrompt}
+          defaultModelId={workspace.defaultModelId}
+          lastReplyModelId={workspace.lastReplyModelId}
+          modelDisplayNames={workspace.modelDisplayNames}
+          customModels={namedCustomModels}
+          {...(workspace.activeAgent === undefined ||
+          isGenericCustomModelName(workspace.activeAgent.name)
+            ? {}
+            : { selectedCustomModelId: workspace.activeAgent.id })}
+          onSelectCustomModel={handleSelectCustomModel}
+          onSelectModel={handleSelectBaseModel}
+          onToggleDefaultModel={(modelId) =>
+            void workspace.handleToggleDefaultModel(modelId)
+          }
           draft={workspace.draft}
           documentAttachments={workspace.documentAttachments}
           error={workspace.error}
@@ -301,11 +397,23 @@ export function WorkspaceShell({
             workspace.chats.find((chat) => chat.id === workspace.activeChatId)
               ?.temporary === true
           }
+          legalHoldUntil={
+            workspace.chats.find((chat) => chat.id === workspace.activeChatId)
+              ?.legalHoldUntil
+          }
+          onOpenSourceChat={(sourceChatId) => {
+            void workspace.handleSelectChat(sourceChatId);
+          }}
+          chatAccess={chatAccess}
           queuedTurns={workspace.queuedTurns}
           isTranscribingVoice={workspace.isTranscribingVoice}
           messages={workspace.messages}
           messageFeedback={workspace.messageFeedback}
+          knowledgeBaseIdsOverride={workspace.knowledgeBaseIdsOverride}
           webSearchEnabled={workspace.webSearchEnabled}
+          agenticRagAvailable={workspace.agenticRagAvailable}
+          agenticRagForced={workspace.agenticRagForced}
+          agenticRagEnabled={workspace.agenticRagEnabled}
           workspaceId={workspace.workspace?.id}
           onBranch={handleBranch}
           onCancel={workspace.handleCancel}
@@ -324,25 +432,69 @@ export function WorkspaceShell({
             void workspace.handleGenerateImages(input)
           }
           onInspectContext={() => void workspace.handleInspectContext()}
+          onKnowledgeBaseIdsChange={workspace.setKnowledgeBaseIdsOverride}
           onEditAndResend={handleEditAndResend}
           onRateMessage={handleRateMessage}
           onRegenerate={handleRegenerate}
+          onRegenerateWith={(input) => void workspace.regenerateLast(input)}
+          onFollowUp={(prompt) => void workspace.handleFollowUp(prompt)}
+          regenerateModels={workspace.models
+            .filter(
+              (model) =>
+                model.enabled &&
+                model.available !== false &&
+                model.id !== workspace.selectedModelId,
+            )
+            .slice(0, 6)
+            .map((model) => ({ id: model.id, label: model.displayName }))}
+          onShareChat={
+            workspace.activeChatId === undefined || chatAccess === "read"
+              ? undefined
+              : () => {
+                  const chat = workspace.chats.find(
+                    (item) => item.id === workspace.activeChatId,
+                  );
+                  if (chat) setSessionDialog({ kind: "share", chat });
+                }
+          }
+          onExportChatMarkdown={
+            workspace.activeChatId === undefined
+              ? undefined
+              : () => {
+                  const chat = workspace.chats.find(
+                    (item) => item.id === workspace.activeChatId,
+                  );
+                  if (chat) void downloadChatMarkdown(chat);
+                }
+          }
           onRemoveImageAttachment={workspace.handleRemoveImageAttachment}
           onRemoveDocumentAttachment={workspace.handleRemoveDocumentAttachment}
           onRemoveUrl={workspace.handleRemoveUrl}
           onSelectVariant={handleSelectVariant}
           onToggleWebSearch={workspace.setWebSearchEnabled}
+          onToggleAgenticRag={workspace.setAgenticRagRequested}
           onTranscribeAudio={(blob) => workspace.handleTranscribeAudio(blob)}
           onTranscriptionError={workspace.handleTranscriptionError}
           onSubmit={workspace.handleSubmit}
           reasoning={workspace.reasoning}
           runActivities={workspace.runActivities}
+          runWait={workspace.runWait}
           speechArtifacts={workspace.speechArtifacts}
           speechMessageId={workspace.speechMessageId}
           toolCalls={workspace.toolCalls}
           variantsByMessageId={workspace.variantsByMessageId}
         />
       </section>
+      <WorkspaceNavDialogs
+        dialog={sessionDialog}
+        folders={[]}
+        onClose={() => setSessionDialog(null)}
+        onRenameChat={(chatId, title) =>
+          void workspace.renameChat(chatId, title)
+        }
+        tags={[]}
+        workspaceId={workspaceId}
+      />
     </main>
   );
 }

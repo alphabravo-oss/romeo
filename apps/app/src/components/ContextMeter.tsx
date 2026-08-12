@@ -1,36 +1,41 @@
 import { Button } from "@romeo/ui";
 
 import type { RunContextPreview } from "../features/chat";
+import type { Message } from "../features/types";
 import { useLocale, type Locale } from "../lib/i18n";
 import { formatNumber } from "../lib/locale-format";
 import { contextMeterValue } from "./context-meter";
 
 /**
  * How full the next request is, in the composer where the decision is made.
- * Clicking it opens the inspector that explains the number — the meter itself
- * never calls the inspect endpoint, which does real retrieval work per call.
- *
- * ponytail: the preview costs the chat's ACTIVE branch, so after switching
- * sibling variants the number can describe a branch the reader is no longer
- * looking at (same ceiling as run-context-inspection-service.ts, which carries
- * the matching note). Upgrade path: key the cached preview by the active leaf
- * message.
+ * History + draft update live; clicking opens the inspector for knowledge /
+ * attachment detail (that path does real retrieval work).
  */
 export function ContextMeter({
   contextWindow,
   disabled,
   draft,
+  messages,
   onInspect,
   preview,
+  systemPrompt,
 }: {
   contextWindow: number | undefined;
   disabled: boolean;
   draft: string;
+  messages: Message[];
   onInspect: () => void;
   preview: RunContextPreview | undefined;
+  systemPrompt: string | undefined;
 }) {
   const { locale, t } = useLocale();
-  const value = contextMeterValue({ contextWindow, draft, preview });
+  const value = contextMeterValue({
+    contextWindow,
+    draft,
+    messages,
+    preview,
+    ...(systemPrompt === undefined ? {} : { systemPrompt }),
+  });
   const used = `${value.exact ? "" : "~"}${compactTokens(value.usedTokens, locale)}`;
   return (
     // No aria-label: the numbers ARE the accessible name, and overriding them

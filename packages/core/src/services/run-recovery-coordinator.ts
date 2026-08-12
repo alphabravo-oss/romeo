@@ -152,6 +152,11 @@ export class RunRecoveryCoordinator {
       status: "failed",
       assistantContent: "",
       ...(model === undefined ? {} : { model }),
+      error: {
+        code: "run_execution_interrupted",
+        message:
+          "The server stopped while this response was running. The run was recovered as failed; you can retry the message.",
+      },
       terminalEvent: {
         type: "run.failed",
         data: {

@@ -40,6 +40,11 @@ export interface MessageRecord {
     title: string;
     sourceUri?: string;
   }>;
+  error?: {
+    code: string;
+    message?: string;
+  };
+  modelId?: string;
   parentId?: string;
   createdAt: string;
 }
@@ -71,6 +76,7 @@ export interface QueuedChatTurnRecord {
   modelId?: string;
   content: string;
   webSearch?: boolean;
+  agenticRag?: boolean;
   urls?: string[];
   createdBy: string;
   principalId: string;
@@ -119,12 +125,17 @@ export function toMessageRecord(
   row: typeof messages.$inferSelect,
 ): MessageRecord {
   const citations = asMessageCitations(row.citations);
+  const error = asMessageRunError(row.error);
   return {
     id: row.id,
     chatId: row.chatId,
     role: row.role,
     content: row.content,
     ...(citations.length === 0 ? {} : { citations }),
+    ...(error === undefined ? {} : { error }),
+    ...(row.modelId === null || row.modelId === undefined
+      ? {}
+      : { modelId: row.modelId }),
     ...(row.parentId === null ? {} : { parentId: row.parentId }),
     createdAt: toIsoString(row.createdAt),
   };
@@ -184,6 +195,7 @@ export function toQueuedChatTurnRecord(
   };
   if (row.modelId !== null) record.modelId = row.modelId;
   if (row.webSearch) record.webSearch = true;
+  if (row.agenticRag) record.agenticRag = true;
   if (row.urls.length > 0) record.urls = row.urls;
   if (row.leaseOwner !== null) record.leaseOwner = row.leaseOwner;
   if (row.leaseToken !== null) record.leaseToken = row.leaseToken;
@@ -227,6 +239,8 @@ export function toMessageInsert(
     role: record.role,
     content: record.content,
     citations: record.citations ?? null,
+    error: record.error ?? null,
+    modelId: record.modelId ?? null,
     parentId: record.parentId ?? null,
     createdAt: new Date(record.createdAt),
   };
@@ -244,6 +258,7 @@ export function toQueuedChatTurnInsert(
     modelId: record.modelId ?? null,
     content: record.content,
     webSearch: record.webSearch === true,
+    agenticRag: record.agenticRag === true,
     urls: record.urls ?? [],
     createdBy: record.createdBy,
     principalId: record.principalId,
@@ -269,6 +284,7 @@ export function toQueuedChatTurnUpdate(record: QueuedChatTurnRecord) {
     modelId: record.modelId ?? null,
     content: record.content,
     webSearch: record.webSearch === true,
+    agenticRag: record.agenticRag === true,
     urls: record.urls ?? [],
     status: record.status,
     attemptCount: record.attemptCount,
@@ -280,6 +296,21 @@ export function toQueuedChatTurnUpdate(record: QueuedChatTurnRecord) {
     lastErrorMessage: record.lastErrorMessage ?? null,
     updatedAt: new Date(record.updatedAt),
     completedAt: optionalDate(record.completedAt),
+  };
+}
+
+function asMessageRunError(
+  value: unknown,
+): MessageRecord["error"] | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const item = value as Record<string, unknown>;
+  if (typeof item.code !== "string" || item.code.trim().length === 0)
+    return undefined;
+  return {
+    code: item.code.trim().slice(0, 120),
+    ...(typeof item.message === "string" && item.message.trim().length > 0
+      ? { message: item.message.trim().slice(0, 2_000) }
+      : {}),
   };
 }
 

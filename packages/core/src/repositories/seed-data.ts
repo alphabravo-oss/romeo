@@ -189,7 +189,7 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
     version: 1,
     status: "published",
     baseModelId: "model_openai_compatible_default",
-    systemPrompt: "You are Romeo, a secure AI workspace assistant.",
+    systemPrompt: "You are Romeo, a secure AI workspace copilot.",
     parameters: { temperature: 0.2 },
     memoryPolicy: { mode: "disabled" },
     safetySettings: {},
@@ -260,7 +260,7 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
         id: "agent_default",
         orgId: "org_default",
         workspaceId: "workspace_default",
-        name: "Romeo Assistant",
+        name: "Default",
         createdBy: "user_dev_admin",
         baseModelId: "model_openai_compatible_default",
         systemPrompt: defaultAgentVersion.systemPrompt,
@@ -441,6 +441,7 @@ function createSeedGrants(): ResourceGrant[] {
     ["knowledge_base", "kb_default", "use"],
     ["knowledge_base", "kb_default", "write"],
     ["voice_profile", "voice_default", "use"],
+    ["workspace", "workspace_default", "read"],
   ];
 
   return resources.map(([resourceType, resourceId, permission], index) => ({

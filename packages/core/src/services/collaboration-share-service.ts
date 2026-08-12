@@ -162,6 +162,187 @@ export class CollaborationShareService {
     return deleted;
   }
 
+  async revokeKnowledgeBaseGrant(input: {
+    subject: AuthSubject;
+    knowledgeBaseId: string;
+    grantId: string;
+  }): Promise<ResourceGrant> {
+    const knowledgeBase = await getAuthorizedKnowledgeBase(this.repository, {
+      knowledgeBaseId: input.knowledgeBaseId,
+      subject: input.subject,
+      scope: "knowledge:write",
+      permission: "write",
+    });
+    const grant = (
+      await this.sharesFor(
+        "knowledge_base",
+        knowledgeBase.id,
+        input.subject.orgId,
+      )
+    ).find((item) => item.id === input.grantId);
+    if (grant === undefined) throw notFound("Knowledge grant");
+    const deleted = await this.repository.deleteResourceGrant(grant.id);
+    if (deleted === undefined) throw notFound("Knowledge grant");
+    await this.audit(
+      input.subject,
+      "knowledge_base.share.revoke",
+      "knowledge_base",
+      knowledgeBase.id,
+      {
+        principalType: grant.principalType,
+        principalId: grant.principalId,
+        permission: grant.permission,
+      },
+    );
+    return deleted;
+  }
+
+  async listModelShares(
+    subject: AuthSubject,
+    modelId: string,
+  ): Promise<ResourceGrant[]> {
+    const model = await this.requireOrgModel(subject, modelId, "admin:read");
+    return this.sharesFor("model", model.id, subject.orgId);
+  }
+
+  async shareModel(input: {
+    subject: AuthSubject;
+    modelId: string;
+    share: ShareInput;
+  }): Promise<ResourceGrant[]> {
+    const model = await this.requireOrgModel(
+      input.subject,
+      input.modelId,
+      "admin:write",
+    );
+    return this.repository.transaction(async (repository) => {
+      const grants = await this.shareResource({
+        repository,
+        subject: input.subject,
+        resourceType: "model",
+        resourceId: model.id,
+        allowedPermissions: ["use"],
+        share: input.share,
+      });
+      await this.shareResource({
+        repository,
+        subject: input.subject,
+        resourceType: "provider",
+        resourceId: model.providerId,
+        allowedPermissions: ["use"],
+        share: { ...input.share, permissions: ["use"] },
+      });
+      await this.audit(
+        input.subject,
+        "model.share",
+        "model",
+        model.id,
+        {
+          principalType: input.share.principalType,
+          permissions: grants.map((grant) => grant.permission),
+          providerId: model.providerId,
+        },
+        repository,
+      );
+      return grants;
+    });
+  }
+
+  async revokeModelGrant(input: {
+    subject: AuthSubject;
+    modelId: string;
+    grantId: string;
+  }): Promise<ResourceGrant> {
+    const model = await this.requireOrgModel(
+      input.subject,
+      input.modelId,
+      "admin:write",
+    );
+    const grant = (
+      await this.sharesFor("model", model.id, input.subject.orgId)
+    ).find((item) => item.id === input.grantId);
+    if (grant === undefined) throw notFound("Model grant");
+    const deleted = await this.repository.deleteResourceGrant(grant.id);
+    if (deleted === undefined) throw notFound("Model grant");
+    await this.audit(input.subject, "model.share.revoke", "model", model.id, {
+      principalType: grant.principalType,
+      principalId: grant.principalId,
+      permission: grant.permission,
+    });
+    return deleted;
+  }
+
+  async listWorkspaceMembers(
+    subject: AuthSubject,
+    workspaceId: string,
+  ): Promise<ResourceGrant[]> {
+    await this.requireOrgWorkspace(subject, workspaceId, "admin:read");
+    return this.sharesFor("workspace", workspaceId, subject.orgId);
+  }
+
+  async shareWorkspace(input: {
+    subject: AuthSubject;
+    workspaceId: string;
+    share: ShareInput;
+  }): Promise<ResourceGrant[]> {
+    await this.requireOrgWorkspace(
+      input.subject,
+      input.workspaceId,
+      "admin:write",
+    );
+    return this.repository.transaction(async (repository) => {
+      const grants = await this.shareResource({
+        repository,
+        subject: input.subject,
+        resourceType: "workspace",
+        resourceId: input.workspaceId,
+        allowedPermissions: ["read"],
+        share: { ...input.share, permissions: ["read"] },
+      });
+      await this.audit(
+        input.subject,
+        "workspace.member.add",
+        "workspace",
+        input.workspaceId,
+        {
+          principalType: input.share.principalType,
+          principalId: input.share.principalId,
+        },
+        repository,
+      );
+      return grants;
+    });
+  }
+
+  async revokeWorkspaceMember(input: {
+    subject: AuthSubject;
+    workspaceId: string;
+    grantId: string;
+  }): Promise<ResourceGrant> {
+    await this.requireOrgWorkspace(
+      input.subject,
+      input.workspaceId,
+      "admin:write",
+    );
+    const grant = (
+      await this.sharesFor("workspace", input.workspaceId, input.subject.orgId)
+    ).find((item) => item.id === input.grantId);
+    if (grant === undefined) throw notFound("Workspace membership");
+    const deleted = await this.repository.deleteResourceGrant(grant.id);
+    if (deleted === undefined) throw notFound("Workspace membership");
+    await this.audit(
+      input.subject,
+      "workspace.member.remove",
+      "workspace",
+      input.workspaceId,
+      {
+        principalType: grant.principalType,
+        principalId: grant.principalId,
+      },
+    );
+    return deleted;
+  }
+
   async listKnowledgeBaseShares(
     subject: AuthSubject,
     knowledgeBaseId: string,
@@ -403,6 +584,34 @@ export class CollaborationShareService {
       (grant) =>
         grant.resourceType === resourceType && grant.resourceId === resourceId,
     );
+  }
+
+  private async requireOrgModel(
+    subject: AuthSubject,
+    modelId: string,
+    scope: "admin:read" | "admin:write",
+  ) {
+    assertScope(subject, scope);
+    const model = await this.repository.getModel(modelId);
+    if (model === undefined) throw notFound("Model");
+    const provider = await this.repository.getProvider(model.providerId);
+    if (provider === undefined || provider.orgId !== subject.orgId) {
+      throw notFound("Model");
+    }
+    return model;
+  }
+
+  private async requireOrgWorkspace(
+    subject: AuthSubject,
+    workspaceId: string,
+    scope: "admin:read" | "admin:write",
+  ) {
+    assertScope(subject, scope);
+    const workspace = await this.repository.getWorkspace(workspaceId);
+    if (workspace === undefined || workspace.orgId !== subject.orgId) {
+      throw notFound("Workspace");
+    }
+    return workspace;
   }
 
   protected async getAuthorizedFile(

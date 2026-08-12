@@ -1,12 +1,14 @@
-import { Button } from "@romeo/ui";
+import { AddButton } from "./AddButton";
 
 import type { KnowledgeBase } from "../features/types";
 import { useLocale } from "../lib/i18n";
 
 export function KnowledgeBaseSummary({
+  canUpload = true,
   knowledgeBase,
   onAddSource,
 }: {
+  canUpload?: boolean;
   knowledgeBase: KnowledgeBase;
   onAddSource: () => void;
 }) {
@@ -20,9 +22,15 @@ export function KnowledgeBaseSummary({
             <p className="text-sm text-muted">{knowledgeBase.description}</p>
           ) : null}
         </div>
-        <Button onClick={onAddSource} type="button" variant="primary">
-          + {t("knowledgeAddSource")}
-        </Button>
+        <AddButton
+          disabled={!canUpload}
+          onClick={onAddSource}
+          {...(canUpload
+            ? {}
+            : { title: t("knowledgeIngestBlockedEmbedding") })}
+        >
+          {t("knowledgeAddSource")}
+        </AddButton>
       </div>
 
       <div className="rm-model-meta-grid">

@@ -75,6 +75,8 @@
   "govExporting": "Exportation",
   "govFiles": "Fichiers",
   "govGovernance": "Gouvernance",
+  "govLifecycleTitle": "Actions de cycle de vie",
+  "govLifecycleHelp": "Archiver des espaces, fermer des discussions ou supprimer des données. Ce sont des chemins d’exception : laissez-les fermés sauf besoin.",
   "govIncludeMessageContent": "Inclure le contenu des messages",
   "govLoading": "Chargement…",
   "govMessages": "Messages",

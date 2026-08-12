@@ -2,6 +2,10 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 
 import { archiveChat, updateChat, type SpeechArtifact } from "../features";
+import {
+  getServerInterfacePreferences,
+  updateServerInterfacePreferences,
+} from "../features/interface-preferences";
 import { cancelQueuedTurn, getActiveChatRun } from "../features/runs";
 import type { QueuedChatTurn } from "../features/runs";
 import type { Chat, Message } from "../features/types";
@@ -113,18 +117,51 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     }
   }
 
-  async function handleSelectModel(modelId: string) {
+  async function handleSelectModel(
+    modelId: string,
+    persistAgentId?: string,
+  ) {
     options.setModelOverrideId(modelId);
-    if (options.activeChatId === undefined || options.workspaceId === undefined)
-      return;
+    const workspaceId = options.workspaceId;
     try {
-      await updateChat(options.activeChatId, { modelId });
-      await invalidateWorkspaceChats(options);
+      if (workspaceId !== undefined) {
+        await rememberLastModel(options.queryClient, workspaceId, modelId);
+      }
+      if (options.activeChatId !== undefined) {
+        await updateChat(options.activeChatId, {
+          modelId,
+          ...(persistAgentId === undefined ? {} : { agentId: persistAgentId }),
+        });
+        await invalidateWorkspaceChats(options);
+      }
     } catch (caught) {
       options.setError(
         caught instanceof Error
           ? caught.message
           : "Unable to save the chat model.",
+      );
+    }
+  }
+
+  async function handleToggleDefaultModel(modelId: string) {
+    const workspaceId = options.workspaceId;
+    if (workspaceId === undefined) return;
+    try {
+      const current = await getServerInterfacePreferences();
+      const next = { ...current.defaultModelByWorkspace };
+      if (next[workspaceId] === modelId) delete next[workspaceId];
+      else next[workspaceId] = modelId;
+      await updateServerInterfacePreferences({
+        defaultModelByWorkspace: next,
+      });
+      await options.queryClient.invalidateQueries({
+        queryKey: ["interfacePreferences"],
+      });
+    } catch (caught) {
+      options.setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to update the default model.",
       );
     }
   }
@@ -218,10 +255,27 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     handleNewTemporaryChat,
     handleSelectChat,
     handleSelectModel,
+    handleToggleDefaultModel,
     handleSelectVariant,
     handleWorkspaceArchived,
     renameChat,
   };
+}
+
+async function rememberLastModel(
+  queryClient: QueryClient,
+  workspaceId: string,
+  modelId: string,
+): Promise<void> {
+  const current = await getServerInterfacePreferences();
+  if (current.lastModelByWorkspace[workspaceId] === modelId) return;
+  await updateServerInterfacePreferences({
+    lastModelByWorkspace: {
+      ...current.lastModelByWorkspace,
+      [workspaceId]: modelId,
+    },
+  });
+  await queryClient.invalidateQueries({ queryKey: ["interfacePreferences"] });
 }
 
 function resetRemovedActiveChat(

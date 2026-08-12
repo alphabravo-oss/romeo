@@ -10,6 +10,7 @@ import { writeTextToClipboard } from "../lib/clipboard";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
 import type { ChatToolCall } from "../lib/run-tool-calls";
+import type { ChatRunWait } from "../lib/run-registry";
 import type {
   ChatCitation,
   ChatReasoning,
@@ -27,6 +28,17 @@ const noActivities: ChatRunActivity[] = [];
 const noCitations: ChatCitation[] = [];
 const noToolCalls: ChatToolCall[] = [];
 
+/** Prefer the model on the message; while streaming, fall back to the picker. */
+export function resolveMessageModelLabel(input: {
+  messageModelId: string | undefined;
+  modelDisplayNames: Record<string, string>;
+  selectedModelId: string | undefined;
+}): string | undefined {
+  const id = input.messageModelId ?? input.selectedModelId;
+  if (id === undefined || id.trim().length === 0) return undefined;
+  return input.modelDisplayNames[id] ?? id;
+}
+
 export const ChatMessages = memo(function ChatMessages({
   activeVoiceProfileId,
   authorName,
@@ -35,6 +47,8 @@ export const ChatMessages = memo(function ChatMessages({
   isGeneratingSpeech,
   isStreaming,
   messages,
+  modelDisplayNames,
+  selectedModelId,
   onBranch,
   onAttachmentRetention,
   onContinue,
@@ -43,9 +57,20 @@ export const ChatMessages = memo(function ChatMessages({
   onGenerateSpeech,
   onRate,
   onRegenerate,
+  onRegenerateWith,
+  onFollowUp,
+  regenerateModels,
   onSelectVariant,
   reasoning,
   runActivities,
+  runWait,
+  showContinueButton,
+  showFollowUps,
+  showMessageModelLabel,
+  showMessageTimestamps,
+  showRunStatus,
+  chatAccess,
+  agentName,
   speechArtifacts,
   speechMessageId,
   toolCalls,
@@ -58,6 +83,9 @@ export const ChatMessages = memo(function ChatMessages({
   isGeneratingSpeech: boolean;
   isStreaming: boolean;
   messages: Message[];
+  modelDisplayNames: Record<string, string>;
+  /** Composer selection — used only while streaming before modelId is persisted. */
+  selectedModelId: string | undefined;
   onBranch: (messageId: string) => void;
   onAttachmentRetention: (
     messageId: string,
@@ -68,11 +96,29 @@ export const ChatMessages = memo(function ChatMessages({
   onDelete: (messageId: string) => void;
   onEditAndResend: (messageId: string, content: string) => Promise<boolean>;
   onGenerateSpeech: (messageId: string) => void;
-  onRate: (messageId: string, rating: "negative" | "none" | "positive") => void;
+  onRate: (
+    messageId: string,
+    rating: "negative" | "none" | "positive",
+    reasonCode?: string,
+  ) => void;
   onRegenerate: () => void;
+  onRegenerateWith: (input: {
+    modelId?: string;
+    mode?: "again" | "shorter";
+  }) => void;
+  onFollowUp: (prompt: string) => void;
+  regenerateModels: Array<{ id: string; label: string }>;
   onSelectVariant: (messageId: string) => void;
   reasoning: ChatReasoning | undefined;
   runActivities: ChatRunActivity[];
+  runWait: ChatRunWait | undefined;
+  showContinueButton: boolean;
+  showFollowUps: boolean;
+  showMessageModelLabel: boolean;
+  showMessageTimestamps: boolean;
+  showRunStatus: boolean;
+  chatAccess: "owner" | "write" | "read";
+  agentName: string | undefined;
   speechArtifacts: Record<string, SpeechArtifact>;
   speechMessageId: string | undefined;
   toolCalls: ChatToolCall[];
@@ -126,6 +172,7 @@ export const ChatMessages = memo(function ChatMessages({
           const isLast = index === messages.length - 1;
           const isThinking =
             message.role === "assistant" &&
+            message.error === undefined &&
             message.content.length === 0 &&
             isStreaming;
           // Flattened to scalars: variantsByMessageId is rebuilt whenever the
@@ -147,6 +194,17 @@ export const ChatMessages = memo(function ChatMessages({
               isThinking={isThinking}
               key={message.id}
               message={message}
+              modelDisplayName={
+                !showMessageModelLabel
+                  ? undefined
+                  : resolveMessageModelLabel({
+                      messageModelId: message.modelId,
+                      modelDisplayNames,
+                      // Streaming rows may not have modelId until terminal persist.
+                      selectedModelId:
+                        isLast && isStreaming ? selectedModelId : undefined,
+                    })
+              }
               nextVariantId={variants?.siblingIds[variants.index + 1]}
               onAttachmentRetention={onAttachmentRetention}
               onBranch={onBranch}
@@ -159,6 +217,9 @@ export const ChatMessages = memo(function ChatMessages({
               onPreview={setPreviewAttachment}
               onRate={onRate}
               onRegenerate={onRegenerate}
+              onRegenerateWith={onRegenerateWith}
+              onFollowUp={onFollowUp}
+              regenerateModels={regenerateModels}
               onSelectVariant={onSelectVariant}
               onStartEdit={handleStartEdit}
               onSubmitEdit={handleSubmitEdit}
@@ -166,6 +227,13 @@ export const ChatMessages = memo(function ChatMessages({
               rating={feedback[message.id]?.rating}
               reasoning={isLast ? reasoning : undefined}
               runActivities={isLast ? runActivities : noActivities}
+              runWait={isLast ? runWait : undefined}
+              showContinueButton={showContinueButton}
+              showFollowUps={showFollowUps}
+              showMessageTimestamps={showMessageTimestamps}
+              showRunStatus={showRunStatus}
+              chatAccess={chatAccess}
+              agentName={agentName}
               toolCalls={isLast ? toolCalls : noToolCalls}
               variantIndex={variants?.index}
               variantTotal={variants?.total}

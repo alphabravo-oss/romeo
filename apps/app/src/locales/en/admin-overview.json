@@ -1,5 +1,5 @@
 {
-  "overviewAgents": "Assistants",
+  "overviewAgents": "Custom models",
   "overviewAgentsConfigured": "configured in this workspace",
   "overviewAlerts": "alerts",
   "overviewBackgroundJobs": "Background jobs",
@@ -32,5 +32,7 @@
   "jobsStatusCompleted": "completed",
   "jobsStatusFailed": "failed",
   "jobsStatusRunning": "running",
-  "jobsStatusQueued": "queued"
+  "jobsStatusQueued": "queued",
+  "overviewOperationsDetail": "Readiness and background jobs",
+  "overviewOperationsDetailHelp": "Open this when something looks off. Everyday navigation is in the directory above."
 }

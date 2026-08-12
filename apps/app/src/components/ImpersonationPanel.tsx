@@ -17,6 +17,7 @@ import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { Section } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PageActions } from "./PageActions";
@@ -261,26 +262,25 @@ export function ImpersonationPanel() {
   }
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("impersonationRequests")}</div>
+    <Section
+      actions={
         <PageActions
           onRefresh={() => void requestsQuery.refetch()}
           refreshLabel={t("refresh")}
           refreshing={requestsQuery.isFetching}
         />
-      </div>
-      <div className="mt-4">
-        <PanelState
-          query={requestsQuery}
-          empty={t("impersonationNoPending")}
-          emptyDescription={t("impersonationNoPendingDescription")}
-          emptyIcon={<UserCog aria-hidden size={24} />}
-          isEmpty={() => pending.length === 0}
-        >
-          {() => <DataTable columns={columns} data={pending} />}
-        </PanelState>
-      </div>
+      }
+      title={t("impersonationRequests")}
+    >
+      <PanelState
+        query={requestsQuery}
+        empty={t("impersonationNoPending")}
+        emptyDescription={t("impersonationNoPendingDescription")}
+        emptyIcon={<UserCog aria-hidden size={24} />}
+        isEmpty={() => pending.length === 0}
+      >
+        {() => <DataTable columns={columns} data={pending} />}
+      </PanelState>
 
       <div className="rm-card-header mt-6">
         <div className="rm-card-title">{t("impersonationActiveSessions")}</div>
@@ -290,18 +290,16 @@ export function ImpersonationPanel() {
           refreshing={sessionsQuery.isFetching}
         />
       </div>
-      <div className="mt-4">
-        <PanelState
-          query={sessionsQuery}
-          empty={t("impersonationNoActive")}
-          emptyDescription={t("impersonationNoActiveDescription")}
-          emptyIcon={<UserCog aria-hidden size={24} />}
-          isEmpty={() => activeSessions.length === 0}
-        >
-          {() => <DataTable columns={sessionColumns} data={activeSessions} />}
-        </PanelState>
-      </div>
+      <PanelState
+        query={sessionsQuery}
+        empty={t("impersonationNoActive")}
+        emptyDescription={t("impersonationNoActiveDescription")}
+        emptyIcon={<UserCog aria-hidden size={24} />}
+        isEmpty={() => activeSessions.length === 0}
+      >
+        {() => <DataTable columns={sessionColumns} data={activeSessions} />}
+      </PanelState>
       {dialog}
-    </section>
+    </Section>
   );
 }

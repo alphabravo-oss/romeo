@@ -13,6 +13,7 @@ import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
+import { Section } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PageActions } from "./PageActions";
@@ -163,9 +164,8 @@ export function SessionsPanel() {
   );
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("activeSessions")}</div>
+    <Section
+      actions={
         <div className="flex gap-2">
           <Button
             variant="danger"
@@ -183,22 +183,22 @@ export function SessionsPanel() {
             refreshing={sessionsQuery.isFetching}
           />
         </div>
-      </div>
-      <div className="mt-4">
-        <PanelState query={sessionsQuery} empty={t("noActiveSessions")}>
-          {(rows) => (
-            <DataTable
-              columns={columns}
-              data={decorateSessions(
-                rows,
-                bootstrapQuery.data?.subject.sessionId,
-              )}
-              empty={t("noActiveSessions")}
-            />
-          )}
-        </PanelState>
-      </div>
+      }
+      title={t("activeSessions")}
+    >
+      <PanelState query={sessionsQuery} empty={t("noActiveSessions")}>
+        {(rows) => (
+          <DataTable
+            columns={columns}
+            data={decorateSessions(
+              rows,
+              bootstrapQuery.data?.subject.sessionId,
+            )}
+            empty={t("noActiveSessions")}
+          />
+        )}
+      </PanelState>
       {dialog}
-    </section>
+    </Section>
   );
 }

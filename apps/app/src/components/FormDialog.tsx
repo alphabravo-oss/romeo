@@ -17,14 +17,16 @@ export function FormDialog(props: {
   open: boolean;
   title: string;
   description?: string;
+  className?: string;
   onClose: () => void;
   children: React.ReactNode;
 }): React.ReactNode {
   const { t } = useLocale();
-  const { open, title, description, onClose, children } = props;
+  const { open, title, description, className, onClose, children } = props;
   return (
     <Dialog
       closeLabel={t("close")}
+      {...(className === undefined ? {} : { className })}
       {...(description === undefined ? {} : { description })}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) onClose();

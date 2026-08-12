@@ -44,6 +44,29 @@ export interface ChatReasoning {
   text: string;
 }
 
+/**
+ * Live wait status while the provider has not produced a first token.
+ * Updated once a second so the transcript can show "45s / 60s" instead of a
+ * silent skeleton during long first-byte waits and retries.
+ */
+export interface ChatRunWait {
+  /** 1-based attempt index (1 = first try, 2 = first retry, …). */
+  attempt: number;
+  /** Seconds since this attempt started waiting for the first token. */
+  elapsedSeconds: number;
+  /** True once any assistant content has arrived. */
+  hasContent: boolean;
+  /** Total attempts = maxRetries + 1. */
+  maxAttempts: number;
+  phase: "waiting" | "streaming" | "retrying" | "reconnecting";
+  /** SSE reconnect attempts after a dropped stream (0 when healthy). */
+  reconnectAttempts?: number;
+  /** Cap used for user-visible recovery messaging. */
+  maxReconnectAttempts?: number;
+  /** Per-attempt idle timeout from the server, when known. */
+  streamTimeoutMs?: number;
+}
+
 export interface ActiveRun {
   activities: ChatRunActivity[];
   assistantMessageId: string;
@@ -54,14 +77,22 @@ export interface ActiveRun {
   reasoning?: ChatReasoning;
   runId: string;
   toolCalls: ChatToolCall[];
+  wait?: ChatRunWait;
 }
+
+export const RUN_STREAM_MAX_RECONNECT_ATTEMPTS = 5;
 
 interface TrackedRun extends ActiveRun {
   controller: AbortController;
+  /** Model serving this run; written onto the optimistic assistant row. */
+  modelId?: string;
   parentMessageId?: string;
   /** First reasoning event of the attempt: the other end of "thought for Ns". */
   reasoningStartedAt?: string;
   t: (key: MessageKey) => string;
+  /** Epoch ms when the current wait attempt started. */
+  waitAttemptStartedAt: number;
+  waitTicker?: ReturnType<typeof setInterval>;
 }
 
 /** Whole seconds of thinking, floored at 1 so a fast model still reports one. */
@@ -109,7 +140,9 @@ export function trackRun(input: TrackRunInput): void {
   const existing = runs.get(input.chatId);
   if (existing?.runId === input.runId && existing.isStreaming) return;
   existing?.controller.abort("superseded");
+  stopWaitTicker(existing);
   const controller = new AbortController();
+  const now = Date.now();
   const run: TrackedRun = {
     activities: [],
     // Mirrors the id the server mints on terminal persist, so the refresh that
@@ -131,8 +164,18 @@ export function trackRun(input: TrackRunInput): void {
     runId: input.runId,
     t: input.t,
     toolCalls: [],
+    wait: {
+      attempt: 1,
+      elapsedSeconds: 0,
+      hasContent: false,
+      maxAttempts: 2,
+      phase: "waiting",
+      streamTimeoutMs: 60_000,
+    },
+    waitAttemptStartedAt: now,
   };
   runs.set(input.chatId, run);
+  startWaitTicker(run);
   // Emptied, not just ensured: a re-attach replays the run's events from
   // sequence 0, so anything already in the row would be written twice.
   input.queryClient.setQueryData<Message[]>(
@@ -158,7 +201,68 @@ export function cancelActiveRun(chatId: string): void {
         caught instanceof Error ? caught.message : run.t("unableCancelRun"),
     }),
   );
+  stopWaitTicker(run);
   publish(chatId, run.runId, { isStreaming: false });
+}
+
+function startWaitTicker(run: TrackedRun): void {
+  stopWaitTicker(run);
+  run.waitTicker = setInterval(() => {
+    const current = runs.get(run.chatId);
+    if (
+      current === undefined ||
+      current.runId !== run.runId ||
+      !current.isStreaming
+    ) {
+      stopWaitTicker(current ?? run);
+      return;
+    }
+    if (current.wait?.hasContent === true) return;
+    const elapsedSeconds = Math.max(
+      0,
+      Math.floor((Date.now() - current.waitAttemptStartedAt) / 1_000),
+    );
+    if (current.wait?.elapsedSeconds === elapsedSeconds) return;
+    publish(current.chatId, current.runId, {
+      wait: {
+        ...(current.wait ?? {
+          attempt: 1,
+          hasContent: false,
+          maxAttempts: 2,
+          phase: "waiting" as const,
+        }),
+        elapsedSeconds,
+      },
+    });
+  }, 1_000);
+  run.waitTicker.unref?.();
+}
+
+function stopWaitTicker(run: TrackedRun | undefined): void {
+  if (run?.waitTicker === undefined) return;
+  clearInterval(run.waitTicker);
+  delete run.waitTicker;
+}
+
+function beginWaitAttempt(
+  run: TrackedRun,
+  phase: "waiting" | "retrying",
+  attempt: number,
+): void {
+  run.waitAttemptStartedAt = Date.now();
+  publish(run.chatId, run.runId, {
+    wait: {
+      attempt,
+      elapsedSeconds: 0,
+      hasContent: false,
+      maxAttempts: run.wait?.maxAttempts ?? 2,
+      phase,
+      ...(run.wait?.streamTimeoutMs === undefined
+        ? {}
+        : { streamTimeoutMs: run.wait.streamTimeoutMs }),
+    },
+  });
+  startWaitTicker(run);
 }
 
 /**
@@ -214,19 +318,65 @@ async function consumeRun(
           )) {
             if (event.sequence <= afterSequence) continue;
             afterSequence = event.sequence;
-            reconnectAttempts = 0;
+            if (reconnectAttempts > 0) {
+              reconnectAttempts = 0;
+              publish(chatId, runId, {
+                wait: {
+                  attempt: run.wait?.attempt ?? 1,
+                  elapsedSeconds: run.wait?.elapsedSeconds ?? 0,
+                  hasContent: run.wait?.hasContent ?? false,
+                  maxAttempts: run.wait?.maxAttempts ?? 2,
+                  phase: run.wait?.hasContent === true ? "streaming" : "waiting",
+                  reconnectAttempts: 0,
+                  maxReconnectAttempts: RUN_STREAM_MAX_RECONNECT_ATTEMPTS,
+                  ...(run.wait?.streamTimeoutMs === undefined
+                    ? {}
+                    : { streamTimeoutMs: run.wait.streamTimeoutMs }),
+                },
+              });
+            } else {
+              reconnectAttempts = 0;
+            }
+            if (event.type === "run.started") {
+              applyRunStarted(queryClient, run, event.data);
+            }
+            if (event.type === "message.started") {
+              // Re-announce without content: retry/fallback dropped the previous
+              // attempt. The first message.started of a run is not a retry.
+              if (
+                run.wait !== undefined &&
+                !run.wait.hasContent &&
+                run.wait.elapsedSeconds > 0
+              ) {
+                beginWaitAttempt(run, "retrying", run.wait.attempt + 1);
+              }
+            }
             if (event.type === "message.delta") {
               appendAssistantDelta(
                 queryClient,
                 run,
                 (event.data as { text?: string }).text ?? "",
               );
+              if (run.wait?.hasContent !== true) {
+                stopWaitTicker(run);
+                publish(chatId, runId, {
+                  wait: {
+                    attempt: run.wait?.attempt ?? 1,
+                    elapsedSeconds: run.wait?.elapsedSeconds ?? 0,
+                    hasContent: true,
+                    maxAttempts: run.wait?.maxAttempts ?? 2,
+                    phase: "streaming",
+                    ...(run.wait?.streamTimeoutMs === undefined
+                      ? {}
+                      : { streamTimeoutMs: run.wait.streamTimeoutMs }),
+                  },
+                });
+              }
             }
             consumeRunDetail(event, chatId, runId, t);
-            if (event.type === "run.failed") {
-              publish(chatId, runId, {
-                error: providerRunFailureMessage(event.data, t),
-              });
+            if (event.type === "run.failed" || event.type === "run.cancelled") {
+              // Inline on the assistant turn — not the composer footer.
+              markAssistantRunError(queryClient, run, event, t);
             }
             if (
               event.type === "run.completed" ||
@@ -241,7 +391,22 @@ async function consumeRun(
         } catch (caught) {
           if (controller.signal.aborted) return;
           reconnectAttempts += 1;
-          if (reconnectAttempts > 5) throw caught;
+          publish(chatId, runId, {
+            wait: {
+              attempt: run.wait?.attempt ?? 1,
+              elapsedSeconds: run.wait?.elapsedSeconds ?? 0,
+              hasContent: run.wait?.hasContent ?? false,
+              maxAttempts: run.wait?.maxAttempts ?? 2,
+              phase: "reconnecting",
+              reconnectAttempts,
+              maxReconnectAttempts: RUN_STREAM_MAX_RECONNECT_ATTEMPTS,
+              ...(run.wait?.streamTimeoutMs === undefined
+                ? {}
+                : { streamTimeoutMs: run.wait.streamTimeoutMs }),
+            },
+          });
+          if (reconnectAttempts > RUN_STREAM_MAX_RECONNECT_ATTEMPTS)
+            throw caught;
           await abortableDelay(
             Math.min(250 * 2 ** (reconnectAttempts - 1), 4_000),
             controller.signal,
@@ -253,20 +418,96 @@ async function consumeRun(
       runId,
       controller.signal,
     ).then((status) => {
-      if (status === "failed")
-        publish(chatId, runId, { error: t("providerFailed") });
+      if (status === "failed" || status === "cancelled") {
+        // Status poll wins when the event stream disconnects mid-timeout. Prefer
+        // any error already written from a run.failed event; only fall back here.
+        const messages = queryClient.getQueryData<Message[]>(
+          messagesQueryKey(chatId),
+        );
+        const row = messages?.find(
+          (message) => message.id === run.assistantMessageId,
+        );
+        if (row?.error === undefined) {
+          markAssistantRunError(
+            queryClient,
+            run,
+            {
+              type: status === "cancelled" ? "run.cancelled" : "run.failed",
+              data:
+                status === "cancelled"
+                  ? { errorCode: "run_cancelled" }
+                  : { errorCode: "provider_run_failed" },
+            },
+            t,
+          );
+        }
+      }
       if (status !== undefined) controller.abort("terminal run observed");
     });
     await Promise.race([consumeEvents(), observeTerminalRecord]);
   } catch (caught) {
-    publish(chatId, runId, {
-      error: caught instanceof Error ? caught.message : t("providerFailed"),
-    });
+    markAssistantRunError(
+      queryClient,
+      run,
+      {
+        type: "run.failed",
+        data: {
+          errorCode: "provider_run_failed",
+          message:
+            caught instanceof Error ? caught.message : t("providerFailed"),
+        },
+      },
+      t,
+    );
   } finally {
     controller.abort();
+    stopWaitTicker(run);
     publish(chatId, runId, { isStreaming: false });
     await input.onSettled?.(chatId, runId);
   }
+}
+
+function applyRunStarted(
+  queryClient: QueryClient,
+  run: TrackedRun,
+  data: unknown,
+): void {
+  const record =
+    typeof data === "object" && data !== null
+      ? (data as Record<string, unknown>)
+      : {};
+  const modelId =
+    typeof record.modelId === "string" && record.modelId.length > 0
+      ? record.modelId
+      : undefined;
+  if (modelId !== undefined) {
+    run.modelId = modelId;
+    stampAssistantModel(queryClient, run, modelId);
+  }
+  const streamTimeoutMs =
+    typeof record.streamTimeoutMs === "number" &&
+    Number.isFinite(record.streamTimeoutMs) &&
+    record.streamTimeoutMs > 0
+      ? record.streamTimeoutMs
+      : 60_000;
+  const maxRetries =
+    typeof record.maxRetries === "number" &&
+    Number.isFinite(record.maxRetries) &&
+    record.maxRetries >= 0
+      ? Math.floor(record.maxRetries)
+      : 1;
+  run.waitAttemptStartedAt = Date.now();
+  publish(run.chatId, run.runId, {
+    wait: {
+      attempt: 1,
+      elapsedSeconds: 0,
+      hasContent: false,
+      maxAttempts: maxRetries + 1,
+      phase: "waiting",
+      streamTimeoutMs,
+    },
+  });
+  startWaitTicker(run);
 }
 
 /**
@@ -295,9 +536,24 @@ function withAssistantRow(
       role: "assistant",
       content: "",
       createdAt: new Date().toISOString(),
+      ...(run.modelId === undefined ? {} : { modelId: run.modelId }),
       ...(parentId === undefined ? {} : { parentId }),
     },
   ];
+}
+
+function stampAssistantModel(
+  queryClient: QueryClient,
+  run: TrackedRun,
+  modelId: string,
+): void {
+  queryClient.setQueryData<Message[]>(messagesQueryKey(run.chatId), (current) =>
+    withAssistantRow(current, run)?.map((message) =>
+      message.id === run.assistantMessageId
+        ? { ...message, modelId }
+        : message,
+    ),
+  );
 }
 
 function appendAssistantDelta(
@@ -314,6 +570,37 @@ function appendAssistantDelta(
         : message,
     ),
   );
+}
+
+function markAssistantRunError(
+  queryClient: QueryClient,
+  run: TrackedRun,
+  event: Pick<RunEvent, "type" | "data">,
+  t: (key: MessageKey) => string,
+): void {
+  const failure = providerRunFailure(event, t);
+  queryClient.setQueryData<Message[]>(messagesQueryKey(run.chatId), (current) =>
+    withAssistantRow(current, run)?.map((message) =>
+      message.id === run.assistantMessageId
+        ? {
+            ...message,
+            ...(run.modelId === undefined ? {} : { modelId: run.modelId }),
+            error: {
+              code: failure.code,
+              message: failure.message,
+            },
+          }
+        : message,
+    ),
+  );
+  // Composer banner is for submit/transport failures, not model-run outcomes.
+  const current = runs.get(run.chatId);
+  if (current !== undefined && current.runId === run.runId) {
+    const next = { ...current };
+    delete next.error;
+    runs.set(run.chatId, next);
+    notify();
+  }
 }
 
 function consumeRunDetail(
@@ -428,28 +715,48 @@ async function waitForRunTerminal(
   return undefined;
 }
 
-function providerRunFailureMessage(
-  data: unknown,
+function providerRunFailure(
+  event: Pick<RunEvent, "type" | "data">,
   t: (key: MessageKey) => string,
-): string {
+): { code: string; message: string } {
+  if (event.type === "run.cancelled") {
+    return { code: "run_cancelled", message: t("responseStopped") };
+  }
   const record =
-    typeof data === "object" && data !== null
-      ? (data as Record<string, unknown>)
+    typeof event.data === "object" && event.data !== null
+      ? (event.data as Record<string, unknown>)
       : {};
   const errorCode =
-    typeof record.errorCode === "string" ? record.errorCode : "";
+    typeof record.errorCode === "string" && record.errorCode.trim().length > 0
+      ? record.errorCode.trim()
+      : "provider_run_failed";
   const errorType =
     typeof record.errorType === "string" ? record.errorType : "";
+  const explicit =
+    typeof record.message === "string" && record.message.trim().length > 0
+      ? record.message.trim()
+      : undefined;
+  if (explicit !== undefined) return { code: errorCode, message: explicit };
   if (errorCode === "provider_credential_unavailable") {
-    return t("providerCredentialUnavailable");
+    return { code: errorCode, message: t("providerCredentialUnavailable") };
   }
-  if (errorType.endsWith("http_401")) return t("providerRejectedKey");
-  if (errorType.endsWith("http_403")) return t("providerDenied");
-  if (errorType.endsWith("http_404")) return t("providerNotFound");
-  if (errorType.endsWith("http_429")) return t("providerRateLimited");
-  if (/http_5\d\d$/u.test(errorType)) return t("providerUnavailable");
-  if (errorCode === "provider_stream_aborted") return t("responseStopped");
-  return t("providerFailed");
+  if (errorCode === "provider_stream_timeout") {
+    return { code: errorCode, message: t("providerStreamTimeout") };
+  }
+  if (errorCode === "provider_stream_aborted" || errorCode === "run_cancelled") {
+    return { code: errorCode, message: t("responseStopped") };
+  }
+  if (errorType.endsWith("http_401"))
+    return { code: errorCode, message: t("providerRejectedKey") };
+  if (errorType.endsWith("http_403"))
+    return { code: errorCode, message: t("providerDenied") };
+  if (errorType.endsWith("http_404"))
+    return { code: errorCode, message: t("providerNotFound") };
+  if (errorType.endsWith("http_429"))
+    return { code: errorCode, message: t("providerRateLimited") };
+  if (/http_5\d\d$/u.test(errorType))
+    return { code: errorCode, message: t("providerUnavailable") };
+  return { code: errorCode, message: t("providerFailed") };
 }
 
 function activityFromEvent(

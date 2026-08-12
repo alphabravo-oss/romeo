@@ -12,6 +12,7 @@ import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
+import { workspaceIdsFromGrants } from "./access-visibility";
 import { canManageServiceAccount } from "./service-account-access";
 import {
   type BulkActionResult,
@@ -170,9 +171,10 @@ export class ApiKeyService {
     if (user.disabledAt !== undefined)
       throw new AuthorizationError("API key owner is disabled.");
 
-    const [workspaces, memberships] = await Promise.all([
+    const [workspaces, memberships, grants] = await Promise.all([
       this.repository.listWorkspaces(apiKey.orgId),
       this.repository.listGroupMemberships(apiKey.orgId, undefined, user.id),
+      this.repository.listResourceGrants(apiKey.orgId),
     ]);
     const groupIds = new Set(
       memberships.map((membership) => membership.groupId),
@@ -183,7 +185,11 @@ export class ApiKeyService {
       type: "user",
       apiKeyId: apiKey.id,
       orgId: apiKey.orgId,
-      workspaceIds: workspaces.map((workspace) => workspace.id),
+      workspaceIds: workspaceIdsFromGrants(workspaces, grants, {
+        id: user.id,
+        type: "user",
+        groupIds: [...groupIds],
+      }),
       groupIds: [...groupIds].sort(),
       scopes: apiKey.scopes,
       isAdmin: false,

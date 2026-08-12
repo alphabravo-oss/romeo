@@ -42,4 +42,24 @@ describe("local text embeddings", () => {
 
     expect(hits[0]?.id).toBe("chunk_a");
   });
+
+  it("drops vector contribution below the similarity threshold", () => {
+    const hits = retrieveFromChunks(
+      [
+        {
+          id: "chunk_a",
+          sourceId: "source_a",
+          sourceTitle: "A",
+          sequence: 1,
+          content: "zzzz",
+          embedding: createTextEmbedding("Romeo quota controls"),
+          metadata: {},
+        },
+      ],
+      "quota usage alerts",
+      5,
+      { hybrid: false, similarityThreshold: 0.99 },
+    );
+    expect(hits).toEqual([]);
+  });
 });

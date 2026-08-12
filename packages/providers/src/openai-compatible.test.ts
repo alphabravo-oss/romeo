@@ -45,12 +45,21 @@ describe("OpenAI-compatible adapter", () => {
       "gpt-4.1",
       "gpt-4.1-mini",
     ]);
+    expect(models.every((item) => item.enabled === false)).toBe(true);
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(String(url)).toBe("https://api.example/v1/models");
     expect(new Headers(init?.headers).get("authorization")).toBe(
       "Bearer secret",
     );
-    expect(models[0]?.capabilities).toEqual(openAiCompatibleCapabilities);
+    expect(models[0]?.capabilities).toMatchObject({
+      streaming: true,
+      toolCalling: true,
+      vision: true,
+      reasoning: false,
+      temperature: true,
+    });
+    expect(models[0]?.contextWindow).toBe(128000);
+    expect(models[0]?.defaultParameters?.maxOutputTokens).toBe(8192);
   });
 
   it("uses an explicit model allowlist without requesting /models", async () => {
@@ -187,6 +196,32 @@ describe("OpenAI-compatible adapter", () => {
     expect(new Headers(calls[0]?.headers).get("authorization")).toBe(
       "Bearer provider-api-key",
     );
+  });
+
+  it("emits streamed reasoning without mixing it into the answer", async () => {
+    const chunks = await collect(
+      openAiCompatibleAdapter.streamChat({
+        apiKey: "provider-api-key",
+        fetchImpl: async () =>
+          new Response(
+            sse([
+              { choices: [{ delta: { reasoning_content: "Plan " } }] },
+              { choices: [{ delta: { reasoning: "the answer." } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+            ]),
+            { status: 200 },
+          ),
+        messages: [{ role: "user", content: "hello" }],
+        model,
+        provider,
+      }),
+    );
+
+    expect(chunks).toEqual([
+      { type: "reasoning", text: "Plan " },
+      { type: "reasoning", text: "the answer." },
+      "Hello",
+    ]);
   });
 
   it("sends vision inputs as OpenAI image content parts", async () => {

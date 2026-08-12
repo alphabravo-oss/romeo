@@ -41,6 +41,7 @@ function assembledMessages(
   return buildCanonicalRunContext({
     agentVersion: {
       memoryPolicy: { mode: "disabled" },
+      safetySettings: {},
       systemPrompt: "You are Ada, the release captain.",
     },
     assistantsEnabled,
@@ -96,7 +97,11 @@ describe("bare chat prompt suppression", () => {
 
   it("charges the suppressed prompt no context budget", () => {
     const bare = buildCanonicalRunContext({
-      agentVersion: { memoryPolicy: { mode: "disabled" }, systemPrompt: "x" },
+      agentVersion: {
+        memoryPolicy: { mode: "disabled" },
+        safetySettings: {},
+        systemPrompt: "x",
+      },
       assistantsEnabled: false,
       history: [],
       knowledgeHits: [],
@@ -106,7 +111,11 @@ describe("bare chat prompt suppression", () => {
       userContent: "Who are you?",
     });
     const withoutPromptAtAll = buildCanonicalRunContext({
-      agentVersion: { memoryPolicy: { mode: "disabled" }, systemPrompt: "" },
+      agentVersion: {
+        memoryPolicy: { mode: "disabled" },
+        safetySettings: {},
+        systemPrompt: "",
+      },
       assistantsEnabled: true,
       history: [],
       knowledgeHits: [],
@@ -122,37 +131,29 @@ describe("bare chat prompt suppression", () => {
   });
 });
 
-describe("bare chat over the API", () => {
-  it("suppresses the seeded persona's system turn until assistants are turned on", async () => {
-    // Through the real routes, on the seeded persona managed model: this is the case the previous
-    // pass-through-agent design missed, because no deployment ever had that seeded row.
+describe("custom model chat over the API", () => {
+  it("always applies the custom model system prompt (dual bare mode retired)", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       startBackgroundWorkers: false,
     });
     const chat = await createChat(api);
     const persona = await agent(api, "agent_default");
 
-    const off = await previewContext(api, chat.id, "agent_default");
-    await setAssistantsEnabled(api, true);
-    const on = await previewContext(api, chat.id, "agent_default");
+    // Attempts to force bare mode are ignored.
     await setAssistantsEnabled(api, false);
-    const offAgain = await previewContext(api, chat.id, "agent_default");
-
-    const personaTurns = on.messages.filter(
+    const preview = await previewContext(api, chat.id, "agent_default");
+    const personaTurns = preview.messages.filter(
       (message) => message.role === "system",
     );
+
     expect(persona.systemPrompt.trim().length).toBeGreaterThan(0);
-    expect(off.messages.some((message) => message.role === "system")).toBe(
-      false,
-    );
-    expect(personaTurns).toHaveLength(1);
-    expect(personaTurns[0]?.content).toBe(persona.systemPrompt);
-    expect(offAgain.messages.some((message) => message.role === "system")).toBe(
-      false,
-    );
+    expect(personaTurns.length).toBeGreaterThanOrEqual(1);
+    expect(
+      personaTurns.some((turn) => turn.content.includes(persona.systemPrompt)),
+    ).toBe(true);
   });
 
-  it("still pins the agent version and enforces safety settings while bare", async () => {
+  it("pins the custom model version and enforces safety settings", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       startBackgroundWorkers: false,
     });
@@ -178,17 +179,9 @@ describe("bare chat over the API", () => {
     const blocked = await blockedResponse.json();
     const allowedResponse = await startRun(api, chat.id, "Summarize deploys.");
     const allowed = await allowedResponse.json();
-    const preview = await previewContext(api, chat.id, "agent_default");
 
     expect(updateResponse.status).toBe(200);
     expect(publishResponse.status).toBe(201);
-    // Bare, so nothing identifies the model in the request...
-    expect(preview.messages.some((message) => message.role === "system")).toBe(
-      false,
-    );
-    // ...yet the version the safety settings were published on is still what the run is attributed
-    // to, which is the whole reason suppression happens at request time instead of via an agent
-    // with an empty prompt.
     expect(blockedResponse.status).toBe(400);
     expect(blocked.error.code).toBe("agent_safety_blocked_term");
     expect(allowedResponse.status).toBe(202);

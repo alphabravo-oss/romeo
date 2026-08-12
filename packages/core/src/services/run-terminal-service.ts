@@ -126,6 +126,10 @@ export class RunTerminalService {
           ? "cancelled"
           : "failed";
     const providerUsage = providerUsageFromEvent(event);
+    const error =
+      status === "failed" || status === "cancelled"
+        ? runErrorFromEvent(event, status)
+        : undefined;
     await this.persist({
       run,
       status,
@@ -133,6 +137,7 @@ export class RunTerminalService {
       model,
       ...(providerUsage === undefined ? {} : { providerUsage }),
       ...(citations.length === 0 ? {} : { citations }),
+      ...(error === undefined ? {} : { error }),
     });
     void this.drain(run.orgId);
     this.drainQueue(run.chatId);
@@ -203,4 +208,32 @@ export class RunTerminalService {
           reference !== undefined,
       );
   }
+}
+
+function runErrorFromEvent(
+  event: RunEvent,
+  status: "cancelled" | "failed",
+): { code: string; message?: string } {
+  if (status === "cancelled") {
+    return {
+      code: "run_cancelled",
+      message: "The response was stopped.",
+    };
+  }
+  const data =
+    typeof event.data === "object" && event.data !== null
+      ? (event.data as Record<string, unknown>)
+      : {};
+  const code =
+    typeof data.errorCode === "string" && data.errorCode.trim().length > 0
+      ? data.errorCode.trim()
+      : "provider_run_failed";
+  const message =
+    typeof data.message === "string" && data.message.trim().length > 0
+      ? data.message.trim()
+      : undefined;
+  return {
+    code,
+    ...(message === undefined ? {} : { message }),
+  };
 }

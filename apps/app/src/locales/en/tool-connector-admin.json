@@ -50,8 +50,8 @@
   "toolUnableUpdate": "Unable to update connector.",
   "toolUnavailable": "unavailable",
   "toolVisibility": "Visibility",
-  "toolDependentAssistants": "Dependent assistants",
+  "toolDependentAssistants": "Dependent custom models",
   "toolDependentOperations": "Bound operations",
   "toolDisableImpactTitle": "Disable this connector?",
-  "toolDisableImpactDescription": "This will block {{agents}} assistants using {{operations}} connector operations. Their next runs may fail until a replacement is bound."
+  "toolDisableImpactDescription": "This will block {{agents}} custom models using {{operations}} connector operations. Their next runs may fail until a replacement is bound."
 }

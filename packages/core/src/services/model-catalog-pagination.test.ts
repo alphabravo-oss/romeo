@@ -44,6 +44,24 @@ describe("model catalog pagination", () => {
       },
       model("model_catalog_hidden", "provider_other_org", "Alpha hidden", true),
     ]);
+    await repository.createResourceGrant({
+      id: "grant_catalog_provider",
+      resourceType: "provider",
+      resourceId: provider.id,
+      principalType: "user",
+      principalId: subject.id,
+      permission: "use",
+    });
+    for (const modelId of ["model_catalog_alpha", "model_catalog_beta"]) {
+      await repository.createResourceGrant({
+        id: `grant_catalog_${modelId}`,
+        resourceType: "model",
+        resourceId: modelId,
+        principalType: "user",
+        principalId: subject.id,
+        permission: "use",
+      });
+    }
     const service = new ProviderService(repository);
 
     const first = await service.modelsPage(subject, {

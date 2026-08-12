@@ -5,7 +5,11 @@ import { describe, expect, it } from "vitest";
 // exempt from the ratchet, and this module imports nothing itself.
 import { estimateTokens as serverEstimateTokens } from "../../../../packages/core/src/services/token-estimate";
 import type { RunContextPreview } from "../features/chat";
-import { contextMeterValue, estimateTokens } from "./context-meter";
+import {
+  contextMeterValue,
+  estimateHistoryTokens,
+  estimateTokens,
+} from "./context-meter";
 
 function preview(overrides: {
   contextWindow?: number;
@@ -38,9 +42,6 @@ function preview(overrides: {
 
 describe("context meter", () => {
   it("agrees with the server token estimator on every shape that reaches it", () => {
-    // Runs both functions rather than grepping the other package's source: a
-    // drift here means the composer promises a budget the run will not honour,
-    // and reformatting either file must not be able to fail or pass this.
     const samples = [
       "",
       " ",
@@ -54,8 +55,6 @@ describe("context meter", () => {
       "café — 🙂",
       "x".repeat(4_001),
     ];
-    // Each count is paired with the string that produced it, so a failure
-    // diff names the input that drifted rather than an array index.
     expect(samples.map((sample) => [sample, estimateTokens(sample)])).toEqual(
       samples.map((sample) => [sample, serverEstimateTokens(sample)]),
     );
@@ -68,50 +67,57 @@ describe("context meter", () => {
     expect(estimateTokens("12345678")).toBe(2);
   });
 
-  it("estimates from the draft alone before anything is inspected", () => {
+  it("estimates history from the visible transcript without an inspect click", () => {
+    // "12345678" = 2 tokens + 4 framing each
     expect(
-      contextMeterValue({
-        contextWindow: 8_000,
-        draft: "12345678",
-        preview: undefined,
-      }),
-    ).toEqual({
-      contextWindow: 8_000,
-      exact: false,
-      percent: 0,
-      retainedFiles: 0,
-      usedTokens: 2,
-    });
+      estimateHistoryTokens([
+        { role: "user", content: "12345678" },
+        { role: "assistant", content: "12345678" },
+        { role: "assistant", content: "", error: { code: "x" } },
+      ]),
+    ).toBe(12);
   });
 
-  it("reports the inspected number exactly while the composer is empty", () => {
-    expect(
-      contextMeterValue({
-        contextWindow: 8_000,
-        draft: "",
-        preview: preview({ estimatedInputTokens: 12_400 }),
-      }),
-    ).toEqual({
-      contextWindow: 128_000,
-      exact: true,
-      percent: 10,
-      retainedFiles: 0,
-      usedTokens: 12_400,
-    });
-  });
-
-  it("grows with the draft and stops being exact", () => {
+  it("grows as the transcript and draft grow", () => {
     const value = contextMeterValue({
-      contextWindow: 128_000,
+      contextWindow: 8_000,
       draft: "12345678",
+      messages: [{ role: "user", content: "12345678" }],
+      preview: undefined,
+    });
+    // history 2+4, draft 2
+    expect(value.usedTokens).toBe(8);
+    expect(value.exact).toBe(false);
+    expect(value.percent).toBe(0);
+  });
+
+  it("uses the inspect preview for retained files and model window only", () => {
+    const value = contextMeterValue({
+      contextWindow: 8_000,
+      draft: "",
+      messages: [{ role: "user", content: "12345678" }],
       preview: preview({
-        estimatedInputTokens: 100,
+        contextWindow: 128_000,
+        estimatedInputTokens: 99_999,
         retainedDocuments: ["file_a", "file_b"],
       }),
     });
-    expect(value.usedTokens).toBe(102);
-    expect(value.exact).toBe(false);
+    // Live history wins over the stale inspect budget total.
+    expect(value.usedTokens).toBe(6);
+    expect(value.contextWindow).toBe(128_000);
     expect(value.retainedFiles).toBe(2);
+    expect(value.exact).toBe(false);
+  });
+
+  it("includes the system prompt when provided", () => {
+    const value = contextMeterValue({
+      contextWindow: 1_000,
+      draft: "",
+      messages: [],
+      preview: undefined,
+      systemPrompt: "12345678",
+    });
+    expect(value.usedTokens).toBe(6);
   });
 
   it("has no percentage when the model's window is unknown", () => {
@@ -127,9 +133,10 @@ describe("context meter", () => {
   it("clamps an overflowing conversation to a full bar", () => {
     expect(
       contextMeterValue({
-        contextWindow: undefined,
-        draft: "",
-        preview: preview({ contextWindow: 1_000, estimatedInputTokens: 4_000 }),
+        contextWindow: 10,
+        draft: "x".repeat(400),
+        messages: [],
+        preview: undefined,
       }).percent,
     ).toBe(100);
   });

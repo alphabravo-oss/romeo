@@ -29,8 +29,9 @@ const defaultSuggestions: ChatSuggestion[] = [
 const defaults: ChatExperience = {
   suggestions: defaultSuggestions,
   autoTitleEnabled: true,
-  // Bare chat is the default: unless an operator opts in, the model answers as itself.
-  assistantsEnabled: false,
+  // Product model: provider → base model → custom model (managed config).
+  // Dual “assistants on/off” mode is retired; custom models are always available.
+  assistantsEnabled: true,
 };
 
 export class ChatExperienceService {
@@ -49,13 +50,12 @@ export class ChatExperienceService {
     input: UpdateChatExperience,
   ): Promise<ChatExperience> {
     assertScope(subject, "admin:write");
-    // A body without `assistantsEnabled` — anything written against the pre-toggle contract — keeps
-    // whatever is stored. Falling back to the default here instead would let an old client silently
-    // switch assistants off for the whole org just by saving its suggestions.
-    const assistantsEnabled =
-      input.assistantsEnabled ??
-      (await assistantsEnabledForOrg(this.repository, subject.orgId));
-    const data = normalize({ ...input, assistantsEnabled });
+    // assistantsEnabled is always on after normalize; ignore client toggles so
+    // older admin UIs cannot reintroduce dual bare/assistant mode.
+    const data = normalize({
+      ...input,
+      assistantsEnabled: true,
+    });
     const now = new Date().toISOString();
     await this.repository.transaction(async (repository) => {
       await repository.upsertSystemSetting({
@@ -69,7 +69,7 @@ export class ChatExperienceService {
         resourceType: "organization",
         resourceId: subject.orgId,
         metadata: {
-          assistantsEnabled: data.assistantsEnabled,
+          assistantsEnabled: true,
           autoTitleEnabled: data.autoTitleEnabled,
           suggestionCount: data.suggestions.length,
         },
@@ -120,12 +120,7 @@ function normalize(value: Record<string, unknown>): ChatExperience {
       typeof value.autoTitleEnabled === "boolean"
         ? value.autoTitleEnabled
         : defaults.autoTitleEnabled,
-    // Rows persisted before this field existed have no `assistantsEnabled`, so they land on the
-    // default and read as bare. The key stays `chat_experience.v1` — bumping it would orphan every
-    // org's saved suggestions to buy nothing.
-    assistantsEnabled:
-      typeof value.assistantsEnabled === "boolean"
-        ? value.assistantsEnabled
-        : defaults.assistantsEnabled,
+    // Dual bare/assistant mode is retired: always treat custom models as on.
+    assistantsEnabled: true,
   };
 }

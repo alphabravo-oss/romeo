@@ -18,10 +18,10 @@ import type { WorkflowScheduleInput } from "../features/workflows";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
+import { AddButton, Section, StatRow } from "./console";
 import { DataTable } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { PageActions } from "./PageActions";
-import { PanelStats } from "./PanelStats";
 import { WorkflowStepBuilder } from "./WorkflowStepBuilder";
 import {
   type StepDraft,
@@ -231,199 +231,191 @@ export function WorkflowsPanel() {
   });
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("workflows")}</div>
-        <div className="flex flex-wrap gap-2">
-          <PageActions
-            onRefresh={() => void workflowsQuery.refetch()}
-            refreshLabel={t("refresh")}
-            refreshing={workflowsQuery.isFetching}
-          />
-          <Button onClick={() => setAddOpen(true)} type="button">
-            + {t("fromTemplate")}
-          </Button>
-          {(workflowsQuery.data?.length ?? 0) > 0 ? (
-            <Button
-              variant="primary"
-              onClick={() => setNewOpen(true)}
-              type="button"
-            >
-              + {t("newWorkflow")}
+    <>
+      <Section
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <PageActions
+              onRefresh={() => void workflowsQuery.refetch()}
+              refreshLabel={t("refresh")}
+              refreshing={workflowsQuery.isFetching}
+            />
+            <Button onClick={() => setAddOpen(true)} type="button">
+              {t("fromTemplate")}
             </Button>
-          ) : null}
-        </div>
-      </div>
-
-      <FormDialog
-        open={addOpen}
-        title={t("newWorkflow")}
-        onClose={() => setAddOpen(false)}
+            {(workflowsQuery.data?.length ?? 0) > 0 ? (
+              <AddButton onClick={() => setNewOpen(true)}>
+                {t("newWorkflow")}
+              </AddButton>
+            ) : null}
+          </div>
+        }
+        title={t("workflows")}
       >
-        <form
-          className="grid gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void createForm.handleSubmit();
-          }}
+        <FormDialog
+          open={addOpen}
+          title={t("newWorkflow")}
+          onClose={() => setAddOpen(false)}
         >
-          <div className="text-sm text-muted">{t("createFromTemplate")}</div>
-          <createForm.Field
-            name="templateId"
-            validators={{
-              onChange: ({ value }: { value: string }) =>
-                !value ? t("templateRequired") : undefined,
+          <form
+            className="grid gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void createForm.handleSubmit();
             }}
           >
-            {(field) => (
-              <Field
-                error={
-                  field.state.meta.errors.length
-                    ? field.state.meta.errors.join(", ")
-                    : undefined
-                }
-                label={t("template")}
-              >
-                <NativeSelect
-                  name="templateId"
+            <div className="text-sm text-muted">{t("createFromTemplate")}</div>
+            <createForm.Field
+              name="templateId"
+              validators={{
+                onChange: ({ value }: { value: string }) =>
+                  !value ? t("templateRequired") : undefined,
+              }}
+            >
+              {(field) => (
+                <Field
+                  error={
+                    field.state.meta.errors.length
+                      ? field.state.meta.errors.join(", ")
+                      : undefined
+                  }
+                  label={t("template")}
+                >
+                  <NativeSelect
+                    name="templateId"
+                    onBlur={field.handleBlur}
+                    onChange={(event) =>
+                      field.handleChange(event.currentTarget.value)
+                    }
+                    value={field.state.value}
+                  >
+                    <option value="">{t("selectTemplate")}</option>
+                    {(templatesQuery.data ?? []).map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              )}
+            </createForm.Field>
+            <createForm.Field name="agentId">
+              {(field) => (
+                <Input
+                  name="agentId"
+                  aria-label={t("agentIdOptional")}
                   onBlur={field.handleBlur}
                   onChange={(event) =>
                     field.handleChange(event.currentTarget.value)
                   }
+                  placeholder={t("agentIdOptional")}
                   value={field.state.value}
-                >
-                  <option value="">{t("selectTemplate")}</option>
-                  {(templatesQuery.data ?? []).map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </Field>
-            )}
-          </createForm.Field>
-          <createForm.Field name="agentId">
-            {(field) => (
-              <Input
-                name="agentId"
-                aria-label={t("agentIdOptional")}
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                placeholder={t("agentIdOptional")}
-                value={field.state.value}
-              />
-            )}
-          </createForm.Field>
-          <createForm.Subscribe
-            selector={(state) => ({
-              canSubmit: state.canSubmit,
-              isSubmitting: state.isSubmitting,
-            })}
-          >
-            {({ canSubmit, isSubmitting }) => (
-              <Button disabled={!canSubmit || isSubmitting} type="submit">
-                {isSubmitting ? t("creating") : t("createWorkflow")}
-              </Button>
-            )}
-          </createForm.Subscribe>
-        </form>
-      </FormDialog>
+                />
+              )}
+            </createForm.Field>
+            <createForm.Subscribe
+              selector={(state) => ({
+                canSubmit: state.canSubmit,
+                isSubmitting: state.isSubmitting,
+              })}
+            >
+              {({ canSubmit, isSubmitting }) => (
+                <Button disabled={!canSubmit || isSubmitting} type="submit">
+                  {isSubmitting ? t("creating") : t("createWorkflow")}
+                </Button>
+              )}
+            </createForm.Subscribe>
+          </form>
+        </FormDialog>
 
-      <FormDialog
-        open={newOpen}
-        title={t("newWorkflow")}
-        onClose={() => setNewOpen(false)}
-      >
-        <form
-          className="grid gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void handleCreateWorkflow();
-          }}
+        <FormDialog
+          open={newOpen}
+          title={t("newWorkflow")}
+          onClose={() => setNewOpen(false)}
         >
-          <Input
-            name="newName"
-            aria-label={t("workflowName")}
-            onChange={(event) => setNewName(event.currentTarget.value)}
-            placeholder={t("workflowName")}
-            value={newName}
-          />
-          <Input
-            name="newDescription"
-            aria-label={t("descriptionOptional")}
-            onChange={(event) => setNewDescription(event.currentTarget.value)}
-            placeholder={t("descriptionOptional")}
-            value={newDescription}
-          />
-
-          <WorkflowStepBuilder
-            drafts={drafts}
-            onAdd={() => setDrafts((prev) => [...prev, makeDraft()])}
-            onChange={setDrafts}
-          />
-
-          <label className="flex items-center gap-2 text-sm">
-            <Input
-              name="scheduleEnabled"
-              checked={scheduleEnabled}
-              onChange={(event) =>
-                setScheduleEnabled(event.currentTarget.checked)
-              }
-              type="checkbox"
-            />
-            <span>{t("runOnSchedule")}</span>
-          </label>
-          {scheduleEnabled ? (
-            <label className="grid gap-1 text-sm">
-              <span className="text-muted">{t("intervalMinutes")}</span>
-              <Input
-                name="intervalMinutes"
-                max={43_200}
-                min={5}
-                onChange={(event) =>
-                  setIntervalMinutes(event.currentTarget.value)
-                }
-                type="number"
-                value={intervalMinutes}
-              />
-            </label>
-          ) : null}
-
-          <Button
-            variant="primary"
-            disabled={createWorkflowMutation.isPending}
-            type="submit"
+          <form
+            className="grid gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void handleCreateWorkflow();
+            }}
           >
-            {createWorkflowMutation.isPending
-              ? t("creating")
-              : t("createWorkflow")}
-          </Button>
-        </form>
-      </FormDialog>
+            <Input
+              name="newName"
+              aria-label={t("workflowName")}
+              onChange={(event) => setNewName(event.currentTarget.value)}
+              placeholder={t("workflowName")}
+              value={newName}
+            />
+            <Input
+              name="newDescription"
+              aria-label={t("descriptionOptional")}
+              onChange={(event) => setNewDescription(event.currentTarget.value)}
+              placeholder={t("descriptionOptional")}
+              value={newDescription}
+            />
 
-      <div className="mt-4">
+            <WorkflowStepBuilder
+              drafts={drafts}
+              onAdd={() => setDrafts((prev) => [...prev, makeDraft()])}
+              onChange={setDrafts}
+            />
+
+            <label className="flex items-center gap-2 text-sm">
+              <Input
+                name="scheduleEnabled"
+                checked={scheduleEnabled}
+                onChange={(event) =>
+                  setScheduleEnabled(event.currentTarget.checked)
+                }
+                type="checkbox"
+              />
+              <span>{t("runOnSchedule")}</span>
+            </label>
+            {scheduleEnabled ? (
+              <label className="grid gap-1 text-sm">
+                <span className="text-muted">{t("intervalMinutes")}</span>
+                <Input
+                  name="intervalMinutes"
+                  max={43_200}
+                  min={5}
+                  onChange={(event) =>
+                    setIntervalMinutes(event.currentTarget.value)
+                  }
+                  type="number"
+                  value={intervalMinutes}
+                />
+              </label>
+            ) : null}
+
+            <Button
+              variant="primary"
+              disabled={createWorkflowMutation.isPending}
+              type="submit"
+            >
+              {createWorkflowMutation.isPending
+                ? t("creating")
+                : t("createWorkflow")}
+            </Button>
+          </form>
+        </FormDialog>
+
         <PanelState
           empty={t("noWorkflows")}
           emptyAction={
-            <Button
-              onClick={() => setNewOpen(true)}
-              type="button"
-              variant="primary"
-            >
-              + {t("createWorkflow")}
-            </Button>
+            <AddButton onClick={() => setNewOpen(true)}>
+              {t("createWorkflow")}
+            </AddButton>
           }
           emptyDescription={t("noWorkflowsDescription")}
           emptyIcon={<Workflow aria-hidden size={24} />}
           query={workflowsQuery}
         >
           {(rows) => (
-            <div className="grid gap-4">
-              <PanelStats
+            <>
+              <StatRow
                 items={[
                   { label: t("totalWorkflows"), value: rows.length },
                   {
@@ -437,13 +429,14 @@ export function WorkflowsPanel() {
                 ]}
               />
               <DataTable columns={workflowColumns} data={rows} />
-            </div>
+            </>
           )}
         </PanelState>
-      </div>
+      </Section>
 
-      <div className="mt-4">
-        <div className="rm-card-title">{t("templates")}</div>
+      {/* Templates and runs are peer groups, not stray headings inside the
+          workflow list. Each gets the divider and rhythm every group gets. */}
+      <Section title={t("templates")}>
         <PanelState
           empty={t("noTemplatesAvailable")}
           emptyDescription={t("noTemplatesAvailableDescription")}
@@ -452,26 +445,27 @@ export function WorkflowsPanel() {
         >
           {(rows) => <DataTable columns={templateColumns} data={rows} />}
         </PanelState>
-      </div>
+      </Section>
 
-      {selectedWorkflowId !== undefined ? (
-        <div className="mt-4">
-          <div className="rm-card-header">
-            <div className="rm-card-title">{t("runs")}</div>
+      {selectedWorkflowId === undefined ? null : (
+        <Section
+          actions={
             <Button
               onClick={() => setSelectedWorkflowId(undefined)}
               type="button"
             >
               {t("close")}
             </Button>
-          </div>
+          }
+          title={t("runs")}
+        >
           <DataTable
             columns={runColumns}
             data={runsQuery.data ?? []}
             empty={t("noRunsForWorkflow")}
           />
-        </div>
-      ) : null}
-    </section>
+        </Section>
+      )}
+    </>
   );
 }

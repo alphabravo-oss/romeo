@@ -5,6 +5,8 @@ import {
   createKnowledgeBaseRoute,
   createKnowledgeSourceRoute,
   createKnowledgeUploadRoute,
+  getAgenticRagSettingsRoute,
+  getKnowledgeIngestReadinessRoute,
   deleteKnowledgeSourceRoute,
   extractKnowledgeSourceRoute,
   getKnowledgeBaseRoute,
@@ -20,6 +22,20 @@ import {
 import type { KnowledgeRetrievalReplayCaseInput } from "../../services/knowledge-service";
 
 export function registerKnowledgeRoutes(app: RomeoApi): void {
+  app.openapi(getAgenticRagSettingsRoute, async (context) => {
+    const data = await context
+      .get("services")
+      .ragPolicy.agenticSettings(context.get("subject"));
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(getKnowledgeIngestReadinessRoute, async (context) => {
+    const data = await context
+      .get("services")
+      .ragPolicy.ingestReadiness(context.get("subject"));
+    return context.json({ data }, 200);
+  });
+
   app.openapi(listKnowledgeBasesRoute, async (context) => {
     const subject = context.get("subject");
     const workspaceId =
@@ -38,12 +54,14 @@ export function registerKnowledgeRoutes(app: RomeoApi): void {
       workspaceId: string;
       name: string;
       description?: string;
+      scope?: "user_private" | "workspace" | "org" | "shared";
     } = {
       subject,
       workspaceId: body.workspaceId,
       name: body.name,
     };
     if (body.description !== undefined) input.description = body.description;
+    if (body.scope !== undefined) input.scope = body.scope;
 
     const data = await context.get("services").knowledge.create(input);
     return context.json({ data }, 201);

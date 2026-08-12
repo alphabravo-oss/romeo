@@ -1,4 +1,3 @@
-import { Button } from "@romeo/ui";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 import type {
@@ -8,6 +7,7 @@ import type {
 import type { Agent } from "../features/types";
 import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
+import { AddButton } from "./AddButton";
 import { AgentKnowledgeBindingControls } from "./AgentKnowledgeBindingControls";
 import { KnowledgeSourceList } from "./KnowledgeSourceList";
 import { PanelStats } from "./PanelStats";
@@ -15,6 +15,7 @@ import { PanelStats } from "./PanelStats";
 export function KnowledgeSourcesTab({
   activeAgent,
   activeKnowledgeBase,
+  canUpload = true,
   isDeleting,
   isExtracting,
   isReindexing,
@@ -26,6 +27,7 @@ export function KnowledgeSourcesTab({
 }: {
   activeAgent: Agent | undefined;
   activeKnowledgeBase: KnowledgeBase | undefined;
+  canUpload?: boolean;
   isDeleting: boolean;
   isExtracting: boolean;
   isReindexing: boolean;
@@ -47,14 +49,12 @@ export function KnowledgeSourcesTab({
         query={sourcesQuery}
         empty={t("knowledgeNoSources")}
         emptyAction={
-          <Button
-            variant="primary"
-            disabled={!activeKnowledgeBase}
+          <AddButton
+            disabled={!activeKnowledgeBase || !canUpload}
             onClick={onAddSource}
-            type="button"
           >
-            + {t("knowledgeAddSource")}
-          </Button>
+            {t("knowledgeAddSource")}
+          </AddButton>
         }
       >
         {(sources) => (
@@ -70,6 +70,7 @@ export function KnowledgeSourcesTab({
               ]}
             />
             <KnowledgeSourceList
+              canUpload={canUpload}
               isDeleting={isDeleting}
               isExtracting={isExtracting}
               isReindexing={isReindexing}

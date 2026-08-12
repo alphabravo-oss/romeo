@@ -5,7 +5,7 @@ import { listJobs, type BackgroundJob } from "../features/jobs";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
-import { PanelStats } from "./PanelStats";
+import { Section, StatRow } from "./console";
 import { PageActions } from "./PageActions";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 
@@ -49,15 +49,16 @@ export function JobPanel() {
   ];
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="text-sm text-muted">{t("jobsTitle")}</div>
+    <Section
+      actions={
         <PageActions
           onRefresh={() => void jobsQuery.refetch()}
           refreshLabel={t("refresh")}
           refreshing={jobsQuery.isFetching}
         />
-      </div>
+      }
+      title={t("jobsTitle")}
+    >
       <PanelState
         empty={t("jobsNone")}
         emptyDescription={t("jobsNoneDescription")}
@@ -66,7 +67,7 @@ export function JobPanel() {
       >
         {(jobs) => (
           <div className="grid gap-4">
-            <PanelStats
+            <StatRow
               items={[
                 { label: t("jobsTotal"), value: jobs.length },
                 {
@@ -83,7 +84,7 @@ export function JobPanel() {
           </div>
         )}
       </PanelState>
-    </section>
+    </Section>
   );
 }
 

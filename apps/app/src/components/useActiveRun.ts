@@ -7,6 +7,7 @@ import {
   type ChatCitation,
   type ChatReasoning,
   type ChatRunActivity,
+  type ChatRunWait,
 } from "../lib/run-registry";
 import type { ChatToolCall } from "../lib/run-tool-calls";
 
@@ -29,6 +30,7 @@ export function useActiveRun(chatId: string | undefined): {
   handleCancel: () => void;
   reasoning: ChatReasoning | undefined;
   toolCalls: ChatToolCall[];
+  wait: ChatRunWait | undefined;
 } {
   const run = useSyncExternalStore(
     subscribeToRuns,
@@ -45,5 +47,6 @@ export function useActiveRun(chatId: string | undefined): {
     },
     reasoning: run?.reasoning,
     toolCalls: run?.toolCalls ?? noToolCalls,
+    wait: run?.wait,
   };
 }

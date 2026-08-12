@@ -1,6 +1,7 @@
 export * from "./capabilities";
 export * from "./embedding-registry";
 export * from "./model-catalog";
+export * from "./model-discovery";
 export * from "./registry";
 export * from "./tool-calls";
 export * from "./types";

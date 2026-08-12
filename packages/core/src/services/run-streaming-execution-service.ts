@@ -140,9 +140,10 @@ export class RunStreamingExecutionService {
         runId: input.run.id,
         messages: input.messages,
         ...(input.sampling === undefined ? {} : { sampling: input.sampling }),
-        ...(this.options.providerStreamTimeoutMs === undefined
-          ? {}
-          : { providerTimeoutMs: this.options.providerStreamTimeoutMs }),
+        ...providerTimeoutFields(
+          this.options.providerStreamTimeoutMs,
+          input.model,
+        ),
         ...(input.routePlan.fallback === undefined
           ? {}
           : { providerFallback: input.routePlan.fallback }),
@@ -247,4 +248,19 @@ export class RunStreamingExecutionService {
   private heartbeatMs(): number {
     return Math.max(250, Math.floor((this.leaseSeconds() * 1_000) / 3));
   }
+}
+
+const REASONING_STREAM_TIMEOUT_FLOOR_MS = 180_000;
+
+function providerTimeoutFields(
+  configuredMs: number | undefined,
+  model: BaseModel,
+): { providerTimeoutMs: number } | Record<string, never> {
+  if (configuredMs === undefined) return {};
+  return {
+    providerTimeoutMs:
+      model.capabilities.reasoning === true
+        ? Math.max(configuredMs, REASONING_STREAM_TIMEOUT_FLOOR_MS)
+        : configuredMs,
+  };
 }

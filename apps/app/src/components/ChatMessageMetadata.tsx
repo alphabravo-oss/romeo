@@ -1,12 +1,83 @@
 import Brain from "lucide-react/dist/esm/icons/brain.mjs";
 import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
+import { useState } from "react";
 
 import type { SpeechArtifact } from "../features/types";
 import { useLocale, type Locale, type MessageKey } from "../lib/i18n";
 import { formatDateTime } from "../lib/locale-format";
-import type { ChatReasoning } from "../lib/run-registry";
+import type { ChatReasoning, ChatRunWait } from "../lib/run-registry";
 import type { ChatToolCall } from "../lib/run-tool-calls";
 import type { ChatCitation, ChatRunActivity } from "./useWorkspaceController";
+
+/**
+ * Open WebUI-style status stack: the current wait/retry line plus recent run
+ * activities in one compact timeline above the answer body.
+ */
+export function RunStatusStack({
+  activities,
+  wait,
+  waitLabel,
+}: {
+  activities: ChatRunActivity[];
+  wait: ChatRunWait | undefined;
+  waitLabel: string | undefined;
+}) {
+  const { t } = useLocale();
+  const [expanded, setExpanded] = useState(false);
+  const history = activities.slice(-6);
+  const showWait =
+    waitLabel !== undefined &&
+    wait !== undefined &&
+    wait.phase !== "streaming" &&
+    !wait.hasContent;
+  if (!showWait && history.length === 0) return null;
+
+  const primaryLabel = showWait
+    ? waitLabel
+    : (history.at(-1)?.label ?? t("chatActivityGeneratingResponse"));
+  const primaryState = showWait
+    ? "active"
+    : (history.at(-1)?.state ?? "active");
+  const canExpand = history.length > 1 || (showWait && history.length > 0);
+
+  return (
+    <div className="rm-status-stack" aria-live="polite">
+      <button
+        aria-expanded={canExpand ? expanded : undefined}
+        className="rm-status-stack__primary"
+        disabled={!canExpand}
+        onClick={() => canExpand && setExpanded((value) => !value)}
+        type="button"
+      >
+        <span className={`rm-run-activity-dot ${primaryState}`} />
+        <span className="rm-status-stack__label">{primaryLabel}</span>
+        {canExpand ? (
+          <span className="rm-status-stack__toggle">
+            {expanded ? t("statusHideSteps") : t("statusShowSteps")}
+          </span>
+        ) : null}
+      </button>
+      {expanded && history.length > 0 ? (
+        <div className="rm-status-stack__history">
+          {history.map((activity, index) => (
+            <div
+              className={`rm-run-activity ${activity.state}`}
+              key={activity.id}
+            >
+              <span className="rm-status-stack__rail" aria-hidden="true">
+                <span className={`rm-run-activity-dot ${activity.state}`} />
+                {index < history.length - 1 ? (
+                  <span className="rm-status-stack__line" />
+                ) : null}
+              </span>
+              <span>{activity.label}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function RunActivityList({
   activities,

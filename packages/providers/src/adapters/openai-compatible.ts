@@ -5,10 +5,8 @@ import type {
   ChatCompletionTool,
 } from "openai/resources/chat/completions";
 
-import {
-  detectsImageGenerationModel,
-  openAiCompatibleCapabilities,
-} from "../capabilities";
+import { openAiCompatibleCapabilities } from "../capabilities";
+import { profileDiscoveredModel } from "../model-discovery";
 import { MAX_DISCOVERED_MODELS } from "../model-catalog";
 import {
   normalizeProviderToolCall,
@@ -92,58 +90,29 @@ export async function discoverCompatibleModels(
   return [...new Set(ids)]
     .slice(0, MAX_DISCOVERED_MODELS)
     .sort()
-    .map((name) => ({
-      id: `model_${provider.id}_${modelIdPart(name)}`,
-      providerId: provider.id,
-      name,
-      displayName: name,
-      enabled: true,
-      capabilities: {
-        ...capabilities,
-        imageGeneration:
-          imageGenerationFromMetadata(metadataById.get(name)) ??
-          detectsImageGenerationModel(name),
-      },
-      contextWindow: 128000,
-    }));
-}
-
-function imageGenerationFromMetadata(
-  metadata: Record<string, unknown> | undefined,
-): boolean | undefined {
-  if (metadata === undefined) return undefined;
-  const capabilities = asRecord(metadata.capabilities);
-  for (const value of [
-    capabilities?.image_generation,
-    capabilities?.imageGeneration,
-    metadata.image_generation,
-    metadata.imageGeneration,
-  ]) {
-    if (typeof value === "boolean") return value;
-  }
-  const outputModalities = arrayOfStrings(
-    metadata.output_modalities ?? capabilities?.output_modalities,
-  );
-  if (outputModalities !== undefined) return outputModalities.includes("image");
-  const methods = arrayOfStrings(
-    metadata.supported_generation_methods ??
-      capabilities?.supported_generation_methods,
-  );
-  if (methods !== undefined) {
-    return methods.some(
-      (method) =>
-        method === "image" ||
-        method === "image_generation" ||
-        method === "generate_image",
-    );
-  }
-  return undefined;
-}
-
-function arrayOfStrings(value: unknown): string[] | undefined {
-  return Array.isArray(value) && value.every((item) => typeof item === "string")
-    ? value.map((item) => item.toLowerCase())
-    : undefined;
+    .map((name) => {
+      const profile = profileDiscoveredModel({
+        base: capabilities,
+        fallbackContextWindow: 128000,
+        name,
+        ...(metadataById.has(name)
+          ? { metadata: metadataById.get(name)! }
+          : {}),
+      });
+      return {
+        id: `model_${provider.id}_${modelIdPart(name)}`,
+        providerId: provider.id,
+        name,
+        displayName: name,
+        enabled: false,
+        capabilities: profile.capabilities,
+        contextWindow: profile.contextWindow,
+        ...(profile.defaultParameters === undefined
+          ? {}
+          : { defaultParameters: profile.defaultParameters }),
+        ...(profile.pricing === undefined ? {} : { pricing: profile.pricing }),
+      };
+    });
 }
 
 function modelIdPart(name: string): string {
@@ -206,6 +175,8 @@ async function* streamOpenAiCompatibleChat(
       const usage = usageFromOpenAiPayload(chunk);
       if (usage !== undefined) yield { type: "usage", usage };
 
+      for (const text of reasoningDeltas(chunk))
+        yield { type: "reasoning", text };
       for (const token of textDeltas(chunk)) yield token;
       toolCalls.merge(chunk);
       if (hasToolCallFinish(chunk)) {
@@ -279,10 +250,34 @@ function toOpenAiToolCall(
 }
 
 function textDeltas(payload: unknown): string[] {
-  return choices(payload).flatMap((choice) => {
-    const delta = asRecord(choice.delta);
-    const content = delta?.content;
-    return typeof content === "string" && content.length > 0 ? [content] : [];
+  return choices(payload).flatMap((choice) =>
+    stringFields(asRecord(choice.delta) ?? asRecord(choice.message), [
+      "content",
+    ]),
+  );
+}
+
+// DeepSeek and many OpenAI-compatible gateways stream thinking as
+// `reasoning_content` (or `reasoning` / `thinking`) on the same chat-completion
+// delta as the eventual answer. Those tokens must not be treated as content.
+function reasoningDeltas(payload: unknown): string[] {
+  return choices(payload).flatMap((choice) =>
+    stringFields(asRecord(choice.delta) ?? asRecord(choice.message), [
+      "reasoning_content",
+      "reasoning",
+      "thinking",
+    ]),
+  );
+}
+
+function stringFields(
+  record: Record<string, unknown> | undefined,
+  keys: string[],
+): string[] {
+  if (record === undefined) return [];
+  return keys.flatMap((key) => {
+    const value = record[key];
+    return typeof value === "string" && value.length > 0 ? [value] : [];
   });
 }
 

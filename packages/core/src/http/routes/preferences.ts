@@ -4,6 +4,7 @@ import {
 } from "@romeo/contracts";
 
 import type { RomeoApi } from "../context";
+import type { InterfacePreferences } from "../../services/interface-preference-service";
 
 export function registerPreferenceRoutes(app: RomeoApi): void {
   app.openapi(getInterfacePreferencesRoute, async (context) =>
@@ -19,18 +20,14 @@ export function registerPreferenceRoutes(app: RomeoApi): void {
 
   app.openapi(updateInterfacePreferencesRoute, async (context) => {
     const subject = context.get("subject");
+    // exactOptionalPropertyTypes: omit keys rather than pass `prop: undefined`.
     const body = context.req.valid("json");
+    const patch = Object.fromEntries(
+      Object.entries(body).filter((entry) => entry[1] !== undefined),
+    ) as Partial<InterfacePreferences>;
     const data = await context
       .get("services")
-      .interfacePreferences.update(subject, {
-        ...(body.theme === undefined ? {} : { theme: body.theme }),
-        ...(body.locale === undefined ? {} : { locale: body.locale }),
-        ...(body.fontSize === undefined ? {} : { fontSize: body.fontSize }),
-        ...(body.density === undefined ? {} : { density: body.density }),
-        ...(body.reducedMotion === undefined
-          ? {}
-          : { reducedMotion: body.reducedMotion }),
-      });
+      .interfacePreferences.update(subject, patch);
     return context.json({ data }, 200);
   });
 }

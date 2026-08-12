@@ -50,7 +50,7 @@ export function useWorkspaceData(
             readinessStatus:
               agent.publishedVersionId === undefined ? "blocked" : "ready",
             ...(agent.publishedVersionId === undefined
-              ? { readinessReason: "Publish this assistant before using it." }
+              ? { readinessReason: "Publish this custom model before using it." }
               : {}),
           }))
         : listAgentGallery(workspace!.id),

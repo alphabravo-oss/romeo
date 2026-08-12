@@ -47,23 +47,25 @@
 }
 
 .rm-chat-model-group {
-  min-height: 32px;
-  padding: 9px 10px 5px;
+  min-height: 28px;
+  padding: 8px 10px 3px;
   background: var(--rm-surface);
   color: var(--rm-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 650;
   text-transform: uppercase;
-  letter-spacing: 0.055em;
+  letter-spacing: 0.05em;
 }
 
+/* Select label · default pin · favorite — fixed action columns prevent wrap. */
 .rm-chat-model-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
   align-items: center;
   min-width: 0;
-  margin: 1px 0;
-  border-radius: 12px;
+  height: 40px;
+  margin: 0;
+  border-radius: 8px;
 }
 
 .rm-chat-model-row:hover,
@@ -73,12 +75,15 @@
 }
 
 .rm-chat-model-row .rm-model-option {
+  display: flex;
   min-width: 0;
-  min-height: 54px;
+  min-height: 0;
+  height: 40px;
   align-items: center;
+  gap: 6px;
   overflow: hidden;
-  padding: 7px 10px;
-  border-radius: 12px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 8px;
   background: transparent;
 }
 
@@ -86,10 +91,11 @@
   background: transparent;
 }
 
-.rm-chat-model-row .rm-model-option > span {
+.rm-chat-model-copy {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  flex: 1;
+  gap: 1px;
   overflow: hidden;
 }
 
@@ -104,34 +110,36 @@
 
 .rm-chat-model-name {
   color: var(--rm-text);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 520;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .rm-chat-model-meta {
   color: var(--rm-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
-.rm-chat-model-row .rm-model-option > svg {
+.rm-chat-model-check {
   flex: 0 0 auto;
   color: var(--rm-accent);
 }
 
-.rm-chat-model-pin {
+.rm-chat-model-action {
   display: grid;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
   place-items: center;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
   color: var(--rm-muted);
   padding: 0;
-  border-radius: 9999px;
-  background: transparent;
   opacity: 0;
   transition:
     color 0.12s ease,
@@ -139,18 +147,24 @@
     opacity 0.12s ease;
 }
 
-.rm-chat-model-row:hover .rm-chat-model-pin,
-.rm-chat-model-row:focus-within .rm-chat-model-pin,
-.rm-chat-model-pin.active,
-.rm-chat-model-pin:hover,
-.rm-chat-model-pin:focus-visible {
+.rm-chat-model-row:hover .rm-chat-model-action,
+.rm-chat-model-row:focus-within .rm-chat-model-action,
+.rm-chat-model-action.active,
+.rm-chat-model-action:hover,
+.rm-chat-model-action:focus-visible {
   opacity: 1;
 }
 
-.rm-chat-model-pin:hover,
-.rm-chat-model-pin.active {
+.rm-chat-model-action:hover,
+.rm-chat-model-action.active {
   color: var(--rm-accent);
-  background: var(--rm-hover);
+  background: color-mix(in srgb, var(--rm-accent) 10%, transparent);
+}
+
+@media (hover: none) {
+  .rm-chat-model-action {
+    opacity: 1;
+  }
 }
 
 /* The assistant picker owns the chat identity. Keep its trigger compact and

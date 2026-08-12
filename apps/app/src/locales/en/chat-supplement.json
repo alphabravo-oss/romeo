@@ -54,10 +54,21 @@
   "toolCallRisk": "Risk",
   "composerMentionKnowledge": "Knowledge base",
   "composerMentions": "Files and knowledge bases",
+  "composerKnowledgeApply": "Use selected collections",
+  "composerKnowledgeClearOverride": "Clear knowledge override",
+  "composerKnowledgeNone": "None (no knowledge this turn)",
+  "composerKnowledgeNoneActive": "No knowledge this turn",
+  "composerKnowledgePicker": "Knowledge collections",
+  "composerKnowledgePickerHelp": "Override which knowledge bases retrieval uses for the next message. Leave on model defaults unless you need a one-turn change.",
+  "composerKnowledgeSelectedCount": "{{count}} collections",
+  "composerKnowledgeUseDefaults": "Use custom model defaults",
   "contextMeterFiles": "{{files}} file(s) retained",
   "contextMeterLabel": "Open the context inspector",
   "contextMeterUsage": "{{used}} / {{total}} context",
   "scrollToLatest": "Jump to the latest message",
   "contextMeterUsageOnly": "{{used}} context",
-  "citationMarkerLabel": "Source: {{title}}"
+  "citationMarkerLabel": "Source: {{title}}",
+  "agenticRag": "Agentic retrieval",
+  "agenticRagHelp": "Search again with rewritten or split queries when the first results are weak.",
+  "agenticRagForcedHelp": "Your organization requires agentic retrieval for knowledge-backed chats."
 }

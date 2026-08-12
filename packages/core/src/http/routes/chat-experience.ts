@@ -5,11 +5,15 @@ import {
 } from "@romeo/contracts";
 
 import type { RomeoApi } from "../context";
+import { normalizeGeneratedTitle } from "../../services/chat-title-normalize";
 
 const titleSystemPrompt = [
   "Create a concise title for this conversation.",
-  "Return only the title: no JSON, quotes, markdown, or punctuation suffix.",
+  "Return only plain words for the title.",
+  "No JSON, quotes, markdown, code fences, language tags, or trailing punctuation.",
+  "Never start with ``` or a programming language name alone.",
   "Use 2 to 6 words and no more than 80 characters.",
+  "Name the user's topic, not the assistant's format (e.g. prefer 'Sample Python code' over 'python').",
   "Preserve important product or project names.",
 ].join(" ");
 
@@ -71,39 +75,4 @@ export function registerChatExperienceRoutes(app: RomeoApi): void {
     });
     return context.json({ data }, 200);
   });
-}
-
-function normalizeGeneratedTitle(generated: string, fallback: string): string {
-  let value = generated.trim();
-  if (value.startsWith("{")) {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      if (typeof parsed === "object" && parsed !== null) {
-        const title = Reflect.get(parsed, "title");
-        if (typeof title === "string") value = title;
-      }
-    } catch {
-      // Treat non-JSON provider output as a plain-text title.
-    }
-  }
-  value = value
-    .split(/\r?\n/u)[0]!
-    .replace(/^#+\s*/u, "")
-    .replace(/^title:\s*/iu, "")
-    .replace(/^["'“”‘’]+|["'“”‘’]+$/gu, "")
-    .trim();
-  if (/^Romeo .+ response:/u.test(value)) value = "";
-  if (value.length === 0) value = fallbackTitle(fallback);
-  return value.split(/\s+/u).slice(0, 6).join(" ").slice(0, 80).trim();
-}
-
-function fallbackTitle(content: string): string {
-  const words = content
-    .trim()
-    .replace(/\s+/gu, " ")
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 6);
-  const title = words.join(" ").replace(/[.!?,:;]+$/gu, "");
-  return title.length > 0 ? title.slice(0, 80) : "New conversation";
 }

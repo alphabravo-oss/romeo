@@ -1,7 +1,7 @@
 {
-  "assistantClearDefault": "Quitar asistente predeterminado",
-  "assistantDefaultFailed": "No se pudo actualizar el asistente predeterminado.",
-  "assistantMakeDefault": "Establecer como predeterminado",
+  "assistantClearDefault": "Quitar modelo personalizado predeterminado",
+  "assistantDefaultFailed": "No se pudo actualizar el modelo personalizado predeterminado.",
+  "assistantMakeDefault": "Establecer como modelo personalizado predeterminado",
   "assistantUnavailable": "No disponible",
   "adminConsole": "Consola de administración",
   "catalogPages": "Páginas del catálogo",
@@ -67,5 +67,12 @@
   "tableTotal": "en total",
   "theme": "Tema",
   "useSystemTheme": "Usar tema del sistema",
-  "workspace": "Espacio de trabajo"
+  "workspace": "Espacio de trabajo",
+  "accessGrant": "Conceder acceso",
+  "accessGrantSaved": "Acceso concedido",
+  "accessGrantFailed": "No se pudo conceder el acceso",
+  "accessGrantRevoked": "Acceso revocado",
+  "accessRevoke": "Revocar",
+  "accessRevokeFailed": "No se pudo revocar el acceso",
+  "accessNoGrants": "Aún no hay permisos."
 }

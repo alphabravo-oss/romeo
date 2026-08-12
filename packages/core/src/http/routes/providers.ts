@@ -172,9 +172,34 @@ export function registerProviderRoutes(app: RomeoApi): void {
       modelId,
       contextWindow: body.contextWindow,
       capabilities: {
-        ...body.capabilities,
+        streaming: body.capabilities.streaming,
+        toolCalling: body.capabilities.toolCalling,
+        vision: body.capabilities.vision,
+        audioInput: body.capabilities.audioInput,
+        structuredJson: body.capabilities.structuredJson,
+        reasoning: body.capabilities.reasoning,
+        modalities: body.capabilities.modalities,
+        deployment: body.capabilities.deployment,
         imageGeneration: body.capabilities.imageGeneration ?? false,
+        ...(body.capabilities.temperature === undefined
+          ? {}
+          : { temperature: body.capabilities.temperature }),
       },
+      ...(body.defaultParameters === undefined
+        ? {}
+        : {
+            defaultParameters: {
+              ...(body.defaultParameters.temperature === undefined
+                ? {}
+                : { temperature: body.defaultParameters.temperature }),
+              ...(body.defaultParameters.topP === undefined
+                ? {}
+                : { topP: body.defaultParameters.topP }),
+              ...(body.defaultParameters.maxOutputTokens === undefined
+                ? {}
+                : { maxOutputTokens: body.defaultParameters.maxOutputTokens }),
+            },
+          }),
     });
     return context.json({ data }, 200);
   });

@@ -23,6 +23,7 @@ export const ProviderCapabilitiesSchema = z
     audioInput: z.boolean(),
     structuredJson: z.boolean(),
     reasoning: z.boolean(),
+    temperature: z.boolean().optional(),
     imageGeneration: z.boolean().optional(),
     modalities: z.array(modelModality),
     deployment: z.strictObject({

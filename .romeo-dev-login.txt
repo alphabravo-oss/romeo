@@ -1,0 +1,9 @@
+Romeo local (persistent Postgres)
+URL:      http://localhost:30000
+Email:    admin@romeo.local
+Password: romeo-admin-local-2026
+
+Notes:
+- Postgres: docker container romeo-postgres-dev on 127.0.0.1:5433, volume romeo-pgdata
+- DEV_SEEDED_LOGIN=true so the browser is auto-authenticated as this admin
+- Password is stored hashed in Postgres for real local login if you disable seeded login

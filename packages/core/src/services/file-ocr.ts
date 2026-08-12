@@ -50,12 +50,13 @@ export interface LocalTesseractOcrOptions {
   timeoutMs?: number;
 }
 
-const supportedImageMimeTypes = new Set([
+export const ocrImageMimeTypes = new Set([
   "image/gif",
   "image/jpeg",
   "image/png",
   "image/webp",
 ]);
+const supportedImageMimeTypes = ocrImageMimeTypes;
 
 export class LocalTesseractOcrProvider implements FileOcrProvider {
   constructor(private readonly options: LocalTesseractOcrOptions = {}) {}

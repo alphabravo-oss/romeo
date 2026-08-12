@@ -16,6 +16,7 @@ import type {
 } from "../features/billing";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
+import { Section } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { EntitlementsTab, LifecycleTab } from "./BillingGovernanceTabs";
 import { PageActions } from "./PageActions";
@@ -96,16 +97,16 @@ export function BillingPanel() {
   });
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("billing")}</div>
+    <Section
+      actions={
         <PageActions
           onRefresh={() => void planQuery.refetch()}
           refreshLabel={t("refresh")}
           refreshing={planQuery.isFetching}
         />
-      </div>
-
+      }
+      title={t("billing")}
+    >
       <div className="text-sm text-muted mb-2">
         {plan ? (
           <span>
@@ -225,7 +226,7 @@ export function BillingPanel() {
           },
         ]}
       />
-    </section>
+    </Section>
   );
 }
 

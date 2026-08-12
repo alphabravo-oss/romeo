@@ -14,11 +14,11 @@ import { type MessageKey, useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { DangerZone } from "./DangerZone";
 import { confirmTone, requiresTypedConfirmation } from "./danger-tier";
 import { billingPlanStatusKey } from "./billing-display";
-import { PanelStats } from "./PanelStats";
 import { PageActions } from "./PageActions";
 import { EdgeSecurityPostureTab } from "./EdgeSecurityPostureTab";
 import { IdListEditor } from "./IdListEditor";
@@ -73,7 +73,7 @@ function validateIdList(
 export function AbuseControlsPanel() {
   const { t } = useLocale();
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <Tabs
         tabs={[
           {
@@ -88,7 +88,7 @@ export function AbuseControlsPanel() {
           },
         ]}
       />
-    </section>
+    </Section>
   );
 }
 
@@ -255,7 +255,7 @@ function ControlsEditor(props: {
 
   return (
     <div className="grid gap-4">
-      <PanelStats
+      <StatRow
         items={[
           { label: t("abuseSource"), value: report.source },
           {

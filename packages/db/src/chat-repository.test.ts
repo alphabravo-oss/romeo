@@ -89,6 +89,8 @@ describe("chat repository mappers", () => {
       role: "assistant" as const,
       content: "Branch answer",
       citations: null,
+      error: null,
+      modelId: null,
       createdAt: new Date("2026-07-16T12:00:01.000Z"),
     };
 
@@ -155,6 +157,8 @@ describe("chat repository mappers", () => {
       chatId: "chat_1",
       role: "assistant",
       content: "Cited response",
+      error: null,
+      modelId: "model_1",
       citations: [
         {
           chunkId: "chunk_1",

@@ -5,6 +5,7 @@ import Building2 from "lucide-react/dist/esm/icons/building-2.mjs";
 import CreditCard from "lucide-react/dist/esm/icons/credit-card.mjs";
 import Database from "lucide-react/dist/esm/icons/database.mjs";
 import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
+import House from "lucide-react/dist/esm/icons/house.mjs";
 import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
 import KeySquare from "lucide-react/dist/esm/icons/key-square.mjs";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard.mjs";
@@ -26,7 +27,7 @@ import Workflow from "lucide-react/dist/esm/icons/workflow.mjs";
 import type { MessageKey } from "../lib/i18n";
 
 export const ADMIN_GROUPS: Array<{
-  labelKey: MessageKey;
+  labelKey?: MessageKey;
   items: Array<{
     key: string;
     labelKey: MessageKey;
@@ -34,29 +35,18 @@ export const ADMIN_GROUPS: Array<{
   }>;
 }> = [
   {
-    labelKey: "navOperations",
-    items: [
-      { key: "overview", labelKey: "navOverview", icon: LayoutDashboard },
-      { key: "usage", labelKey: "navUsageQuotas", icon: BarChart3 },
-      { key: "analytics", labelKey: "navAnalytics", icon: LineChart },
-      { key: "audit", labelKey: "navAuditLog", icon: ScrollText },
-      { key: "posture", labelKey: "navSystemPosture", icon: Activity },
-    ],
+    items: [{ key: "overview", labelKey: "navOverview", icon: LayoutDashboard }],
   },
   {
     labelKey: "navConfiguration",
     items: [
       { key: "providers", labelKey: "navProviders", icon: Server },
+      { key: "rag", labelKey: "navRagGovernance", icon: Database },
       {
         key: "chat-experience",
         labelKey: "navChatExperience",
         icon: MessageSquareText,
       },
-      { key: "connections", labelKey: "navConnections", icon: Plug },
-      { key: "governance", labelKey: "navGovernance", icon: ShieldCheck },
-      { key: "rag", labelKey: "navRagGovernance", icon: Database },
-      { key: "abuse", labelKey: "navAbuseSecurity", icon: ShieldAlert },
-      { key: "billing", labelKey: "navBilling", icon: CreditCard },
       {
         key: "prompt-templates",
         labelKey: "navPromptTemplates",
@@ -68,12 +58,35 @@ export const ADMIN_GROUPS: Array<{
   {
     labelKey: "navAccessIdentity",
     items: [
-      { key: "access", labelKey: "navAccessKeys", icon: KeyRound },
       { key: "users", labelKey: "navUsers", icon: Users },
       { key: "groups", labelKey: "navGroups", icon: UsersRound },
+      {
+        key: "workspace-members",
+        labelKey: "navWorkspaceMembers",
+        icon: House,
+      },
       { key: "organizations", labelKey: "navOrganizations", icon: Building2 },
-      { key: "impersonation", labelKey: "navImpersonation", icon: UserCog },
       { key: "auth-providers", labelKey: "navAuthentication", icon: KeySquare },
+      { key: "impersonation", labelKey: "navImpersonation", icon: UserCog },
+      { key: "access", labelKey: "navAccessKeys", icon: KeyRound },
+    ],
+  },
+  {
+    labelKey: "navOperations",
+    items: [
+      { key: "usage", labelKey: "navUsageQuotas", icon: BarChart3 },
+      { key: "analytics", labelKey: "navAnalytics", icon: LineChart },
+      { key: "audit", labelKey: "navAuditLog", icon: ScrollText },
+      { key: "posture", labelKey: "navSystemPosture", icon: Activity },
+    ],
+  },
+  {
+    labelKey: "navTrust",
+    items: [
+      { key: "governance", labelKey: "navGovernance", icon: ShieldCheck },
+      { key: "abuse", labelKey: "navAbuseSecurity", icon: ShieldAlert },
+      { key: "billing", labelKey: "navBilling", icon: CreditCard },
+      { key: "connections", labelKey: "navConnections", icon: Plug },
     ],
   },
   {
@@ -151,6 +164,10 @@ export const ADMIN_META: Record<
   },
   users: { titleKey: "navUsers", descriptionKey: "adminUsersDescription" },
   groups: { titleKey: "navGroups", descriptionKey: "adminGroupsDescription" },
+  "workspace-members": {
+    titleKey: "navWorkspaceMembers",
+    descriptionKey: "adminWorkspaceMembersDescription",
+  },
   organizations: {
     titleKey: "navOrganizations",
     descriptionKey: "adminOrganizationsDescription",

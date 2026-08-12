@@ -110,3 +110,175 @@
   flex: 0 0 auto;
   color: var(--rm-accent);
 }
+
+/* ── Chat folders ────────────────────────────────────────────────────────── */
+
+.rm-sidebar-folders {
+  display: grid;
+  gap: 2px;
+  margin: 4px 8px 6px;
+  padding: 4px;
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius-item);
+  background: var(--rm-surface-soft);
+}
+
+.rm-sidebar-folder {
+  display: flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 2px 0 0;
+  background: transparent;
+  color: var(--rm-muted);
+  font: inherit;
+  font-size: 12px;
+}
+
+.rm-sidebar-folder:hover {
+  background: color-mix(in srgb, var(--rm-text) 6%, transparent);
+  color: var(--rm-text);
+}
+
+html.dark .rm-sidebar-folder:hover {
+  background: color-mix(in srgb, var(--rm-text) 8%, transparent);
+}
+
+.rm-sidebar-folder.active {
+  border-color: color-mix(in srgb, var(--rm-accent) 28%, var(--rm-border));
+  background: color-mix(in srgb, var(--rm-accent) 10%, transparent);
+  color: var(--rm-text);
+}
+
+.rm-sidebar-folder.drop-target {
+  border-color: var(--rm-accent);
+  background: color-mix(in srgb, var(--rm-accent) 16%, transparent);
+  color: var(--rm-text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rm-accent) 40%, transparent);
+}
+
+.rm-sidebar-folder-select {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 6px 0 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rm-sidebar-folder-select > svg {
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+
+.rm-sidebar-folder-menu {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.rm-sidebar-folder-menu .rm-ui-button,
+.rm-sidebar-folder-menu .rm-icon-button {
+  min-height: 0;
+  height: 22px;
+  width: 22px;
+  padding: 0;
+}
+
+.rm-sidebar-folder .rm-icon-button:hover:not(:disabled),
+.rm-sidebar-folder .rm-ui-button--ghost:hover:not(:disabled) {
+  background: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rm-sidebar-folder .rm-sidebar-folder-menu {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 100ms ease;
+  }
+
+  .rm-sidebar-folder:hover .rm-sidebar-folder-menu,
+  .rm-sidebar-folder:focus-within .rm-sidebar-folder-menu,
+  .rm-sidebar-folder:has([data-state="open"]) .rm-sidebar-folder-menu {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.rm-sidebar-item.is-dragging {
+  opacity: 0.45;
+}
+
+.rm-sidebar-chat-section {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.rm-sidebar-time-label {
+  margin: 8px 10px 3px;
+  color: var(--rm-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  text-transform: none;
+  user-select: none;
+}
+
+.rm-sidebar-chat-section:first-child .rm-sidebar-time-label {
+  margin-top: 4px;
+}
+
+/* Compact form dialogs (create folder, move to folder) */
+
+.rm-form-dialog--sm {
+  width: min(calc(100vw - 2rem), 22rem) !important;
+}
+
+.rm-form-dialog-body {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.rm-form-field {
+  display: grid;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+}
+
+.rm-form-field > span {
+  color: var(--rm-muted);
+  font-weight: 500;
+}
+
+.rm-form-hint {
+  margin: 0;
+  color: var(--rm-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.rm-form-error {
+  margin: 0;
+  color: var(--rm-danger);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.rm-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}

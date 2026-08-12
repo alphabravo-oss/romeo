@@ -22,6 +22,7 @@ import type {
 import { PanelState } from "../lib/panel-state";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { Section } from "./console";
 import { AuthDirectorySyncDialog } from "./AuthDirectorySyncDialog";
 import { ConfigureDialog } from "./AuthProviderConfigureDialog";
 import { DeprovisionDialog } from "./AuthProviderDeprovisionDialog";
@@ -174,9 +175,8 @@ export function AuthProvidersPanel(): React.ReactNode {
   }
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("authProviders")}</div>
+    <Section
+      actions={
         <div className="flex items-center gap-2">
           <Button onClick={openDirectorySync} type="button">
             {t("authSyncDirectory")}
@@ -206,8 +206,9 @@ export function AuthProvidersPanel(): React.ReactNode {
             </div>
           ) : null}
         </div>
-      </div>
-
+      }
+      title={t("authProviders")}
+    >
       <PanelState query={catalogQuery} empty={t("authNoProvidersInCatalog")}>
         {(catalog) => (
           <PanelState query={settingsQuery} empty={t("authNoProviderSettings")}>
@@ -272,7 +273,7 @@ export function AuthProvidersPanel(): React.ReactNode {
       ) : null}
 
       {dialog}
-    </section>
+    </Section>
   );
 }
 

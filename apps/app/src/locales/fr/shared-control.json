@@ -1,7 +1,7 @@
 {
-  "assistantClearDefault": "Effacer l’assistant par défaut",
-  "assistantDefaultFailed": "Impossible de mettre à jour l’assistant par défaut.",
-  "assistantMakeDefault": "Définir comme assistant par défaut",
+  "assistantClearDefault": "Effacer le modèle personnalisé par défaut",
+  "assistantDefaultFailed": "Impossible de mettre à jour le modèle personnalisé par défaut.",
+  "assistantMakeDefault": "Définir comme modèle personnalisé par défaut",
   "assistantUnavailable": "Indisponible",
   "adminConsole": "Console d’administration",
   "catalogPages": "Pages du catalogue",
@@ -67,5 +67,12 @@
   "tableTotal": "au total",
   "theme": "Thème",
   "useSystemTheme": "Utiliser le thème du système",
-  "workspace": "Espace de travail"
+  "workspace": "Espace de travail",
+  "accessGrant": "Accorder l’accès",
+  "accessGrantSaved": "Accès accordé",
+  "accessGrantFailed": "Impossible d’accorder l’accès",
+  "accessGrantRevoked": "Accès révoqué",
+  "accessRevoke": "Révoquer",
+  "accessRevokeFailed": "Impossible de révoquer l’accès",
+  "accessNoGrants": "Aucune autorisation pour le moment."
 }

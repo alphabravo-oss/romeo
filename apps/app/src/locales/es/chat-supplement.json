@@ -54,10 +54,21 @@
   "toolCallRisk": "Riesgo",
   "composerMentionKnowledge": "Base de conocimiento",
   "composerMentions": "Archivos y bases de conocimiento",
+  "composerKnowledgeApply": "Usar colecciones seleccionadas",
+  "composerKnowledgeClearOverride": "Quitar anulación de conocimiento",
+  "composerKnowledgeNone": "Ninguna (sin conocimiento en este turno)",
+  "composerKnowledgeNoneActive": "Sin conocimiento en este turno",
+  "composerKnowledgePicker": "Colecciones de conocimiento",
+  "composerKnowledgePickerHelp": "Anula qué bases de conocimiento usa la recuperación para el siguiente mensaje. Deja los valores predeterminados del modelo salvo un cambio puntual.",
+  "composerKnowledgeSelectedCount": "{{count}} colecciones",
+  "composerKnowledgeUseDefaults": "Usar predeterminados del modelo personalizado",
   "contextMeterFiles": "{{files}} archivo(s) conservado(s)",
   "contextMeterLabel": "Abrir el inspector de contexto",
   "contextMeterUsage": "{{used}} / {{total}} de contexto",
   "scrollToLatest": "Ir al mensaje más reciente",
   "contextMeterUsageOnly": "{{used}} de contexto",
-  "citationMarkerLabel": "Fuente: {{title}}"
+  "citationMarkerLabel": "Fuente: {{title}}",
+  "agenticRag": "Recuperación agéntica",
+  "agenticRagHelp": "Vuelve a buscar con consultas reescritas o divididas cuando los primeros resultados son débiles.",
+  "agenticRagForcedHelp": "Tu organización exige la recuperación agéntica en los chats con conocimiento."
 }

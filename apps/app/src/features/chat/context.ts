@@ -12,6 +12,7 @@ export async function inspectRunContext(input: {
   imageCount?: number;
   webSearch?: boolean;
   urls?: string[];
+  agenticRag?: boolean;
 }): Promise<RunContextPreview> {
   configureBrowserApiClients();
   const response = await runsInspectContext({

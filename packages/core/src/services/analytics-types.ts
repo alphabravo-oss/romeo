@@ -61,10 +61,30 @@ export interface AdminAnalyticsEvalSummary {
 }
 
 export interface AdminAnalyticsUsageSummary {
+  activityEventCount: number;
   byProvider: Array<UsageSummaryMetric & { providerId: string }>;
   eventCount: number;
   estimatedCostUsd: number;
+  runsCompleted: number;
+  runsFailed: number;
+  runsStarted: number;
+  totalTokens: number;
   totals: UsageSummaryMetric[];
+  unpricedTokenQuantity: number;
+}
+
+export interface AdminAnalyticsAttention {
+  models: Array<{
+    displayName: string;
+    issues: Array<
+      | "invalid_context_window"
+      | "missing_max_output"
+      | "missing_pricing"
+      | "unavailable"
+    >;
+    modelId: string;
+    providerId: string;
+  }>;
 }
 
 export interface AdminAnalyticsProviderSummary {
@@ -108,11 +128,13 @@ export interface AdminAnalyticsJobSummary {
 }
 
 export interface AdminAnalyticsSummary {
+  attention: AdminAnalyticsAttention;
   evals: AdminAnalyticsEvalSummary;
   generatedAt: string;
   jobs: AdminAnalyticsJobSummary;
   orgId: string;
   providers: AdminAnalyticsProviderSummary;
+  window: { from: string | null; to: string };
   redaction: {
     rawEvalInputsReturned: false;
     rawEvalOutputsReturned: false;

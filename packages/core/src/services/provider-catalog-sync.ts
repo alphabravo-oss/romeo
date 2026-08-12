@@ -137,6 +137,14 @@ export class ProviderCatalogSyncCoordinator {
     } catch (caught) {
       const message = discoveryErrorMessage(caught);
       await this.markError(provider, attemptAt, message);
+      await writeAuditLog(this.repository, {
+        subject,
+        action: "provider.models.sync",
+        resourceType: "provider",
+        resourceId: provider.id,
+        outcome: "failure",
+        metadata: { error: message.slice(0, 300) },
+      });
       throw new ApiError("provider_model_discovery_failed", message, 502);
     }
 
@@ -148,6 +156,16 @@ export class ProviderCatalogSyncCoordinator {
         attemptAt,
         "Romeo could not persist the synchronized model catalog.",
       );
+      await writeAuditLog(this.repository, {
+        subject,
+        action: "provider.models.sync",
+        resourceType: "provider",
+        resourceId: provider.id,
+        outcome: "failure",
+        metadata: {
+          error: "Romeo could not persist the synchronized model catalog.",
+        },
+      });
       throw caught;
     }
   }
@@ -247,6 +265,10 @@ export class ProviderCatalogSyncCoordinator {
           id: current.id,
           available: true,
           enabled: current.enabled,
+          ...(current.pricing === undefined ? {} : { pricing: current.pricing }),
+          ...(current.defaultParameters === undefined
+            ? {}
+            : { defaultParameters: current.defaultParameters }),
           ...(current.capabilitiesSource === "override"
             ? {
                 capabilities: current.capabilities,

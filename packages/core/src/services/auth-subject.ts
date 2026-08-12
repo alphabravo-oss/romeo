@@ -7,6 +7,7 @@ import {
 
 import type { User } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import { workspaceIdsFromGrants } from "./access-visibility";
 
 export const localUserScopes: Scope[] = [
   "me:read",
@@ -59,9 +60,10 @@ export async function createUserAuthSubject(
     supportSession?: AuthSubject["supportSession"];
   } = {},
 ): Promise<AuthSubject> {
-  const [workspaces, memberships] = await Promise.all([
+  const [workspaces, memberships, grants] = await Promise.all([
     repository.listWorkspaces(user.orgId),
     repository.listGroupMemberships(user.orgId, undefined, user.id),
+    repository.listResourceGrants(user.orgId),
   ]);
   const role = normalizeUserRole(user);
   const adminRole = isUserAdminRole(role)
@@ -82,7 +84,12 @@ export async function createUserAuthSubject(
     email: user.email,
     name: user.name,
     orgId: user.orgId,
-    workspaceIds: workspaces.map((workspace) => workspace.id),
+    workspaceIds: workspaceIdsFromGrants(workspaces, grants, {
+      id: user.id,
+      type: "user",
+      groupIds: [...groupIds],
+      isAdmin,
+    }),
     groupIds: [...groupIds].sort(),
     scopes: isAdmin
       ? [...scopeValues]

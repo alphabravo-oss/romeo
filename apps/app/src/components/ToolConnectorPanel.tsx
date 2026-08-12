@@ -16,10 +16,10 @@ import type { ToolConnector, ToolConnectorAuthCheck } from "../features/types";
 import { PanelState } from "../lib/panel-state";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { AddButton, Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { useConfirm } from "./ConfirmDialog";
-import { PanelStats } from "./PanelStats";
 import { ToolConnectorDetailsPage } from "./ToolConnectorDetailsPage";
 
 export function ToolConnectorPanel({
@@ -197,7 +197,7 @@ export function ToolConnectorPanel({
           <ArrowLeft aria-hidden="true" size={16} />
           {t("toolBackToConnectors")}
         </Button>
-        <section className="rm-panel p-4">
+        <Section>
           {connectorsQuery.isLoading ? (
             <div className="rm-empty" role="status">
               {t("loading")}
@@ -217,7 +217,7 @@ export function ToolConnectorPanel({
           {error ? (
             <div className="mt-3 text-sm text-red-600">{error}</div>
           ) : null}
-        </section>
+        </Section>
         {dialog}
       </div>
     );
@@ -228,13 +228,9 @@ export function ToolConnectorPanel({
       <div className="rm-card-header">
         <div className="rm-card-title">{t("toolConnectors")}</div>
         {connectors.length > 0 ? (
-          <Button
-            variant="primary"
-            onClick={() => setAddOpen(true)}
-            type="button"
-          >
-            + {t("toolImportTool")}
-          </Button>
+          <AddButton onClick={() => setAddOpen(true)}>
+            {t("toolImportTool")}
+          </AddButton>
         ) : null}
       </div>
       <FormDialog
@@ -341,13 +337,9 @@ export function ToolConnectorPanel({
         <PanelState
           empty={t("toolNoConnectors")}
           emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setAddOpen(true)}
-              type="button"
-            >
-              + {t("toolImportTool")}
-            </Button>
+            <AddButton onClick={() => setAddOpen(true)}>
+              {t("toolImportTool")}
+            </AddButton>
           }
           emptyDescription={t("toolNoConnectorsDescription")}
           emptyIcon={<Plug aria-hidden size={24} />}
@@ -355,7 +347,7 @@ export function ToolConnectorPanel({
         >
           {(connectors) => (
             <div className="grid gap-4">
-              <PanelStats
+              <StatRow
                 items={[
                   { label: t("toolTotalConnectors"), value: connectors.length },
                   {

@@ -36,12 +36,30 @@ import {
   requiredPendingChangeRequest,
   settingKey,
 } from "./rag-policy-storage";
+import {
+  evaluateKnowledgeIngestReadiness,
+  type KnowledgeIngestReadiness,
+} from "./knowledge-ingest-readiness";
+
 export class RagPolicyService {
   constructor(private readonly repository: RomeoRepository) {}
 
   async report(subject: AuthSubject): Promise<RagPolicyReport> {
     assertScope(subject, "admin:read");
     return readRagPolicy(this.repository, subject.orgId);
+  }
+
+  async agenticSettings(subject: AuthSubject) {
+    assertScope(subject, "knowledge:read");
+    const policy = await readRagPolicy(this.repository, subject.orgId);
+    return { ...policy.agentic };
+  }
+
+  async ingestReadiness(subject: AuthSubject): Promise<KnowledgeIngestReadiness> {
+    assertScope(subject, "knowledge:read");
+    return evaluateKnowledgeIngestReadiness(
+      await readRagPolicy(this.repository, subject.orgId),
+    );
   }
 
   async update(input: {

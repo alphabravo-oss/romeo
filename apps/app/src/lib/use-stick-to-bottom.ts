@@ -19,7 +19,11 @@ export function shouldStickToBottom(metrics: {
 // - overflow-anchor holds existing content in place but doesn't follow appended
 // content, and column-reverse breaks selection order. This is the minimum that
 // follows the stream without fighting a user who scrolled up.
-export function useStickToBottom(dep: unknown) {
+export function useStickToBottom(
+  dep: unknown,
+  options: { enabled?: boolean } = {},
+) {
+  const enabled = options.enabled !== false;
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   // The same intent, published for rendering. It stays a *second* copy rather
@@ -54,12 +58,12 @@ export function useStickToBottom(dep: unknown) {
   // handle collapses a whole frame's worth of deltas into one layout.
   useEffect(() => {
     const node = ref.current;
-    if (node === null || !stick.current) return;
+    if (node === null || !enabled || !stick.current) return;
     const handle = requestAnimationFrame(() => {
       node.scrollTop = node.scrollHeight;
     });
     return () => cancelAnimationFrame(handle);
-  }, [dep]);
+  }, [dep, enabled]);
 
   // Jumps rather than animates: the button exists to rejoin an answer that is
   // still being written, and a smooth scroll would spend its whole duration

@@ -65,7 +65,7 @@ export default function UiGallery() {
               <Input
                 autoComplete="name"
                 name="name"
-                placeholder="Research assistant"
+                placeholder="Research custom model"
               />
             </Field>
             <Field error="Enter a valid endpoint" label="Endpoint">

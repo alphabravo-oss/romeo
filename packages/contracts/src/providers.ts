@@ -51,6 +51,13 @@ export const ProviderModelSchema = z
         imageGenerationUsd: imagePricing.optional(),
       })
       .optional(),
+    defaultParameters: z
+      .strictObject({
+        temperature: z.number().min(0).max(2).optional(),
+        topP: z.number().min(0).max(1).optional(),
+        maxOutputTokens: z.number().int().min(1).max(200_000).optional(),
+      })
+      .optional(),
     capabilitiesSource: z.enum(["detected", "override"]).optional(),
   })
   .openapi("ProviderModel");
@@ -414,6 +421,13 @@ export const updateProviderModelCapabilitiesRoute = createRoute({
           schema: z.strictObject({
             capabilities: ProviderCapabilitiesSchema,
             contextWindow: z.number().int().positive().max(10_000_000),
+            defaultParameters: z
+              .strictObject({
+                temperature: z.number().min(0).max(2).optional(),
+                topP: z.number().min(0).max(1).optional(),
+                maxOutputTokens: z.number().int().min(1).max(200_000).optional(),
+              })
+              .optional(),
           }),
         },
       },

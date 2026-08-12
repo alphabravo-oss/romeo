@@ -1,4 +1,4 @@
-import { Input, Button, StatusBadge } from "@romeo/ui";
+import { Input, Button, Field, StatusBadge } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import Calculator from "lucide-react/dist/esm/icons/calculator.mjs";
 import Clock3 from "lucide-react/dist/esm/icons/clock-3.mjs";
@@ -10,6 +10,8 @@ import { toast } from "../lib/toast";
 import { ToolApprovalModal } from "./ToolApprovalModal";
 import type { PendingToolApproval } from "./useToolExecution";
 import { createColumnHelper, DataTable } from "./DataTable";
+import { ResourceRow } from "./ResourceRow";
+import { SettingsSection } from "./SettingsSection";
 
 const toolColumn = createColumnHelper<AgentToolSummary>();
 
@@ -90,92 +92,123 @@ export function ToolPanel({
   }
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-title">{t("tools")}</div>
-      <DataTable
-        columns={columns}
-        data={tools}
-        getRowId={(tool) => tool.id}
-        preferenceKey="workspace-agent-tools"
-      />
-      <form
-        className="mt-4 grid gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          void calculatorForm.handleSubmit();
-        }}
+    <div className="rm-console-page">
+      <SettingsSection
+        description={t("workspaceToolsCatalogHelp")}
+        title={t("workspaceToolsCatalog")}
       >
-        <label className="text-sm text-muted" htmlFor="calculator-expression">
-          {t("workspaceToolCalculator")}
-        </label>
-        <calculatorForm.Field
-          name="expression"
-          validators={{
-            onChange: ({ value }: { value: string }) =>
-              !value?.trim() ? t("workspaceToolExpressionRequired") : undefined,
+        {tools.length === 0 ? (
+          <p className="rm-list-empty">{t("workspaceToolsNoTools")}</p>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={tools}
+            getRowId={(tool) => tool.id}
+            preferenceKey="workspace-agent-tools"
+          />
+        )}
+      </SettingsSection>
+      <SettingsSection
+        description={t("workspaceToolsTryHelp")}
+        title={t("workspaceToolsTry")}
+      >
+        <form
+          className="grid gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void calculatorForm.handleSubmit();
           }}
         >
-          {(field) => (
-            <>
-              <Input
-                name="expression"
-                id="calculator-expression"
-                onBlur={field.handleBlur}
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value)
-                }
-                value={field.state.value}
-              />
-              {field.state.meta.errors.length ? (
-                <div className="rm-composer-error">
-                  {field.state.meta.errors.join(", ")}
-                </div>
-              ) : null}
-            </>
-          )}
-        </calculatorForm.Field>
-        <calculatorForm.Subscribe
-          selector={(state) => ({
-            canSubmit: state.canSubmit,
-            isSubmitting: state.isSubmitting,
-          })}
-        >
-          {({ canSubmit, isSubmitting }) => (
-            <Button
-              className="inline-flex items-center justify-center gap-2"
-              disabled={
-                !canSubmit || isSubmitting || isExecuting || !canRunCalculator
-              }
-              type="submit"
-            >
-              <Calculator aria-hidden="true" size={16} />
-              <span>
-                {isExecuting
-                  ? t("agentRunning")
-                  : t("workspaceToolRunCalculator")}
-              </span>
-            </Button>
-          )}
-        </calculatorForm.Subscribe>
-      </form>
-      <form className="mt-4 grid gap-2" onSubmit={handleDateTimeSubmit}>
-        <Button
-          className="inline-flex items-center justify-center gap-2"
-          disabled={isExecuting || !canRunDateTime}
-          type="submit"
-        >
-          <Clock3 aria-hidden="true" size={16} />
-          <span>
-            {isExecuting ? t("agentRunning") : t("workspaceToolRunDateTime")}
-          </span>
-        </Button>
-      </form>
-      {result ? (
-        <div className="mt-3 rounded-md border border-border p-3 text-sm">
-          {result}
-        </div>
-      ) : null}
+          <calculatorForm.Field
+            name="expression"
+            validators={{
+              onChange: ({ value }: { value: string }) =>
+                !value?.trim()
+                  ? t("workspaceToolExpressionRequired")
+                  : undefined,
+            }}
+          >
+            {(field) => (
+              <Field label={t("workspaceToolExpression")}>
+                <Input
+                  name="expression"
+                  id="calculator-expression"
+                  onBlur={field.handleBlur}
+                  onChange={(event) =>
+                    field.handleChange(event.currentTarget.value)
+                  }
+                  value={field.state.value}
+                />
+                {field.state.meta.errors.length ? (
+                  <div className="rm-composer-error">
+                    {field.state.meta.errors.join(", ")}
+                  </div>
+                ) : null}
+              </Field>
+            )}
+          </calculatorForm.Field>
+          <calculatorForm.Subscribe
+            selector={(state) => ({
+              canSubmit: state.canSubmit,
+              isSubmitting: state.isSubmitting,
+            })}
+          >
+            {({ canSubmit, isSubmitting }) => (
+              <div className="rm-resource-row__actions rm-resource-row__actions--start">
+                <Button
+                  className="inline-flex items-center justify-center gap-2"
+                  disabled={
+                    !canSubmit ||
+                    isSubmitting ||
+                    isExecuting ||
+                    !canRunCalculator
+                  }
+                  type="submit"
+                  variant="primary"
+                >
+                  <Calculator aria-hidden="true" size={16} />
+                  <span>
+                    {isExecuting
+                      ? t("agentRunning")
+                      : t("workspaceToolRunCalculator")}
+                  </span>
+                </Button>
+              </div>
+            )}
+          </calculatorForm.Subscribe>
+        </form>
+        <form onSubmit={handleDateTimeSubmit}>
+          <ResourceRow
+            actions={
+              <Button
+                className="inline-flex items-center justify-center gap-2"
+                disabled={isExecuting || !canRunDateTime}
+                type="submit"
+                variant="ghost"
+              >
+                <Clock3 aria-hidden="true" size={16} />
+                <span>
+                  {isExecuting
+                    ? t("agentRunning")
+                    : t("workspaceToolRunDateTime")}
+                </span>
+              </Button>
+            }
+            meta={t("workspaceToolsDateTimeHelp")}
+            title={t("workspaceToolRunDateTime")}
+          />
+        </form>
+        {result ? (
+          <pre className="rm-console-output">
+            <span className="rm-resource-row__meta">
+              {t("workspaceToolsResult")}
+            </span>
+            {"\n"}
+            {result}
+          </pre>
+        ) : null}
+      </SettingsSection>
       {pendingApproval ? (
         <ToolApprovalModal
           approval={pendingApproval}
@@ -184,7 +217,7 @@ export function ToolPanel({
           onCancel={onCancelToolApproval}
         />
       ) : null}
-    </section>
+    </div>
   );
 }
 

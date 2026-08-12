@@ -11,6 +11,7 @@ import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { historyMessageLimit } from "./agent-memory";
 import { assistantsEnabledForOrg } from "./chat-experience-service";
+import { resolveRunAgentic } from "./knowledge-agentic";
 import { managedModelSystemPrompt } from "./run-context-builder";
 import {
   buildRunKnowledgeContext,
@@ -161,11 +162,16 @@ export class RunContinuationContextBuilder {
     const priorMessages = hasMessageTree(ordered)
       ? pathThroughMessage(ordered, userMessage.id).slice(0, -1)
       : historyBefore(ordered, userMessage.id);
+    const agentic = await resolveRunAgentic(
+      this.repository,
+      input.subject.orgId,
+    );
     const knowledge = await buildRunKnowledgeContext(this.repository, {
       agentId: input.run.agentId,
       subject: input.subject,
       query: userMessage.content,
       safetySettings: input.agentVersion.safetySettings,
+      ...(agentic ? { agentic: true } : {}),
       ...(this.embeddingFetch === undefined
         ? {}
         : { fetchImpl: this.embeddingFetch }),

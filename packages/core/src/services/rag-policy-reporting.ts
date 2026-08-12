@@ -26,6 +26,8 @@ export function toReport(
     defaultMaxResultsPerTier: { ...policy.defaultMaxResultsPerTier },
     maxResultsPerTier: { ...policy.maxResultsPerTier },
     allowedEmbeddingProviderModels: policy.allowedEmbeddingProviderModels,
+    retrieval: { ...policy.retrieval },
+    agentic: { ...policy.agentic },
     knowledgeBaseTierAssignments: cloneTierAssignments(
       policy.knowledgeBaseTierAssignments,
     ),
@@ -60,6 +62,8 @@ export function serializeStoredPolicy(
     defaultMaxResultsPerTier: policy.defaultMaxResultsPerTier,
     maxResultsPerTier: policy.maxResultsPerTier,
     allowedEmbeddingProviderModels: policy.allowedEmbeddingProviderModels,
+    retrieval: policy.retrieval,
+    agentic: policy.agentic,
     knowledgeBaseTierAssignments: policy.knowledgeBaseTierAssignments,
     dataResidencyTags: policy.dataResidencyTags,
     externalVectorStore: policy.externalVectorStore,

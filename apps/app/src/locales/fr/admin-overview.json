@@ -1,5 +1,5 @@
 {
-  "overviewAgents": "Assistants",
+  "overviewAgents": "Modèles personnalisés",
   "overviewAgentsConfigured": "configurés dans l’espace de travail",
   "overviewAlerts": "alertes",
   "overviewBackgroundJobs": "Tâches en arrière-plan",
@@ -32,5 +32,7 @@
   "jobsStatusCompleted": "terminée",
   "jobsStatusFailed": "échouée",
   "jobsStatusRunning": "en cours",
-  "jobsStatusQueued": "en attente"
+  "jobsStatusQueued": "en attente",
+  "overviewOperationsDetail": "Préparation et tâches d’arrière-plan",
+  "overviewOperationsDetailHelp": "Ouvrez cette section si quelque chose cloche. La navigation quotidienne est dans l’annuaire ci-dessus."
 }

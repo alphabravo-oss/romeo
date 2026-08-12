@@ -1,6 +1,7 @@
-import { Button, StatusBadge } from "@romeo/ui";
+import { StatusBadge } from "@romeo/ui";
 import { useMemo, useState } from "react";
 
+import type { KnowledgeIngestReadiness } from "../features/knowledge";
 import type { KnowledgeBase } from "../features/types";
 import {
   formatBytes,
@@ -8,18 +9,24 @@ import {
   LocalizedDateTime,
 } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
+import { AddButton } from "./AddButton";
 import { createColumnHelper, DataTable } from "./DataTable";
 import { KnowledgeBaseCreateDialog } from "./KnowledgeBaseCreateDialog";
+import { KnowledgeIngestNotice } from "./KnowledgeIngestNotice";
 
 const knowledgeBaseColumn = createColumnHelper<KnowledgeBase>();
 
 export function KnowledgeCatalogPage({
+  ingestReadiness,
+  isAdmin = false,
   isLoading,
   knowledgeBases,
   onCreated,
   onSelectionChange,
   workspaceId,
 }: {
+  ingestReadiness?: KnowledgeIngestReadiness;
+  isAdmin?: boolean;
   isLoading: boolean;
   knowledgeBases: KnowledgeBase[];
   onCreated: (knowledgeBaseId: string) => void;
@@ -77,44 +84,35 @@ export function KnowledgeCatalogPage({
     [locale, t],
   );
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div>
-          <div className="rm-card-title">{t("knowledgeTitle")}</div>
-          <p className="text-sm text-muted">
-            {t("knowledgeCatalogDescription")}
-          </p>
-        </div>
-        <Button
-          onClick={() => setCreateOpen(true)}
-          type="button"
-          variant="primary"
-        >
-          + {t("knowledgeAddBase")}
-        </Button>
+    <div className="rm-console-page">
+      {/* A page-level warning spans the column; it is not a toolbar item. */}
+      <KnowledgeIngestNotice isAdmin={isAdmin} readiness={ingestReadiness} />
+      <div className="rm-console-toolbar">
+        <AddButton onClick={() => setCreateOpen(true)}>
+          {t("knowledgeAddBase")}
+        </AddButton>
       </div>
       <KnowledgeBaseCreateDialog
+        isAdmin={isAdmin}
         onClose={() => setCreateOpen(false)}
         onCreated={onCreated}
         open={createOpen}
         workspaceId={workspaceId}
       />
-      <div className="mt-4">
-        <DataTable
-          columns={columns}
-          data={knowledgeBases}
-          empty={isLoading ? t("loading") : t("knowledgeNoBases")}
-          getRowId={(knowledgeBase) => knowledgeBase.id}
-          minTableWidth={980}
-          onRowActivate={(knowledgeBase) => onSelectionChange(knowledgeBase.id)}
-          preferenceKey="workspace-knowledge-bases"
-          rowAriaLabel={(knowledgeBase) =>
-            t("knowledgeOpenBase", { name: knowledgeBase.name })
-          }
-          searchVisibility="always"
-        />
-      </div>
-    </section>
+      <DataTable
+        columns={columns}
+        data={knowledgeBases}
+        empty={isLoading ? t("loading") : t("knowledgeNoBases")}
+        getRowId={(knowledgeBase) => knowledgeBase.id}
+        minTableWidth={980}
+        onRowActivate={(knowledgeBase) => onSelectionChange(knowledgeBase.id)}
+        preferenceKey="workspace-knowledge-bases"
+        rowAriaLabel={(knowledgeBase) =>
+          t("knowledgeOpenBase", { name: knowledgeBase.name })
+        }
+        searchVisibility="always"
+      />
+    </div>
   );
 }
 

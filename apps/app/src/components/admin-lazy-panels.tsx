@@ -115,3 +115,7 @@ export const WebSearchPanel = lazyNamed(
   () => import("./WebSearchPanel"),
   "WebSearchPanel",
 );
+export const WorkspaceMembersPanel = lazyNamed(
+  () => import("./WorkspaceMembersPanel"),
+  "WorkspaceMembersPanel",
+);

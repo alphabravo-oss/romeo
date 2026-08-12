@@ -17,9 +17,12 @@ import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import type { Agent, EvalResultHumanRatingValue } from "../features/types";
 import { PanelState } from "../lib/panel-state";
+import { AddButton } from "./AddButton";
 import { PanelStats } from "./PanelStats";
 import { EvalDashboardSummary } from "./EvalDashboardSummary";
 import { FormDialog } from "./FormDialog";
+import { ResourceRow } from "./ResourceRow";
+import { SettingsSection } from "./SettingsSection";
 import { resolveActiveSuite } from "./eval-selection";
 import { evalRatingKey, rubricFromInput } from "./eval-form-utils";
 import {
@@ -156,23 +159,22 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
 
   if (activeAgent === undefined) {
     return (
-      <section className="rm-panel p-4">
-        <div className="rm-empty">{t("evalSelectAgent")}</div>
-      </section>
+      <SettingsSection description={t("evalSelectAgent")} title={t("evals")}>
+        <p className="rm-list-empty">{t("evalSelectAgent")}</p>
+      </SettingsSection>
     );
   }
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="text-sm text-muted">{t("evals")}</div>
+    <div className="rm-console-page">
+      <div className="rm-console-toolbar">
         <div className="flex gap-2">
           <Button
             variant="primary"
             onClick={() => setSuiteDialogOpen(true)}
             type="button"
           >
-            + {t("evalNewSuite")}
+            {t("evalNewSuite")}
           </Button>
           <Button
             disabled={!activeSuite || runMutation.isPending}
@@ -346,13 +348,9 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
           query={suitesQuery}
           empty={t("evalNoSuites")}
           emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setSuiteDialogOpen(true)}
-              type="button"
-            >
-              + {t("evalNewSuite")}
-            </Button>
+            <AddButton onClick={() => setSuiteDialogOpen(true)}>
+              {t("evalNewSuite")}
+            </AddButton>
           }
         >
           {(allSuites) => (
@@ -401,26 +399,24 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
                 (rating) => rating.resultId === activeResult.id,
               );
               return (
-                <div className="rounded-md border border-border p-2">
-                  <div className="font-medium">
-                    {t("evalHumanRating")}{" "}
-                    {activeRating === undefined
-                      ? t("evalNoRating")
-                      : t(evalRatingKey(activeRating.rating))}
-                  </div>
-                  <div className="line-clamp-2 break-words text-muted">
-                    {activeResult.output}
-                  </div>
+                <div className="grid gap-3">
+                  <ResourceRow
+                    meta={activeResult.output}
+                    title={`${t("evalHumanRating")} · ${
+                      activeRating === undefined
+                        ? t("evalNoRating")
+                        : t(evalRatingKey(activeRating.rating))
+                    }`}
+                  />
                   <Input
                     aria-label={t("evalRatingComment")}
-                    className="mt-2"
                     onChange={(event) =>
                       setRatingComment(event.currentTarget.value)
                     }
                     placeholder={t("evalRatingComment")}
                     value={ratingComment}
                   />
-                  <div className="mt-2 grid grid-cols-3 gap-2">
+                  <div className="rm-resource-row__actions rm-resource-row__actions--start">
                     {(["pass", "neutral", "fail"] as const).map((rating) => (
                       <Button
                         disabled={rateMutation.isPending}
@@ -438,6 +434,6 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
           </PanelState>
         ) : null}
       </div>
-    </section>
+    </div>
   );
 }

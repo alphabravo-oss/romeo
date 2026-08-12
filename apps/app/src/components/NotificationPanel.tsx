@@ -8,7 +8,7 @@ import type { UserNotification } from "../features/notifications";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
-import { PanelStats } from "./PanelStats";
+import { Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 
 const col = createColumnHelper<UserNotification>();
@@ -84,12 +84,12 @@ export function NotificationPanel() {
   );
 
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <div className="rm-card-title">{t("notifications")}</div>
       <PanelState query={notificationsQuery} empty={t("noNotifications")}>
         {(notifications) => (
           <div className="grid gap-4">
-            <PanelStats
+            <StatRow
               items={[
                 { label: t("total"), value: notifications.length },
                 {
@@ -108,6 +108,6 @@ export function NotificationPanel() {
           </div>
         )}
       </PanelState>
-    </section>
+    </Section>
   );
 }

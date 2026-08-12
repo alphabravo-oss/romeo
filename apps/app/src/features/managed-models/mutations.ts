@@ -146,10 +146,12 @@ export async function revokeAgentGrant(input: {
 export function shareAgent(input: {
   agentId: string;
   principalId: string;
+  principalType?: "group" | "service_account" | "user";
 }): Promise<AgentGrant[]> {
   return shareAgentAccess({
-    ...input,
-    principalType: "group",
+    agentId: input.agentId,
+    principalId: input.principalId,
+    principalType: input.principalType ?? "group",
     permissions: ["read", "run"],
   });
 }

@@ -57,7 +57,13 @@ export class WorkspaceService {
       this.repository.listWorkspaces(subject.orgId),
     ]);
 
-    return { user, organizations, workspaces };
+    return {
+      user,
+      organizations,
+      workspaces: workspaces.filter((workspace) =>
+        hasWorkspaceAccess(subject, workspace.id),
+      ),
+    };
   }
 
   async create(input: {
@@ -172,7 +178,7 @@ export class WorkspaceService {
       )
         throw new ApiError(
           "invalid_workspace_default_agent",
-          "The workspace default must be a published assistant in this workspace.",
+          "The workspace default must be a published custom model in this workspace.",
           400,
         );
     }

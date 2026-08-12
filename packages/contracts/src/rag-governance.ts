@@ -62,6 +62,24 @@ const RagPolicyAssignmentsSchema = z.strictObject({
   org: z.array(identifier).max(500),
   shared: z.array(identifier).max(500),
 });
+const RagPolicyRetrievalSettingsSchema = z
+  .strictObject({
+    topK: z.number().int().min(1).max(20),
+    similarityThreshold: z.number().min(0).max(1),
+    hybridSearch: z.boolean(),
+    hybridBm25Weight: z.number().min(0).max(1),
+  })
+  .openapi("RagPolicyRetrievalSettings");
+const RagPolicyRetrievalSettingsPatchSchema =
+  RagPolicyRetrievalSettingsSchema.partial();
+const RagPolicyAgenticSettingsSchema = z
+  .strictObject({
+    enabled: z.boolean(),
+    userMode: z.enum(["optional", "required"]),
+  })
+  .openapi("RagPolicyAgenticSettings");
+const RagPolicyAgenticSettingsPatchSchema =
+  RagPolicyAgenticSettingsSchema.partial();
 const RagPolicyAssignmentsPatchSchema = RagPolicyAssignmentsSchema.partial();
 const RagPolicyExternalVectorStorePatchSchema = z.strictObject({
   mode: z.enum(["deployment_managed", "disabled"]).optional(),
@@ -84,6 +102,8 @@ export const UpdateRagPolicyRequestSchema = z
       .array(RagPolicyProviderModelSchema)
       .max(100)
       .optional(),
+    retrieval: RagPolicyRetrievalSettingsPatchSchema.optional(),
+    agentic: RagPolicyAgenticSettingsPatchSchema.optional(),
     knowledgeBaseTierAssignments: RagPolicyAssignmentsPatchSchema.optional(),
     dataResidencyTags: z
       .array(
@@ -112,6 +132,8 @@ export const RagPolicyReportSchema = z
     defaultMaxResultsPerTier: RagPolicyBudgetSchema,
     maxResultsPerTier: RagPolicyBudgetSchema,
     allowedEmbeddingProviderModels: z.array(RagPolicyProviderModelSchema),
+    retrieval: RagPolicyRetrievalSettingsSchema,
+    agentic: RagPolicyAgenticSettingsSchema,
     knowledgeBaseTierAssignments: RagPolicyAssignmentsSchema,
     dataResidencyTags: z.array(z.string()),
     externalVectorStore: z.strictObject({

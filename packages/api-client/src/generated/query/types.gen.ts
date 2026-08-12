@@ -767,6 +767,19 @@ export type DeprovisionSsoOidcUserRequest = {
 };
 
 export type AdminAnalyticsSummary = {
+  attention: {
+    models: Array<{
+      displayName: string;
+      issues: Array<
+        | "invalid_context_window"
+        | "missing_max_output"
+        | "missing_pricing"
+        | "unavailable"
+      >;
+      modelId: string;
+      providerId: string;
+    }>;
+  };
   evals: {
     agentCount: number;
     agents: Array<{
@@ -861,6 +874,7 @@ export type AdminAnalyticsSummary = {
     totalCount: number;
   };
   usage: {
+    activityEventCount: number;
     byProvider: Array<
       UsageSummaryMetric & {
         providerId: string;
@@ -868,7 +882,16 @@ export type AdminAnalyticsSummary = {
     >;
     eventCount: number;
     estimatedCostUsd: number;
+    runsCompleted: number;
+    runsFailed: number;
+    runsStarted: number;
+    totalTokens: number;
     totals: Array<UsageSummaryMetric>;
+    unpricedTokenQuantity: number;
+  };
+  window: {
+    from: string | null;
+    to: string;
   };
 };
 
@@ -1708,15 +1731,35 @@ export type InterfacePreferences = {
   defaultAgentByWorkspace: {
     [key: string]: string;
   };
+  defaultModelByWorkspace: {
+    [key: string]: string;
+  };
+  lastModelByWorkspace: {
+    [key: string]: string;
+  };
   theme: "system" | "light" | "dark";
   locale: "en" | "es" | "fr";
   fontSize: "small" | "medium" | "large";
   density: "comfortable" | "compact";
   reducedMotion: boolean;
+  showFollowUps: boolean;
+  showStarterPrompts: boolean;
+  showContinueButton: boolean;
+  enterToSend: boolean;
+  stickToBottom: boolean;
+  showRunStatus: boolean;
+  showMessageModelLabel: boolean;
+  showMessageTimestamps: boolean;
 };
 
 export type UpdateInterfacePreferencesRequest = {
   defaultAgentByWorkspace?: {
+    [key: string]: string;
+  };
+  defaultModelByWorkspace?: {
+    [key: string]: string;
+  };
+  lastModelByWorkspace?: {
     [key: string]: string;
   };
   theme?: "system" | "light" | "dark";
@@ -1724,6 +1767,14 @@ export type UpdateInterfacePreferencesRequest = {
   fontSize?: "small" | "medium" | "large";
   density?: "comfortable" | "compact";
   reducedMotion?: boolean;
+  showFollowUps?: boolean;
+  showStarterPrompts?: boolean;
+  showContinueButton?: boolean;
+  enterToSend?: boolean;
+  stickToBottom?: boolean;
+  showRunStatus?: boolean;
+  showMessageModelLabel?: boolean;
+  showMessageTimestamps?: boolean;
 };
 
 export type BootstrapResponse = {
@@ -1954,6 +2005,13 @@ export type ManagedModelMemoryPolicy =
 export type ManagedModelSafetySettings = {
   maxUserInputLength?: number;
   blockedTerms?: Array<string>;
+  /**
+   * How hard the model is forced onto retrieved knowledge.
+   * - optional: inject context when found; otherwise normal LLM answer
+   * - prefer: stronger "use context when present" wording
+   * - required: answer only from knowledge; if none matches, refuse
+   */
+  knowledgeGroundingMode?: "optional" | "prefer" | "required";
   promptInjectionGuard?: {
     mode: "disabled" | "block";
     scanUserInput?: boolean;
@@ -3326,6 +3384,7 @@ export type ProviderCapabilities = {
   audioInput: boolean;
   structuredJson: boolean;
   reasoning: boolean;
+  temperature?: boolean;
   imageGeneration?: boolean;
   modalities: Array<
     "audio-input" | "audio-output" | "embeddings" | "text" | "vision"
@@ -3395,6 +3454,11 @@ export type ProviderModel = {
     };
   };
   capabilitiesSource?: "detected" | "override";
+  defaultParameters?: {
+    temperature?: number;
+    topP?: number;
+    maxOutputTokens?: number;
+  };
 };
 
 export type ProviderOperationalSummary = {
@@ -3729,6 +3793,16 @@ export type RagPolicyReport = {
     providerId: string;
     model: string;
   }>;
+  retrieval: {
+    topK: number;
+    similarityThreshold: number;
+    hybridSearch: boolean;
+    hybridBm25Weight: number;
+  };
+  agentic: {
+    enabled: boolean;
+    userMode: "optional" | "required";
+  };
   knowledgeBaseTierAssignments: {
     org: Array<string>;
     shared: Array<string>;
@@ -3785,6 +3859,16 @@ export type UpdateRagPolicyRequest = {
     providerId: string;
     model: string;
   }>;
+  retrieval?: {
+    topK?: number;
+    similarityThreshold?: number;
+    hybridSearch?: boolean;
+    hybridBm25Weight?: number;
+  };
+  agentic?: {
+    enabled?: boolean;
+    userMode?: "optional" | "required";
+  };
   knowledgeBaseTierAssignments?: {
     org?: Array<string>;
     shared?: Array<string>;
@@ -3949,6 +4033,7 @@ export type InspectRunContextRequest = {
   imageCount?: number;
   webSearch?: boolean;
   urls?: Array<string>;
+  agenticRag?: boolean;
 };
 
 export type RunRecord = {
@@ -3988,6 +4073,8 @@ export type EnqueueChatTurnRequest = {
   modelId?: string;
   webSearch?: boolean;
   urls?: Array<string>;
+  knowledgeBaseIds?: Array<string>;
+  agenticRag?: boolean;
   idempotencyKey?: string;
 };
 
@@ -4007,6 +4094,12 @@ export type StartRunRequest = {
     sizeBytes: number;
     dataBase64: string;
   }>;
+  /**
+   * Optional per-turn knowledge bases. When set, retrieval uses these ids
+   * instead of only the agent's enabled bindings. Empty array means no knowledge.
+   */
+  knowledgeBaseIds?: Array<string>;
+  agenticRag?: boolean;
 };
 
 export type RunEvent = {
@@ -4471,6 +4564,11 @@ export type DeleteChatRequest = {
   confirmChatId: string;
 };
 
+export type MessageRunError = {
+  code: string;
+  message?: string;
+};
+
 export type Message = {
   id: string;
   chatId: string;
@@ -4478,6 +4576,8 @@ export type Message = {
   content: string;
   citations?: Array<MessageCitation>;
   attachments?: Array<MessageAttachment>;
+  error?: MessageRunError;
+  modelId?: string;
   parentId?: string;
   createdAt: string;
 };
@@ -6502,6 +6602,11 @@ export type CreateKnowledgeBaseRequest = {
   workspaceId: string;
   name: string;
   description?: string;
+  /**
+   * Retrieval/governance scope. Defaults to workspace-visible collection.
+   * org/shared also assign the base in org RAG policy tier lists.
+   */
+  scope?: "user_private" | "workspace" | "org" | "shared";
 };
 
 export type UpdateKnowledgeBaseRequest = {
@@ -9996,7 +10101,10 @@ export type AuthProviderAdministrationDeprovisionOidcUserResponse =
 export type AdminInsightsGetAnalyticsSummaryData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    from?: string;
+    to?: string;
+  };
   url: "/admin/analytics/summary";
 };
 
@@ -10049,7 +10157,10 @@ export type AdminInsightsGetAnalyticsSummaryResponse =
 export type AdminInsightsExportAnalyticsSummaryData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    from?: string;
+    to?: string;
+  };
   url: "/admin/analytics/summary.csv";
 };
 
@@ -14806,9 +14917,21 @@ export type OperationalGovernanceListAuditLogsData = {
   query?: {
     action?: string;
     actorId?: string;
+    category?:
+      | "security"
+      | "admin"
+      | "access"
+      | "data"
+      | "chat"
+      | "run"
+      | "system";
+    from?: string;
+    includeNoise?: "true" | "false";
     outcome?: "success" | "failure";
+    q?: string;
     resourceId?: string;
     resourceType?: string;
+    to?: string;
     limit?: number;
     cursor?: string;
   };
@@ -14865,9 +14988,21 @@ export type OperationalGovernanceExportAuditLogsData = {
   query?: {
     action?: string;
     actorId?: string;
+    category?:
+      | "security"
+      | "admin"
+      | "access"
+      | "data"
+      | "chat"
+      | "run"
+      | "system";
+    from?: string;
+    includeNoise?: "true" | "false";
     outcome?: "success" | "failure";
+    q?: string;
     resourceId?: string;
     resourceType?: string;
+    to?: string;
   };
   url: "/audit-logs.csv";
 };
@@ -15994,6 +16129,11 @@ export type ProvidersUpdateModelCapabilitiesData = {
   body: {
     capabilities: ProviderCapabilities;
     contextWindow: number;
+    defaultParameters?: {
+      temperature?: number;
+      topP?: number;
+      maxOutputTokens?: number;
+    };
   };
   path: {
     modelId: string;

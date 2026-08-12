@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router";
 import Bot from "lucide-react/dist/esm/icons/bot.mjs";
-import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
 import LogOut from "lucide-react/dist/esm/icons/log-out.mjs";
 import Settings from "lucide-react/dist/esm/icons/settings.mjs";
 import Shield from "lucide-react/dist/esm/icons/shield.mjs";
@@ -18,48 +17,43 @@ export function WorkspaceUserMenu({
   userLabel: string;
 }) {
   const { t } = useLocale();
-  const roleLabel = isAdmin ? t("admin") : t("member");
+  const initial = userInitial(userLabel);
   return (
     <DropdownMenuPrimitive.Root>
       <DropdownMenuPrimitive.Trigger asChild>
         <Button
-          aria-label={`${userLabel}, ${roleLabel}`}
+          aria-label={userLabel}
           className="rm-topbar-user-button"
+          title={userLabel}
           variant="ghost"
         >
-          <span className="rm-user-avatar">
-            <User aria-hidden="true" size={15} />
+          <span className="rm-user-avatar" aria-hidden="true">
+            {initial}
           </span>
-          <span className="rm-topbar-user-copy">
-            <strong>{userLabel}</strong>
-            <small>{roleLabel}</small>
-          </span>
-          <ChevronDown aria-hidden="true" size={14} />
+          <span className="rm-topbar-user-copy">{userLabel}</span>
         </Button>
       </DropdownMenuPrimitive.Trigger>
       <DropdownMenuPrimitive.Portal>
         <DropdownMenuPrimitive.Content
           align="end"
-          className="rm-ui-menu rm-user-menu rm-topbar-user-menu"
+          className="rm-ui-menu rm-topbar-user-menu"
+          sideOffset={6}
         >
           <DropdownMenuPrimitive.Label className="rm-user-menu-identity">
-            <strong>{userLabel}</strong>
-            <small>{roleLabel}</small>
+            {userLabel}
           </DropdownMenuPrimitive.Label>
-          {isAdmin ? (
-            <DropdownMenuPrimitive.Item asChild>
-              <Link
-                className="rm-ui-menu__item rm-user-menu-item"
-                to="/workspace"
-              >
-                <Bot aria-hidden="true" size={16} />
-                <span>{t("workspaceSettings")}</span>
-              </Link>
-            </DropdownMenuPrimitive.Item>
-          ) : null}
+          <DropdownMenuPrimitive.Item asChild>
+            <Link
+              className="rm-ui-menu__item rm-user-menu-item"
+              to="/workspace"
+            >
+              <Bot aria-hidden="true" size={15} />
+              <span>{t("workspace")}</span>
+            </Link>
+          </DropdownMenuPrimitive.Item>
           <DropdownMenuPrimitive.Item asChild>
             <Link className="rm-ui-menu__item rm-user-menu-item" to="/settings">
-              <Settings aria-hidden="true" size={16} />
+              <Settings aria-hidden="true" size={15} />
               <span>{t("settings")}</span>
             </Link>
           </DropdownMenuPrimitive.Item>
@@ -69,14 +63,14 @@ export function WorkspaceUserMenu({
               search={{ section: "account" }}
               to="/settings"
             >
-              <User aria-hidden="true" size={16} />
+              <User aria-hidden="true" size={15} />
               <span>{t("profile")}</span>
             </Link>
           </DropdownMenuPrimitive.Item>
           {isAdmin ? (
             <DropdownMenuPrimitive.Item asChild>
               <Link className="rm-ui-menu__item rm-user-menu-item" to="/admin">
-                <Shield aria-hidden="true" size={16} />
+                <Shield aria-hidden="true" size={15} />
                 <span>{t("adminConsole")}</span>
               </Link>
             </DropdownMenuPrimitive.Item>
@@ -90,11 +84,19 @@ export function WorkspaceUserMenu({
               });
             }}
           >
-            <LogOut aria-hidden="true" size={16} />
+            <LogOut aria-hidden="true" size={15} />
             <span>{t("logout")}</span>
           </DropdownMenuPrimitive.Item>
         </DropdownMenuPrimitive.Content>
       </DropdownMenuPrimitive.Portal>
     </DropdownMenuPrimitive.Root>
   );
+}
+
+function userInitial(label: string): string {
+  const trimmed = label.trim();
+  const at = trimmed.indexOf("@");
+  const source = at > 0 ? trimmed.slice(0, at) : trimmed;
+  const letter = source[0];
+  return letter === undefined ? "?" : letter.toUpperCase();
 }

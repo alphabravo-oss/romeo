@@ -5,7 +5,7 @@ import type {
   ProviderImageInput,
 } from "@romeo/providers";
 
-import type { Message } from "../domain/entities";
+import type { AgentSafetySettings, Message } from "../domain/entities";
 import { ApiError } from "../errors";
 import {
   citationFromRetrievalHit,
@@ -69,6 +69,36 @@ export function pathThroughMessage(
   return path.reverse();
 }
 
+/**
+ * Tip of the visible branch: newest descendant of `leafId`, or the newest
+ * message when the pointer is missing. Ordinary sends attach here so a
+ * follow-up never becomes a sibling of an in-progress turn.
+ */
+export function linearParentId(
+  messages: Message[],
+  leafId: string | undefined,
+): string | undefined {
+  const ordered = orderChatHistory(messages);
+  if (ordered.length === 0) return undefined;
+  const children = new Map<string, Message[]>();
+  for (const message of ordered) {
+    const key = message.parentId ?? "";
+    children.set(key, [...(children.get(key) ?? []), message]);
+  }
+  const start =
+    leafId !== undefined && ordered.some((message) => message.id === leafId)
+      ? leafId
+      : ordered.at(-1)!.id;
+  const seen = new Set<string>([start]);
+  let tip = start;
+  for (;;) {
+    const child = children.get(tip)?.at(-1);
+    if (child === undefined || seen.has(child.id)) return tip;
+    seen.add(child.id);
+    tip = child.id;
+  }
+}
+
 export function hasMessageTree(messages: Message[]): boolean {
   // Chats imported or persisted before parent links existed are flat, and their whole prefix is the
   // branch. Asking "does any row carry a parent?" is the only signal that separates the two shapes.
@@ -80,6 +110,9 @@ export function toHistoryChatMessages(messages: Message[]): ChatMessage[] {
   // and persisted 'tool' rows would serialize without a tool_call_id, which providers reject with a 400.
   return messages.flatMap((message) => {
     if (message.role !== "user" && message.role !== "assistant") return [];
+    // Failed/cancelled turns are transcript UI only -- replaying their error copy
+    // (or any partial stream under an error) would poison the next model request.
+    if (message.error !== undefined) return [];
     const content =
       message.role === "assistant"
         ? stripRunCitations(message.content)
@@ -105,6 +138,7 @@ export interface BuildRunMessagesInput {
   userContent: string;
   userImages?: ProviderImageInput[];
   knowledgeHits: RetrievalHit[];
+  knowledgeGroundingMode?: AgentSafetySettings["knowledgeGroundingMode"];
   tail?: ChatMessage[];
   // The model that will actually serve this run. One model, not a route: the id and the window
   // reported by run_context_window_exceeded are read off this same object, so they cannot disagree.
@@ -166,6 +200,7 @@ export function buildRunMessages(
     hits,
     input.userContent,
     input.userImages,
+    input.knowledgeGroundingMode,
   );
   let floorTokens = systemTokens + chatMessageTokens(userMessage) + tailTokens;
 
@@ -180,6 +215,7 @@ export function buildRunMessages(
         hits,
         input.userContent,
         input.userImages,
+        input.knowledgeGroundingMode,
       );
       floorTokens = systemTokens + chatMessageTokens(userMessage) + tailTokens;
     }
@@ -228,10 +264,15 @@ function knowledgeUserMessage(
   hits: RetrievalHit[],
   userContent: string,
   images?: ProviderImageInput[],
+  groundingMode?: AgentSafetySettings["knowledgeGroundingMode"],
 ): ChatMessage {
   return {
     role: "user",
-    content: knowledgeUserContent(renderKnowledgeContext(hits), userContent),
+    content: knowledgeUserContent(
+      renderKnowledgeContext(hits),
+      userContent,
+      groundingMode,
+    ),
     ...(images === undefined || images.length === 0 ? {} : { images }),
   };
 }

@@ -15,11 +15,11 @@ import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import type { ApiKeyScope, ServiceAccount } from "../features/administration";
+import { Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
-import { PanelStats } from "./PanelStats";
 import { SecretRevealCard } from "./SecretRevealCard";
 
 const serviceAccountScopes = [
@@ -218,9 +218,8 @@ export function ServiceAccountPanel() {
   );
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("serviceAccounts")}</div>
+    <Section
+      actions={
         <Button
           variant="secondary"
           onClick={() => setAddOpen(true)}
@@ -228,7 +227,9 @@ export function ServiceAccountPanel() {
         >
           + {t("addServiceAccount")}
         </Button>
-      </div>
+      }
+      title={t("serviceAccounts")}
+    >
       {createdToken ? (
         <SecretRevealCard
           label={t("token")}
@@ -236,56 +237,54 @@ export function ServiceAccountPanel() {
           secret={createdToken}
         />
       ) : null}
-      <div className="mt-4">
-        <PanelState
-          empty={t("noServiceAccounts")}
-          emptyAction={
-            <Button
-              onClick={() => setAddOpen(true)}
-              type="button"
-              variant="secondary"
-            >
-              + {t("addServiceAccount")}
-            </Button>
-          }
-          emptyDescription={t("noServiceAccountsDescription")}
-          emptyIcon={<KeyRound aria-hidden size={24} />}
-          query={accountsQuery}
-        >
-          {(accounts) => (
-            <div className="grid gap-4">
-              <PanelStats
-                items={[
-                  { label: t("totalAccounts"), value: accounts.length },
-                  {
-                    label: t("disabled"),
-                    value: accounts.filter((a) => a.disabledAt).length,
-                  },
-                ]}
-              />
-              <DataTable
-                columns={columns}
-                data={accounts}
-                empty={t("noServiceAccounts")}
-                enableRowSelection
-                getRowId={(row) => row.id}
-                bulkActions={(ids, clear) => (
-                  <Button
-                    variant="danger"
-                    disabled={bulkDisableMutation.isPending}
-                    onClick={() => void handleBulkDisable(ids, clear)}
-                    type="button"
-                  >
-                    {bulkDisableMutation.isPending
-                      ? t("disabling")
-                      : `${t("disable")} ${ids.length}`}
-                  </Button>
-                )}
-              />
-            </div>
-          )}
-        </PanelState>
-      </div>
+      <PanelState
+        empty={t("noServiceAccounts")}
+        emptyAction={
+          <Button
+            onClick={() => setAddOpen(true)}
+            type="button"
+            variant="secondary"
+          >
+            + {t("addServiceAccount")}
+          </Button>
+        }
+        emptyDescription={t("noServiceAccountsDescription")}
+        emptyIcon={<KeyRound aria-hidden size={24} />}
+        query={accountsQuery}
+      >
+        {(accounts) => (
+          <div className="grid gap-4">
+            <StatRow
+              items={[
+                { label: t("totalAccounts"), value: accounts.length },
+                {
+                  label: t("disabled"),
+                  value: accounts.filter((a) => a.disabledAt).length,
+                },
+              ]}
+            />
+            <DataTable
+              columns={columns}
+              data={accounts}
+              empty={t("noServiceAccounts")}
+              enableRowSelection
+              getRowId={(row) => row.id}
+              bulkActions={(ids, clear) => (
+                <Button
+                  variant="danger"
+                  disabled={bulkDisableMutation.isPending}
+                  onClick={() => void handleBulkDisable(ids, clear)}
+                  type="button"
+                >
+                  {bulkDisableMutation.isPending
+                    ? t("disabling")
+                    : `${t("disable")} ${ids.length}`}
+                </Button>
+              )}
+            />
+          </div>
+        )}
+      </PanelState>
       <FormDialog
         open={addOpen}
         title={t("newServiceAccount")}
@@ -402,6 +401,6 @@ export function ServiceAccountPanel() {
         </form>
       </FormDialog>
       {dialog}
-    </section>
+    </Section>
   );
 }

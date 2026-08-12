@@ -16,10 +16,10 @@ import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDate } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
-import { PanelStats } from "./PanelStats";
 
 const groupCol = createColumnHelper<Group>();
 const memberCol = createColumnHelper<GroupMember>();
@@ -201,35 +201,27 @@ export function GroupsPanel() {
   );
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("groupsTitle")}</div>
-        <Button
-          variant="primary"
-          onClick={() => setAddOpen(true)}
-          type="button"
-        >
-          + {t("groupsAdd")}
-        </Button>
-      </div>
-
-      <div className="mt-4">
+    <>
+      {/* No section title: the page header already reads "Groups". */}
+      <Section
+        actions={
+          <AddButton onClick={() => setAddOpen(true)}>
+            {t("groupsAdd")}
+          </AddButton>
+        }
+      >
         <PanelState
           query={groupsQuery}
           empty={t("groupsNone")}
           emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setAddOpen(true)}
-              type="button"
-            >
-              + {t("groupsAdd")}
-            </Button>
+            <AddButton onClick={() => setAddOpen(true)}>
+              {t("groupsAdd")}
+            </AddButton>
           }
         >
           {(groups) => (
-            <div className="grid gap-4">
-              <PanelStats
+            <>
+              <StatRow
                 items={[{ label: t("groupsTotal"), value: groups.length }]}
               />
               <DataTable
@@ -237,16 +229,18 @@ export function GroupsPanel() {
                 data={groups}
                 empty={t("groupsNone")}
               />
-            </div>
+            </>
           )}
         </PanelState>
-      </div>
+      </Section>
 
+      {/* Membership is a peer group that appears once a group is selected, so
+          it gets its own section rather than a bare label inside the one
+          above. */}
       {selectedGroupId !== "" ? (
-        <div className="mt-4 grid gap-2">
-          <div className="text-sm text-muted">
-            {t("groupsMembersOf")} {selectedGroup?.name ?? selectedGroupId}
-          </div>
+        <Section
+          title={`${t("groupsMembersOf")} ${selectedGroup?.name ?? selectedGroupId}`}
+        >
           <form
             className="grid gap-2"
             onSubmit={(event) => {
@@ -308,7 +302,7 @@ export function GroupsPanel() {
               />
             )}
           </PanelState>
-        </div>
+        </Section>
       ) : null}
 
       <FormDialog
@@ -380,6 +374,6 @@ export function GroupsPanel() {
         </form>
       </FormDialog>
       {dialog}
-    </section>
+    </>
   );
 }

@@ -39,6 +39,10 @@ export function registerRunRoutes(app: RomeoApi): void {
       ...(body.modelId === undefined ? {} : { modelId: body.modelId }),
       ...(body.webSearch === undefined ? {} : { webSearch: body.webSearch }),
       ...(body.urls === undefined ? {} : { urls: body.urls }),
+      ...(body.agenticRag === undefined ? {} : { agenticRag: body.agenticRag }),
+      ...(body.knowledgeBaseIds === undefined
+        ? {}
+        : { knowledgeBaseIds: body.knowledgeBaseIds }),
       ...(body.idempotencyKey === undefined
         ? {}
         : { idempotencyKey: body.idempotencyKey }),
@@ -63,6 +67,7 @@ export function registerRunRoutes(app: RomeoApi): void {
       ...(body.fileIds === undefined ? {} : { fileIds: body.fileIds }),
       ...(body.webSearch === undefined ? {} : { webSearch: body.webSearch }),
       ...(body.urls === undefined ? {} : { urls: body.urls }),
+      ...(body.agenticRag === undefined ? {} : { agenticRag: body.agenticRag }),
       imageCount: body.imageCount ?? 0,
     });
     return context.json({ data }, 200);
@@ -83,9 +88,13 @@ export function registerRunRoutes(app: RomeoApi): void {
       ...(body.parentMessageId === undefined
         ? {}
         : { parentMessageId: body.parentMessageId }),
+      ...(body.knowledgeBaseIds === undefined
+        ? {}
+        : { knowledgeBaseIds: body.knowledgeBaseIds }),
       ...(body.fileIds === undefined ? {} : { fileIds: body.fileIds }),
       ...(body.webSearch === undefined ? {} : { webSearch: body.webSearch }),
       ...(body.urls === undefined ? {} : { urls: body.urls }),
+      ...(body.agenticRag === undefined ? {} : { agenticRag: body.agenticRag }),
       ...(body.attachments === undefined
         ? {}
         : { attachments: body.attachments }),

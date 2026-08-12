@@ -88,6 +88,7 @@ function turnActions(queryClient: QueryClient, activeChatId: string) {
   return useWorkspaceTurnActions({
     activeAgentId: "agent_1",
     activeChatId,
+    chats: [],
     allMessages: [],
     autoTitleEnabled: false,
     appendMessage: () => "msg_new",
@@ -113,6 +114,7 @@ function turnActions(queryClient: QueryClient, activeChatId: string) {
     t: (key) => key,
     temporaryNextChat: false,
     webSearchEnabled: false,
+    agenticRagEnabled: false,
     workspaceId: "ws_1",
   });
 }

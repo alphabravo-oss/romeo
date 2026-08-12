@@ -1,4 +1,4 @@
-import { Button, StatusBadge } from "@romeo/ui";
+import { Button, LinkButton, StatusBadge } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -7,8 +7,10 @@ import {
   getAdminAnalyticsSummary,
 } from "../features/admin-insights";
 import type {
+  AdminAnalyticsAttentionModel,
   AdminAnalyticsSummary,
   AdminAnalyticsToolSummaryRow,
+  AdminAnalyticsUsageMetric,
 } from "../features/admin-insights";
 import { downloadCsv } from "../lib/csv";
 import { useLocale, type MessageKey } from "../lib/i18n";
@@ -19,11 +21,15 @@ import {
   LocalizedDateTime,
   LocalizedNumber,
 } from "../lib/locale-format";
+import { Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { DateRangeSelect } from "./DateRangeSelect";
 import { PageActions } from "./PageActions";
-import { PanelStats } from "./PanelStats";
+import { rangeToBounds, type RangePreset } from "./date-range";
 
 const toolCol = createColumnHelper<AdminAnalyticsToolSummaryRow>();
+const usageCol = createColumnHelper<AdminAnalyticsUsageMetric>();
+const attentionCol = createColumnHelper<AdminAnalyticsAttentionModel>();
 
 interface AnalyticsSignalRow {
   detail?: string;
@@ -36,6 +42,15 @@ interface AnalyticsSignalRow {
 const signalCol = createColumnHelper<AnalyticsSignalRow>();
 
 type Translate = (key: MessageKey) => string;
+
+function analyticsWindow(range: RangePreset): { from?: string; to?: string } {
+  const bounds = rangeToBounds(range, new Date());
+  const query: { from?: string; to?: string } = {
+    to: bounds.to.toISOString(),
+  };
+  if (bounds.from !== undefined) query.from = bounds.from.toISOString();
+  return query;
+}
 
 function toolColumns(
   t: Translate,
@@ -94,18 +109,21 @@ function toolColumns(
 
 export function AnalyticsPanel() {
   const { t } = useLocale();
+  const [range, setRange] = useState<RangePreset>("7d");
   const summaryQuery = useQuery({
-    queryKey: ["adminAnalyticsSummary"],
-    queryFn: getAdminAnalyticsSummary,
+    queryKey: ["adminAnalyticsSummary", range],
+    queryFn: () => getAdminAnalyticsSummary(analyticsWindow(range)),
+    refetchInterval: 30_000,
   });
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string>();
 
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-muted">{t("analyticsTitle")}</div>
         <div className="flex flex-wrap gap-2">
+          <DateRangeSelect onChange={setRange} value={range} />
           <Button
             disabled={isExporting || summaryQuery.data === undefined}
             onClick={() => void exportCsv()}
@@ -128,14 +146,14 @@ export function AnalyticsPanel() {
       <PanelState query={summaryQuery} isEmpty={() => false}>
         {(summary) => <AnalyticsSummaryView summary={summary} />}
       </PanelState>
-    </section>
+    </Section>
   );
 
   async function exportCsv() {
     setExportError(undefined);
     setIsExporting(true);
     try {
-      const csv = await exportAdminAnalyticsSummaryCsv();
+      const csv = await exportAdminAnalyticsSummaryCsv(analyticsWindow(range));
       downloadCsv(csv, "romeo-admin-analytics-summary.csv");
     } catch (caught) {
       setExportError(
@@ -155,6 +173,10 @@ function AnalyticsSummaryView({
 }): React.ReactNode {
   const { t } = useLocale();
   const tools = summary.tools.byTool;
+  const usageTotals = summary.usage.totals.filter(
+    (metric) =>
+      !metric.metric.startsWith("sse.") && metric.metric !== "queue.wait",
+  );
   const signals: AnalyticsSignalRow[] = [
     {
       id: "evals",
@@ -210,23 +232,102 @@ function AnalyticsSummaryView({
       cell: (cell) => <span className="text-muted">{cell.getValue()}</span>,
     }),
   ];
+  const usageColumns: ColumnDef<AdminAnalyticsUsageMetric, any>[] = [
+    usageCol.accessor("metric", {
+      header: t("analyticsMetric"),
+      cell: (cell) => (
+        <span className="rm-mono" translate="no">
+          {cell.getValue()}
+        </span>
+      ),
+    }),
+    usageCol.accessor("quantity", {
+      header: t("usageQuantity"),
+      cell: (cell) => <LocalizedNumber value={cell.getValue()} />,
+    }),
+    usageCol.accessor("unit", {
+      header: t("usageUnit"),
+      cell: (cell) => <span className="text-muted">{cell.getValue()}</span>,
+    }),
+    usageCol.accessor("estimatedCostUsd", {
+      header: t("analyticsEstimatedCost"),
+      cell: (cell) => <LocalizedCurrency value={cell.getValue()} />,
+    }),
+  ];
+  const attentionColumns: ColumnDef<AdminAnalyticsAttentionModel, any>[] = [
+    attentionCol.accessor("displayName", {
+      header: t("models"),
+      cell: (cell) => <span className="font-medium">{cell.getValue()}</span>,
+    }),
+    attentionCol.accessor(
+      (row) =>
+        row.issues.map((issue) => t(modelIssueMessageKey(issue))).join(" · "),
+      {
+        id: "issues",
+        header: t("modelNeedsAttention"),
+        cell: (cell) => <span className="text-sm">{cell.getValue()}</span>,
+      },
+    ),
+    attentionCol.display({
+      id: "open",
+      header: t("analyticsDetails"),
+      cell: (cell) => (
+        <LinkButton
+          href={`/admin?section=providers&view=base-models&model=${encodeURIComponent(cell.row.original.modelId)}`}
+          size="sm"
+          variant="outline"
+        >
+          {t("analyticsOpenModel")}
+        </LinkButton>
+      ),
+    }),
+  ];
 
   return (
     <>
-      <PanelStats
+      <p className="mb-3 text-xs text-muted">{t("analyticsWindowNote")}</p>
+      <StatRow
         items={[
           {
             label: t("analyticsStatus"),
             value: t(analyticsStatusMessageKey(summary.status)),
           },
+          { label: t("usageRuns"), value: summary.usage.runsStarted },
+          { label: t("usageTokens"), value: summary.usage.totalTokens },
           {
             label: t("analyticsEstimatedCost"),
             value: <LocalizedCurrency value={summary.usage.estimatedCostUsd} />,
           },
-          { label: t("analyticsUsageEvents"), value: summary.usage.eventCount },
           { label: t("analyticsToolCalls"), value: summary.tools.totalCount },
         ]}
       />
+      {summary.usage.unpricedTokenQuantity > 0 ? (
+        <div className="rm-attention-note mt-3" role="status">
+          <strong>
+            {t("analyticsUnpricedTokens")} ·{" "}
+            <LocalizedNumber value={summary.usage.unpricedTokenQuantity} />
+          </strong>
+          <p>{t("analyticsUnpricedHelp")}</p>
+        </div>
+      ) : null}
+      <div className="mb-2 mt-3 text-xs font-medium text-muted">
+        {t("modelNeedsAttention")}
+      </div>
+      {summary.attention.models.length === 0 ? (
+        <p className="text-xs text-muted">{t("analyticsNoAttention")}</p>
+      ) : (
+        <>
+          <div className="rm-attention-note mb-2" role="status">
+            <strong>{t("modelNeedsAttention")}</strong>
+            <p>{t("analyticsNeedsAttentionHelp")}</p>
+          </div>
+          <DataTable
+            columns={attentionColumns}
+            data={summary.attention.models}
+            getRowId={(row) => row.modelId}
+          />
+        </>
+      )}
       <div className="mb-2 mt-3 text-xs font-medium text-muted">
         {t("analyticsOperationalSignals")}
       </div>
@@ -234,6 +335,51 @@ function AnalyticsSummaryView({
         columns={signalColumns}
         data={signals}
         getRowId={(row) => row.id}
+      />
+      <div className="mb-2 mt-3 text-xs font-medium text-muted">
+        {t("analyticsUsageBreakdown")}
+      </div>
+      <DataTable
+        columns={usageColumns}
+        data={usageTotals}
+        empty={t("analyticsNoUsageTotals")}
+        getRowId={(row) => `${row.metric}:${row.unit}`}
+      />
+      <div className="mb-2 mt-3 text-xs font-medium text-muted">
+        {t("analyticsEvalBreakdown")}
+      </div>
+      <StatRow
+        items={[
+          { label: t("analyticsEvalSuites"), value: summary.evals.suiteCount },
+          {
+            label: t("analyticsEvalRuns"),
+            value: summary.evals.generatedRunCount,
+          },
+          {
+            label: t("analyticsEvalStatus"),
+            value: t(evalStatusMessageKey(summary.evals.status)),
+          },
+          {
+            label: t("analyticsActivityEvents"),
+            value: summary.usage.activityEventCount,
+          },
+          { label: t("analyticsUsageEvents"), value: summary.usage.eventCount },
+        ]}
+      />
+      <div className="mb-2 mt-3 text-xs font-medium text-muted">
+        {t("analyticsJobBreakdown")}
+      </div>
+      <StatRow
+        items={[
+          { label: t("analyticsJobsQueued"), value: summary.jobs.queued },
+          { label: t("analyticsJobsRunning"), value: summary.jobs.running },
+          { label: t("analyticsJobsCompleted"), value: summary.jobs.completed },
+          { label: t("analyticsJobsFailed"), value: summary.jobs.failed },
+          {
+            label: t("analyticsJobsDeadLettered"),
+            value: summary.jobs.deadLettered,
+          },
+        ]}
       />
       <div className="mb-2 mt-3 text-xs font-medium text-muted">
         {t("analyticsToolBreakdown")}
@@ -246,6 +392,14 @@ function AnalyticsSummaryView({
       <div className="mt-3 text-xs text-muted">
         {t("analyticsGenerated")}{" "}
         <LocalizedDateTime value={summary.generatedAt} />
+        {summary.window.from ? (
+          <>
+            {" · "}
+            <LocalizedDateTime value={summary.window.from} />
+            {" – "}
+            <LocalizedDateTime value={summary.window.to} />
+          </>
+        ) : null}
       </div>
     </>
   );
@@ -266,4 +420,13 @@ function evalStatusMessageKey(
   if (status === "failed") return "evalStatusFailed";
   if (status === "not_required") return "evalStatusNotRequired";
   return "evalStatusMissing";
+}
+
+export function modelIssueMessageKey(
+  issue: AdminAnalyticsAttentionModel["issues"][number],
+): MessageKey {
+  if (issue === "missing_pricing") return "modelIssueMissingPricing";
+  if (issue === "invalid_context_window") return "modelIssueInvalidContext";
+  if (issue === "missing_max_output") return "modelIssueMissingMaxOutput";
+  return "modelIssueUnavailable";
 }

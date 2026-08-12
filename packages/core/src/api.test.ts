@@ -967,6 +967,14 @@ describe("Open WebUI-class governed chat extensions", () => {
         locale: "fr",
         density: "compact",
         reducedMotion: true,
+        showFollowUps: false,
+        showStarterPrompts: true,
+        showContinueButton: false,
+        enterToSend: true,
+        stickToBottom: true,
+        showRunStatus: true,
+        showMessageModelLabel: true,
+        showMessageTimestamps: true,
       }),
     );
     expect(revokedResponse.status).toBe(200);
@@ -2290,6 +2298,7 @@ describe("Romeo API thin slice", () => {
       spec.paths["/governance/identity-lifecycle-policy"].get.responses[200]
         .content["application/json"].schema.properties.data.$ref,
     ).toBe("#/components/schemas/IdentityLifecyclePolicy");
+    expect(Object.keys(spec.paths)).toContain("/knowledge/ingest-readiness");
     expect(Object.keys(spec.paths)).toContain("/knowledge-bases");
     expect(Object.keys(spec.paths)).toContain(
       "/knowledge-bases/{knowledgeBaseId}",
@@ -8324,7 +8333,7 @@ describe("Romeo API thin slice", () => {
 
     expect(detailResponse.status).toBe(200);
     expect(detail.data.id).toBe("agent_default");
-    expect(detail.data.systemPrompt).toContain("secure AI workspace assistant");
+    expect(detail.data.systemPrompt).toContain("secure AI workspace copilot");
     expect(response.status).toBe(201);
     expect(cloned.data.id).not.toBe("agent_default");
     expect(cloned.data.baseModelId).toBe("model_openai_compatible_default");
@@ -18426,7 +18435,7 @@ describe("Romeo chat history", () => {
     const second = bodies[1]?.messages[0];
     // A per-turn-varying messages[0] busts provider prompt caching on every single turn.
     expect(first?.content).toBe(
-      "You are Romeo, a secure AI workspace assistant.",
+      "You are Romeo, a secure AI workspace copilot.",
     );
     expect(second?.content).toBe(first?.content);
     expect(second?.content).not.toContain("Romeo chat memory:");

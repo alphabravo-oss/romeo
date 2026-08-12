@@ -566,10 +566,15 @@ html.dark {
 }
 .rm-ui-status-badge {
   display: inline-flex;
+  align-items: center;
   padding: 0.2rem 0.5rem;
   border-radius: 1rem;
   font-size: 0.75rem;
   font-weight: 575;
+  /* A pill that wraps stops reading as a pill. Long values (protocol names,
+     sync states) tore into two lines inside the rounded shape and left a
+     lumpy blob in the middle of otherwise even table rows. */
+  white-space: nowrap;
 }
 .rm-ui-status-badge--neutral {
   background: var(--rm-ui-soft);

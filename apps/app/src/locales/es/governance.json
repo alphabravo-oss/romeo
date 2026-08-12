@@ -75,6 +75,8 @@
   "govExporting": "Exportando",
   "govFiles": "Archivos",
   "govGovernance": "Gobernanza",
+  "govLifecycleTitle": "Acciones de ciclo de vida",
+  "govLifecycleHelp": "Archiva espacios, cierra chats o elimina datos. Son caminos excepcionales: déjalos cerrados salvo que los necesites.",
   "govIncludeMessageContent": "Incluir contenido de mensajes",
   "govLoading": "Cargando…",
   "govMessages": "Mensajes",

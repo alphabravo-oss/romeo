@@ -2,6 +2,11 @@ const defaultMaxExtractionBytes = 1_000_000;
 const structuredTextMimeTypes = new Set([
   "application/json",
   "application/x-ndjson",
+  "application/xml",
+  "text/xml",
+  "application/yaml",
+  "application/x-yaml",
+  "text/yaml",
 ]);
 
 export interface ExtractKnowledgeTextInput {
@@ -66,6 +71,15 @@ export function extractKnowledgeText(
   if (mimeType === "application/x-ndjson")
     return normalizeNdjson(decoded, mimeType);
   if (mimeType === "text/html") return normalizeHtml(decoded, mimeType);
+  if (
+    mimeType === "application/xml" ||
+    mimeType === "text/xml" ||
+    mimeType === "application/yaml" ||
+    mimeType === "application/x-yaml" ||
+    mimeType === "text/yaml"
+  ) {
+    return normalizePlainText(decoded, mimeType);
+  }
   return normalizePlainText(decoded, mimeType);
 }
 

@@ -31,12 +31,12 @@ import {
   LocalizedNumber,
 } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { Drawer } from "./Drawer";
 import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
-import { PanelStats } from "./PanelStats";
 import { PageActions } from "./PageActions";
 import { useWorkspace } from "./WorkspaceContext";
 
@@ -275,29 +275,25 @@ export function WebhooksPanel() {
   );
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="rm-card-title">{t("webhooksTitle")}</div>
+    <Section
+      actions={
         <div className="flex gap-2">
           <PageActions
             onRefresh={() => void webhooksQuery.refetch()}
             primary={
               (webhooksQuery.data?.length ?? 0) > 0 ? (
-                <Button
-                  variant="primary"
-                  onClick={() => setAddOpen(true)}
-                  type="button"
-                >
-                  + {t("webhooksAdd")}
-                </Button>
+                <AddButton onClick={() => setAddOpen(true)}>
+                  {t("webhooksAdd")}
+                </AddButton>
               ) : undefined
             }
             refreshLabel={t("refresh")}
             refreshing={webhooksQuery.isFetching}
           />
         </div>
-      </div>
-
+      }
+      title={t("webhooksTitle")}
+    >
       <FormDialog
         open={addOpen}
         title={t("webhooksNew")}
@@ -398,53 +394,46 @@ export function WebhooksPanel() {
         </form>
       </FormDialog>
 
-      <div className="mt-4">
-        <PanelState
-          empty={t("webhooksNone")}
-          emptyAction={
-            <Button
-              variant="primary"
-              onClick={() => setAddOpen(true)}
-              type="button"
-            >
-              + {t("webhooksAdd")}
-            </Button>
-          }
-          emptyDescription={t("webhooksNoneDescription")}
-          emptyIcon={<Webhook aria-hidden size={24} />}
-          query={webhooksQuery}
-        >
-          {(rows) => (
-            <div className="grid gap-4">
-              <PanelStats
-                items={[
-                  { label: t("webhooksTotal"), value: rows.length },
-                  {
-                    label: t("webhooksDisabledStat"),
-                    value: rows.filter((row) => row.disabledAt).length,
-                  },
-                ]}
-              />
-              <DataTable
-                bulkActions={(ids, clear) => (
-                  <Button
-                    disabled={bulkDisableMutation.isPending}
-                    onClick={() => void handleBulkDisable(ids, clear)}
-                    type="button"
-                  >
-                    {t("webhooksDisable")}{" "}
-                    <LocalizedNumber value={ids.length} />
-                  </Button>
-                )}
-                columns={webhookColumns}
-                data={rows}
-                enableRowSelection
-                getRowId={(row) => row.id}
-              />
-            </div>
-          )}
-        </PanelState>
-      </div>
+      <PanelState
+        empty={t("webhooksNone")}
+        emptyAction={
+          <AddButton onClick={() => setAddOpen(true)}>
+            {t("webhooksAdd")}
+          </AddButton>
+        }
+        emptyDescription={t("webhooksNoneDescription")}
+        emptyIcon={<Webhook aria-hidden size={24} />}
+        query={webhooksQuery}
+      >
+        {(rows) => (
+          <div className="grid gap-4">
+            <StatRow
+              items={[
+                { label: t("webhooksTotal"), value: rows.length },
+                {
+                  label: t("webhooksDisabledStat"),
+                  value: rows.filter((row) => row.disabledAt).length,
+                },
+              ]}
+            />
+            <DataTable
+              bulkActions={(ids, clear) => (
+                <Button
+                  disabled={bulkDisableMutation.isPending}
+                  onClick={() => void handleBulkDisable(ids, clear)}
+                  type="button"
+                >
+                  {t("webhooksDisable")} <LocalizedNumber value={ids.length} />
+                </Button>
+              )}
+              columns={webhookColumns}
+              data={rows}
+              enableRowSelection
+              getRowId={(row) => row.id}
+            />
+          </div>
+        )}
+      </PanelState>
 
       <Drawer
         description={t("webhooksDeliveriesDescription")}
@@ -485,7 +474,7 @@ export function WebhooksPanel() {
         </PanelState>
       </Drawer>
       {dialog}
-    </section>
+    </Section>
   );
 }
 

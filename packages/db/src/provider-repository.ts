@@ -1,5 +1,9 @@
 import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
-import type { ProviderCatalogSyncState } from "@romeo/providers";
+import type {
+  BaseModel,
+  ModelDefaultParameters,
+  ProviderCatalogSyncState,
+} from "@romeo/providers";
 
 import type { RomeoDatabase } from "./client";
 import { asProviderCatalogSyncState } from "./provider-catalog-record";
@@ -70,6 +74,7 @@ export interface BaseModelRecord {
   capabilities: ProviderCapabilities;
   contextWindow: number;
   pricing?: ModelPricing;
+  defaultParameters?: ModelDefaultParameters;
   capabilitiesSource?: "detected" | "override";
 }
 
@@ -206,6 +211,7 @@ export class PgProviderRepository {
         name: model.name,
         orgId,
         pricing: model.pricing ?? null,
+        defaultParameters: model.defaultParameters ?? null,
         capabilitiesSource: model.capabilitiesSource ?? "detected",
         providerId: model.providerId,
       })
@@ -242,6 +248,7 @@ export class PgProviderRepository {
             name: model.name,
             orgId,
             pricing: model.pricing ?? null,
+            defaultParameters: model.defaultParameters ?? null,
             providerId: model.providerId,
           },
         })
@@ -315,6 +322,9 @@ export function toBaseModelRecord(
   };
   const pricing = asModelPricing(row.pricing);
   if (pricing !== undefined) model.pricing = pricing;
+  const defaultParameters = asModelDefaultParameters(row.defaultParameters);
+  if (defaultParameters !== undefined)
+    model.defaultParameters = defaultParameters;
   return model;
 }
 
@@ -349,6 +359,7 @@ function toBaseModelInsert(
     capabilitiesSource: record.capabilitiesSource ?? "detected",
     contextWindow: record.contextWindow,
     pricing: record.pricing ?? null,
+    defaultParameters: record.defaultParameters ?? null,
     enabled: record.enabled,
     available: record.available ?? true,
   };
@@ -430,6 +441,32 @@ function asModelPricing(value: unknown): ModelPricing | undefined {
     outputTokenUsd: input.outputTokenUsd,
     ...(imageGenerationUsd === undefined ? {} : { imageGenerationUsd }),
   };
+}
+
+function asModelDefaultParameters(
+  value: unknown,
+): ModelDefaultParameters | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return undefined;
+  const input = value as Record<string, unknown>;
+  const parameters: ModelDefaultParameters = {};
+  if (
+    typeof input.temperature === "number" &&
+    Number.isFinite(input.temperature)
+  ) {
+    parameters.temperature = input.temperature;
+  }
+  if (typeof input.topP === "number" && Number.isFinite(input.topP)) {
+    parameters.topP = input.topP;
+  }
+  if (
+    typeof input.maxOutputTokens === "number" &&
+    Number.isInteger(input.maxOutputTokens) &&
+    input.maxOutputTokens > 0
+  ) {
+    parameters.maxOutputTokens = input.maxOutputTokens;
+  }
+  return Object.keys(parameters).length === 0 ? undefined : parameters;
 }
 
 function asImageGenerationPricing(value: unknown):

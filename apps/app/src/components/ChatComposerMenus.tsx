@@ -141,10 +141,8 @@ export function useComposerMenu({
           id: `composer-mention-knowledge-${base.id}`,
           label: `@${base.name}`,
           onSelect: () => {
-            // ponytail: naming a knowledge base only puts its name in the
-            // prompt, it does not bind the base to the turn — the agent's own
-            // grants still decide what is retrievable. Upgrade path:
-            // knowledgeBaseIds on StartRunSchema.
+            // Mentions name the collection in prose. Binding is the
+            // capabilities-menu picker, which sets startRun.knowledgeBaseIds.
             const next = applyMention(draft, range, base.name);
             onReplaceDraft(next.draft, next.caret);
           },

@@ -31,7 +31,7 @@
   "usersLastAdminHint": "No puedes desactivar al último administrador.",
   "userUpdateRole": "Actualizar rol",
   "userUser": "Usuario",
-  "userUsers": "Usuarios",
+  "userDirectory": "Directorio",
   "usersAddViaSso": "Configurar inicio de sesión",
   "usersAddViaSsoHint": "Los miembros se unen a través de un proveedor de inicio de sesión configurado."
 }

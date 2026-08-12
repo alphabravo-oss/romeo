@@ -249,9 +249,13 @@ describe("eval API", () => {
       },
     });
     expect(summary.data.usage).toMatchObject({
+      activityEventCount: 1,
       eventCount: 1,
       estimatedCostUsd: 0.25,
     });
+    expect(summary.data.window.to).toEqual(expect.any(String));
+    expect(summary.data.attention.models.length).toBeGreaterThan(0);
+    expect(csv).toContain("usage,org,org_default,activity_event_count,1");
     expect(summary.data.tools.byTool[0]).toMatchObject({
       toolId: "tool_search",
       totalCount: 1,

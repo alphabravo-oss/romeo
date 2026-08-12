@@ -4,6 +4,7 @@ import {
   ragPolicyExternalVectorModes,
   ragPolicyPhysicalVectorIsolationEnforcements,
   ragPolicyPhysicalVectorIsolationModes,
+  ragPolicyAgenticUserModes,
   ragPolicyTiers,
   ragVectorIsolationPolicies,
   type RagPolicyBudgetMap,
@@ -14,12 +15,18 @@ import {
 } from "../domain/rag-policy";
 import { ApiError } from "../errors";
 import {
+  defaultAgenticSettings,
   defaultBudget,
   defaultMaxBudget,
+  defaultRetrievalSettings,
   type StoredExternalVectorStorePolicy,
   type StoredPhysicalVectorIsolationPolicy,
   type StoredRagPolicy,
 } from "./rag-policy-types";
+import type {
+  RagPolicyAgenticSettings,
+  RagPolicyRetrievalSettings,
+} from "../domain/rag-policy";
 
 export function parseStoredPolicy(
   value: Record<string, unknown>,
@@ -43,6 +50,8 @@ export function parseStoredPolicy(
     allowedEmbeddingProviderModels: normalizeProviderModels(
       value.allowedEmbeddingProviderModels,
     ),
+    retrieval: normalizeRetrievalSettings(value.retrieval),
+    agentic: normalizeAgenticSettings(value.agentic),
     knowledgeBaseTierAssignments: normalizeTierAssignments(
       value.knowledgeBaseTierAssignments,
     ),
@@ -72,6 +81,8 @@ export function defaultStoredPolicy(orgId: string): StoredRagPolicy {
     defaultMaxResultsPerTier: { ...defaultBudget },
     maxResultsPerTier: { ...defaultMaxBudget },
     allowedEmbeddingProviderModels: [],
+    retrieval: { ...defaultRetrievalSettings },
+    agentic: { ...defaultAgenticSettings },
     knowledgeBaseTierAssignments: emptyTierAssignments(),
     dataResidencyTags: [],
     externalVectorStore: defaultExternalVectorStorePolicy(),
@@ -110,6 +121,16 @@ export function applyPolicyPatch(
       patch.allowedEmbeddingProviderModels === undefined
         ? existing.allowedEmbeddingProviderModels
         : normalizeProviderModels(patch.allowedEmbeddingProviderModels),
+    retrieval: normalizeRetrievalSettings({
+      ...defaultRetrievalSettings,
+      ...existing.retrieval,
+      ...(patch.retrieval ?? {}),
+    }),
+    agentic: normalizeAgenticSettings({
+      ...defaultAgenticSettings,
+      ...existing.agentic,
+      ...(patch.agentic ?? {}),
+    }),
     knowledgeBaseTierAssignments:
       patch.knowledgeBaseTierAssignments === undefined
         ? cloneTierAssignments(existing.knowledgeBaseTierAssignments)
@@ -218,6 +239,55 @@ export function normalizeProviderModels(
       left.providerId.localeCompare(right.providerId) ||
       left.model.localeCompare(right.model),
   );
+}
+
+export function normalizeRetrievalSettings(
+  value: unknown,
+): RagPolicyRetrievalSettings {
+  const settings: RagPolicyRetrievalSettings = { ...defaultRetrievalSettings };
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return settings;
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.topK === "number" && Number.isInteger(input.topK)) {
+    settings.topK = Math.min(20, Math.max(1, input.topK));
+  }
+  if (
+    typeof input.similarityThreshold === "number" &&
+    Number.isFinite(input.similarityThreshold)
+  ) {
+    settings.similarityThreshold = Math.min(
+      1,
+      Math.max(0, input.similarityThreshold),
+    );
+  }
+  if (typeof input.hybridSearch === "boolean") {
+    settings.hybridSearch = input.hybridSearch;
+  }
+  if (
+    typeof input.hybridBm25Weight === "number" &&
+    Number.isFinite(input.hybridBm25Weight)
+  ) {
+    settings.hybridBm25Weight = Math.min(1, Math.max(0, input.hybridBm25Weight));
+  }
+  return settings;
+}
+
+export function normalizeAgenticSettings(
+  value: unknown,
+): RagPolicyAgenticSettings {
+  const settings: RagPolicyAgenticSettings = { ...defaultAgenticSettings };
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return settings;
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.enabled === "boolean") settings.enabled = input.enabled;
+  settings.userMode = normalizeEnum(
+    input.userMode,
+    ragPolicyAgenticUserModes,
+    settings.userMode,
+  );
+  return settings;
 }
 
 function emptyTierAssignments(): RagPolicyKnowledgeBaseTierAssignments {

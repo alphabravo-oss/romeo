@@ -4,14 +4,15 @@ export interface HybridRetrievalInput {
   lexicalHits: RetrievalHit[];
   maxResults: number;
   vectorHits: RetrievalHit[];
+  /** Lexical share of rank fusion (0–1). Vector weight is the remainder. */
+  bm25Weight?: number;
 }
-
-const vectorWeight = 0.65;
-const lexicalWeight = 0.35;
 
 export function mergeHybridRetrievalHits(
   input: HybridRetrievalInput,
 ): RetrievalHit[] {
+  const lexicalWeight = clampUnit(input.bm25Weight ?? 0.35);
+  const vectorWeight = 1 - lexicalWeight;
   const merged = new Map<
     string,
     { bestRank: number; hit: RetrievalHit; score: number }
@@ -49,4 +50,9 @@ function mergeRankedHit(
   existing.bestRank = Math.min(existing.bestRank, rank);
   existing.score += score;
   if (hit.score > existing.hit.score) existing.hit = hit;
+}
+
+function clampUnit(value: number): number {
+  if (!Number.isFinite(value)) return 0.35;
+  return Math.min(1, Math.max(0, value));
 }

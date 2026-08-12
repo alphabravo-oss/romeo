@@ -7,6 +7,7 @@ export const openAiCompatibleCapabilities: ProviderCapabilities = {
   audioInput: false,
   structuredJson: true,
   reasoning: false,
+  temperature: true,
   imageGeneration: false,
   modalities: ["text"],
   deployment: {
@@ -35,6 +36,7 @@ export const ollamaCapabilities: ProviderCapabilities = {
   audioInput: false,
   structuredJson: false,
   reasoning: false,
+  temperature: true,
   imageGeneration: false,
   modalities: ["text"],
   deployment: {
@@ -54,8 +56,4 @@ export function defaultProviderCapabilities(
   return ollamaCapabilities;
 }
 
-export function detectsImageGenerationModel(name: string): boolean {
-  return /(?:^|[-_.])(gpt[-_.]?image|dall[-_.]?e|imagegen|imagen)(?:$|[-_.0-9])/iu.test(
-    name,
-  );
-}
+export { looksLikeImageGenerationModel as detectsImageGenerationModel } from "./model-discovery";

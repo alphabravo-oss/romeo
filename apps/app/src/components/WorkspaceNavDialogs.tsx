@@ -2,7 +2,12 @@ import { Button, Checkbox, Input, NativeSelect } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { addFolderItem, assignChatTag, createFolder } from "../features";
+import {
+  addFolderItem,
+  assignChatTag,
+  createFolder,
+  updateFolder,
+} from "../features";
 import {
   listChatShares,
   listShareTargets,
@@ -11,6 +16,7 @@ import {
 } from "../features/collaboration";
 import type { Chat } from "../features/types";
 import { useLocale } from "../lib/i18n";
+import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { FormDialog } from "./FormDialog";
 
@@ -18,6 +24,7 @@ export type WorkspaceNavDialog =
   | { kind: "create-folder" }
   | { kind: "move"; chat: Chat; initialFolderId: string }
   | { kind: "rename"; chat: Chat }
+  | { kind: "rename-folder"; folder: { id: string; name: string } }
   | { kind: "share"; chat: Chat }
   | { kind: "tag"; chat: Chat }
   | null;
@@ -26,15 +33,30 @@ interface WorkspaceNavDialogsProps {
   dialog: WorkspaceNavDialog;
   folders: Array<{ id: string; name: string }>;
   onClose: () => void;
+  onFolderCreated?: (folderId: string) => void;
   onRenameChat: (chatId: string, title: string) => void;
   tags: Array<{ id: string; name: string }>;
   workspaceId: string | undefined;
+}
+
+function apiErrorMessage(error: unknown, fallback: string): string {
+  if (
+    error !== null &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof (error as { message: unknown }).message === "string"
+  ) {
+    const message = (error as { message: string }).message.trim();
+    if (message.length > 0) return message;
+  }
+  return fallback;
 }
 
 export function WorkspaceNavDialogs({
   dialog,
   folders,
   onClose,
+  onFolderCreated,
   onRenameChat,
   tags,
   workspaceId,
@@ -43,10 +65,15 @@ export function WorkspaceNavDialogs({
   const queryClient = useQueryClient();
   const { ask, dialog: confirmDialog } = useConfirm();
   const [value, setValue] = useState("");
+  const [formError, setFormError] = useState("");
   const [shareTargetKey, setShareTargetKey] = useState("");
   const [shareCanWrite, setShareCanWrite] = useState(false);
   const sharingChat = dialog?.kind === "share" ? dialog.chat : null;
   const createFolderMutation = useMutation({ mutationFn: createFolder });
+  const updateFolderMutation = useMutation({
+    mutationFn: ({ folderId, name }: { folderId: string; name: string }) =>
+      updateFolder(folderId, { name }),
+  });
   const addFolderItemMutation = useMutation({ mutationFn: addFolderItem });
   const assignTagMutation = useMutation({ mutationFn: assignChatTag });
   const shareChatMutation = useMutation({ mutationFn: shareChatAccess });
@@ -66,10 +93,13 @@ export function WorkspaceNavDialogs({
     setValue(
       dialog?.kind === "rename"
         ? dialog.chat.title
-        : dialog?.kind === "move"
-          ? dialog.initialFolderId
-          : "",
+        : dialog?.kind === "rename-folder"
+          ? dialog.folder.name
+          : dialog?.kind === "move"
+            ? dialog.initialFolderId
+            : "",
     );
+    setFormError("");
     setShareTargetKey("");
     setShareCanWrite(false);
   }, [dialog]);
@@ -107,50 +137,168 @@ export function WorkspaceNavDialogs({
       </FormDialog>
 
       <FormDialog
+        className="rm-form-dialog--sm"
+        description={t("renameFolderDescription")}
+        onClose={onClose}
+        open={dialog?.kind === "rename-folder"}
+        title={t("renameFolder")}
+      >
+        <form
+          className="rm-form-dialog-body"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (dialog?.kind !== "rename-folder") return;
+            const name = value.trim();
+            if (name.length === 0) {
+              setFormError(t("folderNameRequired"));
+              return;
+            }
+            setFormError("");
+            void updateFolderMutation
+              .mutateAsync({ folderId: dialog.folder.id, name })
+              .then(async () => {
+                await queryClient.invalidateQueries({
+                  queryKey: ["folders", workspaceId],
+                });
+                toast(t("folderRenamed"), "success");
+                onClose();
+              })
+              .catch((error: unknown) => {
+                const message = apiErrorMessage(error, t("folderRenameFailed"));
+                setFormError(message);
+                toast(message, "error");
+              });
+          }}
+        >
+          <label className="rm-form-field" htmlFor="rename-folder-name">
+            <span>{t("name")}</span>
+            <Input
+              autoFocus
+              id="rename-folder-name"
+              name="rename-folder-name"
+              onChange={(event) => {
+                setValue(event.currentTarget.value);
+                if (formError.length > 0) setFormError("");
+              }}
+              value={value}
+            />
+          </label>
+          {formError.length > 0 ? (
+            <p className="rm-form-error" role="alert">
+              {formError}
+            </p>
+          ) : null}
+          <div className="rm-form-actions">
+            <Button onClick={onClose} type="button" variant="ghost">
+              {t("cancel")}
+            </Button>
+            <Button
+              disabled={
+                value.trim().length === 0 || updateFolderMutation.isPending
+              }
+              type="submit"
+              variant="primary"
+            >
+              {updateFolderMutation.isPending
+                ? t("renamingFolder")
+                : t("rename")}
+            </Button>
+          </div>
+        </form>
+      </FormDialog>
+
+      <FormDialog
+        className="rm-form-dialog--sm"
+        description={t("createChatFolderDescription")}
         onClose={onClose}
         open={dialog?.kind === "create-folder"}
         title={t("createChatFolder")}
       >
         <form
-          className="grid gap-3"
+          className="rm-form-dialog-body"
           onSubmit={(event) => {
             event.preventDefault();
-            if (workspaceId === undefined || value.trim().length === 0) return;
+            const name = value.trim();
+            if (name.length === 0) {
+              setFormError(t("folderNameRequired"));
+              return;
+            }
+            if (workspaceId === undefined) {
+              setFormError(t("folderCreateFailed"));
+              toast(t("folderCreateFailed"), "error");
+              return;
+            }
+            setFormError("");
             void createFolderMutation
-              .mutateAsync({ workspaceId, name: value.trim() })
-              .then(async () => {
+              .mutateAsync({ workspaceId, name })
+              .then(async (folder) => {
                 await queryClient.invalidateQueries({
                   queryKey: ["folders", workspaceId],
                 });
+                toast(t("folderCreated"), "success");
+                onFolderCreated?.(folder.id);
                 onClose();
+              })
+              .catch((error: unknown) => {
+                const message = apiErrorMessage(error, t("folderCreateFailed"));
+                setFormError(message);
+                toast(message, "error");
               });
           }}
         >
-          <label className="grid gap-1 text-sm">
-            <span className="text-muted">{t("name")}</span>
+          <label className="rm-form-field" htmlFor="create-folder-name">
+            <span>{t("name")}</span>
             <Input
-              name="value"
               autoFocus
-              onChange={(event) => setValue(event.currentTarget.value)}
+              id="create-folder-name"
+              name="create-folder-name"
+              onChange={(event) => {
+                setValue(event.currentTarget.value);
+                if (formError.length > 0) setFormError("");
+              }}
+              placeholder={t("folderNamePlaceholder")}
               value={value}
             />
           </label>
-          <Button variant="primary" type="submit">
-            {t("createFolder")}
-          </Button>
+          {formError.length > 0 ? (
+            <p className="rm-form-error" role="alert">
+              {formError}
+            </p>
+          ) : (
+            <p className="rm-form-hint">{t("createChatFolderHint")}</p>
+          )}
+          <div className="rm-form-actions">
+            <Button onClick={onClose} type="button" variant="ghost">
+              {t("cancel")}
+            </Button>
+            <Button
+              disabled={
+                value.trim().length === 0 || createFolderMutation.isPending
+              }
+              type="submit"
+              variant="primary"
+            >
+              {createFolderMutation.isPending
+                ? t("creatingFolder")
+                : t("createFolder")}
+            </Button>
+          </div>
         </form>
       </FormDialog>
 
       <FormDialog
+        className="rm-form-dialog--sm"
+        description={t("addToFolderDescription")}
         onClose={onClose}
         open={dialog?.kind === "move"}
         title={t("addToFolder")}
       >
         <form
-          className="grid gap-3"
+          className="rm-form-dialog-body"
           onSubmit={(event) => {
             event.preventDefault();
             if (dialog?.kind !== "move" || value.length === 0) return;
+            setFormError("");
             void addFolderItemMutation
               .mutateAsync({
                 folderId: value,
@@ -161,14 +309,24 @@ export function WorkspaceNavDialogs({
                 await queryClient.invalidateQueries({
                   queryKey: ["folderItems"],
                 });
+                toast(t("chatAddedToFolder"), "success");
                 onClose();
+              })
+              .catch((error: unknown) => {
+                const message = apiErrorMessage(
+                  error,
+                  t("chatAddToFolderFailed"),
+                );
+                setFormError(message);
+                toast(message, "error");
               });
           }}
         >
-          <label className="grid gap-1 text-sm">
-            <span className="text-muted">{t("folder")}</span>
+          <label className="rm-form-field" htmlFor="move-chat-folder">
+            <span>{t("folder")}</span>
             <NativeSelect
-              name="value"
+              id="move-chat-folder"
+              name="move-chat-folder"
               onChange={(event) => setValue(event.currentTarget.value)}
               value={value}
             >
@@ -179,9 +337,25 @@ export function WorkspaceNavDialogs({
               ))}
             </NativeSelect>
           </label>
-          <Button variant="primary" type="submit">
-            {t("addToFolder")}
-          </Button>
+          {formError.length > 0 ? (
+            <p className="rm-form-error" role="alert">
+              {formError}
+            </p>
+          ) : null}
+          <div className="rm-form-actions">
+            <Button onClick={onClose} type="button" variant="ghost">
+              {t("cancel")}
+            </Button>
+            <Button
+              disabled={value.length === 0 || addFolderItemMutation.isPending}
+              type="submit"
+              variant="primary"
+            >
+              {addFolderItemMutation.isPending
+                ? t("addingToFolder")
+                : t("addToFolder")}
+            </Button>
+          </div>
         </form>
       </FormDialog>
 

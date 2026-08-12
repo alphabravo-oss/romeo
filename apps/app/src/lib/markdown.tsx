@@ -1,7 +1,5 @@
 import { Button } from "@romeo/ui";
 import Check from "lucide-react/dist/esm/icons/check.mjs";
-import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
-import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.mjs";
 import Copy from "lucide-react/dist/esm/icons/copy.mjs";
 import Download from "lucide-react/dist/esm/icons/download.mjs";
 import Eye from "lucide-react/dist/esm/icons/eye.mjs";
@@ -13,7 +11,6 @@ import {
   memo,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
@@ -22,7 +19,6 @@ import { writeTextToClipboard } from "./clipboard";
 import { citationHrefPrefix, renderableContent } from "./chat-citations";
 import { useLocale } from "./i18n";
 import { downloadText } from "./download";
-import { drainFrames } from "./markdown-stream";
 import type { ChatCitation } from "./run-registry";
 import { toast } from "./toast";
 
@@ -69,37 +65,6 @@ function extractText(node: ReactNode): string {
     );
   }
   return "";
-}
-
-/**
- * Holds a rendered LENGTH rather than a copy of the text, so the drain can only
- * ever lag the cache the run registry writes into -- it never forks from it,
- * and a shorter or replaced `content` (a sibling variant, a retry) is adopted
- * on the spot instead of being treated as arrears: a length past the end of the
- * text below reads as the whole of it.
- *
- * The drain runs on the frame loop for as long as the answer is streaming and
- * reaches the arriving text through a ref, so an incoming delta cannot disturb
- * it -- deltas arrive faster than frames do, and a drain that restarted on each
- * one advanced only in the gaps between chunks, which is precisely backwards.
- */
-function useStreamingContent(content: string, streaming: boolean): string {
-  const [rendered, setRendered] = useState(content.length);
-  const latest = useRef(content);
-
-  useEffect(() => {
-    latest.current = content;
-    // The settled render is never delayed: the last frame of an answer is a
-    // direct write, not a queued one.
-    if (!streaming) setRendered(content.length);
-  }, [content, streaming]);
-
-  useEffect(() => {
-    if (!streaming) return;
-    return drainFrames(() => latest.current.length, setRendered);
-  }, [streaming]);
-
-  return rendered >= content.length ? content : content.slice(0, rendered);
 }
 
 function CodeBlock({
@@ -156,7 +121,6 @@ function CodeBlock({
           // No dead control: while the block is in the pane there is nothing
           // left here to collapse.
           <span className="rm-codeblock-label">
-            <PanelRight aria-hidden="true" size={13} />
             <span>{language}</span>
           </span>
         ) : (
@@ -164,42 +128,57 @@ function CodeBlock({
             aria-label={collapsed ? t("expandCode") : t("collapseCode")}
             className="rm-codeblock-label"
             onClick={() => setCollapsed((value) => !value)}
+            title={collapsed ? t("expandCode") : t("collapseCode")}
             type="button"
           >
-            {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
             <span>{language}</span>
           </Button>
         )}
         <div className="rm-codeblock-actions">
           {placement === undefined || artifacts === undefined ? null : (
             <Button
+              aria-label={promoted ? t("artifactInCanvas") : t("openInCanvas")}
               onClick={() => artifacts.open(placement.key, placement.version)}
+              title={
+                placement.total > 1
+                  ? `${promoted ? t("artifactInCanvas") : t("openInCanvas")} · ${t("artifactVersion", {
+                      total: placement.total,
+                      version: placement.version + 1,
+                    })}`
+                  : promoted
+                    ? t("artifactInCanvas")
+                    : t("openInCanvas")
+              }
               type="button"
             >
-              <PanelRight size={13} />
-              {promoted ? t("artifactInCanvas") : t("openInCanvas")}
-              {placement.total > 1 ? (
-                <span className="rm-codeblock-version">
-                  {t("artifactVersion", {
-                    total: placement.total,
-                    version: placement.version + 1,
-                  })}
-                </span>
-              ) : null}
+              <PanelRight size={14} />
             </Button>
           )}
           {canPreview && !promoted ? (
-            <Button onClick={() => setPreview((value) => !value)} type="button">
-              {preview ? <EyeOff size={13} /> : <Eye size={13} />}
-              {preview ? t("hidePreview") : t("preview")}
+            <Button
+              aria-label={preview ? t("hidePreview") : t("preview")}
+              onClick={() => setPreview((value) => !value)}
+              title={preview ? t("hidePreview") : t("preview")}
+              type="button"
+            >
+              {preview ? <EyeOff size={14} /> : <Eye size={14} />}
             </Button>
           ) : null}
-          <Button onClick={downloadCode} type="button">
-            <Download size={13} /> {t("download")}
+          <Button
+            aria-label={t("download")}
+            onClick={downloadCode}
+            title={t("download")}
+            type="button"
+          >
+            <Download size={14} />
           </Button>
-          <Button onClick={() => void copyCode()} type="button">
-            {copied ? <Check size={13} /> : <Copy size={13} />}
-            {copied ? t("copied") : t("copy")}
+          <Button
+            aria-label={copied ? t("copied") : t("copy")}
+            onClick={() => void copyCode()}
+            title={copied ? t("copied") : t("copy")}
+            type="button"
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />}
           </Button>
         </div>
       </div>
@@ -266,11 +245,9 @@ export const Markdown = memo(function Markdown({
   previewDiagrams?: boolean;
   streaming?: boolean;
 }) {
-  const drained = useStreamingContent(content, streaming);
-  // The server appends a "Citations:" footer to a grounded answer and the
-  // prompt asks the model to cite by bracket number. Both become the inline
-  // markers below, with CitationList left mounted as the full list.
-  const renderedContent = renderableContent(drained, citations.length);
+  // ChatGPT-like: paint every byte already in the cache. No typewriter lag —
+  // provider token cadence is the only source of "chunks".
+  const renderedContent = renderableContent(content, citations.length);
   const usesFencedCode = fencedCodePattern.test(renderedContent);
   const usesMath = mathPattern.test(renderedContent);
   const [rehypePlugins, setRehypePlugins] = useState<RehypePlugins>([]);

@@ -4,20 +4,40 @@ import type { RomeoRepository } from "../domain/repository";
 
 export interface InterfacePreferences {
   defaultAgentByWorkspace: Record<string, string>;
+  defaultModelByWorkspace: Record<string, string>;
+  lastModelByWorkspace: Record<string, string>;
   theme: "system" | "light" | "dark";
   locale: "en" | "es" | "fr";
   fontSize: "small" | "medium" | "large";
   density: "comfortable" | "compact";
   reducedMotion: boolean;
+  showFollowUps: boolean;
+  showStarterPrompts: boolean;
+  showContinueButton: boolean;
+  enterToSend: boolean;
+  stickToBottom: boolean;
+  showRunStatus: boolean;
+  showMessageModelLabel: boolean;
+  showMessageTimestamps: boolean;
 }
 
 const defaults: InterfacePreferences = {
   defaultAgentByWorkspace: {},
+  defaultModelByWorkspace: {},
+  lastModelByWorkspace: {},
   theme: "system",
   locale: "en",
   fontSize: "medium",
   density: "comfortable",
   reducedMotion: false,
+  showFollowUps: false,
+  showStarterPrompts: true,
+  showContinueButton: false,
+  enterToSend: true,
+  stickToBottom: true,
+  showRunStatus: true,
+  showMessageModelLabel: true,
+  showMessageTimestamps: true,
 };
 
 export class InterfacePreferenceService {
@@ -52,9 +72,9 @@ function preferenceKey(
 
 function normalize(value: Record<string, unknown>): InterfacePreferences {
   return {
-    defaultAgentByWorkspace: normalizeAgentDefaults(
-      value.defaultAgentByWorkspace,
-    ),
+    defaultAgentByWorkspace: normalizeIdMap(value.defaultAgentByWorkspace),
+    defaultModelByWorkspace: normalizeIdMap(value.defaultModelByWorkspace),
+    lastModelByWorkspace: normalizeIdMap(value.lastModelByWorkspace),
     theme:
       value.theme === "light" || value.theme === "dark"
         ? value.theme
@@ -69,10 +89,19 @@ function normalize(value: Record<string, unknown>): InterfacePreferences {
         : defaults.fontSize,
     density: value.density === "compact" ? "compact" : defaults.density,
     reducedMotion: value.reducedMotion === true,
+    // Most chat chrome defaults on; follow-ups + continue are opt-in.
+    showFollowUps: value.showFollowUps === true,
+    showStarterPrompts: value.showStarterPrompts !== false,
+    showContinueButton: value.showContinueButton === true,
+    enterToSend: value.enterToSend !== false,
+    stickToBottom: value.stickToBottom !== false,
+    showRunStatus: value.showRunStatus !== false,
+    showMessageModelLabel: value.showMessageModelLabel !== false,
+    showMessageTimestamps: value.showMessageTimestamps !== false,
   };
 }
 
-function normalizeAgentDefaults(value: unknown): Record<string, string> {
+function normalizeIdMap(value: unknown): Record<string, string> {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return {};
   return Object.fromEntries(

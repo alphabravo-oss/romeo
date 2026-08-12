@@ -3,6 +3,7 @@ import type { Dispatch, FormEvent, SetStateAction } from "react";
 
 import { createChat, forkChat, updateChat } from "../features";
 import type { Chat, Message } from "../features/types";
+import { RomeoApiError } from "@romeo/api-client";
 import {
   enqueueChatTurn,
   getActiveChatRun,
@@ -22,11 +23,17 @@ import type {
   PendingDocumentAttachment,
   PendingImageAttachment,
 } from "./useWorkspaceAttachments";
+import {
+  formatBranchTitle,
+  rememberBranchOrigin,
+} from "./chat-enterprise";
 import { isMessageActionEnabled, resolveTurnOutcome } from "./turn-rollback";
 
 interface WorkspaceTurnActionsOptions {
   activeAgentId: string | undefined;
   activeChatId: string | undefined;
+  /** Sidebar chat list — used for branch origin titles. */
+  chats: Chat[];
   /** Every message, sibling branches included; `messages` is the visible one. */
   allMessages: Message[];
   autoTitleEnabled: boolean;
@@ -43,6 +50,11 @@ interface WorkspaceTurnActionsOptions {
   draft: string;
   imageAttachments: PendingImageAttachment[];
   isStreaming: boolean;
+  /**
+   * When set, startRun sends these knowledge base ids (empty disables RAG for
+   * the turn). When undefined, the custom model's enabled bindings apply.
+   */
+  knowledgeBaseIdsOverride?: string[];
   messages: Message[];
   onChatCreated?: (chatId: string) => void;
   queryClient: QueryClient;
@@ -63,6 +75,7 @@ interface WorkspaceTurnActionsOptions {
   t: (key: MessageKey) => string;
   temporaryNextChat: boolean;
   webSearchEnabled: boolean;
+  agenticRagEnabled: boolean;
   workspaceId: string | undefined;
 }
 
@@ -143,6 +156,14 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       await enqueueTurn(content);
       return;
     }
+    if (options.activeChatId !== undefined) {
+      const activeRun = await getActiveChatRun(options.activeChatId);
+      if (activeRun !== null) {
+        trackChatRun(options.activeChatId, activeRun.id);
+        await enqueueTurn(content);
+        return;
+      }
+    }
     await submitTurn(
       content,
       options.imageAttachments,
@@ -172,9 +193,13 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           ? {}
           : { modelId: options.selectedModelId }),
         ...(options.webSearchEnabled ? { webSearch: true } : {}),
+        ...(options.agenticRagEnabled ? { agenticRag: true } : {}),
         ...(options.attachedUrls.length === 0
           ? {}
           : { urls: options.attachedUrls }),
+        ...(options.knowledgeBaseIdsOverride === undefined
+          ? {}
+          : { knowledgeBaseIds: options.knowledgeBaseIdsOverride }),
       });
       options.queryClient.setQueryData<QueuedChatTurn[]>(
         ["queuedTurns", options.activeChatId],
@@ -254,9 +279,13 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
               })),
             }),
         ...(options.webSearchEnabled ? { webSearch: true } : {}),
+        ...(options.agenticRagEnabled ? { agenticRag: true } : {}),
         ...(options.attachedUrls.length === 0
           ? {}
           : { urls: options.attachedUrls }),
+        ...(options.knowledgeBaseIdsOverride === undefined
+          ? {}
+          : { knowledgeBaseIds: options.knowledgeBaseIdsOverride }),
       });
       accepted = true;
       const userMessageId = appendTurnRow(
@@ -284,6 +313,18 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
         workspaceId: options.workspaceId,
       });
     } catch (caught) {
+      if (
+        caught instanceof RomeoApiError &&
+        caught.code === "chat_run_in_progress"
+      ) {
+        options.setDraft(content);
+        if (snapshotChatId !== undefined) {
+          options.restoreMessages(snapshotChatId, snapshot.messages);
+        }
+        options.restorePendingAttachments(images, documents);
+        await enqueueTurn(content);
+        return;
+      }
       options.setError(
         caught instanceof Error ? caught.message : options.t("unableStartRun"),
       );
@@ -298,12 +339,25 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     }
   }
 
-  async function regenerateLast(): Promise<void> {
+  async function regenerateLast(input?: {
+    modelId?: string;
+    /** Sibling re-answer of the last user turn, optionally on another model. */
+    mode?: "again" | "shorter";
+  }): Promise<void> {
     if (
       options.isStreaming ||
       options.activeChatId === undefined ||
       options.activeAgentId === undefined
     ) {
+      return;
+    }
+    const mode = input?.mode ?? "again";
+    // "Shorter" is a new follow-up turn, not a sibling regenerate: the user is
+    // asking for a rewrite, so it should sit after the previous answer.
+    if (mode === "shorter") {
+      await submitTurn(
+        options.t("regenerateShorterPrompt"),
+      );
       return;
     }
     const lastUser = [...options.messages]
@@ -316,6 +370,7 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
         lastUser.attachments,
       );
       const chatId = options.activeChatId;
+      const modelId = input?.modelId ?? options.selectedModelId;
       // Nothing is deleted any more: the resend hangs off the same parent as
       // the turn it replaces, so both answers stay in the tree. No history
       // boundary either -- the branch stops short of the replaced turn already.
@@ -324,10 +379,13 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
         agentId: options.activeAgentId,
         content: lastUser.content,
         parentMessageId: lastUser.parentId ?? null,
-        ...(options.selectedModelId === undefined
-          ? {}
-          : { modelId: options.selectedModelId }),
+        ...(modelId === undefined ? {} : { modelId }),
         ...(attachments.length === 0 ? {} : { attachments }),
+        ...(options.webSearchEnabled ? { webSearch: true } : {}),
+        ...(options.agenticRagEnabled ? { agenticRag: true } : {}),
+        ...(options.knowledgeBaseIdsOverride === undefined
+          ? {}
+          : { knowledgeBaseIds: options.knowledgeBaseIdsOverride }),
       });
       const userMessageId = appendTurnRow(
         chatId,
@@ -343,6 +401,10 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           : "Unable to regenerate the response.",
       );
     }
+  }
+
+  async function handleFollowUp(prompt: string): Promise<void> {
+    await submitTurn(prompt);
   }
 
   async function followQueuedRuns(chatId: string, previousRunId?: string) {
@@ -381,12 +443,20 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     }
     options.setError(undefined);
     try {
-      const source = options.messages.find((item) => item.id === messageId);
+      const sourceChat = options.activeChatId;
+      const sourceTitle =
+        options.chats.find((c) => c.id === sourceChat)?.title ??
+        "Untitled chat";
       const fork = await forkChat({
         chatId: options.activeChatId,
         throughMessageId: messageId,
         includeAttachments: true,
-        title: `Branch · ${(source?.content ?? "conversation").slice(0, 60)}`,
+        title: formatBranchTitle(sourceTitle),
+      });
+      rememberBranchOrigin({
+        forkChatId: fork.id,
+        sourceChatId: sourceChat,
+        sourceTitle,
       });
       await options.queryClient.invalidateQueries({
         queryKey: ["chats", options.workspaceId],
@@ -434,6 +504,11 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           ? {}
           : { modelId: options.selectedModelId }),
         ...(attachments.length === 0 ? {} : { attachments }),
+        ...(options.webSearchEnabled ? { webSearch: true } : {}),
+        ...(options.agenticRagEnabled ? { agenticRag: true } : {}),
+        ...(options.knowledgeBaseIdsOverride === undefined
+          ? {}
+          : { knowledgeBaseIds: options.knowledgeBaseIdsOverride }),
       });
       const userMessageId = appendTurnRow(
         chatId,
@@ -462,6 +537,7 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     handleBranchFromMessage,
     handleContinueResponse,
     handleEditAndResend,
+    handleFollowUp,
     handleSubmit,
     regenerateLast,
     trackChatRun,

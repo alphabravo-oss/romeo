@@ -30,6 +30,7 @@ export interface ProviderCapabilities {
   audioInput: boolean;
   structuredJson: boolean;
   reasoning: boolean;
+  temperature?: boolean;
   imageGeneration?: boolean;
   modalities: ModelModality[];
   deployment: ProviderDeploymentConstraints;
@@ -73,6 +74,12 @@ export interface ProviderInstance {
   catalogSync?: ProviderCatalogSyncState;
 }
 
+export interface ModelDefaultParameters {
+  temperature?: number;
+  topP?: number;
+  maxOutputTokens?: number;
+}
+
 export interface BaseModel {
   id: string;
   providerId: string;
@@ -83,6 +90,7 @@ export interface BaseModel {
   capabilities: ProviderCapabilities;
   contextWindow: number;
   pricing?: ModelPricing;
+  defaultParameters?: ModelDefaultParameters;
   capabilitiesSource?: "detected" | "override";
 }
 

@@ -29,6 +29,16 @@ describe("knowledge text extraction", () => {
     expect(extracted.metadata.extractor).toBe("json");
   });
 
+  it("indexes XML and YAML as plain text", () => {
+    expect(canExtractKnowledgeText("application/xml")).toBe(true);
+    expect(
+      extractKnowledgeText({
+        bytes: new TextEncoder().encode("<policy>quota</policy>"),
+        mimeType: "application/xml",
+      }).content,
+    ).toContain("quota");
+  });
+
   it("rejects unsupported binary formats in the synchronous extractor", () => {
     expect(canExtractKnowledgeText("application/pdf")).toBe(false);
     expect(() =>

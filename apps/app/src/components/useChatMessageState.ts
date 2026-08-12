@@ -11,6 +11,7 @@ import {
   messagesQueryKey,
   writeChatMessages,
 } from "../lib/run-registry";
+import { normalizeFeedbackReasonCode } from "./chat-enterprise";
 import { isMessageActionEnabled } from "./turn-rollback";
 import { clientMessageId } from "./workspace-controller-media";
 
@@ -86,14 +87,19 @@ export function useChatMessageState({
   async function handleRateMessage(
     messageId: string,
     rating: "negative" | "none" | "positive",
+    reasonCode?: string,
   ) {
     if (activeChatId === undefined) return;
     setError(undefined);
     try {
+      const normalizedReason = normalizeFeedbackReasonCode(rating, reasonCode);
       const feedback = await updateMessageFeedback({
         chatId: activeChatId,
         messageId,
         rating,
+        ...(normalizedReason === undefined
+          ? {}
+          : { reasonCode: normalizedReason }),
       });
       queryClient.setQueryData<Record<string, MessageFeedbackState>>(
         ["messageFeedback", activeChatId],

@@ -19,36 +19,60 @@ import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useLocale, type MessageKey } from "../lib/i18n";
+import { Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
-import { PanelStats } from "./PanelStats";
 import { PageActions } from "./PageActions";
 import { parseRagPolicyPatch } from "./rag-change-request";
 import { RagPolicyTab } from "./RagPolicyTab";
 import { RagPostureTab } from "./RagPostureTab";
 import { RagReplayTab } from "./RagReplayTab";
+import { RagValidateTab } from "./RagValidateTab";
 import { Tabs } from "./Tabs";
 
 export function RagGovernancePanel() {
   const { t } = useLocale();
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <Tabs
         tabs={[
           {
-            id: "policy",
-            label: t("notificationPolicy"),
+            id: "setup",
+            label: t("ragSetupTab"),
             content: <RagPolicyTab />,
           },
-          { id: "posture", label: t("posture"), content: <RagPostureTab /> },
           {
-            id: "change-requests",
-            label: t("changeRequests"),
-            content: <ChangeRequestTab />,
+            id: "health",
+            label: t("ragHealthTab"),
+            content: (
+              <div className="grid gap-6">
+                <RagValidateTab />
+                <RagPostureTab />
+              </div>
+            ),
           },
-          { id: "replay", label: t("replay"), content: <RagReplayTab /> },
+          {
+            id: "governance",
+            label: t("ragGovernanceTab"),
+            content: (
+              <Tabs
+                tabs={[
+                  {
+                    id: "change-requests",
+                    label: t("changeRequests"),
+                    content: <ChangeRequestTab />,
+                  },
+                  {
+                    id: "replay",
+                    label: t("replay"),
+                    content: <RagReplayTab />,
+                  },
+                ]}
+              />
+            ),
+          },
         ]}
       />
-    </section>
+    </Section>
   );
 }
 
@@ -264,7 +288,7 @@ function ChangeRequestView(props: {
 
   return (
     <div className="grid gap-4">
-      <PanelStats
+      <StatRow
         items={[
           { label: t("status"), value: request.status },
           { label: t("changedFields"), value: request.changedFields.length },

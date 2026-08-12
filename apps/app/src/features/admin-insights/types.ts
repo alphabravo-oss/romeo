@@ -11,5 +11,8 @@ export type {
 
 export type AdminAnalyticsToolSummaryRow =
   AdminAnalyticsSummary["tools"]["byTool"][number];
+export type AdminAnalyticsAttentionModel =
+  AdminAnalyticsSummary["attention"]["models"][number];
+export type AdminAnalyticsUsageMetric = AdminAnalyticsSummary["usage"]["totals"][number];
 export type BillingStatus =
   AbuseControlPolicyReport["entitlements"]["allowedBillingStatuses"][number];

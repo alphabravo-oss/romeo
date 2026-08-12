@@ -45,6 +45,7 @@ import type { QuotaCoordinator } from "./quota-coordination";
 import { ensureSystemAuditActor } from "./system-audit-actor";
 import type { WebhookEmitter } from "./webhook-service";
 import { assertWorkspaceActive } from "./workspace-guard";
+import { canSeeKnowledgeBase } from "./access-visibility";
 
 export type {
   KnowledgeRetrievalReplayCaseInput,
@@ -120,7 +121,16 @@ export class KnowledgeService {
         ),
       )
     ).flat();
-    return knowledgeBases.map((knowledgeBase, index) => {
+    const visibleBases =
+      subject.isAdmin === true
+        ? knowledgeBases
+        : knowledgeBases.filter((knowledgeBase) =>
+            canSeeKnowledgeBase(subject, grants, knowledgeBase.id),
+          );
+    return visibleBases.map((knowledgeBase) => {
+      const index = knowledgeBases.findIndex(
+        (item) => item.id === knowledgeBase.id,
+      );
       const sources = sourcesByBase[index] ?? [];
       return {
         ...knowledgeBase,
@@ -153,6 +163,11 @@ export class KnowledgeService {
     workspaceId: string;
     name: string;
     description?: string;
+    /**
+     * user_private | workspace | org | shared — org/shared require admin and
+     * assign the base in org RAG policy tier lists.
+     */
+    scope?: "user_private" | "workspace" | "org" | "shared";
     subject: AuthSubject;
   }): Promise<KnowledgeBase> {
     assertKnowledgeWorkspaceAccess(
@@ -164,6 +179,17 @@ export class KnowledgeService {
       orgId: input.subject.orgId,
       workspaceId: input.workspaceId,
     });
+    const scope = input.scope ?? "workspace";
+    if (
+      (scope === "org" || scope === "shared") &&
+      input.subject.isAdmin !== true
+    ) {
+      throw new ApiError(
+        "knowledge_scope_forbidden",
+        "Only administrators can create organization or shared knowledge bases.",
+        403,
+      );
+    }
     return this.repository.transaction(async (repository) => {
       const now = new Date().toISOString();
       const draft: KnowledgeBase = {
@@ -187,11 +213,20 @@ export class KnowledgeService {
         input.subject,
         knowledgeBase.id,
       );
+      if (scope === "org" || scope === "shared") {
+        await assignKnowledgeBaseTier(repository, {
+          orgId: input.subject.orgId,
+          knowledgeBaseId: knowledgeBase.id,
+          tier: scope,
+          actorId: input.subject.id,
+          now,
+        });
+      }
       await this.audit(
         input.subject,
         "knowledge_base.create",
         knowledgeBase,
-        {},
+        { scope },
         repository,
       );
       return knowledgeBase;
@@ -374,7 +409,7 @@ export class KnowledgeService {
     subject: AuthSubject,
     action: string,
     knowledgeBase: KnowledgeBase,
-    metadata: { changedFields?: string[] },
+    metadata: { changedFields?: string[]; scope?: string },
     repository: RomeoRepository,
   ): Promise<void> {
     const actorId =
@@ -401,6 +436,7 @@ export class KnowledgeService {
         ...(metadata.changedFields === undefined
           ? {}
           : { changedFields: metadata.changedFields }),
+        ...(metadata.scope === undefined ? {} : { scope: metadata.scope }),
         workspaceId: knowledgeBase.workspaceId,
         ...(subject.type === "service_account"
           ? { serviceAccountId: subject.id }
@@ -409,4 +445,44 @@ export class KnowledgeService {
       createdAt: new Date().toISOString(),
     });
   }
+}
+
+async function assignKnowledgeBaseTier(
+  repository: RomeoRepository,
+  input: {
+    orgId: string;
+    knowledgeBaseId: string;
+    tier: "org" | "shared";
+    actorId: string;
+    now: string;
+  },
+): Promise<void> {
+  const { applyPolicyPatch, defaultStoredPolicy } = await import(
+    "./rag-policy-normalization"
+  );
+  const { readStoredRagPolicy, settingKey } = await import(
+    "./rag-policy-storage"
+  );
+  const { serializeStoredPolicy } = await import("./rag-policy-reporting");
+  const existing = await readStoredRagPolicy(repository, input.orgId);
+  const base = existing ?? defaultStoredPolicy(input.orgId);
+  const org = [...base.knowledgeBaseTierAssignments.org].filter(
+    (id) => id !== input.knowledgeBaseId,
+  );
+  const shared = [...base.knowledgeBaseTierAssignments.shared].filter(
+    (id) => id !== input.knowledgeBaseId,
+  );
+  if (input.tier === "org") org.push(input.knowledgeBaseId);
+  else shared.push(input.knowledgeBaseId);
+  const updated = applyPolicyPatch(
+    base,
+    { knowledgeBaseTierAssignments: { org, shared } },
+    input.now,
+    input.actorId,
+  );
+  await repository.upsertSystemSetting({
+    key: settingKey(input.orgId),
+    value: serializeStoredPolicy(updated),
+    updatedAt: input.now,
+  });
 }

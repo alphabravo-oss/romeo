@@ -1,13 +1,17 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { listMessageFeedback } from "../features";
 import type { MessageFeedbackState, SpeechArtifact } from "../features/types";
 import { inspectRunContext, type RunContextPreview } from "../features/chat";
 import { getManagedModelPreferences } from "../features/managed-models";
+import { getAgenticRagSettings } from "../features/knowledge";
 import { listQueuedTurns, type QueuedChatTurn } from "../features/runs";
 import { useLocale } from "../lib/i18n";
-import { resolveChatModelSelection } from "./chat-model-selection";
+import {
+  lastAssistantModelId,
+  resolveChatModelSelection,
+} from "./chat-model-selection";
 import { useActiveRun } from "./useActiveRun";
 import { useChatMessageState } from "./useChatMessageState";
 import { useToolExecution } from "./useToolExecution";
@@ -33,6 +37,7 @@ export type {
   ChatCitation,
   ChatReasoning,
   ChatRunActivity,
+  ChatRunWait,
 } from "../lib/run-registry";
 
 export function useWorkspaceController(
@@ -58,6 +63,22 @@ export function useWorkspaceController(
   // which look identical from activeChatId alone. See ./chat-selection.
   const [isDraftingNewChat, setIsDraftingNewChat] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [agenticRagRequested, setAgenticRagRequested] = useState(false);
+  const agenticSettingsQuery = useQuery({
+    queryKey: ["agenticRagSettings"],
+    queryFn: getAgenticRagSettings,
+  });
+  const agenticRagAvailable = agenticSettingsQuery.data?.enabled === true;
+  const agenticRagForced =
+    agenticRagAvailable && agenticSettingsQuery.data?.userMode === "required";
+  const agenticRagEnabled = agenticRagForced || agenticRagRequested;
+  /**
+   * Per-turn knowledge override. `undefined` keeps the custom model's bindings;
+   * an array (including empty) is sent as `knowledgeBaseIds` on startRun.
+   */
+  const [knowledgeBaseIdsOverride, setKnowledgeBaseIdsOverride] = useState<
+    string[] | undefined
+  >();
   const [attachedUrls, setAttachedUrls] = useState<string[]>([]);
   const [temporaryNextChat, setTemporaryNextChat] = useState(false);
   const [modelOverrideId, setModelOverrideId] = useState<string>();
@@ -101,6 +122,7 @@ export function useWorkspaceController(
     isStreaming,
     reasoning,
     toolCalls,
+    wait: runWait,
   } = useActiveRun(activeChatId);
   const {
     appendMessage,
@@ -123,6 +145,7 @@ export function useWorkspaceController(
     chatsTotal,
     chatExperience,
     hasMoreChats,
+    interfacePreferences,
     isLoadingMoreChats,
     latestChatEvent,
     loadMoreChats,
@@ -168,15 +191,32 @@ export function useWorkspaceController(
     queryClient,
     setError,
   });
-  // The assistant provides the default, while a chat can persist an explicit
-  // model choice. A pending override also survives the first send while the
-  // new chat row is being created.
+  // Chat model wins when set; otherwise user default, last-used, then curated
+  // base. A pending override also survives the first send while a new chat is
+  // being created.
   const activeChat = chats.find((chat) => chat.id === activeChatId);
+  const workspaceId = workspace?.id;
   const selectedModelId = resolveChatModelSelection({
     assistantModelId: activeAgent?.baseModelId,
     chatModelId: activeChat?.modelId,
+    defaultModelId:
+      workspaceId === undefined
+        ? undefined
+        : interfacePreferences?.defaultModelByWorkspace[workspaceId],
+    lastModelId:
+      workspaceId === undefined
+        ? undefined
+        : interfacePreferences?.lastModelByWorkspace[workspaceId],
     overrideModelId: modelOverrideId,
   });
+  const lastReplyModelId = lastAssistantModelId(messages);
+  const modelDisplayNames = useMemo(
+    () =>
+      Object.fromEntries(
+        models.map((model) => [model.id, model.displayName] as const),
+      ),
+    [models],
+  );
   const managedModelPreferencesQuery = useQuery({
     queryKey: ["managedModelPreferences", activeAgent?.id],
     queryFn: () => getManagedModelPreferences(activeAgent!.id),
@@ -205,12 +245,14 @@ export function useWorkspaceController(
     handleBranchFromMessage,
     handleContinueResponse,
     handleEditAndResend,
+    handleFollowUp,
     handleSubmit,
     regenerateLast,
     trackChatRun,
   } = useWorkspaceTurnActions({
     activeAgentId: activeAgent?.id,
     activeChatId,
+    chats,
     allMessages,
     autoTitleEnabled: chatExperience?.autoTitleEnabled ?? true,
     appendMessage,
@@ -220,6 +262,9 @@ export function useWorkspaceController(
     draft,
     imageAttachments,
     isStreaming,
+    ...(knowledgeBaseIdsOverride === undefined
+      ? {}
+      : { knowledgeBaseIdsOverride }),
     messages,
     ...(options.onChatSelection === undefined
       ? {}
@@ -245,6 +290,7 @@ export function useWorkspaceController(
     t,
     temporaryNextChat,
     webSearchEnabled,
+    agenticRagEnabled,
     workspaceId: workspace?.id,
   });
   const {
@@ -257,6 +303,7 @@ export function useWorkspaceController(
     handleNewTemporaryChat: handleNewTemporaryChatInternal,
     handleSelectChat: handleSelectChatInternal,
     handleSelectModel,
+    handleToggleDefaultModel,
     handleSelectVariant,
     handleWorkspaceArchived,
     renameChat,
@@ -327,10 +374,6 @@ export function useWorkspaceController(
   });
 
   useEffect(() => {
-    setModelOverrideId(undefined);
-  }, [activeAgent?.id]);
-
-  useEffect(() => {
     const key = `romeo:draft:${activeChatId ?? `new:${workspace?.id ?? "none"}`}`;
     const saved = localStorage.getItem(key);
     setDraft(saved ?? "");
@@ -358,6 +401,7 @@ export function useWorkspaceController(
           fileIds: documentAttachments.map((item) => item.fileId),
           imageCount: imageAttachments.length,
           ...(webSearchEnabled ? { webSearch: true } : {}),
+          ...(agenticRagEnabled ? { agenticRag: true } : {}),
           ...(attachedUrls.length === 0 ? {} : { urls: attachedUrls }),
         }),
       );
@@ -433,6 +477,7 @@ export function useWorkspaceController(
     handleTranscribeAudio,
     handleSelectChat,
     handleSelectModel,
+    handleToggleDefaultModel,
     handleSelectVariant,
     handleSubmit,
     handleSyncProvider,
@@ -449,17 +494,30 @@ export function useWorkspaceController(
     queuedTurns: queuedTurnsQuery.data ?? noQueuedTurns,
     loadMoreChats,
     attachedUrls,
+    knowledgeBaseIdsOverride,
+    setKnowledgeBaseIdsOverride,
     webSearchEnabled,
     setWebSearchEnabled,
+    agenticRagAvailable,
+    agenticRagForced,
+    agenticRagEnabled,
+    setAgenticRagRequested,
     temporaryNextChat,
     imageAttachments,
     messages,
     messageFeedback: messageFeedbackQuery.data ?? noFeedback,
     models,
+    modelDisplayNames,
+    lastReplyModelId,
+    defaultModelId:
+      workspaceId === undefined
+        ? undefined
+        : interfacePreferences?.defaultModelByWorkspace[workspaceId],
     pendingToolApproval: toolExecution.pendingApproval,
     providers,
     providerOperationalSummary,
     reasoning,
+    handleFollowUp,
     regenerateLast,
     renameChat,
     selectedModelId,
@@ -473,6 +531,7 @@ export function useWorkspaceController(
     subject,
     syncingProviderId,
     runActivities,
+    runWait,
     toolCalls,
     toolResult: toolExecution.toolResult,
     tools,

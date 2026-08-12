@@ -17,11 +17,11 @@ export async function listAuditLogs(
   options: { limit?: number; cursor?: string } = {},
 ) {
   configureBrowserApiClients();
-  const query = {
+  const query = compactAuditQuery({
     ...filter,
     ...(options.limit === undefined ? {} : { limit: options.limit }),
     ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
-  };
+  });
   const response = await operationalGovernanceListAuditLogs({
     query,
     throwOnError: true,
@@ -31,7 +31,7 @@ export async function listAuditLogs(
 
 export async function exportAuditLogsCsv(filter: AuditLogFilter = {}) {
   configureBrowserApiClients();
-  const { limit: _limit, cursor: _cursor, ...query } = filter;
+  const { limit: _limit, cursor: _cursor, ...query } = compactAuditQuery(filter);
   const response = await operationalGovernanceExportAuditLogs({
     headers: { accept: "text/csv" },
     query,
@@ -39,6 +39,12 @@ export async function exportAuditLogsCsv(filter: AuditLogFilter = {}) {
     throwOnError: true,
   });
   return response.data;
+}
+
+function compactAuditQuery(filter: AuditLogFilter): AuditLogFilter {
+  return Object.fromEntries(
+    Object.entries(filter).filter(([, value]) => value !== undefined),
+  ) as AuditLogFilter;
 }
 
 export async function listUsageEvents() {

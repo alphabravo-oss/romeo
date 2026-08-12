@@ -54,10 +54,21 @@
   "toolCallRisk": "Risque",
   "composerMentionKnowledge": "Base de connaissances",
   "composerMentions": "Fichiers et bases de connaissances",
+  "composerKnowledgeApply": "Utiliser les collections sélectionnées",
+  "composerKnowledgeClearOverride": "Effacer le forçage des connaissances",
+  "composerKnowledgeNone": "Aucune (pas de connaissances pour ce tour)",
+  "composerKnowledgeNoneActive": "Pas de connaissances pour ce tour",
+  "composerKnowledgePicker": "Collections de connaissances",
+  "composerKnowledgePickerHelp": "Force les bases de connaissances utilisées pour le prochain message. Laissez les valeurs par défaut du modèle sauf besoin ponctuel.",
+  "composerKnowledgeSelectedCount": "{{count}} collections",
+  "composerKnowledgeUseDefaults": "Utiliser les valeurs par défaut du modèle",
   "contextMeterFiles": "{{files}} fichier(s) conservé(s)",
   "contextMeterLabel": "Ouvrir l'inspecteur de contexte",
   "contextMeterUsage": "{{used}} / {{total}} de contexte",
   "scrollToLatest": "Aller au message le plus récent",
   "contextMeterUsageOnly": "{{used}} de contexte",
-  "citationMarkerLabel": "Source : {{title}}"
+  "citationMarkerLabel": "Source : {{title}}",
+  "agenticRag": "Retrieval agentique",
+  "agenticRagHelp": "Relance la recherche avec des requêtes reformulées ou découpées lorsque les premiers résultats sont faibles.",
+  "agenticRagForcedHelp": "Votre organisation impose le retrieval agentique pour les discussions fondées sur les connaissances."
 }

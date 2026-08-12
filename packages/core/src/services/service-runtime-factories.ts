@@ -33,7 +33,6 @@ import {
   type KnowledgeBinaryExtractor,
 } from "./knowledge-extraction-worker";
 import { LocalDocumentTextExtractor } from "./local-document-extractor";
-import { LocalPdfTextExtractor } from "./local-pdf-extractor";
 import {
   DiscoveryOidcAuthenticator,
   type OidcAuthenticator,
@@ -128,24 +127,27 @@ export function createToolDispatchPayloadStore(
 export function createKnowledgeExtractor(
   env: RomeoEnv,
 ): KnowledgeBinaryExtractor {
+  if (env.KNOWLEDGE_EXTRACTION_DRIVER === "disabled") {
+    return disabledKnowledgeBinaryExtractor;
+  }
+  const ocr = createFileOcrProvider(env);
+  const pdf = {
+    commandPath: env.PDFTOTEXT_PATH,
+    maxBytes: env.KNOWLEDGE_EXTRACTION_MAX_BYTES,
+    timeoutMs: env.KNOWLEDGE_EXTRACTION_TIMEOUT_MS,
+  };
   if (env.KNOWLEDGE_EXTRACTION_DRIVER === "local-pdftotext") {
-    return new LocalPdfTextExtractor({
-      commandPath: env.PDFTOTEXT_PATH,
-      maxBytes: env.KNOWLEDGE_EXTRACTION_MAX_BYTES,
-      timeoutMs: env.KNOWLEDGE_EXTRACTION_TIMEOUT_MS,
-    });
-  }
-  if (env.KNOWLEDGE_EXTRACTION_DRIVER === "local-documents") {
     return new LocalDocumentTextExtractor({
+      ocr,
       ooxml: { maxBytes: env.KNOWLEDGE_EXTRACTION_MAX_BYTES },
-      pdf: {
-        commandPath: env.PDFTOTEXT_PATH,
-        maxBytes: env.KNOWLEDGE_EXTRACTION_MAX_BYTES,
-        timeoutMs: env.KNOWLEDGE_EXTRACTION_TIMEOUT_MS,
-      },
+      pdf,
     });
   }
-  return disabledKnowledgeBinaryExtractor;
+  return new LocalDocumentTextExtractor({
+    ocr,
+    ooxml: { maxBytes: env.KNOWLEDGE_EXTRACTION_MAX_BYTES },
+    pdf,
+  });
 }
 
 export function createFileOcrProvider(env: RomeoEnv): FileOcrProvider {

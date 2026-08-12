@@ -10,6 +10,8 @@ import {
 import { toast } from "../lib/toast";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
+import { Section } from "./console";
+import { AdminDisclosure } from "./AdminDisclosure";
 import { SettingsSection } from "./SettingsSection";
 
 export function WebSearchPanel() {
@@ -97,14 +99,8 @@ export function WebSearchPanel() {
       unreachableUrlPolicy !== query.data.unreachableUrlPolicy);
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div>
-          <div className="rm-card-title">{t("governedWebSearch")}</div>
-          <p className="text-sm text-muted">
-            {t("searchGovernanceDescription")}
-          </p>
-        </div>
+    <Section
+      actions={
         <label>
           <Input
             checked={enabled}
@@ -114,7 +110,10 @@ export function WebSearchPanel() {
           />{" "}
           {t("enabled")}
         </label>
-      </div>
+      }
+      description={t("searchGovernanceDescription")}
+      title={t("governedWebSearch")}
+    >
       {enabled ? (
         <form
           className="mt-4 grid gap-4"
@@ -188,99 +187,105 @@ export function WebSearchPanel() {
                 : ` · ${query.data.health.lastErrorCode}`}
             </div>
           </SettingsSection>
-          <SettingsSection
+          <AdminDisclosure
             description={t("webSearchPolicyDescription")}
             title={t("webSearchPolicySection")}
           >
-            <div className="grid gap-3 md:grid-cols-2">
+            <SettingsSection
+              description={t("webSearchPolicyDescription")}
+              title={t("webSearchPolicySection")}
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                <label>
+                  {t("allowedDomainsPerLine")}
+                  <Textarea
+                    name="allowedDomains"
+                    className="mt-1"
+                    onChange={(event) =>
+                      setAllowedDomains(event.currentTarget.value)
+                    }
+                    rows={5}
+                    value={allowedDomains}
+                  />
+                </label>
+                <label>
+                  {t("blockedDomainsPerLine")}
+                  <Textarea
+                    name="blockedDomains"
+                    className="mt-1"
+                    onChange={(event) =>
+                      setBlockedDomains(event.currentTarget.value)
+                    }
+                    rows={5}
+                    value={blockedDomains}
+                  />
+                </label>
+              </div>
               <label>
-                {t("allowedDomainsPerLine")}
-                <Textarea
-                  name="allowedDomains"
-                  className="mt-1"
-                  onChange={(event) =>
-                    setAllowedDomains(event.currentTarget.value)
-                  }
-                  rows={5}
-                  value={allowedDomains}
-                />
-              </label>
-              <label>
-                {t("blockedDomainsPerLine")}
-                <Textarea
-                  name="blockedDomains"
-                  className="mt-1"
-                  onChange={(event) =>
-                    setBlockedDomains(event.currentTarget.value)
-                  }
-                  rows={5}
-                  value={blockedDomains}
-                />
-              </label>
-            </div>
-            <label>
-              {t("maximumResults")}{" "}
-              <Input
-                name="maxResults"
-                max={10}
-                min={1}
-                onChange={(event) =>
-                  setMaxResults(event.currentTarget.valueAsNumber)
-                }
-                type="number"
-                value={maxResults}
-              />
-            </label>
-            <div className="grid gap-3 md:grid-cols-3">
-              <label>
-                {t("maximumSourceAge")}
+                {t("maximumResults")}{" "}
                 <Input
-                  name="freshnessMaxAgeDays"
-                  className="mt-1"
+                  name="maxResults"
+                  max={10}
                   min={1}
-                  max={3650}
                   onChange={(event) =>
-                    setFreshnessMaxAgeDays(event.currentTarget.value)
+                    setMaxResults(event.currentTarget.valueAsNumber)
                   }
                   type="number"
-                  value={freshnessMaxAgeDays}
+                  value={maxResults}
                 />
               </label>
-              <label>
-                {t("unknownPublicationDates")}
-                <NativeSelect
-                  name="unknownPublicationDatePolicy"
-                  className="mt-1"
-                  onChange={(event) =>
-                    setUnknownPublicationDatePolicy(
-                      event.currentTarget
-                        .value as typeof unknownPublicationDatePolicy,
-                    )
-                  }
-                  value={unknownPublicationDatePolicy}
-                >
-                  <option value="allow">{t("allow")}</option>
-                  <option value="exclude">{t("exclude")}</option>
-                </NativeSelect>
-              </label>
-              <label>
-                {t("unreachableUrls")}
-                <NativeSelect
-                  name="unreachableUrlPolicy"
-                  className="mt-1"
-                  onChange={(event) =>
-                    setUnreachableUrlPolicy(
-                      event.currentTarget.value as typeof unreachableUrlPolicy,
-                    )
-                  }
-                  value={unreachableUrlPolicy}
-                >
-                  <option value="fail">{t("failRequest")}</option>
-                  <option value="skip">{t("skipUnreachable")}</option>
-                </NativeSelect>
-              </label>
-            </div>
-          </SettingsSection>
+              <div className="grid gap-3 md:grid-cols-3">
+                <label>
+                  {t("maximumSourceAge")}
+                  <Input
+                    name="freshnessMaxAgeDays"
+                    className="mt-1"
+                    min={1}
+                    max={3650}
+                    onChange={(event) =>
+                      setFreshnessMaxAgeDays(event.currentTarget.value)
+                    }
+                    type="number"
+                    value={freshnessMaxAgeDays}
+                  />
+                </label>
+                <label>
+                  {t("unknownPublicationDates")}
+                  <NativeSelect
+                    name="unknownPublicationDatePolicy"
+                    className="mt-1"
+                    onChange={(event) =>
+                      setUnknownPublicationDatePolicy(
+                        event.currentTarget
+                          .value as typeof unknownPublicationDatePolicy,
+                      )
+                    }
+                    value={unknownPublicationDatePolicy}
+                  >
+                    <option value="allow">{t("allow")}</option>
+                    <option value="exclude">{t("exclude")}</option>
+                  </NativeSelect>
+                </label>
+                <label>
+                  {t("unreachableUrls")}
+                  <NativeSelect
+                    name="unreachableUrlPolicy"
+                    className="mt-1"
+                    onChange={(event) =>
+                      setUnreachableUrlPolicy(
+                        event.currentTarget
+                          .value as typeof unreachableUrlPolicy,
+                      )
+                    }
+                    value={unreachableUrlPolicy}
+                  >
+                    <option value="fail">{t("failRequest")}</option>
+                    <option value="skip">{t("skipUnreachable")}</option>
+                  </NativeSelect>
+                </label>
+              </div>
+            </SettingsSection>
+          </AdminDisclosure>
           {save.error ? (
             <div className="rm-composer-error">{save.error.message}</div>
           ) : null}
@@ -289,16 +294,14 @@ export function WebSearchPanel() {
           </Button>
         </form>
       ) : (
-        <div className="mt-4">
-          <EmptyState
-            icon={<Search aria-hidden size={24} />}
-            title={t("webSearchDisabledTitle")}
-          >
-            {t("webSearchDisabledDescription")}
-          </EmptyState>
-        </div>
+        <EmptyState
+          icon={<Search aria-hidden size={24} />}
+          title={t("webSearchDisabledTitle")}
+        >
+          {t("webSearchDisabledDescription")}
+        </EmptyState>
       )}
-    </section>
+    </Section>
   );
 }
 

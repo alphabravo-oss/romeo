@@ -138,6 +138,99 @@ export const shareKnowledgeBaseRoute = createRoute({
   },
   responses: { 201: jsonResponse("Resource grants", shareResponse), ...errors },
 });
+export const revokeKnowledgeBaseShareRoute = createRoute({
+  ...metadata,
+  method: "delete",
+  path: "/api/v1/knowledge-bases/{knowledgeBaseId}/shares/{grantId}",
+  operationId: "collaboration.revokeKnowledgeBaseShare",
+  summary: "Revoke a knowledge-base share",
+  request: {
+    params: z.strictObject({
+      knowledgeBaseId: identifier,
+      grantId: identifier,
+    }),
+  },
+  responses: {
+    200: jsonResponse("Resource grant", dataEnvelope(ResourceGrantSchema)),
+    ...errors,
+  },
+});
+export const listModelSharesRoute = createRoute({
+  ...metadata,
+  method: "get",
+  path: "/api/v1/models/{modelId}/shares",
+  operationId: "collaboration.listModelShares",
+  summary: "List model use grants",
+  request: { params: z.strictObject({ modelId: identifier }) },
+  responses: { 200: jsonResponse("Resource grants", shareResponse), ...errors },
+});
+export const shareModelRoute = createRoute({
+  ...metadata,
+  method: "post",
+  path: "/api/v1/models/{modelId}/shares",
+  operationId: "collaboration.shareModel",
+  summary: "Grant model use to a principal",
+  request: {
+    params: z.strictObject({ modelId: identifier }),
+    body: {
+      required: true,
+      content: { "application/json": { schema: ShareResourceSchema } },
+    },
+  },
+  responses: { 201: jsonResponse("Resource grants", shareResponse), ...errors },
+});
+export const revokeModelShareRoute = createRoute({
+  ...metadata,
+  method: "delete",
+  path: "/api/v1/models/{modelId}/shares/{grantId}",
+  operationId: "collaboration.revokeModelShare",
+  summary: "Revoke a model use grant",
+  request: {
+    params: z.strictObject({ modelId: identifier, grantId: identifier }),
+  },
+  responses: {
+    200: jsonResponse("Resource grant", dataEnvelope(ResourceGrantSchema)),
+    ...errors,
+  },
+});
+export const listWorkspaceMembersRoute = createRoute({
+  ...metadata,
+  method: "get",
+  path: "/api/v1/workspaces/{workspaceId}/members",
+  operationId: "collaboration.listWorkspaceMembers",
+  summary: "List workspace membership grants",
+  request: { params: z.strictObject({ workspaceId: identifier }) },
+  responses: { 200: jsonResponse("Resource grants", shareResponse), ...errors },
+});
+export const shareWorkspaceRoute = createRoute({
+  ...metadata,
+  method: "post",
+  path: "/api/v1/workspaces/{workspaceId}/members",
+  operationId: "collaboration.shareWorkspace",
+  summary: "Add a workspace member",
+  request: {
+    params: z.strictObject({ workspaceId: identifier }),
+    body: {
+      required: true,
+      content: { "application/json": { schema: ShareResourceSchema } },
+    },
+  },
+  responses: { 201: jsonResponse("Resource grants", shareResponse), ...errors },
+});
+export const revokeWorkspaceMemberRoute = createRoute({
+  ...metadata,
+  method: "delete",
+  path: "/api/v1/workspaces/{workspaceId}/members/{grantId}",
+  operationId: "collaboration.revokeWorkspaceMember",
+  summary: "Remove a workspace member",
+  request: {
+    params: z.strictObject({ workspaceId: identifier, grantId: identifier }),
+  },
+  responses: {
+    200: jsonResponse("Resource grant", dataEnvelope(ResourceGrantSchema)),
+    ...errors,
+  },
+});
 export const listChatSharesRoute = createRoute({
   ...metadata,
   method: "get",

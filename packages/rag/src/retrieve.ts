@@ -1,22 +1,38 @@
 import type { IndexedChunk, RetrievalHit } from "./types";
 import { cosineSimilarity, createTextEmbedding } from "./embeddings";
 
+export interface RetrieveFromChunksOptions {
+  hybrid?: boolean;
+  /** Lexical share when hybrid is on (0–1). Vector weight is the remainder. */
+  bm25Weight?: number;
+  similarityThreshold?: number;
+}
+
 export function retrieveFromChunks(
   chunks: IndexedChunk[],
   query: string,
   maxResults = 5,
+  options: RetrieveFromChunksOptions = {},
 ): RetrievalHit[] {
   const terms = tokenize(query);
   const queryEmbedding = createTextEmbedding(query);
   if (terms.length === 0 && queryEmbedding.every((value) => value === 0))
     return [];
+  const hybrid = options.hybrid !== false;
+  const threshold = options.similarityThreshold ?? 0.35;
+  const bm25Weight = clampUnit(options.bm25Weight ?? 0.75);
 
   return chunks
-    .map((chunk) => ({
-      chunk,
-      score:
-        scoreChunk(chunk.content, terms) + vectorScore(chunk, queryEmbedding),
-    }))
+    .map((chunk) => {
+      const lexical = scoreChunk(chunk.content, terms);
+      const vector = vectorScore(chunk, queryEmbedding, threshold);
+      const score = hybrid
+        ? lexical * bm25Weight + vector * (1 - bm25Weight)
+        : vector > 0
+          ? vector
+          : lexical;
+      return { chunk, score };
+    })
     .filter((item) => item.score > 0)
     .sort(
       (left, right) =>
@@ -41,10 +57,19 @@ export function retrieveFromChunks(
     });
 }
 
-function vectorScore(chunk: IndexedChunk, queryEmbedding: number[]): number {
+function vectorScore(
+  chunk: IndexedChunk,
+  queryEmbedding: number[],
+  threshold: number,
+): number {
   if (chunk.embedding === undefined) return 0;
   const similarity = cosineSimilarity(chunk.embedding, queryEmbedding);
-  return similarity >= 0.35 ? similarity * 0.25 : 0;
+  return similarity >= threshold ? similarity : 0;
+}
+
+function clampUnit(value: number): number {
+  if (!Number.isFinite(value)) return 0.75;
+  return Math.min(1, Math.max(0, value));
 }
 
 function scoreChunk(content: string, terms: string[]): number {

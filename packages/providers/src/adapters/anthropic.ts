@@ -7,6 +7,7 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages/messages";
 
 import { anthropicCapabilities } from "../capabilities";
+import { profileDiscoveredModel } from "../model-discovery";
 import { MAX_DISCOVERED_MODELS } from "../model-catalog";
 import { normalizeProviderToolCall } from "../tool-calls";
 import type {
@@ -75,15 +76,25 @@ async function discoverAnthropicModels(
   return [...new Set(ids)]
     .slice(0, MAX_DISCOVERED_MODELS)
     .sort()
-    .map((name) => ({
-      id: `model_${provider.id}_${modelIdPart(name)}`,
-      providerId: provider.id,
-      name,
-      displayName: name,
-      enabled: true,
-      capabilities: anthropicCapabilities,
-      contextWindow: 200_000,
-    }));
+    .map((name) => {
+      const profile = profileDiscoveredModel({
+        base: anthropicCapabilities,
+        fallbackContextWindow: 200_000,
+        name,
+      });
+      return {
+        id: `model_${provider.id}_${modelIdPart(name)}`,
+        providerId: provider.id,
+        name,
+        displayName: name,
+        enabled: false,
+        capabilities: profile.capabilities,
+        contextWindow: profile.contextWindow,
+        ...(profile.defaultParameters === undefined
+          ? {}
+          : { defaultParameters: profile.defaultParameters }),
+      };
+    });
 }
 
 async function* credentialUnavailableStream(): AsyncIterable<StreamChatChunk> {

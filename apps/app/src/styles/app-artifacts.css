@@ -22,12 +22,16 @@
    item in a cell an explicitly placed one already holds, so leaving these rows
    automatic would push the transcript down a row the moment the pane arrives. */
 
-.rm-chat-panel.with-artifact > .rm-conversation {
+.rm-chat-panel.with-artifact > .rm-chat-session-bar {
   grid-area: 1 / 1;
 }
 
-.rm-chat-panel.with-artifact > .rm-composer-wrap {
+.rm-chat-panel.with-artifact > .rm-conversation {
   grid-area: 2 / 1;
+}
+
+.rm-chat-panel.with-artifact > .rm-composer-wrap {
+  grid-area: 3 / 1;
 }
 
 .rm-artifact-pane {
@@ -110,15 +114,7 @@
 }
 
 .rm-codeblock.promoted {
-  border-color: color-mix(in srgb, var(--rm-accent) 55%, var(--rm-border));
-}
-
-/* One more action in the row than it was designed for, and the pane can make
-   the transcript narrow enough to need the second line. */
-
-.rm-codeblock-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rm-accent) 45%, transparent);
 }
 
 /*

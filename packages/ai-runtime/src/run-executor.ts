@@ -46,10 +46,17 @@ export async function* streamRunEvents(
     return createRunEvent({ runId: input.runId, sequence, type, data });
   }
 
+  const retryPolicy = normalizeProviderRetryPolicy(input.providerRetryPolicy);
   if (input.emitRunStarted !== false) {
     yield event("run.started", {
       modelId: input.model.id,
       providerId: input.provider.id,
+      // Client wait UI: how long each attempt may idle before timeout, and how
+      // many retries remain after the first attempt.
+      ...(input.providerTimeoutMs === undefined
+        ? {}
+        : { streamTimeoutMs: input.providerTimeoutMs }),
+      maxRetries: retryPolicy.maxRetries,
     });
   }
   yield event("message.started", { role: "assistant" });
@@ -69,7 +76,6 @@ export async function* streamRunEvents(
   let fallback: ProviderFallbackTarget | undefined = input.providerFallback;
   let providerFallback: ProviderFallbackSnapshot | undefined;
   const retryAttemptsByProvider = new Map<string, number>();
-  const retryPolicy = normalizeProviderRetryPolicy(input.providerRetryPolicy);
 
   const maxModelToolCalls = input.maxModelToolCalls ?? 4;
 

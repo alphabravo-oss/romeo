@@ -21,10 +21,10 @@ import {
   LocalizedDateTime,
   LocalizedNumber,
 } from "../lib/locale-format";
+import { Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { DateRangeSelect } from "./DateRangeSelect";
 import { PageActions } from "./PageActions";
-import { PanelStats } from "./PanelStats";
 import { rangeToBounds, type RangePreset } from "./date-range";
 
 const alertCol = createColumnHelper<UsageAlert>();
@@ -184,7 +184,7 @@ export function UsagePanel() {
   );
 
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-muted">{t("usageTitle")}</div>
         <div className="flex flex-wrap gap-2">
@@ -212,7 +212,7 @@ export function UsagePanel() {
           {exportError}
         </div>
       ) : null}
-      <PanelStats
+      <StatRow
         items={[
           { label: t("usageRuns"), value: runCount },
           { label: t("usageTokens"), value: tokenCount },
@@ -251,7 +251,7 @@ export function UsagePanel() {
         data={events}
         empty={t("usageNoEvents")}
       />
-    </section>
+    </Section>
   );
 
   async function refresh() {

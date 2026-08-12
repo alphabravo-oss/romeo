@@ -17,6 +17,7 @@ export * from "./prompts";
 export * from "./providers";
 export * from "./sso-administration";
 export * from "./tenancy";
+export * from "./tenant-administration";
 export * from "./tool-approvals";
 export * from "./tool-connectors";
 export * from "./tools";

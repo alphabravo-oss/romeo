@@ -75,6 +75,8 @@
   "govExporting": "Exporting",
   "govFiles": "Files",
   "govGovernance": "Governance",
+  "govLifecycleTitle": "Lifecycle actions",
+  "govLifecycleHelp": "Archive workspaces, close chats, or delete data. These are exception paths — keep them closed unless you need them.",
   "govIncludeMessageContent": "Include message content",
   "govLoading": "Loading…",
   "govMessages": "Messages",

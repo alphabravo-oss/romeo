@@ -11,7 +11,11 @@ import { StartDelegatedOAuthSchema } from "./delegated-oauth";
 import { CreateDeviceAuthorizationSchema } from "./device-authorizations";
 import { EdgeSecurityPostureCheckSchema } from "./edge-security";
 import { LocalLoginSchema, LocalMfaVerifySchema } from "./sessions";
-import { versionDiffSchema } from "./managed-model-schemas";
+import {
+  ManagedModelSafetySettingsSchema,
+  versionDiffSchema,
+} from "./managed-model-schemas";
+import { CreateKnowledgeBaseSchema } from "./knowledge-schemas";
 
 describe("Romeo HTTP contracts", () => {
   it("keeps response-side version diff fields forward compatible", () => {
@@ -151,6 +155,60 @@ describe("Romeo HTTP contracts", () => {
         agentId: "agent_1",
         content: "Retry",
         parentMessageId: "msg_1",
+      }).success,
+    ).toBe(false);
+    expect(
+      StartRunSchema.safeParse({
+        chatId: "chat_1",
+        agentId: "agent_1",
+        content: "Ask from selected collections",
+        knowledgeBaseIds: ["kb_1", "kb_2"],
+      }).success,
+    ).toBe(true);
+    expect(
+      StartRunSchema.safeParse({
+        chatId: "chat_1",
+        agentId: "agent_1",
+        content: "Ask without knowledge",
+        knowledgeBaseIds: [],
+      }).success,
+    ).toBe(true);
+    expect(
+      EnqueueChatTurnSchema.safeParse({
+        agentId: "agent_1",
+        content: "Queued with override",
+        knowledgeBaseIds: [],
+      }).success,
+    ).toBe(true);
+    expect(
+      CreateKnowledgeBaseSchema.safeParse({
+        workspaceId: "workspace_1",
+        name: "Private notes",
+        scope: "user_private",
+      }).success,
+    ).toBe(true);
+    expect(
+      CreateKnowledgeBaseSchema.safeParse({
+        workspaceId: "workspace_1",
+        name: "Org policy",
+        scope: "org",
+      }).success,
+    ).toBe(true);
+    expect(
+      CreateKnowledgeBaseSchema.safeParse({
+        workspaceId: "workspace_1",
+        name: "Bad scope",
+        scope: "personal",
+      }).success,
+    ).toBe(false);
+    expect(
+      ManagedModelSafetySettingsSchema.safeParse({
+        knowledgeGroundingMode: "required",
+      }).success,
+    ).toBe(true);
+    expect(
+      ManagedModelSafetySettingsSchema.safeParse({
+        knowledgeGroundingMode: "strict",
       }).success,
     ).toBe(false);
   });

@@ -63,6 +63,32 @@ export interface RagPolicyProviderModel {
   model: string;
 }
 
+export interface RagPolicyRetrievalSettings {
+  /** Chunks kept after ranking. Shared across enabled tiers as the default budget. */
+  topK: number;
+  /** Minimum cosine similarity for a vector hit (0–1). */
+  similarityThreshold: number;
+  /** When true, merge lexical (BM25-style) hits with vector hits. */
+  hybridSearch: boolean;
+  /** Lexical share of hybrid rank fusion (0–1). Vector weight is the remainder. */
+  hybridBm25Weight: number;
+}
+
+export const ragPolicyAgenticUserModes = ["optional", "required"] as const;
+
+export type RagPolicyAgenticUserMode =
+  (typeof ragPolicyAgenticUserModes)[number];
+
+export interface RagPolicyAgenticSettings {
+  /** When false, retrieval stays one-shot regardless of the user toggle. */
+  enabled: boolean;
+  /**
+   * `optional` lets the member turn agentic retrieval on per turn.
+   * `required` forces it for every knowledge-backed run.
+   */
+  userMode: RagPolicyAgenticUserMode;
+}
+
 export interface RagPolicyKnowledgeBaseTierAssignments {
   org: string[];
   shared: string[];
@@ -93,6 +119,8 @@ export interface RagPolicyReport {
   defaultMaxResultsPerTier: RagPolicyBudgetMap;
   maxResultsPerTier: RagPolicyBudgetMap;
   allowedEmbeddingProviderModels: RagPolicyProviderModel[];
+  retrieval: RagPolicyRetrievalSettings;
+  agentic: RagPolicyAgenticSettings;
   knowledgeBaseTierAssignments: RagPolicyKnowledgeBaseTierAssignments;
   dataResidencyTags: string[];
   externalVectorStore: RagPolicyExternalVectorStore;
@@ -127,6 +155,8 @@ export interface UpdateRagPolicyRequest {
   defaultMaxResultsPerTier?: Partial<RagPolicyBudgetMap>;
   maxResultsPerTier?: Partial<RagPolicyBudgetMap>;
   allowedEmbeddingProviderModels?: RagPolicyProviderModel[];
+  retrieval?: Partial<RagPolicyRetrievalSettings>;
+  agentic?: Partial<RagPolicyAgenticSettings>;
   knowledgeBaseTierAssignments?: Partial<RagPolicyKnowledgeBaseTierAssignments>;
   dataResidencyTags?: string[];
   externalVectorStore?: UpdateRagPolicyExternalVectorStoreRequest;

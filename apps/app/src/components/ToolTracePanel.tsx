@@ -6,6 +6,7 @@ import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PageActions } from "./PageActions";
+import { SettingsSection } from "./SettingsSection";
 
 const col = createColumnHelper<ToolCallRecord>();
 
@@ -23,12 +24,12 @@ export function ToolTracePanel({
 
   if (activeAgentId === undefined) {
     return (
-      <section className="rm-panel p-4">
-        <div className="rm-card-header">
-          <div className="text-sm text-muted">{t("toolTraceCalls")}</div>
-        </div>
-        <div className="rm-empty">{t("toolTraceSelectAgent")}</div>
-      </section>
+      <SettingsSection
+        description={t("toolTraceSelectAgent")}
+        title={t("toolTraceCalls")}
+      >
+        <p className="rm-list-empty">{t("toolTraceSelectAgent")}</p>
+      </SettingsSection>
     );
   }
 
@@ -73,15 +74,16 @@ export function ToolTracePanel({
   ];
 
   return (
-    <section className="rm-panel p-4">
-      <div className="rm-card-header">
-        <div className="text-sm text-muted">{t("toolTraceCalls")}</div>
+    <SettingsSection
+      actions={
         <PageActions
           onRefresh={() => void callsQuery.refetch()}
           refreshLabel={t("refresh")}
           refreshing={callsQuery.isFetching || activeAgentId === undefined}
         />
-      </div>
+      }
+      title={t("toolTraceCalls")}
+    >
       <PanelState query={callsQuery} empty={t("toolTraceNone")}>
         {(calls) => (
           <DataTable
@@ -91,6 +93,6 @@ export function ToolTracePanel({
           />
         )}
       </PanelState>
-    </section>
+    </SettingsSection>
   );
 }

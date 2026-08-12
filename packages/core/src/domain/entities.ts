@@ -82,6 +82,11 @@ export interface CollaborationChannelMember {
   updatedAt: string;
 }
 
+export interface MessageRunError {
+  code: string;
+  message?: string;
+}
+
 export interface Message {
   id: string;
   chatId: string;
@@ -89,6 +94,10 @@ export interface Message {
   content: string;
   citations?: MessageCitation[];
   attachments?: MessageAttachment[];
+  /** Inline run failure shown in place of a normal assistant answer. */
+  error?: MessageRunError;
+  /** Model that produced this assistant turn. */
+  modelId?: string;
   parentId?: string;
   createdAt: string;
 }
@@ -329,6 +338,7 @@ export interface QueuedChatTurn {
   modelId?: string;
   content: string;
   webSearch?: boolean;
+  agenticRag?: boolean;
   urls?: string[];
   createdBy: string;
   principalId: string;

@@ -82,6 +82,7 @@ describe("provider repository mappers", () => {
       },
       enabled: true,
       available: true,
+      defaultParameters: null,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
     });
     const unpriced = toBaseModelRecord({
@@ -96,6 +97,7 @@ describe("provider repository mappers", () => {
       pricing: { inputTokenUsd: Number.NaN, outputTokenUsd: 1 },
       enabled: false,
       available: false,
+      defaultParameters: null,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
     });
 

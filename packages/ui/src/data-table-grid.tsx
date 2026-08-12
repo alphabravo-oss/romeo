@@ -67,7 +67,7 @@ export function DataTableGrid<T>({
       tabIndex={onRowActivate ? 0 : undefined}
     >
       {row.getVisibleCells().map((cell) => (
-        <td key={cell.id}>
+        <td data-col={cell.column.id} key={cell.id}>
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
         </td>
       ))}
@@ -124,6 +124,7 @@ export function DataTableGrid<T>({
                         : undefined
                     }
                     className={canSort ? "rm-th-sortable" : undefined}
+                    data-col={header.column.id}
                     key={header.id}
                     style={{ width: header.getSize() || undefined }}
                   >

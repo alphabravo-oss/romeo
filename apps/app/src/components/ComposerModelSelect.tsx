@@ -2,26 +2,39 @@ import { Button, Input } from "@romeo/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import Check from "lucide-react/dist/esm/icons/check.mjs";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
+import Pin from "lucide-react/dist/esm/icons/pin.mjs";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
 import Star from "lucide-react/dist/esm/icons/star.mjs";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { deleteFavorite, favoriteResource, listFavorites } from "../features";
+import type { AgentGalleryItem } from "../features/managed-models";
 import type { BaseModel, Provider } from "../features/types";
 import { useLocale } from "../lib/i18n";
+import { isGenericCustomModelName } from "./chat-enterprise";
 
 export function ComposerModelSelect({
+  customModels = [],
+  defaultModelId,
   disabled,
   models,
   providers,
+  onSelectCustomModel,
   onSelectModel,
+  onToggleDefaultModel,
+  selectedCustomModelId,
   selectedModelId,
 }: {
+  customModels?: AgentGalleryItem[];
+  defaultModelId: string | undefined;
   disabled: boolean;
   models: BaseModel[];
   providers: Provider[];
+  onSelectCustomModel?: (agentId: string, baseModelId: string) => void;
   onSelectModel: (modelId: string) => void;
+  onToggleDefaultModel: (modelId: string) => void;
+  selectedCustomModelId?: string;
   selectedModelId: string | undefined;
 }) {
   const { t } = useLocale();
@@ -62,6 +75,15 @@ export function ComposerModelSelect({
     () => new Map(providers.map((provider) => [provider.id, provider.name])),
     [providers],
   );
+  const readyCustomModels = useMemo(
+    () =>
+      customModels.filter(
+        (agent) =>
+          agent.readinessStatus === "ready" &&
+          !isGenericCustomModelName(agent.name),
+      ),
+    [customModels],
+  );
   const filteredModels = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return enabledModels
@@ -85,25 +107,56 @@ export function ComposerModelSelect({
         );
       });
   }, [capabilityFilter, enabledModels, pinnedIds, query]);
+  const filteredCustomModels = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return readyCustomModels.filter((agent) => {
+      const base = enabledModels.find(
+        (model) => model.id === agent.baseModelId,
+      );
+      if (capabilityFilter === "vision" && base?.capabilities.vision !== true)
+        return false;
+      if (
+        capabilityFilter === "tools" &&
+        base?.capabilities.toolCalling !== true
+      )
+        return false;
+      return `${agent.name} ${agent.description ?? ""} ${base?.displayName ?? ""}`
+        .toLowerCase()
+        .includes(normalizedQuery);
+    });
+  }, [capabilityFilter, enabledModels, query, readyCustomModels]);
   const pickerRows = useMemo(
-    () => modelPickerRows(filteredModels, providerById),
-    [filteredModels, providerById],
+    () =>
+      modelPickerRows(
+        filteredModels,
+        providerById,
+        filteredCustomModels,
+        t("modelGroupCustom"),
+      ),
+    [filteredCustomModels, filteredModels, providerById, t],
   );
   const modelRowIndexes = useMemo(
     () =>
-      pickerRows.flatMap((row, index) => (row.kind === "model" ? [index] : [])),
+      pickerRows.flatMap((row, index) =>
+        row.kind === "provider" ? [] : [index],
+      ),
     [pickerRows],
   );
   const rowVirtualizer = useVirtualizer({
     count: pickerRows.length,
-    estimateSize: (index) => (pickerRows[index]?.kind === "provider" ? 32 : 56),
+    estimateSize: (index) => (pickerRows[index]?.kind === "provider" ? 28 : 40),
     getItemKey: (index) => pickerRows[index]?.id ?? index,
     getScrollElement: () => listRef.current,
     overscan: 8,
   });
+  const selectedCustomModel = readyCustomModels.find(
+    (agent) => agent.id === selectedCustomModelId,
+  );
   const selectedModel = enabledModels.find(
     (model) => model.id === selectedModelId,
   );
+  const triggerLabel =
+    selectedCustomModel?.name ?? selectedModel?.displayName ?? t("selectModel");
 
   function closeModelMenu({ restoreFocus = false } = {}) {
     setOpen(false);
@@ -125,7 +178,8 @@ export function ComposerModelSelect({
           window.innerHeight) -
         safeHeaderHeight -
         12;
-    setMenuMaxHeight(Math.max(120, Math.floor(available)));
+    // Cap hard: a near-viewport menu reads as a sheet, not a picker.
+    setMenuMaxHeight(Math.max(160, Math.min(320, Math.floor(available))));
   }
 
   function handleModelMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -140,7 +194,7 @@ export function ComposerModelSelect({
     const activeModelId = (document.activeElement as HTMLElement | null)
       ?.dataset.modelId;
     const currentRow = pickerRows.findIndex(
-      (row) => row.kind === "model" && row.model.id === activeModelId,
+      (row) => selectableRowId(row) === activeModelId,
     );
     const current = modelRowIndexes.indexOf(currentRow);
     const nextPosition =
@@ -157,13 +211,14 @@ export function ComposerModelSelect({
               : (current - 1 + modelRowIndexes.length) % modelRowIndexes.length;
     const nextRowIndex = modelRowIndexes[nextPosition];
     const nextRow = pickerRows[nextRowIndex ?? -1];
-    if (nextRowIndex === undefined || nextRow?.kind !== "model") return;
+    const nextId = nextRow === undefined ? undefined : selectableRowId(nextRow);
+    if (nextRowIndex === undefined || nextId === undefined) return;
     rowVirtualizer.scrollToIndex(nextRowIndex, { align: "auto" });
     requestAnimationFrame(() =>
       requestAnimationFrame(() =>
         ref.current
           ?.querySelector<HTMLButtonElement>(
-            `[data-model-id="${CSS.escape(nextRow.model.id)}"]`,
+            `[data-model-id="${CSS.escape(nextId)}"]`,
           )
           ?.focus(),
       ),
@@ -210,7 +265,7 @@ export function ComposerModelSelect({
     };
   }, [open]);
 
-  if (enabledModels.length === 0) return null;
+  if (enabledModels.length === 0 && readyCustomModels.length === 0) return null;
 
   async function togglePinned(modelId: string) {
     const favoriteId = pinnedModels.get(modelId);
@@ -250,9 +305,7 @@ export function ComposerModelSelect({
         title={t("chooseModelTitle")}
         type="button"
       >
-        <span className="truncate">
-          {selectedModel?.displayName ?? t("selectModel")}
-        </span>
+        <span className="truncate">{triggerLabel}</span>
         <ChevronDown aria-hidden="true" size={12} strokeWidth={2.5} />
       </Button>
 
@@ -311,7 +364,8 @@ export function ComposerModelSelect({
             ref={listRef}
             role="listbox"
           >
-            {filteredModels.length === 0 ? (
+            {filteredModels.length === 0 &&
+            filteredCustomModels.length === 0 ? (
               <div className="p-3 text-sm text-muted">
                 {t("noMatchingModels")}
               </div>
@@ -340,13 +394,39 @@ export function ComposerModelSelect({
                         >
                           {row.label}
                         </div>
+                      ) : row.kind === "custom" ? (
+                        <CustomModelPickerOption
+                          agent={row.agent}
+                          baseLabel={
+                            row.base === undefined
+                              ? undefined
+                              : t("modelBasedOn", {
+                                  name: row.base.displayName,
+                                })
+                          }
+                          closeModelMenu={closeModelMenu}
+                          onSelect={() =>
+                            onSelectCustomModel === undefined
+                              ? onSelectModel(row.agent.baseModelId)
+                              : onSelectCustomModel(
+                                  row.agent.id,
+                                  row.agent.baseModelId,
+                                )
+                          }
+                          selected={row.agent.id === selectedCustomModelId}
+                        />
                       ) : (
                         <ModelPickerOption
                           closeModelMenu={closeModelMenu}
+                          isDefault={row.model.id === defaultModelId}
                           model={row.model}
                           onSelectModel={onSelectModel}
+                          onToggleDefaultModel={onToggleDefaultModel}
                           pinned={pinnedIds.has(row.model.id)}
-                          selected={row.model.id === selectedModelId}
+                          selected={
+                            selectedCustomModel === undefined &&
+                            row.model.id === selectedModelId
+                          }
                           togglePinned={togglePinned}
                         />
                       )}
@@ -364,19 +444,24 @@ export function ComposerModelSelect({
 
 function ModelPickerOption({
   closeModelMenu,
+  isDefault,
   model,
   onSelectModel,
+  onToggleDefaultModel,
   pinned,
   selected,
   togglePinned,
 }: {
   closeModelMenu: (options?: { restoreFocus?: boolean }) => void;
+  isDefault: boolean;
   model: BaseModel;
   onSelectModel: (modelId: string) => void;
+  onToggleDefaultModel: (modelId: string) => void;
   pinned: boolean;
   selected: boolean;
   togglePinned: (modelId: string) => Promise<void>;
 }) {
+  const { t } = useLocale();
   return (
     <div className={`rm-chat-model-row ${selected ? "selected" : ""}`}>
       <Button
@@ -390,7 +475,7 @@ function ModelPickerOption({
         role="option"
         type="button"
       >
-        <span className="min-w-0 flex-1 text-left">
+        <span className="rm-chat-model-copy">
           <span
             className="rm-chat-model-name"
             title={model.displayName}
@@ -399,18 +484,38 @@ function ModelPickerOption({
             {model.displayName}
           </span>
           <small className="rm-chat-model-meta">
+            {isDefault ? `${t("defaultModelBadge")} · ` : ""}
             {model.capabilities.toolCalling ? "Tools" : "Chat"}
             {model.capabilities.vision ? " · Vision" : ""} ·{" "}
             {formatModelContext(model.contextWindow)}
           </small>
         </span>
-        {selected ? <Check aria-hidden="true" size={16} /> : null}
+        {selected ? (
+          <Check aria-hidden="true" className="rm-chat-model-check" size={14} />
+        ) : null}
+      </Button>
+      <Button
+        aria-label={
+          isDefault ? t("assistantClearDefault") : t("assistantMakeDefault")
+        }
+        className={`rm-chat-model-action rm-chat-model-default ${isDefault ? "active" : ""}`}
+        onClick={() => onToggleDefaultModel(model.id)}
+        title={
+          isDefault ? t("assistantClearDefault") : t("assistantMakeDefault")
+        }
+        type="button"
+      >
+        <Pin
+          aria-hidden="true"
+          fill={isDefault ? "currentColor" : "none"}
+          size={13}
+        />
       </Button>
       <Button
         aria-label={
           pinned ? `Unpin ${model.displayName}` : `Pin ${model.displayName}`
         }
-        className={`rm-chat-model-pin ${pinned ? "active" : ""}`}
+        className={`rm-chat-model-action rm-chat-model-pin ${pinned ? "active" : ""}`}
         onClick={() => void togglePinned(model.id)}
         type="button"
       >
@@ -424,6 +529,52 @@ function ModelPickerOption({
   );
 }
 
+function CustomModelPickerOption({
+  agent,
+  baseLabel,
+  closeModelMenu,
+  onSelect,
+  selected,
+}: {
+  agent: AgentGalleryItem;
+  baseLabel: string | undefined;
+  closeModelMenu: (options?: { restoreFocus?: boolean }) => void;
+  onSelect: () => void;
+  selected: boolean;
+}) {
+  return (
+    <div className={`rm-chat-model-row ${selected ? "selected" : ""}`}>
+      <Button
+        aria-selected={selected}
+        className="rm-model-option min-w-0 flex-1"
+        data-model-id={`agent:${agent.id}`}
+        onClick={() => {
+          onSelect();
+          closeModelMenu({ restoreFocus: true });
+        }}
+        role="option"
+        type="button"
+      >
+        <span className="rm-chat-model-copy">
+          <span
+            className="rm-chat-model-name"
+            title={agent.name}
+            translate="no"
+          >
+            {agent.name}
+          </span>
+          {baseLabel === undefined ? null : (
+            <small className="rm-chat-model-meta">{baseLabel}</small>
+          )}
+        </span>
+        {selected ? (
+          <Check aria-hidden="true" className="rm-chat-model-check" size={14} />
+        ) : null}
+      </Button>
+    </div>
+  );
+}
+
 function formatModelContext(contextWindow: number): string {
   return contextWindow >= 1_000
     ? `${Math.round(contextWindow / 1_000)}k context`
@@ -432,28 +583,62 @@ function formatModelContext(contextWindow: number): string {
 
 type ModelPickerRow =
   | { id: string; kind: "provider"; label: string }
-  | { id: string; kind: "model"; model: BaseModel };
+  | { id: string; kind: "model"; model: BaseModel }
+  | {
+      id: string;
+      kind: "custom";
+      agent: AgentGalleryItem;
+      base: BaseModel | undefined;
+    };
+
+function selectableRowId(row: ModelPickerRow): string | undefined {
+  if (row.kind === "model") return row.model.id;
+  if (row.kind === "custom") return `agent:${row.agent.id}`;
+  return undefined;
+}
 
 function modelPickerRows(
   models: BaseModel[],
   providerById: Map<string, string>,
+  customModels: AgentGalleryItem[],
+  customGroupLabel: string,
 ): ModelPickerRow[] {
+  const rows: ModelPickerRow[] = [];
+  if (customModels.length > 0) {
+    rows.push({
+      id: "provider:custom",
+      kind: "provider",
+      label: customGroupLabel,
+    });
+    const baseById = new Map(models.map((model) => [model.id, model]));
+    for (const agent of customModels) {
+      rows.push({
+        id: `custom:${agent.id}`,
+        kind: "custom",
+        agent,
+        base: baseById.get(agent.baseModelId),
+      });
+    }
+  }
   const grouped = new Map<string, BaseModel[]>();
   for (const model of models) {
     const group = grouped.get(model.providerId) ?? [];
     group.push(model);
     grouped.set(model.providerId, group);
   }
-  return [...grouped].flatMap(([providerId, providerModels]) => [
-    {
+  for (const [providerId, providerModels] of grouped) {
+    rows.push({
       id: `provider:${providerId}`,
-      kind: "provider" as const,
+      kind: "provider",
       label: providerById.get(providerId) ?? providerId,
-    },
-    ...providerModels.map((model) => ({
-      id: `model:${model.id}`,
-      kind: "model" as const,
-      model,
-    })),
-  ]);
+    });
+    for (const model of providerModels) {
+      rows.push({
+        id: `model:${model.id}`,
+        kind: "model",
+        model,
+      });
+    }
+  }
+  return rows;
 }

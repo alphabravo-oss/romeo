@@ -11,6 +11,7 @@ import { useLocale, type Locale } from "../lib/i18n";
 import { formatNumber, LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { createColumnHelper, DataTable } from "./DataTable";
+import { SettingsSection } from "./SettingsSection";
 
 const voiceColumn = createColumnHelper<VoiceProfile>();
 
@@ -145,14 +146,8 @@ export function VoicePanel({
 
   if (selectedVoiceId === undefined) {
     return (
-      <section className="rm-panel p-4">
-        <div className="rm-card-header">
-          <div>
-            <div className="rm-card-title">{t("workspaceVoice")}</div>
-            <p className="text-sm text-muted">
-              {t("workspaceVoiceCatalogDescription")}
-            </p>
-          </div>
+      <div className="rm-console-page">
+        <div className="rm-console-toolbar">
           <Button
             disabled={syncMutation.isPending}
             onClick={handleSync}
@@ -161,34 +156,28 @@ export function VoicePanel({
             {t("sync")}
           </Button>
         </div>
-        <div className="mt-4">
-          <DataTable
-            columns={columns}
-            data={voices}
-            empty={
-              voicesQuery.isLoading
-                ? t("loading")
-                : t("workspaceVoiceNoProfiles")
-            }
-            getRowId={(voice) => voice.id}
-            minTableWidth={900}
-            onRowActivate={(voice) => onSelectionChange(voice.id)}
-            preferenceKey="workspace-voices"
-            rowAriaLabel={(voice) =>
-              t("workspaceVoiceOpen", { name: voice.name })
-            }
-            searchVisibility="always"
-          />
-        </div>
-        {notice ? (
-          <div className="mt-3 text-sm text-muted">{notice}</div>
-        ) : null}
-      </section>
+        <DataTable
+          columns={columns}
+          data={voices}
+          empty={
+            voicesQuery.isLoading ? t("loading") : t("workspaceVoiceNoProfiles")
+          }
+          getRowId={(voice) => voice.id}
+          minTableWidth={900}
+          onRowActivate={(voice) => onSelectionChange(voice.id)}
+          preferenceKey="workspace-voices"
+          rowAriaLabel={(voice) =>
+            t("workspaceVoiceOpen", { name: voice.name })
+          }
+          searchVisibility="always"
+        />
+        {notice ? <p className="rm-list-empty">{notice}</p> : null}
+      </div>
     );
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="rm-console-page">
       <Button
         className="w-fit"
         onClick={() => onSelectionChange(null)}
@@ -197,58 +186,68 @@ export function VoicePanel({
         <ArrowLeft aria-hidden="true" size={16} />
         {t("workspaceVoiceBack")}
       </Button>
-      <section className="rm-panel p-4">
-        {selectedVoice ? (
-          <>
-            <div>
-              <div className="rm-card-title">{selectedVoice.name}</div>
-              <p className="text-sm text-muted">
-                {selectedVoice.providerId} · {selectedVoice.providerVoiceId}
-              </p>
-            </div>
-            <div className="rm-model-meta-grid mt-4">
-              <span>
-                <small>{t("workspaceVoiceLanguage")}</small>
-                {selectedVoice.language}
-              </span>
-              <span>
-                <small>{t("workspaceVoiceAvailability")}</small>
-                <StatusBadge
-                  tone={selectedVoice.enabled ? "success" : "neutral"}
-                >
+      {selectedVoice ? (
+        <>
+          <SettingsSection
+            description={`${selectedVoice.providerId} · ${selectedVoice.providerVoiceId}`}
+            title={selectedVoice.name}
+          >
+            <div className="rm-defs">
+              <div>
+                <dt>{t("workspaceVoiceLanguage")}</dt>
+                <dd>{selectedVoice.language}</dd>
+              </div>
+              <div>
+                <dt>{t("workspaceVoiceAvailability")}</dt>
+                <dd>
+                  <StatusBadge
+                    tone={selectedVoice.enabled ? "success" : "neutral"}
+                  >
+                    {t(
+                      selectedVoice.enabled
+                        ? "workspaceVoiceAvailable"
+                        : "assistantUnavailable",
+                    )}
+                  </StatusBadge>
+                </dd>
+              </div>
+              <div>
+                <dt>{t("workspaceVoiceAccess")}</dt>
+                <dd>{formatNumber(selectedVoice.grantCount ?? 0, locale)}</dd>
+              </div>
+              <div>
+                <dt>{t("workspaceVoiceAssistants")}</dt>
+                <dd>
+                  {formatNumber(selectedVoice.dependentAgentCount ?? 0, locale)}
+                </dd>
+              </div>
+              <div>
+                <dt>{t("workspaceVoiceCloning")}</dt>
+                <dd>
                   {t(
-                    selectedVoice.enabled
-                      ? "workspaceVoiceAvailable"
-                      : "assistantUnavailable",
+                    selectedVoice.cloningAllowed
+                      ? "workspaceVoiceAllowed"
+                      : "workspaceVoiceNotAllowed",
                   )}
-                </StatusBadge>
-              </span>
-              <span>
-                <small>{t("workspaceVoiceAccess")}</small>
-                {formatNumber(selectedVoice.grantCount ?? 0, locale)}
-              </span>
-              <span>
-                <small>{t("workspaceVoiceAssistants")}</small>
-                {formatNumber(selectedVoice.dependentAgentCount ?? 0, locale)}
-              </span>
-              <span>
-                <small>{t("workspaceVoiceCloning")}</small>
-                {t(
-                  selectedVoice.cloningAllowed
-                    ? "workspaceVoiceAllowed"
-                    : "workspaceVoiceNotAllowed",
-                )}
-              </span>
-              <span>
-                <small>{t("workspaceVoiceUpdated")}</small>
-                <LocalizedDateTime value={selectedVoice.updatedAt} />
-              </span>
+                </dd>
+              </div>
+              <div>
+                <dt>{t("workspaceVoiceUpdated")}</dt>
+                <dd>
+                  <LocalizedDateTime value={selectedVoice.updatedAt} />
+                </dd>
+              </div>
             </div>
-            <div className="mt-4 text-sm text-muted">
+            <p className="rm-list-empty">
               {selectedVoice.styleTags.join(", ") ||
                 t("workspaceVoiceNoStyles")}
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
+            </p>
+          </SettingsSection>
+          <SettingsSection
+            description={t("workspaceVoiceCatalogDescription")}
+            title={t("preview")}
+          >
+            <div className="rm-resource-row__actions rm-resource-row__actions--start">
               <Button
                 disabled={!voiceProfileId || previewMutation.isPending}
                 onClick={handlePreview}
@@ -267,12 +266,12 @@ export function VoicePanel({
                 {t("workspaceVoiceBind")}
               </Button>
             </div>
-            {notice ? (
-              <div className="mt-3 text-sm text-muted">{notice}</div>
-            ) : null}
+            {notice ? <p className="rm-list-empty">{notice}</p> : null}
             {previewArtifact ? (
-              <div className="mt-3 grid gap-2 text-xs text-muted">
-                <span>{formatSpeechArtifact(previewArtifact, locale)}</span>
+              <div className="grid gap-2">
+                <p className="rm-list-empty">
+                  {formatSpeechArtifact(previewArtifact, locale)}
+                </p>
                 {previewArtifact.playbackUrl ? (
                   // The visible preview metadata is the text alternative for
                   // this generated speech-only artifact.
@@ -286,11 +285,11 @@ export function VoicePanel({
                 ) : null}
               </div>
             ) : null}
-          </>
-        ) : (
-          <div className="rm-empty">{t("workspaceVoiceNotFound")}</div>
-        )}
-      </section>
+          </SettingsSection>
+        </>
+      ) : (
+        <p className="rm-list-empty">{t("workspaceVoiceNotFound")}</p>
+      )}
     </div>
   );
 }

@@ -42,6 +42,52 @@ const errors = {
 const basePath = z.strictObject({ knowledgeBaseId: knowledgeIdentifier });
 const sourcePath = basePath.extend({ sourceId: knowledgeIdentifier });
 
+export const AgenticRagSettingsSchema = z
+  .strictObject({
+    enabled: z.boolean(),
+    userMode: z.enum(["optional", "required"]),
+  })
+  .openapi("AgenticRagSettings");
+
+export const KnowledgeIngestReadinessSchema = z
+  .strictObject({
+    ready: z.boolean(),
+    reason: z
+      .enum(["embedding_unset", "tiers_disabled", "vector_unconfigured"])
+      .optional(),
+  })
+  .openapi("KnowledgeIngestReadiness");
+
+export const getKnowledgeIngestReadinessRoute = createRoute({
+  ...metadata,
+  method: "get",
+  path: "/api/v1/knowledge/ingest-readiness",
+  operationId: "knowledge.getIngestReadiness",
+  summary: "Whether this org can upload and embed knowledge sources",
+  responses: {
+    200: jsonResponse(
+      "Knowledge ingest readiness",
+      dataEnvelope(KnowledgeIngestReadinessSchema),
+    ),
+    ...errors,
+  },
+});
+
+export const getAgenticRagSettingsRoute = createRoute({
+  ...metadata,
+  method: "get",
+  path: "/api/v1/knowledge/agentic",
+  operationId: "knowledge.getAgenticSettings",
+  summary: "Get whether agentic RAG is available for this organization",
+  responses: {
+    200: jsonResponse(
+      "Agentic RAG settings",
+      dataEnvelope(AgenticRagSettingsSchema),
+    ),
+    ...errors,
+  },
+});
+
 export const listKnowledgeBasesRoute = createRoute({
   ...metadata,
   method: "get",
@@ -344,6 +390,8 @@ export const compareTieredKnowledgeReplayRoute = createRoute({
 });
 
 export const knowledgeRoutes = [
+  getAgenticRagSettingsRoute,
+  getKnowledgeIngestReadinessRoute,
   listKnowledgeBasesRoute,
   createKnowledgeBaseRoute,
   getKnowledgeBaseRoute,

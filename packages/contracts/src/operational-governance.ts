@@ -47,9 +47,24 @@ export const AuditLogFilterSchema = z
   .strictObject({
     action: z.string().min(1).max(300).optional(),
     actorId: identifier.optional(),
+    category: z
+      .enum([
+        "security",
+        "admin",
+        "access",
+        "data",
+        "chat",
+        "run",
+        "system",
+      ])
+      .optional(),
+    from: timestamp.optional(),
+    includeNoise: z.enum(["true", "false"]).optional(),
     outcome: z.enum(["success", "failure"]).optional(),
+    q: z.string().min(1).max(300).optional(),
     resourceId: identifier.optional(),
     resourceType: z.string().min(1).max(300).optional(),
+    to: timestamp.optional(),
     limit: z.coerce.number().int().min(1).max(1_000).optional(),
     cursor: z.string().min(1).max(2_000).optional(),
   })

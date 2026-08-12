@@ -16,9 +16,11 @@ import {
   defaultTiers,
   normalizeBudgetMap,
   normalizeEnum,
+  normalizeAgenticSettings,
   normalizeExternalVectorStore,
   normalizePhysicalVectorIsolation,
   normalizeProviderModels,
+  normalizeRetrievalSettings,
   normalizeTags,
   normalizeTierAssignments,
   normalizeTiers,
@@ -110,6 +112,12 @@ function normalizePolicyPatch(value: unknown): UpdateRagPolicyRequest {
       input.allowedEmbeddingProviderModels,
     );
   }
+  if (input.retrieval !== undefined) {
+    patch.retrieval = normalizeRetrievalSettings(input.retrieval);
+  }
+  if (input.agentic !== undefined) {
+    patch.agentic = normalizeAgenticSettings(input.agentic);
+  }
   if (input.knowledgeBaseTierAssignments !== undefined) {
     patch.knowledgeBaseTierAssignments = normalizeTierAssignments(
       input.knowledgeBaseTierAssignments,
@@ -168,6 +176,8 @@ function parsePolicyReport(value: unknown, orgId: string): RagPolicyReport {
     allowedEmbeddingProviderModels: normalizeProviderModels(
       input.allowedEmbeddingProviderModels,
     ),
+    retrieval: normalizeRetrievalSettings(input.retrieval),
+    agentic: normalizeAgenticSettings(input.agentic),
     knowledgeBaseTierAssignments: normalizeTierAssignments(
       input.knowledgeBaseTierAssignments,
     ),
@@ -277,6 +287,7 @@ function policyComparable(policy: RagPolicyReport): Record<string, unknown> {
     defaultMaxResultsPerTier: policy.defaultMaxResultsPerTier,
     maxResultsPerTier: policy.maxResultsPerTier,
     allowedEmbeddingProviderModels: policy.allowedEmbeddingProviderModels,
+    retrieval: policy.retrieval,
     knowledgeBaseTierAssignments: policy.knowledgeBaseTierAssignments,
     dataResidencyTags: policy.dataResidencyTags,
     externalVectorStore: policy.externalVectorStore,
@@ -384,6 +395,12 @@ export function changedPolicyFields(
   ) {
     fields.push("allowedEmbeddingProviderModels");
   }
+  if (JSON.stringify(before.retrieval) !== JSON.stringify(after.retrieval)) {
+    fields.push("retrieval");
+  }
+  if (JSON.stringify(before.agentic) !== JSON.stringify(after.agentic)) {
+    fields.push("agentic");
+  }
   if (
     JSON.stringify(before.knowledgeBaseTierAssignments) !==
     JSON.stringify(after.knowledgeBaseTierAssignments)
@@ -416,6 +433,8 @@ export function isEmptyPolicyPatch(policy: UpdateRagPolicyRequest): boolean {
     policy.defaultMaxResultsPerTier === undefined &&
     policy.maxResultsPerTier === undefined &&
     policy.allowedEmbeddingProviderModels === undefined &&
+    policy.retrieval === undefined &&
+    policy.agentic === undefined &&
     policy.knowledgeBaseTierAssignments === undefined &&
     policy.dataResidencyTags === undefined &&
     policy.externalVectorStore === undefined &&

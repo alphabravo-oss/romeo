@@ -31,7 +31,7 @@
   "usersLastAdminHint": "You cannot disable the last admin.",
   "userUpdateRole": "Update role",
   "userUser": "User",
-  "userUsers": "Users",
+  "userDirectory": "Directory",
   "usersAddViaSso": "Set up sign-on",
   "usersAddViaSsoHint": "Members join through a configured sign-on provider."
 }

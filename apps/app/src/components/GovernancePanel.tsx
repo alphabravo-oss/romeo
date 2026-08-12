@@ -21,11 +21,12 @@ import { downloadCsv } from "../lib/csv";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
 import { LocalizedBytes, LocalizedDateTime } from "../lib/locale-format";
+import { Section, StatRow } from "./console";
+import { AdminDisclosure } from "./AdminDisclosure";
 import { ChatLifecyclePanel } from "./ChatLifecyclePanel";
 import { DataDeletionPanel } from "./DataDeletionPanel";
 import { DataRightsTab, GovernanceReportsTab } from "./GovernanceReportTabs";
 import { GovernanceRetentionTab } from "./GovernanceRetentionTab";
-import { PanelStats } from "./PanelStats";
 import { Tabs } from "./Tabs";
 import { WorkspaceLifecyclePanel } from "./WorkspaceLifecyclePanel";
 import { useConfirm } from "./ConfirmDialog";
@@ -47,7 +48,7 @@ export function GovernancePanel({
 }) {
   const { t } = useLocale();
   return (
-    <section className="rm-panel p-4">
+    <Section>
       <div className="rm-card-title">{t("govGovernance")}</div>
       <Tabs
         tabs={[
@@ -73,19 +74,24 @@ export function GovernancePanel({
           },
         ]}
       />
-      <WorkspaceLifecyclePanel
-        onWorkspaceArchived={onWorkspaceArchived}
-        workspace={workspace}
-      />
-      <ChatLifecyclePanel
-        activeChatId={activeChatId}
-        onChatArchived={onChatArchived}
-      />
-      <DataDeletionPanel
-        activeChatId={activeChatId}
-        onChatDeleted={onChatDeleted}
-      />
-    </section>
+      <AdminDisclosure
+        description={t("govLifecycleHelp")}
+        title={t("govLifecycleTitle")}
+      >
+        <WorkspaceLifecyclePanel
+          onWorkspaceArchived={onWorkspaceArchived}
+          workspace={workspace}
+        />
+        <ChatLifecyclePanel
+          activeChatId={activeChatId}
+          onChatArchived={onChatArchived}
+        />
+        <DataDeletionPanel
+          activeChatId={activeChatId}
+          onChatDeleted={onChatDeleted}
+        />
+      </AdminDisclosure>
+    </Section>
   );
 }
 
@@ -239,7 +245,7 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
   return (
     <div className="grid gap-4 text-sm">
       {dialog}
-      <PanelStats
+      <StatRow
         items={[
           { label: t("govPackages"), value: packages.length },
           {
