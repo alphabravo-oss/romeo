@@ -15,6 +15,7 @@ import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { createSeedData } from "./repositories/seed-data";
 import { enableDefaultAgentTool } from "./test-support/agent-tools";
+import { enableAssistants } from "./test-support/chat-experience";
 import { LocalMfaSecretVault } from "./services/local-mfa-secret-vault";
 import { ManagedSecretService } from "./services/managed-secret-service";
 import { EnvironmentSecretResolver } from "./services/secret-resolver";
@@ -314,6 +315,8 @@ describe("Open WebUI-class governed chat extensions", () => {
   it("creates, controls, and exposes retained memory in context inspection", async () => {
     const objectStore = new MemoryObjectStore();
     const api = createRomeoApi(new InMemoryRomeoRepository(), { objectStore });
+    // Memory rides in the system prompt, which bare mode withholds wholesale.
+    await enableAssistants(api);
     const createdResponse = await api.request("/api/v1/memories", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -8390,6 +8393,8 @@ describe("Romeo API thin slice", () => {
 
   it("governs managed-model personalization and applies it to run context", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    // Personalization rides in the system prompt, which bare mode withholds wholesale.
+    await enableAssistants(api);
     const defaultPolicyResponse = await api.request(
       "/api/v1/agents/agent_default/customization-policy",
     );
@@ -18249,7 +18254,7 @@ describe("Romeo chat history", () => {
     if (provider === undefined) throw new Error("Expected seeded provider");
     provider.baseUrl = "https://api.example/v1";
     provider.credentialRef = "env://ROMEO_PROVIDER_API_KEY";
-    return createRomeoApi(options.repository, {
+    const api = createRomeoApi(options.repository, {
       providerFetch: async (_input, init) => {
         options.bodies.push(JSON.parse(String(init?.body)) as ProviderBody);
         return new Response(
@@ -18267,6 +18272,11 @@ describe("Romeo chat history", () => {
         ROMEO_PROVIDER_API_KEY: "provider-api-key",
       }),
     });
+    // These cases assert where the system turn sits and that it stays byte-identical across turns.
+    // Bare mode sends no system turn at all, so the precondition is stated here once rather than
+    // silently inherited.
+    await enableAssistants(api);
+    return api;
   }
 
   async function createChat(
@@ -18420,10 +18430,10 @@ describe("Romeo chat history", () => {
     );
     expect(second?.content).toBe(first?.content);
     expect(second?.content).not.toContain("Romeo chat memory:");
-    expect(second?.content).not.toContain("Romeo knowledge context:");
+    expect(second?.content).not.toContain("Knowledge context:");
     // Retrieved context rides the current user turn instead.
     expect(bodies[1]?.messages.at(-1)?.content).toContain(
-      "Romeo knowledge context:",
+      "Knowledge context:",
     );
   });
 

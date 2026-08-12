@@ -12,8 +12,9 @@ import { contextMeterValue } from "./context-meter";
  *
  * ponytail: the preview costs the chat's ACTIVE branch, so after switching
  * sibling variants the number can describe a branch the reader is no longer
- * looking at (same ceiling as run-context-inspection-service.ts:68). Upgrade
- * path: key the cached preview by the active leaf message.
+ * looking at (same ceiling as run-context-inspection-service.ts, which carries
+ * the matching note). Upgrade path: key the cached preview by the active leaf
+ * message.
  */
 export function ContextMeter({
   contextWindow,

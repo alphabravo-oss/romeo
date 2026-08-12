@@ -40,7 +40,8 @@ import { useLocale } from "../lib/i18n";
 
 export function ChatPanel({
   activeVoiceProfileId,
-  agentName,
+  nextTurnAuthorName,
+  transcriptAuthorName,
   citations,
   attachedUrls,
   canInspectContext,
@@ -97,7 +98,18 @@ export function ChatPanel({
   variantsByMessageId,
 }: {
   activeVoiceProfileId: string | undefined;
-  agentName: string;
+  /**
+   * Who will answer the message being composed -- the assistant's name, or the
+   * base model's when the workspace runs bare. Heads a chat with no transcript
+   * yet; undefined falls back to a neutral heading.
+   */
+  nextTurnAuthorName: string | undefined;
+  /**
+   * Who produced the assistant rows already on screen. Undefined leaves them
+   * unlabelled, which is what a bare workspace gets: see resolveChatAuthorNames
+   * for why the current selection is not an answer to that question.
+   */
+  transcriptAuthorName: string | undefined;
   citations: ChatCitation[];
   attachedUrls: string[];
   canInspectContext: boolean;
@@ -305,7 +317,9 @@ export function ChatPanel({
               <div className="rm-placeholder-logo">
                 <BotMessageSquare aria-hidden="true" size={20} />
               </div>
-              <h1 className="rm-placeholder-title">{agentName}</h1>
+              <h1 className="rm-placeholder-title">
+                {nextTurnAuthorName ?? t("newChat")}
+              </h1>
             </div>
             {composer}
             {promptSuggestions.length > 0 ? (
@@ -378,7 +392,7 @@ export function ChatPanel({
         <div className="rm-conversation" ref={conversationRef}>
           <ChatMessages
             activeVoiceProfileId={activeVoiceProfileId}
-            agentName={agentName}
+            authorName={transcriptAuthorName}
             citations={citations}
             feedback={messageFeedback}
             isGeneratingSpeech={isGeneratingSpeech}
@@ -443,10 +457,3 @@ export function ChatPanel({
     </section>
   );
 }
-
-/**
- * Composer-scoped model picker: which model answers the *next* message in
- * this chat. Mirrors ModelSelector's trigger/menu/click-outside pattern, but
- * lists enabled models rather than agents, and is styled to sit quietly among
- * the composer's other muted icon buttons instead of the top bar.
- */

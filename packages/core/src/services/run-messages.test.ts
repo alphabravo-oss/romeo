@@ -92,6 +92,57 @@ describe("buildRunMessages shape", () => {
     expect(result.historyTruncated).toBe(false);
   });
 
+  it("omits the system turn entirely when the prompt is empty", () => {
+    const result = buildRunMessages({
+      ...baseInput,
+      systemPrompt: "",
+      history: [
+        message({
+          id: "msg_1",
+          role: "user",
+          content: "First question",
+          createdAt: "2026-07-15T10:00:00.000Z",
+        }),
+      ],
+    });
+
+    expect(result.messages.some((item) => item.role === "system")).toBe(false);
+    expect(result.messages[0]?.role).toBe("user");
+    expect(result.messages.at(-1)).toEqual({
+      role: "user",
+      content: "What is the status?",
+    });
+    expect(result.historyMessages).toBe(1);
+  });
+
+  it("omits the system turn when the prompt is only whitespace", () => {
+    const result = buildRunMessages({ ...baseInput, systemPrompt: "  \n\t " });
+
+    expect(result.messages.some((item) => item.role === "system")).toBe(false);
+  });
+
+  it("keeps a single system turn when personalization is appended to an empty prompt", () => {
+    const result = buildRunMessages({
+      ...baseInput,
+      systemPrompt: "\n\nRespond in Spanish.",
+    });
+
+    const systemTurns = result.messages.filter(
+      (item) => item.role === "system",
+    );
+    expect(systemTurns).toHaveLength(1);
+    expect(systemTurns[0]?.content).toBe("\n\nRespond in Spanish.");
+  });
+
+  it("charges no context budget for an omitted system turn", () => {
+    const withPrompt = buildRunMessages(baseInput);
+    const withoutPrompt = buildRunMessages({ ...baseInput, systemPrompt: "" });
+
+    expect(withoutPrompt.estimatedInputTokens).toBeLessThan(
+      withPrompt.estimatedInputTokens,
+    );
+  });
+
   it("decorates the last user turn with knowledge context and leaves the system prompt untouched", () => {
     const result = buildRunMessages({
       ...baseInput,
@@ -100,11 +151,11 @@ describe("buildRunMessages shape", () => {
 
     expect(result.messages[0]?.content).toBe("You are Romeo.");
     expect(result.messages[0]?.content).not.toContain(
-      "Romeo knowledge context:",
+      "Knowledge context:",
     );
     const userTurn = result.messages.at(-1);
     expect(userTurn?.role).toBe("user");
-    expect(userTurn?.content).toContain("Romeo knowledge context:");
+    expect(userTurn?.content).toContain("Knowledge context:");
     expect(userTurn?.content).toContain("[1] Title c1: Romeo ships on Friday.");
     expect(userTurn?.content.endsWith("What is the status?")).toBe(true);
     expect(result.citations.map((citation) => citation.chunkId)).toEqual([
@@ -165,7 +216,7 @@ describe("buildRunMessages shape", () => {
     expect(turnTwo.messages[0]?.content).toBe("You are Romeo.");
     expect(turnTwo.messages[1]?.content).toBe("Turn one");
     expect(turnTwo.messages[1]?.content).not.toContain(
-      "Romeo knowledge context:",
+      "Knowledge context:",
     );
   });
 });

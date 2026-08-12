@@ -77,6 +77,34 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
         void form.handleSubmit();
       }}
     >
+      <form.Field name="assistantsEnabled">
+        {(field) => (
+          <label
+            className="flex items-start gap-3 rounded-md border border-border p-3"
+            htmlFor="chat-assistants-enabled"
+          >
+            <Input
+              checked={field.state.value}
+              id="chat-assistants-enabled"
+              name="assistantsEnabled"
+              onBlur={field.handleBlur}
+              onChange={(event) =>
+                field.handleChange(event.currentTarget.checked)
+              }
+              type="checkbox"
+            />
+            <span>
+              <strong className="block text-sm">
+                {t("chatAssistantsLabel")}
+              </strong>
+              <span className="mt-1 block text-sm text-muted">
+                {t("chatAssistantsDescription")}
+              </span>
+            </span>
+          </label>
+        )}
+      </form.Field>
+
       <form.Field name="autoTitleEnabled">
         {(field) => (
           <label

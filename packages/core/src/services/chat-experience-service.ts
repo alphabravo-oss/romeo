@@ -1,5 +1,9 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
-import type { ChatExperience, ChatSuggestion } from "@romeo/contracts";
+import type {
+  ChatExperience,
+  ChatSuggestion,
+  UpdateChatExperience,
+} from "@romeo/contracts";
 
 import type { RomeoRepository } from "../domain/repository";
 import { writeAuditLog } from "./audit-log";
@@ -25,6 +29,8 @@ const defaultSuggestions: ChatSuggestion[] = [
 const defaults: ChatExperience = {
   suggestions: defaultSuggestions,
   autoTitleEnabled: true,
+  // Bare chat is the default: unless an operator opts in, the model answers as itself.
+  assistantsEnabled: false,
 };
 
 export class ChatExperienceService {
@@ -40,10 +46,16 @@ export class ChatExperienceService {
 
   async update(
     subject: AuthSubject,
-    input: ChatExperience,
+    input: UpdateChatExperience,
   ): Promise<ChatExperience> {
     assertScope(subject, "admin:write");
-    const data = normalize(input);
+    // A body without `assistantsEnabled` — anything written against the pre-toggle contract — keeps
+    // whatever is stored. Falling back to the default here instead would let an old client silently
+    // switch assistants off for the whole org just by saving its suggestions.
+    const assistantsEnabled =
+      input.assistantsEnabled ??
+      (await assistantsEnabledForOrg(this.repository, subject.orgId));
+    const data = normalize({ ...input, assistantsEnabled });
     const now = new Date().toISOString();
     await this.repository.transaction(async (repository) => {
       await repository.upsertSystemSetting({
@@ -57,6 +69,7 @@ export class ChatExperienceService {
         resourceType: "organization",
         resourceId: subject.orgId,
         metadata: {
+          assistantsEnabled: data.assistantsEnabled,
           autoTitleEnabled: data.autoTitleEnabled,
           suggestionCount: data.suggestions.length,
         },
@@ -64,6 +77,20 @@ export class ChatExperienceService {
     });
     return data;
   }
+}
+
+/**
+ * The run path's read of the same org row the admin screen writes. No scope assert and no subject:
+ * this is a property of the organization, not of the caller, and every caller has already
+ * authorized the run it is assembling. Reading through `normalize` keeps one definition of the
+ * default, so an org that never opened the screen reads bare here exactly as it does in the API.
+ */
+export async function assistantsEnabledForOrg(
+  repository: RomeoRepository,
+  orgId: string,
+): Promise<boolean> {
+  const value = (await repository.getSystemSetting(settingKey(orgId)))?.value;
+  return normalize(value ?? {}).assistantsEnabled;
 }
 
 function settingKey(orgId: string): string {
@@ -93,5 +120,12 @@ function normalize(value: Record<string, unknown>): ChatExperience {
       typeof value.autoTitleEnabled === "boolean"
         ? value.autoTitleEnabled
         : defaults.autoTitleEnabled,
+    // Rows persisted before this field existed have no `assistantsEnabled`, so they land on the
+    // default and read as bare. The key stays `chat_experience.v1` — bumping it would orphan every
+    // org's saved suggestions to buy nothing.
+    assistantsEnabled:
+      typeof value.assistantsEnabled === "boolean"
+        ? value.assistantsEnabled
+        : defaults.assistantsEnabled,
   };
 }

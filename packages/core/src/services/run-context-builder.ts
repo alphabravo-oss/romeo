@@ -32,6 +32,13 @@ import {
 
 export interface CanonicalRunContextInput {
   agentVersion: Pick<AgentVersion, "memoryPolicy" | "systemPrompt">;
+  /**
+   * The org chat-experience setting. False means BARE: the assembled system prompt is withheld
+   * from the provider, so the model answers as itself. The agent row is still selected and its
+   * version still pinned to the run, so the audit trail and the agent's safetySettings are
+   * untouched — only the prompt text is withheld.
+   */
+  assistantsEnabled: boolean;
   history: Message[];
   knowledgeHits: RetrievalHit[];
   memories: WorkspaceContentItem[];
@@ -53,11 +60,19 @@ export function buildCanonicalRunContext(input: CanonicalRunContextInput) {
     input.agentVersion.memoryPolicy,
   );
   return buildRunMessages({
+    // Bare mode withholds what belongs to the ASSISTANT -- its persona and the personalization of
+    // it -- because the surface that shows or clears personalization is hidden with assistants off,
+    // so keeping it would inject an instruction the reader cannot see or remove. Memories are not
+    // the assistant's: Settings -> Memory stays visible either way and tells the user their
+    // memories may be sent as context, so dropping them here would make that panel lie. An empty
+    // result reaches buildRunMessages' guard, which omits the turn rather than sending a blank one.
     systemPrompt: appendMemoryContext(
-      appendManagedModelPreferences(
-        input.agentVersion.systemPrompt,
-        input.preferences,
-      ),
+      input.assistantsEnabled
+        ? appendManagedModelPreferences(
+            input.agentVersion.systemPrompt,
+            input.preferences,
+          )
+        : "",
       input.memories,
     ),
     history: input.history,

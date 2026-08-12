@@ -120,7 +120,7 @@ describe("knowledgeUserContent", () => {
     );
 
     expect(content).toBe(
-      "Romeo knowledge context:\n[1] Alpha: Alpha body\n\nUse this context when relevant and cite sources by bracket number.\n\nWhat is the status?",
+      "Knowledge context:\n[1] Alpha: Alpha body\n\nUse this context when relevant and cite sources by bracket number.\n\nWhat is the status?",
     );
   });
 });

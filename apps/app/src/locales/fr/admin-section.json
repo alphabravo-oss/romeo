@@ -8,6 +8,8 @@
   "adminChatExperienceDescription": "Configurez l'accueil d'une nouvelle discussion, les suggestions et les titres automatiques.",
   "chatExperienceSettings": "Paramètres de l'expérience de discussion",
   "chatExperienceSettingsDescription": "Ces paramètres globaux s'appliquent à la page de nouvelle discussion de chaque membre.",
+  "chatAssistantsLabel": "Activer les assistants",
+  "chatAssistantsDescription": "Lorsque l'option est activée, les discussions passent par un assistant doté de son propre nom et de sa propre invite système, et les membres disposent du sélecteur d'assistants et de la personnalisation. Lorsqu'elle est désactivée, les discussions répondent en tant que modèle de base sélectionné et ces commandes sont masquées. Dans les deux cas, l'exécution est enregistrée sur une version de modèle gouverné et ses paramètres de sécurité continuent de s'appliquer.",
   "chatAutoTitleLabel": "Générer automatiquement les titres",
   "chatAutoTitleDescription": "Après la première réponse, le modèle sélectionné crée un titre concis. La discussion continue si le modèle est indisponible.",
   "chatStarterPrompts": "Suggestions de départ",

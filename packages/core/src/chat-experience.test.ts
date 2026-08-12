@@ -26,6 +26,86 @@ describe("chat experience", () => {
     ).toBe(false);
   });
 
+  it("reads a settings row saved before assistants were switchable as bare chat", async () => {
+    const repository = new InMemoryRomeoRepository();
+    await repository.upsertSystemSetting({
+      key: "chat_experience.v1:org_default",
+      value: { suggestions: [], autoTitleEnabled: true },
+      updatedAt: "2026-07-29T12:00:00.000Z",
+    });
+    const api = createRomeoApi(repository, { startBackgroundWorkers: false });
+
+    const response = await api.request("/api/v1/chat-experience");
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.autoTitleEnabled).toBe(true);
+    expect(body.data.assistantsEnabled).toBe(false);
+  });
+
+  it("keeps the stored assistants control when a settings write omits it", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, { startBackgroundWorkers: false });
+    const put = (body: Record<string, unknown>) =>
+      api.request("/api/v1/admin/chat-experience", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const readAssistantsEnabled = async () => {
+      const response = await api.request("/api/v1/chat-experience");
+      return (await response.json()).data.assistantsEnabled;
+    };
+    // The body a client written against the pre-toggle contract still sends.
+    const legacyBody = { autoTitleEnabled: true, suggestions: [] };
+
+    await put({ ...legacyBody, assistantsEnabled: true });
+    const keptOn = await put(legacyBody);
+
+    expect(keptOn.status).toBe(200);
+    expect((await keptOn.json()).data.assistantsEnabled).toBe(true);
+    expect(await readAssistantsEnabled()).toBe(true);
+
+    await put({ ...legacyBody, assistantsEnabled: false });
+    const keptOff = await put(legacyBody);
+
+    expect(keptOff.status).toBe(200);
+    expect((await keptOff.json()).data.assistantsEnabled).toBe(false);
+    expect(await readAssistantsEnabled()).toBe(false);
+  });
+
+  it("audits both directions of the assistants switch", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, { startBackgroundWorkers: false });
+    const read = async () => {
+      const response = await api.request("/api/v1/chat-experience");
+      return (await response.json()).data;
+    };
+    const initial = await read();
+    const put = (assistantsEnabled: boolean) =>
+      api.request("/api/v1/admin/chat-experience", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...initial, assistantsEnabled }),
+      });
+
+    await put(true);
+    await put(false);
+    const settled = await read();
+    const recorded = (await repository.listAuditLogs("org_default"))
+      .filter((event) => event.action === "chat_experience.update")
+      .map((event) => event.metadata.assistantsEnabled);
+
+    // Switching back off has to be as auditable as switching on: a `false` recorded as absent
+    // would leave "who made this workspace bare" unanswerable. Order is not asserted — both
+    // writes land in the same millisecond, and the audit list sorts on that timestamp alone.
+    expect(recorded).toHaveLength(2);
+    expect(recorded).toContain(true);
+    expect(recorded).toContain(false);
+    // The toggle rewrites the whole settings row, so it must not reset the rest of it.
+    expect(settled.suggestions).toEqual(initial.suggestions);
+  });
+
   it("stores admin-managed starters and generates a governed title", async () => {
     const repository = new InMemoryRomeoRepository();
     const provider = await repository.getProvider("provider_openai_compatible");
@@ -63,6 +143,7 @@ describe("chat experience", () => {
     const defaults = await defaultsResponse.json();
     expect(defaultsResponse.status).toBe(200);
     expect(defaults.data.autoTitleEnabled).toBe(true);
+    expect(defaults.data.assistantsEnabled).toBe(false);
     expect(defaults.data.suggestions).toHaveLength(3);
 
     const settingsResponse = await api.request(
@@ -72,6 +153,7 @@ describe("chat experience", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           autoTitleEnabled: true,
+          assistantsEnabled: true,
           suggestions: [
             {
               title: "Review release readiness",
@@ -82,6 +164,9 @@ describe("chat experience", () => {
       },
     );
     expect(settingsResponse.status).toBe(200);
+    const savedResponse = await api.request("/api/v1/chat-experience");
+    const saved = await savedResponse.json();
+    expect(saved.data.assistantsEnabled).toBe(true);
 
     const importedResponse = await api.request("/api/v1/chats/import", {
       method: "POST",
@@ -115,7 +200,11 @@ describe("chat experience", () => {
     expect(titleResponse.status).toBe(200);
     expect(titled.data.title).toBe("Secure Milestone Rollout");
     expect(
-      audit.some((event) => event.action === "chat_experience.update"),
+      audit.some(
+        (event) =>
+          event.action === "chat_experience.update" &&
+          event.metadata?.assistantsEnabled === true,
+      ),
     ).toBe(true);
   });
 });

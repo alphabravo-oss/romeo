@@ -8,6 +8,8 @@
   "adminChatExperienceDescription": "Configure the new-chat experience, starter prompts, and automatic conversation titles.",
   "chatExperienceSettings": "Chat experience settings",
   "chatExperienceSettingsDescription": "These organization-wide settings apply to every member's new-chat page.",
+  "chatAssistantsLabel": "Enable assistants",
+  "chatAssistantsDescription": "When on, chats run through an assistant with its own name and system prompt, and members get the assistant switcher and personalization. When off, chats answer as the selected base model and those controls are hidden. Either way the run is recorded against a managed model version and that version's safety settings still apply.",
   "chatAutoTitleLabel": "Generate conversation titles automatically",
   "chatAutoTitleDescription": "After the first response, use the selected governed model to create a concise title. Title generation is non-blocking if the model is unavailable.",
   "chatStarterPrompts": "Starter prompts",

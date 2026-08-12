@@ -658,7 +658,8 @@ html.dark .rm-suggestion:hover {
   font-weight: 650;
 }
 
-/* Assistant name: full-contrast, base size (Open WebUI ~16px, not 12px) */
+/* Author name -- the assistant's, or the base model's when the workspace runs
+   bare: full-contrast, base size (Open WebUI ~16px, not 12px) */
 
 .rm-message-heading > span {
   color: var(--rm-text);

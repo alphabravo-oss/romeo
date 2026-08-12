@@ -8,6 +8,8 @@
   "adminChatExperienceDescription": "Configura la experiencia de chat nuevo, los mensajes iniciales y los títulos automáticos.",
   "chatExperienceSettings": "Configuración de la experiencia de chat",
   "chatExperienceSettingsDescription": "Esta configuración para toda la organización se aplica a la página de chat nuevo de cada miembro.",
+  "chatAssistantsLabel": "Activar asistentes",
+  "chatAssistantsDescription": "Cuando está activado, los chats se ejecutan a través de un asistente con su propio nombre e instrucciones de sistema, y los miembros disponen del selector de asistentes y de la personalización. Cuando está desactivado, los chats responden como el modelo base seleccionado y esos controles se ocultan. En ambos casos, la ejecución se registra en una versión de modelo gobernado y su configuración de seguridad se sigue aplicando.",
   "chatAutoTitleLabel": "Generar títulos de conversación automáticamente",
   "chatAutoTitleDescription": "Después de la primera respuesta, utiliza el modelo seleccionado para crear un título conciso. Si el modelo no está disponible, la conversación continúa.",
   "chatStarterPrompts": "Mensajes iniciales",

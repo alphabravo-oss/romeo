@@ -25,6 +25,7 @@ import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { getAuthorizedAgent } from "./agent-access";
 import { writeAuditLog } from "./audit-log";
+import { assistantsEnabledForOrg } from "./chat-experience-service";
 import { normalizeEvalRubric, scoreEvalCase } from "./eval-case-scoring";
 import { buildEvalReleaseCandidateEvidence } from "./eval-reporting";
 import { assertEvalRunAllowed } from "./eval-run-policy";
@@ -327,12 +328,18 @@ export class EvalService {
         : { webhooks: this.options.webhooks }),
     });
 
+    // Same suppression the run path applies, read off the same org row: an eval that measured a
+    // system turn production never sends would score a request shape that does not exist.
+    const assistantsEnabled = await assistantsEnabledForOrg(
+      this.repository,
+      input.subject.orgId,
+    );
     const resultDrafts: Array<Omit<EvalRunResult, "createdAt" | "runId">> = [];
     for (const testCase of cases) {
       const output = await this.generateOutput(
         provider,
         model,
-        agent.systemPrompt,
+        assistantsEnabled ? agent.systemPrompt : "",
         testCase.input,
       );
       resultDrafts.push(scoreEvalCase(testCase, output, input.subject.orgId));
@@ -449,7 +456,11 @@ export class EvalService {
         ? {}
         : { fetchImpl: this.options.providerFetch }),
       messages: [
-        { role: "system", content: systemPrompt },
+        // buildRunMessages' empty-prompt guard, repeated because evals bypass that assembler:
+        // every provider but Anthropic serializes a blank system turn verbatim.
+        ...(systemPrompt.trim().length === 0
+          ? []
+          : [{ role: "system" as const, content: systemPrompt }]),
         { role: "user", content: input },
       ],
     })) {

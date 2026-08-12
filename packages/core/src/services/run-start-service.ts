@@ -6,6 +6,7 @@ import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { enforceAgentSafetySettings } from "./agent-safety";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
+import { assistantsEnabledForOrg } from "./chat-experience-service";
 import { consumeQuota } from "./consume-quota";
 import { storeMessageAttachments } from "./message-attachments";
 import {
@@ -281,6 +282,7 @@ export class RunStartService {
     ]);
     const built = buildCanonicalRunContext({
       agentVersion,
+      assistantsEnabled: await assistantsEnabledForOrg(repository, chat.orgId),
       preferences: customization.preferences,
       memories,
       history,

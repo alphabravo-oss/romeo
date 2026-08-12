@@ -2,6 +2,7 @@ import type { AuthSubject } from "@romeo/auth";
 import type { ObjectStore } from "@romeo/storage";
 
 import type { RomeoRepository } from "../domain/repository";
+import { assistantsEnabledForOrg } from "./chat-experience-service";
 import {
   appendDocumentContext,
   buildCanonicalRunContext,
@@ -143,8 +144,16 @@ export class RunContextInspectionService {
         mimeType: "image/png" as const,
       })),
     ];
+    // The preview exists to show what the run would send, so it reads the same org setting the run
+    // path reads. Diverging here would let an operator sign off on a request shape production never
+    // sends — the exact failure this preview is meant to catch.
+    const assistantsEnabled = await assistantsEnabledForOrg(
+      this.repository,
+      chat.orgId,
+    );
     const built = buildCanonicalRunContext({
       agentVersion,
+      assistantsEnabled,
       preferences: customization.preferences,
       memories,
       history,
@@ -182,11 +191,15 @@ export class RunContextInspectionService {
         pendingImages: input.imageCount,
       },
       knowledge: built.citations,
-      memories: memories.map((memory) => ({
-        id: memory.id,
-        title: memory.title,
-        scope: memory.scope,
-      })),
+      // Memory rides in the system prompt, which bare mode withholds, so listing it here would
+      // advertise context the request does not carry.
+      memories: assistantsEnabled
+        ? memories.map((memory) => ({
+            id: memory.id,
+            title: memory.title,
+            scope: memory.scope,
+          }))
+        : [],
       messages: built.messages.map((message) => ({
         role: message.role,
         content: message.content,

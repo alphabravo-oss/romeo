@@ -29,7 +29,7 @@ const noToolCalls: ChatToolCall[] = [];
 
 export const ChatMessages = memo(function ChatMessages({
   activeVoiceProfileId,
-  agentName,
+  authorName,
   citations,
   feedback,
   isGeneratingSpeech,
@@ -52,7 +52,7 @@ export const ChatMessages = memo(function ChatMessages({
   variantsByMessageId,
 }: {
   activeVoiceProfileId: string | undefined;
-  agentName: string;
+  authorName: string | undefined;
   citations: ChatCitation[];
   feedback: Record<string, MessageFeedbackState>;
   isGeneratingSpeech: boolean;
@@ -134,7 +134,7 @@ export const ChatMessages = memo(function ChatMessages({
           return (
             <ChatMessageRow
               activeVoiceProfileId={activeVoiceProfileId}
-              agentName={agentName}
+              authorName={authorName}
               artifact={speechArtifacts[message.id]}
               citations={isLast ? citations : noCitations}
               copied={copiedId === message.id}

@@ -159,7 +159,10 @@ export function knowledgeUserContent(
   userContent: string,
 ): string {
   if (knowledgeContext === undefined) return userContent;
-  return `Romeo knowledge context:\n${knowledgeContext}\n\nUse this context when relevant and cite sources by bracket number.\n\n${userContent}`;
+  // Product-neutral on purpose: this preamble rides in the USER turn, so it reaches the model even
+  // in bare mode where the system prompt is withheld. Naming the product here told the model what
+  // it was running inside, which is the identity leak bare mode exists to close.
+  return `Knowledge context:\n${knowledgeContext}\n\nUse this context when relevant and cite sources by bracket number.\n\n${userContent}`;
 }
 
 export function appendRunCitations(

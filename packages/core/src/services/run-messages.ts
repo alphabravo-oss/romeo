@@ -143,11 +143,18 @@ export function buildRunMessages(
       ? allCandidates
       : allCandidates.slice(-input.maxHistoryMessages);
 
-  const systemMessage: ChatMessage = {
-    role: "system",
-    content: input.systemPrompt,
-  };
-  const systemTokens = chatMessageTokens(systemMessage);
+  // Guard the FINAL prompt, not the managed model's stored one: run-context-builder has already
+  // folded in per-user preferences and memory, so a model whose stored prompt is empty still gets
+  // a system turn when personalization put something there. Only the Anthropic adapter drops an
+  // empty system turn; openai-compatible, ollama and openai-responses would serialize
+  // {"role":"system","content":""} verbatim, which is what makes a blank-prompt model answer as a
+  // nameless assistant instead of as itself.
+  const systemMessage: ChatMessage | undefined =
+    input.systemPrompt.trim().length === 0
+      ? undefined
+      : { role: "system", content: input.systemPrompt };
+  const systemTokens =
+    systemMessage === undefined ? 0 : chatMessageTokens(systemMessage);
   const tailTokens = tail.reduce(
     (total, message) => total + chatMessageTokens(message),
     0,
@@ -196,7 +203,7 @@ export function buildRunMessages(
     budgetEnabled ? usable - floorTokens : 0,
   );
   const messages: ChatMessage[] = [
-    systemMessage,
+    ...(systemMessage === undefined ? [] : [systemMessage]),
     ...kept,
     userMessage,
     ...tail,

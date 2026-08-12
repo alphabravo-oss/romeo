@@ -7,6 +7,7 @@ import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import type { QueuedChatTurn } from "../features/runs";
 import { type AppCommand, useRegisterCommands } from "../lib/commands";
 import { useLocale } from "../lib/i18n";
+import { resolveChatAuthorNames } from "./assistant-selection";
 import { ChatPanel } from "./ChatPanel";
 import { ModelSelector } from "./ModelSelector";
 import { useWorkspaceController } from "./useWorkspaceController";
@@ -46,6 +47,21 @@ export function WorkspaceShell({
   });
   const { agents, handleNewChat, setActiveAgentId } = workspace;
   const { workspaceId, workspaces, setWorkspaceId } = useWorkspace();
+  // The single read of the toggle in the chat tree: everything below this
+  // component receives already-resolved names, not the flag. It stays undefined
+  // until the setting loads, and every use here reads that as "not yet" -- a
+  // name is withheld rather than guessed, and the assistant-only controls stay
+  // out until they are known to belong. Guessing would label an assistants-on
+  // workspace by the bare rule for a paint, then flip.
+  const assistantsEnabled = workspace.chatExperience?.assistantsEnabled;
+  const authorNames = resolveChatAuthorNames({
+    agentName: workspace.activeAgent?.name,
+    assistantsEnabled,
+    fallbackName: t("shellRomeoAssistant"),
+    modelDisplayName: workspace.models.find(
+      (model) => model.id === workspace.selectedModelId,
+    )?.displayName,
+  });
 
   // ChatMessageRow is memoised, and a memo only holds if its function props
   // keep their identity -- a fresh arrow per render is a changed prop on every
@@ -120,15 +136,20 @@ export function WorkspaceShell({
         icon: SquarePen,
         run: handleNewChat,
       },
-      ...agents.map((agent) => ({
-        id: `switch-agent-${agent.id}`,
-        group: t("shellSwitchAgent"),
-        label: agent.name,
-        icon: Bot,
-        run: () => setActiveAgentId(agent.id),
-      })),
+      // Dropped wholesale when assistants are off: there is nothing to switch
+      // between, and the group heading is one of the strings that names the
+      // wrapper the setting exists to hide.
+      ...(assistantsEnabled
+        ? agents.map((agent) => ({
+            id: `switch-agent-${agent.id}`,
+            group: t("shellSwitchAgent"),
+            label: agent.name,
+            icon: Bot,
+            run: () => setActiveAgentId(agent.id),
+          }))
+        : []),
     ],
-    [agents, handleNewChat, setActiveAgentId, t],
+    [agents, assistantsEnabled, handleNewChat, setActiveAgentId, t],
   );
   useRegisterCommands(commands);
 
@@ -173,18 +194,32 @@ export function WorkspaceShell({
       <section className="rm-main" id="main-content" tabIndex={-1}>
         <header className="rm-topbar">
           <div className="rm-main-context">
-            <ModelSelector
-              activeAgentId={
-                workspace.activeAgentId ?? workspace.activeAgent?.id
-              }
-              activeAgentName={
-                workspace.activeAgent?.name ?? t("shellRomeoAssistant")
-              }
-              agents={workspace.agents}
-              onSelectAgent={workspace.setActiveAgentId}
-              workspaceId={workspace.workspace?.id}
-            />
-            <ManagedModelPersonalization agentId={workspace.activeAgent?.id} />
+            {/*
+             * Both controls act on the assistant wrapper, so with assistants
+             * off neither has a subject the reader can see: the composer's own
+             * model picker is what chooses who answers. Personalization is
+             * gated explicitly rather than left to its all-locked-policy
+             * self-hide, which is an accident of the default policy and not a
+             * promise.
+             */}
+            {assistantsEnabled ? (
+              <>
+                <ModelSelector
+                  activeAgentId={
+                    workspace.activeAgentId ?? workspace.activeAgent?.id
+                  }
+                  activeAgentName={
+                    workspace.activeAgent?.name ?? t("shellRomeoAssistant")
+                  }
+                  agents={workspace.agents}
+                  onSelectAgent={workspace.setActiveAgentId}
+                  workspaceId={workspace.workspace?.id}
+                />
+                <ManagedModelPersonalization
+                  agentId={workspace.activeAgent?.id}
+                />
+              </>
+            ) : null}
             {/*
              * Rendered only when there is somewhere to switch to. Previously the
              * single-workspace case fell back to a plain <span> holding the
@@ -238,7 +273,8 @@ export function WorkspaceShell({
 
         <ChatPanel
           activeVoiceProfileId={workspace.activeVoiceProfileId}
-          agentName={workspace.activeAgent?.name ?? t("shellRomeoAssistant")}
+          nextTurnAuthorName={authorNames.nextTurn}
+          transcriptAuthorName={authorNames.transcript}
           attachedUrls={workspace.attachedUrls}
           citations={workspace.citations}
           contextPreview={workspace.contextPreview}

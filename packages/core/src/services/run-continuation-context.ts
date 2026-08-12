@@ -10,6 +10,7 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { historyMessageLimit } from "./agent-memory";
+import { assistantsEnabledForOrg } from "./chat-experience-service";
 import { managedModelSystemPrompt } from "./run-context-builder";
 import {
   buildRunKnowledgeContext,
@@ -195,13 +196,21 @@ export class RunContinuationContextBuilder {
     const maxHistoryMessages = historyMessageLimit(
       input.agentVersion.memoryPolicy,
     );
-    const systemPrompt = await managedModelSystemPrompt(
+    // Resuming after a tool approval is the same run, so it must carry the same prompt shape it
+    // started with: a bare run that grew a system turn halfway through would change who the model
+    // thinks it is mid-conversation.
+    const systemPrompt = (await assistantsEnabledForOrg(
       this.repository,
-      input.subject,
-      input.run.agentId,
-      input.agentVersion.systemPrompt,
-      this.options,
-    );
+      input.run.orgId,
+    ))
+      ? await managedModelSystemPrompt(
+          this.repository,
+          input.subject,
+          input.run.agentId,
+          input.agentVersion.systemPrompt,
+          this.options,
+        )
+      : "";
     return buildRunMessages({
       systemPrompt,
       history: base.priorMessages,

@@ -20,12 +20,24 @@ export const ChatExperienceSchema = z
   .strictObject({
     suggestions: z.array(ChatSuggestionSchema).max(8),
     autoTitleEnabled: z.boolean(),
+    // Off means the chat answers as the selected model. Runs are still recorded against a managed
+    // model version, so the audit trail and its safety settings survive either way.
+    assistantsEnabled: z.boolean(),
   })
   .openapi("ChatExperience");
 
-export const UpdateChatExperienceSchema = ChatExperienceSchema.openapi(
-  "UpdateChatExperienceRequest",
-);
+// Spread rather than `.extend()`: extending a registered schema emits an `allOf` against the
+// ChatExperience component, which would keep the field required through the $ref.
+export const UpdateChatExperienceSchema = z
+  .strictObject({
+    ...ChatExperienceSchema.shape,
+    // Optional on the request only — the read schema still guarantees it. A client built before
+    // this field existed PUTs the old body, and requiring it would 400 every one of them. Omitting
+    // the field means "leave the stored control alone", never "turn assistants off": a settings
+    // write must not silently flip a switch it never sent.
+    assistantsEnabled: z.boolean().optional(),
+  })
+  .openapi("UpdateChatExperienceRequest");
 
 const errors = {
   400: standardErrorResponses[400],
@@ -103,4 +115,5 @@ export const chatExperienceRoutes = [
 ] as const;
 
 export type ChatExperience = z.infer<typeof ChatExperienceSchema>;
+export type UpdateChatExperience = z.infer<typeof UpdateChatExperienceSchema>;
 export type ChatSuggestion = z.infer<typeof ChatSuggestionSchema>;

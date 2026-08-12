@@ -51,7 +51,7 @@ import {
  */
 export const ChatMessageRow = memo(function ChatMessageRow({
   activeVoiceProfileId,
-  agentName,
+  authorName,
   artifact,
   citations,
   copied,
@@ -87,7 +87,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   variantTotal,
 }: {
   activeVoiceProfileId: string | undefined;
-  agentName: string;
+  authorName: string | undefined;
   artifact: SpeechArtifact | undefined;
   citations: ChatCitation[];
   copied: boolean;
@@ -237,9 +237,13 @@ export const ChatMessageRow = memo(function ChatMessageRow({
         <BotMessageSquare aria-hidden="true" size={16} />
       </div>
       <div className="rm-message-body">
-        <div className="rm-message-heading">
-          <span>{agentName}</span>
-        </div>
+        {/* The whole heading goes, not just its text: an empty row would still
+            take the body's gap and leave the answer sitting low for no reason. */}
+        {authorName === undefined ? null : (
+          <div className="rm-message-heading">
+            <span>{authorName}</span>
+          </div>
+        )}
         {reasoning === undefined ? null : (
           <ReasoningPanel reasoning={reasoning} streaming={isThinking} />
         )}

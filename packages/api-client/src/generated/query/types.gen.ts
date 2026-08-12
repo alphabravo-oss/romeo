@@ -4535,6 +4535,7 @@ export type CreateChatCommentRequest = {
 export type ChatExperience = {
   suggestions: Array<ChatSuggestion>;
   autoTitleEnabled: boolean;
+  assistantsEnabled: boolean;
 };
 
 export type ChatSuggestion = {
@@ -4545,6 +4546,7 @@ export type ChatSuggestion = {
 export type UpdateChatExperienceRequest = {
   suggestions: Array<ChatSuggestion>;
   autoTitleEnabled: boolean;
+  assistantsEnabled?: boolean;
 };
 
 export type Channel = {

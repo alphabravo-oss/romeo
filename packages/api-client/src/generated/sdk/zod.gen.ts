@@ -5126,11 +5126,13 @@ export const zChatSuggestion = z.object({
 export const zChatExperience = z.object({
   suggestions: z.array(zChatSuggestion).max(8),
   autoTitleEnabled: z.boolean(),
+  assistantsEnabled: z.boolean(),
 });
 
 export const zUpdateChatExperienceRequest = z.object({
   suggestions: z.array(zChatSuggestion).max(8),
   autoTitleEnabled: z.boolean(),
+  assistantsEnabled: z.boolean().optional(),
 });
 
 export const zChannelUser = z.object({
