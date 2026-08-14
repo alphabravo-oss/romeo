@@ -1,11 +1,6 @@
 import type { QueuedChatTurn } from "@romeo/core";
-import {
-  chatComments,
-  chats,
-  messageParts,
-  messages,
-  queuedChatTurns,
-} from "./schema";
+import { providerReasoningPolicyFromUnknown } from "@romeo/providers";
+import { chatComments, chats, messages, queuedChatTurns } from "./schema";
 import {
   asStringArray,
   optionalDate,
@@ -26,6 +21,7 @@ export interface ChatRecord {
   legalHoldUntil?: string;
   legalHoldReason?: string;
   activeLeafMessageId?: string;
+  transcriptVersion?: string;
   updatedAt: string;
 }
 
@@ -49,13 +45,11 @@ export interface MessageRecord {
   createdAt: string;
 }
 
-export interface MessagePartRecord {
-  id: string;
-  messageId: string;
-  type: "attachment" | "collaboration_channel_metadata";
-  content: string;
-  metadata: Record<string, unknown>;
-}
+export {
+  toMessagePartInsert,
+  toMessagePartRecord,
+  type MessagePartRecord,
+} from "./message-part-records";
 
 export interface ChatCommentRecord {
   id: string;
@@ -74,6 +68,10 @@ export interface QueuedChatTurnRecord {
   chatId: string;
   agentId: string;
   modelId?: string;
+  routingMode?: "economy";
+  researchMode?: "deep";
+  reasoningPolicy?: NonNullable<QueuedChatTurn["reasoningPolicy"]>;
+  parentMessageId?: string | null;
   content: string;
   webSearch?: boolean;
   agenticRag?: boolean;
@@ -103,6 +101,7 @@ export function toChatRecord(row: typeof chats.$inferSelect): ChatRecord {
     workspaceId: row.workspaceId,
     title: row.title,
     createdBy: row.createdBy,
+    transcriptVersion: row.transcriptVersion.toString(),
     updatedAt: toIsoString(row.updatedAt),
     ...(row.temporary ? { temporary: true } : {}),
   };
@@ -122,7 +121,9 @@ export function toChatRecord(row: typeof chats.$inferSelect): ChatRecord {
 }
 
 export function toMessageRecord(
-  row: typeof messages.$inferSelect,
+  row: Omit<typeof messages.$inferSelect, "partsSchemaVersion"> & {
+    partsSchemaVersion?: number;
+  },
 ): MessageRecord {
   const citations = asMessageCitations(row.citations);
   const error = asMessageRunError(row.error);
@@ -138,21 +139,6 @@ export function toMessageRecord(
       : { modelId: row.modelId }),
     ...(row.parentId === null ? {} : { parentId: row.parentId }),
     createdAt: toIsoString(row.createdAt),
-  };
-}
-
-export function toMessagePartRecord(
-  row: typeof messageParts.$inferSelect,
-): MessagePartRecord {
-  return {
-    id: row.id,
-    messageId: row.messageId,
-    type:
-      row.type === "collaboration_channel_metadata"
-        ? "collaboration_channel_metadata"
-        : "attachment",
-    content: row.content,
-    metadata: asJsonRecord(row.metadata),
   };
 }
 
@@ -194,6 +180,15 @@ export function toQueuedChatTurnRecord(
     updatedAt: toIsoString(row.updatedAt),
   };
   if (row.modelId !== null) record.modelId = row.modelId;
+  if (row.routingMode === "economy") record.routingMode = "economy";
+  if (row.researchMode === "deep") record.researchMode = "deep";
+  const reasoningPolicy = providerReasoningPolicyFromUnknown(
+    row.reasoningPolicy,
+  );
+  if (row.reasoningPolicy !== null && reasoningPolicy === undefined)
+    throw new Error("Stored queued turn has an invalid reasoning policy.");
+  if (reasoningPolicy !== undefined) record.reasoningPolicy = reasoningPolicy;
+  if (row.parentMessageConfigured) record.parentMessageId = row.parentMessageId;
   if (row.webSearch) record.webSearch = true;
   if (row.agenticRag) record.agenticRag = true;
   if (row.urls.length > 0) record.urls = row.urls;
@@ -226,6 +221,7 @@ export function toChatInsert(record: ChatRecord): typeof chats.$inferInsert {
     legalHoldUntil: optionalDate(record.legalHoldUntil),
     legalHoldReason: record.legalHoldReason ?? null,
     activeLeafMessageId: record.activeLeafMessageId ?? null,
+    transcriptVersion: BigInt(record.transcriptVersion ?? "0"),
     updatedAt: new Date(record.updatedAt),
   };
 }
@@ -238,6 +234,7 @@ export function toMessageInsert(
     chatId: record.chatId,
     role: record.role,
     content: record.content,
+    partsSchemaVersion: 1,
     citations: record.citations ?? null,
     error: record.error ?? null,
     modelId: record.modelId ?? null,
@@ -256,6 +253,11 @@ export function toQueuedChatTurnInsert(
     chatId: record.chatId,
     agentId: record.agentId,
     modelId: record.modelId ?? null,
+    routingMode: record.routingMode ?? "selected",
+    researchMode: record.researchMode ?? "standard",
+    reasoningPolicy: record.reasoningPolicy ?? null,
+    parentMessageConfigured: record.parentMessageId !== undefined,
+    parentMessageId: record.parentMessageId ?? null,
     content: record.content,
     webSearch: record.webSearch === true,
     agenticRag: record.agenticRag === true,
@@ -282,6 +284,11 @@ export function toQueuedChatTurnInsert(
 export function toQueuedChatTurnUpdate(record: QueuedChatTurnRecord) {
   return {
     modelId: record.modelId ?? null,
+    routingMode: record.routingMode ?? "selected",
+    researchMode: record.researchMode ?? "standard",
+    reasoningPolicy: record.reasoningPolicy ?? null,
+    parentMessageConfigured: record.parentMessageId !== undefined,
+    parentMessageId: record.parentMessageId ?? null,
     content: record.content,
     webSearch: record.webSearch === true,
     agenticRag: record.agenticRag === true,
@@ -299,9 +306,7 @@ export function toQueuedChatTurnUpdate(record: QueuedChatTurnRecord) {
   };
 }
 
-function asMessageRunError(
-  value: unknown,
-): MessageRecord["error"] | undefined {
+function asMessageRunError(value: unknown): MessageRecord["error"] | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const item = value as Record<string, unknown>;
   if (typeof item.code !== "string" || item.code.trim().length === 0)
@@ -354,20 +359,6 @@ function citationStringField(
     : {};
 }
 
-export function toMessagePartInsert(
-  record: MessagePartRecord,
-  position: number,
-): typeof messageParts.$inferInsert {
-  return {
-    id: record.id,
-    messageId: record.messageId,
-    position,
-    type: record.type,
-    content: record.content,
-    metadata: record.metadata,
-  };
-}
-
 export function toChatCommentInsert(
   record: ChatCommentRecord,
 ): typeof chatComments.$inferInsert {
@@ -380,10 +371,4 @@ export function toChatCommentInsert(
     mentionedUserIds: record.mentionedUserIds,
     createdAt: new Date(record.createdAt),
   };
-}
-
-function asJsonRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return {};
-  return value as Record<string, unknown>;
 }

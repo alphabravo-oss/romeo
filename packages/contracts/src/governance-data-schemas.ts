@@ -10,6 +10,7 @@ export const RetentionPolicySchema = z
   .strictObject({
     orgId: identifier,
     auditLogRetentionDays: z.number().int().min(30).max(3650),
+    runEventRetentionDays: z.number().int().min(1).max(3650),
     fileRetentionDays: z.number().int().min(1).max(3650).nullable(),
     workspaceFileRetentionDays: z.record(
       z.string(),
@@ -26,6 +27,7 @@ export const RetentionPolicySchema = z
 export const UpdateRetentionPolicyRequestSchema = z
   .strictObject({
     auditLogRetentionDays: z.number().int().min(30).max(3650),
+    runEventRetentionDays: z.number().int().min(1).max(3650),
     fileRetentionDays: z.number().int().min(1).max(3650).nullable().optional(),
     workspaceFileRetentionDays: z
       .record(
@@ -47,7 +49,9 @@ export const RetentionEnforcementResultSchema = z
   .strictObject({
     orgId: identifier,
     auditLogRetentionDays: count,
+    runEventRetentionDays: count,
     cutoffAt: timestamp,
+    runEventCutoffAt: timestamp,
     cleanedBrowserAutomationJobCount: count.optional(),
     deletedBrowserAutomationArtifactCount: count.optional(),
     cleanedVoiceArtifactUsageEventCount: count.optional(),
@@ -59,6 +63,8 @@ export const RetentionEnforcementResultSchema = z
     missingFileObjectCount: count.optional(),
     deletedFileObjectBytes: count.optional(),
     deletedAuditLogCount: count,
+    deletedRunEventCount: count,
+    runEventCompactionLimitReached: z.boolean(),
     enforcedAt: timestamp,
   })
   .openapi("RetentionEnforcementResult");

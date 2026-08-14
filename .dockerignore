@@ -1,6 +1,16 @@
 .git
 .turbo
 .DS_Store
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*
+.superpowers
+.codex
 
 node_modules
 **/node_modules
@@ -15,3 +25,6 @@ coverage
 backups
 tmp
 *.log
+docs
+**/*.test.*
+**/*.spec.*

@@ -6,34 +6,50 @@ import Brain from "lucide-react/dist/esm/icons/brain.mjs";
 import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen.mjs";
 import Smartphone from "lucide-react/dist/esm/icons/smartphone.mjs";
 import UserIcon from "lucide-react/dist/esm/icons/user.mjs";
+import { Suspense } from "react";
 
-import { AccountSecurityPanel } from "../components/AccountSecurityPanel";
 import { ConsoleLayout } from "../components/ConsoleLayout";
-import { ProfileEditPanel } from "../components/ProfileEditPanel";
-import { InterfaceSettings } from "../components/InterfaceSettings";
-import { NotificationPanel } from "../components/NotificationPanel";
 import { PageHeader } from "../components/PageHeader";
-import { SessionsPanel } from "../components/SessionsPanel";
-import { DeviceTokensPanel } from "../components/DeviceTokensPanel";
-import { PersonalContentPanel } from "../components/PersonalContentPanel";
-import { useWorkspaceData } from "../components/useWorkspaceData";
+import {
+  DeviceTokensPanel,
+  InterfaceSettings,
+  NotificationPanel,
+  PersonalContentPanel,
+  preloadSettingsSection,
+  SettingsAccountSection,
+  SettingsSecuritySection,
+} from "../components/settings-lazy-panels";
+import { useWorkspace } from "../components/WorkspaceContext";
 import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
 import {
-  localeNamespaceGroups,
+  localeNamespacesForSettingsSection,
   useLocale,
   useLocaleNamespaces,
 } from "../lib/i18n";
 import { resolveSectionKey } from "../lib/section-routing";
+import { prefetchPrimaryRouteData } from "../lib/route-data";
+import { validatedWorkspaceRouteSearch } from "../lib/route-workspace-selection";
 
 export const Route = createFileRoute("/settings")({
-  validateSearch: (search: Record<string, unknown>): { section?: string } =>
-    typeof search.section === "string" ? { section: search.section } : {},
+  loaderDeps: ({ search }) => ({ workspaceId: search.workspace }),
+  loader: ({ cause, context, deps }) =>
+    prefetchPrimaryRouteData(
+      "settings",
+      context,
+      cause === "preload" ? "intent" : "navigation",
+      deps,
+    ),
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { section?: string; workspace?: string } => ({
+    ...(typeof search.section === "string" ? { section: search.section } : {}),
+    ...validatedWorkspaceRouteSearch(search.workspace),
+  }),
   component: SettingsPage,
 });
 
 function SettingsPage() {
-  useLocaleNamespaces(localeNamespaceGroups.settings);
-  const data = useWorkspaceData(undefined);
+  const { subject, workspace } = useWorkspace();
   const { t } = useLocale();
   const { section: sectionParam } = Route.useSearch();
   const groups = [
@@ -78,6 +94,7 @@ function SettingsPage() {
     },
   };
   const section = resolveSectionKey(sectionParam, meta, "interface");
+  useLocaleNamespaces(localeNamespacesForSettingsSection(section));
 
   return (
     <ConsoleLayout
@@ -85,14 +102,12 @@ function SettingsPage() {
       groups={groups}
       route="/settings"
       title={t("settings")}
+      onSectionIntent={preloadSettingsSection}
       userMenu={
         <WorkspaceUserMenu
-          isAdmin={data.subject?.isAdmin === true}
+          isAdmin={subject?.isAdmin === true}
           userLabel={
-            data.subject?.name ??
-            data.subject?.email ??
-            data.subject?.id ??
-            t("account")
+            subject?.name ?? subject?.email ?? subject?.id ?? t("account")
           }
         />
       }
@@ -101,46 +116,28 @@ function SettingsPage() {
         description={meta[section]!.description}
         title={meta[section]!.title}
       />
-      {section === "interface" ? <InterfaceSettings /> : null}
-      {section === "notifications" ? <NotificationPanel /> : null}
-      {section === "memories" ? <PersonalContentPanel kind="memories" /> : null}
-      {section === "notes" ? <PersonalContentPanel kind="notes" /> : null}
-      {section === "account" ? (
-        <div className="grid gap-4">
-          <div className="rm-panel p-4">
-            <div className="rm-card-title">{t("profile")}</div>
-            <dl className="rm-defs">
-              <div>
-                <dt>{t("user")}</dt>
-                <dd>{data.subject?.id ?? "—"}</dd>
-              </div>
-              <div>
-                <dt>{t("organization")}</dt>
-                <dd>{data.subject?.orgId ?? "—"}</dd>
-              </div>
-              <div>
-                <dt>{t("role")}</dt>
-                <dd>{data.subject?.isAdmin ? t("admin") : t("member")}</dd>
-              </div>
-              <div>
-                <dt>{t("workspace")}</dt>
-                <dd>{data.workspace?.name ?? "—"}</dd>
-              </div>
-            </dl>
+      <Suspense
+        fallback={
+          <div className="rm-loading" role="status">
+            {t("loading")}
           </div>
-          <ProfileEditPanel
-            currentName={data.subject?.name}
-            currentEmail={data.subject?.email}
+        }
+      >
+        {section === "interface" ? <InterfaceSettings /> : null}
+        {section === "notifications" ? <NotificationPanel /> : null}
+        {section === "memories" ? (
+          <PersonalContentPanel kind="memories" />
+        ) : null}
+        {section === "notes" ? <PersonalContentPanel kind="notes" /> : null}
+        {section === "account" ? (
+          <SettingsAccountSection
+            subject={subject}
+            workspaceName={workspace?.name}
           />
-        </div>
-      ) : null}
-      {section === "security" ? (
-        <div className="grid gap-4">
-          <AccountSecurityPanel />
-          <SessionsPanel />
-        </div>
-      ) : null}
-      {section === "device-tokens" ? <DeviceTokensPanel /> : null}
+        ) : null}
+        {section === "security" ? <SettingsSecuritySection /> : null}
+        {section === "device-tokens" ? <DeviceTokensPanel /> : null}
+      </Suspense>
     </ConsoleLayout>
   );
 }

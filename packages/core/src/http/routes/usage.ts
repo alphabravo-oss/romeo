@@ -3,6 +3,7 @@ import {
   getUsageSummaryRoute,
   listUsageAlertsRoute,
   listUsageEventsRoute,
+  listUsageMetricDefinitionsRoute,
 } from "@romeo/contracts";
 import type { RomeoApi } from "../context";
 
@@ -10,6 +11,12 @@ export function registerUsageRoutes(app: RomeoApi): void {
   app.openapi(listUsageEventsRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context.get("services").usage.list(subject);
+    return context.json({ data });
+  });
+
+  app.openapi(listUsageMetricDefinitionsRoute, (context) => {
+    const subject = context.get("subject");
+    const data = context.get("services").usage.taxonomy(subject);
     return context.json({ data });
   });
 

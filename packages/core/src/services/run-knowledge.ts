@@ -79,9 +79,8 @@ export async function buildRunKnowledgeContext(
     });
   const merged = new Map<string, RetrievalHit>();
   const seenQueries = new Set<string>();
-  let pending = input.agentic === true
-    ? planAgenticQueries(input.query)
-    : [input.query];
+  let pending =
+    input.agentic === true ? planAgenticQueries(input.query) : [input.query];
   const hopLimit = input.agentic === true ? defaultAgenticHopLimit : 1;
   for (let hop = 0; hop < hopLimit && pending.length > 0; hop += 1) {
     const unused = pending.filter((query) => {
@@ -185,13 +184,13 @@ export async function resolveKnowledgeBaseIdsForRun(
   if (input.knowledgeBaseIds !== undefined) {
     return [
       ...new Set(
-        input.knowledgeBaseIds.map((id) => id.trim()).filter((id) => id.length > 0),
+        input.knowledgeBaseIds
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0),
       ),
     ];
   }
-  return (
-    await repository.listAgentKnowledgeBindings(input.agentId)
-  )
+  return (await repository.listAgentKnowledgeBindings(input.agentId))
     .filter((binding) => binding.enabled)
     .map((binding) => binding.knowledgeBaseId);
 }

@@ -1,6 +1,9 @@
 import type {
   ProviderConnection,
+  ProviderCapabilityReport,
+  ProviderKindCatalogEntry,
   ProviderModel,
+  ProviderModelCapabilityReport,
   ProviderOperationalSummary,
   ProviderVerification,
   ProvidersDeleteOllamaModelResponse,
@@ -8,7 +11,10 @@ import type {
 } from "@romeo/api-client/generated/sdk";
 
 export type Provider = ProviderConnection;
+export type ProviderKindDefinition = ProviderKindCatalogEntry;
+export type ProviderCapabilityEvidence = ProviderCapabilityReport;
 export type BaseModel = ProviderModel;
+export type ProviderModelCapabilityEvidence = ProviderModelCapabilityReport;
 export type ProviderKind = ProviderConnection["type"];
 export type ProviderCapabilities = ProviderConnection["capabilities"];
 export type ProviderDeploymentConstraints = ProviderCapabilities["deployment"];

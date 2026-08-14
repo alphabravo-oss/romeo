@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { suggestionSubtitle } from "./chat-suggestions";
+import {
+  defaultStarterSuggestions,
+  suggestionSubtitle,
+} from "./chat-suggestions";
 
 describe("chat suggestion cards", () => {
   it("takes the first non-empty line as the subtitle", () => {
@@ -22,5 +25,17 @@ describe("chat suggestion cards", () => {
 
   it("has nothing to show for an empty prompt", () => {
     expect(suggestionSubtitle("   \n\n")).toBe("");
+  });
+
+  it("provides distinct outcome-oriented defaults", () => {
+    const suggestions = defaultStarterSuggestions((key) => key);
+
+    expect(suggestions).toHaveLength(4);
+    expect(
+      new Set(suggestions.map((suggestion) => suggestion.title)).size,
+    ).toBe(suggestions.length);
+    expect(
+      suggestions.every((suggestion) => suggestion.prompt.length > 0),
+    ).toBe(true);
   });
 });

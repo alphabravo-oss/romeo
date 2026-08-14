@@ -3,7 +3,7 @@ import type { ErrorHandler } from "hono";
 import { ZodError } from "zod";
 import { createHash } from "node:crypto";
 
-import { ApiError } from "../errors";
+import { ApiError, AuthenticationError } from "../errors";
 import type { AppBindings } from "./context";
 
 export const errorHandler: ErrorHandler<AppBindings> = (error, context) => {
@@ -34,6 +34,21 @@ export const errorHandler: ErrorHandler<AppBindings> = (error, context) => {
         },
       },
       403,
+    );
+  }
+
+  if (error instanceof AuthenticationError) {
+    context.header("www-authenticate", 'Bearer realm="romeo"');
+    return context.json(
+      {
+        error: {
+          code: error.code,
+          message: error.message,
+          request_id: requestId,
+          details: {},
+        },
+      },
+      401,
     );
   }
 

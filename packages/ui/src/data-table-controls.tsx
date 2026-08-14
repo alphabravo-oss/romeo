@@ -17,7 +17,7 @@ import {
 
 export function DataTableControls<T>({
   canExport,
-  clientPaginate,
+  showPageSize,
   density,
   globalFilter,
   labels,
@@ -34,7 +34,7 @@ export function DataTableControls<T>({
   table,
 }: {
   canExport: boolean;
-  clientPaginate: boolean;
+  showPageSize: boolean;
   density: TableDensity;
   globalFilter: string;
   labels: DataTableLabels;
@@ -79,6 +79,11 @@ export function DataTableControls<T>({
       ) : (
         <span />
       )}
+      {/* How many rows you are looking at, stated before the view controls.
+          Without it a filtered grid gives no sense of how much it removed. */}
+      <span className="rm-table-count">
+        {table.getFilteredRowModel().rows.length} {labels.results}
+      </span>
       <div className="rm-table-view">
         {showExport ? (
           <IconButton
@@ -126,7 +131,7 @@ export function DataTableControls<T>({
               {labels.compact}
             </Button>
           </div>
-          {clientPaginate ? (
+          {showPageSize ? (
             <>
               <label className="rm-table-view-label" htmlFor={pageSizeId}>
                 {labels.rowsPerPage}

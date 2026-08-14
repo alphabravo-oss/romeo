@@ -1,5 +1,7 @@
 import {
+  bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -9,6 +11,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { ProviderReasoningPolicy } from "@romeo/providers";
 
 import { messageRole, queuedChatTurnStatus } from "./enums";
 import { organizations, workspaces } from "./tenancy";
@@ -46,6 +49,9 @@ export const chats = pgTable(
     // self reference with ON DELETE SET NULL, once integrity is worth the
     // circular-FK and purge-ordering cost.
     activeLeafMessageId: text("active_leaf_message_id"),
+    transcriptVersion: bigint("transcript_version", { mode: "bigint" })
+      .notNull()
+      .default(0n),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -74,6 +80,7 @@ export const messages = pgTable(
       .references(() => chats.id, { onDelete: "cascade" }),
     role: messageRole("role").notNull(),
     content: text("content").notNull(),
+    partsSchemaVersion: integer("parts_schema_version").notNull().default(0),
     citations: jsonb("citations"),
     // { code, message? } when a model run fails/cancels without a final answer.
     error: jsonb("error"),
@@ -88,9 +95,21 @@ export const messages = pgTable(
       "gin",
       table.content.op("gin_trgm_ops"),
     ),
+    messagesChatCreatedIdIdx: index("messages_chat_created_id_idx").on(
+      table.chatId,
+      table.createdAt,
+      table.id,
+    ),
     messagesChatCreatedIdx: index("messages_chat_created_idx").on(
       table.chatId,
       table.createdAt,
+    ),
+    messagesChatParentCreatedIdIdx: index(
+      "messages_chat_parent_created_id_idx",
+    ).on(table.chatId, table.parentId, table.createdAt, table.id),
+    messagesPartsSchemaVersionCheck: check(
+      "messages_parts_schema_version_check",
+      sql`${table.partsSchemaVersion} IN (0, 1)`,
     ),
   }),
 );
@@ -110,6 +129,13 @@ export const queuedChatTurns = pgTable(
       .references(() => chats.id, { onDelete: "cascade" }),
     agentId: text("agent_id").notNull(),
     modelId: text("model_id"),
+    routingMode: text("routing_mode").notNull().default("selected"),
+    researchMode: text("research_mode").notNull().default("standard"),
+    reasoningPolicy: jsonb("reasoning_policy").$type<ProviderReasoningPolicy>(),
+    parentMessageConfigured: boolean("parent_message_configured")
+      .notNull()
+      .default(false),
+    parentMessageId: text("parent_message_id"),
     content: text("content").notNull(),
     webSearch: boolean("web_search").notNull().default(false),
     agenticRag: boolean("agentic_rag").notNull().default(false),
@@ -166,9 +192,14 @@ export const messageParts = pgTable(
       .notNull()
       .references(() => messages.id, { onDelete: "cascade" }),
     position: integer("position").notNull().default(0),
+    canonicalPosition: integer("canonical_position"),
+    schemaVersion: integer("schema_version").notNull().default(0),
     type: text("type").notNull(),
     content: text("content").notNull(),
     metadata: jsonb("metadata").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => ({
     messagePartsFilenameTrgmIdx: index("message_parts_filename_trgm_idx").using(
@@ -178,6 +209,30 @@ export const messageParts = pgTable(
     messagePartsMessagePositionIdx: index(
       "message_parts_message_position_idx",
     ).on(table.messageId, table.position),
+    messagePartsCanonicalOrderIdx: index(
+      "message_parts_canonical_order_idx",
+    ).on(table.messageId, table.canonicalPosition, table.position, table.id),
+    messagePartsCanonicalPositionUniqueIdx: uniqueIndex(
+      "message_parts_message_canonical_position_unique_idx",
+    )
+      .on(table.messageId, table.canonicalPosition)
+      .where(sql`${table.canonicalPosition} IS NOT NULL`),
+    messagePartsPositionCheck: check(
+      "message_parts_position_check",
+      sql`(${table.schemaVersion} = 0 OR ${table.position} BETWEEN 0 AND 9999) AND (${table.canonicalPosition} IS NULL OR ${table.canonicalPosition} BETWEEN 0 AND 9999)`,
+    ),
+    messagePartsSchemaVersionCheck: check(
+      "message_parts_schema_version_check",
+      sql`${table.schemaVersion} IN (0, 1)`,
+    ),
+    messagePartsTypeVersionCheck: check(
+      "message_parts_type_version_check",
+      sql`${table.schemaVersion} = 0 OR ${table.type} IN ('text', 'image_ref', 'audio_ref', 'video_ref', 'document_ref', 'tool_result_ref', 'artifact_ref', 'citation_ref')`,
+    ),
+    messagePartsPayloadSizeCheck: check(
+      "message_parts_payload_size_check",
+      sql`${table.schemaVersion} = 0 OR (octet_length(${table.content}) <= 4000064 AND octet_length(${table.metadata}::text) <= 262144 AND (${table.type} = 'text' OR ${table.content} = '') AND (${table.type} <> 'text' OR (left(${table.content}, 22) = 'romeo-message-text-v1:' AND length(${table.content}) > 22)))`,
+    ),
   }),
 );
 

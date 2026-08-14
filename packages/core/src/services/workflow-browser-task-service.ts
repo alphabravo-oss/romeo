@@ -11,7 +11,11 @@ import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import type { DeferredRunStart } from "./run-service";
 import { telemetryJobPayload } from "./telemetry-context";
 import {
@@ -322,12 +326,12 @@ function invalidState(message: string): ApiError {
   );
 }
 
-async function audit(
+async function audit<A extends AuditAction>(
   repository: RomeoRepository,
   subject: AuthSubject,
-  action: string,
+  action: A,
   resourceId: string,
-  metadata: Record<string, unknown>,
+  metadata: AuditMetadata<A>,
 ): Promise<void> {
   await writeAuditLog(repository, {
     subject,

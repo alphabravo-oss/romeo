@@ -27,6 +27,12 @@ import type {
   RagPolicyAgenticSettings,
   RagPolicyRetrievalSettings,
 } from "../domain/rag-policy";
+import {
+  isRagPolicyTier,
+  normalizeEnum,
+} from "./rag-policy-normalization-helpers";
+
+export { normalizeEnum } from "./rag-policy-normalization-helpers";
 
 export function parseStoredPolicy(
   value: Record<string, unknown>,
@@ -124,12 +130,12 @@ export function applyPolicyPatch(
     retrieval: normalizeRetrievalSettings({
       ...defaultRetrievalSettings,
       ...existing.retrieval,
-      ...(patch.retrieval ?? {}),
+      ...patch.retrieval,
     }),
     agentic: normalizeAgenticSettings({
       ...defaultAgenticSettings,
       ...existing.agentic,
-      ...(patch.agentic ?? {}),
+      ...patch.agentic,
     }),
     knowledgeBaseTierAssignments:
       patch.knowledgeBaseTierAssignments === undefined
@@ -268,7 +274,10 @@ export function normalizeRetrievalSettings(
     typeof input.hybridBm25Weight === "number" &&
     Number.isFinite(input.hybridBm25Weight)
   ) {
-    settings.hybridBm25Weight = Math.min(1, Math.max(0, input.hybridBm25Weight));
+    settings.hybridBm25Weight = Math.min(
+      1,
+      Math.max(0, input.hybridBm25Weight),
+    );
   }
   return settings;
 }
@@ -480,21 +489,4 @@ function assertPhysicalVectorIsolationPolicy(policy: StoredRagPolicy): void {
       400,
     );
   }
-}
-
-export function normalizeEnum<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-  fallback: T,
-): T {
-  return typeof value === "string" && allowed.includes(value as T)
-    ? (value as T)
-    : fallback;
-}
-
-function isRagPolicyTier(value: unknown): value is RagPolicyTier {
-  return (
-    typeof value === "string" &&
-    (ragPolicyTiers as readonly string[]).includes(value)
-  );
 }

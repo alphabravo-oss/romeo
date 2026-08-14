@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
@@ -15,7 +15,7 @@ describe("external vector isolation", () => {
     let authorizedPayload: Record<string, unknown> | undefined;
     const qdrantQueryBodies: unknown[] = [];
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.isolation.example",
         QDRANT_COLLECTION: "romeo-isolation",

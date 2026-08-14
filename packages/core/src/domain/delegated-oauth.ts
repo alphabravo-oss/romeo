@@ -33,14 +33,17 @@ export type DelegatedOAuthProviderRevocationStatus =
   | "skipped"
   | "succeeded";
 
-export interface DelegatedOAuthTokenEnvelope {
+interface DelegatedOAuthTokenEnvelopeBase {
   alg: "A256GCM";
   ciphertext: string;
   createdAt: string;
   iv: string;
   tag: string;
-  v: 1;
 }
+
+export type DelegatedOAuthTokenEnvelope = DelegatedOAuthTokenEnvelopeBase & {
+  v: 1 | 2;
+};
 
 export interface DelegatedOAuthConnection {
   id: string;

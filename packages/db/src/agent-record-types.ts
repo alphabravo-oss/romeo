@@ -1,3 +1,5 @@
+import { capabilityIds, parseCapabilityConfigurationPatch } from "@romeo/core";
+
 export interface AgentParametersRecord {
   temperature?: number;
   topP?: number;
@@ -86,7 +88,92 @@ export interface AgentVersionRecord {
     enabled: boolean;
     approvalRequired: boolean;
   }>;
+  capabilityDefaults?: Array<{
+    capabilityId: string;
+    state: "inherit" | "enabled" | "disabled" | "required";
+    configuration: Record<string, unknown>;
+    assignmentVersion: number;
+    expiresAt?: string;
+  }>;
   createdBy: string;
   createdAt: string;
   publishedAt: string;
+}
+
+export function asVersionCapabilityDefaults(
+  value: unknown,
+): NonNullable<AgentVersionRecord["capabilityDefaults"]> {
+  if (
+    !Array.isArray(value) ||
+    value.length > capabilityIds.length ||
+    new TextEncoder().encode(JSON.stringify(value)).byteLength > 16_384
+  )
+    throw new Error("Invalid stored agent-version capability defaults.");
+  const seen = new Set<string>();
+  return value.map((item) => {
+    if (typeof item !== "object" || item === null || Array.isArray(item))
+      throw new Error("Invalid stored agent-version capability default.");
+    const record = item as Record<string, unknown>;
+    const keys = Object.keys(record);
+    const capabilityId = capabilityIds.find(
+      (candidate) => candidate === record.capabilityId,
+    );
+    if (
+      keys.some(
+        (key) =>
+          ![
+            "capabilityId",
+            "state",
+            "configuration",
+            "assignmentVersion",
+            "expiresAt",
+          ].includes(key),
+      ) ||
+      capabilityId === undefined ||
+      seen.has(capabilityId) ||
+      !["inherit", "enabled", "disabled", "required"].includes(
+        String(record.state),
+      ) ||
+      typeof record.configuration !== "object" ||
+      record.configuration === null ||
+      Array.isArray(record.configuration) ||
+      !Number.isInteger(record.assignmentVersion) ||
+      Number(record.assignmentVersion) <= 0 ||
+      (record.expiresAt !== undefined &&
+        (typeof record.expiresAt !== "string" ||
+          !Number.isFinite(Date.parse(record.expiresAt)) ||
+          new Date(record.expiresAt).toISOString() !== record.expiresAt))
+    )
+      throw new Error("Invalid stored agent-version capability default.");
+    seen.add(capabilityId);
+    return {
+      capabilityId,
+      state: record.state as NonNullable<
+        AgentVersionRecord["capabilityDefaults"]
+      >[number]["state"],
+      configuration: Object.fromEntries(
+        Object.entries(
+          parseCapabilityConfigurationPatch(capabilityId, record.configuration),
+        ),
+      ),
+      assignmentVersion: Number(record.assignmentVersion),
+      ...(record.expiresAt === undefined
+        ? {}
+        : { expiresAt: record.expiresAt as string }),
+    };
+  });
+}
+
+export function attachVersionCapabilityDefaults(
+  version: AgentVersionRecord,
+  value: unknown,
+): void {
+  const defaults = asVersionCapabilityDefaults(value);
+  if (defaults.length > 0) version.capabilityDefaults = defaults;
+}
+
+export function asJsonRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return {};
+  return value as Record<string, unknown>;
 }

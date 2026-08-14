@@ -16,6 +16,8 @@ import type { AgentVersion, FileObject, Message } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { historyMessageLimit } from "./agent-memory";
+import { isLegacyAttachmentPart, isMessagePartV1 } from "./message-part-v1";
+import { isFileReadyForUse } from "./file-lifecycle";
 import {
   appendManagedModelPreferences,
   getManagedModelCustomizationPolicy,
@@ -47,6 +49,7 @@ export interface CanonicalRunContextInput {
   memories: WorkspaceContentItem[];
   model: BaseModel;
   preferences: ManagedModelPreferences;
+  researchMode?: "standard" | "deep";
   tail?: ChatMessage[];
   userContent: string;
   userImages?: ProviderImageInput[];
@@ -79,7 +82,7 @@ export function buildCanonicalRunContext(input: CanonicalRunContextInput) {
       input.memories,
     ),
     history: input.history,
-    userContent: input.userContent,
+    userContent: researchUserContent(input.userContent, input.researchMode),
     knowledgeHits: input.knowledgeHits,
     knowledgeGroundingMode:
       input.agentVersion.safetySettings.knowledgeGroundingMode,
@@ -88,6 +91,23 @@ export function buildCanonicalRunContext(input: CanonicalRunContextInput) {
     ...(input.tail === undefined ? {} : { tail: input.tail }),
     ...(maxHistoryMessages === undefined ? {} : { maxHistoryMessages }),
   });
+}
+
+export function researchUserContent(
+  userContent: string,
+  mode: "standard" | "deep" | undefined,
+): string {
+  if (mode !== "deep") return userContent;
+  return [
+    "Deep research protocol (requested by the user):",
+    "- Synthesize only the evidence supplied in this request; distinguish evidence from inference.",
+    "- Cite each material factual claim with its bracketed source number, such as [1].",
+    "- Call out conflicting sources, material uncertainty, and missing evidence explicitly.",
+    "- Prefer sources with a clear publisher and publication/access date when available.",
+    "- Do not invent sources or citations. If the evidence is insufficient, say so.",
+    "",
+    `Research request: ${userContent}`,
+  ].join("\n");
 }
 
 export interface RetainedMessageContext {
@@ -102,6 +122,8 @@ export async function resolveRetainedMessageContext(input: {
   messages: Message[];
   objectStore: ObjectStore;
   repository: RomeoRepository;
+  subject: AuthSubject;
+  workspaceId: string;
 }): Promise<RetainedMessageContext> {
   const candidates = (
     await Promise.all(
@@ -113,12 +135,39 @@ export async function resolveRetainedMessageContext(input: {
     .flat()
     .filter(
       (part) =>
-        part.type === "attachment" && part.metadata.retainedInContext !== false,
+        (isLegacyAttachmentPart(part) &&
+          part.metadata.retainedInContext !== false) ||
+        (isMessagePartV1(part) &&
+          (part.type === "image_ref" || part.type === "document_ref")),
     )
     .slice(-8);
   const documents: RetainedMessageContext["documents"] = [];
   const images: RetainedMessageContext["images"] = [];
   for (const part of candidates) {
+    if (
+      isMessagePartV1(part) &&
+      (part.type === "image_ref" || part.type === "document_ref")
+    ) {
+      const file = await authorizedHistoricalFile(input, part.fileId);
+      if (file === undefined) continue;
+      const bytes = await input.objectStore.getObject(file.objectKey, {
+        maxBytes: file.sizeBytes,
+      });
+      if (bytes === undefined) continue;
+      if (part.type === "image_ref") {
+        images.push({
+          dataBase64: Buffer.from(bytes).toString("base64"),
+          mimeType: part.mediaType,
+        });
+      } else {
+        const extracted = (await extractedRunFileText(file, bytes))
+          .extractedText;
+        if (extracted !== undefined)
+          documents.push({ fileName: file.fileName, text: extracted });
+      }
+      continue;
+    }
+    if (!isLegacyAttachmentPart(part)) continue;
     const fileName = part.metadata.fileName;
     const mimeType = part.metadata.mimeType;
     if (typeof fileName !== "string" || typeof mimeType !== "string") continue;
@@ -152,6 +201,7 @@ export async function resolveRetainedMessageContext(input: {
 export interface ResolvedGovernedRunFile {
   bytes: Uint8Array;
   extractedText?: string;
+  id: string;
   fileName: string;
   mimeType: string;
 }
@@ -172,7 +222,7 @@ export async function resolveGovernedRunFiles(input: {
         file === undefined ||
         file.orgId !== input.subject.orgId ||
         file.workspaceId !== input.workspaceId ||
-        file.status !== "available"
+        !isFileReadyForUse(file)
       )
         throw notFound("File");
       if (!hasWorkspaceAccess(input.subject, file.workspaceId)) {
@@ -185,7 +235,9 @@ export async function resolveGovernedRunFiles(input: {
           `Missing read permission for file:${file.id}`,
         );
       }
-      const bytes = await input.objectStore.getObject(file.objectKey);
+      const bytes = await input.objectStore.getObject(file.objectKey, {
+        maxBytes: file.sizeBytes,
+      });
       if (bytes === undefined)
         throw new ApiError(
           "file_object_missing",
@@ -194,12 +246,33 @@ export async function resolveGovernedRunFiles(input: {
         );
       return {
         bytes,
+        id: file.id,
         fileName: file.fileName,
         mimeType: file.mimeType,
         ...(await extractedRunFileText(file, bytes)),
       };
     }),
   );
+}
+
+async function authorizedHistoricalFile(
+  input: Pick<
+    Parameters<typeof resolveRetainedMessageContext>[0],
+    "repository" | "subject" | "workspaceId"
+  >,
+  fileId: string,
+): Promise<FileObject | undefined> {
+  const file = await input.repository.getFileObject(fileId);
+  if (
+    file === undefined ||
+    file.orgId !== input.subject.orgId ||
+    file.workspaceId !== input.workspaceId ||
+    !isFileReadyForUse(file) ||
+    !hasWorkspaceAccess(input.subject, file.workspaceId)
+  )
+    return undefined;
+  const grants = await input.repository.listResourceGrants(input.subject.orgId);
+  return canReadRunFile(input.subject, grants, file) ? file : undefined;
 }
 
 function canReadRunFile(

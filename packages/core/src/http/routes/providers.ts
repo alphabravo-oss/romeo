@@ -1,28 +1,63 @@
-import type { ProviderInstance, ProviderKind } from "@romeo/providers";
+import { type ProviderKind } from "@romeo/providers";
 import {
   createProviderConnectionRoute,
   deleteOllamaModelRoute,
+  getProviderCapabilityReportRoute,
+  getProviderModelCapabilityReportRoute,
   getProviderOperationalSummaryRoute,
+  listProviderKindsRoute,
   listProviderConnectionsRoute,
+  getProviderCatalogSyncJobRoute,
   listProviderModelsRoute,
   pullOllamaModelRoute,
+  runProviderCatalogSyncJobRoute,
   syncProviderModelsRoute,
   updateProviderConnectionRoute,
   updateProviderModelCapabilitiesRoute,
   updateProviderModelEnabledRoute,
   updateProviderModelPricingRoute,
   verifyProviderConnectionRoute,
+  probeModelRoute,
+  updateModelCapabilityOverridesRoute,
+  previewModelCompatibilityRoute,
 } from "@romeo/contracts";
 
 import type { RomeoApi } from "../context";
-import { parseManagedSecretRef } from "../../services/secret-refs";
+import { listProviderKindCatalog } from "../../services/provider-kind-catalog";
+
 
 export function registerProviderRoutes(app: RomeoApi): void {
+  app.openapi(listProviderKindsRoute, (context) =>
+    context.json(
+      { data: listProviderKindCatalog(context.get("subject")) },
+      200,
+    ),
+  );
+
+  app.openapi(getProviderCapabilityReportRoute, async (context) => {
+    const data = await context
+      .get("services")
+      .providerCapabilityReports.provider(
+        context.get("subject"),
+        context.req.valid("param").providerId,
+      );
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(getProviderModelCapabilityReportRoute, async (context) => {
+    const data = await context
+      .get("services")
+      .providerCapabilityReports.model(
+        context.get("subject"),
+        context.req.valid("param").modelId,
+      );
+    return context.json({ data }, 200);
+  });
+
   app.openapi(listProviderConnectionsRoute, async (context) => {
-    const subject = context.get("subject");
-    const data = (await context.get("services").providers.list(subject)).map(
-      toProviderResponse,
-    );
+    const data = await context
+      .get("services")
+      .providers.presentConnections(context.get("subject"));
     return context.json({ data }, 200);
   });
 
@@ -42,13 +77,23 @@ export function registerProviderRoutes(app: RomeoApi): void {
       type: body.type as ProviderKind,
       name: body.name,
       baseUrl: body.baseUrl,
+      ...(body.auth === undefined ? {} : { auth: body.auth }),
       ...(body.credentialRef === undefined
         ? {}
         : { credentialRef: body.credentialRef }),
+      ...(body.deployment === undefined ? {} : { deployment: body.deployment }),
       ...(body.modelIds === undefined ? {} : { modelIds: body.modelIds }),
+      ...(body.project === undefined ? {} : { project: body.project }),
+      ...(body.region === undefined ? {} : { region: body.region }),
+      ...(body.target === undefined ? {} : { target: body.target }),
     });
 
-    return context.json({ data: toProviderResponse(data) }, 201);
+    return context.json(
+      {
+        data: await context.get("services").providers.presentConnection(data),
+      },
+      201,
+    );
   });
 
   app.openapi(verifyProviderConnectionRoute, async (context) => {
@@ -67,23 +112,56 @@ export function registerProviderRoutes(app: RomeoApi): void {
     const data = await context.get("services").providers.update({
       subject,
       providerId,
+      ...(body.auth === undefined ? {} : { auth: body.auth }),
       ...(body.name === undefined ? {} : { name: body.name }),
       ...(body.baseUrl === undefined ? {} : { baseUrl: body.baseUrl }),
       ...(body.credentialRef === undefined
         ? {}
         : { credentialRef: body.credentialRef }),
+      ...(body.deployment === undefined ? {} : { deployment: body.deployment }),
       ...(body.modelIds === undefined ? {} : { modelIds: body.modelIds }),
       ...(body.enabled === undefined ? {} : { enabled: body.enabled }),
+      ...(body.project === undefined ? {} : { project: body.project }),
+      ...(body.region === undefined ? {} : { region: body.region }),
+      ...(body.target === undefined ? {} : { target: body.target }),
     });
-    return context.json({ data: toProviderResponse(data) }, 200);
+    return context.json(
+      { data: await context.get("services").providers.presentConnection(data) },
+      200,
+    );
   });
 
   app.openapi(syncProviderModelsRoute, async (context) => {
     const subject = context.get("subject");
     const { providerId } = context.req.valid("param");
+    const started = await context
+      .get("services")
+      .providers.catalogSyncJobs.start({
+        mode: context.req.valid("query").mode ?? "inline",
+        providerId,
+        subject,
+      });
+    if (started.mode === "async_job")
+      return context.json({ data: started.job }, 202);
     const data = await context
       .get("services")
       .providers.syncModels(subject, providerId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(runProviderCatalogSyncJobRoute, async (context) => {
+    const data = await context.get("services").providers.catalogSyncJobs.run({
+      jobId: context.req.valid("param").jobId,
+      subject: context.get("subject"),
+    });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(getProviderCatalogSyncJobRoute, async (context) => {
+    const data = await context.get("services").providers.catalogSyncJobs.get({
+      jobId: context.req.valid("param").jobId,
+      subject: context.get("subject"),
+    });
     return context.json({ data }, 200);
   });
 
@@ -114,7 +192,7 @@ export function registerProviderRoutes(app: RomeoApi): void {
         query.available === undefined ? undefined : query.available === "true";
       const enabled =
         query.enabled === undefined ? undefined : query.enabled === "true";
-      const page = await context.get("services").providers.modelsPage(subject, {
+      const page = await context.get("services").providers.presentModelsPage(subject, {
         limit,
         offset: offset ?? 0,
         ...(query.direction === undefined
@@ -141,7 +219,7 @@ export function registerProviderRoutes(app: RomeoApi): void {
         200,
       );
     }
-    const data = await context.get("services").providers.models(subject);
+    const data = await context.get("services").providers.presentModels(subject);
     return context.json({ data }, 200);
   });
 
@@ -215,25 +293,38 @@ export function registerProviderRoutes(app: RomeoApi): void {
     });
     return context.json({ data }, 200);
   });
-}
 
-function toProviderResponse(provider: ProviderInstance) {
-  const { credentialRef: _credentialRef, ...safeProvider } = provider;
-  const scheme = credentialRefScheme(provider.credentialRef);
-  return {
-    ...safeProvider,
-    credentialConfigured: provider.credentialRef !== undefined,
-    ...(scheme === undefined ? {} : { credentialRefScheme: scheme }),
-  };
-}
+  app.openapi(probeModelRoute, async (context) => {
+    const data = await context.get("services").modelCapabilityProbes.probe({
+      subject: context.get("subject"),
+      modelId: context.req.valid("param").modelId,
+      features: context.req.valid("json").features,
+    });
+    return context.json({ data }, 200);
+  });
 
-function credentialRefScheme(
-  credentialRef: string | undefined,
-): string | undefined {
-  if (credentialRef === undefined) return undefined;
-  try {
-    return parseManagedSecretRef(credentialRef).scheme;
-  } catch {
-    return "invalid";
-  }
+  app.openapi(updateModelCapabilityOverridesRoute, async (context) => {
+    const body = context.req.valid("json");
+    const data = await context.get("services").modelCapabilityProbes.override({
+      subject: context.get("subject"),
+      modelId: context.req.valid("param").modelId,
+      reason: body.reason,
+      ...(body.tools === undefined ? {} : { tools: body.tools }),
+      ...(body.reasoning === undefined ? {} : { reasoning: body.reasoning }),
+      ...(body.vision === undefined ? {} : { vision: body.vision }),
+      ...(body.imageOutput === undefined ? {} : { imageOutput: body.imageOutput }),
+      ...(body.expiresAt === undefined ? {} : { expiresAt: body.expiresAt }),
+    });
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(previewModelCompatibilityRoute, async (context) => {
+    const body = context.req.valid("json");
+    const data = await context.get("services").modelCapabilityProbes.preview({
+      subject: context.get("subject"),
+      modelId: body.modelId,
+      required: body.required,
+    });
+    return context.json({ data }, 200);
+  });
 }

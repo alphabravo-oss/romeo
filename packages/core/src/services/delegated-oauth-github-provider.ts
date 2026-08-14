@@ -1,6 +1,7 @@
 import { Octokit, OAuthApp, RequestError } from "octokit";
 
 import { ApiError } from "../errors";
+import { requirePublicApiErrorCode } from "../public-api-error-registry";
 
 export interface DelegatedOAuthProviderExchangeInput {
   clientId: string;
@@ -157,7 +158,7 @@ function tokenFromPayload(
   const accessToken = stringField(payload, "access_token");
   if (accessToken === undefined || accessToken.length === 0) {
     throw new ApiError(
-      options.missingTokenCode,
+      requirePublicApiErrorCode(options.missingTokenCode),
       "Delegated OAuth provider did not return an access token.",
       401,
     );

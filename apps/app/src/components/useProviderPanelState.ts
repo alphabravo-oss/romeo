@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type {
   BaseModel,
@@ -8,6 +8,7 @@ import type {
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 export function useProviderPanelState(input: {
   models: BaseModel[];
@@ -18,7 +19,10 @@ export function useProviderPanelState(input: {
   ) => Promise<unknown>;
   onPullProviderModel: (providerId: string, model: string) => Promise<unknown>;
   onSyncProvider: (providerId: string) => Promise<void>;
-  onVerifyProvider: (providerId: string) => Promise<ProviderVerification>;
+  onVerifyProvider: (
+    providerId: string,
+    signal?: AbortSignal,
+  ) => Promise<ProviderVerification>;
 }) {
   const { t } = useLocale();
   const { ask, dialog: confirmDialog } = useConfirm();
@@ -30,6 +34,7 @@ export function useProviderPanelState(input: {
     () => new Set(),
   );
   const [pullNames, setPullNames] = useState<Record<string, string>>({});
+  const verifyAbort = useRef<AbortController | undefined>(undefined);
   const modelsByProvider = useMemo(() => {
     const grouped = new Map<string, BaseModel[]>();
     for (const model of input.models) {
@@ -46,13 +51,28 @@ export function useProviderPanelState(input: {
   }, [input.models]);
 
   async function verify(providerId: string) {
+    verifyAbort.current?.abort();
+    const controller = new AbortController();
+    verifyAbort.current = controller;
     try {
-      const result = await input.onVerifyProvider(providerId);
+      const result = await input.onVerifyProvider(providerId, controller.signal);
+      if (controller.signal.aborted) return;
       setVerification((current) => ({ ...current, [providerId]: result }));
-      toast(result.message, result.ok ? "success" : "error");
+      toast(
+        result.ok ? t("connectionVerified") : t("couldNotVerifyConnection"),
+        result.ok ? "success" : "error",
+      );
     } catch {
+      if (controller.signal.aborted) {
+        toast(t("catalogVerifyCancelled"));
+        return;
+      }
       toast(t("couldNotVerifyConnection"), "error");
     }
+  }
+
+  function cancelVerify() {
+    verifyAbort.current?.abort();
   }
 
   async function sync(providerId: string) {
@@ -60,10 +80,7 @@ export function useProviderPanelState(input: {
       await input.onSyncProvider(providerId);
       toast(t("modelsSynced"), "success");
     } catch (caught) {
-      toast(
-        caught instanceof Error ? caught.message : t("couldNotSyncModels"),
-        "error",
-      );
+      toast(safeUserErrorMessage(caught, t("couldNotSyncModels")), "error");
     }
   }
 
@@ -96,6 +113,7 @@ export function useProviderPanelState(input: {
   }
 
   return {
+    cancelVerify,
     confirmDialog,
     dialog,
     expandedProviders,

@@ -5,10 +5,11 @@ import type {
   AbuseControlEntitlements,
   AbuseControlKillSwitches,
   AbuseControlPolicyReport,
+  AbuseControlSimulationRequest,
+  AbuseControlSimulationResult,
   AbuseControlSuspension,
   UpdateAbuseControlPolicyRequest,
 } from "../domain/abuse-controls";
-import type { BillingPlan } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { writeAuditLog } from "./audit-log";
@@ -25,13 +26,17 @@ import type {
   AbuseControlEnforcementInput,
   StoredAbuseControlPolicy,
 } from "./abuse-control-types";
+import {
+  isSafeValue,
+  normalizeIdList,
+  normalizeReasonCode,
+  uniqueBillingStatuses,
+} from "./abuse-control-normalizers";
 
 export type {
   AbuseControlEnforcementInput,
   StoredAbuseControlPolicy,
 } from "./abuse-control-types";
-
-const idPattern = /^[A-Za-z0-9_.:/@-]+$/u;
 
 export class AbuseControlService {
   constructor(private readonly repository: RomeoRepository) {}
@@ -39,6 +44,25 @@ export class AbuseControlService {
   report(subject: AuthSubject): Promise<AbuseControlPolicyReport> {
     assertScope(subject, "admin:read");
     return readAbuseControlPolicy(this.repository, subject.orgId);
+  }
+
+  async simulate(input: {
+    subject: AuthSubject;
+    request: AbuseControlSimulationRequest;
+  }): Promise<AbuseControlSimulationResult> {
+    assertScope(input.subject, "admin:read");
+    const report = await readAbuseControlPolicy(
+      this.repository,
+      input.subject.orgId,
+    );
+    const reasonCodes = enforcementReasons(report, input.request);
+    return {
+      action: input.request.action,
+      allowed: reasonCodes.length === 0,
+      reasonCodes,
+      evaluatedAt: new Date().toISOString(),
+      policySource: report.source,
+    };
   }
 
   async update(input: {
@@ -435,54 +459,4 @@ function normalizeKillSwitches(value: unknown): AbuseControlKillSwitches {
     toolIds: normalizeIdList(value.toolIds, "toolIds"),
     workerClasses: normalizeIdList(value.workerClasses, "workerClasses"),
   };
-}
-
-function normalizeIdList(value: unknown, field: string): string[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) {
-    throw new ApiError(
-      "invalid_abuse_control_policy",
-      `Abuse control ${field} must be an array.`,
-      400,
-    );
-  }
-  const ids = value.map((item) => {
-    if (typeof item !== "string" || !isSafeValue(item)) {
-      throw new ApiError(
-        "invalid_abuse_control_policy",
-        `Abuse control ${field} contains an invalid identifier.`,
-        400,
-      );
-    }
-    return item.trim();
-  });
-  return [...new Set(ids)].sort();
-}
-
-function normalizeReasonCode(value: string): string {
-  if (!isSafeValue(value)) {
-    throw new ApiError(
-      "invalid_abuse_control_policy",
-      "Suspension reason code is invalid.",
-      400,
-    );
-  }
-  return value.trim();
-}
-
-function uniqueBillingStatuses(values: unknown[]): BillingPlan["status"][] {
-  const statuses = values.filter(
-    (value): value is BillingPlan["status"] =>
-      value === "active" ||
-      value === "canceled" ||
-      value === "past_due" ||
-      value === "trialing",
-  );
-  const unique = [...new Set(statuses)].sort();
-  return unique.length === 0 ? ["active", "trialing"] : unique;
-}
-
-function isSafeValue(value: string): boolean {
-  const trimmed = value.trim();
-  return trimmed.length > 0 && trimmed.length <= 200 && idPattern.test(trimmed);
 }

@@ -1,7 +1,7 @@
 import {
+  bigint,
   boolean,
   index,
-  integer,
   jsonb,
   pgTable,
   text,
@@ -49,6 +49,9 @@ export const runs = pgTable(
       .notNull()
       .defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    nextEventSequence: bigint("next_event_sequence", { mode: "number" })
+      .notNull()
+      .default(0),
   },
   (table) => ({
     runsChatCreatedIdx: index("runs_chat_created_idx").on(
@@ -58,6 +61,11 @@ export const runs = pgTable(
     runsOrgCreatedIdx: index("runs_org_created_idx").on(
       table.orgId,
       table.createdAt,
+    ),
+    runsOrgCompletedIdx: index("runs_org_completed_idx").on(
+      table.orgId,
+      table.completedAt,
+      table.id,
     ),
   }),
 );
@@ -69,7 +77,7 @@ export const runEvents = pgTable(
     runId: text("run_id")
       .notNull()
       .references(() => runs.id, { onDelete: "cascade" }),
-    sequence: integer("sequence").notNull(),
+    sequence: bigint("sequence", { mode: "number" }).notNull(),
     type: text("type").notNull(),
     data: jsonb("data").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })

@@ -59,6 +59,9 @@ export const webhookDeliveries = pgTable(
     responseStatus: integer("response_status"),
     errorCode: text("error_code"),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    leaseOwner: text("lease_owner"),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -69,13 +72,24 @@ export const webhookDeliveries = pgTable(
   (table) => ({
     webhookDeliveriesOrgCreatedIdx: index(
       "webhook_deliveries_org_created_idx",
-    ).on(table.orgId, table.createdAt),
+    ).on(table.orgId, table.createdAt.desc(), table.id.asc()),
     webhookDeliveriesSubscriptionCreatedIdx: index(
       "webhook_deliveries_subscription_created_idx",
-    ).on(table.orgId, table.subscriptionId, table.createdAt),
+    ).on(
+      table.orgId,
+      table.subscriptionId,
+      table.createdAt.desc(),
+      table.id.asc(),
+    ),
     webhookDeliveriesRetryDueIdx: index("webhook_deliveries_retry_due_idx").on(
+      table.orgId,
       table.status,
       table.nextAttemptAt,
+    ),
+    webhookDeliveriesLeaseIdx: index("webhook_deliveries_lease_idx").on(
+      table.orgId,
+      table.status,
+      table.leaseExpiresAt,
     ),
   }),
 );

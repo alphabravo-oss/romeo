@@ -37,7 +37,9 @@ describe("groupChatsForSidebar", () => {
       { now },
     );
     expect(
-      Object.fromEntries(sections.map((s) => [s.key, s.chats.map((c) => c.id)])),
+      Object.fromEntries(
+        sections.map((s) => [s.key, s.chats.map((c) => c.id)]),
+      ),
     ).toEqual({
       today: ["today"],
       yesterday: ["yesterday"],

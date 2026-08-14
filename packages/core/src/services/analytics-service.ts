@@ -2,9 +2,6 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { BaseModel } from "@romeo/providers";
 
 import type {
-  Agent,
-  EvalRun,
-  EvalSuite,
   ToolCallRecord,
   UsageEvent,
   UsageSummaryMetric,
@@ -12,7 +9,13 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import type { JobOperationalSummary } from "./job-service";
 import type { ProviderOperationalSummary } from "./provider-operational-summary";
+import {
+  isPriceableTokenUsageMetric,
+  recordedUsageCostUsd,
+  selectUsageCostEventIds,
+} from "./usage-cost-reconciliation";
 import { overallStatus, summarizeJobs } from "./analytics-status";
+import { buildAnalyticsEvalSummary } from "./analytics-eval-summary";
 import { countToolCall, emptyToolSummary } from "./analytics-tool-summary";
 import {
   collectModelConfigAttention,
@@ -20,10 +23,7 @@ import {
   usageMetricQuantity,
 } from "./model-config-attention";
 import type {
-  AdminAnalyticsEvalAgentSummary,
-  AdminAnalyticsEvalModelSummary,
-  AdminAnalyticsEvalSuiteSummary,
-  AdminAnalyticsEvalSummary,
+  AdminAnalyticsAdoptionSummary,
   AdminAnalyticsProviderSummary,
   AdminAnalyticsSummary,
   AdminAnalyticsToolSummary,
@@ -69,13 +69,14 @@ export class AnalyticsService {
         workspaces.map((workspace) => this.repository.listAgents(workspace.id)),
       )
     ).flat();
-    const evals = await this.evalSummary(agents);
+    const evals = await buildAnalyticsEvalSummary(this.repository, agents);
     const usage = summarizeUsage(rangedUsage, models);
     const providers = summarizeProviders(input.providerSummary);
     const tools = summarizeTools(rangedTools);
     const jobs = summarizeJobs(input.jobSummary);
 
     return {
+      adoption: summarizeAdoption(rangedUsage, usage, tools),
       attention: { models: collectModelConfigAttention(models) },
       evals,
       generatedAt,
@@ -96,173 +97,64 @@ export class AnalyticsService {
       usage,
     };
   }
-
-  private async evalSummary(
-    agents: Agent[],
-  ): Promise<AdminAnalyticsEvalSummary> {
-    const agentSummaries: AdminAnalyticsEvalAgentSummary[] = [];
-    const suiteSummaries: AdminAnalyticsEvalSuiteSummary[] = [];
-    const [allSuites, allRuns] = await Promise.all([
-      this.repository.listEvalSuitesForAgents(agents.map((agent) => agent.id)),
-      this.repository.listEvalRunsForAgents(agents.map((agent) => agent.id)),
-    ]);
-    const suitesByAgent = groupByAgent(allSuites);
-    const runsByAgent = groupByAgent(allRuns);
-
-    for (const agent of agents) {
-      const suites = suitesByAgent.get(agent.id) ?? [];
-      const runs = runsByAgent.get(agent.id) ?? [];
-      const agentSuiteSummaries = suites.map((suite) =>
-        summarizeSuite(agent, suite, runs),
-      );
-      suiteSummaries.push(...agentSuiteSummaries);
-      agentSummaries.push(summarizeAgent(agent, suites, runs));
-    }
-
-    const completedSuites = suiteSummaries.filter(
-      (suite) => suite.latestScore !== undefined,
-    );
-    const failedSuiteCount = suiteSummaries.filter(
-      (suite) => suite.latestStatus === "failed",
-    ).length;
-    const missingSuiteCount = suiteSummaries.filter(
-      (suite) => suite.latestStatus === "missing",
-    ).length;
-    const passedSuiteCount = suiteSummaries.filter(
-      (suite) => suite.latestStatus === "passed",
-    ).length;
-    const status =
-      suiteSummaries.length === 0
-        ? "not_required"
-        : missingSuiteCount > 0
-          ? "missing"
-          : failedSuiteCount > 0
-            ? "failed"
-            : "passed";
-
-    return {
-      agentCount: agents.length,
-      agents: agentSummaries.sort(compareAgentSummaries),
-      averageLatestScore:
-        completedSuites.length === 0
-          ? null
-          : completedSuites.reduce(
-              (total, suite) => total + (suite.latestScore ?? 0),
-              0,
-            ) / completedSuites.length,
-      byModel: summarizeEvalModels(allRuns),
-      failedSuiteCount,
-      generatedRunCount: allRuns.length,
-      missingSuiteCount,
-      passedSuiteCount,
-      releaseGate: {
-        failedSuiteCount,
-        missingSuiteCount,
-        requiredSuiteCount: suiteSummaries.length,
-        status,
-      },
-      status,
-      suiteCount: suiteSummaries.length,
-      suites: suiteSummaries.sort(compareSuiteSummaries),
-    };
-  }
 }
 
-function summarizeSuite(
-  agent: Agent,
-  suite: EvalSuite,
-  runs: EvalRun[],
-): AdminAnalyticsEvalSuiteSummary {
-  const suiteRuns = runs
-    .filter((run) => run.suiteId === suite.id)
-    .sort(compareRunsNewestFirst);
-  const latestRun = suiteRuns[0];
-  return {
-    agentId: agent.id,
-    workspaceId: agent.workspaceId,
-    suiteId: suite.id,
-    latestStatus: latestRun?.status ?? "missing",
-    runCount: suiteRuns.length,
-    ...(latestRun === undefined
-      ? {}
-      : {
-          latestCompletedAt: latestRun.completedAt,
-          latestRunId: latestRun.id,
-          latestScore: latestRun.score,
-        }),
-  };
-}
-
-function summarizeAgent(
-  agent: Agent,
-  suites: EvalSuite[],
-  runs: EvalRun[],
-): AdminAnalyticsEvalAgentSummary {
-  const latestRun = [...runs].sort(compareRunsNewestFirst)[0];
-  const suiteSummaries = suites.map((suite) =>
-    summarizeSuite(agent, suite, runs),
+function summarizeAdoption(
+  events: UsageEvent[],
+  usage: AdminAnalyticsUsageSummary,
+  tools: AdminAnalyticsToolSummary,
+): AdminAnalyticsAdoptionSummary {
+  const activity = events.filter(
+    (event) =>
+      !isAnalyticsNoiseMetric(event.metric) &&
+      !event.actorId.startsWith("system_"),
   );
-  const failedSuiteCount = suiteSummaries.filter(
-    (suite) => suite.latestStatus === "failed",
-  ).length;
-  const missingSuiteCount = suiteSummaries.filter(
-    (suite) => suite.latestStatus === "missing",
-  ).length;
-  const latestStatus =
-    suites.length === 0
-      ? "not_required"
-      : missingSuiteCount > 0
-        ? "missing"
-        : failedSuiteCount > 0
-          ? "failed"
-          : "passed";
-  return {
-    agentId: agent.id,
-    workspaceId: agent.workspaceId,
-    latestStatus,
-    runCount: runs.length,
-    suiteCount: suites.length,
-    ...(latestRun === undefined
-      ? {}
-      : {
-          latestCompletedAt: latestRun.completedAt,
-          latestRunId: latestRun.id,
-          latestScore: latestRun.score,
-        }),
-  };
-}
-
-function summarizeEvalModels(
-  runs: EvalRun[],
-): AdminAnalyticsEvalModelSummary[] {
-  const byModel = new Map<string, EvalRun[]>();
-  for (const run of runs) {
-    byModel.set(run.modelId, [...(byModel.get(run.modelId) ?? []), run]);
+  const actorEventCounts = new Map<string, number>();
+  for (const event of activity) {
+    actorEventCounts.set(
+      event.actorId,
+      (actorEventCounts.get(event.actorId) ?? 0) + 1,
+    );
   }
-  return Array.from(byModel.entries())
-    .map(([modelId, modelRuns]) => {
-      const latestRun = [...modelRuns].sort(compareRunsNewestFirst)[0];
-      const passedRunCount = modelRuns.filter(
-        (run) => run.status === "passed",
-      ).length;
-      const failedRunCount = modelRuns.length - passedRunCount;
-      return {
-        averageScore:
-          modelRuns.reduce((total, run) => total + run.score, 0) /
-          modelRuns.length,
-        failedRunCount,
-        modelId,
-        passedRunCount,
-        runCount: modelRuns.length,
-        ...(latestRun === undefined
-          ? {}
-          : {
-              latestCompletedAt: latestRun.completedAt,
-              latestRunId: latestRun.id,
-            }),
-      };
-    })
-    .sort((left, right) => left.modelId.localeCompare(right.modelId));
+  const feedback = events.filter(
+    (event) =>
+      event.metric === "chat.message.feedback" &&
+      event.quantity > 0 &&
+      event.metadata.configured !== false,
+  );
+  const positiveCount = feedback.filter(
+    (event) => event.metadata.rating === "positive",
+  ).length;
+  const negativeCount = feedback.filter(
+    (event) => event.metadata.rating === "negative",
+  ).length;
+  const totalFeedback = positiveCount + negativeCount;
+  const activeUserCount = actorEventCounts.size;
+  const runTerminalCount = usage.runsCompleted + usage.runsFailed;
+  const toolTerminalCount = tools.successCount + tools.failureCount;
+  return {
+    activeUserCount,
+    activeWorkspaceCount: new Set(
+      activity.flatMap((event) =>
+        event.workspaceId === undefined ? [] : [event.workspaceId],
+      ),
+    ).size,
+    engagedUserCount: Array.from(actorEventCounts.values()).filter(
+      (count) => count >= 3,
+    ).length,
+    completedRunsPerActiveUser:
+      activeUserCount === 0 ? 0 : usage.runsCompleted / activeUserCount,
+    runCompletionRate:
+      runTerminalCount === 0 ? null : usage.runsCompleted / runTerminalCount,
+    toolSuccessRate:
+      toolTerminalCount === 0 ? null : tools.successCount / toolTerminalCount,
+    feedback: {
+      negativeCount,
+      positiveCount,
+      positiveRate: totalFeedback === 0 ? null : positiveCount / totalFeedback,
+      totalCount: totalFeedback,
+    },
+  };
 }
 
 function summarizeUsage(
@@ -270,7 +162,8 @@ function summarizeUsage(
   models: readonly BaseModel[],
 ): AdminAnalyticsUsageSummary {
   const modelsById = new Map(models.map((model) => [model.id, model]));
-  const totals = rollupUsage(events, modelsById, (event) => ({
+  const costEventIds = selectUsageCostEventIds(events);
+  const totals = rollupUsage(events, modelsById, costEventIds, (event) => ({
     metric: event.metric,
     unit: event.unit,
   }));
@@ -281,6 +174,9 @@ function summarizeUsage(
     events,
     "llm.total_token.reported",
   );
+  const reportedTokenParts =
+    usageMetricQuantity(events, "llm.input_token.reported") +
+    usageMetricQuantity(events, "llm.output_token.reported");
   const estimatedTokens =
     usageMetricQuantity(events, "llm.input_token.estimated") +
     usageMetricQuantity(events, "llm.output_token.estimated");
@@ -289,6 +185,7 @@ function summarizeUsage(
     byProvider: rollupUsage(
       events.filter((event) => typeof event.metadata.providerId === "string"),
       modelsById,
+      costEventIds,
       (event) => ({
         metric: event.metric,
         providerId: String(event.metadata.providerId),
@@ -303,12 +200,19 @@ function summarizeUsage(
     runsCompleted: usageMetricQuantity(events, "run.completed"),
     runsFailed: usageMetricQuantity(events, "run.failed"),
     runsStarted: usageMetricQuantity(events, "run.started"),
-    totalTokens: reportedTokens > 0 ? reportedTokens : estimatedTokens,
+    totalTokens:
+      reportedTokens > 0
+        ? reportedTokens
+        : reportedTokenParts > 0
+          ? reportedTokenParts
+          : estimatedTokens,
     totals,
     unpricedTokenQuantity: events
       .filter(
         (event) =>
-          event.unit === "token" && usageCost(event, modelsById) === 0,
+          costEventIds.has(event.id) &&
+          isPriceableTokenUsageMetric(event.metric) &&
+          usageCost(event, modelsById, costEventIds) === 0,
       )
       .reduce((total, event) => total + event.quantity, 0),
   };
@@ -369,6 +273,7 @@ function summarizeTools(calls: ToolCallRecord[]): AdminAnalyticsToolSummary {
 function rollupUsage<T extends UsageSummaryMetric>(
   events: UsageEvent[],
   modelsById: ReadonlyMap<string, BaseModel>,
+  costEventIds: ReadonlySet<string>,
   keyFor: (event: UsageEvent) => Omit<T, "estimatedCostUsd" | "quantity">,
 ): T[] {
   const byKey = new Map<string, T>();
@@ -379,7 +284,7 @@ function rollupUsage<T extends UsageSummaryMetric>(
       byKey.get(key) ??
       ({ ...keyFields, estimatedCostUsd: 0, quantity: 0 } as T);
     current.quantity += event.quantity;
-    current.estimatedCostUsd += usageCost(event, modelsById);
+    current.estimatedCostUsd += usageCost(event, modelsById, costEventIds);
     byKey.set(key, current);
   }
   return Array.from(byKey.values()).sort((left, right) =>
@@ -392,9 +297,11 @@ function rollupUsage<T extends UsageSummaryMetric>(
 function usageCost(
   event: UsageEvent,
   modelsById: ReadonlyMap<string, BaseModel>,
+  costEventIds: ReadonlySet<string>,
 ): number {
-  const recorded = event.metadata.estimatedCostUsd;
-  if (typeof recorded === "number" && Number.isFinite(recorded)) return recorded;
+  if (!costEventIds.has(event.id)) return 0;
+  const recorded = recordedUsageCostUsd(event);
+  if (recorded !== undefined) return recorded;
   if (event.unit !== "token") return 0;
   const modelId =
     typeof event.metadata.modelId === "string"
@@ -412,52 +319,7 @@ function usageCost(
   return 0;
 }
 
-function inWindow(
-  timestamp: string,
-  from: string | null,
-  to: string,
-): boolean {
+function inWindow(timestamp: string, from: string | null, to: string): boolean {
   if (timestamp > to) return false;
   return from === null || timestamp >= from;
-}
-
-function groupByAgent<T extends { agentId: string }>(
-  values: T[],
-): Map<string, T[]> {
-  const grouped = new Map<string, T[]>();
-  for (const value of values) {
-    const items = grouped.get(value.agentId) ?? [];
-    items.push(value);
-    grouped.set(value.agentId, items);
-  }
-  return grouped;
-}
-
-function compareRunsNewestFirst(left: EvalRun, right: EvalRun): number {
-  const completedDelta = right.completedAt.localeCompare(left.completedAt);
-  return completedDelta === 0
-    ? right.id.localeCompare(left.id)
-    : completedDelta;
-}
-
-function compareAgentSummaries(
-  left: AdminAnalyticsEvalAgentSummary,
-  right: AdminAnalyticsEvalAgentSummary,
-): number {
-  const workspaceDelta = left.workspaceId.localeCompare(right.workspaceId);
-  return workspaceDelta === 0
-    ? left.agentId.localeCompare(right.agentId)
-    : workspaceDelta;
-}
-
-function compareSuiteSummaries(
-  left: AdminAnalyticsEvalSuiteSummary,
-  right: AdminAnalyticsEvalSuiteSummary,
-): number {
-  const workspaceDelta = left.workspaceId.localeCompare(right.workspaceId);
-  if (workspaceDelta !== 0) return workspaceDelta;
-  const agentDelta = left.agentId.localeCompare(right.agentId);
-  return agentDelta === 0
-    ? left.suiteId.localeCompare(right.suiteId)
-    : agentDelta;
 }

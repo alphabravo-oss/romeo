@@ -53,8 +53,12 @@ describe("admin-client — governance retention enforcement", () => {
       data: {
         orgId: "o1",
         auditLogRetentionDays: 365,
+        runEventRetentionDays: 30,
         cutoffAt: "x",
+        runEventCutoffAt: "x",
         deletedAuditLogCount: 3,
+        deletedRunEventCount: 5,
+        runEventCompactionLimitReached: false,
         enforcedAt: "y",
       },
     });

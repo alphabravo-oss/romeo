@@ -1,4 +1,5 @@
 import { createRouter } from "@tanstack/react-router";
+import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 import {
   createIsomorphicFn,
   getGlobalStartContext,
@@ -8,13 +9,31 @@ import {
   RouteErrorBoundary,
   RouteNotFound,
 } from "./components/RouteErrorBoundary";
+import { RouteLoadingState } from "./components/RouteLoadingState";
 import { routeTree } from "./routeTree.gen";
+import {
+  createRomeoQueryClient,
+  routeDehydrateOptions,
+} from "./lib/query-client";
+import { getRouterApiClient } from "./lib/router-api-client";
+import type { RomeoRouterContext } from "./lib/router-context";
+import { getRouterLocale } from "./lib/router-locale";
 
 export function getRouter() {
+  const context: RomeoRouterContext = {
+    apiClient: getRouterApiClient(),
+    locale: getRouterLocale(),
+    queryClient: createRomeoQueryClient(),
+  };
   const nonce = getCspNonce();
-  return createRouter({
+  const router = createRouter({
     routeTree,
-    defaultPreload: "intent",
+    context,
+    // Intent preloading is deliberately opt-in. Some routes (notably admin)
+    // own privileged or operational datasets that must not be warmed merely
+    // because a link is rendered or crossed by the pointer.
+    defaultPreload: false,
+    defaultPreloadDelay: 75,
     scrollRestoration: true,
     ...(nonce === undefined ? {} : { ssr: { nonce } }),
     /*
@@ -25,7 +44,14 @@ export function getRouter() {
      */
     defaultErrorComponent: RouteErrorBoundary,
     defaultNotFoundComponent: RouteNotFound,
+    defaultPendingComponent: RouteLoadingState,
   });
+  setupRouterSsrQueryIntegration({
+    router,
+    queryClient: context.queryClient,
+    dehydrateOptions: routeDehydrateOptions,
+  });
+  return router;
 }
 
 const getCspNonce = createIsomorphicFn()

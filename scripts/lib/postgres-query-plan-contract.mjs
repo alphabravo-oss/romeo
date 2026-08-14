@@ -131,6 +131,46 @@ export const QUERY_PLAN_REVIEW_CHECKS = [
     `,
   },
   {
+    id: "audit_org_keyset_page",
+    category: "audit",
+    description: "Stable keyset page for the server-driven audit table.",
+    expectedIndexes: ["audit_logs_org_created_id_idx"],
+    sql: `
+      SELECT id
+      FROM audit_logs
+      WHERE org_id = 'org_default'
+        AND (created_at, id) < (${planTimestamp}, 'audit_cursor')
+      ORDER BY created_at DESC, id DESC
+      LIMIT 201
+    `,
+  },
+  {
+    id: "audit_org_search_trigram",
+    category: "audit-search",
+    description:
+      "Tenant-scoped literal substring search over the audit allowlist.",
+    expectedIndexes: ["audit_logs_search_trgm_idx"],
+    representativeRowRequirements: [
+      { table: "audit_logs", minRows: 1_000_000 },
+    ],
+    requireObservedIndexAtRepresentativeVolume: true,
+    sql: `
+      SELECT id
+      FROM audit_logs
+      WHERE org_id = 'org_default'
+        AND lower(action || chr(31) || actor_id || chr(31) || resource_type || chr(31) || resource_id)
+          LIKE '%romeo-audit-search-marker%'
+        AND (
+          position(lower('romeo-audit-search-marker') in lower(action)) > 0
+          OR position(lower('romeo-audit-search-marker') in lower(actor_id)) > 0
+          OR position(lower('romeo-audit-search-marker') in lower(resource_type)) > 0
+          OR position(lower('romeo-audit-search-marker') in lower(resource_id)) > 0
+        )
+      ORDER BY created_at DESC, id DESC
+      LIMIT 201
+    `,
+  },
+  {
     id: "usage_org_recent",
     category: "usage",
     description: "Recent usage event listing for billing and quota review.",
@@ -306,6 +346,21 @@ export const QUERY_PLAN_REVIEW_CHECKS = [
     `,
   },
   {
+    id: "workspace_folder_items_batch",
+    category: "collaboration",
+    description: "Tenant-scoped stable folder item batch loading.",
+    expectedIndexes: ["workspace_folder_item_batch_idx"],
+    sql: `
+      SELECT id
+      FROM workspace_folder_items
+      WHERE org_id = 'org_default'
+        AND workspace_id = 'workspace_default'
+        AND folder_id IN ('folder_default_a', 'folder_default_b')
+      ORDER BY folder_id ASC, created_at ASC, id ASC
+      LIMIT 201
+    `,
+  },
+  {
     id: "quota_buckets_org_metric",
     category: "billing",
     description: "Quota bucket scan by organization and metric.",
@@ -343,6 +398,45 @@ export const QUERY_PLAN_REVIEW_CHECKS = [
       FROM billing_plans
       WHERE org_id = 'org_default'
       LIMIT 1
+    `,
+  },
+  {
+    id: "inventoried_api_keys_org_created",
+    category: "inventoried-table",
+    description: "Tenant API-key table-page sort.",
+    expectedIndexes: ["api_keys_user_idx"],
+    sql: `
+      SELECT id
+      FROM api_keys
+      WHERE org_id = 'org_default'
+      ORDER BY created_at DESC, id DESC
+      LIMIT 100
+    `,
+  },
+  {
+    id: "inventoried_background_jobs_org_created",
+    category: "inventoried-table",
+    description: "Tenant background-job table-page sort.",
+    expectedIndexes: ["background_jobs_org_created_idx"],
+    sql: `
+      SELECT id
+      FROM background_jobs
+      WHERE org_id = 'org_default'
+      ORDER BY created_at DESC, id DESC
+      LIMIT 100
+    `,
+  },
+  {
+    id: "inventoried_base_models_org_created",
+    category: "inventoried-table",
+    description: "Tenant model-catalog table-page sort.",
+    expectedIndexes: ["base_models_org_created_id_idx"],
+    sql: `
+      SELECT id
+      FROM base_models
+      WHERE org_id = 'org_default'
+      ORDER BY created_at DESC, id DESC
+      LIMIT 100
     `,
   },
 ];

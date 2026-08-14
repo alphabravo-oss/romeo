@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import {
-  getRagPosture,
+  ragPostureQueryOptions,
   type RagPostureReport,
 } from "../features/rag-governance";
 import { useLocale } from "../lib/i18n";
@@ -12,10 +12,7 @@ import { PageActions } from "./PageActions";
 
 export function RagPostureTab() {
   const { t } = useLocale();
-  const postureQuery = useQuery({
-    queryKey: ["ragPosture"],
-    queryFn: getRagPosture,
-  });
+  const postureQuery = useQuery(ragPostureQueryOptions());
 
   return (
     <div className="grid gap-2">

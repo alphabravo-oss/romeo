@@ -20,13 +20,33 @@ describe("provider usage normalization", () => {
     });
   });
 
-  it("normalizes OpenAI Responses-style usage payloads and derives totals", () => {
+  it("normalizes cached-input and reasoning token details without double-counting totals", () => {
+    expect(
+      usageFromOpenAiPayload({
+        usage: {
+          prompt_tokens: 120,
+          completion_tokens: 30,
+          total_tokens: 150,
+          prompt_tokens_details: { cached_tokens: 80 },
+          completion_tokens_details: { reasoning_tokens: 20 },
+        },
+      }),
+    ).toEqual({
+      inputTokens: 120,
+      cachedInputTokens: 80,
+      outputTokens: 30,
+      reasoningTokens: 20,
+      totalTokens: 150,
+      source: "openai-compatible",
+    });
+  });
+
+  it("keeps an inferred component sum distinct from a reported total", () => {
     expect(
       usageFromOpenAiPayload({ input_tokens: 4, output_tokens: 6 }),
     ).toEqual({
       inputTokens: 4,
       outputTokens: 6,
-      totalTokens: 10,
       source: "openai-compatible",
     });
   });
@@ -52,7 +72,6 @@ describe("provider usage normalization", () => {
     ).toEqual({
       inputTokens: 3,
       outputTokens: 4,
-      totalTokens: 7,
       source: "openai-compatible",
     });
   });
@@ -63,7 +82,6 @@ describe("provider usage normalization", () => {
     ).toEqual({
       inputTokens: 17,
       outputTokens: 9,
-      totalTokens: 26,
       source: "ollama",
     });
   });
@@ -77,7 +95,6 @@ describe("provider usage normalization", () => {
     ).toEqual({
       inputTokens: 2,
       outputTokens: 3,
-      totalTokens: 5,
       source: "custom",
     });
   });
@@ -92,5 +109,19 @@ describe("provider usage normalization", () => {
       normalizeProviderTokenUsage({ usage: { model: "gpt-compatible" } }),
     ).toBeUndefined();
     expect(normalizeProviderTokenUsage(undefined)).toBeUndefined();
+  });
+
+  it("drops an impossible reasoning component that exceeds reported output", () => {
+    expect(
+      usageFromOpenAiPayload({
+        usage: {
+          completion_tokens: 2,
+          completion_tokens_details: { reasoning_tokens: 3 },
+        },
+      }),
+    ).toEqual({
+      outputTokens: 2,
+      source: "openai-compatible",
+    });
   });
 });

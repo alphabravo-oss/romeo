@@ -20,6 +20,9 @@ import type {
   AdminInsightsGetAnalyticsSummaryData,
   AdminInsightsGetAnalyticsSummaryErrors,
   AdminInsightsGetAnalyticsSummaryResponses,
+  AdminInsightsSimulateAbuseControlsData,
+  AdminInsightsSimulateAbuseControlsErrors,
+  AdminInsightsSimulateAbuseControlsResponses,
   AdminInsightsUpdateAbuseControlsData,
   AdminInsightsUpdateAbuseControlsErrors,
   AdminInsightsUpdateAbuseControlsResponses,
@@ -68,6 +71,9 @@ import type {
   AdministrationListUsersData,
   AdministrationListUsersErrors,
   AdministrationListUsersResponses,
+  AdministrationQueryUsersData,
+  AdministrationQueryUsersErrors,
+  AdministrationQueryUsersResponses,
   AdministrationRemoveGroupMemberData,
   AdministrationRemoveGroupMemberErrors,
   AdministrationRemoveGroupMemberResponses,
@@ -155,6 +161,54 @@ import type {
   BrowserAutomationRenewTaskLeaseData,
   BrowserAutomationRenewTaskLeaseErrors,
   BrowserAutomationRenewTaskLeaseResponses,
+  CapabilitiesApprovePublicationData,
+  CapabilitiesApprovePublicationErrors,
+  CapabilitiesApprovePublicationResponses,
+  CapabilitiesExplainAdminData,
+  CapabilitiesExplainAdminErrors,
+  CapabilitiesExplainAdminResponses,
+  CapabilitiesGetAdminOverviewData,
+  CapabilitiesGetAdminOverviewErrors,
+  CapabilitiesGetAdminOverviewResponses,
+  CapabilitiesGetAssignmentHistoryData,
+  CapabilitiesGetAssignmentHistoryErrors,
+  CapabilitiesGetAssignmentHistoryResponses,
+  CapabilitiesGetPlatformPostureData,
+  CapabilitiesGetPlatformPostureErrors,
+  CapabilitiesGetPlatformPostureResponses,
+  CapabilitiesListDefinitionsData,
+  CapabilitiesListDefinitionsErrors,
+  CapabilitiesListDefinitionsResponses,
+  CapabilitiesPatchAssignmentData,
+  CapabilitiesPatchAssignmentErrors,
+  CapabilitiesPatchAssignmentResponses,
+  CapabilitiesPreviewAssignmentData,
+  CapabilitiesPreviewAssignmentErrors,
+  CapabilitiesPreviewAssignmentResponses,
+  CapabilitiesPreviewImpactData,
+  CapabilitiesPreviewImpactErrors,
+  CapabilitiesPreviewImpactResponses,
+  CapabilitiesPublishAssignmentData,
+  CapabilitiesPublishAssignmentErrors,
+  CapabilitiesPublishAssignmentResponses,
+  CapabilitiesResolveEffectiveData,
+  CapabilitiesResolveEffectiveErrors,
+  CapabilitiesResolveEffectiveResponses,
+  CapabilitiesUpdateAssignmentData,
+  CapabilitiesUpdateAssignmentErrors,
+  CapabilitiesUpdateAssignmentResponses,
+  CapabilityFlagsGetAdminReportData,
+  CapabilityFlagsGetAdminReportErrors,
+  CapabilityFlagsGetAdminReportResponses,
+  CapabilityFlagsGetHistoryData,
+  CapabilityFlagsGetHistoryErrors,
+  CapabilityFlagsGetHistoryResponses,
+  CapabilityFlagsListEffectiveData,
+  CapabilityFlagsListEffectiveErrors,
+  CapabilityFlagsListEffectiveResponses,
+  CapabilityFlagsUpdateData,
+  CapabilityFlagsUpdateErrors,
+  CapabilityFlagsUpdateResponses,
   ChannelsAddMembersData,
   ChannelsAddMembersErrors,
   ChannelsAddMembersResponses,
@@ -265,6 +319,9 @@ import type {
   ChatsListMessageFeedbackData,
   ChatsListMessageFeedbackErrors,
   ChatsListMessageFeedbackResponses,
+  ChatsListMessagePageData,
+  ChatsListMessagePageErrors,
+  ChatsListMessagePageResponses,
   ChatsListMessagesData,
   ChatsListMessagesErrors,
   ChatsListMessagesResponses,
@@ -280,6 +337,9 @@ import type {
   ChatsReadAttachmentResponses,
   ChatsSearchData,
   ChatsSearchErrors,
+  ChatsSearchMessagesData,
+  ChatsSearchMessagesErrors,
+  ChatsSearchMessagesResponses,
   ChatsSearchResponses,
   ChatsUnarchiveData,
   ChatsUnarchiveErrors,
@@ -338,6 +398,9 @@ import type {
   CollaborationListFileSharesData,
   CollaborationListFileSharesErrors,
   CollaborationListFileSharesResponses,
+  CollaborationListFolderItemsBatchData,
+  CollaborationListFolderItemsBatchErrors,
+  CollaborationListFolderItemsBatchResponses,
   CollaborationListFolderItemsData,
   CollaborationListFolderItemsErrors,
   CollaborationListFolderItemsResponses,
@@ -350,15 +413,30 @@ import type {
   CollaborationListKnowledgeBaseSharesData,
   CollaborationListKnowledgeBaseSharesErrors,
   CollaborationListKnowledgeBaseSharesResponses,
+  CollaborationListModelSharesData,
+  CollaborationListModelSharesErrors,
+  CollaborationListModelSharesResponses,
   CollaborationListShareTargetsData,
   CollaborationListShareTargetsErrors,
   CollaborationListShareTargetsResponses,
+  CollaborationListWorkspaceMembersData,
+  CollaborationListWorkspaceMembersErrors,
+  CollaborationListWorkspaceMembersResponses,
   CollaborationRemoveChatTagData,
   CollaborationRemoveChatTagErrors,
   CollaborationRemoveChatTagResponses,
   CollaborationRevokeChatShareData,
   CollaborationRevokeChatShareErrors,
   CollaborationRevokeChatShareResponses,
+  CollaborationRevokeKnowledgeBaseShareData,
+  CollaborationRevokeKnowledgeBaseShareErrors,
+  CollaborationRevokeKnowledgeBaseShareResponses,
+  CollaborationRevokeModelShareData,
+  CollaborationRevokeModelShareErrors,
+  CollaborationRevokeModelShareResponses,
+  CollaborationRevokeWorkspaceMemberData,
+  CollaborationRevokeWorkspaceMemberErrors,
+  CollaborationRevokeWorkspaceMemberResponses,
   CollaborationShareChatData,
   CollaborationShareChatErrors,
   CollaborationShareChatResponses,
@@ -371,9 +449,84 @@ import type {
   CollaborationShareKnowledgeBaseData,
   CollaborationShareKnowledgeBaseErrors,
   CollaborationShareKnowledgeBaseResponses,
+  CollaborationShareModelData,
+  CollaborationShareModelErrors,
+  CollaborationShareModelResponses,
+  CollaborationShareWorkspaceData,
+  CollaborationShareWorkspaceErrors,
+  CollaborationShareWorkspaceResponses,
   CollaborationUpdateFolderData,
   CollaborationUpdateFolderErrors,
   CollaborationUpdateFolderResponses,
+  CompareCreateSessionData,
+  CompareCreateSessionErrors,
+  CompareCreateSessionResponses,
+  CompareSynthesisPreviewData,
+  CompareSynthesisPreviewErrors,
+  CompareSynthesisPreviewResponses,
+  ComputeArtifactsCreateVersionData,
+  ComputeArtifactsCreateVersionErrors,
+  ComputeArtifactsCreateVersionResponses,
+  ComputeArtifactsIntakeData,
+  ComputeArtifactsIntakeErrors,
+  ComputeArtifactsIntakeResponses,
+  ComputeArtifactsLifecycleData,
+  ComputeArtifactsLifecycleErrors,
+  ComputeArtifactsLifecycleResponses,
+  ComputeArtifactsPreviewData,
+  ComputeArtifactsPreviewErrors,
+  ComputeArtifactsPreviewResponses,
+  ComputeArtifactsProvenanceData,
+  ComputeArtifactsProvenanceErrors,
+  ComputeArtifactsProvenanceResponses,
+  ComputeCreateJobData,
+  ComputeCreateJobErrors,
+  ComputeCreateJobResponses,
+  ComputeOperationsPostureData,
+  ComputeOperationsPostureErrors,
+  ComputeOperationsPostureResponses,
+  ComputeRuntimeImagesAuthorizeData,
+  ComputeRuntimeImagesAuthorizeErrors,
+  ComputeRuntimeImagesAuthorizeResponses,
+  ComputeSandboxPostureData,
+  ComputeSandboxPostureErrors,
+  ComputeSandboxPostureResponses,
+  ContentPolicyApprovalsListData,
+  ContentPolicyApprovalsListErrors,
+  ContentPolicyApprovalsListResponses,
+  ContentPolicyApprovalsRequestData,
+  ContentPolicyApprovalsRequestErrors,
+  ContentPolicyApprovalsRequestResponses,
+  ContentPolicyApprovalsResolveData,
+  ContentPolicyApprovalsResolveErrors,
+  ContentPolicyApprovalsResolveResponses,
+  ContentPolicyDecisionsListData,
+  ContentPolicyDecisionsListErrors,
+  ContentPolicyDecisionsListResponses,
+  ContentPolicyGetData,
+  ContentPolicyGetErrors,
+  ContentPolicyGetResponses,
+  ContentPolicyRollbackData,
+  ContentPolicyRollbackErrors,
+  ContentPolicyRollbackResponses,
+  ContentPolicySimulateData,
+  ContentPolicySimulateErrors,
+  ContentPolicySimulateResponses,
+  ContentPolicyUpdateData,
+  ContentPolicyUpdateErrors,
+  ContentPolicyUpdateResponses,
+  ContentPolicyVersionsCreateData,
+  ContentPolicyVersionsCreateErrors,
+  ContentPolicyVersionsCreateResponses,
+  ContentPolicyVersionsDryRunData,
+  ContentPolicyVersionsDryRunErrors,
+  ContentPolicyVersionsDryRunResponses,
+  ContentPolicyVersionsListData,
+  ContentPolicyVersionsListErrors,
+  ContentPolicyVersionsListResponses,
+  ContentPolicyVersionsPublishData,
+  ContentPolicyVersionsPublishErrors,
+  ContentPolicyVersionsPublishResponses,
   DataConnectorsCreateData,
   DataConnectorsCreateErrors,
   DataConnectorsCreateResponses,
@@ -424,12 +577,18 @@ import type {
   EdgeSecurityGetPostureData,
   EdgeSecurityGetPostureErrors,
   EdgeSecurityGetPostureResponses,
+  EvalsCreateCaseFromMessageFeedbackData,
+  EvalsCreateCaseFromMessageFeedbackErrors,
+  EvalsCreateCaseFromMessageFeedbackResponses,
   EvalsCreateSuiteData,
   EvalsCreateSuiteErrors,
   EvalsCreateSuiteResponses,
   EvalsGetDashboardData,
   EvalsGetDashboardErrors,
   EvalsGetDashboardResponses,
+  EvalsGetReasoningComparisonData,
+  EvalsGetReasoningComparisonErrors,
+  EvalsGetReasoningComparisonResponses,
   EvalsGetReleaseCandidateEvidenceData,
   EvalsGetReleaseCandidateEvidenceErrors,
   EvalsGetReleaseCandidateEvidenceResponses,
@@ -511,6 +670,12 @@ import type {
   FilesRetryExtractionData,
   FilesRetryExtractionErrors,
   FilesRetryExtractionResponses,
+  FilesRetryLifecycleData,
+  FilesRetryLifecycleErrors,
+  FilesRetryLifecycleResponses,
+  FirewallEvaluateOutputData,
+  FirewallEvaluateOutputErrors,
+  FirewallEvaluateOutputResponses,
   GovernanceCreateDataExportPackageData,
   GovernanceCreateDataExportPackageErrors,
   GovernanceCreateDataExportPackageResponses,
@@ -574,6 +739,12 @@ import type {
   IdentityUpdateCurrentProfileData,
   IdentityUpdateCurrentProfileErrors,
   IdentityUpdateCurrentProfileResponses,
+  ImagesCancelJobData,
+  ImagesCancelJobErrors,
+  ImagesCancelJobResponses,
+  ImagesCreateJobData,
+  ImagesCreateJobErrors,
+  ImagesCreateJobResponses,
   ImagesGenerateData,
   ImagesGenerateErrors,
   ImagesGenerateResponses,
@@ -610,6 +781,9 @@ import type {
   JobsListData,
   JobsListErrors,
   JobsListResponses,
+  KnowledgeAclFreshnessData,
+  KnowledgeAclFreshnessErrors,
+  KnowledgeAclFreshnessResponses,
   KnowledgeCompareTieredReplayData,
   KnowledgeCompareTieredReplayErrors,
   KnowledgeCompareTieredReplayResponses,
@@ -631,9 +805,15 @@ import type {
   KnowledgeExtractSourceData,
   KnowledgeExtractSourceErrors,
   KnowledgeExtractSourceResponses,
+  KnowledgeGetAgenticSettingsData,
+  KnowledgeGetAgenticSettingsErrors,
+  KnowledgeGetAgenticSettingsResponses,
   KnowledgeGetBaseData,
   KnowledgeGetBaseErrors,
   KnowledgeGetBaseResponses,
+  KnowledgeGetIngestReadinessData,
+  KnowledgeGetIngestReadinessErrors,
+  KnowledgeGetIngestReadinessResponses,
   KnowledgeIndexEmbeddingsData,
   KnowledgeIndexEmbeddingsErrors,
   KnowledgeIndexEmbeddingsResponses,
@@ -643,6 +823,9 @@ import type {
   KnowledgeListSourcesData,
   KnowledgeListSourcesErrors,
   KnowledgeListSourcesResponses,
+  KnowledgePrefilterAclData,
+  KnowledgePrefilterAclErrors,
+  KnowledgePrefilterAclResponses,
   KnowledgeQueryBaseData,
   KnowledgeQueryBaseErrors,
   KnowledgeQueryBaseResponses,
@@ -754,6 +937,15 @@ import type {
   ManagedModelsUpdatePreferencesErrors,
   ManagedModelsUpdatePreferencesResponses,
   ManagedModelsUpdateResponses,
+  ModelsCapabilityOverridesUpdateData,
+  ModelsCapabilityOverridesUpdateErrors,
+  ModelsCapabilityOverridesUpdateResponses,
+  ModelsCompatibilityPreviewData,
+  ModelsCompatibilityPreviewErrors,
+  ModelsCompatibilityPreviewResponses,
+  ModelsProbeData,
+  ModelsProbeErrors,
+  ModelsProbeResponses,
   NotificationsCreateChannelData,
   NotificationsCreateChannelErrors,
   NotificationsCreateChannelResponses,
@@ -988,6 +1180,12 @@ import type {
   OperationalGovernanceListUsageEventsData,
   OperationalGovernanceListUsageEventsErrors,
   OperationalGovernanceListUsageEventsResponses,
+  OperationalGovernanceListUsageMetricDefinitionsData,
+  OperationalGovernanceListUsageMetricDefinitionsErrors,
+  OperationalGovernanceListUsageMetricDefinitionsResponses,
+  OperationalGovernanceQueryAuditLogsData,
+  OperationalGovernanceQueryAuditLogsErrors,
+  OperationalGovernanceQueryAuditLogsResponses,
   OperationalGovernanceUpdateQuotaBucketData,
   OperationalGovernanceUpdateQuotaBucketErrors,
   OperationalGovernanceUpdateQuotaBucketResponses,
@@ -1027,18 +1225,33 @@ import type {
   ProvidersDeleteOllamaModelData,
   ProvidersDeleteOllamaModelErrors,
   ProvidersDeleteOllamaModelResponses,
+  ProvidersGetCapabilityReportData,
+  ProvidersGetCapabilityReportErrors,
+  ProvidersGetCapabilityReportResponses,
+  ProvidersGetModelCapabilityReportData,
+  ProvidersGetModelCapabilityReportErrors,
+  ProvidersGetModelCapabilityReportResponses,
   ProvidersGetOperationalSummaryData,
   ProvidersGetOperationalSummaryErrors,
   ProvidersGetOperationalSummaryResponses,
   ProvidersListConnectionsData,
   ProvidersListConnectionsErrors,
   ProvidersListConnectionsResponses,
+  ProvidersListKindsData,
+  ProvidersListKindsErrors,
+  ProvidersListKindsResponses,
   ProvidersListModelsData,
   ProvidersListModelsErrors,
   ProvidersListModelsResponses,
   ProvidersPullOllamaModelData,
   ProvidersPullOllamaModelErrors,
   ProvidersPullOllamaModelResponses,
+  ProvidersSyncJobsGetData,
+  ProvidersSyncJobsGetErrors,
+  ProvidersSyncJobsGetResponses,
+  ProvidersSyncJobsRunData,
+  ProvidersSyncJobsRunErrors,
+  ProvidersSyncJobsRunResponses,
   ProvidersSyncModelsData,
   ProvidersSyncModelsErrors,
   ProvidersSyncModelsResponses,
@@ -1081,6 +1294,12 @@ import type {
   ReadinessGetReportData,
   ReadinessGetReportErrors,
   ReadinessGetReportResponses,
+  RealtimeAdaptersPreviewData,
+  RealtimeAdaptersPreviewErrors,
+  RealtimeAdaptersPreviewResponses,
+  RealtimeCreateSessionData,
+  RealtimeCreateSessionErrors,
+  RealtimeCreateSessionResponses,
   RunsCancelData,
   RunsCancelErrors,
   RunsCancelQueuedTurnData,
@@ -1099,6 +1318,9 @@ import type {
   RunsInspectContextData,
   RunsInspectContextErrors,
   RunsInspectContextResponses,
+  RunsInspectPersistedContextData,
+  RunsInspectPersistedContextErrors,
+  RunsInspectPersistedContextResponses,
   RunsListQueuedTurnsData,
   RunsListQueuedTurnsErrors,
   RunsListQueuedTurnsResponses,
@@ -1188,6 +1410,24 @@ import type {
   SystemGetOpenApiDocumentData,
   SystemGetOpenApiDocumentErrors,
   SystemGetOpenApiDocumentResponses,
+  TableExportsCreateData,
+  TableExportsCreateErrors,
+  TableExportsCreateResponses,
+  TableExportsGetData,
+  TableExportsGetErrors,
+  TableExportsGetResponses,
+  TableExportsRunData,
+  TableExportsRunErrors,
+  TableExportsRunResponses,
+  TablePagesQueryData,
+  TablePagesQueryErrors,
+  TablePagesQueryResponses,
+  TableViewsListData,
+  TableViewsListErrors,
+  TableViewsListResponses,
+  TableViewsReplaceData,
+  TableViewsReplaceErrors,
+  TableViewsReplaceResponses,
   TenancyArchiveWorkspaceData,
   TenancyArchiveWorkspaceErrors,
   TenancyArchiveWorkspaceResponses,
@@ -1332,6 +1572,21 @@ import type {
   ToolsUpdateAgentBindingData,
   ToolsUpdateAgentBindingErrors,
   ToolsUpdateAgentBindingResponses,
+  TrustAuditSegmentsSealData,
+  TrustAuditSegmentsSealErrors,
+  TrustAuditSegmentsSealResponses,
+  TrustBreakGlassAuthorizeData,
+  TrustBreakGlassAuthorizeErrors,
+  TrustBreakGlassAuthorizeResponses,
+  TrustCryptoShredPreviewData,
+  TrustCryptoShredPreviewErrors,
+  TrustCryptoShredPreviewResponses,
+  TrustGetPostureData,
+  TrustGetPostureErrors,
+  TrustGetPostureResponses,
+  TrustSiemExportCheckpointData,
+  TrustSiemExportCheckpointErrors,
+  TrustSiemExportCheckpointResponses,
   VoicesCreateData,
   VoicesCreateErrors,
   VoicesCreateResponses,
@@ -1488,6 +1743,37 @@ export const administrationListUsers = <ThrowOnError extends boolean = false>(
     ],
     url: "/users",
     ...options,
+  });
+
+/**
+ * Query organization users with server-driven keyset pagination
+ */
+export const administrationQueryUsers = <ThrowOnError extends boolean = false>(
+  options: Options<AdministrationQueryUsersData, ThrowOnError>,
+): RequestResult<
+  AdministrationQueryUsersResponses,
+  AdministrationQueryUsersErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AdministrationQueryUsersResponses,
+    AdministrationQueryUsersErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/users/query",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
@@ -2353,6 +2639,39 @@ export const adminInsightsUpdateAbuseControls = <
       },
     ],
     url: "/admin/abuse-controls",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Simulate abuse-control enforcement without side effects
+ */
+export const adminInsightsSimulateAbuseControls = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<AdminInsightsSimulateAbuseControlsData, ThrowOnError>,
+): RequestResult<
+  AdminInsightsSimulateAbuseControlsResponses,
+  AdminInsightsSimulateAbuseControlsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    AdminInsightsSimulateAbuseControlsResponses,
+    AdminInsightsSimulateAbuseControlsErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/abuse-controls/simulate",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -4361,7 +4680,7 @@ export const managedModelsListVersions = <ThrowOnError extends boolean = false>(
 /**
  * Publish a managed-model version
  *
- * Publishes an immutable snapshot of the current draft.
+ * Creates an immutable candidate snapshot or publishes a snapshot directly to production. Candidate snapshots do not change the live managed model until promoted with the rollback/promote endpoint.
  */
 export const managedModelsPublish = <ThrowOnError extends boolean = false>(
   options: Options<ManagedModelsPublishData, ThrowOnError>,
@@ -4385,6 +4704,10 @@ export const managedModelsPublish = <ThrowOnError extends boolean = false>(
     ],
     url: "/agents/{agentId}/versions",
     ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
@@ -5153,6 +5476,39 @@ export const operationalGovernanceListAuditLogs = <
   });
 
 /**
+ * Query audit logs with server-driven keyset pagination
+ */
+export const operationalGovernanceQueryAuditLogs = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<OperationalGovernanceQueryAuditLogsData, ThrowOnError>,
+): RequestResult<
+  OperationalGovernanceQueryAuditLogsResponses,
+  OperationalGovernanceQueryAuditLogsErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    OperationalGovernanceQueryAuditLogsResponses,
+    OperationalGovernanceQueryAuditLogsErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/audit-logs/query",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Export audit logs as CSV
  */
 export const operationalGovernanceExportAuditLogs = <
@@ -5207,6 +5563,38 @@ export const operationalGovernanceListUsageEvents = <
       },
     ],
     url: "/usage/events",
+    ...options,
+  });
+
+/**
+ * List canonical usage metric definitions
+ */
+export const operationalGovernanceListUsageMetricDefinitions = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<
+    OperationalGovernanceListUsageMetricDefinitionsData,
+    ThrowOnError
+  >,
+): RequestResult<
+  OperationalGovernanceListUsageMetricDefinitionsResponses,
+  OperationalGovernanceListUsageMetricDefinitionsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    OperationalGovernanceListUsageMetricDefinitionsResponses,
+    OperationalGovernanceListUsageMetricDefinitionsErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/usage/taxonomy",
     ...options,
   });
 
@@ -5512,6 +5900,97 @@ export const operationalPostureGetPostgres = <
   });
 
 /**
+ * Get an authorized provider capability report
+ *
+ * Separates registry defaults, configured provider capability posture, dialect operations, catalog freshness, and authorized model counts. It never returns endpoints or credentials.
+ */
+export const providersGetCapabilityReport = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ProvidersGetCapabilityReportData, ThrowOnError>,
+): RequestResult<
+  ProvidersGetCapabilityReportResponses,
+  ProvidersGetCapabilityReportErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ProvidersGetCapabilityReportResponses,
+    ProvidersGetCapabilityReportErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/providers/{providerId}/capability-report",
+    ...options,
+  });
+
+/**
+ * Get an authorized provider-model capability report
+ *
+ * Reports detected or overridden model capability truth and current provider/model operational availability. Operational usability is not a substitute for workspace policy or action-time authorization.
+ */
+export const providersGetModelCapabilityReport = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ProvidersGetModelCapabilityReportData, ThrowOnError>,
+): RequestResult<
+  ProvidersGetModelCapabilityReportResponses,
+  ProvidersGetModelCapabilityReportErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ProvidersGetModelCapabilityReportResponses,
+    ProvidersGetModelCapabilityReportErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/models/{modelId}/capability-report",
+    ...options,
+  });
+
+/**
+ * List installed provider kinds and safe setup metadata
+ *
+ * Returns static provider protocol and configuration-field metadata. It never returns configured endpoints, credential references, secret values, or tenant provider instances.
+ */
+export const providersListKinds = <ThrowOnError extends boolean = false>(
+  options?: Options<ProvidersListKindsData, ThrowOnError>,
+): RequestResult<
+  ProvidersListKindsResponses,
+  ProvidersListKindsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ProvidersListKindsResponses,
+    ProvidersListKindsErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/provider-kinds",
+    ...options,
+  });
+
+/**
  * List provider connections
  */
 export const providersListConnections = <ThrowOnError extends boolean = false>(
@@ -5630,7 +6109,7 @@ export const providersVerifyConnection = <ThrowOnError extends boolean = false>(
 /**
  * Discover and synchronize provider models
  *
- * Preserves administrative capability and enabled-state overrides while synchronizing the remote catalog.
+ * Preserves administrative capability and enabled-state overrides while synchronizing the remote catalog. Large catalogs must use mode=async_job.
  */
 export const providersSyncModels = <ThrowOnError extends boolean = false>(
   options: Options<ProvidersSyncModelsData, ThrowOnError>,
@@ -5653,6 +6132,60 @@ export const providersSyncModels = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/providers/{providerId}/sync",
+    ...options,
+  });
+
+/**
+ * Run one provider catalog sync job tick
+ */
+export const providersSyncJobsRun = <ThrowOnError extends boolean = false>(
+  options: Options<ProvidersSyncJobsRunData, ThrowOnError>,
+): RequestResult<
+  ProvidersSyncJobsRunResponses,
+  ProvidersSyncJobsRunErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ProvidersSyncJobsRunResponses,
+    ProvidersSyncJobsRunErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/providers/{providerId}/sync-jobs/{jobId}/run",
+    ...options,
+  });
+
+/**
+ * Read a provider catalog sync job
+ */
+export const providersSyncJobsGet = <ThrowOnError extends boolean = false>(
+  options: Options<ProvidersSyncJobsGetData, ThrowOnError>,
+): RequestResult<
+  ProvidersSyncJobsGetResponses,
+  ProvidersSyncJobsGetErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ProvidersSyncJobsGetResponses,
+    ProvidersSyncJobsGetErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/providers/{providerId}/sync-jobs/{jobId}",
     ...options,
   });
 
@@ -5869,6 +6402,99 @@ export const providersGetOperationalSummary = <
     ],
     url: "/providers/operational-summary",
     ...options,
+  });
+
+/**
+ * Probe advertised model capabilities with synthetic inputs
+ */
+export const modelsProbe = <ThrowOnError extends boolean = false>(
+  options: Options<ModelsProbeData, ThrowOnError>,
+): RequestResult<ModelsProbeResponses, ModelsProbeErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    ModelsProbeResponses,
+    ModelsProbeErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/models/{modelId}/probe",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Set an expiring administrator capability override
+ */
+export const modelsCapabilityOverridesUpdate = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ModelsCapabilityOverridesUpdateData, ThrowOnError>,
+): RequestResult<
+  ModelsCapabilityOverridesUpdateResponses,
+  ModelsCapabilityOverridesUpdateErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    ModelsCapabilityOverridesUpdateResponses,
+    ModelsCapabilityOverridesUpdateErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/models/{modelId}/capability-overrides",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Preview whether a model satisfies turn requirements without executing
+ */
+export const modelsCompatibilityPreview = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ModelsCompatibilityPreviewData, ThrowOnError>,
+): RequestResult<
+  ModelsCompatibilityPreviewResponses,
+  ModelsCompatibilityPreviewErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ModelsCompatibilityPreviewResponses,
+    ModelsCompatibilityPreviewErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/models/compatibility/preview",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
@@ -6340,9 +6966,9 @@ export const readinessGetReport = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Inspect the exact governed context for a proposed run
+ * Inspect a privacy-safe context summary for a proposed run
  *
- * Uses the same context builder as run execution and returns redacted messages, retained context, citations, memory metadata, and the estimated token budget.
+ * Uses the same context builder as run execution and returns safe role/image counts, retained-context metadata, citations, memory metadata, and the estimated token budget. Provider-ready message text is deliberately withheld.
  */
 export const runsInspectContext = <ThrowOnError extends boolean = false>(
   options: Options<RunsInspectContextData, ThrowOnError>,
@@ -6370,6 +6996,37 @@ export const runsInspectContext = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Inspect privacy-safe context provenance for a chat run
+ *
+ * Returns bounded persisted run provenance and currently authorized visible sources without provider request bodies, hidden reasoning, secret values, or policy match text. The latest run is selected when runId is omitted.
+ */
+export const runsInspectPersistedContext = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<RunsInspectPersistedContextData, ThrowOnError>,
+): RequestResult<
+  RunsInspectPersistedContextResponses,
+  RunsInspectPersistedContextErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    RunsInspectPersistedContextResponses,
+    RunsInspectPersistedContextErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/chats/{chatId}/context-inspection",
+    ...options,
   });
 
 /**
@@ -7288,6 +7945,60 @@ export const chatsListMessages = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/chats/{chatId}/messages",
+    ...options,
+  });
+
+/**
+ * Page upward through the selected chat branch
+ */
+export const chatsListMessagePage = <ThrowOnError extends boolean = false>(
+  options: Options<ChatsListMessagePageData, ThrowOnError>,
+): RequestResult<
+  ChatsListMessagePageResponses,
+  ChatsListMessagePageErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ChatsListMessagePageResponses,
+    ChatsListMessagePageErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/chats/{chatId}/messages/page",
+    ...options,
+  });
+
+/**
+ * Search persisted messages within one authorized chat
+ */
+export const chatsSearchMessages = <ThrowOnError extends boolean = false>(
+  options: Options<ChatsSearchMessagesData, ThrowOnError>,
+): RequestResult<
+  ChatsSearchMessagesResponses,
+  ChatsSearchMessagesErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    ChatsSearchMessagesResponses,
+    ChatsSearchMessagesErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/chats/{chatId}/messages/search",
     ...options,
   });
 
@@ -8302,6 +9013,496 @@ export const channelsRemoveReaction = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * List governed capability definitions
+ */
+export const capabilitiesListDefinitions = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<CapabilitiesListDefinitionsData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesListDefinitionsResponses,
+  CapabilitiesListDefinitionsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    CapabilitiesListDefinitionsResponses,
+    CapabilitiesListDefinitionsErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/definitions",
+    ...options,
+  });
+
+/**
+ * Get global operator capability posture
+ *
+ * Returns the deployment-controlled capability ceiling to global administrators. This layer is read-only through tenant APIs and contains no environment values or secrets.
+ */
+export const capabilitiesGetPlatformPosture = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<CapabilitiesGetPlatformPostureData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesGetPlatformPostureResponses,
+  CapabilitiesGetPlatformPostureErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    CapabilitiesGetPlatformPostureResponses,
+    CapabilitiesGetPlatformPostureErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/platform",
+    ...options,
+  });
+
+/**
+ * Resolve capabilities for the authenticated subject
+ */
+export const capabilitiesResolveEffective = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CapabilitiesResolveEffectiveData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesResolveEffectiveResponses,
+  CapabilitiesResolveEffectiveErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CapabilitiesResolveEffectiveResponses,
+    CapabilitiesResolveEffectiveErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/capabilities/effective",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get layered capability administration overview
+ */
+export const capabilitiesGetAdminOverview = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CapabilitiesGetAdminOverviewData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesGetAdminOverviewResponses,
+  CapabilitiesGetAdminOverviewErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    CapabilitiesGetAdminOverviewResponses,
+    CapabilitiesGetAdminOverviewErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/overview",
+    ...options,
+  });
+
+/**
+ * Get capability assignment history
+ */
+export const capabilitiesGetAssignmentHistory = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CapabilitiesGetAssignmentHistoryData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesGetAssignmentHistoryResponses,
+  CapabilitiesGetAssignmentHistoryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    CapabilitiesGetAssignmentHistoryResponses,
+    CapabilitiesGetAssignmentHistoryErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/{capabilityId}/history",
+    ...options,
+  });
+
+/**
+ * Explain a layered capability decision
+ */
+export const capabilitiesExplainAdmin = <ThrowOnError extends boolean = false>(
+  options: Options<CapabilitiesExplainAdminData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesExplainAdminResponses,
+  CapabilitiesExplainAdminErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    CapabilitiesExplainAdminResponses,
+    CapabilitiesExplainAdminErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/{capabilityId}/explain",
+    ...options,
+  });
+
+/**
+ * Replace a versioned capability assignment
+ */
+export const capabilitiesPatchAssignment = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CapabilitiesPatchAssignmentData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesPatchAssignmentResponses,
+  CapabilitiesPatchAssignmentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    CapabilitiesPatchAssignmentResponses,
+    CapabilitiesPatchAssignmentErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/{capabilityId}/assignment",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Create or replace a versioned capability assignment
+ */
+export const capabilitiesUpdateAssignment = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CapabilitiesUpdateAssignmentData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesUpdateAssignmentResponses,
+  CapabilitiesUpdateAssignmentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    CapabilitiesUpdateAssignmentResponses,
+    CapabilitiesUpdateAssignmentErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/{capabilityId}/assignment",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Preview a capability assignment without persisting it
+ */
+export const capabilitiesPreviewAssignment = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CapabilitiesPreviewAssignmentData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesPreviewAssignmentResponses,
+  CapabilitiesPreviewAssignmentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CapabilitiesPreviewAssignmentResponses,
+    CapabilitiesPreviewAssignmentErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/{capabilityId}/assignment/preview",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Preview capability-change impact counts without user content
+ */
+export const capabilitiesPreviewImpact = <ThrowOnError extends boolean = false>(
+  options: Options<CapabilitiesPreviewImpactData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesPreviewImpactResponses,
+  CapabilitiesPreviewImpactErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CapabilitiesPreviewImpactResponses,
+    CapabilitiesPreviewImpactErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/{capabilityId}/assignment/impact",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Publish a capability assignment, using dual approval when required
+ */
+export const capabilitiesPublishAssignment = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CapabilitiesPublishAssignmentData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesPublishAssignmentResponses,
+  CapabilitiesPublishAssignmentErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CapabilitiesPublishAssignmentResponses,
+    CapabilitiesPublishAssignmentErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/{capabilityId}/assignment/publish",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Approve a high-risk capability publication as a distinct actor
+ */
+export const capabilitiesApprovePublication = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CapabilitiesApprovePublicationData, ThrowOnError>,
+): RequestResult<
+  CapabilitiesApprovePublicationResponses,
+  CapabilitiesApprovePublicationErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CapabilitiesApprovePublicationResponses,
+    CapabilitiesApprovePublicationErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capabilities/publications/{bundleId}/approve",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List the caller's effective organization capability flags
+ */
+export const capabilityFlagsListEffective = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<CapabilityFlagsListEffectiveData, ThrowOnError>,
+): RequestResult<
+  CapabilityFlagsListEffectiveResponses,
+  CapabilityFlagsListEffectiveErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    CapabilityFlagsListEffectiveResponses,
+    CapabilityFlagsListEffectiveErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/capability-flags/effective",
+    ...options,
+  });
+
+/**
+ * Get organization capability flag configuration
+ */
+export const capabilityFlagsGetAdminReport = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<CapabilityFlagsGetAdminReportData, ThrowOnError>,
+): RequestResult<
+  CapabilityFlagsGetAdminReportResponses,
+  CapabilityFlagsGetAdminReportErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    CapabilityFlagsGetAdminReportResponses,
+    CapabilityFlagsGetAdminReportErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capability-flags",
+    ...options,
+  });
+
+/**
+ * Get capability flag revision history
+ */
+export const capabilityFlagsGetHistory = <ThrowOnError extends boolean = false>(
+  options: Options<CapabilityFlagsGetHistoryData, ThrowOnError>,
+): RequestResult<
+  CapabilityFlagsGetHistoryResponses,
+  CapabilityFlagsGetHistoryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    CapabilityFlagsGetHistoryResponses,
+    CapabilityFlagsGetHistoryErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capability-flags/{flagId}/history",
+    ...options,
+  });
+
+/**
+ * Replace an organization capability flag revision
+ */
+export const capabilityFlagsUpdate = <ThrowOnError extends boolean = false>(
+  options: Options<CapabilityFlagsUpdateData, ThrowOnError>,
+): RequestResult<
+  CapabilityFlagsUpdateResponses,
+  CapabilityFlagsUpdateErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    CapabilityFlagsUpdateResponses,
+    CapabilityFlagsUpdateErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/capability-flags/{flagId}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Search same-organization share targets
  */
 export const collaborationListShareTargets = <
@@ -8390,6 +9591,215 @@ export const collaborationShareKnowledgeBase = <
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Revoke a knowledge-base share
+ */
+export const collaborationRevokeKnowledgeBaseShare = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CollaborationRevokeKnowledgeBaseShareData, ThrowOnError>,
+): RequestResult<
+  CollaborationRevokeKnowledgeBaseShareResponses,
+  CollaborationRevokeKnowledgeBaseShareErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    CollaborationRevokeKnowledgeBaseShareResponses,
+    CollaborationRevokeKnowledgeBaseShareErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/knowledge-bases/{knowledgeBaseId}/shares/{grantId}",
+    ...options,
+  });
+
+/**
+ * List model use grants
+ */
+export const collaborationListModelShares = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CollaborationListModelSharesData, ThrowOnError>,
+): RequestResult<
+  CollaborationListModelSharesResponses,
+  CollaborationListModelSharesErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    CollaborationListModelSharesResponses,
+    CollaborationListModelSharesErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/models/{modelId}/shares",
+    ...options,
+  });
+
+/**
+ * Grant model use to a principal
+ */
+export const collaborationShareModel = <ThrowOnError extends boolean = false>(
+  options: Options<CollaborationShareModelData, ThrowOnError>,
+): RequestResult<
+  CollaborationShareModelResponses,
+  CollaborationShareModelErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CollaborationShareModelResponses,
+    CollaborationShareModelErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/models/{modelId}/shares",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Revoke a model use grant
+ */
+export const collaborationRevokeModelShare = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CollaborationRevokeModelShareData, ThrowOnError>,
+): RequestResult<
+  CollaborationRevokeModelShareResponses,
+  CollaborationRevokeModelShareErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    CollaborationRevokeModelShareResponses,
+    CollaborationRevokeModelShareErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/models/{modelId}/shares/{grantId}",
+    ...options,
+  });
+
+/**
+ * List workspace membership grants
+ */
+export const collaborationListWorkspaceMembers = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CollaborationListWorkspaceMembersData, ThrowOnError>,
+): RequestResult<
+  CollaborationListWorkspaceMembersResponses,
+  CollaborationListWorkspaceMembersErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    CollaborationListWorkspaceMembersResponses,
+    CollaborationListWorkspaceMembersErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/workspaces/{workspaceId}/members",
+    ...options,
+  });
+
+/**
+ * Add a workspace member
+ */
+export const collaborationShareWorkspace = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CollaborationShareWorkspaceData, ThrowOnError>,
+): RequestResult<
+  CollaborationShareWorkspaceResponses,
+  CollaborationShareWorkspaceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CollaborationShareWorkspaceResponses,
+    CollaborationShareWorkspaceErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/workspaces/{workspaceId}/members",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Remove a workspace member
+ */
+export const collaborationRevokeWorkspaceMember = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CollaborationRevokeWorkspaceMemberData, ThrowOnError>,
+): RequestResult<
+  CollaborationRevokeWorkspaceMemberResponses,
+  CollaborationRevokeWorkspaceMemberErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    CollaborationRevokeWorkspaceMemberResponses,
+    CollaborationRevokeWorkspaceMemberErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/workspaces/{workspaceId}/members/{grantId}",
+    ...options,
   });
 
 /**
@@ -8898,6 +10308,39 @@ export const collaborationAddFolderItem = <
   });
 
 /**
+ * List authorized items for a bounded folder batch
+ */
+export const collaborationListFolderItemsBatch = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<CollaborationListFolderItemsBatchData, ThrowOnError>,
+): RequestResult<
+  CollaborationListFolderItemsBatchResponses,
+  CollaborationListFolderItemsBatchErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CollaborationListFolderItemsBatchResponses,
+    CollaborationListFolderItemsBatchErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/collaboration/folder-items/batch",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * Delete a folder item
  */
 export const collaborationDeleteFolderItem = <
@@ -9071,6 +10514,372 @@ export const collaborationRemoveChatTag = <
     ],
     url: "/chats/{chatId}/tag-assignments/{tagSlug}",
     ...options,
+  });
+
+/**
+ * Get organization content policy
+ */
+export const contentPolicyGet = <ThrowOnError extends boolean = false>(
+  options?: Options<ContentPolicyGetData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyGetResponses,
+  ContentPolicyGetErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ContentPolicyGetResponses,
+    ContentPolicyGetErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy",
+    ...options,
+  });
+
+/**
+ * Update organization content policy
+ */
+export const contentPolicyUpdate = <ThrowOnError extends boolean = false>(
+  options: Options<ContentPolicyUpdateData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyUpdateResponses,
+  ContentPolicyUpdateErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).patch<
+    ContentPolicyUpdateResponses,
+    ContentPolicyUpdateErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Simulate content policy without returning sensitive content
+ */
+export const contentPolicySimulate = <ThrowOnError extends boolean = false>(
+  options: Options<ContentPolicySimulateData, ThrowOnError>,
+): RequestResult<
+  ContentPolicySimulateResponses,
+  ContentPolicySimulateErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ContentPolicySimulateResponses,
+    ContentPolicySimulateErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/simulate",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List immutable content-policy versions
+ */
+export const contentPolicyVersionsList = <ThrowOnError extends boolean = false>(
+  options?: Options<ContentPolicyVersionsListData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyVersionsListResponses,
+  ContentPolicyVersionsListErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ContentPolicyVersionsListResponses,
+    ContentPolicyVersionsListErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/versions",
+    ...options,
+  });
+
+/**
+ * Create an immutable content-policy draft
+ */
+export const contentPolicyVersionsCreate = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ContentPolicyVersionsCreateData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyVersionsCreateResponses,
+  ContentPolicyVersionsCreateErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ContentPolicyVersionsCreateResponses,
+    ContentPolicyVersionsCreateErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/versions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Dry-run a content-policy version without returning matches
+ */
+export const contentPolicyVersionsDryRun = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ContentPolicyVersionsDryRunData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyVersionsDryRunResponses,
+  ContentPolicyVersionsDryRunErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ContentPolicyVersionsDryRunResponses,
+    ContentPolicyVersionsDryRunErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/versions/{versionId}/dry-run",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Publish a staged or draft content-policy version
+ */
+export const contentPolicyVersionsPublish = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ContentPolicyVersionsPublishData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyVersionsPublishResponses,
+  ContentPolicyVersionsPublishErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ContentPolicyVersionsPublishResponses,
+    ContentPolicyVersionsPublishErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/versions/{versionId}/publish",
+    ...options,
+  });
+
+/**
+ * Roll back to a previous published content-policy version
+ */
+export const contentPolicyRollback = <ThrowOnError extends boolean = false>(
+  options: Options<ContentPolicyRollbackData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyRollbackResponses,
+  ContentPolicyRollbackErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ContentPolicyRollbackResponses,
+    ContentPolicyRollbackErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/rollback",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List sanitized content-policy decisions
+ */
+export const contentPolicyDecisionsList = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<ContentPolicyDecisionsListData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyDecisionsListResponses,
+  ContentPolicyDecisionsListErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ContentPolicyDecisionsListResponses,
+    ContentPolicyDecisionsListErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/decisions",
+    ...options,
+  });
+
+/**
+ * List scoped content-policy approvals
+ */
+export const contentPolicyApprovalsList = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<ContentPolicyApprovalsListData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyApprovalsListResponses,
+  ContentPolicyApprovalsListErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    ContentPolicyApprovalsListResponses,
+    ContentPolicyApprovalsListErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/approvals",
+    ...options,
+  });
+
+/**
+ * Pause a run for a scoped, expiring, content-minimized approval
+ */
+export const contentPolicyApprovalsRequest = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ContentPolicyApprovalsRequestData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyApprovalsRequestResponses,
+  ContentPolicyApprovalsRequestErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ContentPolicyApprovalsRequestResponses,
+    ContentPolicyApprovalsRequestErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/approvals",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Resolve a scoped content-policy approval
+ */
+export const contentPolicyApprovalsResolve = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ContentPolicyApprovalsResolveData, ThrowOnError>,
+): RequestResult<
+  ContentPolicyApprovalsResolveResponses,
+  ContentPolicyApprovalsResolveErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ContentPolicyApprovalsResolveResponses,
+    ContentPolicyApprovalsResolveErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/approvals/{approvalId}/resolve",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
@@ -9542,6 +11351,891 @@ export const edgeSecurityGetPosture = <ThrowOnError extends boolean = false>(
   });
 
 /**
+ * Create an authenticated realtime voice session or fail closed
+ */
+export const realtimeCreateSession = <ThrowOnError extends boolean = false>(
+  options: Options<RealtimeCreateSessionData, ThrowOnError>,
+): RequestResult<
+  RealtimeCreateSessionResponses,
+  RealtimeCreateSessionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    RealtimeCreateSessionResponses,
+    RealtimeCreateSessionErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/realtime/sessions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Queue an isolated compute job or fail closed when uninstalled
+ */
+export const computeCreateJob = <ThrowOnError extends boolean = false>(
+  options: Options<ComputeCreateJobData, ThrowOnError>,
+): RequestResult<
+  ComputeCreateJobResponses,
+  ComputeCreateJobErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ComputeCreateJobResponses,
+    ComputeCreateJobErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/compute/jobs",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Preflight a multi-model compare session before any child starts
+ */
+export const compareCreateSession = <ThrowOnError extends boolean = false>(
+  options: Options<CompareCreateSessionData, ThrowOnError>,
+): RequestResult<
+  CompareCreateSessionResponses,
+  CompareCreateSessionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CompareCreateSessionResponses,
+    CompareCreateSessionErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/run-groups",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Evaluate streamed output against rolling detectors before persist
+ */
+export const firewallEvaluateOutput = <ThrowOnError extends boolean = false>(
+  options: Options<FirewallEvaluateOutputData, ThrowOnError>,
+): RequestResult<
+  FirewallEvaluateOutputResponses,
+  FirewallEvaluateOutputErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    FirewallEvaluateOutputResponses,
+    FirewallEvaluateOutputErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/content-policy/output-buffer/evaluate",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Resolve allowed knowledge document IDs before rank
+ */
+export const knowledgePrefilterAcl = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgePrefilterAclData, ThrowOnError>,
+): RequestResult<
+  KnowledgePrefilterAclResponses,
+  KnowledgePrefilterAclErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgePrefilterAclResponses,
+    KnowledgePrefilterAclErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/knowledge/acl/prefilter",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Report key, residency, DLP, and ACL posture without synthetic green
+ */
+export const trustGetPosture = <ThrowOnError extends boolean = false>(
+  options?: Options<TrustGetPostureData, ThrowOnError>,
+): RequestResult<
+  TrustGetPostureResponses,
+  TrustGetPostureErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    TrustGetPostureResponses,
+    TrustGetPostureErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/trust/posture",
+    ...options,
+  });
+
+/**
+ * Create a file-ref image generation, edit, or variation job
+ */
+export const imagesCreateJob = <ThrowOnError extends boolean = false>(
+  options: Options<ImagesCreateJobData, ThrowOnError>,
+): RequestResult<
+  ImagesCreateJobResponses,
+  ImagesCreateJobErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ImagesCreateJobResponses,
+    ImagesCreateJobErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/images/jobs",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Cancel a durable image job
+ */
+export const imagesCancelJob = <ThrowOnError extends boolean = false>(
+  options: Options<ImagesCancelJobData, ThrowOnError>,
+): RequestResult<
+  ImagesCancelJobResponses,
+  ImagesCancelJobErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ImagesCancelJobResponses,
+    ImagesCancelJobErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/images/jobs/{jobId}/cancel",
+    ...options,
+  });
+
+/**
+ * Preview native or pipeline realtime adapter selection
+ */
+export const realtimeAdaptersPreview = <ThrowOnError extends boolean = false>(
+  options: Options<RealtimeAdaptersPreviewData, ThrowOnError>,
+): RequestResult<
+  RealtimeAdaptersPreviewResponses,
+  RealtimeAdaptersPreviewErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    RealtimeAdaptersPreviewResponses,
+    RealtimeAdaptersPreviewErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/realtime/adapters/preview",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Preview an independently authorized compare synthesis
+ */
+export const compareSynthesisPreview = <ThrowOnError extends boolean = false>(
+  options: Options<CompareSynthesisPreviewData, ThrowOnError>,
+): RequestResult<
+  CompareSynthesisPreviewResponses,
+  CompareSynthesisPreviewErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    CompareSynthesisPreviewResponses,
+    CompareSynthesisPreviewErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/run-groups/synthesis/preview",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Evaluate ACL freshness and fail closed for restricted sources
+ */
+export const knowledgeAclFreshness = <ThrowOnError extends boolean = false>(
+  options: Options<KnowledgeAclFreshnessData, ThrowOnError>,
+): RequestResult<
+  KnowledgeAclFreshnessResponses,
+  KnowledgeAclFreshnessErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    KnowledgeAclFreshnessResponses,
+    KnowledgeAclFreshnessErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/knowledge/acl/freshness",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Preview crypto-shred after hold, backup, and dual-approval checks
+ */
+export const trustCryptoShredPreview = <ThrowOnError extends boolean = false>(
+  options: Options<TrustCryptoShredPreviewData, ThrowOnError>,
+): RequestResult<
+  TrustCryptoShredPreviewResponses,
+  TrustCryptoShredPreviewErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TrustCryptoShredPreviewResponses,
+    TrustCryptoShredPreviewErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/trust/crypto/shred",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Seal a hash-chained audit segment
+ */
+export const trustAuditSegmentsSeal = <ThrowOnError extends boolean = false>(
+  options: Options<TrustAuditSegmentsSealData, ThrowOnError>,
+): RequestResult<
+  TrustAuditSegmentsSealResponses,
+  TrustAuditSegmentsSealErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TrustAuditSegmentsSealResponses,
+    TrustAuditSegmentsSealErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/trust/audit-segments",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Checkpoint a SIEM or WORM audit-segment export
+ */
+export const trustSiemExportCheckpoint = <ThrowOnError extends boolean = false>(
+  options: Options<TrustSiemExportCheckpointData, ThrowOnError>,
+): RequestResult<
+  TrustSiemExportCheckpointResponses,
+  TrustSiemExportCheckpointErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TrustSiemExportCheckpointResponses,
+    TrustSiemExportCheckpointErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/trust/siem-export",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Authorize time-limited break-glass without disabling mandatory controls
+ */
+export const trustBreakGlassAuthorize = <ThrowOnError extends boolean = false>(
+  options: Options<TrustBreakGlassAuthorizeData, ThrowOnError>,
+): RequestResult<
+  TrustBreakGlassAuthorizeResponses,
+  TrustBreakGlassAuthorizeErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TrustBreakGlassAuthorizeResponses,
+    TrustBreakGlassAuthorizeErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/trust/break-glass",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Evaluate required Kata guest sandbox posture before claim
+ */
+export const computeSandboxPosture = <ThrowOnError extends boolean = false>(
+  options: Options<ComputeSandboxPostureData, ThrowOnError>,
+): RequestResult<
+  ComputeSandboxPostureResponses,
+  ComputeSandboxPostureErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ComputeSandboxPostureResponses,
+    ComputeSandboxPostureErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/compute/sandbox/posture",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Authorize a signed digest-pinned runtime image and package policy
+ */
+export const computeRuntimeImagesAuthorize = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ComputeRuntimeImagesAuthorizeData, ThrowOnError>,
+): RequestResult<
+  ComputeRuntimeImagesAuthorizeResponses,
+  ComputeRuntimeImagesAuthorizeErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ComputeRuntimeImagesAuthorizeResponses,
+    ComputeRuntimeImagesAuthorizeErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/compute/runtime-images/authorize",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Admit a compute artifact after path, size, scan, and DLP checks
+ */
+export const computeArtifactsIntake = <ThrowOnError extends boolean = false>(
+  options: Options<ComputeArtifactsIntakeData, ThrowOnError>,
+): RequestResult<
+  ComputeArtifactsIntakeResponses,
+  ComputeArtifactsIntakeErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ComputeArtifactsIntakeResponses,
+    ComputeArtifactsIntakeErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/compute/artifacts/intake",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Record runtime, code, input, output, and policy provenance
+ */
+export const computeArtifactsProvenance = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ComputeArtifactsProvenanceData, ThrowOnError>,
+): RequestResult<
+  ComputeArtifactsProvenanceResponses,
+  ComputeArtifactsProvenanceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ComputeArtifactsProvenanceResponses,
+    ComputeArtifactsProvenanceErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/compute/artifacts/provenance",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Create an immutable artifact version instead of overwriting
+ */
+export const computeArtifactsCreateVersion = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<ComputeArtifactsCreateVersionData, ThrowOnError>,
+): RequestResult<
+  ComputeArtifactsCreateVersionResponses,
+  ComputeArtifactsCreateVersionErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ComputeArtifactsCreateVersionResponses,
+    ComputeArtifactsCreateVersionErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/compute/artifacts/versions",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Authorize a hardened or sandboxed artifact preview and download
+ */
+export const computeArtifactsPreview = <ThrowOnError extends boolean = false>(
+  options: Options<ComputeArtifactsPreviewData, ThrowOnError>,
+): RequestResult<
+  ComputeArtifactsPreviewResponses,
+  ComputeArtifactsPreviewErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ComputeArtifactsPreviewResponses,
+    ComputeArtifactsPreviewErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/compute/artifacts/preview",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Authorize artifact quota, hold, export, delete, shred, or cleanup
+ */
+export const computeArtifactsLifecycle = <ThrowOnError extends boolean = false>(
+  options: Options<ComputeArtifactsLifecycleData, ThrowOnError>,
+): RequestResult<
+  ComputeArtifactsLifecycleResponses,
+  ComputeArtifactsLifecycleErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ComputeArtifactsLifecycleResponses,
+    ComputeArtifactsLifecycleErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/compute/artifacts/lifecycle",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Report compute worker, lease, image, and cleanup posture
+ */
+export const computeOperationsPosture = <ThrowOnError extends boolean = false>(
+  options: Options<ComputeOperationsPostureData, ThrowOnError>,
+): RequestResult<
+  ComputeOperationsPostureResponses,
+  ComputeOperationsPostureErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    ComputeOperationsPostureResponses,
+    ComputeOperationsPostureErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/compute/operations/posture",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * List server saved views with optional local-preference fallback
+ */
+export const tableViewsList = <ThrowOnError extends boolean = false>(
+  options: Options<TableViewsListData, ThrowOnError>,
+): RequestResult<TableViewsListResponses, TableViewsListErrors, ThrowOnError> =>
+  (options.client ?? client).post<
+    TableViewsListResponses,
+    TableViewsListErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-views/list",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Persist a per-user workspace saved view
+ */
+export const tableViewsReplace = <ThrowOnError extends boolean = false>(
+  options: Options<TableViewsReplaceData, ThrowOnError>,
+): RequestResult<
+  TableViewsReplaceResponses,
+  TableViewsReplaceErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).put<
+    TableViewsReplaceResponses,
+    TableViewsReplaceErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-views",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Queue an async table export from a frozen query snapshot
+ */
+export const tableExportsCreate = <ThrowOnError extends boolean = false>(
+  options: Options<TableExportsCreateData, ThrowOnError>,
+): RequestResult<
+  TableExportsCreateResponses,
+  TableExportsCreateErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TableExportsCreateResponses,
+    TableExportsCreateErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-exports",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Run one table-export worker tick to an expiring artifact
+ */
+export const tableExportsRun = <ThrowOnError extends boolean = false>(
+  options: Options<TableExportsRunData, ThrowOnError>,
+): RequestResult<
+  TableExportsRunResponses,
+  TableExportsRunErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TableExportsRunResponses,
+    TableExportsRunErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-exports/{jobId}/run",
+    ...options,
+  });
+
+/**
+ * Read a table export job and expire stale artifacts
+ */
+export const tableExportsGet = <ThrowOnError extends boolean = false>(
+  options: Options<TableExportsGetData, ThrowOnError>,
+): RequestResult<
+  TableExportsGetResponses,
+  TableExportsGetErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TableExportsGetResponses,
+    TableExportsGetErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-exports/{jobId}",
+    ...options,
+  });
+
+/**
+ * Page an inventoried admin dataset with a signed cursor
+ */
+export const tablePagesQuery = <ThrowOnError extends boolean = false>(
+  options: Options<TablePagesQueryData, ThrowOnError>,
+): RequestResult<
+  TablePagesQueryResponses,
+  TablePagesQueryErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TablePagesQueryResponses,
+    TablePagesQueryErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-pages",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
  * List suites
  */
 export const evalsListSuites = <ThrowOnError extends boolean = false>(
@@ -9592,6 +12286,39 @@ export const evalsCreateSuite = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/eval-suites",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Create an eval case from negative message feedback
+ */
+export const evalsCreateCaseFromMessageFeedback = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<EvalsCreateCaseFromMessageFeedbackData, ThrowOnError>,
+): RequestResult<
+  EvalsCreateCaseFromMessageFeedbackResponses,
+  EvalsCreateCaseFromMessageFeedbackErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    EvalsCreateCaseFromMessageFeedbackResponses,
+    EvalsCreateCaseFromMessageFeedbackErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/eval-cases/from-message-feedback",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -9703,6 +12430,35 @@ export const evalsRunSuite = <ThrowOnError extends boolean = false>(
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Compare reasoning-policy eval runs
+ */
+export const evalsGetReasoningComparison = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<EvalsGetReasoningComparisonData, ThrowOnError>,
+): RequestResult<
+  EvalsGetReasoningComparisonResponses,
+  EvalsGetReasoningComparisonErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    EvalsGetReasoningComparisonResponses,
+    EvalsGetReasoningComparisonErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/eval-suites/{suiteId}/reasoning-comparison",
+    ...options,
   });
 
 /**
@@ -10144,6 +12900,33 @@ export const filesRetryExtraction = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/files/{fileId}/extraction/retry",
+    ...options,
+  });
+
+/**
+ * Retry an authorized failed file lifecycle
+ */
+export const filesRetryLifecycle = <ThrowOnError extends boolean = false>(
+  options: Options<FilesRetryLifecycleData, ThrowOnError>,
+): RequestResult<
+  FilesRetryLifecycleResponses,
+  FilesRetryLifecycleErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    FilesRetryLifecycleResponses,
+    FilesRetryLifecycleErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/files/{fileId}/lifecycle/retry",
     ...options,
   });
 
@@ -10750,6 +13533,64 @@ export const governanceGetIdentityLifecyclePolicy = <
       },
     ],
     url: "/governance/identity-lifecycle-policy",
+    ...options,
+  });
+
+/**
+ * Get whether agentic RAG is available for this organization
+ */
+export const knowledgeGetAgenticSettings = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<KnowledgeGetAgenticSettingsData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetAgenticSettingsResponses,
+  KnowledgeGetAgenticSettingsErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    KnowledgeGetAgenticSettingsResponses,
+    KnowledgeGetAgenticSettingsErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/knowledge/agentic",
+    ...options,
+  });
+
+/**
+ * Whether this org can upload and embed knowledge sources
+ */
+export const knowledgeGetIngestReadiness = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<KnowledgeGetIngestReadinessData, ThrowOnError>,
+): RequestResult<
+  KnowledgeGetIngestReadinessResponses,
+  KnowledgeGetIngestReadinessErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    KnowledgeGetIngestReadinessResponses,
+    KnowledgeGetIngestReadinessErrors,
+    ThrowOnError
+  >({
+    security: [
+      { scheme: "bearer", type: "http" },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/knowledge/ingest-readiness",
     ...options,
   });
 

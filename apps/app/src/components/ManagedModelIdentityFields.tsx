@@ -1,6 +1,7 @@
 import { Field, Input, Textarea } from "@romeo/ui";
 
 import { useLocale } from "../lib/i18n";
+import { AvatarPicker } from "./console";
 import { ManagedModelAvatar } from "./ManagedModelAvatar";
 
 export interface ManagedModelIdentityValues {
@@ -69,23 +70,26 @@ export function ManagedModelIdentityFields({
               value={values.icon}
             />
           </Field>
-          <Field
-            description={t("managedModelPhotoHelp")}
+          {/* Drop, browse, or paste an image. A URL still works, behind the
+              disclosure — it is no longer the only way to set a picture. */}
+          <AvatarPicker
+            disabled={disabled}
+            hint={t("managedModelPhotoHelp")}
             label={t("managedModelPhoto")}
-          >
-            <Input
-              autoComplete="off"
-              disabled={disabled}
-              maxLength={2_000}
-              name="managedModelPhoto"
-              onChange={(event) =>
-                onChange("avatarUrl", event.currentTarget.value)
-              }
-              placeholder="https://…"
-              type="url"
-              value={values.avatarUrl}
-            />
-          </Field>
+            labels={{
+              browse: t("managedModelPhotoBrowse"),
+              dropHere: t("managedModelPhotoDrop"),
+              remove: t("managedModelPhotoRemove"),
+              tooLarge: t("managedModelPhotoTooLarge"),
+              unsupported: t("managedModelPhotoUnsupported"),
+              invalidUrl: t("managedModelPhotoInvalidUrl"),
+              urlLabel: t("managedModelPhotoUrlLabel"),
+              useUrl: t("managedModelPhotoUseUrl"),
+            }}
+            onChange={(next) => onChange("avatarUrl", next)}
+            preview={<ManagedModelAvatar agent={values} size={44} />}
+            value={values.avatarUrl}
+          />
         </div>
       </div>
     </div>

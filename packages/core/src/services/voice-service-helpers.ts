@@ -202,14 +202,14 @@ export async function createVoiceUseGrant(
   });
 }
 
-export async function auditVoiceProfile(
+export async function auditVoiceProfile<A extends AuditAction>(
   repository: RomeoRepository,
   subject: AuthSubject,
-  action: string,
+  action: A,
   resourceId: string,
-  metadata: Record<string, unknown>,
+  metadata: AuditMetadata<A>,
 ): Promise<void> {
-  await repository.createAuditLog({
+  await writeAuditLog(repository, {
     id: createId("audit"),
     orgId: subject.orgId,
     actorId: subject.id,
@@ -229,3 +229,8 @@ function boundedToken(value: string, fallback: string): string {
     .slice(0, 120);
   return token.length === 0 ? fallback : token;
 }
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";

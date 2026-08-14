@@ -9,7 +9,6 @@ import type {
   OpenAiChatCompletionRequest,
   OpenAiChatCompletionResponse,
   OpenAiChatMessageInput,
-  OpenAiChatToolInput,
   OpenAiCompletionUsage,
   OpenAiToolCall,
 } from "@romeo/contracts";
@@ -21,7 +20,6 @@ import {
   type ProviderInstance,
   type ProviderTokenUsage,
   type ProviderToolCallRequest,
-  type ProviderToolDefinition,
   type StreamChatChunk,
 } from "@romeo/providers";
 
@@ -30,14 +28,24 @@ import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import { consumeQuota } from "./consume-quota";
+import { enforceContentPolicyValue } from "./content-policy-service";
 import type { QuotaCoordinator } from "./quota-coordination";
 import type { SecretResolver } from "./secret-resolver";
 import type { WebhookEmitter } from "./webhook-service";
-import { providerApiError } from "./provider-api-error";
+import { providerChatApiError } from "./provider-api-error";
 import {
   chatCompletionChunk,
   createdSeconds,
 } from "./openai-chat-completion-protocol";
+import {
+  assertOpenAiChatProviderParameters,
+  dedupeToolCalls,
+  isToolCallChunk,
+  isUsageChunk,
+  providerParameterFields,
+  providerToolFields,
+  toolCallsFromChunk,
+} from "./openai-chat-chunk-helpers";
 
 export type {
   OpenAiChatCompletionRequest,
@@ -59,8 +67,10 @@ export class OpenAiChatCompletionsService {
     request: OpenAiChatCompletionRequest;
     subject: AuthSubject;
   }): Promise<OpenAiChatCompletionResponse> {
-    const target = await this.resolveTarget(input.subject, input.request.model);
-    const result = await this.collectProviderOutput(target, input.request);
+    const request = await this.governRequest(input.subject, input.request);
+    const target = await this.resolveTarget(input.subject, request.model);
+    assertOpenAiChatProviderParameters(request, target);
+    const result = await this.collectProviderOutput(target, request);
     return chatCompletionResponse(input.request.model, result);
   }
 
@@ -68,8 +78,18 @@ export class OpenAiChatCompletionsService {
     request: OpenAiChatCompletionRequest;
     subject: AuthSubject;
   }): Promise<ReadableStream<Uint8Array>> {
-    const target = await this.resolveTarget(input.subject, input.request.model);
-    return openAiChatCompletionStream(target, input.request, this.options);
+    const request = await this.governRequest(input.subject, input.request);
+    const target = await this.resolveTarget(input.subject, request.model);
+    assertOpenAiChatProviderParameters(request, target);
+    return openAiChatCompletionStream(target, request, this.options);
+  }
+
+  private async governRequest(
+    subject: AuthSubject,
+    request: OpenAiChatCompletionRequest,
+  ): Promise<OpenAiChatCompletionRequest> {
+    return (await enforceContentPolicyValue(this.repository, subject, request))
+      .value;
   }
 
   private async assertModelRequestAllowed(
@@ -105,7 +125,7 @@ export class OpenAiChatCompletionsService {
         collectChunk(output, chunk);
       }
     } catch (error) {
-      throw providerApiError(error);
+      throw providerChatApiError(error, target.provider.type);
     }
     return output;
   }
@@ -124,12 +144,11 @@ export class OpenAiChatCompletionsService {
         ...(this.options.fetchImpl === undefined
           ? {}
           : { fetchImpl: this.options.fetchImpl }),
-        ...(request.tools === undefined || request.tools.length === 0
-          ? {}
-          : { tools: request.tools.map(toProviderTool) }),
+        ...providerToolFields(request),
+        ...providerParameterFields(request),
       });
     } catch (error) {
-      throw providerApiError(error);
+      throw providerChatApiError(error, target.provider.type);
     }
   }
 
@@ -289,9 +308,8 @@ function openAiChatCompletionStream(
           ...(options.fetchImpl === undefined
             ? {}
             : { fetchImpl: options.fetchImpl }),
-          ...(request.tools === undefined || request.tools.length === 0
-            ? {}
-            : { tools: request.tools.map(toProviderTool) }),
+          ...providerToolFields(request),
+          ...providerParameterFields(request),
         });
 
         for await (const chunk of chunks) {
@@ -343,7 +361,7 @@ function openAiChatCompletionStream(
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
       } catch (error) {
-        controller.error(providerApiError(error));
+        controller.error(providerChatApiError(error, target.provider.type));
       }
     },
   });
@@ -420,14 +438,6 @@ function toProviderMessage(message: OpenAiChatMessageInput): ChatMessage {
   return message;
 }
 
-function toProviderTool(tool: OpenAiChatToolInput): ProviderToolDefinition {
-  return {
-    name: tool.function.name,
-    description: tool.function.description ?? "",
-    parameters: tool.function.parameters ?? { type: "object" },
-  };
-}
-
 function toOpenAiToolCall(toolCall: ProviderToolCallRequest): OpenAiToolCall {
   return {
     id: toolCall.providerCallId,
@@ -465,33 +475,15 @@ function toOpenAiUsage(usage: ProviderTokenUsage): OpenAiCompletionUsage {
     ...(usage.totalTokens === undefined
       ? {}
       : { total_tokens: usage.totalTokens }),
+    ...(usage.cachedInputTokens === undefined
+      ? {}
+      : { prompt_tokens_details: { cached_tokens: usage.cachedInputTokens } }),
+    ...(usage.reasoningTokens === undefined
+      ? {}
+      : {
+          completion_tokens_details: {
+            reasoning_tokens: usage.reasoningTokens,
+          },
+        }),
   };
-}
-
-function toolCallsFromChunk(
-  chunk: Extract<StreamChatChunk, { type: "tool_call" }>,
-): ProviderToolCallRequest[] {
-  return chunk.toolCalls ?? [chunk.toolCall];
-}
-
-function dedupeToolCalls(
-  toolCalls: ProviderToolCallRequest[],
-): ProviderToolCallRequest[] {
-  return [
-    ...new Map(
-      toolCalls.map((toolCall) => [toolCall.providerCallId, toolCall]),
-    ).values(),
-  ];
-}
-
-function isUsageChunk(
-  chunk: Exclude<StreamChatChunk, string>,
-): chunk is { type: "usage"; usage: ProviderTokenUsage } {
-  return chunk.type === "usage";
-}
-
-function isToolCallChunk(
-  chunk: Exclude<StreamChatChunk, string>,
-): chunk is Extract<StreamChatChunk, { type: "tool_call" }> {
-  return chunk.type === "tool_call";
 }

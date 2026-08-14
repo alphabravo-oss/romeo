@@ -1,6 +1,6 @@
 import { Input, NativeSelect } from "@romeo/ui";
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { getStoredTheme, setTheme, type Theme } from "../lib/theme";
 import { resolveThemeSelection } from "../lib/theme-preference";
@@ -17,10 +17,9 @@ import {
   type ChatUiPreferences,
   chatUiPreferencesFrom,
 } from "../lib/chat-ui-preferences";
-import {
-  getServerInterfacePreferences,
-  updateServerInterfacePreferences,
-} from "../features/interface-preferences";
+import { interfacePreferencesPatchMutationOptions } from "../features/interface-preferences/mutation-options";
+import { interfacePreferencesQueryOptions } from "../lib/api-query-options";
+import { useRouterApiClient } from "../lib/router-context";
 
 const OPTIONS: Theme[] = ["system", "light", "dark"];
 
@@ -98,18 +97,13 @@ export function InterfaceSettings() {
   const [chatPrefs, setChatPrefs] = useState<ChatUiPreferences>(
     () => CHAT_UI_PREF_DEFAULTS,
   );
-  const queryClient = useQueryClient();
-  const serverPreferences = useQuery({
-    queryKey: ["interfacePreferences"],
-    queryFn: getServerInterfacePreferences,
-  });
-  const savePreferences = useMutation({
-    mutationFn: updateServerInterfacePreferences,
-    onSuccess: (data) => {
-      queryClient.setQueryData(["interfacePreferences"], data);
-      setChatPrefs(chatUiPreferencesFrom(data));
-    },
-  });
+  const apiClient = useRouterApiClient();
+  const serverPreferences = useQuery(
+    interfacePreferencesQueryOptions(apiClient),
+  );
+  const savePreferences = useMutation(
+    interfacePreferencesPatchMutationOptions(),
+  );
 
   useEffect(() => {
     if (seeded.current || serverPreferences.data === undefined) return;
@@ -142,16 +136,21 @@ export function InterfaceSettings() {
     const merged = { ...preferences, ...next };
     setPreferences(merged);
     applyInterfacePreferences(merged);
-    savePreferences.mutate(next);
+    savePreferences.mutate(next, {
+      onSuccess: (data) => setChatPrefs(chatUiPreferencesFrom(data)),
+    });
   }
 
   function updateChatPref(key: keyof ChatUiPreferences, value: boolean) {
     setChatPrefs((current) => ({ ...current, [key]: value }));
-    savePreferences.mutate({ [key]: value });
+    savePreferences.mutate(
+      { [key]: value },
+      { onSuccess: (data) => setChatPrefs(chatUiPreferencesFrom(data)) },
+    );
   }
 
   return (
-    <div className="rm-panel grid gap-6 p-4">
+    <div className="grid gap-6">
       <div>
         <div className="rm-card-title">{t("appearance")}</div>
         <div className="rm-field">
@@ -183,7 +182,13 @@ export function InterfaceSettings() {
             onChange={(event) => {
               const next = event.currentTarget.value as Locale;
               setLocale(next);
-              savePreferences.mutate({ locale: next });
+              savePreferences.mutate(
+                { locale: next },
+                {
+                  onSuccess: (data) =>
+                    setChatPrefs(chatUiPreferencesFrom(data)),
+                },
+              );
             }}
             value={locale}
           >

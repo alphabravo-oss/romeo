@@ -1,15 +1,14 @@
 import { Button, Field, Input, Select } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import Plug from "lucide-react/dist/esm/icons/plug.mjs";
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  createDataConnector,
-  getDataConnectorCatalog,
-  listDataConnectors,
-  listKnowledgeBases,
+  createDataConnectorMutationOptions,
+  dataConnectorCatalogQueryOptions,
+  knowledgeBasesQueryOptions,
 } from "../features";
 import type { DataConnector, DataConnectorType } from "../features/types";
 import { useLocale } from "../lib/i18n";
@@ -26,6 +25,7 @@ import {
 } from "./DataConnectorCatalog";
 import { DataConnectorImportsTab } from "./DataConnectorImportsTab";
 import { FormDialog } from "./FormDialog";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const col = createColumnHelper<DataConnector>();
 
@@ -37,28 +37,16 @@ export function DataConnectorPanel({
   workspaceId: string | undefined;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
+  const inventoriedTable = useInventoriedServerTable<any>("data_connectors", {
+    enabled: workspaceId !== undefined,
+    workspaceId,
+  });
   const [addOpen, setAddOpen] = useState(false);
   const [addType, setAddType] = useState<DataConnectorType>("local_import");
   const [activeConnectorId, setActiveConnectorId] = useState<string>();
-  const knowledgeBasesQuery = useQuery({
-    queryKey: ["knowledgeBases", workspaceId],
-    queryFn: () => listKnowledgeBases(workspaceId!),
-    enabled: workspaceId !== undefined,
-  });
-  const connectorsQuery = useQuery({
-    queryKey: ["dataConnectors", workspaceId],
-    queryFn: () => listDataConnectors(workspaceId!),
-    enabled: workspaceId !== undefined,
-  });
-  const catalogQuery = useQuery({
-    queryKey: ["dataConnectorCatalog"],
-    queryFn: getDataConnectorCatalog,
-  });
-  const connectors = useMemo(
-    () => connectorsQuery.data ?? [],
-    [connectorsQuery.data],
-  );
+  const knowledgeBasesQuery = useQuery(knowledgeBasesQueryOptions(workspaceId));
+  const catalogQuery = useQuery(dataConnectorCatalogQueryOptions());
+  const connectors = inventoriedTable.rows;
   const knowledgeBases = useMemo(
     () => knowledgeBasesQuery.data ?? [],
     [knowledgeBasesQuery.data],
@@ -70,7 +58,7 @@ export function DataConnectorPanel({
   const activeConnector =
     connectors.find((connector) => connector.id === activeConnectorId) ??
     connectors[0];
-  const createMutation = useMutation({ mutationFn: createDataConnector });
+  const createMutation = useMutation(createDataConnectorMutationOptions());
   const activeConfigHint = useMemo(
     () => connectorConfigHint(addType, t),
     [addType, t],
@@ -114,9 +102,6 @@ export function DataConnectorPanel({
           config,
         });
         setActiveConnectorId(connector.id);
-        await queryClient.invalidateQueries({
-          queryKey: ["dataConnectors", workspaceId],
-        });
         toast(t("connectorCreated"), "success");
         createForm.reset();
         setAddOpen(false);
@@ -195,7 +180,7 @@ export function DataConnectorPanel({
     <div className="grid gap-4">
       <div className="rm-card-header">
         <div className="rm-card-title">{t("connectorListTitle")}</div>
-        {(connectorsQuery.data?.length ?? 0) > 0 ? (
+        {inventoriedTable.estimatedTotal > 0 ? (
           <AddButton onClick={() => openAdd("local_import")}>
             {t("connectorAdd")}
           </AddButton>
@@ -211,22 +196,33 @@ export function DataConnectorPanel({
         }
         emptyDescription={t("connectorNoneDescription")}
         emptyIcon={<Plug aria-hidden size={24} />}
-        query={connectorsQuery}
+        query={inventoriedTable.query}
+        isEmpty={() =>
+          inventoriedTable.rows.length === 0 &&
+          inventoriedTable.isFirstPage &&
+          inventoriedTable.search.trim() === ""
+        }
       >
-        {(rows) => (
+        {() => (
           <div className="grid gap-4">
             <StatRow
               items={[
-                { label: t("connectorTotal"), value: rows.length },
+                {
+                  label: t("connectorTotal"),
+                  value: inventoriedTable.estimatedTotal,
+                },
                 {
                   label: t("connectorActive"),
-                  value: rows.filter((row) => row.status === "active").length,
+                  value: inventoriedTable.rows.filter(
+                    (row) => row.status === "active",
+                  ).length,
                 },
               ]}
             />
             <DataTable
+              serverState={inventoriedTable.serverState}
               columns={columns}
-              data={rows}
+              data={inventoriedTable.rows}
               empty={t("connectorNone")}
             />
           </div>
@@ -388,7 +384,11 @@ export function DataConnectorPanel({
         empty={t("dataConnectorNeedsKb")}
         emptyAction={
           <Button asChild variant="primary">
-            <Link search={{ section: "knowledge" }} to="/workspace">
+            <Link
+              preload="intent"
+              search={{ section: "knowledge" }}
+              to="/workspace"
+            >
               {t("knowledgeAddBase")}
             </Link>
           </Button>

@@ -51,7 +51,7 @@ export async function auditSamlFailure(
     name: "SAML Auth Audit Actor",
     orgId: input.orgId,
   });
-  await repository.createAuditLog({
+  await writeAuditLog(repository, {
     id: createId("audit"),
     orgId: input.orgId,
     actorId: actor.id,

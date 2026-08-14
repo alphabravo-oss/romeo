@@ -2,6 +2,7 @@ import { Button, Sheet } from "@romeo/ui";
 import { Link } from "@tanstack/react-router";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left.mjs";
 import Menu from "lucide-react/dist/esm/icons/menu.mjs";
+import Search from "lucide-react/dist/esm/icons/search.mjs";
 import {
   type ComponentType,
   type ReactNode,
@@ -10,8 +11,12 @@ import {
   useState,
 } from "react";
 import { useLocale } from "../lib/i18n";
+import "../styles/app-content.css";
+import "../styles/console.css";
 import { SidebarBrand, SidebarFrame } from "./SidebarFrame";
 import { ThemeToggle } from "./ThemeToggle";
+import { useWorkspaceIntentPrefetch } from "./useWorkspaceIntentPrefetch";
+import { useWorkspace } from "./WorkspaceContext";
 
 export interface ConsoleSection {
   key: string;
@@ -36,6 +41,7 @@ export function ConsoleLayout({
   route,
   children,
   userMenu,
+  onSectionIntent,
 }: {
   title: string;
   groups: ConsoleGroup[];
@@ -43,8 +49,11 @@ export function ConsoleLayout({
   route: "/admin" | "/settings" | "/workspace";
   children: ReactNode;
   userMenu?: ReactNode;
+  onSectionIntent?: (section: string) => Promise<void> | void;
 }) {
   const { t } = useLocale();
+  const prefetchWorkspace = useWorkspaceIntentPrefetch();
+  const { workspaceId } = useWorkspace();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(() =>
     initialExpandedGroups(route, groups, active),
@@ -91,7 +100,7 @@ export function ConsoleLayout({
             key={groupId}
           >
             {group.label ? (
-              <button
+              <Button
                 aria-expanded={expanded}
                 className={
                   mobile
@@ -100,16 +109,16 @@ export function ConsoleLayout({
                 }
                 onClick={() => toggleGroup(groupId)}
                 type="button"
+                variant="ghost"
               >
                 <span>{group.label}</span>
                 <span aria-hidden="true" className="rm-console-group-chevron">
                   {expanded ? "▾" : "▸"}
                 </span>
-              </button>
+              </Button>
             ) : null}
             {expanded || !group.label
               ? group.items.map((item) => {
-                  const Icon = item.icon;
                   const isActive = item.key === active;
                   return (
                     <Button
@@ -119,15 +128,34 @@ export function ConsoleLayout({
                     >
                       <Link
                         aria-current={isActive ? "page" : undefined}
+                        onFocus={() =>
+                          runSectionIntent(onSectionIntent, item.key)
+                        }
                         onClick={() => {
                           if (mobile) setMobileNavigationOpen(false);
                         }}
+                        onMouseEnter={() =>
+                          runSectionIntent(onSectionIntent, item.key)
+                        }
+                        preload={route === "/admin" ? false : "intent"}
                         ref={isActive && !mobile ? activeLinkRef : undefined}
-                        search={{ section: item.key }}
+                        search={(previous) => ({
+                          ...previous,
+                          section: item.key,
+                          ...(workspaceId === undefined
+                            ? {}
+                            : { workspace: workspaceId }),
+                        })}
                         to={route}
                       >
-                        {Icon ? <Icon aria-hidden size={16} /> : null}
-                        <span>{item.label}</span>
+                        {/* A dot, not the section icon: at 13px the icons read
+                            as visual noise down a 24-item rail, and the same
+                            icon already labels the section on the overview.
+                            The dot carries alignment and active state only. */}
+                        <span aria-hidden="true" className="rm-console-dot" />
+                        <span className="rm-console-item-label">
+                          {item.label}
+                        </span>
                       </Link>
                     </Button>
                   );
@@ -146,15 +174,48 @@ export function ConsoleLayout({
       </a>
       <SidebarFrame className="rm-console-nav">
         <SidebarBrand className="rm-console-brand" />
-        <Link
-          aria-label={t("adminBackToChat")}
-          className="rm-console-back"
-          to="/"
-        >
-          <ArrowLeft aria-hidden size={16} />
-          <span>{t("adminBackToChat")}</span>
-        </Link>
-        <div className="rm-console-title">{title}</div>
+        <div className="rm-console-railtop">
+          <Link
+            aria-label={t("adminBackToChat")}
+            className="rm-console-back"
+            preload="intent"
+            search={workspaceId === undefined ? {} : { workspace: workspaceId }}
+            to="/"
+          >
+            <ArrowLeft aria-hidden size={14} />
+            <span>{t("adminBackToChat")}</span>
+          </Link>
+          {/* Workspace and Admin are peer consoles, so switching between them
+              belongs in the rail rather than behind a trip through the chat. */}
+          <div className="rm-console-switch" role="group">
+            <Link
+              className={`rm-console-switch__tab${
+                route === "/workspace" ? " is-active" : ""
+              }`}
+              onFocus={prefetchWorkspace}
+              onMouseEnter={prefetchWorkspace}
+              preload="intent"
+              search={
+                workspaceId === undefined ? {} : { workspace: workspaceId }
+              }
+              to="/workspace"
+            >
+              {t("workspace")}
+            </Link>
+            <Link
+              className={`rm-console-switch__tab${
+                route === "/admin" ? " is-active" : ""
+              }`}
+              preload={false}
+              search={
+                workspaceId === undefined ? {} : { workspace: workspaceId }
+              }
+              to="/admin"
+            >
+              {t("admin")}
+            </Link>
+          </div>
+        </div>
         {navigation(false)}
       </SidebarFrame>
       <section
@@ -163,6 +224,8 @@ export function ConsoleLayout({
         tabIndex={-1}
       >
         <header className="rm-topbar rm-console-topbar">
+          {/* Breadcrumb, not a bare title: it names the console you are in and
+              the section you are on, which the page heading below cannot do. */}
           <div className="rm-console-topbar-heading">
             <Button
               aria-label={t("openNavigation")}
@@ -173,9 +236,31 @@ export function ConsoleLayout({
             >
               <Menu aria-hidden size={18} />
             </Button>
-            <strong>{title}</strong>
+            <span className="rm-console-crumb">{title}</span>
+            <span aria-hidden="true" className="rm-console-crumb-sep">
+              /
+            </span>
+            <strong className="rm-console-crumb-current">
+              {activeLabel(groups, active) ?? title}
+            </strong>
           </div>
           <div className="rm-topbar-actions">
+            {/* Opens the existing command palette; the shortcut hint is the
+                affordance that tells people it exists at all. */}
+            <Button
+              className="rm-console-omnisearch"
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent("romeo:command-palette"))
+              }
+              type="button"
+              variant="ghost"
+            >
+              <Search aria-hidden size={14} />
+              <span className="rm-console-omnisearch__label">
+                {t("searchCommands")}
+              </span>
+              <kbd className="rm-console-omnisearch__kbd">⌘K</kbd>
+            </Button>
             <ThemeToggle />
             {userMenu}
           </div>
@@ -191,7 +276,12 @@ export function ConsoleLayout({
         title={title}
       >
         <Button asChild className="rm-console-mobile-back" variant="ghost">
-          <Link onClick={() => setMobileNavigationOpen(false)} to="/">
+          <Link
+            onClick={() => setMobileNavigationOpen(false)}
+            preload="intent"
+            search={workspaceId === undefined ? {} : { workspace: workspaceId }}
+            to="/"
+          >
             <ArrowLeft aria-hidden size={16} />
             <span>{t("adminBackToChat")}</span>
           </Link>
@@ -200,6 +290,30 @@ export function ConsoleLayout({
       </Sheet>
     </main>
   );
+}
+
+function runSectionIntent(
+  onSectionIntent: ((section: string) => Promise<void> | void) | undefined,
+  section: string,
+): void {
+  if (onSectionIntent === undefined) return;
+  try {
+    void Promise.resolve(onSectionIntent(section)).catch(() => undefined);
+  } catch {
+    // Navigation remains authoritative if a speculative chunk cannot load.
+  }
+}
+
+/** Label of the section currently shown, for the topbar breadcrumb. */
+function activeLabel(
+  groups: ConsoleGroup[],
+  active: string,
+): string | undefined {
+  for (const group of groups) {
+    const item = group.items.find((candidate) => candidate.key === active);
+    if (item) return item.label;
+  }
+  return undefined;
 }
 
 function groupIdForSection(

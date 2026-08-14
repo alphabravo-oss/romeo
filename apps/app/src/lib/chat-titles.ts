@@ -1,4 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
+import * as appQueryKeys from "./app-query-keys";
+import { invalidateCachedResourceExactly } from "./server-mutation-options";
 
 import { generateChatTitle } from "../features/chat-experience";
 
@@ -24,9 +26,10 @@ export async function generateAutomaticChatTitle(input: {
   if (!input.enabled || input.modelId === undefined) return;
   try {
     await generateChatTitle(input.chatId, input.modelId);
-    await input.queryClient.invalidateQueries({
-      queryKey: ["chats", input.workspaceId],
-    });
+    await invalidateCachedResourceExactly(
+      input.queryClient,
+      appQueryKeys.chats(input.workspaceId),
+    );
   } catch {
     // A completed first turn remains successful when the optional background
     // title request cannot reach the configured model.

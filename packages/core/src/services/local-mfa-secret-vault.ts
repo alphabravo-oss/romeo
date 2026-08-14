@@ -8,12 +8,19 @@ import {
 import { ApiError } from "../errors";
 
 interface LocalMfaSecretEnvelope {
-  v: 1;
+  v: 1 | 2;
   alg: "A256GCM";
   iv: string;
   ciphertext: string;
   tag: string;
   createdAt: string;
+}
+
+export interface LocalMfaSecretContext {
+  factorId: string;
+  factorType: "recovery_codes" | "totp";
+  orgId: string;
+  userId: string;
 }
 
 export class LocalMfaSecretVault {
@@ -34,15 +41,16 @@ export class LocalMfaSecretVault {
       .digest();
   }
 
-  encrypt(secret: string): string {
+  encrypt(secret: string, context: LocalMfaSecretContext): string {
     const iv = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", this.key, iv);
+    cipher.setAAD(localMfaSecretAad(context));
     const ciphertext = Buffer.concat([
       cipher.update(secret, "utf8"),
       cipher.final(),
     ]);
     return JSON.stringify({
-      v: 1,
+      v: 2,
       alg: "A256GCM",
       iv: iv.toString("base64url"),
       ciphertext: ciphertext.toString("base64url"),
@@ -51,13 +59,14 @@ export class LocalMfaSecretVault {
     } satisfies LocalMfaSecretEnvelope);
   }
 
-  decrypt(envelopeJson: string): string {
+  decrypt(envelopeJson: string, context: LocalMfaSecretContext): string {
     const envelope = parseEnvelope(envelopeJson);
     const decipher = createDecipheriv(
       "aes-256-gcm",
       this.key,
       Buffer.from(envelope.iv, "base64url"),
     );
+    if (envelope.v === 2) decipher.setAAD(localMfaSecretAad(context));
     decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
     return Buffer.concat([
       decipher.update(Buffer.from(envelope.ciphertext, "base64url")),
@@ -78,7 +87,7 @@ export function localMfaSecretKeyConfigured(secret: string): boolean {
 function parseEnvelope(envelopeJson: string): LocalMfaSecretEnvelope {
   const value = JSON.parse(envelopeJson) as Partial<LocalMfaSecretEnvelope>;
   if (
-    value.v !== 1 ||
+    (value.v !== 1 && value.v !== 2) ||
     value.alg !== "A256GCM" ||
     typeof value.iv !== "string" ||
     typeof value.ciphertext !== "string" ||
@@ -92,4 +101,17 @@ function parseEnvelope(envelopeJson: string): LocalMfaSecretEnvelope {
     );
   }
   return value as LocalMfaSecretEnvelope;
+}
+
+function localMfaSecretAad(context: LocalMfaSecretContext): Buffer {
+  return Buffer.from(
+    JSON.stringify([
+      "romeo.local-mfa-secret",
+      context.orgId,
+      context.userId,
+      context.factorId,
+      context.factorType,
+    ]),
+    "utf8",
+  );
 }

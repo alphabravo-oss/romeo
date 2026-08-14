@@ -45,6 +45,37 @@ export function jsonResponse<T extends z.ZodType>(
   } as const;
 }
 
+export const IdempotencyKeyHeaderSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .openapi("IdempotencyKey");
+
+export const optionalIdempotencyHeaders = z.object({
+  "idempotency-key": IdempotencyKeyHeaderSchema.optional(),
+});
+
+export function idempotentJsonResponse<T extends z.ZodType>(
+  description: string,
+  schema: T,
+) {
+  return {
+    ...jsonResponse(description, schema),
+    headers: {
+      "Idempotency-Replayed": {
+        description:
+          "True when the response was replayed from a durable receipt.",
+        schema: { type: "boolean" as const },
+      },
+      "Idempotency-Receipt-Expires-At": {
+        description: "Expiry of the durable receipt in ISO 8601 form.",
+        schema: { type: "string" as const, format: "date-time" },
+      },
+    },
+  } as const;
+}
+
 export const errorResponse = jsonResponse(
   "Stable Romeo API error response",
   ApiErrorSchema,

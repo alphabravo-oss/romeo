@@ -1,0 +1,213 @@
+{
+  "schemaVersion": 1,
+  "classification": "synthetic_non_secret",
+  "models": [
+    {
+      "id": "fx_model_text_reasoning",
+      "providerId": "fx_provider_local",
+      "name": "fixture-text-reasoning",
+      "modalities": ["text"],
+      "reasoning": true,
+      "tools": true,
+      "structuredOutput": true,
+      "contextWindow": 32768
+    },
+    {
+      "id": "fx_model_multimodal",
+      "providerId": "fx_provider_local",
+      "name": "fixture-multimodal",
+      "modalities": ["text", "image", "audio", "document"],
+      "reasoning": false,
+      "tools": false,
+      "structuredOutput": true,
+      "contextWindow": 16384
+    }
+  ],
+  "media": [
+    {
+      "id": "fx_media_png_1x1",
+      "kind": "image",
+      "mimeType": "image/png",
+      "fileName": "fixture.png",
+      "payloadBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "sizeBytes": 68,
+      "sha256": "431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460",
+      "width": 1,
+      "height": 1
+    },
+    {
+      "id": "fx_media_wav_empty",
+      "kind": "audio",
+      "mimeType": "audio/wav",
+      "fileName": "fixture.wav",
+      "payloadBase64": "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=",
+      "sizeBytes": 44,
+      "sha256": "5b517b506f635e251ee0d7020062f1ce375cc3a92f1f445e71be6995f4a591f1",
+      "durationMs": 0
+    },
+    {
+      "id": "fx_media_pdf_minimal",
+      "kind": "document",
+      "mimeType": "application/pdf",
+      "fileName": "fixture.pdf",
+      "payloadBase64": "JVBERi0xLjQKJSVFT0YK",
+      "sizeBytes": 15,
+      "sha256": "14bcd090baf31edba64e9cbd8cdfc15f943344aa72cb3675ad8e91bfcbce03ad"
+    }
+  ],
+  "acl": {
+    "resources": [
+      {
+        "id": "fx_agent_alpha",
+        "type": "agent",
+        "orgId": "fx_org_alpha",
+        "workspaceId": "fx_workspace_alpha"
+      }
+    ],
+    "grants": [
+      {
+        "id": "fx_grant_direct_read",
+        "resourceType": "agent",
+        "resourceId": "fx_agent_alpha",
+        "principalType": "user",
+        "principalId": "fx_user_direct",
+        "permission": "read"
+      },
+      {
+        "id": "fx_grant_group_run",
+        "resourceType": "agent",
+        "resourceId": "fx_agent_alpha",
+        "principalType": "group",
+        "principalId": "fx_group_operators",
+        "permission": "run"
+      }
+    ],
+    "cases": [
+      {
+        "id": "fx_acl_direct_read_allowed",
+        "subjectId": "fx_user_direct",
+        "subjectOrgId": "fx_org_alpha",
+        "subjectWorkspaceIds": ["fx_workspace_alpha"],
+        "subjectGroupIds": [],
+        "permission": "read",
+        "expectedAllowed": true
+      },
+      {
+        "id": "fx_acl_group_run_allowed",
+        "subjectId": "fx_user_group",
+        "subjectOrgId": "fx_org_alpha",
+        "subjectWorkspaceIds": ["fx_workspace_alpha"],
+        "subjectGroupIds": ["fx_group_operators"],
+        "permission": "run",
+        "expectedAllowed": true
+      },
+      {
+        "id": "fx_acl_missing_write_denied",
+        "subjectId": "fx_user_direct",
+        "subjectOrgId": "fx_org_alpha",
+        "subjectWorkspaceIds": ["fx_workspace_alpha"],
+        "subjectGroupIds": [],
+        "permission": "write",
+        "expectedAllowed": false
+      },
+      {
+        "id": "fx_acl_cross_org_denied",
+        "subjectId": "fx_user_direct",
+        "subjectOrgId": "fx_org_beta",
+        "subjectWorkspaceIds": ["fx_workspace_alpha"],
+        "subjectGroupIds": [],
+        "permission": "read",
+        "expectedAllowed": false
+      },
+      {
+        "id": "fx_acl_cross_workspace_denied",
+        "subjectId": "fx_user_direct",
+        "subjectOrgId": "fx_org_alpha",
+        "subjectWorkspaceIds": ["fx_workspace_beta"],
+        "subjectGroupIds": [],
+        "permission": "read",
+        "expectedAllowed": false
+      }
+    ]
+  },
+  "streaming": [
+    {
+      "id": "fx_stream_resume_terminal",
+      "runId": "fx_run_stream",
+      "events": [
+        {
+          "id": "fx_event_stream_1",
+          "sequence": 1,
+          "type": "run.started",
+          "data": {}
+        },
+        {
+          "id": "fx_event_stream_2",
+          "sequence": 2,
+          "type": "message.delta",
+          "data": { "content": "fixture-" }
+        },
+        {
+          "id": "fx_event_stream_3",
+          "sequence": 3,
+          "type": "message.delta",
+          "data": { "content": "response" }
+        },
+        {
+          "id": "fx_event_stream_4",
+          "sequence": 4,
+          "type": "run.completed",
+          "data": {}
+        }
+      ],
+      "resumeAfterSequence": 2,
+      "expectedReplaySequences": [3, 4]
+    }
+  ],
+  "dlp": [
+    {
+      "id": "fx_dlp_credit_card",
+      "detector": "credit_card",
+      "segments": ["test card ", "4242 4242 4242 4242"],
+      "expectedCount": 1
+    },
+    {
+      "id": "fx_dlp_email",
+      "detector": "email_address",
+      "segments": ["fixture person at ", "person@example.invalid"],
+      "expectedCount": 1
+    },
+    {
+      "id": "fx_dlp_us_ssn",
+      "detector": "us_ssn",
+      "segments": ["synthetic identifier ", "123-45-6789"],
+      "expectedCount": 1
+    },
+    {
+      "id": "fx_dlp_api_token",
+      "detector": "api_token",
+      "segments": ["synthetic token ", "sk-", "FIXTUREONLY0000000000000000"],
+      "expectedCount": 1
+    }
+  ],
+  "compute": [
+    {
+      "id": "fx_compute_python_no_network",
+      "runtime": "python3.12",
+      "sourceFragments": ["result = ", "2 + 2", "\nprint(result)"],
+      "networkPolicy": "none",
+      "limits": {
+        "cpuMillis": 1000,
+        "memoryBytes": 67108864,
+        "wallTimeMillis": 2000,
+        "outputBytes": 4096,
+        "artifactBytes": 0
+      },
+      "expected": {
+        "exitCode": 0,
+        "stdoutSha256": "7de1555df0c2700329e815b93b32c571c3ea54dc967b89e81ab73b9972b72d1d",
+        "artifactCount": 0
+      }
+    }
+  ]
+}

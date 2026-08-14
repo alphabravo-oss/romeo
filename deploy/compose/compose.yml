@@ -1,15 +1,26 @@
-name: romeo
+# DEVELOPMENT ONLY: this stack uses local credentials and mutable dependency
+# tags. It is not a production deployment manifest; use deploy/helm instead.
+name: romeo-development
+
+x-romeo-deployment-scope:
+  environment: development-only
 
 x-app-build: &app-build
   context: ../..
   dockerfile: deploy/compose/Dockerfile
+  target: app-runtime
+
+x-ops-build: &ops-build
+  context: ../..
+  dockerfile: deploy/compose/Dockerfile
+  target: ops-runtime
 
 x-cli-environment: &cli-environment
   ROMEO_BASE_URL: http://app:3000
   ROMEO_API_KEY: ${ROMEO_API_KEY:-}
 
 x-loop-worker: &loop-worker
-  build: *app-build
+  build: *ops-build
   depends_on:
     app:
       condition: service_healthy
@@ -19,6 +30,7 @@ services:
   app:
     build: *app-build
     environment:
+      ROMEO_ENV: ${ROMEO_ENV:-development}
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
       REPOSITORY_DRIVER: postgres
       DATABASE_URL: ${DATABASE_URL:-postgres://romeo:romeo@postgres:5432/romeo}
@@ -94,6 +106,7 @@ services:
       MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD: ${MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD:-5}
       MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS: ${MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS:-60000}
       MODEL_PROVIDER_DISABLED_IDS: ${MODEL_PROVIDER_DISABLED_IDS:-}
+      CAPABILITY_PLATFORM_DISABLED_IDS: ${CAPABILITY_PLATFORM_DISABLED_IDS:-realtime_voice,external_provider_use,secure_compute,image_editing,multi_model_compare,streamed_output_policy}
       MODEL_PROVIDER_FALLBACK_MODEL_ID: ${MODEL_PROVIDER_FALLBACK_MODEL_ID:-}
       VALKEY_URL: redis://valkey:6379
       REALTIME_EVENT_DRIVER: ${REALTIME_EVENT_DRIVER:-valkey}
@@ -186,10 +199,10 @@ services:
       OIDC_WORKSPACE_GROUP_MAP: ${OIDC_WORKSPACE_GROUP_MAP:-}
       OIDC_WORKSPACE_GROUP_PREFIX: ${OIDC_WORKSPACE_GROUP_PREFIX:-}
       SCIM_ENABLED: ${SCIM_ENABLED:-false}
-      DEV_SEEDED_LOGIN: ${DEV_SEEDED_LOGIN:-true}
+      DEV_SEEDED_LOGIN: ${DEV_SEEDED_LOGIN:-false}
       PORT: 3000
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -211,7 +224,7 @@ services:
       start_period: 20s
 
   migrate:
-    build: *app-build
+    build: *ops-build
     command: ["pnpm", "migrate:postgres"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://romeo:romeo@postgres:5432/romeo}
@@ -242,7 +255,7 @@ services:
       POSTGRES_USER: romeo
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-romeo}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -255,7 +268,7 @@ services:
     image: valkey/valkey:9
     command: ["valkey-server", "--save", "60", "1", "--appendonly", "yes"]
     ports:
-      - "${VALKEY_PORT:-6379}:6379"
+      - "127.0.0.1:${VALKEY_PORT:-6379}:6379"
     volumes:
       - valkey-data:/data
     healthcheck:
@@ -270,7 +283,7 @@ services:
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-romeo}
       RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-romeo-local-secret}
     ports:
-      - "${RUSTFS_PORT:-9000}:9000"
+      - "127.0.0.1:${RUSTFS_PORT:-9000}:9000"
     volumes:
       - rustfs-data:/data
 
@@ -457,7 +470,7 @@ services:
       ]
 
   operational-monitoring-exporter:
-    build: *app-build
+    build: *ops-build
     profiles: ["monitoring"]
     environment:
       <<: *cli-environment
@@ -504,7 +517,7 @@ services:
       ]
 
   postgres-backup:
-    build: *app-build
+    build: *ops-build
     profiles: ["backup"]
     command:
       [
@@ -533,7 +546,7 @@ services:
       - compose-backups:/backups
 
   object-store-backup:
-    build: *app-build
+    build: *ops-build
     profiles: ["backup"]
     command:
       [

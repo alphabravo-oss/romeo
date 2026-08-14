@@ -26,7 +26,6 @@
   "languageDescription": "Changes supported navigation and chat labels immediately.",
   "large": "Large",
   "light": "Light",
-  "loading": "Loading…",
   "interfaceDensityMedium": "Medium",
   "member": "Member",
   "memory": "Memory",
@@ -88,7 +87,7 @@
   "textSize": "Text size",
   "theme": "Theme",
   "themeDescription": "System follows your device’s light or dark setting.",
-  "updated": "updated",
+  "contentUpdated": "updated",
   "user": "User",
   "visibility": "Visibility"
 }

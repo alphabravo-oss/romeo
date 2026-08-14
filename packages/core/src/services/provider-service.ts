@@ -1,9 +1,6 @@
 import { assertScope, canAccessOrg, type AuthSubject } from "@romeo/auth";
 import {
   defaultProviderCapabilities,
-  getProviderAdapter,
-  deleteOllamaModel,
-  pullOllamaModel,
   type BaseModel,
   type ModelPricing,
   type ProviderInstance,
@@ -11,30 +8,54 @@ import {
 } from "@romeo/providers";
 
 import type { ModelCatalogQuery, RomeoRepository } from "../domain/repository";
-import { ApiError, notFound } from "../errors";
+import { notFound } from "../errors";
 import { createId } from "../ids";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import { canUseProvider, canUseProviderModel } from "./access-visibility";
 import {
   ProviderCatalogSyncCoordinator,
   providerCatalogStaleState,
   type ProviderCatalogSyncOptions,
 } from "./provider-catalog-sync";
-import { assertManagedSecretRef } from "./secret-refs";
 import type { SecretResolver } from "./secret-resolver";
-import { withTelemetryFetch } from "./telemetry-context";
+import { decorateCatalogModels } from "./catalog-model-decorator";
+import { requireAcceptedProviderConnection } from "./provider-connection-config";
+import {
+  readProviderConnectionExtras,
+  saveProviderConnectionExtras,
+} from "./provider-connection-extras";
+import {
+  toProviderResponse,
+  toProviderResponses,
+} from "./provider-http-mapping";
+import { ProviderCatalogSyncJobStore } from "./provider-catalog-sync-job-store";
+import {
+  deleteProviderRuntimeModel,
+  pullProviderRuntimeModel,
+  verifyProviderConnection,
+} from "./provider-runtime-operations";
 
 export interface CreateProviderInput {
   subject: AuthSubject;
   type: ProviderKind;
   name: string;
   baseUrl: string;
+  auth?: string;
   credentialRef?: string;
+  deployment?: string;
   modelIds?: string[];
+  project?: string;
+  region?: string;
+  target?: string;
 }
 
 export class ProviderService {
   private readonly catalogSync: ProviderCatalogSyncCoordinator;
+  readonly catalogSyncJobs: ProviderCatalogSyncJobStore;
 
   constructor(
     private readonly repository: RomeoRepository,
@@ -56,12 +77,53 @@ export class ProviderService {
         ? {}
         : { fetchImpl: options.fetchImpl }),
     });
+    this.catalogSyncJobs = new ProviderCatalogSyncJobStore(
+      repository,
+      (subject, providerId) => this.syncModels(subject, providerId),
+    );
   }
 
   async list(subject: AuthSubject): Promise<ProviderInstance[]> {
     assertScope(subject, "providers:read");
     const providers = await this.repository.listProviders(subject.orgId);
     return this.visibleProviders(subject, providers);
+  }
+
+  presentConnections(subject: AuthSubject) {
+    return this.list(subject).then((providers) =>
+      toProviderResponses(this.repository, subject.orgId, providers),
+    );
+  }
+
+  async presentConnection(provider: ProviderInstance) {
+    return toProviderResponse(
+      provider,
+      await readProviderConnectionExtras(
+        this.repository,
+        provider.orgId,
+        provider.id,
+      ),
+    );
+  }
+
+  async presentModels(subject: AuthSubject) {
+    return decorateCatalogModels(
+      this.repository,
+      subject.orgId,
+      await this.models(subject),
+    );
+  }
+
+  async presentModelsPage(subject: AuthSubject, input: ModelCatalogQuery) {
+    const page = await this.modelsPage(subject, input);
+    return {
+      ...page,
+      items: await decorateCatalogModels(
+        this.repository,
+        subject.orgId,
+        page.items,
+      ),
+    };
   }
 
   async models(subject: AuthSubject) {
@@ -77,6 +139,10 @@ export class ProviderService {
 
   stopCatalogSyncWorker(): void {
     this.catalogSync.stop();
+  }
+
+  drainCatalogSyncWorker(): Promise<void> {
+    return this.catalogSync.drain();
   }
 
   runCatalogSyncOnce(): Promise<number> {
@@ -186,22 +252,26 @@ export class ProviderService {
 
   async create(input: CreateProviderInput): Promise<ProviderInstance> {
     assertScope(input.subject, "providers:write");
-    if (input.credentialRef !== undefined)
-      assertManagedSecretRef(input.credentialRef);
+    const accepted = requireAcceptedProviderConnection(input);
     return this.repository.transaction(async (repository) => {
       const provider = await repository.createProvider({
         id: createId("provider"),
         orgId: input.subject.orgId,
         type: input.type,
-        name: input.name,
-        baseUrl: input.baseUrl,
-        ...(input.credentialRef === undefined
+        name: accepted.name,
+        baseUrl: accepted.baseUrl,
+        ...(accepted.credentialRef === undefined
           ? {}
-          : { credentialRef: input.credentialRef }),
-        ...(input.modelIds === undefined ? {} : { modelIds: input.modelIds }),
+          : { credentialRef: accepted.credentialRef }),
+        ...(accepted.modelIds === undefined ? {} : { modelIds: accepted.modelIds }),
         enabled: true,
         capabilities: defaultProviderCapabilities(input.type),
         catalogSync: { status: "never", modelCount: 0 },
+      });
+      await saveProviderConnectionExtras(repository, {
+        extras: accepted,
+        orgId: input.subject.orgId,
+        providerId: provider.id,
       });
       await this.audit(
         repository,
@@ -222,18 +292,34 @@ export class ProviderService {
   async update(input: {
     subject: AuthSubject;
     providerId: string;
+    auth?: string;
     name?: string;
     baseUrl?: string;
     credentialRef?: string;
+    deployment?: string;
     modelIds?: string[];
     enabled?: boolean;
+    project?: string;
+    region?: string;
+    target?: string;
   }): Promise<ProviderInstance> {
     assertScope(input.subject, "providers:write");
-    if (input.credentialRef !== undefined)
-      assertManagedSecretRef(input.credentialRef);
     const current = await this.repository.getProvider(input.providerId);
     if (!current || !canAccessOrg(input.subject, current.orgId))
       throw notFound("Provider");
+    const accepted = requireAcceptedProviderConnection({
+      auth: input.auth,
+      baseUrl: input.baseUrl ?? current.baseUrl,
+      credentialAlreadyConfigured: current.credentialRef !== undefined,
+      credentialRef: input.credentialRef,
+      deployment: input.deployment,
+      kind: current.type,
+      modelIds: input.modelIds ?? current.modelIds,
+      name: input.name ?? current.name,
+      project: input.project,
+      region: input.region,
+      target: input.target,
+    });
     const catalogConfigurationChanged =
       (input.baseUrl !== undefined && input.baseUrl !== current.baseUrl) ||
       (input.credentialRef !== undefined &&
@@ -243,18 +329,28 @@ export class ProviderService {
     return this.repository.transaction(async (repository) => {
       const updated = await repository.updateProvider({
         ...current,
-        ...(input.name === undefined ? {} : { name: input.name }),
-        ...(input.baseUrl === undefined ? {} : { baseUrl: input.baseUrl }),
+        name: accepted.name,
+        baseUrl: accepted.baseUrl,
         ...(input.credentialRef === undefined
           ? {}
-          : { credentialRef: input.credentialRef }),
-        ...(input.modelIds === undefined ? {} : { modelIds: input.modelIds }),
+          : { credentialRef: accepted.credentialRef }),
+        ...(input.modelIds === undefined ? {} : { modelIds: accepted.modelIds }),
         ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
         ...(catalogConfigurationChanged
           ? {
               catalogSync: providerCatalogStaleState(current.catalogSync),
             }
           : {}),
+      });
+      const previousExtras = await readProviderConnectionExtras(
+        repository,
+        input.subject.orgId,
+        updated.id,
+      );
+      await saveProviderConnectionExtras(repository, {
+        extras: { ...previousExtras, ...accepted },
+        orgId: input.subject.orgId,
+        providerId: updated.id,
       });
       await this.audit(
         repository,
@@ -272,66 +368,18 @@ export class ProviderService {
     });
   }
 
-  async verify(
-    subject: AuthSubject,
-    providerId: string,
-  ): Promise<{
-    ok: boolean;
-    message: string;
-    latencyMs: number;
-    checks: Array<{
-      label: string;
-      status: "fail" | "pass" | "warning";
-      detail: string;
-    }>;
-  }> {
-    assertScope(subject, "providers:write");
-    const provider = await this.repository.getProvider(providerId);
-    if (!provider || !canAccessOrg(subject, provider.orgId))
-      throw notFound("Provider");
-    const resolution = await this.resolveCredential(provider);
-    const startedAt = Date.now();
-    const result = await getProviderAdapter(provider.type).health(provider, {
-      ...(resolution?.value === undefined ? {} : { apiKey: resolution.value }),
-      fetchImpl: withTelemetryFetch(this.options.fetchImpl ?? fetch),
+  async verify(subject: AuthSubject, providerId: string) {
+    return verifyProviderConnection({
+      providerId,
+      repository: this.repository,
+      subject,
+      ...(this.options.fetchImpl === undefined
+        ? {}
+        : { fetchImpl: this.options.fetchImpl }),
+      ...(this.options.secretResolver === undefined
+        ? {}
+        : { secretResolver: this.options.secretResolver }),
     });
-    const credentialRequired =
-      provider.capabilities.deployment.credentialRequired;
-    return {
-      ...result,
-      latencyMs: Date.now() - startedAt,
-      checks: [
-        {
-          label: "Base URL",
-          status: "pass",
-          detail: provider.baseUrl,
-        },
-        {
-          label: "Credential",
-          status:
-            credentialRequired && resolution?.value === undefined
-              ? "fail"
-              : resolution?.value === undefined
-                ? "warning"
-                : "pass",
-          detail:
-            resolution?.value !== undefined
-              ? "Managed credential resolved."
-              : credentialRequired
-                ? "A managed API credential is required."
-                : "No credential required by this provider type.",
-        },
-        {
-          label: "Model discovery",
-          status: result.ok ? "pass" : "fail",
-          detail: result.ok
-            ? "The endpoint returned usable models."
-            : provider.modelIds?.length
-              ? "The configured model allowlist could not be verified."
-              : "Check network reachability and Models API access, or configure allowed model IDs.",
-        },
-      ],
-    };
   }
 
   private async visibleModels(
@@ -373,102 +421,44 @@ export class ProviderService {
   }
 
   async pullModel(subject: AuthSubject, providerId: string, model: string) {
-    assertScope(subject, "providers:write");
-    const provider = await this.repository.getProvider(providerId);
-    if (!provider || !canAccessOrg(subject, provider.orgId))
-      throw notFound("Provider");
-    if (provider.type !== "ollama") {
-      throw new ApiError(
-        "provider_operation_not_supported",
-        "Pulling models is only supported for Ollama connections.",
-        400,
-      );
-    }
-    const resolution = await this.resolveCredential(provider);
-    let result;
-    try {
-      result = await pullOllamaModel(provider, model, {
-        ...(resolution?.value === undefined
-          ? {}
-          : { apiKey: resolution.value }),
-        fetchImpl: withTelemetryFetch(this.options.fetchImpl ?? fetch),
-      });
-    } catch (caught) {
-      throw new ApiError(
-        "ollama_model_pull_failed",
-        caught instanceof Error
-          ? caught.message
-          : "Ollama could not pull the requested model.",
-        502,
-      );
-    }
-    await this.audit(
-      this.repository,
+    return pullProviderRuntimeModel({
+      model,
+      providerId,
+      repository: this.repository,
       subject,
-      "provider.model.pull",
-      "provider",
-      provider.id,
-      { model, status: result.status },
-    );
-    return result;
+      ...(this.options.fetchImpl === undefined
+        ? {}
+        : { fetchImpl: this.options.fetchImpl }),
+      ...(this.options.secretResolver === undefined
+        ? {}
+        : { secretResolver: this.options.secretResolver }),
+    });
   }
 
   async deleteModel(subject: AuthSubject, providerId: string, model: string) {
-    assertScope(subject, "providers:write");
-    const provider = await this.repository.getProvider(providerId);
-    if (!provider || !canAccessOrg(subject, provider.orgId))
-      throw notFound("Provider");
-    if (provider.type !== "ollama") {
-      throw new ApiError(
-        "provider_operation_not_supported",
-        "Deleting runtime models is only supported for Ollama connections.",
-        400,
-      );
-    }
-    const resolution = await this.resolveCredential(provider);
-    let result;
-    try {
-      result = await deleteOllamaModel(provider, model, {
-        ...(resolution?.value === undefined
-          ? {}
-          : { apiKey: resolution.value }),
-        fetchImpl: withTelemetryFetch(this.options.fetchImpl ?? fetch),
-      });
-    } catch (caught) {
-      throw new ApiError(
-        "ollama_model_delete_failed",
-        caught instanceof Error
-          ? caught.message
-          : "Ollama could not delete the requested model.",
-        502,
-      );
-    }
-    await this.audit(
-      this.repository,
+    const result = await deleteProviderRuntimeModel({
+      model,
+      providerId,
+      repository: this.repository,
       subject,
-      "provider.model.delete",
-      "provider",
-      provider.id,
-      { model, status: result.status },
-    );
+      ...(this.options.fetchImpl === undefined
+        ? {}
+        : { fetchImpl: this.options.fetchImpl }),
+      ...(this.options.secretResolver === undefined
+        ? {}
+        : { secretResolver: this.options.secretResolver }),
+    });
     await this.syncModels(subject, providerId);
     return result;
   }
 
-  private resolveCredential(provider: ProviderInstance) {
-    return provider.credentialRef === undefined ||
-      this.options.secretResolver?.resolveValue === undefined
-      ? Promise.resolve(undefined)
-      : this.options.secretResolver.resolveValue(provider.credentialRef);
-  }
-
-  private async audit(
+  private async audit<A extends AuditAction>(
     repository: RomeoRepository,
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceType: string,
     resourceId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
   ): Promise<void> {
     await writeAuditLog(repository, {
       subject,

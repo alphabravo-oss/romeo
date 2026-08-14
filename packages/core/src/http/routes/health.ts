@@ -1,4 +1,4 @@
-import { getHealthRoute } from "@romeo/contracts";
+import { getHealthRoute, ROMEO_PRODUCT_VERSION } from "@romeo/contracts";
 
 import type { RomeoApi } from "../context";
 
@@ -9,7 +9,7 @@ export function registerHealthRoutes(app: RomeoApi): void {
         data: {
           status: "ok",
           service: "romeo-api",
-          version: "0.1.0",
+          version: ROMEO_PRODUCT_VERSION,
           requestId: context.get("requestId"),
         },
       },

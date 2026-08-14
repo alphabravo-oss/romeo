@@ -16,6 +16,11 @@ import {
   type FileMalwareScanner,
   type FileMalwareScanPolicy,
 } from "./file-service";
+import {
+  fileIdsForMessagePart,
+  isMessagePartV1,
+  legacyTextProjection,
+} from "./message-part-v1";
 
 const allowedImageMimeTypes = new Set([
   "image/gif",
@@ -52,12 +57,74 @@ export async function attachMessageParts(
 ): Promise<Message[]> {
   return Promise.all(
     messages.map(async (message) => {
-      const attachments = (await repository.listMessageParts(message.id))
+      const storedParts = await repository.listMessageParts(message.id);
+      const attachments = storedParts
         .map((part) => publicAttachment(part, message.chatId))
         .filter((part): part is MessageAttachment => part !== undefined);
-      return attachments.length === 0 ? message : { ...message, attachments };
+      return projectMessageParts(message, storedParts, attachments);
     }),
   );
+}
+
+export async function attachMessagePartsBatch(
+  repository: RomeoRepository,
+  messages: Message[],
+): Promise<Message[]> {
+  if (messages.length === 0) return [];
+  const parts = await repository.listMessagePartsForMessages(
+    messages.map((message) => message.id),
+  );
+  const messagesById = new Map(
+    messages.map((message) => [message.id, message]),
+  );
+  const attachmentsByMessage = new Map<string, MessageAttachment[]>();
+  const partsByMessage = new Map<string, MessagePart[]>();
+  for (const part of parts) {
+    const message = messagesById.get(part.messageId);
+    if (message === undefined) continue;
+    const messageParts = partsByMessage.get(message.id) ?? [];
+    messageParts.push(part);
+    partsByMessage.set(message.id, messageParts);
+    const attachment = publicAttachment(part, message.chatId);
+    if (attachment === undefined) continue;
+    const attachments = attachmentsByMessage.get(message.id) ?? [];
+    attachments.push(attachment);
+    attachmentsByMessage.set(message.id, attachments);
+  }
+  return messages.map((message) => {
+    const attachments = attachmentsByMessage.get(message.id);
+    return projectMessageParts(
+      message,
+      partsByMessage.get(message.id) ?? [],
+      attachments,
+    );
+  });
+}
+
+function projectMessageParts(
+  message: Message,
+  storedParts: MessagePart[],
+  attachments?: MessageAttachment[],
+): Message {
+  const typedParts = storedParts.filter(isMessagePartV1);
+  if (!typedParts.some((part) => part.type === "text")) {
+    const text = legacyTextProjection(
+      message,
+      typedParts.reduce((next, part) => Math.max(next, part.position + 1), 0),
+    );
+    if (text !== undefined) typedParts.push(text);
+  }
+  typedParts.sort(
+    (left, right) =>
+      left.position - right.position || left.id.localeCompare(right.id),
+  );
+  return {
+    ...message,
+    ...(typedParts.length === 0 ? {} : { parts: typedParts }),
+    ...(attachments === undefined || attachments.length === 0
+      ? {}
+      : { attachments }),
+  };
 }
 
 export async function storeMessageAttachments(input: {
@@ -145,11 +212,21 @@ export async function readMessageAttachment(input: {
   const message = await input.repository.getMessage(input.messageId);
   if (!message || message.chatId !== input.chatId) throw notFound("Message");
   const part = await input.repository.getMessagePart(input.attachmentId);
-  if (!part || part.messageId !== input.messageId || part.type !== "attachment")
+  if (!part || part.messageId !== input.messageId)
     throw notFound("Message attachment");
   const attachment = publicAttachment(part, input.chatId);
   if (attachment === undefined) throw notFound("Message attachment");
-  const bytes = await input.objectStore.getObject(part.content);
+  const fileId = fileIdsForMessagePart(part)[0];
+  const file =
+    fileId === undefined
+      ? undefined
+      : await input.repository.getFileObject(fileId);
+  const bytes =
+    part.type === "attachment"
+      ? await input.objectStore.getObject(part.content)
+      : file === undefined
+        ? undefined
+        : await input.objectStore.getObject(file.objectKey);
   if (bytes === undefined)
     throw new ApiError(
       "message_attachment_object_missing",
@@ -168,6 +245,26 @@ function publicAttachment(
   part: MessagePart,
   chatId: string,
 ): MessageAttachment | undefined {
+  const previewUrl = `/api/v1/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(part.messageId)}/attachments/${encodeURIComponent(part.id)}`;
+  if (isMessagePartV1(part) && (part.type === "image_ref" || part.type === "document_ref" || part.type === "audio_ref")) {
+    const mimeType = part.mediaType;
+    const fileName =
+      part.type === "document_ref"
+        ? part.fileName
+        : part.type === "image_ref"
+          ? (part.altText ?? "image")
+          : "audio";
+    return {
+      id: part.id,
+      messageId: part.messageId,
+      fileName,
+      mimeType,
+      sizeBytes: 0,
+      kind: part.type === "image_ref" ? "image" : "document",
+      retainedInContext: true,
+      previewUrl,
+    };
+  }
   if (part.type !== "attachment") return undefined;
   const fileName = part.metadata.fileName;
   const mimeType = part.metadata.mimeType;
@@ -191,7 +288,7 @@ function publicAttachment(
     sizeBytes,
     kind: allowedImageMimeTypes.has(mimeType) ? "image" : "document",
     retainedInContext: part.metadata.retainedInContext !== false,
-    previewUrl: `/api/v1/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(part.messageId)}/attachments/${encodeURIComponent(part.id)}`,
+    previewUrl,
   };
 }
 

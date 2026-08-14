@@ -17,7 +17,11 @@ import {
   type SsoOidcProviderPresetSummary,
 } from "../domain/sso-provider-presets";
 import { ApiError, notFound } from "../errors";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import { oidcUserId } from "./oidc-client";
 import {
   testOidcConnection,
@@ -268,12 +272,12 @@ export class SsoSettingsService {
     };
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     repository: RomeoRepository,
     subject: AuthSubject,
-    action: string,
+    action: A,
     input: {
-      metadata: Record<string, unknown>;
+      metadata: AuditMetadata<A>;
       resourceId: string;
       resourceType: string;
     },

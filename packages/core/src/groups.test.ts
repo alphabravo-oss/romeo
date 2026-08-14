@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApiKeyToken, hashApiKey } from "@romeo/auth";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
@@ -51,7 +51,7 @@ describe("group administration", () => {
       createdAt: new Date().toISOString(),
     });
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",

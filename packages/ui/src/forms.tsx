@@ -279,7 +279,14 @@ function groupSelectOptions(options: readonly SelectOption[]) {
 
 export function InlineError({
   className,
+  role = "alert",
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rm-ui-inline-error", className)} {...props} />;
+  return (
+    <div
+      className={cn("rm-ui-inline-error", className)}
+      role={role}
+      {...props}
+    />
+  );
 }

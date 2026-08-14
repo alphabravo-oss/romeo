@@ -7,6 +7,7 @@ import type {
   FileObjectResponse,
 } from "./file-service-contracts";
 import { isDeferredExtractionMimeType } from "./knowledge-extraction-worker";
+import { isFileReadyForUse } from "./file-lifecycle";
 
 export function canReadFile(
   subject: AuthSubject,
@@ -40,12 +41,25 @@ export function publicFileObject(file: FileObject): FileObjectResponse {
     sha256: file.sha256,
     purpose: file.purpose,
     status: file.status,
+    lifecycle: {
+      schemaVersion: 1,
+      state: file.status,
+      version: file.lifecycleVersion ?? 0,
+      attempts: file.lifecycleAttempts ?? 0,
+      retryable:
+        file.status === "failed" && (file.lifecycleAttempts ?? 0) < 100,
+      failureCode: file.lifecycleFailureCode ?? null,
+      nextAttemptAt: file.lifecycleNextAttemptAt ?? null,
+      // Lease timing is an internal worker coordination detail.
+      leaseExpiresAt: null,
+      attachedAt: file.attachedAt ?? null,
+      retainedAt: file.retainedAt ?? null,
+    },
     metadata: file.metadata,
     extraction: publicExtractionState(file),
-    contentUrl:
-      file.status === "available"
-        ? `/api/v1/files/${encodeURIComponent(file.id)}/content`
-        : null,
+    contentUrl: isFileReadyForUse(file)
+      ? `/api/v1/files/${encodeURIComponent(file.id)}/content`
+      : null,
     createdAt: file.createdAt,
     updatedAt: file.updatedAt,
     ...(file.deletedAt === undefined ? {} : { deletedAt: file.deletedAt }),

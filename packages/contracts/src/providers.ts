@@ -7,7 +7,22 @@ import {
   jsonResponse,
   standardErrorResponses,
 } from "./common";
-import { ProviderCatalogSyncSchema } from "./provider-catalog-schemas";
+import {
+  CatalogModelSurfaceSchema,
+  ProviderCatalogSyncJobSchema,
+  ProviderCatalogSyncSchema,
+} from "./provider-catalog-schemas";
+import {
+  getProviderCatalogSyncJobRoute,
+  runProviderCatalogSyncJobRoute,
+} from "./provider-catalog-sync-routes";
+
+export {
+  getProviderCatalogSyncJobRoute,
+  runProviderCatalogSyncJobRoute,
+} from "./provider-catalog-sync-routes";
+export { ProviderCatalogSyncJobSchema } from "./provider-catalog-schemas";
+import { ProviderOperationalSummarySchema } from "./provider-operational-schema";
 import {
   ProviderCapabilitiesSchema,
   ProviderImagePricingSchema as imagePricing,
@@ -17,6 +32,26 @@ import {
 export { ProviderCapabilitiesSchema } from "./provider-capability-schemas";
 
 const identifier = z.string().trim().min(1).max(300);
+
+export const ProviderDialectSummarySchema = z
+  .strictObject({
+    contractVersion: z.literal("1"),
+    version: z.string().regex(/^[a-z0-9][a-z0-9.-]{2,79}$/u),
+    operations: z.strictObject({
+      audio: z.boolean(),
+      batches: z.boolean(),
+      capabilityProbing: z.boolean(),
+      chat: z.literal(true),
+      discovery: z.literal(true),
+      embeddings: z.boolean(),
+      errorNormalization: z.boolean(),
+      files: z.boolean(),
+      imageGeneration: z.boolean(),
+      tokenCounting: z.boolean(),
+      usageParsing: z.boolean(),
+    }),
+  })
+  .openapi("ProviderDialectSummary");
 
 export const ProviderConnectionSchema = z
   .strictObject({
@@ -28,9 +63,15 @@ export const ProviderConnectionSchema = z
     modelIds: z.array(identifier).optional(),
     enabled: z.boolean(),
     capabilities: ProviderCapabilitiesSchema,
+    dialect: ProviderDialectSummarySchema,
     catalogSync: ProviderCatalogSyncSchema.optional(),
     credentialConfigured: z.boolean(),
     credentialRefScheme: z.string().optional(),
+    auth: z.string().min(1).max(80).optional(),
+    target: z.string().min(1).max(80).optional(),
+    region: z.string().min(1).max(80).optional(),
+    project: z.string().min(1).max(80).optional(),
+    deployment: z.string().min(1).max(80).optional(),
   })
   .openapi("ProviderConnection");
 
@@ -59,6 +100,8 @@ export const ProviderModelSchema = z
       })
       .optional(),
     capabilitiesSource: z.enum(["detected", "override"]).optional(),
+    probedAt: z.iso.datetime().optional(),
+    catalogSurface: CatalogModelSurfaceSchema.optional(),
   })
   .openapi("ProviderModel");
 
@@ -67,8 +110,13 @@ export const CreateProviderConnectionSchema = z
     type: providerKind,
     name: z.string().trim().min(1).max(200),
     baseUrl: z.url(),
+    auth: z.string().trim().min(1).max(80).optional(),
     credentialRef: z.string().trim().min(1).max(500).optional(),
+    deployment: z.string().trim().min(1).max(80).optional(),
     modelIds: z.array(identifier).max(2_000).optional(),
+    project: z.string().trim().min(1).max(80).optional(),
+    region: z.string().trim().min(1).max(80).optional(),
+    target: z.string().trim().min(1).max(80).optional(),
   })
   .openapi("CreateProviderConnectionRequest");
 
@@ -95,83 +143,6 @@ export const ProviderVerificationSchema = z
     ),
   })
   .openapi("ProviderVerification");
-
-const operationalSummary = z
-  .strictObject({
-    alerts: z.array(
-      z.strictObject({
-        code: z.enum([
-          "fallback_unavailable",
-          "no_available_providers",
-          "provider_circuit_open",
-          "provider_disabled",
-          "provider_kill_switch",
-          "provider_without_enabled_models",
-          "object_store_failures_recent",
-          "provider_errors_recent",
-          "queue_wait_high",
-          "sse_disconnects_recent",
-          "time_to_first_token_high",
-        ]),
-        id: identifier,
-        modelId: identifier.optional(),
-        providerId: identifier.optional(),
-        severity: z.enum(["critical", "warning"]),
-      }),
-    ),
-    fallback: z.strictObject({
-      available: z.boolean(),
-      configured: z.boolean(),
-      modelId: identifier.optional(),
-      providerId: identifier.optional(),
-      reason: z
-        .enum(["model_disabled", "model_missing", "provider_disabled"])
-        .optional(),
-    }),
-    generatedAt: z.iso.datetime(),
-    policy: z.strictObject({
-      circuitCooldownMs: z.number().nonnegative(),
-      circuitFailureThreshold: z.number().int().nonnegative(),
-      disabledProviderIds: z.array(identifier),
-      fallbackModelId: identifier.optional(),
-      retryAttempts: z.number().int().nonnegative(),
-      retryBackoffMs: z.number().nonnegative(),
-      streamTimeoutMs: z.number().nonnegative(),
-    }),
-    providers: z.array(
-      z.strictObject({
-        circuit: z.strictObject({
-          consecutiveFailures: z.number().int().nonnegative(),
-          state: z.enum(["closed", "half_open", "open"]),
-        }),
-        enabled: z.boolean(),
-        enabledModelCount: z.number().int().nonnegative(),
-        killSwitchActive: z.boolean(),
-        modelCount: z.number().int().nonnegative(),
-        providerId: identifier,
-        reasons: z.array(z.string()),
-        status: z.enum(["available", "degraded", "unavailable"]),
-        type: providerKind,
-      }),
-    ),
-    runtime: z.strictObject({
-      contextInputTokensAverage: z.number(),
-      lookbackSeconds: z.number().nonnegative(),
-      objectStoreFailureCount: z.number().nonnegative(),
-      providerErrorCount: z.number().nonnegative(),
-      queueWaitP95Ms: z.number().nonnegative(),
-      recoveryCount: z.number().nonnegative(),
-      sseDisconnectCount: z.number().nonnegative(),
-      sseReconnectCount: z.number().nonnegative(),
-      timeToFirstTokenAverageMs: z.number().nonnegative(),
-      timeToFirstTokenP95Ms: z.number().nonnegative(),
-      uploadPipelineAverageMs: z.number().nonnegative(),
-      webRetrievalAverageMs: z.number().nonnegative(),
-      outputThroughputAverage: z.number(),
-    }),
-    status: z.enum(["critical", "degraded", "healthy"]),
-  })
-  .openapi("ProviderOperationalSummary");
 
 const providerPath = z.strictObject({ providerId: identifier });
 const modelPath = z.strictObject({ modelId: identifier });
@@ -269,10 +240,19 @@ export const syncProviderModelsRoute = createRoute({
   operationId: "providers.syncModels",
   summary: "Discover and synchronize provider models",
   description:
-    "Preserves administrative capability and enabled-state overrides while synchronizing the remote catalog.",
-  request: { params: providerPath },
+    "Preserves administrative capability and enabled-state overrides while synchronizing the remote catalog. Large catalogs must use mode=async_job.",
+  request: {
+    params: providerPath,
+    query: z.strictObject({
+      mode: z.enum(["async_job", "inline"]).optional(),
+    }),
+  },
   responses: {
     200: jsonResponse("Synchronized provider models", modelsResponse),
+    202: jsonResponse(
+      "Accepted catalog sync job",
+      dataEnvelope(ProviderCatalogSyncJobSchema),
+    ),
     ...mutationErrors,
     502: errorResponse,
   },
@@ -425,7 +405,12 @@ export const updateProviderModelCapabilitiesRoute = createRoute({
               .strictObject({
                 temperature: z.number().min(0).max(2).optional(),
                 topP: z.number().min(0).max(1).optional(),
-                maxOutputTokens: z.number().int().min(1).max(200_000).optional(),
+                maxOutputTokens: z
+                  .number()
+                  .int()
+                  .min(1)
+                  .max(200_000)
+                  .optional(),
               })
               .optional(),
           }),
@@ -471,7 +456,7 @@ export const getProviderOperationalSummaryRoute = createRoute({
   responses: {
     200: jsonResponse(
       "Provider operational summary",
-      dataEnvelope(operationalSummary),
+      dataEnvelope(ProviderOperationalSummarySchema),
     ),
     ...readErrors,
   },
@@ -483,6 +468,8 @@ export const providerRoutes = [
   updateProviderConnectionRoute,
   verifyProviderConnectionRoute,
   syncProviderModelsRoute,
+  runProviderCatalogSyncJobRoute,
+  getProviderCatalogSyncJobRoute,
   pullOllamaModelRoute,
   deleteOllamaModelRoute,
   listProviderModelsRoute,

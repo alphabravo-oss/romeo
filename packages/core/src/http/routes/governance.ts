@@ -22,6 +22,8 @@ import {
 
 import type { DataExportRequest } from "../../domain/entities";
 import type { RomeoApi } from "../context";
+import { resolveIdempotencyKey } from "../../services/idempotency-service";
+import { applyIdempotencyHeaders } from "../idempotency-response";
 
 export function registerGovernanceRoutes(app: RomeoApi): void {
   app.openapi(getRetentionPolicyRoute, async (context) => {
@@ -40,6 +42,7 @@ export function registerGovernanceRoutes(app: RomeoApi): void {
       .governance.updateRetentionPolicy({
         subject,
         auditLogRetentionDays: body.auditLogRetentionDays,
+        runEventRetentionDays: body.runEventRetentionDays,
         ...(body.fileRetentionDays === undefined
           ? {}
           : { fileRetentionDays: body.fileRetentionDays }),
@@ -105,11 +108,24 @@ export function registerGovernanceRoutes(app: RomeoApi): void {
   app.openapi(executeDataExportRoute, async (context) => {
     const subject = context.get("subject");
     const body = context.req.valid("json");
-    const data = await context.get("services").governance.executeDataExport({
+    const key = resolveIdempotencyKey(
+      context.req.header("idempotency-key") ?? undefined,
+      undefined,
+    );
+    const result = await context.get("services").idempotency.execute({
       subject,
+      operation: "exports.execute",
+      ...(key === undefined ? {} : { key }),
       request: dataExportRequest(body),
+      responseStatus: 200,
+      work: () =>
+        context.get("services").governance.executeDataExport({
+          subject,
+          request: dataExportRequest(body),
+        }),
     });
-    return context.json({ data }, 200);
+    applyIdempotencyHeaders(context, result.idempotency);
+    return context.json({ data: result.value }, 200);
   });
 
   app.openapi(listDataExportPackagesRoute, async (context) => {

@@ -1,9 +1,12 @@
 import { client as queryClient } from "../generated/query";
 import { client as sdkClient } from "../generated/sdk";
 import { RomeoApiError } from "../errors";
+import { adaptGeneratedFetch } from "./generated-transport";
 import type { ApiErrorEnvelope } from "./types";
 
 type GeneratedClient = typeof sdkClient;
+
+export type BrowserQueryClient = typeof queryClient;
 
 const configuredClients = new WeakSet<GeneratedClient>();
 
@@ -16,6 +19,11 @@ export function configureBrowserApiClients(
 ): void {
   configureGeneratedClient(sdkClient, options);
   configureGeneratedClient(queryClient, options);
+}
+
+export function getBrowserQueryClient(): BrowserQueryClient {
+  configureBrowserApiClients();
+  return queryClient;
 }
 
 export function configureGeneratedClient(
@@ -63,27 +71,13 @@ function configureSameOriginTransport(client: GeneratedClient): void {
       : window.location.origin;
   client.setConfig({
     baseUrl: new URL(baseUrl, origin).toString().replace(/\/$/u, ""),
-    fetch: async (input, init) => {
-      if (!(input instanceof Request)) return globalThis.fetch(input, init);
-      const url = new URL(input.url);
-      const body = ["GET", "HEAD"].includes(input.method)
-        ? undefined
-        : await input.clone().text();
-      return globalThis.fetch(`${url.pathname}${url.search}`, {
-        ...(body === undefined || body === "" ? {} : { body }),
-        cache: input.cache,
-        credentials: input.credentials,
-        headers: input.headers,
-        integrity: input.integrity,
-        keepalive: input.keepalive,
-        method: input.method,
-        mode: input.mode,
-        redirect: input.redirect,
-        referrer: input.referrer,
-        referrerPolicy: input.referrerPolicy,
-        signal: input.signal,
-      });
-    },
+    fetch: adaptGeneratedFetch(
+      (input, init) => globalThis.fetch(input, init),
+      (request) => {
+        const url = new URL(request.url);
+        return `${url.pathname}${url.search}`;
+      },
+    ),
   });
 }
 

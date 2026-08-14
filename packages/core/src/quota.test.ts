@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createHmac } from "node:crypto";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { seededSubject } from "@romeo/auth";
 
 import { createRomeoApi } from "./api";
@@ -10,6 +10,44 @@ import { consumeQuotas } from "./services/consume-quota";
 import { enableDefaultAgentTool } from "./test-support/agent-tools";
 
 describe("Romeo quota controls", () => {
+  it("simulates abuse-control outcomes without enforcement side effects", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, { startBackgroundWorkers: false });
+    await api.request("/api/v1/admin/abuse-controls", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        killSwitches: { providerIds: ["provider_ollama_default"] },
+      }),
+    });
+    const beforeAuditCount = (await repository.listAuditLogs("org_default"))
+      .length;
+
+    const response = await api.request(
+      "/api/v1/admin/abuse-controls/simulate",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "run.start",
+          providerId: "provider_ollama_default",
+        }),
+      },
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data).toMatchObject({
+      action: "run.start",
+      allowed: false,
+      policySource: "org",
+      reasonCodes: ["provider_kill_switch"],
+    });
+    expect(await repository.listAuditLogs("org_default")).toHaveLength(
+      beforeAuditCount,
+    );
+  });
+
   it("reserves image count and cost buckets atomically with per-bucket quantities", async () => {
     const repository = new InMemoryRomeoRepository();
     const now = new Date().toISOString();
@@ -741,7 +779,7 @@ describe("Romeo quota controls", () => {
           "Suspended tenant embedding provider call was reached.",
         );
       },
-      env: readEnv({
+      env: testEnv({
         WEBHOOK_SIGNING_KEY: "test-webhook-signing-key-32-bytes",
       }),
       providerFetch: async () => {
@@ -1254,8 +1292,10 @@ describe("Romeo quota controls", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        eventId: "evt_external_sync_1",
         provider: "stripe",
         eventType: "invoice.paid",
+        occurredAt: "2026-08-13T12:00:00.000Z",
         externalCustomerId: "cus_123",
         externalSubscriptionId: "sub_123",
         externalInvoiceId: "in_123",
@@ -1278,12 +1318,39 @@ describe("Romeo quota controls", () => {
       }),
     });
     const synced = await syncResponse.json();
+    const replayResponse = await api.request(
+      "/api/v1/billing/external-events",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          eventId: "evt_external_sync_1",
+          provider: "stripe",
+          eventType: "invoice.paid",
+          occurredAt: "2026-08-13T12:00:00.000Z",
+          externalCustomerId: "cus_123",
+          externalSubscriptionId: "sub_123",
+          externalInvoiceId: "in_123",
+          invoiceStatus: "paid",
+          amountCents: 2500,
+          currency: "USD",
+          planCode: "team",
+          planName: "Team",
+          quotaTemplates: [
+            { metric: "run.started", limit: 1000, resetInterval: "monthly" },
+          ],
+        }),
+      },
+    );
+    const replayed = await replayResponse.json();
     const planResponse = await api.request("/api/v1/billing/plan");
     const plan = await planResponse.json();
     const auditResponse = await api.request("/api/v1/audit-logs");
     const audit = await auditResponse.json();
 
     expect(syncResponse.status).toBe(200);
+    expect(replayResponse.status).toBe(200);
+    expect(replayed.data).toEqual(synced.data);
     expect(synced.data.plan).toMatchObject({
       code: "team",
       source: "external",
@@ -1313,12 +1380,71 @@ describe("Romeo quota controls", () => {
       "shouldNotPersist",
     );
     expect(
-      audit.data.some(
+      audit.data.filter(
         (log: { action: string; metadata: Record<string, unknown> }) =>
           log.action === "billing.external_event_synced" &&
           log.metadata.eventType === "invoice.paid",
       ),
-    ).toBe(true);
+    ).toHaveLength(1);
+  });
+
+  it("ignores older billing events and never reactivates a canceled subscription from an invoice", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository);
+    const send = (body: Record<string, unknown>) =>
+      api.request("/api/v1/billing/external-events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const base = {
+      provider: "stripe",
+      planCode: "team",
+      planName: "Team",
+      quotaTemplates: [
+        { metric: "run.started", limit: 1000, resetInterval: "monthly" },
+      ],
+    };
+
+    expect(
+      (
+        await send({
+          ...base,
+          eventId: "evt_canceled",
+          eventType: "subscription.canceled",
+          occurredAt: "2026-08-13T12:00:00.000Z",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await send({
+          ...base,
+          eventId: "evt_old_paid",
+          eventType: "invoice.paid",
+          occurredAt: "2026-08-12T12:00:00.000Z",
+          status: "active",
+        })
+      ).status,
+    ).toBe(200);
+    const laterInvoice = await send({
+      ...base,
+      eventId: "evt_new_paid",
+      eventType: "invoice.paid",
+      occurredAt: "2026-08-14T12:00:00.000Z",
+      status: "active",
+    });
+    const laterBody = await laterInvoice.json();
+    const audit = await (await api.request("/api/v1/audit-logs")).json();
+
+    expect(laterInvoice.status).toBe(200);
+    expect(laterBody.data.plan.status).toBe("canceled");
+    expect(
+      audit.data.filter(
+        (log: { action: string }) =>
+          log.action === "billing.external_event_ignored",
+      ),
+    ).toHaveLength(1);
   });
 
   it("accepts signed Stripe billing webhooks without requiring API authentication", async () => {
@@ -1337,7 +1463,7 @@ describe("Romeo quota controls", () => {
     });
     const secret = "whsec_test_secret_1234567890";
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -1417,7 +1543,7 @@ describe("Romeo quota controls", () => {
     const repository = new InMemoryRomeoRepository();
     const secret = "generic_test_secret_1234567890";
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -1425,8 +1551,10 @@ describe("Romeo quota controls", () => {
       }),
     });
     const payload = JSON.stringify({
+      eventId: "evt_generic_subscription_1",
       provider: "paddle-proxy",
       eventType: "subscription.updated",
+      occurredAt: "2026-08-13T12:00:00.000Z",
       externalCustomerId: "customer_123",
       externalSubscriptionId: "subscription_123",
       planCode: "enterprise",
@@ -1483,7 +1611,7 @@ describe("Romeo quota controls", () => {
 
   it("rejects Stripe billing webhooks with invalid signatures", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",

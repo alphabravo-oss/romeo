@@ -1,18 +1,18 @@
 import { Button, Field, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Workflow from "lucide-react/dist/esm/icons/workflow.mjs";
 import { useRef, useState } from "react";
 
 import {
-  approveWorkflowRun,
-  createWorkflow,
-  createWorkflowFromTemplate,
-  listWorkflowRuns,
-  listWorkflowTemplates,
-  listWorkflows,
-  resumeWorkflowRun,
-  startWorkflowRun,
+  approveWorkflowRunMutationOptions,
+  createWorkflowMutationOptions,
+  createWorkflowFromTemplateMutationOptions,
+  workflowRunsQueryOptions,
+  workflowTemplatesQueryOptions,
+  workflowsQueryOptions,
+  resumeWorkflowRunMutationOptions,
+  startWorkflowRunMutationOptions,
 } from "../features/workflows";
 import type { WorkflowScheduleInput } from "../features/workflows";
 import { PanelState } from "../lib/panel-state";
@@ -30,39 +30,32 @@ import {
 } from "./workflow-step-builder";
 import { useWorkspace } from "./WorkspaceContext";
 import { useWorkflowColumns } from "./useWorkflowColumns";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 export function WorkflowsPanel() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { workspaceId } = useWorkspace();
+  const inventoriedTable = useInventoriedServerTable<any>("workflows", {
+    enabled: workspaceId !== undefined,
+    workspaceId,
+  });
   const [addOpen, setAddOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<
     string | undefined
   >(undefined);
 
-  const workflowsQuery = useQuery({
-    queryKey: ["workflows", workspaceId],
-    queryFn: () => listWorkflows(workspaceId),
-    enabled: workspaceId !== undefined,
-  });
-  const templatesQuery = useQuery({
-    queryKey: ["workflowTemplates", workspaceId],
-    queryFn: listWorkflowTemplates,
-  });
-  const runsQuery = useQuery({
-    queryKey: ["workflowRuns", selectedWorkflowId],
-    queryFn: () => listWorkflowRuns(selectedWorkflowId!),
-    enabled: selectedWorkflowId !== undefined,
-  });
+  const workflowsQuery = useQuery(workflowsQueryOptions(workspaceId));
+  const templatesQuery = useQuery(workflowTemplatesQueryOptions(workspaceId));
+  const runsQuery = useQuery(workflowRunsQueryOptions(selectedWorkflowId));
 
-  const createMutation = useMutation({
-    mutationFn: createWorkflowFromTemplate,
-  });
-  const createWorkflowMutation = useMutation({ mutationFn: createWorkflow });
-  const startRunMutation = useMutation({ mutationFn: startWorkflowRun });
-  const approveMutation = useMutation({ mutationFn: approveWorkflowRun });
-  const resumeMutation = useMutation({ mutationFn: resumeWorkflowRun });
+  const createMutation = useMutation(
+    createWorkflowFromTemplateMutationOptions(),
+  );
+  const createWorkflowMutation = useMutation(createWorkflowMutationOptions());
+  const startRunMutation = useMutation(startWorkflowRunMutationOptions());
+  const approveMutation = useMutation(approveWorkflowRunMutationOptions());
+  const resumeMutation = useMutation(resumeWorkflowRunMutationOptions());
 
   const createForm = useForm({
     defaultValues: {
@@ -79,9 +72,6 @@ export function WorkflowsPanel() {
           templateId: value.templateId,
           workspaceId,
           ...(value.agentId.trim() ? { agentId: value.agentId.trim() } : {}),
-        });
-        await queryClient.invalidateQueries({
-          queryKey: ["workflows", workspaceId],
         });
         toast(t("workflowCreated"), "success");
         createForm.reset();
@@ -173,9 +163,6 @@ export function WorkflowsPanel() {
         ...(description ? { description } : {}),
         ...(schedule ? { schedule } : {}),
       });
-      await queryClient.invalidateQueries({
-        queryKey: ["workflows", workspaceId],
-      });
       toast(t("workflowCreated"), "success");
       resetNewWorkflow();
       setNewOpen(false);
@@ -187,9 +174,6 @@ export function WorkflowsPanel() {
   async function handleRun(workflowId: string) {
     try {
       await startRunMutation.mutateAsync({ workflowId });
-      await queryClient.invalidateQueries({
-        queryKey: ["workflowRuns", workflowId],
-      });
       toast(t("runStarted"), "success");
     } catch {
       toast(t("couldNotStartRun"), "error");
@@ -198,9 +182,10 @@ export function WorkflowsPanel() {
 
   async function handleApprove(workflowRunId: string) {
     try {
-      await approveMutation.mutateAsync(workflowRunId);
-      await queryClient.invalidateQueries({
-        queryKey: ["workflowRuns", selectedWorkflowId],
+      if (selectedWorkflowId === undefined) return;
+      await approveMutation.mutateAsync({
+        workflowId: selectedWorkflowId,
+        workflowRunId,
       });
       toast(t("runApproved"), "success");
     } catch {
@@ -210,9 +195,10 @@ export function WorkflowsPanel() {
 
   async function handleResume(workflowRunId: string) {
     try {
-      await resumeMutation.mutateAsync(workflowRunId);
-      await queryClient.invalidateQueries({
-        queryKey: ["workflowRuns", selectedWorkflowId],
+      if (selectedWorkflowId === undefined) return;
+      await resumeMutation.mutateAsync({
+        workflowId: selectedWorkflowId,
+        workflowRunId,
       });
       toast(t("runResumed"), "success");
     } catch {
@@ -250,7 +236,6 @@ export function WorkflowsPanel() {
             ) : null}
           </div>
         }
-        title={t("workflows")}
       >
         <FormDialog
           open={addOpen}
@@ -428,7 +413,11 @@ export function WorkflowsPanel() {
                   },
                 ]}
               />
-              <DataTable columns={workflowColumns} data={rows} />
+              <DataTable
+                serverState={inventoriedTable.serverState}
+                columns={workflowColumns}
+                data={inventoriedTable.rows}
+              />
             </>
           )}
         </PanelState>

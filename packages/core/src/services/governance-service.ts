@@ -113,7 +113,7 @@ export class GovernanceService extends GovernanceRetentionService {
         input.resourceId,
       );
       if (!deletion) throw notFoundDeletionResource(input.resourceType);
-      await repository.createAuditLog({
+      await writeAuditLog(repository, {
         id: createId("audit"),
         orgId: input.subject.orgId,
         actorId: input.subject.id,
@@ -179,7 +179,7 @@ export class GovernanceService extends GovernanceRetentionService {
       knowledgeBaseId: plan.knowledgeBaseId,
       sourceId: input.resourceId,
     });
-    await this.repository.createAuditLog({
+    await writeAuditLog(this.repository, {
       id: createId("audit"),
       orgId: input.subject.orgId,
       actorId: input.subject.id,
@@ -238,7 +238,7 @@ export class GovernanceService extends GovernanceRetentionService {
       subject: input.subject,
       request: input.request,
     });
-    await this.repository.createAuditLog({
+    await writeAuditLog(this.repository, {
       id: createId("audit"),
       orgId: input.subject.orgId,
       actorId: input.subject.id,
@@ -277,7 +277,7 @@ export class GovernanceService extends GovernanceRetentionService {
           repository,
           package: packaged,
         });
-        await repository.createAuditLog({
+        await writeAuditLog(repository, {
           id: createId("audit"),
           orgId: input.subject.orgId,
           actorId: input.subject.id,
@@ -355,7 +355,7 @@ export class GovernanceService extends GovernanceRetentionService {
         orgId: input.subject.orgId,
         packageId: input.packageId,
       });
-      await repository.createAuditLog({
+      await writeAuditLog(repository, {
         id: createId("audit"),
         orgId: input.subject.orgId,
         actorId: input.subject.id,
@@ -462,3 +462,4 @@ function notFoundDeletionResource(
     404,
   );
 }
+import { writeAuditLog } from "./audit-log";

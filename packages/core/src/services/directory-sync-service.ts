@@ -13,7 +13,7 @@ import type { Group, GroupMembership, User } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { normalizeUserRole } from "./auth-subject";
-import { writeAuditLog } from "./audit-log";
+import { type AuditMetadata, writeAuditLog } from "./audit-log";
 import { normalizeLocalAuthEmail } from "./local-password";
 import { UserLifecycleService } from "./user-lifecycle-service";
 
@@ -397,7 +397,7 @@ function directorySyncWarnings(
 function directorySyncAuditMetadata(
   result: DirectorySyncResult,
   reason: string | undefined,
-): Record<string, unknown> {
+): AuditMetadata<"directory_sync.apply" | "directory_sync.preview"> {
   return {
     schema: result.schema,
     source: result.source,

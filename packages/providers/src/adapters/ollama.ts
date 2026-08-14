@@ -2,6 +2,7 @@ import type { Message, Ollama, Tool } from "ollama";
 
 import { ollamaCapabilities } from "../capabilities";
 import { MAX_DISCOVERED_MODELS } from "../model-catalog";
+import { translateProviderChatParameters } from "../parameter-translation";
 import {
   normalizeProviderToolCalls,
   type ProviderToolCallRequest,
@@ -9,7 +10,9 @@ import {
 import type {
   BaseModel,
   ChatMessage,
-  ModelProviderAdapter,
+  ProviderChatAdapter,
+  ProviderDiscoveryAdapter,
+  ProviderHealthAdapter,
   ProviderInstance,
   StreamChatChunk,
   StreamChatInput,
@@ -18,7 +21,9 @@ import { usageFromOllamaPayload } from "../usage";
 import { devEchoStream } from "./dev-echo";
 import { createOllamaClient, normalizeProviderSdkError } from "./provider-sdk";
 
-export const ollamaAdapter: ModelProviderAdapter = {
+export const ollamaAdapter: ProviderHealthAdapter &
+  ProviderDiscoveryAdapter &
+  ProviderChatAdapter = {
   kind: "ollama",
   async health(provider, options) {
     try {
@@ -28,50 +33,55 @@ export const ollamaAdapter: ModelProviderAdapter = {
       }).list();
       return { ok: true, message: "Connected to Ollama." };
     } catch (caught) {
-      const status = sdkStatus(caught);
-      return status === undefined
-        ? { ok: false, message: "Could not reach the Ollama endpoint." }
-        : { ok: false, message: `Ollama returned HTTP ${status}.` };
+      const normalized = normalizeProviderSdkError(caught, "ollama", "health");
+      return { ok: false, message: normalized.safeMessage };
     }
   },
   async listModels(provider, options): Promise<BaseModel[]> {
-    const client = createOllamaClient(provider, {
-      ...options,
-      timeoutMs: options?.timeoutMs ?? 1_500,
-    });
-    const allowedNames = new Set(
-      (provider.modelIds ?? []).map((name) => name.trim()).filter(Boolean),
-    );
-    const discovered = (await client.list()).models
-      .map((model) => (model.model || model.name).trim())
-      .filter(
-        (name) =>
-          name.length > 0 &&
-          (allowedNames.size === 0 || allowedNames.has(name)),
-      )
-      .sort((left, right) => left.localeCompare(right));
-    const enriched = await mapConcurrent(
-      [...new Set(discovered)].slice(0, MAX_DISCOVERED_MODELS),
-      6,
-      async (name) =>
-        discoverOllamaModel(client, name).catch(() => discoveredModel(name)),
-    );
-    return enriched.map((model) => ({
-      id: `model_${provider.id}_${modelIdPart(model.name)}`,
-      providerId: provider.id,
-      name: model.name,
-      displayName: `Ollama ${model.name}`,
-      enabled: false,
-      capabilities: model.embeddingOnly
-        ? {
-            ...model.capabilities,
-            streaming: false,
-            toolCalling: false,
-            modalities: ["embeddings"],
-          }
-        : model.capabilities,
-      contextWindow: model.contextWindow,
-    }));
+    try {
+      const client = createOllamaClient(provider, {
+        ...options,
+        timeoutMs: options?.timeoutMs ?? 1_500,
+      });
+      const allowedNames = new Set(
+        (provider.modelIds ?? []).map((name) => name.trim()).filter(Boolean),
+      );
+      const discovered = (await client.list()).models
+        .map((model) => (model.model || model.name).trim())
+        .filter(
+          (name) =>
+            name.length > 0 &&
+            (allowedNames.size === 0 || allowedNames.has(name)),
+        )
+        .sort((left, right) => left.localeCompare(right));
+      const enriched = await mapConcurrent(
+        [...new Set(discovered)].slice(0, MAX_DISCOVERED_MODELS),
+        6,
+        async (name) =>
+          discoverOllamaModel(client, name).catch((caught) => {
+            normalizeProviderSdkError(caught, "ollama", "discovery");
+            return discoveredModel(name);
+          }),
+      );
+      return enriched.map((model) => ({
+        id: `model_${provider.id}_${modelIdPart(model.name)}`,
+        providerId: provider.id,
+        name: model.name,
+        displayName: `Ollama ${model.name}`,
+        enabled: false,
+        capabilities: model.embeddingOnly
+          ? {
+              ...model.capabilities,
+              streaming: false,
+              toolCalling: false,
+              modalities: ["embeddings"],
+            }
+          : model.capabilities,
+        contextWindow: model.contextWindow,
+      }));
+    } catch (caught) {
+      throw normalizeProviderSdkError(caught, "ollama", "discovery");
+    }
   },
   streamChat(input) {
     if (
@@ -105,8 +115,14 @@ export async function deleteOllamaModel(
   model: string,
   options?: { apiKey?: string; fetchImpl?: typeof fetch },
 ): Promise<OllamaDeleteResult> {
-  const result = await createOllamaClient(provider, options).delete({ model });
-  return { model, status: result.status };
+  try {
+    const result = await createOllamaClient(provider, options).delete({
+      model,
+    });
+    return { model, status: result.status };
+  } catch (caught) {
+    throw normalizeProviderSdkError(caught, "ollama", "modelManagement");
+  }
 }
 
 export async function pullOllamaModel(
@@ -114,27 +130,31 @@ export async function pullOllamaModel(
   model: string,
   options?: { apiKey?: string; fetchImpl?: typeof fetch },
 ): Promise<OllamaPullResult> {
-  const stream = await createOllamaClient(provider, options).pull({
-    model,
-    stream: true,
-  });
-  let completed = 0;
-  let total = 0;
-  let digest: string | undefined;
-  let status = "starting";
-  for await (const event of stream) {
-    status = event.status;
-    completed = event.completed ?? completed;
-    total = event.total ?? total;
-    digest = event.digest || digest;
+  try {
+    const stream = await createOllamaClient(provider, options).pull({
+      model,
+      stream: true,
+    });
+    let completed = 0;
+    let total = 0;
+    let digest: string | undefined;
+    let status = "starting";
+    for await (const event of stream) {
+      status = event.status;
+      completed = event.completed ?? completed;
+      total = event.total ?? total;
+      digest = event.digest || digest;
+    }
+    return {
+      completed,
+      ...(digest === undefined ? {} : { digest }),
+      model,
+      status,
+      total,
+    };
+  } catch (caught) {
+    throw normalizeProviderSdkError(caught, "ollama", "modelManagement");
   }
-  return {
-    completed,
-    ...(digest === undefined ? {} : { digest }),
-    model,
-    status,
-    total,
-  };
 }
 
 async function* providerCredentialUnavailableStream(): AsyncIterable<StreamChatChunk> {
@@ -216,32 +236,39 @@ function usesVitestHermeticRuntime(input: StreamChatInput): boolean {
 async function* streamOllamaChat(
   input: StreamChatInput,
 ): AsyncIterable<StreamChatChunk> {
-  const client = createOllamaClient(input.provider, {
-    ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
-    ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl }),
-  });
   try {
+    const parameters = translateProviderChatParameters({
+      ...input,
+      kind: "ollama",
+    }).effective;
+    const client = createOllamaClient(input.provider, {
+      ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
+      ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl }),
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
+    });
     const stream = await client.chat({
       model: input.model.name,
       messages: input.messages.map(toOllamaMessage),
       stream: true,
       // Ollama carries sampling under `options`, and names the output cap num_predict.
-      ...(input.sampling === undefined
+      ...(parameters.sampling === undefined
         ? {}
         : {
             options: {
-              ...(input.sampling.temperature === undefined
+              ...(parameters.sampling.temperature === undefined
                 ? {}
-                : { temperature: input.sampling.temperature }),
-              ...(input.sampling.topP === undefined
+                : { temperature: parameters.sampling.temperature }),
+              ...(parameters.sampling.topP === undefined
                 ? {}
-                : { top_p: input.sampling.topP }),
-              ...(input.sampling.maxTokens === undefined
+                : { top_p: parameters.sampling.topP }),
+              ...(parameters.sampling.maxTokens === undefined
                 ? {}
-                : { num_predict: input.sampling.maxTokens }),
+                : { num_predict: parameters.sampling.maxTokens }),
             },
           }),
-      ...(input.tools?.length ? { tools: input.tools.map(toOllamaTool) } : {}),
+      ...(parameters.tools?.length
+        ? { tools: parameters.tools.map(toOllamaTool) }
+        : {}),
     });
     const abort = () => stream.abort();
     input.signal?.addEventListener("abort", abort, { once: true });
@@ -271,7 +298,7 @@ async function* streamOllamaChat(
         : new DOMException("The provider stream was aborted.", "AbortError");
     }
   } catch (caught) {
-    throw normalizeProviderSdkError(caught, "ollama");
+    throw normalizeProviderSdkError(caught, "ollama", "chat");
   }
 }
 
@@ -325,24 +352,6 @@ function recordFromMap(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function sdkStatus(caught: unknown): number | undefined {
-  if (
-    typeof caught === "object" &&
-    caught !== null &&
-    "status_code" in caught &&
-    typeof caught.status_code === "number"
-  )
-    return caught.status_code;
-  if (
-    typeof caught === "object" &&
-    caught !== null &&
-    "status" in caught &&
-    typeof caught.status === "number"
-  )
-    return caught.status;
-  return undefined;
 }
 
 function modelIdPart(name: string): string {

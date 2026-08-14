@@ -114,7 +114,10 @@ describe("provider catalog synchronization", () => {
         subject,
         (await repository.getProvider(provider.id))!,
       ),
-    ).rejects.toMatchObject({ code: "provider_model_discovery_failed" });
+    ).rejects.toMatchObject({
+      code: "provider_unexpected_failure",
+      message: "The model provider request failed unexpectedly.",
+    });
     expect(
       await repository.getModel(
         "model_provider_catalog_error_test_known_model",
@@ -132,6 +135,9 @@ describe("provider catalog synchronization", () => {
           log.action === "provider.models.sync" && log.outcome === "failure",
       ),
     ).toBe(true);
+    expect(
+      JSON.stringify(await repository.listAuditLogs(subject.orgId)),
+    ).not.toContain("provider offline");
   });
 
   it("preserves a referenced model id when discovery matches its provider name", async () => {

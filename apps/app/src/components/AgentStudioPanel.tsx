@@ -1,28 +1,29 @@
 import { useBlocker } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@romeo/ui";
+import { Button, EmptyState } from "@romeo/ui";
 
 import {
-  diffAgentVersions,
-  deleteAgent,
-  exportAgentDefinition,
-  listAgentVersions,
-  publishAgent,
-  rollbackAgentVersion,
-  updateAgent,
+  agentVersionsQueryOptions,
+  type Agent,
+  type AgentVersion,
+  type AgentVersionDiff,
 } from "../features/managed-models";
+import {
+  deleteAgentMutationOptions,
+  diffAgentVersionsMutationOptions,
+  exportAgentDefinitionMutationOptions,
+  publishAgentMutationOptions,
+  rollbackAgentVersionMutationOptions,
+  updateAgentMutationOptions,
+} from "../features/managed-models/mutation-options";
 import { useLocale } from "../lib/i18n";
 import { downloadText } from "../lib/download";
 import { toast } from "../lib/toast";
-import type {
-  Agent,
-  AgentVersion,
-  AgentVersionDiff,
-} from "../features/managed-models/types";
 import type { BaseModel, Provider } from "../features/providers/types";
 import { AgentAccessPanel } from "./AgentAccessPanel";
-import { AgentDraftForm, type AgentDraftInput } from "./AgentDraftForm";
+import { AgentDraftForm } from "./AgentDraftForm";
+import type { AgentDraftInput } from "./agent-draft-types";
 import { canPublishAgent } from "./agent-publish-gate";
 import { useConfirm } from "./ConfirmDialog";
 import { CreateManagedModelDialog } from "./CreateManagedModelDialog";
@@ -33,17 +34,16 @@ import { ManagedModelCustomizationPanel } from "./ManagedModelCustomizationPanel
 import { ManagedModelAvatar } from "./ManagedModelAvatar";
 import { ManagedModelKnowledgePanel } from "./ManagedModelKnowledgePanel";
 import { ManagedModelToolPanel } from "./ManagedModelToolPanel";
-import { VoicePanel } from "./VoicePanel";
+import {
+  AgentStudioSaveBar,
+  AgentVoiceTab,
+  portableAgentFileName,
+} from "./agent-studio-sections";
 import {
   agentStudioTabLabel,
   agentStudioTabs,
   changedPublishedFields,
   equivalentEditorLocation,
-  type AgentStudioTab,
-} from "./agent-studio-model";
-
-export {
-  resolveAgentStudioTab,
   type AgentStudioTab,
 } from "./agent-studio-model";
 
@@ -72,7 +72,6 @@ export function AgentStudioPanel({
   showCreateAction?: boolean;
   workspaceId: string | undefined;
 }) {
-  const queryClient = useQueryClient();
   const { t } = useLocale();
   const [leftVersionId, setLeftVersionId] = useState("");
   const [rightVersionId, setRightVersionId] = useState("");
@@ -82,11 +81,7 @@ export function AgentStudioPanel({
   const [draftGeneration, setDraftGeneration] = useState(0);
   const { ask, dialog } = useConfirm();
 
-  const versionsQuery = useQuery({
-    queryKey: ["agentVersions", activeAgent?.id],
-    queryFn: () => listAgentVersions(activeAgent!.id),
-    enabled: activeAgent !== undefined,
-  });
+  const versionsQuery = useQuery(agentVersionsQueryOptions(activeAgent?.id));
   const versions = versionsQuery.data ?? emptyVersions;
   const publishedVersion = versions.find(
     (version) => version.id === activeAgent?.publishedVersionId,
@@ -96,12 +91,14 @@ export function AgentStudioPanel({
     [activeAgent, publishedVersion],
   );
 
-  const saveMutation = useMutation({ mutationFn: updateAgent });
-  const publishMutation = useMutation({ mutationFn: publishAgent });
-  const rollbackMutation = useMutation({ mutationFn: rollbackAgentVersion });
-  const diffMutation = useMutation({ mutationFn: diffAgentVersions });
-  const deleteMutation = useMutation({ mutationFn: deleteAgent });
-  const exportMutation = useMutation({ mutationFn: exportAgentDefinition });
+  const saveMutation = useMutation(updateAgentMutationOptions(workspaceId));
+  const publishMutation = useMutation(publishAgentMutationOptions(workspaceId));
+  const rollbackMutation = useMutation(
+    rollbackAgentVersionMutationOptions(workspaceId),
+  );
+  const diffMutation = useMutation(diffAgentVersionsMutationOptions());
+  const deleteMutation = useMutation(deleteAgentMutationOptions(workspaceId));
+  const exportMutation = useMutation(exportAgentDefinitionMutationOptions());
 
   useEffect(() => {
     setNotice(undefined);
@@ -131,7 +128,6 @@ export function AgentStudioPanel({
   async function handleSave(input: AgentDraftInput): Promise<Agent> {
     try {
       const saved = await saveMutation.mutateAsync(input);
-      await invalidateAgentData(saved.id);
       toast(t("agentSaved"), "success");
       return saved;
     } catch (caught) {
@@ -140,7 +136,7 @@ export function AgentStudioPanel({
     }
   }
 
-  async function handlePublish() {
+  async function handlePublish(channel: "candidate" | "production") {
     if (
       !activeAgent ||
       !canPublishAgent({
@@ -152,18 +148,34 @@ export function AgentStudioPanel({
       return;
     if (
       !(await ask({
-        title: t("agentPublishTitle"),
-        body: t("agentPublishBody"),
-        confirmLabel: t("agentPublish"),
-        tone: "danger",
+        title:
+          channel === "candidate"
+            ? t("agentStageCandidateTitle")
+            : t("agentPublishTitle"),
+        body:
+          channel === "candidate"
+            ? t("agentStageCandidateBody")
+            : t("agentPublishBody"),
+        confirmLabel:
+          channel === "candidate"
+            ? t("agentStageCandidate")
+            : t("agentPublishProduction"),
+        tone: channel === "candidate" ? "default" : "danger",
       }))
     )
       return;
     try {
-      const version = await publishMutation.mutateAsync(activeAgent.id);
+      const version = await publishMutation.mutateAsync({
+        agentId: activeAgent.id,
+        channel,
+      });
       setNotice(`${t("agentPublishedVersion")} ${version.version}.`);
-      await invalidateAgentData(activeAgent.id);
-      toast(t("agentPublishedToast"), "success");
+      toast(
+        channel === "candidate"
+          ? t("agentCandidateStagedToast")
+          : t("agentPublishedToast"),
+        "success",
+      );
     } catch {
       toast(t("agentCouldNotPublish"), "error");
     }
@@ -171,13 +183,31 @@ export function AgentStudioPanel({
 
   async function handleRollback(versionId: string) {
     if (!activeAgent || isDraftDirty) return;
+    const target = versions.find((version) => version.id === versionId);
+    const promoting =
+      target !== undefined &&
+      publishedVersion !== undefined &&
+      target.version > publishedVersion.version;
+    if (
+      promoting &&
+      !(await ask({
+        title: t("agentPromoteCandidateTitle"),
+        body: t("agentPromoteCandidateBody"),
+        confirmLabel: t("agentPromoteCandidate"),
+        tone: "danger",
+      }))
+    )
+      return;
     try {
-      const rolledBack = await rollbackMutation.mutateAsync({
+      await rollbackMutation.mutateAsync({
         agentId: activeAgent.id,
         versionId,
       });
-      setNotice(t("agentRolledBackNotice"));
-      await invalidateAgentData(rolledBack.id);
+      setNotice(
+        promoting
+          ? t("agentCandidatePromotedNotice")
+          : t("agentRolledBackNotice"),
+      );
       toast(t("agentRolledBack"), "success");
     } catch {
       toast(t("agentCouldNotRollback"), "error");
@@ -194,9 +224,7 @@ export function AgentStudioPanel({
     setDiff(result);
   }
 
-  // Discarding remounts the draft form, which reseeds every field from the
-  // saved agent. Cheaper and harder to get wrong than threading a reset
-  // handler through the form's own state.
+  // Remounting reseeds the form without threading a reset through its state.
   async function handleDiscard() {
     if (
       !(await ask({
@@ -228,9 +256,6 @@ export function AgentStudioPanel({
     if (!activeAgent || !workspaceId) return;
     try {
       await deleteMutation.mutateAsync(activeAgent.id);
-      await queryClient.invalidateQueries({
-        queryKey: ["agents", workspaceId],
-      });
       onAgentDeleted?.();
       toast(t("agentDeleted"), "success");
     } catch {
@@ -244,7 +269,7 @@ export function AgentStudioPanel({
       const document = await exportMutation.mutateAsync(activeAgent.id);
       downloadText(
         JSON.stringify(document, null, 2),
-        `${portableFileName(activeAgent.name)}.romeo-custom-model.json`,
+        `${portableAgentFileName(activeAgent.name)}.romeo-custom-model.json`,
         "application/json;charset=utf-8",
       );
       toast(t("managedModelExported"), "success");
@@ -253,23 +278,8 @@ export function AgentStudioPanel({
     }
   }
 
-  async function invalidateAgentData(agentId: string) {
-    await Promise.all([
-      workspaceId
-        ? queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] })
-        : Promise.resolve(),
-      queryClient.invalidateQueries({ queryKey: ["agentVersions", agentId] }),
-      queryClient.invalidateQueries({ queryKey: ["agentReadiness", agentId] }),
-      workspaceId
-        ? queryClient.invalidateQueries({
-            queryKey: ["agentGallery", workspaceId],
-          })
-        : Promise.resolve(),
-    ]);
-  }
-
   return (
-    <section className="rm-panel rm-managed-model-editor p-4">
+    <section className="rm-managed-model-editor">
       <div className="rm-managed-model-editor__header">
         <div className="flex min-w-0 items-center gap-3">
           {activeAgent ? (
@@ -394,7 +404,7 @@ export function AgentStudioPanel({
         {isAdmin ? (
           <ManagedModelCustomizationPanel activeAgent={activeAgent} />
         ) : (
-          <div className="rm-empty">{t("agentAdminBehaviorOnly")}</div>
+          <EmptyState title={t("agentAdminBehaviorOnly")} />
         )}
       </div>
 
@@ -440,87 +450,18 @@ export function AgentStudioPanel({
 
       {notice ? <div className="mt-3 text-sm text-muted">{notice}</div> : null}
 
-      <div className="rm-managed-model-savebar">
-        <div className="rm-managed-model-savebar__label">
-          <strong>
-            {isDraftDirty ? t("agentUnsavedChanges") : t("agentDraftSaved")}
-          </strong>
-          <span>
-            {isDraftDirty
-              ? t("agentPublishBlockedByDraft")
-              : publishedVersion && draftChanges.length === 0
-                ? t("agentDraftMatchesPublished")
-                : t("agentDraftReadyToPublish")}
-          </span>
-        </div>
-        <div className="rm-managed-model-savebar__actions">
-          {/* Cancel is only offered while there is something to cancel. */}
-          {isDraftDirty ? (
-            <Button
-              disabled={saveMutation.isPending}
-              onClick={() => void handleDiscard()}
-              type="button"
-              variant="ghost"
-            >
-              {t("cancel")}
-            </Button>
-          ) : null}
-          <Button
-            disabled={!activeAgent || !isDraftDirty || saveMutation.isPending}
-            form="managed-model-draft-form"
-            pending={saveMutation.isPending}
-            type="submit"
-            variant="secondary"
-          >
-            {t("agentSaveDraft")}
-          </Button>
-          <Button
-            disabled={
-              !canPublishAgent({
-                hasActiveAgent: activeAgent !== undefined,
-                isDraftDirty,
-                isPublishing: publishMutation.isPending,
-              })
-            }
-            onClick={() => void handlePublish()}
-            pending={publishMutation.isPending}
-            title={isDraftDirty ? t("agentPublishBlockedByDraft") : undefined}
-            variant="primary"
-          >
-            {t("agentPublish")}
-          </Button>
-        </div>
-      </div>
+      <AgentStudioSaveBar
+        activeAgent={activeAgent}
+        draftChanges={draftChanges}
+        hasPublishedVersion={publishedVersion !== undefined}
+        isDraftDirty={isDraftDirty}
+        isPublishing={publishMutation.isPending}
+        isSaving={saveMutation.isPending}
+        onDiscard={() => void handleDiscard()}
+        onPublish={(channel) => void handlePublish(channel)}
+        t={t}
+      />
       {dialog}
     </section>
-  );
-}
-
-function AgentVoiceTab({
-  activeAgent,
-  workspaceId,
-}: {
-  activeAgent: Agent | undefined;
-  workspaceId: string | undefined;
-}) {
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>();
-  return (
-    <VoicePanel
-      activeAgent={activeAgent}
-      onSelectionChange={(voiceId) => setSelectedVoiceId(voiceId ?? undefined)}
-      selectedVoiceId={selectedVoiceId}
-      workspaceId={workspaceId}
-    />
-  );
-}
-
-function portableFileName(value: string): string {
-  return (
-    value
-      .normalize("NFKD")
-      .replace(/[^\p{L}\p{N}]+/gu, "-")
-      .replace(/^-+|-+$/gu, "")
-      .toLocaleLowerCase()
-      .slice(0, 80) || "custom-model"
   );
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   composeRepositoryFragments,
   createAccessRepositoryFragment,
+  createCapabilityAssignmentRepositoryFragment,
   createAgentEvalRepositoryFragment,
   createAuthCredentialRepositoryFragment,
   createChatRepositoryFragment,
@@ -80,6 +81,7 @@ describe("repository fragment composition", () => {
       "listUsersPage",
       "listWorkspaces",
       "purgeTenantData",
+      "queryUsers",
       "updateGroup",
       "updateOrganization",
       "updateUser",
@@ -92,10 +94,15 @@ describe("repository fragment composition", () => {
     const fragment = createAuthCredentialRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "consumeLocalMfaChallenge",
+      "consumeLocalMfaFactor",
+      "consumeSamlAuthRequest",
       "createApiKey",
       "createDeviceAuthorization",
+      "createLocalMfaChallenge",
       "createLocalMfaFactor",
       "createLocalPasswordCredential",
+      "createSamlAuthRequest",
       "createServiceAccount",
       "createUserSession",
       "getApiKey",
@@ -114,6 +121,8 @@ describe("repository fragment composition", () => {
       "listLocalMfaFactorsForOrg",
       "listServiceAccounts",
       "listUserSessions",
+      "recordFailedLocalPasswordAttempt",
+      "rotateDeviceAuthorization",
       "updateApiKey",
       "updateDeviceAuthorization",
       "updateLocalMfaFactor",
@@ -184,8 +193,10 @@ describe("repository fragment composition", () => {
     const fragment = createChatRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "backfillLegacyMessageTextParts",
       "cancelQueuedChatTurn",
       "claimNextQueuedChatTurn",
+      "countMessageFileReferences",
       "createChat",
       "createChatComment",
       "createMessage",
@@ -202,9 +213,13 @@ describe("repository fragment composition", () => {
       "listChatComments",
       "listChats",
       "listMessageParts",
+      "listMessagePartsForMessages",
       "listMessages",
       "listQueuedChatTurns",
+      "queryAuthorizedMessagesPage",
+      "reconcileChatFileReferences",
       "renewQueuedChatTurnLease",
+      "searchAuthorizedChatMessages",
       "searchChatContent",
       "updateChat",
       "updateMessagePart",
@@ -231,10 +246,14 @@ describe("repository fragment composition", () => {
     const fragment = createFileRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "advanceFileLifecycleLease",
+      "claimNextFileLifecycle",
       "createFileObject",
+      "finishFileLifecycleLease",
       "getFileObject",
       "listAuthorizedFileObjectsPage",
       "listFileObjects",
+      "renewFileLifecycleLease",
       "updateFileObject",
     ]);
   });
@@ -260,14 +279,18 @@ describe("repository fragment composition", () => {
     const fragment = createRunRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "allocateRunEventSequence",
       "appendRunEvents",
       "createRun",
       "createToolCall",
+      "deleteCompactedRunEventsBefore",
       "finalizeRun",
       "getRun",
       "listRunEvents",
+      "listRunEventsAfter",
       "listRuns",
       "listToolCalls",
+      "listToolCallsForRun",
       "updateRun",
     ]);
   });
@@ -314,6 +337,8 @@ describe("repository fragment composition", () => {
       "listBackgroundJobs",
       "listSystemSettings",
       "listUsageEvents",
+      "listUsageEventsForRun",
+      "queryAuditLogs",
       "renewBackgroundJobLease",
       "updateBackgroundJob",
       "updateBackgroundJobWithLease",
@@ -326,10 +351,14 @@ describe("repository fragment composition", () => {
     const fragment = createWebhookRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "claimDueWebhookDeliveries",
+      "claimWebhookDelivery",
+      "completeWebhookDeliveryAttempt",
       "createWebhookDelivery",
       "createWebhookSubscription",
       "getWebhookSubscription",
       "listWebhookDeliveries",
+      "listWebhookDeliveriesPage",
       "listWebhookSubscriptions",
       "updateWebhookDelivery",
       "updateWebhookSubscription",
@@ -355,8 +384,11 @@ describe("repository fragment composition", () => {
     const fragment = createGovernanceBillingRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "acquireBillingSyncLock",
+      "createBillingEventReceipt",
       "createQuotaBucket",
       "deleteQuotaBucket",
+      "getBillingEventReceipt",
       "getBillingPlan",
       "getRetentionPolicy",
       "listQuotaBuckets",
@@ -397,6 +429,8 @@ describe("repository fragment composition", () => {
       "getPromptTemplate",
       "getWorkspaceFolder",
       "listAuthorizedPromptTemplatesPage",
+      "listAuthorizedWorkspaceFolderItemsBatch",
+      "listAuthorizedWorkspaceFoldersByIds",
       "listPromptTemplates",
       "listResourceFavorites",
       "listWorkspaceFolderItems",
@@ -414,6 +448,16 @@ describe("repository fragment composition", () => {
       "deleteResourceGrant",
       "deleteResourceGrantsForPrincipal",
       "listResourceGrants",
+    ]);
+  });
+
+  it("exposes capability assignment persistence as a composable fragment", () => {
+    const fragment = createCapabilityAssignmentRepositoryFragment({} as never);
+
+    expect(Object.keys(fragment).sort()).toEqual([
+      "listActiveCapabilityAssignments",
+      "listCapabilityAssignmentHistory",
+      "replaceCapabilityAssignment",
     ]);
   });
 

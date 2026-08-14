@@ -56,6 +56,7 @@ export class KnowledgeUploadService {
         key: source.objectKey ?? source.id,
         contentType: source.mimeType,
         expiresInSeconds: 900,
+        sizeBytes: source.sizeBytes,
       });
       await recordSubjectUsage(repository, input.subject, {
         orgId: knowledgeBase.orgId,

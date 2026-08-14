@@ -1,11 +1,15 @@
 /* ============================================================
  * Console design system — admin + workspace chrome.
+ * Implements the "Romeo Console" design.
  *
- * Every rule here styles a primitive in components/console/. Nothing in this
- * file exists to *undo* a panel's markup; if a panel needs correcting, the fix
- * belongs in the primitive, not in a new selector here. That distinction is
- * what the previous stylesheet lost, and it is why it grew a dozen rules whose
- * only job was flattening `.rm-panel` and stripping borders off `.rounded-md`.
+ * The governing idea is that data lives *inside a card*: tables, stat rows,
+ * and inventories sit in a bordered, rounded, surface-coloured container with
+ * a tinted header and a footer bar. Prose and form sections stay flat on the
+ * page and separate with hairlines. That contrast — contained data, open
+ * settings — is what gives the console its structure.
+ *
+ * Every rule styles a primitive in components/console/. Nothing here exists to
+ * undo a panel's markup; if a panel looks wrong, fix the primitive.
  *
  * The chat surface has its own language and is untouched by this file.
  * ============================================================ */
@@ -13,7 +17,7 @@
 .cs-page {
   display: grid;
   align-content: start;
-  gap: 24px;
+  gap: 22px;
   min-width: 0;
 }
 
@@ -34,24 +38,24 @@
 .cs-page__title {
   margin: 0;
   color: var(--rm-text);
-  font-size: 1.375rem;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.024em;
   line-height: 1.2;
 }
 
 .cs-page__description {
-  max-width: var(--rm-measure-prose, 68ch);
+  max-width: 68ch;
   margin: 0;
   color: var(--rm-muted);
-  font-size: 0.8125rem;
+  font-size: 13px;
   line-height: 1.5;
   text-wrap: pretty;
 }
 
 .cs-page__actions {
   display: flex;
-  flex-shrink: 0;
+  flex: none;
   align-items: center;
   gap: 8px;
 }
@@ -63,12 +67,13 @@
   min-width: 0;
 }
 
-/* ---------- Tabs: peer views of one subject ---------- */
+/* ---------- Tabs ---------- */
 
 .cs-tabs {
   display: flex;
-  gap: 24px;
+  gap: 22px;
   min-width: 0;
+  margin-top: -6px;
   overflow-x: auto;
   border-bottom: 1px solid var(--rm-border);
   scrollbar-width: none;
@@ -86,10 +91,10 @@
   background: transparent;
   color: var(--rm-muted);
   font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: 13px;
   text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
   transition: color 120ms ease;
 }
 
@@ -115,18 +120,15 @@
   display: grid;
   gap: 16px;
   min-width: 0;
-  padding-block: 28px;
+  padding-block: 24px;
 }
-
-/* The divider is drawn by the section below, so the first one never opens with
-   a stray rule under the page header. */
 
 .cs-section + .cs-section {
   border-top: 1px solid var(--rm-border);
 }
 
 .cs-page__body > .cs-section:first-child {
-  padding-block-start: 4px;
+  padding-block-start: 0;
 }
 
 .cs-page__body > .cs-section:last-child {
@@ -143,31 +145,30 @@
 
 .cs-section__copy {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .cs-section__title {
   margin: 0;
   color: var(--rm-text);
-  font-size: 0.875rem;
+  font-size: 14.5px;
   font-weight: 600;
-  letter-spacing: -0.006em;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .cs-section__description {
-  max-width: var(--rm-measure-prose, 68ch);
+  max-width: 68ch;
   margin: 0;
   color: var(--rm-muted);
-  font-size: 0.8125rem;
+  font-size: 12.5px;
   line-height: 1.5;
   text-wrap: pretty;
 }
 
 .cs-section__actions {
   display: flex;
-  flex-shrink: 0;
+  flex: none;
   align-items: center;
   gap: 8px;
 }
@@ -178,7 +179,12 @@
   min-width: 0;
 }
 
-/* Destructive controls are fenced off so they are never adjacent to a Save. */
+/* Form sections read better constrained than full-bleed — the design caps
+   field grids rather than letting inputs run the width of a data table. */
+
+.cs-section__body :where(.cs-fields, form) {
+  max-width: 44rem;
+}
 
 .cs-section--danger {
   border-top: 1px solid color-mix(in srgb, var(--rm-danger) 38%, transparent);
@@ -191,11 +197,13 @@
 /* ---------- Progressive disclosure ---------- */
 
 .cs-disclosure {
-  border-top: 1px solid var(--rm-border);
+  border: 1px solid var(--rm-border);
+  border-radius: 10px;
+  background: var(--rm-surface);
 }
 
-.cs-disclosure:first-of-type {
-  border-top: 0;
+.cs-disclosure + .cs-disclosure {
+  margin-top: -8px;
 }
 
 .cs-disclosure__summary {
@@ -203,7 +211,7 @@
   grid-template-columns: 12px minmax(0, 1fr) auto;
   align-items: start;
   gap: 12px;
-  padding-block: 14px;
+  padding: 13px 14px;
   cursor: pointer;
   list-style: none;
 }
@@ -212,21 +220,26 @@
   display: none;
 }
 
+.cs-disclosure__summary:hover {
+  background: var(--rm-hover);
+}
+
+.cs-disclosure[open] > .cs-disclosure__summary {
+  border-bottom: 1px solid var(--rm-border-soft);
+}
+
 .cs-disclosure__summary:focus-visible {
   outline: 2px solid var(--rm-accent);
   outline-offset: -2px;
-  border-radius: 4px;
+  border-radius: 10px;
 }
-
-/* A disclosure has to look disclosable, or it reads as an inert heading and
-   nobody finds the settings underneath it. */
 
 .cs-disclosure__marker {
   width: 6px;
   height: 6px;
   margin-top: 6px;
-  border-right: 1.5px solid var(--rm-muted);
-  border-bottom: 1.5px solid var(--rm-muted);
+  border-right: 1.5px solid var(--rm-faint);
+  border-bottom: 1.5px solid var(--rm-faint);
   transform: rotate(-45deg);
   transition: transform 140ms ease;
 }
@@ -235,81 +248,76 @@
   transform: rotate(45deg);
 }
 
-.cs-disclosure__summary:hover .cs-disclosure__marker {
-  border-color: var(--rm-text);
-}
-
 .cs-disclosure__copy {
   display: grid;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
 .cs-disclosure__title {
   color: var(--rm-text);
-  font-size: 0.875rem;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .cs-disclosure__description {
-  max-width: var(--rm-measure-prose, 68ch);
+  max-width: 68ch;
   color: var(--rm-muted);
-  font-size: 0.8125rem;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .cs-disclosure__badge {
-  color: var(--rm-muted);
-  font-size: 0.75rem;
+  color: var(--rm-faint);
+  font-size: 11.5px;
   white-space: nowrap;
 }
 
-/* Indented to the summary's text column, so disclosed controls read as
-   belonging to the row that opened them. */
-
 .cs-disclosure__body {
   display: grid;
-  gap: 16px;
-  padding: 2px 0 20px 24px;
+  gap: 14px;
+  padding: 14px;
 }
 
-/* ---------- Stats ---------- */
+/* ---------- Stats: one card, cells divided by hairlines ---------- */
 
 .cs-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   margin: 0;
-  border-block: 1px solid var(--rm-border);
+  overflow: hidden;
+  border: 1px solid var(--rm-border);
+  border-radius: 12px;
+  background: var(--rm-surface);
 }
 
 .cs-stat {
   display: grid;
   gap: 6px;
   min-width: 0;
-  padding: 14px 20px;
+  padding: 14px 18px;
   border-left: 1px solid var(--rm-border);
 }
 
-/* First stat sits flush on the page's text column. */
-
 .cs-stat:first-child {
-  padding-left: 0;
   border-left: 0;
 }
 
 .cs-stat__label {
   color: var(--rm-muted);
-  font-size: 0.6875rem;
-  font-weight: 550;
-  letter-spacing: 0.05em;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .cs-stat__value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   color: var(--rm-text);
-  font-size: 1.25rem;
+  font-size: 19px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -347,20 +355,18 @@
 
 .cs-toolbar__actions {
   display: flex;
-  flex-shrink: 0;
+  flex: none;
   align-items: center;
   gap: 8px;
   margin-left: auto;
 }
 
-/* Search is a filter, not a form field. Capping it here is what stops a lone
-   magnifier sitting at one end of a 1000px trough. */
-
 .cs-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: min(100%, 18rem);
+  width: min(100%, 17rem);
+  height: 32px;
   padding: 0 10px;
   border: 1px solid var(--rm-border);
   border-radius: 8px;
@@ -371,13 +377,12 @@
 .cs-search input {
   width: 100%;
   min-width: 0;
-  padding: 7px 0;
   border: 0;
   outline: none;
   background: transparent;
   color: var(--rm-text);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 13px;
 }
 
 .cs-search input::-webkit-search-cancel-button {
@@ -396,7 +401,7 @@
   place-items: center;
   border: 1px solid var(--rm-border);
   border-radius: 8px;
-  background: transparent;
+  background: var(--rm-surface);
   color: var(--rm-muted);
   cursor: pointer;
   transition:
@@ -414,13 +419,68 @@
   opacity: 0.5;
 }
 
+/* ---------- Topbar omnisearch ---------- */
+
+.rm-console-omnisearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 230px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  background: var(--rm-surface);
+  color: var(--rm-muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.rm-console-omnisearch:hover {
+  border-color: color-mix(in srgb, var(--rm-accent) 40%, var(--rm-border));
+  color: var(--rm-text);
+}
+
+.rm-console-omnisearch__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-console-omnisearch__kbd {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--rm-border);
+  border-radius: 4px;
+  color: var(--rm-faint);
+  font-family: var(--rm-font-mono);
+  font-size: 10px;
+}
+
+@media (max-width: 60rem) {
+  .rm-console-omnisearch {
+    width: 32px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .rm-console-omnisearch__label,
+  .rm-console-omnisearch__kbd {
+    display: none;
+  }
+}
+
 /* ---------- Empty states ---------- */
 
 .cs-empty {
   display: grid;
   justify-items: center;
   gap: 8px;
-  padding: 40px 24px;
+  padding: 56px 24px;
   border: 1px dashed var(--rm-border);
   border-radius: 12px;
   text-align: center;
@@ -440,7 +500,7 @@
 .cs-empty__title {
   margin: 0;
   color: var(--rm-text);
-  font-size: 0.9375rem;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -448,7 +508,7 @@
   max-width: 46ch;
   margin: 0;
   color: var(--rm-muted);
-  font-size: 0.8125rem;
+  font-size: 13px;
   line-height: 1.5;
   text-wrap: pretty;
 }
@@ -461,7 +521,7 @@
 
 .cs-savebar {
   position: sticky;
-  bottom: 12px;
+  bottom: 10px;
   z-index: 10;
   display: flex;
   align-items: center;
@@ -471,9 +531,7 @@
   padding: 10px 10px 10px 16px;
   border: 1px solid var(--rm-border);
   border-radius: 12px;
-  /* Translucent so the page reads as continuing underneath the bar rather than
-     ending at it. */
-  background: color-mix(in srgb, var(--rm-surface) 88%, transparent);
+  background: color-mix(in srgb, var(--rm-surface) 92%, transparent);
   box-shadow: var(--rm-shadow);
   backdrop-filter: blur(12px);
 }
@@ -481,12 +539,12 @@
 .cs-savebar__summary {
   min-width: 0;
   color: var(--rm-muted);
-  font-size: 0.8125rem;
+  font-size: 12.5px;
 }
 
 .cs-savebar__actions {
   display: flex;
-  flex-shrink: 0;
+  flex: none;
   gap: 8px;
 }
 
@@ -500,11 +558,11 @@
   }
 
   .cs-stats {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   }
 
   .cs-stat {
-    padding-inline: 12px;
+    padding-inline: 14px;
   }
 
   .cs-savebar {
@@ -521,6 +579,344 @@
   .cs-disclosure__marker,
   .cs-tab,
   .cs-icon-button {
+    transition: none;
+  }
+}
+
+/* ---------- Identity cell ---------- */
+
+.rm-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rm-identity__mark {
+  display: grid;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--rm-surface-soft);
+  color: var(--rm-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.rm-identity__copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.rm-identity__primary {
+  overflow: hidden;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-identity__secondary {
+  overflow: hidden;
+  color: var(--rm-muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-identity__secondary.is-mono {
+  font-family: var(--rm-font-mono);
+  font-size: 11px;
+}
+
+/* ---------- Grant list ---------- */
+
+.rm-grant-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  max-width: 44rem;
+  list-style: none;
+}
+
+.rm-grant-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--rm-border);
+  border-radius: 10px;
+  background: var(--rm-surface);
+}
+
+.rm-grant-row__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rm-grant-row__principal {
+  overflow: hidden;
+  font-family: var(--rm-font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-grant-row__meta {
+  color: var(--rm-muted);
+  font-size: 11.5px;
+}
+
+/* ---------- Master–detail ---------- */
+
+.cs-masterdetail {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+  min-width: 0;
+}
+
+.cs-masterdetail__list {
+  display: grid;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  min-width: 0;
+}
+
+.cs-masterdetail__detail {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+
+.cs-masterlist {
+  overflow: hidden;
+  border: 1px solid var(--rm-border);
+  border-radius: 12px;
+  background: var(--rm-surface);
+}
+
+.cs-masterlist__item {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 11px 13px;
+  border: 0;
+  border-top: 1px solid var(--rm-border-soft);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cs-masterlist__item:first-child {
+  border-top: 0;
+}
+
+.cs-masterlist__item:hover {
+  background: var(--rm-hover);
+}
+
+.cs-masterlist__item.is-selected {
+  background: var(--rm-surface-soft);
+}
+
+.cs-masterlist__item:focus-visible {
+  outline: 2px solid var(--rm-accent);
+  outline-offset: -2px;
+}
+
+.cs-masterlist__line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cs-masterlist__title {
+  overflow: hidden;
+  color: var(--rm-text);
+  font-size: 13px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-masterlist__item.is-selected .cs-masterlist__title {
+  font-weight: 650;
+}
+
+.cs-masterlist__badge {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--rm-surface-soft);
+  color: var(--rm-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.cs-masterlist__meta {
+  overflow: hidden;
+  color: var(--rm-muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 60rem) {
+  .cs-masterdetail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cs-masterdetail__list {
+    position: static;
+  }
+}
+
+/* A loading fallback is "not yet", not "nothing" — it must not borrow the
+   empty-state card, which would flash a bordered "no results" box on every
+   navigation. */
+
+.rm-loading {
+  padding: 32px 24px;
+  color: var(--rm-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---------- Avatar picker ---------- */
+
+.cs-avatar {
+  display: grid;
+  gap: 8px;
+  max-width: 30rem;
+  min-width: 0;
+}
+
+.cs-avatar__label {
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.cs-avatar__drop {
+  padding: 12px 14px;
+  border: 1px dashed var(--rm-border);
+  border-radius: 12px;
+  background: var(--rm-surface);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.cs-avatar__drop:hover,
+.cs-avatar__drop.is-dragging {
+  border-color: var(--rm-accent);
+  background: color-mix(in srgb, var(--rm-accent) 6%, var(--rm-surface));
+}
+
+.cs-avatar__drop.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Keyboard focus lands on the file input, so the target has to show it. */
+
+.cs-avatar__drop:focus-within {
+  border-color: var(--rm-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rm-accent) 18%, transparent);
+}
+
+/* The label fills the drop wrapper so the whole tile is the click target. */
+
+.cs-avatar__target {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: inherit;
+}
+
+.cs-avatar__preview {
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+
+.cs-avatar__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cs-avatar__prompt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--rm-text);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.cs-avatar__hint {
+  color: var(--rm-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* Visually hidden, not display:none — it must stay focusable and clickable. */
+
+.cs-avatar__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cs-avatar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cs-avatar__urltoggle {
+  margin-left: auto;
+}
+
+.cs-avatar__url {
+  display: grid;
+  gap: 4px;
+  font-size: 12.5px;
+}
+
+.cs-avatar__url > span {
+  color: var(--rm-muted);
+}
+
+.cs-avatar__error {
+  margin: 0;
+  color: var(--rm-danger);
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-avatar__drop {
     transition: none;
   }
 }

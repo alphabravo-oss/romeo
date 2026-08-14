@@ -1,8 +1,15 @@
-import type { BaseModel, ProviderInstance } from "@romeo/providers";
+import type {
+  BaseModel,
+  ProviderInstance,
+  ProviderReasoningPolicy,
+} from "@romeo/providers";
+import type { MessagePartOutput as TypedMessagePart } from "@romeo/contracts";
 import type { Scope } from "@romeo/auth";
 
 export type * from "./agent-entities";
+export type * from "./capabilities";
 export type * from "./identity-entities";
+export type * from "./operational-entities";
 
 export interface Chat {
   agentId?: string;
@@ -18,6 +25,8 @@ export interface Chat {
   legalHoldUntil?: string;
   legalHoldReason?: string;
   activeLeafMessageId?: string;
+  /** Decimal monotonic version of message/parent/active-leaf structure. */
+  transcriptVersion?: string;
   updatedAt: string;
 }
 
@@ -92,6 +101,8 @@ export interface Message {
   chatId: string;
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** Ordered versioned parts; absent only on internal reads before compatibility projection. */
+  parts?: TypedMessagePart[];
   citations?: MessageCitation[];
   attachments?: MessageAttachment[];
   /** Inline run failure shown in place of a normal assistant answer. */
@@ -125,12 +136,24 @@ export interface MessageAttachment {
   previewUrl?: string;
 }
 
-export interface MessagePart {
+export interface LegacyMessagePart {
   id: string;
   messageId: string;
   type: "attachment" | "collaboration_channel_metadata";
   content: string;
   metadata: Record<string, unknown>;
+}
+
+export type MessagePart = LegacyMessagePart | TypedMessagePart;
+
+/** Internal durable edge; never serialized as message content or public metadata. */
+export interface MessageFileReference {
+  messagePartId: string;
+  messageId: string;
+  fileId: string;
+  orgId: string;
+  workspaceId: string;
+  createdAt: string;
 }
 
 export type MessageFeedbackRating = "negative" | "positive";
@@ -164,7 +187,18 @@ export type FileObjectPurpose =
   | "web_source"
   | "voice_artifact";
 
-export type FileObjectStatus = "available" | "deleted" | "uploading";
+export type FileObjectStatus =
+  | "attached"
+  | "available"
+  | "deleted"
+  | "extracting"
+  | "failed"
+  | "quarantined"
+  | "ready"
+  | "retained"
+  | "scanning"
+  | "transcoding"
+  | "uploading";
 
 export interface FileObject {
   id: string;
@@ -179,6 +213,15 @@ export interface FileObject {
   objectKey: string;
   purpose: FileObjectPurpose;
   status: FileObjectStatus;
+  lifecycleVersion?: number;
+  lifecycleAttempts?: number;
+  lifecycleFailureCode?: string;
+  lifecycleNextAttemptAt?: string;
+  lifecycleLeaseOwner?: string;
+  lifecycleLeaseToken?: string;
+  lifecycleLeaseExpiresAt?: string;
+  attachedAt?: string;
+  retainedAt?: string;
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -199,113 +242,6 @@ export interface VoiceProfile {
   updatedAt: string;
   dependentAgentCount?: number;
   grantCount?: number;
-}
-
-export interface AuditLog {
-  id: string;
-  orgId: string;
-  actorId: string;
-  action: string;
-  resourceType: string;
-  resourceId: string;
-  outcome: "success" | "failure";
-  metadata: Record<string, unknown>;
-  createdAt: string;
-}
-
-export interface UsageEvent {
-  id: string;
-  orgId: string;
-  workspaceId?: string;
-  actorId: string;
-  sourceType: "chat" | "retrieval" | "run" | "tool" | "storage" | "voice";
-  sourceId: string;
-  metric: string;
-  quantity: number;
-  unit: string;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-}
-
-export interface UsageSummaryMetric {
-  metric: string;
-  quantity: number;
-  unit: string;
-  estimatedCostUsd: number;
-}
-
-export interface UsageSummary {
-  totals: UsageSummaryMetric[];
-  byActor: Array<UsageSummaryMetric & { actorId: string }>;
-  byProvider: Array<UsageSummaryMetric & { providerId: string }>;
-}
-
-export interface UsageAlert {
-  id: string;
-  scopeType: QuotaBucket["scopeType"];
-  scopeId: string;
-  metric: string;
-  used: number;
-  limit: number;
-  percentUsed: number;
-  severity: "warning" | "critical" | "exceeded";
-  resetAt?: string;
-}
-
-export type QuotaMetric =
-  | "image.cost.micro_usd"
-  | "image.generated"
-  | "web.search.request"
-  | "web.url.fetch"
-  | "run.started"
-  | "tool.call"
-  | "storage.byte";
-
-export interface BillingPlanQuotaTemplate {
-  metric: QuotaMetric;
-  limit: number;
-  resetInterval: QuotaBucket["resetInterval"];
-}
-
-export interface BillingPlan {
-  id: string;
-  orgId: string;
-  code: string;
-  name: string;
-  status: "active" | "canceled" | "past_due" | "trialing";
-  source: "external" | "manual";
-  quotaTemplates: BillingPlanQuotaTemplate[];
-  metadata: Record<string, unknown>;
-  externalCustomerId?: string;
-  externalSubscriptionId?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface BackgroundJob {
-  id: string;
-  orgId: string;
-  workspaceId?: string;
-  type: string;
-  status: "queued" | "running" | "completed" | "failed";
-  payload: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  completedAt?: string;
-}
-
-export interface QuotaBucket {
-  id: string;
-  orgId: string;
-  scopeType: "org" | "user" | "workspace" | "provider" | "agent" | "api_key";
-  scopeId: string;
-  metric: QuotaMetric;
-  limit: number;
-  used: number;
-  resetInterval: "none" | "daily" | "monthly";
-  resetAt?: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface RunRecord {
@@ -336,6 +272,10 @@ export interface QueuedChatTurn {
   chatId: string;
   agentId: string;
   modelId?: string;
+  routingMode?: "economy";
+  researchMode?: "deep";
+  reasoningPolicy?: ProviderReasoningPolicy;
+  parentMessageId?: string | null;
   content: string;
   webSearch?: boolean;
   agenticRag?: boolean;
@@ -375,16 +315,21 @@ export type {
   EvalDashboardSuiteSummary,
   EvalReleaseCandidateEvidence,
   EvalReleaseCandidateSuiteEvidence,
+  EvalReasoningComparison,
+  EvalReasoningPolicyEvidence,
   EvalResultHumanRating,
   EvalResultHumanRatingValue,
   EvalRubric,
   EvalRun,
+  EvalRunMetrics,
   EvalRunResult,
   EvalSuite,
   EvalToolCallExpectation,
   EvalToolOutcomeExpectation,
 } from "./evals";
 export type {
+  AuthorizedWorkspaceFoldersByIdsInput,
+  AuthorizedWorkspaceFolderItemsBatchInput,
   ChatComment,
   FavoritableResourceType,
   NotificationDelivery,
@@ -398,6 +343,7 @@ export type {
   UserNotification,
   WorkspaceFolder,
   WorkspaceFolderItem,
+  WorkspaceFolderItemsBatchGroup,
 } from "./collaboration";
 export type {
   AgentKnowledgeBinding,

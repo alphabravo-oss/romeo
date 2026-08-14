@@ -1,5 +1,4 @@
 {
-  "groupsTitle": "Groupes",
   "groupsAdd": "Ajouter un groupe",
   "groupsCreated": "Groupe créé",
   "groupsCouldNotCreate": "Impossible de créer le groupe",
@@ -31,7 +30,6 @@
   "groupsSlugOptional": "Slug (facultatif)",
   "groupsCreating": "Création",
   "groupsCreate": "Créer le groupe",
-  "organizationsTitle": "Organisations",
   "organizationsName": "Nom",
   "organizationsSlug": "Slug",
   "organizationsId": "ID",
@@ -80,6 +78,5 @@
   "organizationsReactivated": "Organisation réactivée",
   "organizationsReactivateFailed": "Impossible de réactiver l’organisation.",
   "organizationsActionsFor": "Actions de l’organisation pour",
-  "workspaceMembersTitle": "Membres de l’espace",
   "workspaceMembersHelp": "L’appartenance est une autorisation de lecture de l’espace. Sans elle, les utilisateurs et groupes ne peuvent pas l’ouvrir."
 }

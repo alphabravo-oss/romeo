@@ -105,6 +105,18 @@ export function renderPrometheus(metrics) {
   return `${lines.join("\n")}\n`;
 }
 
+export async function probeOperationalReadiness(
+  options = {},
+  scrape = scrapeOperationalMetrics,
+) {
+  try {
+    await scrape(options);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function main() {
   const options = {
     apiKey: argValue("--api-key"),
@@ -132,10 +144,35 @@ async function main() {
 
 function serveMetrics(options) {
   const endpoint = parseListen(options.listen);
+  const server = createOperationalMonitoringServer(options);
+  server.listen(endpoint.port, endpoint.host, () => {
+    console.log(
+      `Romeo operational monitoring exporter listening on ${endpoint.host}:${endpoint.port}`,
+    );
+  });
+}
+
+export function createOperationalMonitoringServer(
+  options = {},
+  dependencies = {},
+) {
+  const scrape = dependencies.scrape ?? scrapeOperationalMetrics;
   const server = createServer(async (request, response) => {
     if (request.url === "/health") {
-      response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+      response.writeHead(200, {
+        "cache-control": "no-store",
+        "content-type": "text/plain; charset=utf-8",
+      });
       response.end("ok\n");
+      return;
+    }
+    if (request.url === "/ready") {
+      const ready = await probeOperationalReadiness(options, scrape);
+      response.writeHead(ready ? 200 : 503, {
+        "cache-control": "no-store",
+        "content-type": "text/plain; charset=utf-8",
+      });
+      response.end(ready ? "ready\n" : "not ready\n");
       return;
     }
     if (request.url !== "/metrics") {
@@ -145,10 +182,11 @@ function serveMetrics(options) {
     }
 
     try {
+      const body = renderPrometheus(await scrape(options));
       response.writeHead(200, {
         "content-type": "text/plain; version=0.0.4; charset=utf-8",
       });
-      response.end(renderPrometheus(await scrapeOperationalMetrics(options)));
+      response.end(body);
     } catch {
       response.writeHead(200, {
         "content-type": "text/plain; version=0.0.4; charset=utf-8",
@@ -156,11 +194,7 @@ function serveMetrics(options) {
       response.end(renderPrometheus(buildFailureMetrics("all")));
     }
   });
-  server.listen(endpoint.port, endpoint.host, () => {
-    console.log(
-      `Romeo operational monitoring exporter listening on ${endpoint.host}:${endpoint.port}`,
-    );
-  });
+  return server;
 }
 
 async function fetchSummary({ apiKey, baseUrl, path, timeoutMs }) {
@@ -268,7 +302,22 @@ function providerMetrics(summary) {
   }
 
   const runtime = summary?.runtime;
+  const apiDeprecations = runtime?.apiDeprecations;
+  const capabilityAssignments = runtime?.capabilityAssignments;
+  const capabilityFlags = runtime?.capabilityFlags;
+  const idempotency = runtime?.idempotency;
+  const sse = runtime?.sse;
+  const sseLabels = {
+    scope: stringLabel(sse?.observationScope ?? "process"),
+  };
   metrics.push(
+    metric(
+      "romeo_api_deprecation_observation_window_seconds",
+      "Age of the process-local Romeo API deprecation observation window.",
+      "gauge",
+      apiDeprecations?.observationWindowSeconds,
+      { scope: stringLabel(apiDeprecations?.observationScope ?? "process") },
+    ),
     metric(
       "romeo_run_time_to_first_token_milliseconds",
       "Recent Romeo run time to first token.",
@@ -322,6 +371,97 @@ function providerMetrics(summary) {
       runtime?.sseDisconnectCount,
     ),
     metric(
+      "romeo_sse_active_streams",
+      "Active Romeo run SSE streams on the observed process.",
+      "gauge",
+      sse?.activeStreams,
+      sseLabels,
+    ),
+    metric(
+      "romeo_sse_connection_count",
+      "Romeo run SSE connections during the process observation window.",
+      "gauge",
+      sse?.connectionCount,
+      sseLabels,
+    ),
+    metric(
+      "romeo_sse_replayed_rows",
+      "Romeo run-event rows replayed for reconnecting SSE clients during the process observation window.",
+      "gauge",
+      sse?.replayedRowCount,
+      sseLabels,
+    ),
+    metric(
+      "romeo_sse_cursor_query_count",
+      "Romeo run-event cursor queries during the process observation window.",
+      "gauge",
+      sse?.cursorQueryCount,
+      sseLabels,
+    ),
+    metric(
+      "romeo_sse_cursor_query_rows",
+      "Romeo run-event rows returned by cursor queries during the process observation window.",
+      "gauge",
+      sse?.cursorQueryRowCount,
+      sseLabels,
+    ),
+    metric(
+      "romeo_sse_notifier_lag_milliseconds",
+      "Romeo run-event notifier-to-cursor delivery lag.",
+      "gauge",
+      sse?.notifierLagAverageMs,
+      { ...sseLabels, statistic: "average" },
+    ),
+    metric(
+      "romeo_sse_notifier_lag_milliseconds",
+      "Romeo run-event notifier-to-cursor delivery lag.",
+      "gauge",
+      sse?.notifierLagP95Ms,
+      { ...sseLabels, statistic: "p95" },
+    ),
+    metric(
+      "romeo_sse_notifier_unavailable_count",
+      "Romeo run SSE subscriptions that entered bounded polling fallback during the process observation window.",
+      "gauge",
+      sse?.notifierUnavailableCount,
+      sseLabels,
+    ),
+    metric(
+      "romeo_sse_buffered_bytes_high_water",
+      "Highest observed Romeo run SSE stream buffer occupancy during the process observation window.",
+      "gauge",
+      sse?.bufferedBytesHighWater,
+      sseLabels,
+    ),
+    metric(
+      "romeo_sse_slow_consumer_drops",
+      "Romeo run SSE streams dropped for sustained backpressure during the process observation window.",
+      "gauge",
+      sse?.slowConsumerDropCount,
+      sseLabels,
+    ),
+    metric(
+      "romeo_sse_heartbeat_failures",
+      "Romeo run SSE heartbeat enqueue failures during the process observation window.",
+      "gauge",
+      sse?.heartbeatFailureCount,
+      sseLabels,
+    ),
+    metric(
+      "romeo_sse_terminal_close_latency_milliseconds",
+      "Romeo run SSE latency from terminal-event enqueue to stream close.",
+      "gauge",
+      sse?.terminalCloseLatencyAverageMs,
+      { ...sseLabels, statistic: "average" },
+    ),
+    metric(
+      "romeo_sse_terminal_close_latency_milliseconds",
+      "Romeo run SSE latency from terminal-event enqueue to stream close.",
+      "gauge",
+      sse?.terminalCloseLatencyP95Ms,
+      { ...sseLabels, statistic: "p95" },
+    ),
+    metric(
       "romeo_provider_error_total",
       "Recent sanitized Romeo provider error count.",
       "gauge",
@@ -348,6 +488,102 @@ function providerMetrics(summary) {
       { statistic: "average" },
     ),
   );
+
+  for (const operation of array(apiDeprecations?.operations)) {
+    const labels = { operation: stringLabel(operation.operationId) };
+    for (const responseClass of ["1xx", "2xx", "3xx", "4xx", "5xx", "other"]) {
+      metrics.push(
+        metric(
+          "romeo_api_deprecated_requests_total",
+          "Requests to deprecated Romeo API operations by bounded response class.",
+          "counter",
+          operation.responseClasses?.[responseClass],
+          { ...labels, response_class: responseClass },
+        ),
+      );
+    }
+    metrics.push(
+      metric(
+        "romeo_api_deprecated_last_use_timestamp_seconds",
+        "Unix timestamp of the last deprecated Romeo API operation request in this process, or zero when unused.",
+        "gauge",
+        isoTimestampSeconds(operation.lastUsedAt),
+        labels,
+      ),
+      metric(
+        "romeo_api_deprecation_zero_usage_window_seconds",
+        "Current process-local zero-usage window for a deprecated Romeo API operation.",
+        "gauge",
+        operation.zeroUsageWindowSeconds,
+        labels,
+      ),
+    );
+  }
+  metrics.push(
+    metric(
+      "romeo_capability_flag_resolutions_total",
+      "Process-local capability flag resolutions across the bounded registry.",
+      "counter",
+      capabilityFlags?.total,
+      { scope: stringLabel(capabilityFlags?.observationScope ?? "process") },
+    ),
+  );
+  for (const resolution of array(capabilityFlags?.resolutions)) {
+    metrics.push(
+      metric(
+        "romeo_capability_flag_resolution_total",
+        "Capability flag resolutions by bounded flag, state, and reason.",
+        "counter",
+        resolution.count,
+        {
+          flag: stringLabel(resolution.flagId),
+          state: stringLabel(resolution.effectiveState),
+          reason: stringLabel(resolution.reasonCode),
+        },
+      ),
+    );
+  }
+  metrics.push(
+    metric(
+      "romeo_capability_resolutions_total",
+      "Process-local generic capability resolutions across the bounded registry.",
+      "counter",
+      capabilityAssignments?.total,
+      {
+        scope: stringLabel(
+          capabilityAssignments?.observationScope ?? "process",
+        ),
+      },
+    ),
+  );
+  for (const resolution of array(capabilityAssignments?.resolutions)) {
+    metrics.push(
+      metric(
+        "romeo_capability_resolution_total",
+        "Generic capability resolutions by bounded capability and effective status.",
+        "counter",
+        resolution.count,
+        {
+          capability: stringLabel(resolution.capabilityId),
+          status: stringLabel(resolution.status),
+        },
+      ),
+    );
+  }
+  for (const outcome of array(idempotency?.outcomes)) {
+    metrics.push(
+      metric(
+        "romeo_idempotency_outcome_total",
+        "Durable command idempotency outcomes by bounded operation and result.",
+        "counter",
+        outcome.count,
+        {
+          operation: stringLabel(outcome.operation),
+          outcome: stringLabel(outcome.outcome),
+        },
+      ),
+    );
+  }
 
   return metrics;
 }
@@ -524,6 +760,11 @@ function boolNumber(value) {
 
 function numberValue(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function isoTimestampSeconds(value) {
+  const parsed = typeof value === "string" ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed / 1_000 : 0;
 }
 
 function array(value) {

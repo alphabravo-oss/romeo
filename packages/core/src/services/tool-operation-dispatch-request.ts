@@ -1,3 +1,5 @@
+import { ROMEO_PRODUCT_VERSION } from "@romeo/contracts";
+
 import type {
   ToolConnector,
   ToolOperation,
@@ -112,7 +114,7 @@ function mcpToolCallBody(
         "io.modelcontextprotocol/protocolVersion": transport.mcpProtocolVersion,
         "io.modelcontextprotocol/clientInfo": {
           name: "Romeo",
-          version: "0.1.0",
+          version: ROMEO_PRODUCT_VERSION,
         },
         "io.modelcontextprotocol/clientCapabilities": {},
       },

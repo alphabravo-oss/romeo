@@ -300,8 +300,7 @@ describe("RBAC grant and revoke", () => {
     expect(
       listedKnowledge.some(
         (grant) =>
-          grant.principalType === "group" &&
-          grant.principalId === "group_rbac",
+          grant.principalType === "group" && grant.principalId === "group_rbac",
       ),
     ).toBe(true);
     const revokedKnowledge = await shares.revokeKnowledgeBaseGrant({
@@ -331,10 +330,7 @@ describe("RBAC grant and revoke", () => {
       workspaceId: "workspace_default",
       grantId: workspaceGrants[0]!.id,
     });
-    const after = await shares.listWorkspaceMembers(
-      admin,
-      "workspace_default",
-    );
+    const after = await shares.listWorkspaceMembers(admin, "workspace_default");
     expect(after.some((grant) => grant.id === workspaceGrants[0]!.id)).toBe(
       false,
     );

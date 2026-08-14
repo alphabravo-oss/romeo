@@ -1,3 +1,5 @@
+import { ROMEO_PRODUCT_VERSION } from "@romeo/contracts";
+
 import type {
   ToolOperationDispatchReadbackResponse,
   ToolOperationDispatchRequestClaimResult,
@@ -25,7 +27,10 @@ export async function executeToolDispatchHttpRequest(
     payload,
     input.allowPrivateNetwork === true,
   );
-  await assertResolvedHostAllowed(input, url.hostname);
+  const approvedAddresses = await assertResolvedHostAllowed(
+    input,
+    url.hostname,
+  );
   const method = claim.method?.toUpperCase() ?? "GET";
   const headers: Record<string, string> = {
     accept: "application/json",
@@ -47,10 +52,11 @@ export async function executeToolDispatchHttpRequest(
   }
 
   const response = await fetchWithTimeout(
-    input.fetchImpl,
+    input,
     url,
     init,
     input.timeoutMs,
+    approvedAddresses,
   );
   const body = await readBoundedResponseBody(response, input.maxBytes);
   const contentType = response.headers.get("content-type");
@@ -114,7 +120,7 @@ function mcpToolCallBody(
         "io.modelcontextprotocol/protocolVersion": transport.mcpProtocolVersion,
         "io.modelcontextprotocol/clientInfo": {
           name: "Romeo",
-          version: "0.1.0",
+          version: ROMEO_PRODUCT_VERSION,
         },
         "io.modelcontextprotocol/clientCapabilities": {},
       },

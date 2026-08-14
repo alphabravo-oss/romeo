@@ -2,11 +2,9 @@ import {
   AuthorizationError,
   assertScope,
   canAccessOrg,
-  hasGrant,
   hasScope,
   hasWorkspaceAccess,
   type AuthSubject,
-  type ResourceGrant,
 } from "@romeo/auth";
 import { memoryObjectStore, type ObjectStore } from "@romeo/storage";
 import {
@@ -15,17 +13,15 @@ import {
   type VoiceProvider,
 } from "@romeo/voices";
 
-import type {
-  Agent,
-  Message,
-  UsageEvent,
-  VoiceProfile,
-} from "../domain/entities";
+import type { Agent, VoiceProfile } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
-import { recordSubjectUsage } from "./record-usage";
+import { authorizeVoiceProcessing } from "./capability-consumer-enforcement";
+import type { CapabilityService } from "./capability-resolver";
+import { enforceContentPolicyText } from "./content-policy-service";
+import { recordSubjectUsage, updateRecordedUsage } from "./record-usage";
 import {
   metadataString,
   readActiveVoiceArtifactUsageMetadata,
@@ -46,6 +42,7 @@ import {
   voiceProfileFromProvider,
 } from "./voice-service-helpers";
 import { listVoiceProfilesWithDependencies } from "./voice-catalog-summary";
+import { VoiceAccess } from "./voice-access";
 
 export type {
   PublicSpeechArtifact,
@@ -54,18 +51,23 @@ export type {
 } from "./voice-service-helpers";
 
 export class VoiceService {
+  private readonly access: VoiceAccess;
+
   constructor(
     private readonly repository: RomeoRepository,
     private readonly voiceProvider: VoiceProvider = disabledVoiceProvider,
     private readonly objectStore: ObjectStore = memoryObjectStore,
-  ) {}
-
+    private readonly capabilities?: CapabilityService,
+  ) {
+    this.access = new VoiceAccess(repository);
+  }
   async list(subject: AuthSubject): Promise<VoiceProfile[]> {
     return listVoiceProfilesWithDependencies(this.repository, subject);
   }
 
   async syncCatalog(subject: AuthSubject) {
     assertScope(subject, "voices:manage");
+    await authorizeVoiceProcessing(this.capabilities, subject);
     await assertAbuseControlsAllow(this.repository, subject, {
       action: "voice.request",
       workerClass: "voice.catalog_sync",
@@ -173,7 +175,7 @@ export class VoiceService {
     voiceProfileId: string;
     text: string;
   }) {
-    const voiceProfile = await this.getAuthorizedVoice(
+    const voiceProfile = await this.access.voice(
       input.voiceProfileId,
       input.subject,
       "use",
@@ -191,7 +193,7 @@ export class VoiceService {
     messageId: string;
     voiceProfileId: string;
   }) {
-    const message = await this.getAuthorizedAssistantMessage(
+    const message = await this.access.assistantMessage(
       input.subject,
       input.messageId,
     );
@@ -201,7 +203,7 @@ export class VoiceService {
         "Message speech is limited to 4000 characters.",
         400,
       );
-    const voiceProfile = await this.getAuthorizedVoice(
+    const voiceProfile = await this.access.voice(
       input.voiceProfileId,
       input.subject,
       "use",
@@ -224,6 +226,17 @@ export class VoiceService {
     prompt?: string;
   }): Promise<TranscriptionResult> {
     assertScope(input.subject, "voices:use");
+    await authorizeVoiceProcessing(this.capabilities, input.subject);
+    const governedPrompt =
+      input.prompt === undefined
+        ? undefined
+        : (
+            await enforceContentPolicyText(
+              this.repository,
+              input.subject,
+              input.prompt,
+            )
+          ).content;
     const contentType = safeTranscriptionContentType(input.contentType);
     if (contentType === undefined)
       throw new ApiError(
@@ -243,22 +256,48 @@ export class VoiceService {
         contentType,
         ...(input.fileName === undefined ? {} : { fileName: input.fileName }),
         ...(input.language === undefined ? {} : { language: input.language }),
-        ...(input.prompt === undefined ? {} : { prompt: input.prompt }),
+        ...(governedPrompt === undefined ? {} : { prompt: governedPrompt }),
       });
-      await recordSubjectUsage(this.repository, input.subject, {
-        orgId: input.subject.orgId,
-        sourceType: "voice",
-        sourceId: "voice_transcription",
-        metric: "voice.transcription.generated",
-        quantity: result.durationMs ?? audio.byteLength,
-        unit: result.durationMs === undefined ? "byte" : "ms",
-        metadata: {
+      await this.repository.transaction(async (repository) => {
+        const metadata = {
           audioBytes: audio.byteLength,
           contentType,
           textLength: result.text.length,
           language: result.language ?? null,
           promptProvided: input.prompt !== undefined,
-        },
+        };
+        await recordSubjectUsage(repository, input.subject, {
+          orgId: input.subject.orgId,
+          sourceType: "voice",
+          sourceId: "voice_transcription",
+          metric: "voice.transcription.generated",
+          quantity: 1,
+          unit: "event",
+          metadata,
+        });
+        await recordSubjectUsage(
+          repository,
+          input.subject,
+          result.durationMs === undefined
+            ? {
+                orgId: input.subject.orgId,
+                sourceType: "voice",
+                sourceId: "voice_transcription",
+                metric: "audio.input_byte",
+                quantity: audio.byteLength,
+                unit: "byte",
+                metadata: { contentType },
+              }
+            : {
+                orgId: input.subject.orgId,
+                sourceType: "voice",
+                sourceId: "voice_transcription",
+                metric: "audio.input_second",
+                quantity: result.durationMs / 1000,
+                unit: "second",
+                metadata: { contentType },
+              },
+        );
       });
       return result;
     } catch {
@@ -280,7 +319,7 @@ export class VoiceService {
       input.artifactId,
     );
     if (event === undefined) throw notFound("Voice artifact");
-    await this.authorizeArtifact(input.subject, event);
+    await this.access.artifact(input.subject, event);
     const artifact = readActiveVoiceArtifactUsageMetadata(event);
     const storageKey = artifact?.storageKey;
     const contentType = safeAudioContentType(
@@ -300,7 +339,7 @@ export class VoiceService {
       input.artifactId,
     );
     if (event === undefined) throw notFound("Voice artifact");
-    await this.authorizeArtifact(input.subject, event);
+    await this.access.artifact(input.subject, event);
     if (
       event.actorId !== input.subject.id &&
       !hasScope(input.subject, "admin:write")
@@ -314,7 +353,7 @@ export class VoiceService {
     const deletedAt = new Date().toISOString();
     const existing = await this.objectStore.getObject(artifact.storageKey);
     await this.repository.transaction(async (repository) => {
-      await repository.updateUsageEvent({
+      await updateRecordedUsage(repository, {
         ...event,
         metadata: redactVoiceArtifactStorageMetadata(
           event.metadata,
@@ -325,7 +364,7 @@ export class VoiceService {
           },
         ),
       });
-      await repository.createAuditLog({
+      await writeAuditLog(repository, {
         id: createId("audit"),
         orgId: input.subject.orgId,
         actorId: input.subject.id,
@@ -359,7 +398,7 @@ export class VoiceService {
     voiceProfileId: string;
   }): Promise<Agent> {
     assertScope(input.subject, "agents:write");
-    await this.getAuthorizedVoice(input.voiceProfileId, input.subject, "use");
+    await this.access.voice(input.voiceProfileId, input.subject, "use");
 
     const agent = await this.repository.getAgent(input.agentId);
     if (!agent) throw notFound("Agent");
@@ -379,61 +418,6 @@ export class VoiceService {
     });
   }
 
-  private async getAuthorizedVoice(
-    voiceProfileId: string,
-    subject: AuthSubject,
-    permission: ResourceGrant["permission"],
-  ): Promise<VoiceProfile> {
-    assertScope(subject, "voices:use");
-    const voiceProfile = await this.repository.getVoiceProfile(voiceProfileId);
-    if (!voiceProfile) throw notFound("Voice profile");
-    if (!canAccessOrg(subject, voiceProfile.orgId))
-      throw new AuthorizationError(
-        "The voice is outside the caller organization.",
-      );
-
-    const grants = await this.repository.listResourceGrants(subject.orgId);
-    if (
-      !hasGrant(subject, grants, "voice_profile", voiceProfile.id, permission)
-    ) {
-      throw new AuthorizationError(
-        `Missing ${permission} permission for voice_profile:${voiceProfile.id}`,
-      );
-    }
-    return voiceProfile;
-  }
-
-  private async getAuthorizedAssistantMessage(
-    subject: AuthSubject,
-    messageId: string,
-  ): Promise<Message> {
-    assertScope(subject, "chats:read");
-    const message = await this.repository.getMessage(messageId);
-    if (!message) throw notFound("Message");
-    const chat = await this.repository.getChat(message.chatId);
-    if (!chat) throw notFound("Chat");
-    if (!canAccessOrg(subject, chat.orgId))
-      throw new AuthorizationError(
-        "The message is outside the caller organization.",
-      );
-    if (!hasWorkspaceAccess(subject, chat.workspaceId))
-      throw new AuthorizationError(
-        "The message is outside the caller workspace access.",
-      );
-    const grants = await this.repository.listResourceGrants(subject.orgId);
-    if (!hasGrant(subject, grants, "chat", chat.id, "read"))
-      throw new AuthorizationError(
-        `Missing read permission for chat:${chat.id}`,
-      );
-    if (message.role !== "assistant")
-      throw new ApiError(
-        "message_speech_role_unsupported",
-        "Speech can only be generated for model messages.",
-        400,
-      );
-    return message;
-  }
-
   private async synthesizeAndRecord(input: {
     subject: AuthSubject;
     voiceProfile: VoiceProfile;
@@ -441,6 +425,10 @@ export class VoiceService {
     metric: "voice.message.generated" | "voice.preview.generated";
     metadata?: Record<string, unknown>;
   }) {
+    await authorizeVoiceProcessing(this.capabilities, input.subject);
+    const governedText = (
+      await enforceContentPolicyText(this.repository, input.subject, input.text)
+    ).content;
     await assertAbuseControlsAllow(this.repository, input.subject, {
       action: "voice.request",
       providerId: input.voiceProfile.providerId,
@@ -450,7 +438,7 @@ export class VoiceService {
       const artifact = await this.voiceProvider.synthesize({
         orgId: input.subject.orgId,
         voiceId: input.voiceProfile.providerVoiceId,
-        text: input.text,
+        text: governedText,
         format: "wav",
       });
       const persistedArtifact = await persistVoiceArtifact(
@@ -458,20 +446,45 @@ export class VoiceService {
         input.subject.orgId,
         artifact,
       );
-      await recordSubjectUsage(this.repository, input.subject, {
-        orgId: input.subject.orgId,
-        sourceType: "voice",
-        sourceId: input.voiceProfile.id,
-        metric: input.metric,
-        quantity: persistedArtifact.durationMs ?? input.text.length,
-        unit: persistedArtifact.durationMs === undefined ? "char" : "ms",
-        metadata: {
-          ...input.metadata,
-          artifactId: persistedArtifact.id,
-          storageKey: persistedArtifact.storageKey,
-          contentType: persistedArtifact.contentType,
-          durationMs: persistedArtifact.durationMs ?? null,
-        },
+      await this.repository.transaction(async (repository) => {
+        await recordSubjectUsage(repository, input.subject, {
+          orgId: input.subject.orgId,
+          sourceType: "voice",
+          sourceId: input.voiceProfile.id,
+          metric: input.metric,
+          quantity: 1,
+          unit: "event",
+          metadata: {
+            ...input.metadata,
+            artifactId: persistedArtifact.id,
+            storageKey: persistedArtifact.storageKey,
+            contentType: persistedArtifact.contentType,
+            durationMs: persistedArtifact.durationMs ?? null,
+          },
+        });
+        await recordSubjectUsage(
+          repository,
+          input.subject,
+          persistedArtifact.durationMs === undefined
+            ? {
+                orgId: input.subject.orgId,
+                sourceType: "voice",
+                sourceId: input.voiceProfile.id,
+                metric: "audio.output_character",
+                quantity: governedText.length,
+                unit: "character",
+                metadata: { contentType: persistedArtifact.contentType },
+              }
+            : {
+                orgId: input.subject.orgId,
+                sourceType: "voice",
+                sourceId: input.voiceProfile.id,
+                metric: "audio.output_second",
+                quantity: persistedArtifact.durationMs / 1000,
+                unit: "second",
+                metadata: { contentType: persistedArtifact.contentType },
+              },
+        );
       });
       return publicVoiceArtifact(persistedArtifact);
     } catch {
@@ -482,11 +495,5 @@ export class VoiceService {
       );
     }
   }
-
-  private async authorizeArtifact(subject: AuthSubject, event: UsageEvent) {
-    await this.getAuthorizedVoice(event.sourceId, subject, "use");
-    const messageId = metadataString(event.metadata, "messageId");
-    if (messageId !== undefined)
-      await this.getAuthorizedAssistantMessage(subject, messageId);
-  }
 }
+import { writeAuditLog } from "./audit-log";

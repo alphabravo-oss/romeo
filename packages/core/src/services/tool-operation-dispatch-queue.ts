@@ -8,6 +8,7 @@ import type {
   ToolOperationDispatchRequestResult,
 } from "../domain/entities";
 import { ApiError } from "../errors";
+import { requirePublicApiErrorCode } from "../public-api-error-registry";
 import { completeBackgroundJob, startBackgroundJob } from "./job-service";
 import { writeAuditLog } from "./audit-log";
 import {
@@ -31,7 +32,7 @@ import { reportCleanupFailure } from "./telemetry-context";
 
 export async function assertDispatchApproval(
   input: DispatchToolOperationInput,
-  auditAction: string,
+  auditAction: DispatchAuditAction,
 ): Promise<void> {
   if (input.operation.approvalPolicy === "never") return;
   if (input.approved !== true) {
@@ -77,12 +78,12 @@ export async function assertDispatchApproval(
   if (validationError !== undefined) {
     await auditApprovalFailure(
       input,
-      validationError,
+      requirePublicApiErrorCode(validationError),
       auditAction,
       input.approvalRequestId,
     );
     throw new ApiError(
-      validationError,
+      requirePublicApiErrorCode(validationError),
       "Tool operation approval request is invalid for this dispatch.",
       409,
       {
@@ -135,7 +136,7 @@ function consumeDispatchApprovalRequest(
 async function auditApprovalFailure(
   input: DispatchToolOperationInput,
   errorCode: string,
-  action: string,
+  action: DispatchAuditAction,
   approvalRequestId?: string,
 ): Promise<void> {
   await writeAuditLog(input.repository, {
@@ -158,6 +159,10 @@ async function auditApprovalFailure(
     },
   });
 }
+
+type DispatchAuditAction =
+  | "tool.operation.dispatch"
+  | "tool.operation.dispatch.enqueue";
 
 export async function auditDispatchEnqueue(
   input: DispatchToolOperationInput,

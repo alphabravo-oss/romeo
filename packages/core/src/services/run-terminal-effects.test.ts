@@ -5,9 +5,69 @@ import type { BackgroundJob, RunRecord } from "../domain/entities";
 import { InMemoryRomeoRepository } from "../repositories/in-memory";
 import { RunEventSequencer } from "./run-event-sequencer";
 import { RunService } from "./run-service";
+import { persistTerminalRun } from "./run-terminal-effects";
+import { selectUsageCostEventIds } from "./usage-cost-reconciliation";
 import type { WebhookEmitter } from "./webhook-service";
 
 describe("run terminal effects", () => {
+  it("records reported reasoning once when terminal completion races", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const seededModel = await repository.getModel(
+      "model_openai_compatible_default",
+    );
+    if (seededModel === undefined) throw new Error("Expected seeded model.");
+    const model = {
+      ...seededModel,
+      pricing: { inputTokenUsd: 0.001, outputTokenUsd: 0.002 },
+    };
+    const run: RunRecord = {
+      id: "run_terminal_reasoning_race",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      chatId: "chat_welcome",
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: model.id,
+      providerId: model.providerId,
+      status: "running",
+      createdBy: "user_dev_admin",
+      createdAt: "2026-07-16T12:00:00.000Z",
+    };
+    await repository.createRun(run);
+    const complete = () =>
+      persistTerminalRun(repository, new RunEventSequencer(), {
+        run,
+        status: "completed",
+        assistantContent: "",
+        model,
+        providerUsage: {
+          outputTokens: 30,
+          reasoningTokens: 20,
+          source: "openai-compatible",
+        },
+      });
+
+    await Promise.all([complete(), complete()]);
+    const runUsage = (await repository.listUsageEvents(run.orgId)).filter(
+      (event) => event.sourceId === run.id,
+    );
+    expect(
+      runUsage.filter(
+        (event) => event.metric === "llm.reasoning_token.reported",
+      ),
+    ).toHaveLength(1);
+    expect(
+      runUsage.filter((event) => event.metric === "llm.output_token.reported"),
+    ).toHaveLength(1);
+    expect([...selectUsageCostEventIds(runUsage)]).toEqual([
+      expect.stringMatching(/^usage_/u),
+    ]);
+    const selected = runUsage.find((event) =>
+      selectUsageCostEventIds(runUsage).has(event.id),
+    );
+    expect(selected?.metric).toBe("llm.output_token.reported");
+  });
+
   it("allows only one of two service replicas to finalize a run", async () => {
     const repository = new InMemoryRomeoRepository();
     let webhookEmissions = 0;
@@ -37,6 +97,9 @@ describe("run terminal effects", () => {
       createdAt: "2026-07-16T12:00:00.000Z",
     };
     await repository.createRun(run);
+    const beforeVersion = BigInt(
+      (await repository.getChat(run.chatId))?.transcriptVersion ?? "0",
+    );
 
     await Promise.all([
       first.cancel(run.id, seededSubject),
@@ -48,6 +111,13 @@ describe("run terminal effects", () => {
       repository.listAuditLogs(run.orgId),
       repository.listBackgroundJobs(run.orgId),
     ]);
+    const terminalMessages = (await repository.listMessages(run.chatId)).filter(
+      (message) => message.id === `msg_run_terminal_${run.id}`,
+    );
+    expect(terminalMessages).toHaveLength(1);
+    expect(
+      BigInt((await repository.getChat(run.chatId))?.transcriptVersion ?? "0"),
+    ).toBeGreaterThan(beforeVersion);
 
     expect(
       usage.filter(

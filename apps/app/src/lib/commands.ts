@@ -6,6 +6,7 @@ export interface AppCommand {
   id: string;
   group: string;
   label: string;
+  keywords?: string[];
   icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }>;
   run: () => void;
 }

@@ -1,3 +1,4 @@
+import { Button } from "@romeo/ui";
 import Brain from "lucide-react/dist/esm/icons/brain.mjs";
 import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
 import { useState } from "react";
@@ -7,7 +8,10 @@ import { useLocale, type Locale, type MessageKey } from "../lib/i18n";
 import { formatDateTime } from "../lib/locale-format";
 import type { ChatReasoning, ChatRunWait } from "../lib/run-registry";
 import type { ChatToolCall } from "../lib/run-tool-calls";
-import type { ChatCitation, ChatRunActivity } from "./useWorkspaceController";
+import type {
+  ChatCitation,
+  ChatRunActivity,
+} from "./workspace-controller-types";
 
 /**
  * Open WebUI-style status stack: the current wait/retry line plus recent run
@@ -42,12 +46,13 @@ export function RunStatusStack({
 
   return (
     <div className="rm-status-stack" aria-live="polite">
-      <button
+      <Button
         aria-expanded={canExpand ? expanded : undefined}
         className="rm-status-stack__primary"
         disabled={!canExpand}
         onClick={() => canExpand && setExpanded((value) => !value)}
         type="button"
+        variant="ghost"
       >
         <span className={`rm-run-activity-dot ${primaryState}`} />
         <span className="rm-status-stack__label">{primaryLabel}</span>
@@ -56,7 +61,7 @@ export function RunStatusStack({
             {expanded ? t("statusHideSteps") : t("statusShowSteps")}
           </span>
         ) : null}
-      </button>
+      </Button>
       {expanded && history.length > 0 ? (
         <div className="rm-status-stack__history">
           {history.map((activity, index) => (
@@ -97,14 +102,11 @@ export function RunActivityList({
 }
 
 /**
- * What the model worked through before it started answering. Collapsed by
- * default and a plain <details>, so it is keyboard operable, announced as a
- * disclosure, and costs nothing when the provider sends no reasoning at all --
- * ChatMessageRow simply does not render it.
+ * A provider-designated safe reasoning summary. Collapsed by default and a
+ * plain <details>, so it is keyboard operable and announced as a disclosure.
  *
- * The body is text, not markdown: reasoning is a scratchpad, and rendering it
- * as rich content invites a half-written fence to reflow the transcript on
- * every token.
+ * The body is text, not markdown: even a safe summary is untrusted provider
+ * output and must not create active links or rich content.
  */
 export function ReasoningPanel({
   reasoning,
@@ -115,7 +117,7 @@ export function ReasoningPanel({
 }) {
   const { t } = useLocale();
   return (
-    <details className="rm-reasoning">
+    <details aria-live="polite" className="rm-reasoning">
       <summary>
         <Brain aria-hidden="true" size={13} />
         {streaming

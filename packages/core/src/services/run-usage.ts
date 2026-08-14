@@ -3,8 +3,11 @@ import type { RunEvent } from "@romeo/ai-runtime";
 
 import type { RunRecord } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import type { UsageMetricCode, UsageUnit } from "../usage-taxonomy";
+import type { ModelRoutingDecision } from "./model-routing";
 import { recordUsage } from "./record-usage";
 import { estimateTokens } from "./token-estimate";
+import { providerUsageSegmentsFromEvents } from "./run-provider-usage";
 
 export async function recordRunStartedUsage(
   repository: RomeoRepository,
@@ -14,14 +17,26 @@ export async function recordRunStartedUsage(
     model: BaseModel;
     historyMessages?: number;
     historyTruncated?: boolean;
+    imageInputCount?: number;
     knowledgeHitsDropped?: number;
+    routing?: ModelRoutingDecision;
   },
 ): Promise<void> {
-  const metadata = runMetadata(input.run);
+  const metadata = {
+    ...runMetadata(input.run),
+    ...(input.routing === undefined
+      ? {}
+      : {
+          routingMode: input.routing.mode,
+          routingRequestedModelId: input.routing.requestedModelId,
+          routingSelectedModelId: input.routing.selectedModelId,
+          routingCandidateCount: input.routing.candidateCount,
+        }),
+  };
   // The assembler's estimate is billed verbatim so the number that gated the context budget and the
   // number that bills cannot drift.
   const inputTokens = input.inputTokens;
-  await Promise.all([
+  const writes: Array<Promise<unknown>> = [
     recordUsage(repository, {
       orgId: input.run.orgId,
       workspaceId: input.run.workspaceId,
@@ -59,7 +74,23 @@ export async function recordRunStartedUsage(
         costFor(input.model, "input", inputTokens),
       ),
     }),
-  ]);
+  ];
+  const imageInputCount = input.imageInputCount ?? 0;
+  if (imageInputCount > 0)
+    writes.push(
+      recordUsage(repository, {
+        orgId: input.run.orgId,
+        workspaceId: input.run.workspaceId,
+        actorId: input.run.createdBy,
+        sourceType: "run",
+        sourceId: input.run.id,
+        metric: "image.input",
+        quantity: imageInputCount,
+        unit: "image",
+        metadata,
+      }),
+    );
+  await Promise.all(writes);
 }
 
 export async function recordRunTerminalUsage(
@@ -81,7 +112,7 @@ export async function recordRunTerminalUsage(
       actorId: input.run.createdBy,
       sourceType: "run" as const,
       sourceId: input.run.id,
-      metric: `run.${input.status}`,
+      metric: terminalUsageMetric(input.status),
       quantity: 1,
       unit: "run",
       metadata,
@@ -108,7 +139,30 @@ export async function recordRunTerminalUsage(
     );
   }
 
-  if (input.providerUsage !== undefined && input.model !== undefined) {
+  const usageSegments = providerUsageSegmentsFromEvents(input.runEvents ?? []);
+  for (const [usageSegmentIndex, segment] of usageSegments.entries()) {
+    const model = await repository.getModel(segment.modelId);
+    if (model === undefined) continue;
+    const segmentRun = {
+      ...input.run,
+      modelId: segment.modelId,
+      providerId: segment.providerId,
+    };
+    writes.push(
+      ...reportedUsageEvents(
+        repository,
+        segmentRun,
+        model,
+        { ...runMetadata(segmentRun), usageSegmentIndex },
+        segment.usage,
+      ),
+    );
+  }
+  if (
+    usageSegments.length === 0 &&
+    input.providerUsage !== undefined &&
+    input.model !== undefined
+  )
     writes.push(
       ...reportedUsageEvents(
         repository,
@@ -118,7 +172,6 @@ export async function recordRunTerminalUsage(
         input.providerUsage,
       ),
     );
-  }
 
   writes.push(...observabilityUsageEvents(repository, input, metadata));
 
@@ -219,12 +272,12 @@ function observabilityUsageEvents(
   return writes;
 }
 
-function observabilityUsage(
+function observabilityUsage<M extends RunObservabilityMetric>(
   repository: RomeoRepository,
   run: RunRecord,
-  metric: string,
+  metric: M,
   quantity: number,
-  unit: string,
+  unit: UsageUnit<M>,
   metadata: Record<string, unknown>,
 ): Promise<unknown> {
   return recordUsage(repository, {
@@ -240,6 +293,30 @@ function observabilityUsage(
   });
 }
 
+type RunObservabilityMetric = Extract<
+  UsageMetricCode,
+  | "provider.error"
+  | "run.duration"
+  | "run.output_throughput"
+  | "run.recovery"
+  | "run.time_to_first_token"
+>;
+
+function terminalUsageMetric(
+  status: RunRecord["status"],
+): "run.cancelled" | "run.completed" | "run.failed" {
+  switch (status) {
+    case "cancelled":
+      return "run.cancelled";
+    case "completed":
+      return "run.completed";
+    case "failed":
+      return "run.failed";
+    default:
+      throw new Error(`Cannot record terminal usage for run status ${status}.`);
+  }
+}
+
 function millisecondsBetween(start: string, end: string): number {
   return Math.max(0, Date.parse(end) - Date.parse(start));
 }
@@ -253,7 +330,7 @@ function reportedUsageEvents(
 ): Array<Promise<unknown>> {
   const usageMetadata = {
     ...metadata,
-    usageSource: usage.source ?? "provider",
+    usageSource: safeUsageSource(usage.source),
   };
   const writes: Array<Promise<unknown>> = [];
   if (usage.inputTokens !== undefined)
@@ -268,6 +345,20 @@ function reportedUsageEvents(
         "llm.input_token.reported",
       ),
     );
+  if (usage.cachedInputTokens !== undefined)
+    writes.push(
+      recordUsage(repository, {
+        orgId: run.orgId,
+        workspaceId: run.workspaceId,
+        actorId: run.createdBy,
+        sourceType: "run",
+        sourceId: run.id,
+        metric: "llm.cached_input_token.reported",
+        quantity: usage.cachedInputTokens,
+        unit: "token",
+        metadata: usageMetadata,
+      }),
+    );
   if (usage.outputTokens !== undefined)
     writes.push(
       recordTokenUsage(
@@ -279,6 +370,31 @@ function reportedUsageEvents(
         usage.outputTokens,
         "llm.output_token.reported",
       ),
+    );
+  if (
+    usage.reasoningTokens !== undefined &&
+    usage.outputTokens !== undefined &&
+    usage.reasoningTokens <= usage.outputTokens
+  )
+    writes.push(
+      recordUsage(repository, {
+        orgId: run.orgId,
+        workspaceId: run.workspaceId,
+        actorId: run.createdBy,
+        sourceType: "run",
+        sourceId: run.id,
+        metric: "llm.reasoning_token.reported",
+        quantity: usage.reasoningTokens,
+        unit: "token",
+        metadata: {
+          ...usageMetadata,
+          // Current reporting dialects include reasoning in outputTokens. This
+          // component cost is useful reconciliation evidence but deliberately
+          // does not participate in additive cost rollups.
+          costIncludedIn: "llm.output_token.reported",
+          ...optionalReasoningComponentCost(model, usage.reasoningTokens),
+        },
+      }),
     );
   if (usage.totalTokens !== undefined) {
     writes.push(
@@ -298,6 +414,29 @@ function reportedUsageEvents(
   return writes;
 }
 
+const trustedUsageSources = new Set([
+  "anthropic",
+  "ollama",
+  "openai-compatible",
+  "openai-responses-compatible",
+]);
+
+function safeUsageSource(source: string | undefined): string {
+  return source !== undefined && trustedUsageSources.has(source)
+    ? source
+    : "provider";
+}
+
+function optionalReasoningComponentCost(
+  model: BaseModel,
+  reasoningTokens: number,
+): { estimatedComponentCostUsd: number } | Record<string, never> {
+  const estimatedComponentCostUsd = costFor(model, "output", reasoningTokens);
+  return estimatedComponentCostUsd === undefined
+    ? {}
+    : { estimatedComponentCostUsd };
+}
+
 function recordTokenUsage(
   repository: RomeoRepository,
   run: RunRecord,
@@ -305,7 +444,7 @@ function recordTokenUsage(
   metadata: Record<string, unknown>,
   side: "input" | "output",
   tokens: number,
-  metric: string,
+  metric: "llm.input_token.reported" | "llm.output_token.reported",
 ): Promise<unknown> {
   return recordUsage(repository, {
     orgId: run.orgId,

@@ -2,6 +2,7 @@ import {
   directorySyncRoute,
   disableUserRoute,
   listUsersRoute,
+  queryUsersRoute,
   setUserLocalPasswordRoute,
   updateUserRoleRoute,
 } from "@romeo/contracts";
@@ -34,6 +35,24 @@ export function registerUserRoutes(app: RomeoApi): void {
         userTotal: page.userTotal,
       },
     });
+  });
+
+  app.openapi(queryUsersRoute, async (context) => {
+    const request = context.req.valid("json");
+    const page = await context
+      .get("services")
+      .users.queryTable(context.get("subject"), {
+        filters: request.filters,
+        limit: request.limit,
+        sort: request.sort.map((sort) => ({
+          direction: sort.direction,
+          field: sort.field,
+          ...(sort.nulls === undefined ? {} : { nulls: sort.nulls }),
+        })),
+        ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+        ...(request.search === undefined ? {} : { search: request.search }),
+      });
+    return context.json(page);
   });
 
   app.openapi(disableUserRoute, async (context) => {

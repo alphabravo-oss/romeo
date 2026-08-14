@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CircleAlert from "lucide-react/dist/esm/icons/circle-alert.mjs";
 import CircleCheck from "lucide-react/dist/esm/icons/circle-check.mjs";
@@ -6,14 +6,16 @@ import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 
 import { Button, Checkbox, Input, Select, StatusBadge } from "@romeo/ui";
 
-import { listShareTargets } from "../features";
+import { shareTargetsQueryOptions } from "../features/collaboration";
 import type { ShareTarget } from "../features/types";
 import {
-  getAgentReadiness,
-  listAgentShares,
-  revokeAgentGrant,
-  shareAgentAccess,
+  agentReadinessQueryOptions,
+  agentSharesQueryOptions,
 } from "../features/managed-models";
+import {
+  revokeAgentGrantMutationOptions,
+  shareAgentAccessMutationOptions,
+} from "../features/managed-models/mutation-options";
 import type { Agent, ManagedModelReadiness } from "../features/managed-models";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
@@ -41,23 +43,15 @@ export function AgentAccessPanel({
   activeAgent: Agent | undefined;
   onNotice: (notice: string | undefined) => void;
 }) {
-  const queryClient = useQueryClient();
   const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [selectedTargetKey, setSelectedTargetKey] = useState("");
   const [permissions, setPermissions] = useState(defaultPermissions);
 
-  const targetsQuery = useQuery({
-    queryKey: ["shareTargets", query],
-    queryFn: () => listShareTargets(query),
-  });
-  const sharesQuery = useQuery({
-    queryKey: ["agentShares", activeAgent?.id],
-    queryFn: () => listAgentShares(activeAgent!.id),
-    enabled: activeAgent !== undefined,
-  });
-  const shareMutation = useMutation({ mutationFn: shareAgentAccess });
-  const revokeMutation = useMutation({ mutationFn: revokeAgentGrant });
+  const targetsQuery = useQuery(shareTargetsQueryOptions({ query }, query));
+  const sharesQuery = useQuery(agentSharesQueryOptions(activeAgent?.id));
+  const shareMutation = useMutation(shareAgentAccessMutationOptions());
+  const revokeMutation = useMutation(revokeAgentGrantMutationOptions());
   const targets = targetsQuery.data ?? emptyTargets;
   const groupedShares = useMemo(
     () => groupAgentShares(sharesQuery.data ?? []),
@@ -70,21 +64,13 @@ export function AgentAccessPanel({
   const selectedTarget = targets.find(
     (target) => targetKey(target) === selectedTargetKey,
   );
-  const readinessQuery = useQuery({
-    queryKey: [
-      "agentReadiness",
-      activeAgent?.id,
-      selectedTarget?.principalType,
-      selectedTarget?.principalId,
-    ],
-    queryFn: () =>
-      getAgentReadiness({
-        agentId: activeAgent!.id,
-        principalType: selectedTarget!.principalType,
-        principalId: selectedTarget!.principalId,
-      }),
-    enabled: activeAgent !== undefined && selectedTarget !== undefined,
-  });
+  const readinessQuery = useQuery(
+    agentReadinessQueryOptions({
+      agentId: activeAgent?.id,
+      principalType: selectedTarget?.principalType,
+      principalId: selectedTarget?.principalId,
+    }),
+  );
   const selectedPermissions = (
     Object.entries(permissions) as Array<[AgentPermission, boolean]>
   )
@@ -138,16 +124,6 @@ export function AgentAccessPanel({
       );
       onNotice(t("agentAccessUpdated"));
       toast(t("agentAccessGranted"), "success");
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["agentShares", activeAgent.id],
-        }),
-        queryClient.invalidateQueries({ queryKey: ["agentGallery"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["agentReadiness", activeAgent.id],
-        }),
-        queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-      ]);
     } catch {
       toast(t("agentCouldNotGrantAccess"), "error");
     }
@@ -173,21 +149,11 @@ export function AgentAccessPanel({
           ),
         );
         toast(t("agentAccessRevoked"), "success");
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ["agentShares", activeAgent.id],
-          }),
-          queryClient.invalidateQueries({ queryKey: ["agentGallery"] }),
-          queryClient.invalidateQueries({
-            queryKey: ["agentReadiness", activeAgent.id],
-          }),
-          queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-        ]);
       } catch {
         toast(t("agentCouldNotRevokeAccess"), "error");
       }
     },
-    [activeAgent, queryClient, revokeMutation, t],
+    [activeAgent, revokeMutation, t],
   );
 
   function editShare(row: AgentAccessRow) {
@@ -340,7 +306,10 @@ export function AgentAccessPanel({
                   {t("managedModelReadinessChecking")}…
                 </div>
               ) : readinessQuery.isError ? (
-                <div className="rm-managed-model-readiness is-blocked">
+                <div
+                  className="rm-managed-model-readiness is-blocked"
+                  role="alert"
+                >
                   {t("managedModelReadinessFailed")}
                 </div>
               ) : readinessQuery.data ? (

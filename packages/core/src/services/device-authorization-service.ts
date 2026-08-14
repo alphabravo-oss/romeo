@@ -10,7 +10,7 @@ import {
 
 import type { DeviceAuthorization } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
-import { ApiError, notFound } from "../errors";
+import { ApiError, AuthenticationError, notFound } from "../errors";
 import { createId } from "../ids";
 
 export type DeviceAuthorizationSummary = Omit<
@@ -111,17 +111,17 @@ export class DeviceAuthorizationService {
       const authorization =
         await repository.getDeviceAuthorizationByRefreshHash(refreshTokenHash);
       if (!authorization || authorization.revokedAt !== undefined) {
-        throw new AuthorizationError(
+        throw new AuthenticationError(
           "Device refresh token is invalid or revoked.",
         );
       }
       if (new Date(authorization.expiresAt).getTime() <= Date.now()) {
-        throw new AuthorizationError("Device refresh token is expired.");
+        throw new AuthenticationError("Device refresh token is expired.");
       }
 
       const user = await repository.getCurrentUser(authorization.userId);
       if (!user || user.orgId !== authorization.orgId)
-        throw new AuthorizationError(
+        throw new AuthenticationError(
           "Device authorization owner was not found.",
         );
 
@@ -147,13 +147,26 @@ export class DeviceAuthorizationService {
         scopes: authorization.scopes,
         createdAt: now.toISOString(),
       });
-      const refreshed = await repository.updateDeviceAuthorization({
+      const nextAuthorization = {
         ...authorization,
         hashedRefreshToken: refreshTokenNextHash,
         accessApiKeyId: apiKey.id,
         lastRefreshedAt: now.toISOString(),
         updatedAt: now.toISOString(),
+      };
+      const refreshed = await repository.rotateDeviceAuthorization({
+        authorization: nextAuthorization,
+        expectedRefreshHash: refreshTokenHash,
       });
+      if (refreshed === undefined) {
+        await repository.updateApiKey({
+          ...apiKey,
+          revokedAt: now.toISOString(),
+        });
+        throw new AuthenticationError(
+          "Device refresh token has already been rotated.",
+        );
+      }
 
       await this.audit(
         repository,
@@ -233,14 +246,14 @@ export class DeviceAuthorizationService {
     }
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     repository: RomeoRepository,
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
   ): Promise<void> {
-    await repository.createAuditLog({
+    await writeAuditLog(repository, {
       id: createId("audit"),
       orgId: subject.orgId,
       actorId: subject.id,
@@ -283,3 +296,8 @@ function toSummary(
   const { hashedRefreshToken: _hashedRefreshToken, ...summary } = authorization;
   return summary;
 }
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";

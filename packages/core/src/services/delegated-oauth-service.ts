@@ -15,14 +15,12 @@ import type {
 import type { DataConnector } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
+import { createId } from "../ids";
 import {
   DelegatedOAuthConfiguration,
   providerDefinitions,
 } from "./delegated-oauth-configuration";
-import type {
-  DelegatedOAuthState,
-  ProviderRevocationResult,
-} from "./delegated-oauth-internal-types";
+import type { ProviderRevocationResult } from "./delegated-oauth-internal-types";
 import {
   addConnectionPostureWarnings,
   connectionRecord,
@@ -32,11 +30,8 @@ import {
 } from "./delegated-oauth-records";
 import {
   auditDelegatedOAuth,
-  callbackStateJob,
-  callbackStateReplayError,
   codeChallenge,
-  isCallbackStateReplayError,
-  isUniqueConstraintError,
+  consumeDelegatedOAuthCallbackState,
   normalizeAppOrigin,
   randomToken,
   sanitizeReturnTo,
@@ -44,7 +39,10 @@ import {
   stateSubject,
 } from "./delegated-oauth-support";
 import { DelegatedOAuthTokenRuntime } from "./delegated-oauth-token-runtime";
-import { DelegatedOAuthTokenVault } from "./delegated-oauth-token-vault";
+import {
+  delegatedOAuthTokenContext,
+  DelegatedOAuthTokenVault,
+} from "./delegated-oauth-token-vault";
 
 const stateTtlMs = 10 * 60 * 1000;
 
@@ -253,7 +251,7 @@ export class DelegatedOAuthService {
     const definition = this.configuration.providerDefinition(stored.providerId);
     const clientId = this.configuration.clientId(definition.id);
     this.configuration.assertProviderReady(definition.id, clientId);
-    await this.consumeCallbackState(stored);
+    await consumeDelegatedOAuthCallbackState(this.repository, stored);
     const providerToken = await this.tokenRuntime.exchangeProviderToken(
       definition,
       {
@@ -268,7 +266,6 @@ export class DelegatedOAuthService {
     const tokenVault = new DelegatedOAuthTokenVault(
       this.configuration.tokenEncryptionKey,
     );
-    const token = tokenVault.encrypt(storedToken(providerToken, now));
     const actor = stateSubject(stored);
     const connection = await this.repository.transaction(async (repository) => {
       const existing =
@@ -280,11 +277,25 @@ export class DelegatedOAuthService {
           connectorType: stored.connectorType,
           providerAccountId: providerToken.providerAccountId,
         });
+      const connectionId =
+        existing?.id ?? createId("delegated_oauth_connection");
+      const token = tokenVault.encrypt(
+        storedToken(providerToken, now),
+        delegatedOAuthTokenContext({
+          connectorType: stored.connectorType,
+          id: connectionId,
+          orgId: stored.orgId,
+          providerId: stored.providerId,
+          userId: stored.userId,
+          workspaceId: stored.workspaceId,
+        }),
+      );
       const saved =
         existing === undefined
           ? await repository.createDelegatedOAuthConnection(
               connectionRecord({
                 existing,
+                id: connectionId,
                 now,
                 providerToken,
                 state: stored,
@@ -294,6 +305,7 @@ export class DelegatedOAuthService {
           : await repository.updateDelegatedOAuthConnection(
               connectionRecord({
                 existing,
+                id: connectionId,
                 now,
                 providerToken,
                 state: stored,
@@ -462,24 +474,5 @@ export class DelegatedOAuthService {
     }
     const usable = await this.tokenRuntime.getUsableToken(connection);
     return usable.token.accessToken;
-  }
-
-  private async consumeCallbackState(
-    state: DelegatedOAuthState,
-  ): Promise<void> {
-    const job = callbackStateJob(state, new Date().toISOString());
-    try {
-      await this.repository.transaction(async (repository) => {
-        const existing = (
-          await repository.listBackgroundJobs(state.orgId)
-        ).find((item) => item.id === job.id);
-        if (existing !== undefined) throw callbackStateReplayError();
-        await repository.createBackgroundJob(job);
-      });
-    } catch (error) {
-      if (isCallbackStateReplayError(error)) throw error;
-      if (isUniqueConstraintError(error)) throw callbackStateReplayError();
-      throw error;
-    }
   }
 }

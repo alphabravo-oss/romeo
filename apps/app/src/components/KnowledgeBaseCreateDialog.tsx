@@ -1,11 +1,12 @@
 import { Button, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 
-import { createKnowledgeBase } from "../features";
+import { createKnowledgeBaseMutationOptions } from "../features";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
 import { FormDialog } from "./FormDialog";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 type KnowledgeScope = "user_private" | "workspace" | "org" | "shared";
 
@@ -23,8 +24,7 @@ export function KnowledgeBaseCreateDialog({
   workspaceId: string | undefined;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const createMutation = useMutation({ mutationFn: createKnowledgeBase });
+  const createMutation = useMutation(createKnowledgeBaseMutationOptions());
   const form = useForm({
     defaultValues: {
       name: "",
@@ -38,18 +38,13 @@ export function KnowledgeBaseCreateDialog({
           name: value.name.trim(),
           scope: value.scope,
         });
-        await queryClient.invalidateQueries({
-          queryKey: ["knowledgeBases", workspaceId],
-        });
         toast(t("knowledgeBaseCreated"), "success");
         onCreated(created.id);
         form.reset();
         onClose();
       } catch (caught) {
         toast(
-          caught instanceof Error
-            ? caught.message
-            : t("knowledgeCouldNotCreateBase"),
+          safeUserErrorMessage(caught, t("knowledgeCouldNotCreateBase")),
           "error",
         );
       }

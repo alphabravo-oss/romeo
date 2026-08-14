@@ -1,19 +1,10 @@
-import { Button, DropdownMenu, Input, Textarea } from "@romeo/ui";
+import { Button, DropdownMenu, InlineError, Input, Textarea } from "@romeo/ui";
 import ArrowUp from "lucide-react/dist/esm/icons/arrow-up.mjs";
-import BookOpen from "lucide-react/dist/esm/icons/book-open.mjs";
 import Clock3 from "lucide-react/dist/esm/icons/clock-3.mjs";
-import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
-import Globe2 from "lucide-react/dist/esm/icons/globe-2.mjs";
-import Images from "lucide-react/dist/esm/icons/images.mjs";
-import Library from "lucide-react/dist/esm/icons/library.mjs";
-import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen.mjs";
-import Paperclip from "lucide-react/dist/esm/icons/paperclip.mjs";
 import Plus from "lucide-react/dist/esm/icons/plus.mjs";
-import ScanSearch from "lucide-react/dist/esm/icons/scan-search.mjs";
-import Search from "lucide-react/dist/esm/icons/search.mjs";
 import Square from "lucide-react/dist/esm/icons/square.mjs";
+import Globe2 from "lucide-react/dist/esm/icons/globe-2.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
-import Zap from "lucide-react/dist/esm/icons/zap.mjs";
 import {
   useCallback,
   useLayoutEffect,
@@ -24,16 +15,26 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { listKnowledgeBases } from "../features/knowledge";
+import { knowledgeBasesQueryOptions } from "../features/knowledge";
 import { useLocale } from "../lib/i18n";
 import { canPerformChatWriteAction } from "./chat-enterprise";
 import { ChatComposerDialogs } from "./ChatComposerDialogs";
 import { composerMenuId, useComposerMenu } from "./ChatComposerMenus";
 import type { ChatComposerProps } from "./chat-composer-props";
 import { listImageGenerationModels } from "./chat-composer-utils";
+import {
+  allowFileDrop,
+  claimDroppedFiles,
+  claimPastedFiles,
+} from "./composer-attachment-input";
 import { ComposerModelSelect } from "./ComposerModelSelect";
+import { ComposerTurnModeControls } from "./ComposerTurnModeControls";
 import { ContextMeter } from "./ContextMeter";
 import { VoiceInputButton } from "./VoiceInputButton";
+import {
+  buildComposerCapabilityItems,
+  ComposerPendingAttachments,
+} from "./ChatComposerCapabilities";
 
 export function ChatComposer({
   attachedUrls,
@@ -63,8 +64,13 @@ export function ChatComposer({
   onGenerateImages,
   onInspectContext,
   onKnowledgeBaseIdsChange,
+  onCancelAttachment,
+  onMoveDocumentAttachment,
+  onMoveImageAttachment,
   onRemoveDocumentAttachment,
   onRemoveImageAttachment,
+  onRetryDocumentAttachment,
+  onSelectDocumentPage,
   onRemoveUrl,
   customModels,
   selectedCustomModelId,
@@ -74,6 +80,9 @@ export function ChatComposer({
   onSubmit,
   onToggleWebSearch,
   onToggleAgenticRag,
+  onRoutingModeChange,
+  onResearchModeChange,
+  onReasoningModeChange,
   onTranscribeAudio,
   onTranscriptionError,
   providers,
@@ -83,6 +92,9 @@ export function ChatComposer({
   agenticRagAvailable,
   agenticRagForced,
   agenticRagEnabled,
+  routingMode,
+  researchMode,
+  reasoningMode,
   workspaceId,
 }: ChatComposerProps) {
   const { t } = useLocale();
@@ -94,12 +106,12 @@ export function ChatComposer({
   const [noteLibraryOpen, setNoteLibraryOpen] = useState(false);
   const [urlDialogOpen, setUrlDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
-  const knowledgeBasesQuery = useQuery({
-    queryKey: ["knowledgeBases", workspaceId],
-    queryFn: () => listKnowledgeBases(workspaceId!),
-    enabled:
-      workspaceId !== undefined && knowledgeBaseIdsOverride !== undefined,
-  });
+  const knowledgeBasesQuery = useQuery(
+    knowledgeBasesQueryOptions(
+      workspaceId,
+      knowledgeBaseIdsOverride !== undefined,
+    ),
+  );
   const knowledgeOverrideLabel = useMemo(() => {
     if (knowledgeBaseIdsOverride === undefined) return undefined;
     if (knowledgeBaseIdsOverride.length === 0) {
@@ -121,11 +133,10 @@ export function ChatComposer({
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const pendingCaret = useRef<number | undefined>(undefined);
 
-  // A menu selection can land mid-sentence, and React writing .value on a
-  // controlled textarea drops the caret at the end. The write is deferred to the
-  // layout effect below, which runs after the new value is in the DOM.
+  // Defer menu-selection caret restoration until React writes the textarea.
   const replaceDraft = useCallback(
     (value: string, nextCaret: number) => {
       pendingCaret.current = nextCaret;
@@ -180,91 +191,24 @@ export function ChatComposer({
 
   // Consolidated capabilities surface (E3): attach, libraries, web/url, image,
   // and context inspect live in one menu so the composer stays clean.
-  const composerMenuItems = [
-    {
-      disabled: isStreaming || !canAttach,
-      label: (
-        <span className="rm-composer-menu-item">
-          <Paperclip aria-hidden="true" size={16} />
-          {t("attach")}
-        </span>
-      ),
-      onSelect: () => fileInputRef.current?.click(),
-    },
-    {
-      disabled: !canSend,
-      label: (
-        <span className="rm-composer-menu-item">
-          <Zap aria-hidden="true" size={16} />
-          {t("promptLibrary")}
-        </span>
-      ),
-      onSelect: () => setPromptLibraryOpen(true),
-    },
-    {
-      disabled: !canAttach,
-      label: (
-        <span className="rm-composer-menu-item">
-          <Library aria-hidden="true" size={16} />
-          {t("files")}
-        </span>
-      ),
-      onSelect: () => setFileLibraryOpen(true),
-    },
-    {
-      disabled: !canSend,
-      label: (
-        <span className="rm-composer-menu-item">
-          <BookOpen aria-hidden="true" size={16} />
-          {t("composerKnowledgePicker")}
-        </span>
-      ),
-      onSelect: () => setKnowledgeLibraryOpen(true),
-    },
-    {
-      disabled: !canSend,
-      label: (
-        <span className="rm-composer-menu-item">
-          <NotebookPen aria-hidden="true" size={16} />
-          {t("notes")}
-        </span>
-      ),
-      onSelect: () => setNoteLibraryOpen(true),
-    },
-    {
-      disabled: !canAttach,
-      label: (
-        <span className="rm-composer-menu-item">
-          <Globe2 aria-hidden="true" size={16} />
-          {t("url")}
-        </span>
-      ),
-      onSelect: () => setUrlDialogOpen(true),
-    },
-    {
-      disabled: imageModels.length === 0 || !canSend,
-      label: (
-        <span className="rm-composer-menu-item">
-          <Images aria-hidden="true" size={16} />
-          {t("image")}
-        </span>
-      ),
-      onSelect: () => setImageDialogOpen(true),
-    },
-    {
-      disabled: !canInspectContext || isStreaming || isInspectingContext,
-      label: (
-        <span
-          className="rm-composer-menu-item"
-          title={canInspectContext ? t("inspectNext") : t("inspectFirst")}
-        >
-          <ScanSearch aria-hidden="true" size={16} />
-          {t("inspectContextCapability")}
-        </span>
-      ),
-      onSelect: onInspectContext,
-    },
-  ];
+  const composerMenuItems = buildComposerCapabilityItems({
+    cameraInputRef,
+    canAttach,
+    canInspectContext,
+    canSend,
+    fileInputRef,
+    hasImageModels: imageModels.length > 0,
+    isInspectingContext,
+    isStreaming,
+    onInspectContext,
+    openFileLibrary: () => setFileLibraryOpen(true),
+    openImageDialog: () => setImageDialogOpen(true),
+    openKnowledgeLibrary: () => setKnowledgeLibraryOpen(true),
+    openNoteLibrary: () => setNoteLibraryOpen(true),
+    openPromptLibrary: () => setPromptLibraryOpen(true),
+    openUrlDialog: () => setUrlDialogOpen(true),
+    t,
+  });
 
   return (
     <>
@@ -278,6 +222,8 @@ export function ChatComposer({
       ) : null}
       <form
         className="rm-composer-wrap"
+        onDragOver={(event) => allowFileDrop(event, canAttach)}
+        onDrop={(event) => claimDroppedFiles(event, canAttach, onAttachFiles)}
         onSubmit={(event) => {
           if (!canSend) {
             event.preventDefault();
@@ -289,69 +235,21 @@ export function ChatComposer({
         <label className="sr-only" htmlFor="prompt">
           {t("message")}
         </label>
-        {imageAttachments.length > 0 ? (
-          <div className="rm-pending-attachments">
-            {imageAttachments.map((attachment) => (
-              <div className="rm-pending-attachment" key={attachment.id}>
-                <img
-                  alt={attachment.fileName}
-                  height={48}
-                  src={attachment.previewUrl}
-                  width={48}
-                />
-                <span className="truncate">{attachment.fileName}</span>
-                <Button
-                  aria-label={`${t("removeAttachment")}: ${attachment.fileName}`}
-                  disabled={isStreaming}
-                  onClick={() => onRemoveImageAttachment(attachment.id)}
-                  title={`${t("removeAttachment")}: ${attachment.fileName}`}
-                  type="button"
-                >
-                  <X aria-hidden="true" size={12} />
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {documentAttachments.length > 0 ? (
-          <div className="rm-pending-attachments">
-            {documentAttachments.map((attachment) => (
-              <div
-                className="rm-pending-attachment document"
-                key={attachment.id}
-              >
-                <FileText aria-hidden="true" size={18} />
-                <span className="truncate">{attachment.fileName}</span>
-                <Button
-                  aria-label={`${t("removeAttachment")}: ${attachment.fileName}`}
-                  disabled={isStreaming}
-                  onClick={() => onRemoveDocumentAttachment(attachment.id)}
-                  title={`${t("removeAttachment")}: ${attachment.fileName}`}
-                  type="button"
-                >
-                  <X aria-hidden="true" size={12} />
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {knowledgeOverrideLabel !== undefined ? (
-          <div className="rm-pending-attachments">
-            <div className="rm-pending-attachment document">
-              <BookOpen aria-hidden="true" size={16} />
-              <span className="truncate">{knowledgeOverrideLabel}</span>
-              <Button
-                aria-label={t("composerKnowledgeClearOverride")}
-                disabled={isStreaming}
-                onClick={() => onKnowledgeBaseIdsChange(undefined)}
-                title={t("composerKnowledgeClearOverride")}
-                type="button"
-              >
-                <X aria-hidden="true" size={12} />
-              </Button>
-            </div>
-          </div>
-        ) : null}
+        <ComposerPendingAttachments
+          documentAttachments={documentAttachments}
+          imageAttachments={imageAttachments}
+          isStreaming={isStreaming}
+          knowledgeOverrideLabel={knowledgeOverrideLabel}
+          onClearKnowledgeOverride={() => onKnowledgeBaseIdsChange(undefined)}
+          onCancelAttachment={onCancelAttachment}
+          onMoveDocument={onMoveDocumentAttachment}
+          onMoveImage={onMoveImageAttachment}
+          onRemoveDocument={onRemoveDocumentAttachment}
+          onRemoveImage={onRemoveImageAttachment}
+          onRetryDocument={onRetryDocumentAttachment}
+          onSelectDocumentPage={onSelectDocumentPage}
+          selectedModel={models.find((model) => model.id === selectedModelId)}
+        />
         <div className="rm-composer">
           <Textarea
             name="prompt"
@@ -367,11 +265,9 @@ export function ChatComposer({
               onDraftChange(event.currentTarget.value);
             }}
             onKeyDown={handleDraftKeyDown}
-            onPaste={(event) => {
-              if (!canAttach) return;
-              const files = Array.from(event.clipboardData.files);
-              if (files.length > 0) onAttachFiles(files);
-            }}
+            onPaste={(event) =>
+              claimPastedFiles(event, canAttach, onAttachFiles)
+            }
             placeholder={
               !canSend
                 ? t("readOnlyChat")
@@ -391,7 +287,7 @@ export function ChatComposer({
               here, and the input itself remains a labelled keyboard target. */}
           <Input
             name="chat-image-attachment"
-            accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.docx,.pptx,.xlsx,text/plain,text/markdown,text/csv,application/json,text/html"
+            accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.docx,.pptx,.xlsx,text/plain,text/markdown,text/csv,application/json,text/html,audio/*,video/*"
             aria-label={t("attach")}
             className="rm-ui-visually-hidden"
             disabled={isStreaming}
@@ -403,6 +299,20 @@ export function ChatComposer({
             }}
             multiple
             ref={fileInputRef}
+            type="file"
+          />
+          <Input
+            accept="image/*"
+            aria-label={t("trayCapturePhoto")}
+            capture="environment"
+            className="rm-ui-visually-hidden"
+            disabled={isStreaming}
+            onChange={(event) => {
+              const files = Array.from(event.currentTarget.files ?? []);
+              event.currentTarget.value = "";
+              onAttachFiles(files);
+            }}
+            ref={cameraInputRef}
             type="file"
           />
           <div className="rm-composer-actions">
@@ -431,39 +341,36 @@ export function ChatComposer({
                 : { onSelectCustomModel })}
               onSelectModel={onSelectModel}
               onToggleDefaultModel={onToggleDefaultModel}
+              requiresReasoning={
+                reasoningMode !== "default" && reasoningMode !== "off"
+              }
+              requiresTools={agenticRagEnabled}
+              requiresVision={
+                imageAttachments.length > 0 || documentAttachments.length > 0
+              }
               {...(selectedCustomModelId === undefined
                 ? {}
                 : { selectedCustomModelId })}
               selectedModelId={selectedModelId}
             />
-            <Button
-              aria-pressed={webSearchEnabled}
-              aria-label={t("search")}
-              className={`rm-icon-button ${webSearchEnabled ? "active" : ""}`}
-              disabled={!canSend}
-              onClick={() => onToggleWebSearch(!webSearchEnabled)}
-              title={t("search")}
-              type="button"
-            >
-              <Search aria-hidden="true" size={17} />
-            </Button>
-            {agenticRagAvailable ? (
-              <Button
-                aria-pressed={agenticRagEnabled}
-                aria-label={t("agenticRag")}
-                className={`rm-icon-button ${agenticRagEnabled ? "active" : ""}`}
-                disabled={!canSend || agenticRagForced}
-                onClick={() => onToggleAgenticRag(!agenticRagEnabled)}
-                title={
-                  agenticRagForced
-                    ? t("agenticRagForcedHelp")
-                    : t("agenticRagHelp")
-                }
-                type="button"
-              >
-                <ScanSearch aria-hidden="true" size={17} />
-              </Button>
-            ) : null}
+            <ComposerTurnModeControls
+              agenticRagAvailable={agenticRagAvailable}
+              agenticRagEnabled={agenticRagEnabled}
+              agenticRagForced={agenticRagForced}
+              canSend={canSend}
+              isStreaming={isStreaming}
+              models={models}
+              onAgenticRagChange={onToggleAgenticRag}
+              onReasoningModeChange={onReasoningModeChange}
+              onResearchModeChange={onResearchModeChange}
+              onRoutingModeChange={onRoutingModeChange}
+              onWebSearchChange={onToggleWebSearch}
+              reasoningMode={reasoningMode}
+              researchMode={researchMode}
+              routingMode={routingMode}
+              selectedModelId={selectedModelId}
+              webSearchEnabled={webSearchEnabled}
+            />
             {canInspectContext ? (
               <ContextMeter
                 contextWindow={
@@ -556,7 +463,7 @@ export function ChatComposer({
             })}
           </div>
         ) : null}
-        {error ? <div className="rm-composer-error">{error}</div> : null}
+        {error ? <InlineError role="alert">{error}</InlineError> : null}
       </form>
       <ChatComposerDialogs
         draft={draft}

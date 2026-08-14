@@ -9,6 +9,7 @@ import {
   extractKnowledgeSourceBytes,
 } from "./knowledge-ingestion";
 import { getAuthorizedKnowledgeBase } from "./knowledge-access";
+import { readKnowledgeObject } from "./knowledge-object-read";
 import { indexKnowledgeSource } from "./knowledge-source-indexing";
 import { recordSubjectUsage } from "./record-usage";
 import { emitWebhookEvent } from "./webhook-events";
@@ -49,13 +50,10 @@ export async function completeKnowledgeUpload(input: {
     );
   }
 
-  const bytes = await input.objectStore.getObject(source.objectKey);
-  if (bytes === undefined)
-    throw new ApiError(
-      "upload_object_missing",
-      "Uploaded object was not found in object storage.",
-      409,
-    );
+  const bytes = await readKnowledgeObject(input.objectStore, {
+    key: source.objectKey,
+    sizeBytes: source.sizeBytes,
+  });
   const extracted = extractKnowledgeSourceBytes(bytes, source.mimeType);
   const completed = await input.repository.transaction(async (repository) => {
     const completed = await indexKnowledgeSource(

@@ -89,6 +89,26 @@ export function shouldClearActiveChat(state: {
   return !state.isStreaming;
 }
 
+/**
+ * A URL `?leaf=` is only valid for the chat the URL still names. Chat
+ * selection updates `activeChatId` before the route search is replaced, so
+ * applying the previous chat's leaf to the new chat 409s.
+ */
+export function readerScopedBranchLeaf(state: {
+  activeChatId: string | undefined;
+  requestedChatId: string | undefined;
+  requestedLeafMessageId: string | undefined;
+}): string | undefined {
+  if (state.requestedLeafMessageId === undefined) return undefined;
+  if (
+    state.requestedChatId !== undefined &&
+    state.requestedChatId !== state.activeChatId
+  ) {
+    return undefined;
+  }
+  return state.requestedLeafMessageId;
+}
+
 export function isActiveChatRemoval(
   activeChatId: string | undefined,
   event: { action: string; chatId: string } | undefined,

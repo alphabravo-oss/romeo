@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { defaultProviderCapabilities } from "@romeo/providers";
 
-import { samplingForModel, samplingFromParameters } from "./run-sampling";
+import {
+  chatParametersFromParameters,
+  requestedChatParametersForModel,
+  samplingFromParameters,
+} from "./run-sampling";
 
 // A managed model version stores `parameters` as an open record, and before this existed nothing
 // read it — temperature was saved, versioned, diffed and audited while every request went out with
@@ -44,7 +48,7 @@ describe("samplingFromParameters", () => {
     expect(samplingFromParameters({})).toBeUndefined();
   });
 
-  it("drops temperature and top-p when the model does not accept them", () => {
+  it("keeps requested values for the centralized provider resolution boundary", () => {
     const model = {
       id: "model_reasoner",
       providerId: "provider_a",
@@ -59,7 +63,41 @@ describe("samplingFromParameters", () => {
       contextWindow: 200_000,
     };
     expect(
-      samplingForModel(model, { temperature: 0.7, topP: 0.9, maxTokens: 512 }),
-    ).toEqual({ maxTokens: 512 });
+      requestedChatParametersForModel(model, {
+        temperature: 0.7,
+        topP: 0.9,
+        maxTokens: 512,
+      }),
+    ).toEqual({
+      sampling: { temperature: 0.7, topP: 0.9, maxTokens: 512 },
+    });
+  });
+
+  it("extracts only bounded reasoning and structured-output request shapes", () => {
+    expect(
+      chatParametersFromParameters({
+        reasoning: { effort: "high", summary: "concise" },
+        structuredOutput: {
+          type: "json_schema",
+          name: "answer",
+          schema: { type: "object" },
+          strict: true,
+        },
+      }),
+    ).toEqual({
+      reasoning: { effort: "high", summary: "concise" },
+      structuredOutput: {
+        type: "json_schema",
+        name: "answer",
+        schema: { type: "object" },
+        strict: true,
+      },
+    });
+    expect(
+      chatParametersFromParameters({
+        reasoningEffort: "unbounded",
+        structuredOutput: { type: "template", prompt: "private" },
+      }),
+    ).toEqual({});
   });
 });

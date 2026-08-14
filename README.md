@@ -28,7 +28,7 @@ your data on your own infrastructure.
 
 ## Quick start
 
-You need [Node.js](https://nodejs.org) 22+ and pnpm 11.7.0.
+You need [Node.js](https://nodejs.org) 24.x and pnpm 11.7.0.
 
 ```bash
 git clone https://github.com/alphabravo-oss/romeo.git
@@ -85,6 +85,10 @@ That brings up the app with Postgres, Valkey, and S3-compatible object
 storage, and runs migrations first. For Kubernetes, a Helm chart lives in
 `deploy/helm` (external Postgres or CloudNativePG, HPA, NetworkPolicies,
 backup CronJob).
+
+The example fails closed: `DEV_SEEDED_LOGIN=false`. For an isolated local demo
+only, you may explicitly set it to `true`; doing so gives unauthenticated
+callers administrator access, so never expose that process beyond loopback.
 
 ---
 
@@ -156,10 +160,10 @@ with an OpenAPI spec, a TypeScript SDK, a dependency-free Python SDK, and a
   until deployment credentials are supplied; adapter tests are not presented
   as live-provider proof.
 - Multi-replica PostgreSQL/object-storage recovery, browser-engine coverage,
-  load/soak thresholds, and production bundle budgets have repeatable passing
-  acceptance evidence. Credentialed target-provider checks, deployment egress
-  enforcement, and immutable-backup-platform expiry remain release gates. Track
-  the exact evidence status in
+  and load/soak thresholds have repeatable acceptance evidence. Production
+  bundle budgets are currently a release gate, alongside credentialed
+  target-provider checks, deployment egress enforcement, and
+  immutable-backup-platform expiry. Track the exact evidence status in
   [`docs/plans/2026-07-16-openwebui-core-production-readiness.md`](docs/plans/2026-07-16-openwebui-core-production-readiness.md).
 
 ### Credentialed provider acceptance

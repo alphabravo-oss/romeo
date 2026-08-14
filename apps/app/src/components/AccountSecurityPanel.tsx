@@ -1,15 +1,15 @@
 import { Button, Input } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import {
-  confirmTotpEnrollment,
-  disableTotpFactor,
-  generateRecoveryCodes,
-  getLocalAuthStatus,
-  setLocalPassword,
-  startTotpEnrollment,
+  confirmTotpEnrollmentMutationOptions,
+  disableTotpFactorMutationOptions,
+  generateRecoveryCodesMutationOptions,
+  localAuthStatusQueryOptions,
+  setLocalPasswordMutationOptions,
+  startTotpEnrollmentMutationOptions,
 } from "../features/auth";
 import type { TotpEnrollment } from "@romeo/api-client/generated/sdk";
 import { PanelState } from "../lib/panel-state";
@@ -24,12 +24,8 @@ import { AccountMfaDialogs, type RecoveryStep } from "./AccountMfaDialogs";
 import { isLockoutRisk, recoveryCodesRemaining } from "./mfa-recovery";
 
 export function AccountSecurityPanel() {
-  const queryClient = useQueryClient();
   const { t } = useLocale();
-  const statusQuery = useQuery({
-    queryKey: ["localAuthStatus"],
-    queryFn: getLocalAuthStatus,
-  });
+  const statusQuery = useQuery(localAuthStatusQueryOptions());
 
   const [pwOpen, setPwOpen] = useState(false);
   const [enrollment, setEnrollment] = useState<TotpEnrollment>();
@@ -40,14 +36,11 @@ export function AccountSecurityPanel() {
   const [disableFactorId, setDisableFactorId] = useState<string>();
   const [disableCode, setDisableCode] = useState("");
 
-  const passwordMutation = useMutation({ mutationFn: setLocalPassword });
-  const enrollMutation = useMutation({ mutationFn: startTotpEnrollment });
-  const confirmMutation = useMutation({ mutationFn: confirmTotpEnrollment });
-  const recoveryMutation = useMutation({ mutationFn: generateRecoveryCodes });
-  const disableMutation = useMutation({ mutationFn: disableTotpFactor });
-
-  const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: ["localAuthStatus"] });
+  const passwordMutation = useMutation(setLocalPasswordMutationOptions());
+  const enrollMutation = useMutation(startTotpEnrollmentMutationOptions());
+  const confirmMutation = useMutation(confirmTotpEnrollmentMutationOptions());
+  const recoveryMutation = useMutation(generateRecoveryCodesMutationOptions());
+  const disableMutation = useMutation(disableTotpFactorMutationOptions());
 
   const passwordForm = useForm({
     defaultValues: {
@@ -65,7 +58,6 @@ export function AccountSecurityPanel() {
           newPassword: value.newPassword,
           ...(hasPassword ? { currentPassword: value.currentPassword } : {}),
         });
-        await refresh();
         toast(hasPassword ? t("passwordChanged") : t("passwordSet"), "success");
         passwordForm.reset();
         setPwOpen(false);
@@ -92,7 +84,6 @@ export function AccountSecurityPanel() {
         factorId: enrollment.factor.id,
         code: totpCode,
       });
-      await refresh();
       toast(t("authenticatorEnabled"), "success");
       setTotpCode("");
       // Confirmation activates MFA, but enrollment is not complete until the
@@ -109,7 +100,6 @@ export function AccountSecurityPanel() {
       const result = await recoveryMutation.mutateAsync({
         totpCode: recoveryTotpCode,
       });
-      await refresh();
       setRecoveryCodes(result.codes);
       setRecoveryTotpCode("");
       setRecoveryStep("showing-codes");
@@ -153,7 +143,6 @@ export function AccountSecurityPanel() {
         factorId: disableFactorId,
         code: disableCode,
       });
-      await refresh();
       toast(t("authenticatorRemoved"), "success");
       setDisableFactorId(undefined);
       setDisableCode("");

@@ -9,6 +9,7 @@ import type { AuthProviderAuditSettingsMap } from "./auth-provider-settings-audi
 import { authProviderSettingsChangeSummary } from "./auth-provider-settings-audit";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
+import type { AuditMetadata } from "./audit-log";
 import { parseStoredLdapConnection } from "./auth-provider-ldap-config";
 import { parseStoredOAuth2Connection } from "./auth-provider-oauth2-config";
 import { parseStoredOidcConnection } from "./auth-provider-oidc-config";
@@ -85,7 +86,7 @@ export function sanitizedSettingsAuditMetadata(
   global: StoredAuthProviderGlobalSettings,
   org: StoredAuthProviderOrgOverrides,
   changedScopes: string[],
-): Record<string, unknown> {
+): AuditMetadata<"admin.auth_provider_settings.update"> {
   const effective = authProviderCatalog.map((entry) =>
     summarizeEffectiveProvider(
       entry,

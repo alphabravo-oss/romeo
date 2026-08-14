@@ -24,9 +24,25 @@ For Docker Compose installs, the `monitoring` profile runs the same exporter on 
 ROMEO_API_KEY="$ROMEO_API_KEY" docker compose -f deploy/compose/compose.yml --profile monitoring up operational-monitoring-exporter
 ```
 
-Use `operational-exporter.deployment.example.yaml` as the Kubernetes starting point. It expects a scoped monitoring API key in `romeo-monitoring-api-key` and serves `/metrics` on port `9464`. Prometheus Operator users can apply `prometheus-rules.yaml`; plain Prometheus users can copy `spec.groups` into their rule files.
+Use `operational-exporter.deployment.example.yaml` as the Kubernetes starting point. It expects a scoped monitoring API key in `romeo-monitoring-api-key` and serves `/metrics` on port `9464`. `/health` is process liveness only; `/ready` performs a bounded authenticated read of both operational-summary sources and fails closed with `503` when either source is unavailable. Prometheus Operator users can apply `prometheus-rules.yaml`; plain Prometheus users can copy `spec.groups` into their rule files.
 
 The rule file includes provider, background-job queue, dead-letter, and Postgres backup job alerts. `RomeoPostgresBackupJobFailed` uses kube-state-metrics `kube_job_status_failed`, so Kubernetes installs must scrape kube-state-metrics for backup alert evidence.
+
+Run-stream monitoring also exports active streams, reconnect replay rows,
+cursor-query counts and rows, notifier lag/fallback, bounded-buffer high-water,
+slow-consumer drops, heartbeat failures, and terminal-close latency. These
+transport observations carry only counts, byte totals, timings, and the fixed
+`scope="process"` label; they never include run, chat, user, event, or content
+identifiers. They use a rolling 15-minute in-process window and reset on
+process restart. Fleet dashboards should aggregate every Romeo API replica and
+retain the existing durable `romeo_sse_reconnect_total` and
+`romeo_sse_disconnect_total` summaries for cross-process trend evidence.
+
+The example rules warn when notification delivery falls back to cursor
+polling, notifier p95 lag exceeds one second, a slow consumer is dropped, a
+heartbeat enqueue fails, or terminal close p95 exceeds one second. A single
+fallback or drop is not evidence of lost events: PostgreSQL cursor replay
+remains authoritative.
 
 Validate the exporter and alert contract with:
 

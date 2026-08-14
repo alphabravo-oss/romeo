@@ -143,6 +143,7 @@ function stripeEventToBillingEvent(
   const metadata = jsonRecord(object.metadata);
   const eventType = stripeEventType(type);
   return {
+    eventId: event.id,
     provider: "stripe",
     eventType,
     externalCustomerId: stripeCustomerId(eventType, object),
@@ -178,14 +179,21 @@ function genericPayloadToBillingEvent(
     "Generic billing webhook payload must be valid JSON.",
   );
   const provider = boundedString(event.provider, 80);
+  const eventId = boundedString(event.eventId, 300);
   const eventType = genericEventType(event.eventType);
-  if (provider === undefined)
+  const occurredAt = isoTimestamp(event.occurredAt);
+  if (
+    provider === undefined ||
+    eventId === undefined ||
+    occurredAt === undefined
+  )
     throw new ApiError(
       "billing_webhook_payload_invalid",
-      "Generic billing webhook provider is required.",
+      "Generic billing webhook provider, eventId, and occurredAt are required.",
       400,
     );
   return {
+    eventId,
     provider,
     eventType,
     externalCustomerId: boundedString(event.externalCustomerId, 200),
@@ -194,7 +202,7 @@ function genericPayloadToBillingEvent(
     invoiceStatus: boundedString(event.invoiceStatus, 80),
     amountCents: nonNegativeInteger(event.amountCents),
     currency: uppercaseCurrency(event.currency),
-    occurredAt: isoTimestamp(event.occurredAt),
+    occurredAt,
     planCode: boundedString(event.planCode, 120),
     planName: boundedString(event.planName, 200),
     status: billingStatus(event.status),
@@ -301,9 +309,14 @@ function invoiceAmountCents(
   );
 }
 
-function stripeOccurredAt(created: unknown): string | undefined {
+function stripeOccurredAt(created: unknown): string {
   const seconds = numberValue(created);
-  if (seconds === undefined) return undefined;
+  if (seconds === undefined)
+    throw new ApiError(
+      "billing_webhook_payload_invalid",
+      "Stripe billing webhook event timestamp is invalid.",
+      400,
+    );
   return new Date(seconds * 1000).toISOString();
 }
 

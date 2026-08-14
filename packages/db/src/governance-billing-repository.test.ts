@@ -11,6 +11,7 @@ describe("governance and billing repository mappers", () => {
     const policy = toRetentionPolicyRecord({
       orgId: "org_1",
       auditLogRetentionDays: 365,
+      runEventRetentionDays: 30,
       fileRetentionDays: 90,
       workspaceFileRetentionDays: { workspace_1: 30 },
       userFileRetentionDays: { user_1: null },
@@ -21,6 +22,7 @@ describe("governance and billing repository mappers", () => {
     expect(policy).toEqual({
       orgId: "org_1",
       auditLogRetentionDays: 365,
+      runEventRetentionDays: 30,
       fileRetentionDays: 90,
       workspaceFileRetentionDays: { workspace_1: 30 },
       userFileRetentionDays: { user_1: null },

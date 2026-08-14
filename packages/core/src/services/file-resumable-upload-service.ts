@@ -13,11 +13,7 @@ import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import { consumeQuota } from "./consume-quota";
 import type { FileAccessService } from "./file-access-service";
-import {
-  extractionAttempts,
-  initialExtractionState,
-  publicFileObject,
-} from "./file-object-state";
+import { initialExtractionState, publicFileObject } from "./file-object-state";
 import type { FilePipelineSupport } from "./file-pipeline-support";
 import {
   expectedPartSize,
@@ -40,6 +36,7 @@ import {
   sha256Hex,
 } from "./file-upload-normalization";
 import type { QuotaCoordinator } from "./quota-coordination";
+import { isFileReadyForUse } from "./file-lifecycle";
 import { assertWorkspaceActive } from "./workspace-guard";
 
 const uploadUrlExpiresInSeconds = 900;
@@ -169,7 +166,7 @@ export class FileResumableUploadService {
       "files:write",
       "write",
     );
-    if (file.status === "available") return publicFileObject(file);
+    if (isFileReadyForUse(file)) return publicFileObject(file);
     if (file.status !== "uploading") {
       throw new ApiError(
         "file_upload_not_active",
@@ -194,13 +191,6 @@ export class FileResumableUploadService {
       );
     }
     assertFileContentMatchesMimeType(bytes, file.mimeType);
-    await this.pipeline.scanUploadedFileOrReject(
-      file,
-      bytes,
-      partNumbers(resumable.partCount).map((partNumber) =>
-        resumablePartObjectKey(file.objectKey, partNumber),
-      ),
-    );
     const duplicateMetadata = await this.pipeline.duplicateContentMetadata({
       subject,
       workspaceId: file.workspaceId,
@@ -220,44 +210,39 @@ export class FileResumableUploadService {
           contentType: file.mimeType,
         }),
     );
-    const extraction = await this.pipeline.extractFile(
-      { bytes, fileName: file.fileName, mimeType: file.mimeType },
-      extractionAttempts(file) + 1,
+    const partKeys = partNumbers(resumable.partCount).map((partNumber) =>
+      resumablePartObjectKey(file.objectKey, partNumber),
     );
-    const completed = await this.repository
-      .transaction(async (repository) => {
-        const result = await repository.updateFileObject({
-          ...file,
-          status: "available",
-          metadata: { ...file.metadata, ...duplicateMetadata, extraction },
-          updatedAt: new Date().toISOString(),
-        });
-        await this.pipeline.audit(
-          repository,
-          subject,
-          "file.resumable_upload.complete",
-          result,
-          {
-            partCount: resumable.partCount,
-            partSizeBytes: resumable.partSizeBytes,
-            purpose: result.purpose,
-            sizeBytes: result.sizeBytes,
-            mimeType: result.mimeType,
-          },
-        );
-        return result;
+    const completed = await this.pipeline
+      .processFileLifecycle({
+        subject,
+        file,
+        bytes,
+        objectKeys: [file.objectKey, ...partKeys],
+        metadata: duplicateMetadata,
       })
-      .catch(async (error: unknown) => {
-        await this.pipeline
-          .traceObjectStore(
-            subject,
-            file.workspaceId,
-            file.id,
-            "delete_rollback",
-            () => this.objectStore.deleteObject(file.objectKey),
-          )
-          .catch(() => {});
-        throw error;
+      .then(async (result) => {
+        try {
+          await this.repository.transaction((repository) =>
+            this.pipeline.audit(
+              repository,
+              subject,
+              "file.resumable_upload.complete",
+              result,
+              {
+                partCount: resumable.partCount,
+                partSizeBytes: resumable.partSizeBytes,
+                purpose: result.purpose,
+                sizeBytes: result.sizeBytes,
+                mimeType: result.mimeType,
+              },
+            ),
+          );
+        } catch (error) {
+          await this.pipeline.failFileLifecycle(result, error);
+          throw error;
+        }
+        return result;
       });
     await this.pipeline.traceObjectStore(
       subject,
@@ -265,13 +250,7 @@ export class FileResumableUploadService {
       file.id,
       "delete_parts",
       () =>
-        Promise.all(
-          partNumbers(resumable.partCount).map((partNumber) =>
-            this.objectStore.deleteObject(
-              resumablePartObjectKey(file.objectKey, partNumber),
-            ),
-          ),
-        ),
+        Promise.all(partKeys.map((key) => this.objectStore.deleteObject(key))),
     );
     await this.pipeline.recordUploadPipeline(
       subject,

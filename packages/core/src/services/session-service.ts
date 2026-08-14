@@ -5,6 +5,7 @@ import {
   hashApiKey,
   type AuthSubject,
 } from "@romeo/auth";
+import { AuthenticationError } from "../errors";
 
 import type { UserSession } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
@@ -176,19 +177,19 @@ export class SessionService {
 
   async authenticate(token: string): Promise<AuthSubject> {
     if (!sessionTokenPattern.test(token))
-      throw new AuthorizationError("Session token is invalid or revoked.");
+      throw new AuthenticationError("Session token is invalid or revoked.");
     const session = await this.repository.getUserSessionByHash(
       await hashApiKey(token),
     );
     if (!session || session.revokedAt !== undefined)
-      throw new AuthorizationError("Session token is invalid or revoked.");
+      throw new AuthenticationError("Session token is invalid or revoked.");
     if (new Date(session.expiresAt).getTime() <= Date.now())
-      throw new AuthorizationError("Session token is expired.");
+      throw new AuthenticationError("Session token is expired.");
     const user = await this.repository.getCurrentUser(session.userId);
     if (!user || user.orgId !== session.orgId)
-      throw new AuthorizationError("Session owner was not found.");
+      throw new AuthenticationError("Session owner was not found.");
     if (user.disabledAt !== undefined)
-      throw new AuthorizationError("Session owner is disabled.");
+      throw new AuthenticationError("Session owner is disabled.");
 
     await this.touchSession(session);
     const supportSession = await this.supportSessionContext(session);
@@ -218,7 +219,7 @@ export class SessionService {
       input.subject.sessionId === undefined
     )
       return;
-    await this.repository.createAuditLog({
+    await writeAuditLog(this.repository, {
       id: createId("audit"),
       orgId: input.subject.orgId,
       actorId: input.subject.id,
@@ -375,18 +376,18 @@ export class SessionService {
     });
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
     options: {
       repository?: RomeoRepository;
       resourceType?: string;
       createdAt?: string;
     } = {},
   ): Promise<void> {
-    await (options.repository ?? this.repository).createAuditLog({
+    await writeAuditLog(options.repository ?? this.repository, {
       id: createId("audit"),
       orgId: subject.orgId,
       actorId: subject.id,
@@ -418,3 +419,8 @@ export class SessionService {
     return { adminUserId: createLog.actorId, createdAuditLogId: createLog.id };
   }
 }
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";

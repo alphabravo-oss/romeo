@@ -6,6 +6,19 @@ import {
   jsonResponse,
   standardErrorResponses,
 } from "./common";
+import {
+  EvalReasoningPolicyEvidenceSchema,
+  EvalRunMetricsSchema,
+  RunEvalSuiteSchema,
+} from "./eval-reasoning";
+import { getEvalReasoningComparisonRoute } from "./eval-reasoning-route";
+export {
+  EvalReasoningComparisonSchema,
+  EvalReasoningPolicyEvidenceSchema,
+  EvalRunMetricsSchema,
+  RunEvalSuiteSchema,
+} from "./eval-reasoning";
+export { getEvalReasoningComparisonRoute } from "./eval-reasoning-route";
 
 const id = z.string().trim().min(1).max(300);
 const time = z.iso.datetime();
@@ -109,6 +122,8 @@ export const EvalRunSchema = z
     createdBy: id,
     createdAt: time,
     completedAt: time,
+    reasoningPolicy: EvalReasoningPolicyEvidenceSchema.optional(),
+    metrics: EvalRunMetricsSchema.optional(),
   })
   .openapi("EvalRun");
 
@@ -156,6 +171,8 @@ const EvalDashboardRunPointSchema = z.strictObject({
   status: runStatus,
   score,
   completedAt: time,
+  reasoningPolicy: EvalReasoningPolicyEvidenceSchema.optional(),
+  metrics: EvalRunMetricsSchema.optional(),
 });
 export const EvalDashboardSchema = z
   .strictObject({
@@ -261,15 +278,45 @@ export const CreateEvalSuiteSchema = z
       .max(100),
   })
   .openapi("CreateEvalSuiteRequest");
-export const RunEvalSuiteSchema = z
-  .strictObject({ modelId: id.optional() })
-  .openapi("RunEvalSuiteRequest");
 export const RateEvalResultSchema = z
   .strictObject({
     rating: z.enum(["pass", "neutral", "fail"]),
     comment: z.string().min(1).max(2_000).optional(),
   })
   .openapi("RateEvalResultRequest");
+
+export const CreateEvalCaseFromFeedbackSchema = z
+  .strictObject({
+    agentId: id,
+    chatId: id,
+    messageId: id,
+    suiteId: id.optional(),
+    suiteName: z.string().trim().min(1).max(200).optional(),
+  })
+  .refine(
+    (input) => input.suiteId === undefined || input.suiteName === undefined,
+    {
+      message: "suiteName cannot be used when appending to an existing suite.",
+    },
+  )
+  .openapi("CreateEvalCaseFromFeedbackRequest");
+
+export const FeedbackEvalCaseResultSchema = z
+  .strictObject({
+    suiteId: id,
+    caseId: id,
+    created: z.boolean(),
+    redaction: z.strictObject({
+      evalInputReturned: z.literal(false),
+      assistantContentPersisted: z.literal(false),
+      assistantContentReturned: z.literal(false),
+      feedbackReasonPersisted: z.literal(false),
+      feedbackReasonReturned: z.literal(false),
+      reviewerIdentityPersisted: z.literal(false),
+      reviewerIdentityReturned: z.literal(false),
+    }),
+  })
+  .openapi("FeedbackEvalCaseResult");
 
 const CreatedEvalSuiteSchema = z
   .strictObject({ suite: EvalSuiteSchema, cases: z.array(EvalCaseSchema) })
@@ -311,6 +358,25 @@ export const createEvalSuiteRoute = createRoute({
     201: jsonResponse(
       "Created eval suite",
       dataEnvelope(CreatedEvalSuiteSchema),
+    ),
+    ...errors,
+  },
+});
+export const createEvalCaseFromFeedbackRoute = createRoute({
+  ...meta,
+  method: "post",
+  path: "/api/v1/eval-cases/from-message-feedback",
+  operationId: "evals.createCaseFromMessageFeedback",
+  summary: "Create an eval case from negative message feedback",
+  request: { body: body(CreateEvalCaseFromFeedbackSchema) },
+  responses: {
+    200: jsonResponse(
+      "Existing feedback-derived eval case",
+      dataEnvelope(FeedbackEvalCaseResultSchema),
+    ),
+    201: jsonResponse(
+      "Created feedback-derived eval case",
+      dataEnvelope(FeedbackEvalCaseResultSchema),
     ),
     ...errors,
   },
@@ -418,10 +484,12 @@ export const rateEvalResultRoute = createRoute({
 export const evalRoutes = [
   listEvalSuitesRoute,
   createEvalSuiteRoute,
+  createEvalCaseFromFeedbackRoute,
   listEvalRunsRoute,
   getEvalDashboardRoute,
   getEvalReleaseCandidateEvidenceRoute,
   runEvalSuiteRoute,
+  getEvalReasoningComparisonRoute,
   listEvalResultsRoute,
   listEvalRatingsRoute,
   rateEvalResultRoute,

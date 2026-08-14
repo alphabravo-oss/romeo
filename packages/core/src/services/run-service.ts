@@ -17,6 +17,7 @@ import {
 } from "../domain/repository";
 import { createId } from "../ids";
 import { replayRunEvents, terminalRunEvents } from "./run-events";
+import { ReasoningSummaryGovernor } from "./run-reasoning-summary-policy";
 import type { RunEventSequencer } from "./run-event-sequencer";
 import { type QueuedChatTurn } from "./run-command-service";
 import { type RunToolDispatchWait } from "./run-tool-service";
@@ -24,6 +25,7 @@ import {
   RunContextInspectionService,
   type RunContextInspectionInput,
 } from "./run-context-inspection-service";
+import { PersistedRunContextInspectionService } from "./persisted-run-context-inspection-service";
 import { type RunKnowledgeCitation } from "./run-knowledge";
 import { recordUsage } from "./record-usage";
 import {
@@ -39,6 +41,7 @@ import type {
   DeferredRunStart,
   RunServiceOptions,
   StartRunInput,
+  StartedRunRecord,
 } from "./run-service-contracts";
 import { RunStartService } from "./run-start-service";
 import { RunQueueService } from "./run-queue-service";
@@ -49,11 +52,13 @@ import { RunContinuationContextBuilder } from "./run-continuation-context";
 import { RunAccessService } from "./run-access-service";
 import { RunTerminalService } from "./run-terminal-service";
 import { RunContinuationService } from "./run-continuation-service";
+import { RunSseObservability } from "./run-sse-observability";
 
 export type {
   DeferredRunStart,
   RunServiceOptions,
   StartRunInput,
+  StartedRunRecord,
 } from "./run-service-contracts";
 
 export class RunService {
@@ -62,6 +67,7 @@ export class RunService {
   private readonly runWorkerId = createId("run_worker");
   private readonly executionCheckpointStore: ObjectStore;
   private readonly contextInspection: RunContextInspectionService;
+  private readonly persistedContextInspection: PersistedRunContextInspectionService;
   private readonly runStart: RunStartService;
   private readonly runQueue: RunQueueService;
   private readonly recovery: RunRecoveryCoordinator;
@@ -71,6 +77,7 @@ export class RunService {
   private readonly access: RunAccessService;
   private readonly terminal: RunTerminalService;
   private readonly continuation: RunContinuationService;
+  private readonly sseObservability = new RunSseObservability();
 
   constructor(
     private readonly repository: RomeoRepository,
@@ -94,11 +101,19 @@ export class RunService {
       this.runWorkerId,
       this.runExecutionLeaseSeconds(),
     );
+    this.providerRoutingPolicy = createProviderRoutingPolicy({
+      disabledProviderIds: options.providerDisabledIds,
+      fallbackModelId: options.providerFallbackModelId,
+    });
     this.contextInspection = new RunContextInspectionService(
       repository,
       objectStore,
       embeddingFetch,
       options,
+      this.providerRoutingPolicy.disabledProviderIds,
+    );
+    this.persistedContextInspection = new PersistedRunContextInspectionService(
+      repository,
     );
     this.continuationContext = new RunContinuationContextBuilder(
       repository,
@@ -109,10 +124,6 @@ export class RunService {
       failureThreshold: options.providerCircuitFailureThreshold ?? 0,
       cooldownMs: options.providerCircuitCooldownMs ?? 0,
     });
-    this.providerRoutingPolicy = createProviderRoutingPolicy({
-      disabledProviderIds: options.providerDisabledIds,
-      fallbackModelId: options.providerFallbackModelId,
-    });
     this.streamingExecution = new RunStreamingExecutionService(
       repository,
       runEventSequencer,
@@ -120,8 +131,15 @@ export class RunService {
       this.providerCircuitBreaker,
       this.runWorkerId,
       options,
-      (run, event, assistantContent, model, citations) =>
-        this.terminal.complete(run, event, assistantContent, model, citations),
+      (run, event, assistantContent, model, citations, subject) =>
+        this.terminal.complete(
+          run,
+          event,
+          assistantContent,
+          model,
+          citations,
+          subject,
+        ),
     );
     this.runStart = new RunStartService(
       repository,
@@ -143,6 +161,15 @@ export class RunService {
           ...(prepared.sampling === undefined
             ? {}
             : { sampling: prepared.sampling }),
+          ...(prepared.reasoning === undefined
+            ? {}
+            : { reasoning: prepared.reasoning }),
+          ...(prepared.reasoningPolicy === undefined
+            ? {}
+            : { reasoningPolicy: prepared.reasoningPolicy }),
+          ...(prepared.structuredOutput === undefined
+            ? {}
+            : { structuredOutput: prepared.structuredOutput }),
           subject: prepared.input.subject,
         });
       },
@@ -199,14 +226,30 @@ export class RunService {
     this.terminal.stopWorker();
   }
 
+  drainTerminalOutboxWorker(): Promise<void> {
+    return this.terminal.drainWorker();
+  }
+
   runTerminalOutboxOnce(): Promise<number> {
     return this.terminal.runOnce();
   }
   inspectContext(input: RunContextInspectionInput) {
     return this.contextInspection.inspect(input);
   }
+  inspectPersistedContext(input: {
+    chatId: string;
+    runId?: string;
+    subject: AuthSubject;
+  }) {
+    return this.persistedContextInspection.inspect(input);
+  }
   start(input: StartRunInput): Promise<RunRecord> {
     return this.runStart.start(input);
+  }
+
+  async startForApi(input: StartRunInput): Promise<StartedRunRecord> {
+    const started = await this.runStart.startWithInputMessage(input);
+    return { ...started.run, inputMessageId: started.inputMessageId };
   }
 
   startDeferred(
@@ -237,7 +280,7 @@ export class RunService {
   enqueueTurn(
     input: Omit<
       StartRunInput,
-      "attachments" | "fileIds" | "historyBoundaryMessageId" | "parentMessageId"
+      "attachments" | "fileIds" | "historyBoundaryMessageId"
     > & { idempotencyKey?: string },
   ): Promise<QueuedChatTurn> {
     return this.runQueue.enqueue(input);
@@ -260,6 +303,7 @@ export class RunService {
       orgId: subject.orgId,
       repository: this.repository,
       routingPolicy: this.providerRoutingPolicy,
+      sse: this.sseObservability.snapshot(),
     });
   }
 
@@ -270,6 +314,7 @@ export class RunService {
     runId: string,
     subject: AuthSubject,
     afterSequence = 0,
+    signal?: AbortSignal,
   ): AsyncIterable<RunEvent> {
     const run = await this.access.getAuthorizedRun(runId, subject, "runs:read");
     await this.recoverStaleRun(run.chatId);
@@ -288,14 +333,40 @@ export class RunService {
       },
     });
     let terminalSeen = false;
+    const reasoningSummaryGovernor = new ReasoningSummaryGovernor(
+      this.repository,
+      subject,
+    );
     try {
       for await (const event of replayRunEvents(
         this.repository,
+        this.runEventSequencer,
         runId,
         afterSequence,
+        {
+          closeWhenCaughtUp:
+            run.status === "cancelled" ||
+            run.status === "completed" ||
+            run.status === "failed" ||
+            run.status === "waiting_tool_approval",
+          observer: this.sseObservability.replayObserver(afterSequence > 0),
+          authorize: () =>
+            this.access.assertCurrentStreamAccess(runId, subject),
+          ...(this.options.runStreamAuthorizationRecheckMs === undefined
+            ? {}
+            : {
+                authorizationRecheckMs:
+                  this.options.runStreamAuthorizationRecheckMs,
+              }),
+          ...(signal === undefined ? {} : { signal }),
+        },
       )) {
-        if (terminalRunEvents.has(event.type)) terminalSeen = true;
-        yield event;
+        for (const governedEvent of await reasoningSummaryGovernor.consume(
+          event,
+        )) {
+          if (terminalRunEvents.has(governedEvent.type)) terminalSeen = true;
+          yield governedEvent;
+        }
       }
     } finally {
       if (!terminalSeen) {
@@ -307,11 +378,19 @@ export class RunService {
           sourceId: run.id,
           metric: "sse.disconnect",
           quantity: 1,
-          unit: "disconnect",
+          unit: "connection",
           metadata: { chatId: run.chatId, afterSequence },
         });
       }
     }
+  }
+
+  runSseStreamObserver(afterSequence: number) {
+    return this.sseObservability.streamObserver(afterSequence > 0);
+  }
+
+  closeRunEventTransport(): void {
+    this.runEventSequencer.close();
   }
 
   resumeAfterApprovedTool(input: {
@@ -353,6 +432,7 @@ export class RunService {
     assistantContent: string,
     model: BaseModel,
     citations: RunKnowledgeCitation[],
+    subject: AuthSubject,
   ): Promise<void> {
     return this.terminal.complete(
       run,
@@ -360,6 +440,7 @@ export class RunService {
       assistantContent,
       model,
       citations,
+      subject,
     );
   }
   private recoverStaleRun(chatId: string): Promise<void> {

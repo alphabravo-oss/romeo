@@ -99,6 +99,36 @@ describe("OpenAI Responses-compatible adapter", () => {
     );
   });
 
+  it("emits only provider-designated summaries and drops raw reasoning sentinels", async () => {
+    const rawSentinel = "private-hidden-reasoning-sentinel";
+    const chunks = await collect(
+      openAiResponsesCompatibleAdapter.streamChat({
+        apiKey: "provider-api-key",
+        fetchImpl: async () =>
+          new Response(
+            sse([
+              { type: "response.reasoning_text.delta", delta: rawSentinel },
+              {
+                type: "response.reasoning_summary_text.delta",
+                delta: "Safe provider summary.",
+              },
+              { type: "response.output_text.delta", delta: "Answer." },
+            ]),
+            { status: 200 },
+          ),
+        messages: [{ role: "user", content: "hello" }],
+        model,
+        provider,
+      }),
+    );
+
+    expect(chunks).toEqual([
+      { type: "reasoning_summary", text: "Safe provider summary." },
+      "Answer.",
+    ]);
+    expect(JSON.stringify(chunks)).not.toContain(rawSentinel);
+  });
+
   it("normalizes Responses function-call output items", async () => {
     const chunks = await collect(
       openAiResponsesCompatibleAdapter.streamChat({

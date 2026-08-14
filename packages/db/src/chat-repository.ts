@@ -1,10 +1,15 @@
 import type {
   AuthorizedChatCatalogQuery,
+  AuthorizedChatMessageSearchQuery,
+  AuthorizedMessagePageQuery,
   CancelQueuedChatTurnInput,
   ClaimQueuedChatTurnInput,
   FinishQueuedChatTurnLeaseInput,
   RenewQueuedChatTurnLeaseInput,
+  MessagePageQueryResult,
+  ChatMessageSearchQueryResult,
 } from "@romeo/core";
+import { ApiError, persistedTextPartId, textPartForMessage } from "@romeo/core";
 import {
   and,
   asc,
@@ -29,6 +34,8 @@ import {
   resourceGrants,
 } from "./schema";
 import { optionalDate } from "./repository-mapping";
+import { queryAuthorizedMessagePage } from "./message-page-repository";
+import { searchAuthorizedChatMessages } from "./chat-message-search-repository";
 import { PgQueuedChatTurnRepository } from "./queued-chat-turn-repository";
 import {
   toChatCommentInsert,
@@ -37,21 +44,25 @@ import {
   toChatRecord,
   toMessageInsert,
   toMessagePartInsert,
-  toMessagePartRecord,
   toMessageRecord,
   type ChatCommentRecord,
   type ChatRecord,
-  type MessagePartRecord,
   type MessageRecord,
   type QueuedChatTurnRecord,
 } from "./chat-repository-records";
+import { PgMessagePartRepository } from "./message-part-repository";
+import {
+  reconcileFileReferenceIds,
+  referencedFileIdsForMessage,
+} from "./message-file-reference-repository";
 
 export * from "./chat-repository-records";
 
-export class PgChatRepository {
+export class PgChatRepository extends PgMessagePartRepository {
   private readonly queuedTurns: PgQueuedChatTurnRepository;
 
-  constructor(private readonly db: RomeoDatabase) {
+  constructor(db: RomeoDatabase) {
+    super(db);
     this.queuedTurns = new PgQueuedChatTurnRepository(db);
   }
   async listChats(workspaceId: string): Promise<ChatRecord[]> {
@@ -284,6 +295,27 @@ export class PgChatRepository {
     return rows.map(toMessageRecord);
   }
 
+  async queryAuthorizedMessagesPage(
+    input: AuthorizedMessagePageQuery,
+  ): Promise<MessagePageQueryResult> {
+    return this.db.transaction(
+      async (transaction) => {
+        await transaction.execute(sql`set local statement_timeout = '2000ms'`);
+        return queryAuthorizedMessagePage(
+          transaction as unknown as RomeoDatabase,
+          input,
+        );
+      },
+      { accessMode: "read only", isolationLevel: "repeatable read" },
+    );
+  }
+
+  async searchAuthorizedChatMessages(
+    input: AuthorizedChatMessageSearchQuery,
+  ): Promise<ChatMessageSearchQueryResult> {
+    return searchAuthorizedChatMessages(this.db, input);
+  }
+
   async getMessage(messageId: string): Promise<MessageRecord | undefined> {
     const [row] = await this.db
       .select()
@@ -294,92 +326,81 @@ export class PgChatRepository {
   }
 
   async createMessage(message: MessageRecord): Promise<MessageRecord> {
-    const [row] = await this.db
-      .insert(messages)
-      .values(toMessageInsert(message))
-      .returning();
-    return row === undefined ? message : toMessageRecord(row);
+    return this.db.transaction(async (rawTransaction) => {
+      const transaction = rawTransaction as unknown as RomeoDatabase;
+      const [row] = await transaction
+        .insert(messages)
+        .values(toMessageInsert(message))
+        .returning();
+      const created = row === undefined ? message : toMessageRecord(row);
+      const textPart = textPartForMessage({
+        id: persistedTextPartId(message.id),
+        message,
+        position: 0,
+      });
+      if (textPart !== undefined)
+        await transaction
+          .insert(messageParts)
+          .values(toMessagePartInsert(textPart, 0));
+      return created;
+    });
   }
 
   async deleteMessage(messageId: string): Promise<void> {
-    const [row] = await this.db
-      .select({ chatId: messages.chatId, parentId: messages.parentId })
-      .from(messages)
-      .where(eq(messages.id, messageId))
-      .limit(1);
-    if (row === undefined) return;
-    // Splice, don't sever: children adopt their grandparent. Left dangling, every turn above the
-    // deleted row falls off the branch and silently stops being replayed to the provider.
-    await this.db
-      .update(messages)
-      .set({ parentId: row.parentId })
-      .where(eq(messages.parentId, messageId));
-    // message_parts.message_id has ON DELETE CASCADE, so this also removes
-    // any attachment parts for the message.
-    await this.db.delete(messages).where(eq(messages.id, messageId));
-    // A pointer still naming the deleted row resolves to no branch, so the next turn would persist
-    // as a fresh root and collapse the transcript. Its parent is the tip of what is left; a deleted
-    // root has none, so fall back to the newest surviving row — a child is always written after its
-    // parent, which makes the newest row a branch tip.
-    const replacement =
-      row.parentId ?? (await this.newestMessageId(row.chatId));
-    await this.db
-      .update(chats)
-      .set({ activeLeafMessageId: replacement })
-      .where(
-        and(eq(chats.id, row.chatId), eq(chats.activeLeafMessageId, messageId)),
+    await this.db.transaction(async (transaction) => {
+      const tx = transaction as unknown as RomeoDatabase;
+      const [row] = await tx
+        .select({ chatId: messages.chatId, parentId: messages.parentId })
+        .from(messages)
+        .where(eq(messages.id, messageId))
+        .limit(1);
+      if (row === undefined) return;
+      const [chat] = await tx
+        .select({ legalHoldUntil: chats.legalHoldUntil })
+        .from(chats)
+        .where(eq(chats.id, row.chatId))
+        .limit(1)
+        .for("update");
+      const now = new Date();
+      if (
+        chat?.legalHoldUntil !== null &&
+        chat?.legalHoldUntil !== undefined &&
+        chat.legalHoldUntil > now
+      )
+        throw new ApiError(
+          "chat_delete_legal_hold",
+          "Chat is under legal hold and cannot be changed.",
+          409,
+        );
+      const referencedFileIds = await referencedFileIdsForMessage(
+        tx,
+        messageId,
       );
-  }
-
-  private async newestMessageId(chatId: string): Promise<string | null> {
-    // Reverse of listMessages' ordering, so both backends pick the same row.
-    const [row] = await this.db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(eq(messages.chatId, chatId))
-      .orderBy(desc(messages.createdAt), desc(messages.id))
-      .limit(1);
-    return row?.id ?? null;
-  }
-
-  async listMessageParts(messageId: string): Promise<MessagePartRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(messageParts)
-      .where(eq(messageParts.messageId, messageId))
-      .orderBy(asc(messageParts.position), asc(messageParts.id));
-    return rows.map(toMessagePartRecord);
-  }
-
-  async getMessagePart(
-    messagePartId: string,
-  ): Promise<MessagePartRecord | undefined> {
-    const [row] = await this.db
-      .select()
-      .from(messageParts)
-      .where(eq(messageParts.id, messagePartId))
-      .limit(1);
-    return row === undefined ? undefined : toMessagePartRecord(row);
-  }
-
-  async createMessageParts(
-    parts: MessagePartRecord[],
-  ): Promise<MessagePartRecord[]> {
-    if (parts.length === 0) return [];
-    const rows = await this.db
-      .insert(messageParts)
-      .values(parts.map((part, index) => toMessagePartInsert(part, index)))
-      .returning();
-    return rows.map(toMessagePartRecord);
-  }
-
-  async updateMessagePart(part: MessagePartRecord): Promise<MessagePartRecord> {
-    const [row] = await this.db
-      .update(messageParts)
-      .set({ content: part.content, metadata: part.metadata, type: part.type })
-      .where(eq(messageParts.id, part.id))
-      .returning();
-    return row === undefined ? part : toMessagePartRecord(row);
+      // Splice, don't sever: children adopt their grandparent. The transaction
+      // keeps reparent, delete, leaf repair, and trigger version bumps atomic.
+      await tx
+        .update(messages)
+        .set({ parentId: row.parentId })
+        .where(eq(messages.parentId, messageId));
+      await tx.delete(messages).where(eq(messages.id, messageId));
+      await reconcileFileReferenceIds(tx, referencedFileIds, now.toISOString());
+      const [newest] = await tx
+        .select({ id: messages.id })
+        .from(messages)
+        .where(eq(messages.chatId, row.chatId))
+        .orderBy(desc(messages.createdAt), desc(messages.id))
+        .limit(1);
+      const replacement = row.parentId ?? newest?.id ?? null;
+      await tx
+        .update(chats)
+        .set({ activeLeafMessageId: replacement })
+        .where(
+          and(
+            eq(chats.id, row.chatId),
+            eq(chats.activeLeafMessageId, messageId),
+          ),
+        );
+    });
   }
 
   async listChatComments(chatId: string): Promise<ChatCommentRecord[]> {

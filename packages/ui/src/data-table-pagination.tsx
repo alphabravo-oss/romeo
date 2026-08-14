@@ -3,8 +3,8 @@ import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left.mjs";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.mjs";
 import type { ReactNode } from "react";
 
-import type { DataTableLabels, ServerPagination } from "./advanced-data-table";
-import { IconButton } from "./button";
+import type { DataTableLabels } from "./advanced-data-table";
+import type { ServerPagination } from "./server-table-state";
 
 export function ClientTablePager<T>({
   formatNumber,
@@ -57,7 +57,20 @@ export function ServerTablePager({
           labels.loading
         ) : (
           <>
+            {pagination.pageIndex === undefined ? null : (
+              <>
+                {labels.page} {formatNumber(pagination.pageIndex + 1)} ·{" "}
+              </>
+            )}
             {formatNumber(dataLength)} {labels.shown}
+            {pagination.total?.mode === "unknown" ||
+            pagination.total === undefined ? null : (
+              <>
+                {" · "}
+                {pagination.total.mode === "estimated" ? "~" : ""}
+                {formatNumber(pagination.total.value)} {labels.total}
+              </>
+            )}
           </>
         )}
       </span>
@@ -74,6 +87,10 @@ export function ServerTablePager({
   );
 }
 
+/**
+ * Labelled page controls. Bare chevrons made people guess which arrow paged
+ * which way and gave a 28px hit target; the words are the affordance.
+ */
 function PagerButtons({
   canNext,
   canPrevious,
@@ -89,24 +106,24 @@ function PagerButtons({
 }) {
   return (
     <div className="rm-table-pager-nav">
-      <IconButton
-        aria-label={labels.previousPage}
-        className="rm-icon-button"
+      <button
+        className="rm-table-pager-button"
         disabled={!canPrevious}
         onClick={onPrevious}
-        variant="ghost"
+        type="button"
       >
-        <ChevronLeft aria-hidden size={16} />
-      </IconButton>
-      <IconButton
-        aria-label={labels.nextPage}
-        className="rm-icon-button"
+        <ChevronLeft aria-hidden size={14} />
+        {labels.previousPage}
+      </button>
+      <button
+        className="rm-table-pager-button"
         disabled={!canNext}
         onClick={onNext}
-        variant="ghost"
+        type="button"
       >
-        <ChevronRight aria-hidden size={16} />
-      </IconButton>
+        {labels.nextPage}
+        <ChevronRight aria-hidden size={14} />
+      </button>
     </div>
   );
 }

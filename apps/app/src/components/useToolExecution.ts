@@ -1,9 +1,10 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { RomeoApiError } from "@romeo/api-client";
-import { executeTool } from "../features/tools";
+import { executeToolMutationOptions } from "../features/tools";
 import type { Agent, AgentToolSummary } from "../features/types";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 export interface PendingToolApproval {
   approvalRequestId: string;
@@ -19,33 +20,16 @@ export function useToolExecution(
   tools: AgentToolSummary[],
   onError: (message: string | undefined) => void,
 ) {
-  const queryClient = useQueryClient();
   const [toolResult, setToolResult] = useState<string>();
   const [pendingApproval, setPendingApproval] = useState<PendingToolApproval>();
-  const calculatorMutation = useMutation({
-    mutationFn: (input: { agentId: string; expression: string }) =>
-      executeTool<{ result: number }>({
-        toolId: "tool_calculator",
-        agentId: input.agentId,
-        payload: { expression: input.expression },
-      }),
-  });
-  const dateTimeMutation = useMutation({
-    mutationFn: (input: {
-      agentId: string;
-      approved: boolean;
-      approvalRequestId?: string;
-    }) =>
-      executeTool<{ iso: string; timeZone: string }>({
-        toolId: "tool_datetime",
-        agentId: input.agentId,
-        payload: dateTimePayload(),
-        approved: input.approved,
-        ...(input.approvalRequestId === undefined
-          ? {}
-          : { approvalRequestId: input.approvalRequestId }),
-      }),
-  });
+  const calculatorMutation = useMutation(
+    executeToolMutationOptions<{ result: number }>("tool_calculator"),
+  );
+  const dateTimeMutation = useMutation(
+    executeToolMutationOptions<{ iso: string; timeZone: string }>(
+      "tool_datetime",
+    ),
+  );
 
   async function handleExecuteCalculator(expression: string) {
     if (!activeAgent) return;
@@ -53,14 +37,11 @@ export function useToolExecution(
     try {
       const result = await calculatorMutation.mutateAsync({
         agentId: activeAgent.id,
-        expression,
+        payload: { expression },
       });
       setToolResult(String(result.result));
-      await refreshToolControls();
     } catch (caught) {
-      onError(
-        caught instanceof Error ? caught.message : "Unable to execute tool.",
-      );
+      onError(safeUserErrorMessage(caught, "Unable to execute tool."));
     }
   }
 
@@ -94,12 +75,9 @@ export function useToolExecution(
               : (tool?.approvalPolicy ?? "always"),
           inputKeys: ["timeZone"],
         });
-        await refreshToolControls();
         return;
       }
-      onError(
-        caught instanceof Error ? caught.message : "Unable to execute tool.",
-      );
+      onError(safeUserErrorMessage(caught, "Unable to execute tool."));
     }
   }
 
@@ -114,9 +92,7 @@ export function useToolExecution(
       );
       setPendingApproval(undefined);
     } catch (caught) {
-      onError(
-        caught instanceof Error ? caught.message : "Unable to execute tool.",
-      );
+      onError(safeUserErrorMessage(caught, "Unable to execute tool."));
     }
   }
 
@@ -133,20 +109,9 @@ export function useToolExecution(
       agentId,
       approved,
       ...(approvalRequestId === undefined ? {} : { approvalRequestId }),
+      payload: dateTimePayload(),
     });
     setToolResult(`${result.timeZone}: ${result.iso}`);
-    await refreshToolControls();
-  }
-
-  async function refreshToolControls() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
-      queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-      queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-      queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-      queryClient.invalidateQueries({ queryKey: ["toolCalls"] }),
-      queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-    ]);
   }
 
   return {

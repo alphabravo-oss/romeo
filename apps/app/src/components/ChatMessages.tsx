@@ -15,11 +15,12 @@ import type {
   ChatCitation,
   ChatReasoning,
   ChatRunActivity,
-} from "./useWorkspaceController";
+} from "./workspace-controller-types";
 import { FormDialog } from "./FormDialog";
 import { previewUrlForAttachment } from "./ChatMessageActions";
 import { ChatMessageRow } from "./ChatMessageRow";
-import type { MessageVariants } from "./message-tree";
+import type { MessageBranchVariants } from "../lib/message-page-query";
+import { TranscriptWindow } from "./TranscriptWindow";
 
 // Frozen empties handed to every row but the last. Run state (activities,
 // citations, tool calls) belongs to the streaming answer alone, and a fresh []
@@ -39,6 +40,13 @@ export function resolveMessageModelLabel(input: {
   return input.modelDisplayNames[id] ?? id;
 }
 
+function estimateTranscriptMessageHeight(message: Message): number {
+  const textLines = Math.max(1, Math.ceil(message.content.length / 88));
+  const attachmentHeight = (message.attachments?.length ?? 0) * 56;
+  const roleBase = message.role === "assistant" ? 136 : 104;
+  return Math.min(760, roleBase + textLines * 24 + attachmentHeight);
+}
+
 export const ChatMessages = memo(function ChatMessages({
   activeVoiceProfileId,
   authorName,
@@ -52,6 +60,7 @@ export const ChatMessages = memo(function ChatMessages({
   onBranch,
   onAttachmentRetention,
   onContinue,
+  onCreateFeedbackEvalCase,
   onDelete,
   onEditAndResend,
   onGenerateSpeech,
@@ -61,6 +70,8 @@ export const ChatMessages = memo(function ChatMessages({
   onFollowUp,
   regenerateModels,
   onSelectVariant,
+  onStreamingContentChange,
+  getScrollElement,
   reasoning,
   runActivities,
   runWait,
@@ -73,6 +84,7 @@ export const ChatMessages = memo(function ChatMessages({
   agentName,
   speechArtifacts,
   speechMessageId,
+  streamingAssistantMessageId,
   toolCalls,
   variantsByMessageId,
 }: {
@@ -93,6 +105,7 @@ export const ChatMessages = memo(function ChatMessages({
     retainedInContext: boolean,
   ) => void;
   onContinue: () => void;
+  onCreateFeedbackEvalCase?: (messageId: string) => void;
   onDelete: (messageId: string) => void;
   onEditAndResend: (messageId: string, content: string) => Promise<boolean>;
   onGenerateSpeech: (messageId: string) => void;
@@ -109,6 +122,8 @@ export const ChatMessages = memo(function ChatMessages({
   onFollowUp: (prompt: string) => void;
   regenerateModels: Array<{ id: string; label: string }>;
   onSelectVariant: (messageId: string) => void;
+  onStreamingContentChange: () => void;
+  getScrollElement: () => HTMLDivElement | null;
   reasoning: ChatReasoning | undefined;
   runActivities: ChatRunActivity[];
   runWait: ChatRunWait | undefined;
@@ -121,8 +136,9 @@ export const ChatMessages = memo(function ChatMessages({
   agentName: string | undefined;
   speechArtifacts: Record<string, SpeechArtifact>;
   speechMessageId: string | undefined;
+  streamingAssistantMessageId: string | undefined;
   toolCalls: ChatToolCall[];
-  variantsByMessageId: Record<string, MessageVariants>;
+  variantsByMessageId: Record<string, MessageBranchVariants>;
 }) {
   const { t } = useLocale();
   const [editingId, setEditingId] = useState<string>();
@@ -130,7 +146,6 @@ export const ChatMessages = memo(function ChatMessages({
   const [copiedId, setCopiedId] = useState<string>();
   const [previewAttachment, setPreviewAttachment] =
     useState<MessageAttachment>();
-
   // Stable identities, or the per-row memo never holds: a new closure per
   // render is a changed prop on every row.
   const handleCopy = useCallback(
@@ -164,83 +179,157 @@ export const ChatMessages = memo(function ChatMessages({
     },
     [onEditAndResend],
   );
+  const estimateSize = useCallback(
+    (index: number) => {
+      const message = messages[index];
+      return message === undefined
+        ? 180
+        : estimateTranscriptMessageHeight(message);
+    },
+    [messages],
+  );
+  const renderMessage = useCallback(
+    (message: Message, index: number) => {
+      const isLast = index === messages.length - 1;
+      const isThinking =
+        message.role === "assistant" &&
+        message.error === undefined &&
+        message.content.length === 0 &&
+        isStreaming;
+      // Flattened to scalars so stable rows keep their memo boundary when
+      // branch topology changes at a message boundary.
+      const variants = variantsByMessageId[message.id];
+      return (
+        <ChatMessageRow
+          activeVoiceProfileId={activeVoiceProfileId}
+          authorName={authorName}
+          artifact={speechArtifacts[message.id]}
+          citations={isLast ? citations : noCitations}
+          copied={copiedId === message.id}
+          editing={editingId === message.id}
+          editValue={editingId === message.id ? editValue : ""}
+          isGeneratingSpeech={isGeneratingSpeech}
+          isLast={isLast}
+          isSpeechTarget={speechMessageId === message.id}
+          isStreaming={isStreaming}
+          isThinking={isThinking}
+          key={message.id}
+          message={message}
+          modelDisplayName={
+            !showMessageModelLabel
+              ? undefined
+              : resolveMessageModelLabel({
+                  messageModelId: message.modelId,
+                  modelDisplayNames,
+                  selectedModelId:
+                    isLast && isStreaming ? selectedModelId : undefined,
+                })
+          }
+          nextVariantId={variants?.nextLeafMessageId}
+          onAttachmentRetention={onAttachmentRetention}
+          onBranch={onBranch}
+          onCancelEdit={handleCancelEdit}
+          onContinue={onContinue}
+          {...(onCreateFeedbackEvalCase === undefined
+            ? {}
+            : { onCreateFeedbackEvalCase })}
+          onCopy={handleCopy}
+          onDelete={onDelete}
+          onEditValueChange={setEditValue}
+          onGenerateSpeech={onGenerateSpeech}
+          onPreview={setPreviewAttachment}
+          onRate={onRate}
+          onRegenerate={onRegenerate}
+          onRegenerateWith={onRegenerateWith}
+          onFollowUp={onFollowUp}
+          regenerateModels={regenerateModels}
+          onSelectVariant={onSelectVariant}
+          observeStreamingMessage={
+            isStreaming && message.id === streamingAssistantMessageId
+          }
+          onStreamingContentChange={onStreamingContentChange}
+          onStartEdit={handleStartEdit}
+          onSubmitEdit={handleSubmitEdit}
+          positionInSet={index + 1}
+          previousVariantId={variants?.previousLeafMessageId}
+          rating={feedback[message.id]?.rating}
+          reasoning={isLast ? reasoning : undefined}
+          runActivities={isLast ? runActivities : noActivities}
+          runWait={isLast ? runWait : undefined}
+          setSize={messages.length}
+          showContinueButton={showContinueButton}
+          showFollowUps={showFollowUps}
+          showMessageTimestamps={showMessageTimestamps}
+          showRunStatus={showRunStatus}
+          chatAccess={chatAccess}
+          agentName={agentName}
+          toolCalls={isLast ? toolCalls : noToolCalls}
+          variantIndex={variants?.index}
+          variantTotal={variants?.total}
+        />
+      );
+    },
+    [
+      activeVoiceProfileId,
+      agentName,
+      authorName,
+      chatAccess,
+      citations,
+      copiedId,
+      editValue,
+      editingId,
+      feedback,
+      handleCancelEdit,
+      handleCopy,
+      handleStartEdit,
+      handleSubmitEdit,
+      isGeneratingSpeech,
+      isStreaming,
+      messages.length,
+      modelDisplayNames,
+      onAttachmentRetention,
+      onBranch,
+      onContinue,
+      onCreateFeedbackEvalCase,
+      onDelete,
+      onFollowUp,
+      onGenerateSpeech,
+      onRate,
+      onRegenerate,
+      onRegenerateWith,
+      onSelectVariant,
+      onStreamingContentChange,
+      reasoning,
+      regenerateModels,
+      runActivities,
+      runWait,
+      selectedModelId,
+      showContinueButton,
+      showFollowUps,
+      showMessageModelLabel,
+      showMessageTimestamps,
+      showRunStatus,
+      speechArtifacts,
+      speechMessageId,
+      streamingAssistantMessageId,
+      toolCalls,
+      variantsByMessageId,
+    ],
+  );
 
   return (
     <>
-      <div className="rm-message-list">
-        {messages.map((message, index) => {
-          const isLast = index === messages.length - 1;
-          const isThinking =
-            message.role === "assistant" &&
-            message.error === undefined &&
-            message.content.length === 0 &&
-            isStreaming;
-          // Flattened to scalars: variantsByMessageId is rebuilt whenever the
-          // transcript is, which during a stream is once per token.
-          const variants = variantsByMessageId[message.id];
-          return (
-            <ChatMessageRow
-              activeVoiceProfileId={activeVoiceProfileId}
-              authorName={authorName}
-              artifact={speechArtifacts[message.id]}
-              citations={isLast ? citations : noCitations}
-              copied={copiedId === message.id}
-              editing={editingId === message.id}
-              editValue={editingId === message.id ? editValue : ""}
-              isGeneratingSpeech={isGeneratingSpeech}
-              isLast={isLast}
-              isSpeechTarget={speechMessageId === message.id}
-              isStreaming={isStreaming}
-              isThinking={isThinking}
-              key={message.id}
-              message={message}
-              modelDisplayName={
-                !showMessageModelLabel
-                  ? undefined
-                  : resolveMessageModelLabel({
-                      messageModelId: message.modelId,
-                      modelDisplayNames,
-                      // Streaming rows may not have modelId until terminal persist.
-                      selectedModelId:
-                        isLast && isStreaming ? selectedModelId : undefined,
-                    })
-              }
-              nextVariantId={variants?.siblingIds[variants.index + 1]}
-              onAttachmentRetention={onAttachmentRetention}
-              onBranch={onBranch}
-              onCancelEdit={handleCancelEdit}
-              onContinue={onContinue}
-              onCopy={handleCopy}
-              onDelete={onDelete}
-              onEditValueChange={setEditValue}
-              onGenerateSpeech={onGenerateSpeech}
-              onPreview={setPreviewAttachment}
-              onRate={onRate}
-              onRegenerate={onRegenerate}
-              onRegenerateWith={onRegenerateWith}
-              onFollowUp={onFollowUp}
-              regenerateModels={regenerateModels}
-              onSelectVariant={onSelectVariant}
-              onStartEdit={handleStartEdit}
-              onSubmitEdit={handleSubmitEdit}
-              previousVariantId={variants?.siblingIds[variants.index - 1]}
-              rating={feedback[message.id]?.rating}
-              reasoning={isLast ? reasoning : undefined}
-              runActivities={isLast ? runActivities : noActivities}
-              runWait={isLast ? runWait : undefined}
-              showContinueButton={showContinueButton}
-              showFollowUps={showFollowUps}
-              showMessageTimestamps={showMessageTimestamps}
-              showRunStatus={showRunStatus}
-              chatAccess={chatAccess}
-              agentName={agentName}
-              toolCalls={isLast ? toolCalls : noToolCalls}
-              variantIndex={variants?.index}
-              variantTotal={variants?.total}
-            />
-          );
-        })}
-      </div>
+      <TranscriptWindow
+        accessibleDescription={t("fullTranscriptModeDescription")}
+        estimateSize={estimateSize}
+        feedLabel={t("conversationTranscript")}
+        getScrollElement={getScrollElement}
+        items={messages}
+        renderItem={renderMessage}
+        showAllLabel={t("showAllLoadedMessages")}
+        useWindowedLabel={t("useWindowedTranscript")}
+        windowedDescription={t("windowedTranscriptModeDescription")}
+      />
       <FormDialog
         open={previewAttachment !== undefined}
         title={previewAttachment?.fileName ?? t("sourceDocument")}

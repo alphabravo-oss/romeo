@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { getReadinessReport, type ReadinessCheck } from "../features/readiness";
+import {
+  readinessQueryOptions,
+  type ReadinessCheck,
+} from "../features/readiness";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
@@ -16,10 +19,7 @@ const col = createColumnHelper<ReadinessCheck>();
 
 export function ReadinessPanel() {
   const { t } = useLocale();
-  const readinessQuery = useQuery({
-    queryKey: ["readiness"],
-    queryFn: getReadinessReport,
-  });
+  const readinessQuery = useQuery(readinessQueryOptions());
 
   return (
     <Section

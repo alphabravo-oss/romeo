@@ -1,5 +1,4 @@
 {
-  "groupsTitle": "Groups",
   "groupsAdd": "Add group",
   "groupsCreated": "Group created",
   "groupsCouldNotCreate": "Could not create group",
@@ -31,7 +30,6 @@
   "groupsSlugOptional": "Slug (optional)",
   "groupsCreating": "Creating",
   "groupsCreate": "Create group",
-  "organizationsTitle": "Organizations",
   "organizationsName": "Name",
   "organizationsSlug": "Slug",
   "organizationsId": "ID",
@@ -80,6 +78,5 @@
   "organizationsReactivated": "Organization reactivated",
   "organizationsReactivateFailed": "Could not reactivate the organization.",
   "organizationsActionsFor": "Organization actions for",
-  "workspaceMembersTitle": "Workspace members",
   "workspaceMembersHelp": "Membership is a workspace read grant. Users and groups without it cannot open this workspace."
 }

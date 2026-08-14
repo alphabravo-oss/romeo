@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import {
   exportAdminAnalyticsSummaryCsv,
-  getAdminAnalyticsSummary,
+  adminAnalyticsSummaryQueryOptions,
 } from "../features/admin-insights";
 import type {
   AdminAnalyticsAttentionModel,
@@ -26,6 +26,7 @@ import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { DateRangeSelect } from "./DateRangeSelect";
 import { PageActions } from "./PageActions";
 import { rangeToBounds, type RangePreset } from "./date-range";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 const toolCol = createColumnHelper<AdminAnalyticsToolSummaryRow>();
 const usageCol = createColumnHelper<AdminAnalyticsUsageMetric>();
@@ -110,18 +111,15 @@ function toolColumns(
 export function AnalyticsPanel() {
   const { t } = useLocale();
   const [range, setRange] = useState<RangePreset>("7d");
-  const summaryQuery = useQuery({
-    queryKey: ["adminAnalyticsSummary", range],
-    queryFn: () => getAdminAnalyticsSummary(analyticsWindow(range)),
-    refetchInterval: 30_000,
-  });
+  const summaryQuery = useQuery(
+    adminAnalyticsSummaryQueryOptions(range, analyticsWindow(range)),
+  );
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string>();
 
   return (
     <Section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm text-muted">{t("analyticsTitle")}</div>
         <div className="flex flex-wrap gap-2">
           <DateRangeSelect onChange={setRange} value={range} />
           <Button
@@ -156,9 +154,7 @@ export function AnalyticsPanel() {
       const csv = await exportAdminAnalyticsSummaryCsv(analyticsWindow(range));
       downloadCsv(csv, "romeo-admin-analytics-summary.csv");
     } catch (caught) {
-      setExportError(
-        caught instanceof Error ? caught.message : t("analyticsUnableExport"),
-      );
+      setExportError(safeUserErrorMessage(caught, t("analyticsUnableExport")));
       toast(t("analyticsUnableExport"), "error");
     } finally {
       setIsExporting(false);
@@ -301,6 +297,50 @@ function AnalyticsSummaryView({
           { label: t("analyticsToolCalls"), value: summary.tools.totalCount },
         ]}
       />
+      <div className="mb-2 mt-3 text-xs font-medium text-muted">
+        {t("analyticsAdoptionValue")}
+      </div>
+      <StatRow
+        items={[
+          {
+            label: t("analyticsActiveUsers"),
+            value: summary.adoption.activeUserCount,
+          },
+          {
+            label: t("analyticsEngagedUsers"),
+            value: summary.adoption.engagedUserCount,
+          },
+          {
+            label: t("analyticsActiveWorkspaces"),
+            value: summary.adoption.activeWorkspaceCount,
+          },
+          {
+            label: t("analyticsRunCompletionRate"),
+            value:
+              summary.adoption.runCompletionRate === null ? (
+                "—"
+              ) : (
+                <LocalizedNumber
+                  options={{ style: "percent", maximumFractionDigits: 1 }}
+                  value={summary.adoption.runCompletionRate}
+                />
+              ),
+          },
+          {
+            label: t("analyticsPositiveFeedbackRate"),
+            value:
+              summary.adoption.feedback.positiveRate === null ? (
+                "—"
+              ) : (
+                <LocalizedNumber
+                  options={{ style: "percent", maximumFractionDigits: 1 }}
+                  value={summary.adoption.feedback.positiveRate}
+                />
+              ),
+          },
+        ]}
+      />
+      <p className="mt-2 text-xs text-muted">{t("analyticsAdoptionHelp")}</p>
       {summary.usage.unpricedTokenQuantity > 0 ? (
         <div className="rm-attention-note mt-3" role="status">
           <strong>

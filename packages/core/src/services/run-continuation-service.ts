@@ -18,6 +18,8 @@ import type { RunEventSequencer } from "./run-event-sequencer";
 import type { RunExecutionStateService } from "./run-execution-state-service";
 import { isTerminalRunStatus, runWithStatus } from "./run-recovery-service";
 import type { RunServiceOptions } from "./run-service-contracts";
+import { requestedChatParametersForModel } from "./run-sampling";
+import { reasoningPolicyLayersForContinuation } from "./run-reasoning-policy";
 import type { RunStreamingExecutionInput } from "./run-streaming-execution-service";
 import {
   dispatchRunContext,
@@ -66,6 +68,17 @@ export class RunContinuationService {
       { model, provider },
     );
     const providerTools = await this.providerTools(input.subject, run);
+    const reasoningPolicy = await reasoningPolicyLayersForContinuation(
+      this.repository,
+      run,
+      agentVersion.parameters,
+      this.options.capabilityPlatformPolicy,
+    );
+    const requestedParameters = requestedChatParametersForModel(
+      model,
+      agentVersion.parameters,
+      reasoningPolicy,
+    );
     const resumeContext = await this.contextBuilder.buildApproval({
       agentVersion,
       approvalRequestId: input.approvalRequestId,
@@ -93,6 +106,7 @@ export class RunContinuationService {
       subject: input.subject,
       assistantContentPrefix: resumeContext.assistantContentPrefix,
       emitRunStarted: false,
+      ...requestedParameters,
     });
     return runningRun;
   }
@@ -139,7 +153,7 @@ export class RunContinuationService {
         type: "run.waiting_tool_dispatch",
         data: dispatchWaitEventData(job, input.dispatch, input.toolId),
       });
-      await this.repository.appendRunEvents([event]);
+      await this.sequencer.append(this.repository, [event]);
     }
     return queued;
   }
@@ -178,6 +192,17 @@ export class RunContinuationService {
       { model, provider },
     );
     const providerTools = await this.providerTools(runSubject, run);
+    const reasoningPolicy = await reasoningPolicyLayersForContinuation(
+      this.repository,
+      run,
+      agentVersion.parameters,
+      this.options.capabilityPlatformPolicy,
+    );
+    const requestedParameters = requestedChatParametersForModel(
+      model,
+      agentVersion.parameters,
+      reasoningPolicy,
+    );
     const resumeContext = await this.contextBuilder.buildDispatch({
       agentVersion,
       job,
@@ -206,6 +231,7 @@ export class RunContinuationService {
       subject: runSubject,
       assistantContentPrefix: resumeContext.assistantContentPrefix,
       emitRunStarted: false,
+      ...requestedParameters,
     });
     return runningRun;
   }

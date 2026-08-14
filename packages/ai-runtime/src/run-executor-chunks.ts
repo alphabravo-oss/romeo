@@ -1,11 +1,13 @@
 import type {
   ProviderToolCallRequest,
+  ProviderKind,
   ProviderTokenUsage,
   StreamChatChunk,
   StreamChatInput,
 } from "@romeo/providers";
 import { providerToolCallRedactionHash } from "@romeo/providers";
 
+import { hiddenReasoningOmitted, providerSafeReasoningSummary } from "./events";
 import type {
   ExecuteRunInput,
   ProviderFallbackTarget,
@@ -40,12 +42,51 @@ export function isUsageChunk(
   return typeof chunk === "object" && chunk !== null && chunk.type === "usage";
 }
 
-export function isReasoningChunk(
+export function reasoningChunkEventData(
   chunk: StreamChatChunk,
-): chunk is { type: "reasoning"; text: string } {
-  return (
-    typeof chunk === "object" && chunk !== null && chunk.type === "reasoning"
-  );
+  privateReasoningAlreadyObserved: boolean,
+  retainProviderSafeSummary: boolean,
+):
+  | {
+      observed: true;
+      event?: {
+        type: "message.reasoning" | "reasoning.summary.delta";
+        data: Record<string, unknown>;
+      };
+    }
+  | undefined {
+  if (typeof chunk !== "object" || chunk === null) return undefined;
+  if (chunk.type === "reasoning")
+    return privateReasoningAlreadyObserved
+      ? { observed: true }
+      : {
+          observed: true,
+          event: {
+            type: "message.reasoning",
+            data: { classification: hiddenReasoningOmitted },
+          },
+        };
+  if (chunk.type !== "reasoning_summary") return undefined;
+  if (!retainProviderSafeSummary)
+    return privateReasoningAlreadyObserved
+      ? { observed: true }
+      : {
+          observed: true,
+          event: {
+            type: "message.reasoning",
+            data: { classification: hiddenReasoningOmitted },
+          },
+        };
+  return {
+    observed: true,
+    event: {
+      type: "reasoning.summary.delta",
+      data: {
+        classification: providerSafeReasoningSummary,
+        text: chunk.text.slice(0, 4_096),
+      },
+    },
+  };
 }
 
 export function isToolCallChunk(chunk: StreamChatChunk): chunk is {
@@ -86,17 +127,35 @@ export function providerToolCallRequestedData(
   };
 }
 
-export function sanitizeUsage(usage: ProviderTokenUsage): ProviderTokenUsage {
+export function sanitizeUsage(
+  usage: ProviderTokenUsage,
+  trustedSource: ProviderKind,
+): ProviderTokenUsage {
   const sanitized: ProviderTokenUsage = {};
   if (isNonNegativeInteger(usage.inputTokens))
     sanitized.inputTokens = usage.inputTokens;
+  if (isNonNegativeInteger(usage.cachedInputTokens))
+    sanitized.cachedInputTokens = usage.cachedInputTokens;
   if (isNonNegativeInteger(usage.outputTokens))
     sanitized.outputTokens = usage.outputTokens;
+  if (isNonNegativeInteger(usage.reasoningTokens))
+    sanitized.reasoningTokens = usage.reasoningTokens;
   if (isNonNegativeInteger(usage.totalTokens))
     sanitized.totalTokens = usage.totalTokens;
-  if (typeof usage.source === "string" && usage.source.length > 0)
-    sanitized.source = usage.source.slice(0, 80);
+  // `source` is metadata on a read-wide usage surface. Never accept it from an
+  // upstream/custom chunk; stamp the adapter kind selected by the executor.
+  sanitized.source = trustedSource;
   return sanitized;
+}
+
+export function mergeProviderUsage(
+  previous: ProviderTokenUsage | undefined,
+  next: ProviderTokenUsage,
+): ProviderTokenUsage {
+  return {
+    ...previous,
+    ...next,
+  };
 }
 
 function isNonNegativeInteger(value: unknown): value is number {

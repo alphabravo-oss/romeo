@@ -1,11 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Button } from "@romeo/ui";
 
-import {
-  listAgentKnowledgeBindings,
-  updateAgentKnowledgeBinding,
-} from "../features/managed-models";
+import { agentKnowledgeBindingsQueryOptions } from "../features/managed-models";
+import { updateAgentKnowledgeBindingMutationOptions } from "../features/managed-models/mutation-options";
 import type { KnowledgeBase } from "../features/types";
 import type { Agent } from "../features/managed-models";
 import { useLocale } from "../lib/i18n";
@@ -20,13 +18,10 @@ export function AgentKnowledgeBindingControls({
   activeKnowledgeBase,
 }: AgentKnowledgeBindingControlsProps) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const [notice, setNotice] = useState<string>();
-  const bindingsQuery = useQuery({
-    queryKey: ["agentKnowledgeBindings", activeAgent?.id],
-    queryFn: () => listAgentKnowledgeBindings(activeAgent!.id),
-    enabled: activeAgent !== undefined,
-  });
+  const bindingsQuery = useQuery(
+    agentKnowledgeBindingsQueryOptions(activeAgent?.id),
+  );
   const bindings = useMemo(
     () => bindingsQuery.data ?? [],
     [bindingsQuery.data],
@@ -34,9 +29,9 @@ export function AgentKnowledgeBindingControls({
   const activeBinding = bindings.find(
     (binding) => binding.knowledgeBaseId === activeKnowledgeBase?.id,
   );
-  const updateMutation = useMutation({
-    mutationFn: updateAgentKnowledgeBinding,
-  });
+  const updateMutation = useMutation(
+    updateAgentKnowledgeBindingMutationOptions(),
+  );
 
   async function handleToggle() {
     if (!activeAgent || !activeKnowledgeBase) return;
@@ -49,9 +44,6 @@ export function AgentKnowledgeBindingControls({
     setNotice(
       t(binding.enabled ? "knowledgeBoundNotice" : "knowledgeDisabledNotice"),
     );
-    await queryClient.invalidateQueries({
-      queryKey: ["agentKnowledgeBindings", activeAgent.id],
-    });
   }
 
   return (

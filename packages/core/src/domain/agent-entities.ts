@@ -116,10 +116,20 @@ export interface AgentVersion {
     enabled: boolean;
     approvalRequired: boolean;
   }>;
+  /** Immutable snapshot of the mutable agent capability assignments at publish time. */
+  capabilityDefaults?: AgentVersionCapabilityDefault[];
   createdBy: string;
   createdAt: string;
   publishedAt: string;
   evalSummary?: AgentVersionEvalSummary;
+}
+
+export interface AgentVersionCapabilityDefault {
+  capabilityId: string;
+  state: "inherit" | "enabled" | "disabled" | "required";
+  configuration: Record<string, unknown>;
+  assignmentVersion: number;
+  expiresAt?: string;
 }
 
 export interface AgentVersionEvalSuiteSummary {

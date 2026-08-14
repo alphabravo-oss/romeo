@@ -54,6 +54,11 @@ import {
 } from "./tool-dispatch-payload-store";
 import { ValkeyQuotaCoordinator } from "./valkey-quota-coordinator";
 import { ValkeyChatEventTransport } from "./valkey-chat-event-transport";
+import {
+  InMemoryRunEventTransport,
+  type RunEventTransport,
+} from "./run-event-transport";
+import { ValkeyRunEventTransport } from "./valkey-run-event-transport";
 
 export function canResolveExternalVectorStoreSecret(
   env: RomeoEnv,
@@ -110,6 +115,17 @@ export function createChatEventTransport(env: RomeoEnv): ChatEventTransport {
     });
   }
   return new InMemoryChatEventTransport();
+}
+
+export function createRunEventTransport(env: RomeoEnv): RunEventTransport {
+  if (env.REALTIME_EVENT_DRIVER === "valkey") {
+    return new ValkeyRunEventTransport({
+      keyPrefix: `${env.REALTIME_EVENT_KEY_PREFIX}:runs`,
+      timeoutMs: env.REALTIME_EVENT_TIMEOUT_MS,
+      url: env.VALKEY_URL,
+    });
+  }
+  return new InMemoryRunEventTransport();
 }
 
 export function createToolDispatchPayloadStore(

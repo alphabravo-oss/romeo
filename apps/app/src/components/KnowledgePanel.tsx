@@ -1,34 +1,28 @@
 import { Input, Textarea, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import Upload from "lucide-react/dist/esm/icons/upload.mjs";
-import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left.mjs";
 
 import {
-  createKnowledgeSource,
-  deleteKnowledgeSource,
-  extractKnowledgeSource,
-  getKnowledgeIngestReadiness,
-  listKnowledgeBases,
-  listKnowledgeSources,
-  queryKnowledgeBase,
-  reindexKnowledgeSource,
+  createKnowledgeSourceMutationOptions,
+  deleteKnowledgeSourceMutationOptions,
+  extractKnowledgeSourceMutationOptions,
+  ingestKnowledgeFileMutationOptions,
+  knowledgeBasesQueryOptions,
+  knowledgeIngestReadinessQueryOptions,
+  knowledgeSourcesQueryOptions,
+  queryKnowledgeBaseMutationOptions,
+  reindexKnowledgeSourceMutationOptions,
 } from "../features";
 import { Section } from "./console";
 import { ingestKnowledgeFile } from "./knowledge-file-ingest";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import { formatNumber } from "../lib/locale-format";
-import type { Agent, KnowledgeSource, RetrievalHit } from "../features/types";
+import type { KnowledgeSource, RetrievalHit } from "../features/types";
 import { useConfirm } from "./ConfirmDialog";
 import { FormDialog } from "./FormDialog";
-import { Tabs } from "./Tabs";
-import { KnowledgeSourcesTab } from "./KnowledgeSourcesTab";
-import { KnowledgeQueryTab } from "./KnowledgeQueryTab";
-import { KnowledgeCatalogPage } from "./KnowledgeCatalogPage";
-import { KnowledgeBaseSummary } from "./KnowledgeBaseSummary";
-import { KnowledgeIngestNotice } from "./KnowledgeIngestNotice";
 import {
   isSupportedKnowledgeMime,
   knowledgeJobStatusKey,
@@ -37,13 +31,11 @@ import {
   shouldInlineKnowledgeFile,
 } from "./knowledge-file-utils";
 import { isReindexPayloadCoherent } from "./knowledge-reindex";
-import {
-  listKnowledgeShares,
-  revokeKnowledgeShare,
-  shareKnowledge,
-} from "../features/access/api";
-import { ResourceGrantEditor } from "./ResourceGrantEditor";
-import { SettingsSection } from "./SettingsSection";
+import { knowledgeSharesQueryOptions } from "../features/access/query-options";
+import { KnowledgeWorkspaceTabs } from "./KnowledgeWorkspaceTabs";
+import { KnowledgePanelHeader } from "./KnowledgePanelHeader";
+import type { KnowledgePanelProps } from "./knowledge-panel-types";
+import { KnowledgeCatalogBoundary } from "./KnowledgeCatalogBoundary";
 
 export function KnowledgePanel({
   activeAgent,
@@ -51,15 +43,8 @@ export function KnowledgePanel({
   onSelectionChange,
   selectedKnowledgeBaseId,
   workspaceId,
-}: {
-  activeAgent: Agent | undefined;
-  isAdmin?: boolean;
-  onSelectionChange: (knowledgeBaseId: string | null) => void;
-  selectedKnowledgeBaseId: string | undefined;
-  workspaceId: string | undefined;
-}) {
+}: KnowledgePanelProps) {
   const { locale, t } = useLocale();
-  const queryClient = useQueryClient();
   const [hits, setHits] = useState<RetrievalHit[]>([]);
   const [notice, setNotice] = useState<string>();
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
@@ -67,11 +52,7 @@ export function KnowledgePanel({
   const [reindexing, setReindexing] = useState<KnowledgeSource>();
   const { ask, dialog } = useConfirm();
 
-  const knowledgeBasesQuery = useQuery({
-    queryKey: ["knowledgeBases", workspaceId],
-    queryFn: () => listKnowledgeBases(workspaceId!),
-    enabled: workspaceId !== undefined,
-  });
+  const knowledgeBasesQuery = useQuery(knowledgeBasesQueryOptions(workspaceId));
   const knowledgeBases = useMemo(
     () => knowledgeBasesQuery.data ?? [],
     [knowledgeBasesQuery.data],
@@ -79,38 +60,31 @@ export function KnowledgePanel({
   const activeKnowledgeBase = knowledgeBases.find(
     (item) => item.id === selectedKnowledgeBaseId,
   );
-  const sourcesQuery = useQuery({
-    queryKey: ["knowledgeSources", activeKnowledgeBase?.id],
-    queryFn: () => listKnowledgeSources(activeKnowledgeBase!.id),
-    enabled: activeKnowledgeBase !== undefined,
-  });
-  const sharesQuery = useQuery({
-    queryKey: ["knowledgeShares", activeKnowledgeBase?.id],
-    queryFn: () => listKnowledgeShares(activeKnowledgeBase!.id),
-    enabled: isAdmin && activeKnowledgeBase !== undefined,
-  });
-  const ingestQuery = useQuery({
-    queryKey: ["knowledgeIngestReadiness"],
-    queryFn: getKnowledgeIngestReadiness,
-  });
+  const sourcesQuery = useQuery(
+    knowledgeSourcesQueryOptions(activeKnowledgeBase?.id),
+  );
+  const sharesQuery = useQuery(
+    knowledgeSharesQueryOptions(activeKnowledgeBase?.id, isAdmin),
+  );
+  const ingestQuery = useQuery(knowledgeIngestReadinessQueryOptions());
   const canUpload = ingestQuery.data?.ready === true;
 
-  const createSourceMutation = useMutation({
-    mutationFn: createKnowledgeSource,
-  });
-  const ingestFileMutation = useMutation({
-    mutationFn: ingestKnowledgeFile,
-  });
-  const deleteSourceMutation = useMutation({
-    mutationFn: deleteKnowledgeSource,
-  });
-  const extractSourceMutation = useMutation({
-    mutationFn: extractKnowledgeSource,
-  });
-  const reindexSourceMutation = useMutation({
-    mutationFn: reindexKnowledgeSource,
-  });
-  const queryMutation = useMutation({ mutationFn: queryKnowledgeBase });
+  const createSourceMutation = useMutation(
+    createKnowledgeSourceMutationOptions(),
+  );
+  const ingestFileMutation = useMutation(
+    ingestKnowledgeFileMutationOptions(ingestKnowledgeFile),
+  );
+  const deleteSourceMutation = useMutation(
+    deleteKnowledgeSourceMutationOptions(),
+  );
+  const extractSourceMutation = useMutation(
+    extractKnowledgeSourceMutationOptions(),
+  );
+  const reindexSourceMutation = useMutation(
+    reindexKnowledgeSourceMutationOptions(),
+  );
+  const queryMutation = useMutation(queryKnowledgeBaseMutationOptions());
 
   const SourceForm = useForm({
     defaultValues: {
@@ -125,10 +99,13 @@ export function KnowledgePanel({
           await ingestFileMutation.mutateAsync({
             file: pendingFile,
             knowledgeBaseId: activeKnowledgeBase.id,
+            ...(workspaceId === undefined ? {} : { workspaceId }),
           });
+          ingestFileMutation.reset();
         } else {
           await createSourceMutation.mutateAsync({
             knowledgeBaseId: activeKnowledgeBase.id,
+            ...(workspaceId === undefined ? {} : { workspaceId }),
             fileName: value.fileName,
             mimeType: mimeTypeFor(value.fileName),
             sizeBytes: Math.max(
@@ -137,17 +114,9 @@ export function KnowledgePanel({
             ),
             ...(content.length > 0 ? { content } : {}),
           });
+          createSourceMutation.reset();
         }
         setNotice(t("knowledgeSourceRegistered"));
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ["knowledgeSources", activeKnowledgeBase.id],
-          }),
-          queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
-          queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-          queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-          queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-        ]);
         toast(t("knowledgeSourceAdded"), "success");
         setPendingFile(undefined);
         setSourceDialogOpen(false);
@@ -187,6 +156,7 @@ export function KnowledgePanel({
         const source = await reindexSourceMutation.mutateAsync({
           knowledgeBaseId: activeKnowledgeBase.id,
           sourceId: reindexing.id,
+          ...(workspaceId === undefined ? {} : { workspaceId }),
           content,
           sizeBytes: content.length,
         });
@@ -194,16 +164,7 @@ export function KnowledgePanel({
         setNotice(
           `${t("knowledgeSourceReindexedNotice")}: ${formatNumber(source.chunkCount ?? 0, locale)} ${t("knowledgeChunksLower")}.`,
         );
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ["knowledgeSources", activeKnowledgeBase.id],
-          }),
-          queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
-          queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-          queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-          queryClient.invalidateQueries({ queryKey: ["jobs"] }),
-          queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-        ]);
+        reindexSourceMutation.reset();
         toast(t("knowledgeSourceReindexed"), "success");
         setReindexing(undefined);
         ReindexForm.reset();
@@ -242,6 +203,7 @@ export function KnowledgePanel({
       query,
     });
     setHits(results);
+    queryMutation.reset();
     setNotice(t("knowledgeQueryComplete"));
   }
 
@@ -268,17 +230,10 @@ export function KnowledgePanel({
       await deleteSourceMutation.mutateAsync({
         knowledgeBaseId: activeKnowledgeBase.id,
         sourceId,
+        ...(workspaceId === undefined ? {} : { workspaceId }),
       });
       setHits([]);
       setNotice(t("knowledgeSourceDeletedNotice"));
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["knowledgeSources", activeKnowledgeBase.id],
-        }),
-        queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
-        queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-        queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-      ]);
       toast(t("knowledgeSourceDeleted"), "success");
     } catch {
       toast(t("knowledgeCouldNotDeleteSource"), "error");
@@ -298,20 +253,12 @@ export function KnowledgePanel({
       const result = await extractSourceMutation.mutateAsync({
         knowledgeBaseId: activeKnowledgeBase.id,
         sourceId,
+        ...(workspaceId === undefined ? {} : { workspaceId }),
       });
       setHits([]);
       setNotice(
         `${t("knowledgeExtraction")} ${t(knowledgeJobStatusKey(result.job.status))}: ${formatNumber(result.source.chunkCount ?? 0, locale)} ${t("knowledgeChunksLower")}.`,
       );
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["knowledgeSources", activeKnowledgeBase.id],
-        }),
-        queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
-        queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-        queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-        queryClient.invalidateQueries({ queryKey: ["jobs"] }),
-      ]);
       toast(t("knowledgeExtracted"), "success");
     } catch {
       toast(t("knowledgeCouldNotExtractSource"), "error");
@@ -320,10 +267,8 @@ export function KnowledgePanel({
 
   if (activeKnowledgeBase === undefined) {
     return (
-      <KnowledgeCatalogPage
-        {...(ingestQuery.data === undefined
-          ? {}
-          : { ingestReadiness: ingestQuery.data })}
+      <KnowledgeCatalogBoundary
+        ingestReadiness={ingestQuery.data}
         isAdmin={isAdmin}
         isLoading={knowledgeBasesQuery.isLoading}
         knowledgeBases={knowledgeBases}
@@ -339,38 +284,16 @@ export function KnowledgePanel({
 
   return (
     <div className="grid gap-3">
-      <Button
-        className="w-fit"
-        onClick={() => onSelectionChange(null)}
-        variant="ghost"
-      >
-        <ArrowLeft aria-hidden="true" size={16} />
-        {t("knowledgeBackToBases")}
-      </Button>
+      <KnowledgePanelHeader
+        canUpload={canUpload}
+        grants={sharesQuery.data ?? []}
+        isAdmin={isAdmin}
+        knowledgeBase={activeKnowledgeBase}
+        onAddSource={() => setSourceDialogOpen(true)}
+        onBack={() => onSelectionChange(null)}
+        readiness={ingestQuery.data}
+      />
       <Section>
-        <KnowledgeBaseSummary
-          canUpload={canUpload}
-          knowledgeBase={activeKnowledgeBase}
-          onAddSource={() => setSourceDialogOpen(true)}
-        />
-        <KnowledgeIngestNotice isAdmin={isAdmin} readiness={ingestQuery.data} />
-        {isAdmin ? (
-          <SettingsSection
-            description={t("knowledgeAccessHelp")}
-            title={t("knowledgeAccess")}
-          >
-            <ResourceGrantEditor
-              grants={sharesQuery.data ?? []}
-              onGrant={(share) => shareKnowledge(activeKnowledgeBase.id, share)}
-              onRevoke={(grantId) =>
-                revokeKnowledgeShare(activeKnowledgeBase.id, grantId)
-              }
-              permissionOptions={["read", "use", "write"]}
-              queryKey={["knowledgeShares", activeKnowledgeBase.id]}
-            />
-          </SettingsSection>
-        ) : null}
-
         <FormDialog
           onClose={() => {
             setSourceDialogOpen(false);
@@ -514,41 +437,22 @@ export function KnowledgePanel({
           </form>
         </FormDialog>
 
-        <Tabs
-          tabs={[
-            {
-              id: "sources",
-              label: t("knowledgeSources"),
-              content: (
-                <KnowledgeSourcesTab
-                  activeAgent={activeAgent}
-                  activeKnowledgeBase={activeKnowledgeBase}
-                  canUpload={canUpload}
-                  isDeleting={deleteSourceMutation.isPending}
-                  isExtracting={extractSourceMutation.isPending}
-                  isReindexing={reindexSourceMutation.isPending}
-                  onAddSource={() => setSourceDialogOpen(true)}
-                  onDelete={(sourceId) => void handleDeleteSource(sourceId)}
-                  onExtract={(sourceId) => void handleExtractSource(sourceId)}
-                  onReindex={handleReindexSource}
-                  sourcesQuery={sourcesQuery}
-                />
-              ),
-            },
-            {
-              id: "query",
-              label: t("knowledgeQuery"),
-              content: (
-                <KnowledgeQueryTab
-                  enabled={activeKnowledgeBase !== undefined && canUpload}
-                  hits={hits}
-                  isPending={queryMutation.isPending}
-                  notice={notice}
-                  onQuery={handleQuery}
-                />
-              ),
-            },
-          ]}
+        <KnowledgeWorkspaceTabs
+          activeAgent={activeAgent}
+          activeKnowledgeBase={activeKnowledgeBase}
+          canUpload={canUpload}
+          hits={hits}
+          isDeleting={deleteSourceMutation.isPending}
+          isExtracting={extractSourceMutation.isPending}
+          isQuerying={queryMutation.isPending}
+          isReindexing={reindexSourceMutation.isPending}
+          notice={notice}
+          onAddSource={() => setSourceDialogOpen(true)}
+          onDelete={(sourceId) => void handleDeleteSource(sourceId)}
+          onExtract={(sourceId) => void handleExtractSource(sourceId)}
+          onQuery={handleQuery}
+          onReindex={handleReindexSource}
+          sourcesQuery={sourcesQuery}
         />
         {dialog}
       </Section>

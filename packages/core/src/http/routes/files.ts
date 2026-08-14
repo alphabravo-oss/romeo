@@ -14,6 +14,7 @@ import {
   listFilesRoute,
   readFileContentRoute,
   retryFileExtractionRoute,
+  retryFileLifecycleRoute,
 } from "@romeo/contracts";
 
 export function registerFileRoutes(app: RomeoApi): void {
@@ -134,6 +135,14 @@ export function registerFileRoutes(app: RomeoApi): void {
     const data = await context
       .get("services")
       .files.retryExtraction(subject, context.req.valid("param").fileId);
+    return context.json({ data });
+  });
+
+  app.openapi(retryFileLifecycleRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context
+      .get("services")
+      .files.retryLifecycle(subject, context.req.valid("param").fileId);
     return context.json({ data });
   });
 

@@ -1,5 +1,5 @@
 import { Button, EmptyState, Input, StatusBadge } from "@romeo/ui";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left.mjs";
 import Copy from "lucide-react/dist/esm/icons/copy.mjs";
 import Download from "lucide-react/dist/esm/icons/download.mjs";
@@ -7,22 +7,23 @@ import Upload from "lucide-react/dist/esm/icons/upload.mjs";
 import Pin from "lucide-react/dist/esm/icons/pin.mjs";
 import { useCallback, useMemo, useRef } from "react";
 
-import {
-  cloneAgent,
-  exportAgentDefinition,
-  importAgentDefinition,
-} from "../features/managed-models";
 import type {
   Agent,
   ManagedModelExportDocument,
 } from "../features/managed-models";
+import {
+  cloneAgentMutationOptions,
+  exportAgentDefinitionMutationOptions,
+  importAgentDefinitionMutationOptions,
+} from "../features/managed-models/mutation-options";
 import type { BaseModel, Provider } from "../features/providers/types";
-import { updateWorkspaceDefaultAgent } from "../features/tenancy";
+import { updateWorkspaceDefaultAgentMutationOptions } from "../features/tenancy";
 import { downloadText } from "../lib/download";
 import { useLocale } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
-import { AgentStudioPanel, type AgentStudioTab } from "./AgentStudioPanel";
+import { AgentStudioPanel } from "./AgentStudioPanel";
+import type { AgentStudioTab } from "./agent-studio-model";
 import { CreateManagedModelDialog } from "./CreateManagedModelDialog";
 import { ManagedModelAvatar } from "./ManagedModelAvatar";
 import { PanelStats } from "./PanelStats";
@@ -52,14 +53,13 @@ export function ManagedModelAdminPanel({
   workspaceId: string | undefined;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const importInputRef = useRef<HTMLInputElement>(null);
-  const cloneMutation = useMutation({ mutationFn: cloneAgent });
-  const exportMutation = useMutation({ mutationFn: exportAgentDefinition });
-  const importMutation = useMutation({ mutationFn: importAgentDefinition });
-  const defaultMutation = useMutation({
-    mutationFn: updateWorkspaceDefaultAgent,
-  });
+  const cloneMutation = useMutation(cloneAgentMutationOptions(workspaceId));
+  const exportMutation = useMutation(exportAgentDefinitionMutationOptions());
+  const importMutation = useMutation(importAgentDefinitionMutationOptions());
+  const defaultMutation = useMutation(
+    updateWorkspaceDefaultAgentMutationOptions(),
+  );
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId);
   const modelById = useMemo(
     () => new Map(models.map((model) => [model.id, model])),
@@ -78,13 +78,12 @@ export function ManagedModelAdminPanel({
           workspaceId,
           agentId: workspaceDefaultAgentId === agentId ? null : agentId,
         });
-        await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
         toast(t("managedModelDefaultUpdated"), "success");
       } catch {
         toast(t("managedModelDefaultFailed"), "error");
       }
     },
-    [defaultMutation, queryClient, t, workspaceDefaultAgentId, workspaceId],
+    [defaultMutation, t, workspaceDefaultAgentId, workspaceId],
   );
   const handleClone = useCallback(
     async (agent: Agent) => {
@@ -94,17 +93,13 @@ export function ManagedModelAdminPanel({
           includeKnowledgeBindings: true,
           name: `${agent.name} copy`,
         });
-        if (workspaceId)
-          await queryClient.invalidateQueries({
-            queryKey: ["agents", workspaceId],
-          });
         onNavigationChange(cloned.id);
         toast(t("managedModelCloned"), "success");
       } catch {
         toast(t("managedModelCloneFailed"), "error");
       }
     },
-    [cloneMutation, onNavigationChange, queryClient, t, workspaceId],
+    [cloneMutation, onNavigationChange, t],
   );
   const handleExport = useCallback(
     async (agent: Agent) => {
@@ -253,16 +248,6 @@ export function ManagedModelAdminPanel({
     ],
   );
 
-  async function invalidateAgentLists() {
-    if (!workspaceId) return;
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] }),
-      queryClient.invalidateQueries({
-        queryKey: ["agentGallery", workspaceId],
-      }),
-    ]);
-  }
-
   async function handleImport(file: File) {
     if (!workspaceId) return;
     if (file.size > 5 * 1024 * 1024) {
@@ -277,7 +262,6 @@ export function ManagedModelAdminPanel({
         workspaceId,
         document: parsed,
       });
-      await invalidateAgentLists();
       onNavigationChange(imported.id);
       toast(t("managedModelImported"), "success");
     } catch {
@@ -319,7 +303,7 @@ export function ManagedModelAdminPanel({
   }
 
   return (
-    <section className="rm-panel rm-managed-model-list-page p-4">
+    <section className="rm-managed-model-list-page">
       <div className="rm-card-header rm-managed-model-list-header">
         <div>
           <div className="rm-card-title">{t("curatedModels")}</div>

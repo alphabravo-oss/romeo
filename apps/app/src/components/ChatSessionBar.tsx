@@ -13,6 +13,7 @@ import {
   type ChatSensitivity,
 } from "./chat-enterprise";
 import { OverflowMenu } from "./OverflowMenu";
+import { ChatMessageSearch } from "./ChatMessageSearch";
 
 /**
  * Sticky chrome above an in-progress chat: identity, model, sensitivity badge,
@@ -27,6 +28,7 @@ export function ChatSessionBar({
   onExportMarkdown,
   onOpenSourceChat,
   onShare,
+  onSearchNavigate,
 }: {
   chatId: string | undefined;
   /** Used only to recover a "Branch of …" origin when localStorage is empty. */
@@ -37,6 +39,7 @@ export function ChatSessionBar({
   onExportMarkdown: (() => void) | undefined;
   onOpenSourceChat?: ((sourceChatId: string) => void) | undefined;
   onShare: (() => void) | undefined;
+  onSearchNavigate: (leafMessageId: string) => void;
 }) {
   const { t } = useLocale();
   const title = chatTitle?.trim() || t("newChat");
@@ -95,6 +98,13 @@ export function ChatSessionBar({
         </div>
         {canPort ? (
           <div className="rm-chat-session-bar__actions">
+            <ChatMessageSearch
+              chatId={chatId}
+              key={chatId}
+              onNavigate={(result) =>
+                onSearchNavigate(result.branchLeafMessageId)
+              }
+            />
             {onShare === undefined ? null : (
               <Button
                 aria-label={t("share")}

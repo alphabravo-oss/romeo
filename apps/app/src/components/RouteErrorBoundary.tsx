@@ -4,6 +4,7 @@ import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.mjs";
 
 import { useLocale } from "../lib/i18n";
+import "../styles/route-error.css";
 
 /**
  * Rendered by the router whenever a route's component or loader throws.

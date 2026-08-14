@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { hashApiKey } from "@romeo/auth";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { MemoryObjectStore } from "@romeo/storage";
-import { DevVoiceProvider } from "@romeo/voices";
 
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
+import { createSeedData } from "./repositories/seed-data";
 
 describe("governance API", () => {
   it("filters audit logs and exports filtered CSV without raw metadata", async () => {
@@ -38,6 +38,52 @@ describe("governance API", () => {
     expect(csv).toContain('"metadataKeys"');
   });
 
+  it("serves the additive audit table contract with bounded allowlisted queries", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository);
+    await repository.createAuditLog({
+      id: "audit_table_route",
+      orgId: "org_default",
+      actorId: "user_dev_admin",
+      action: "local_auth.login",
+      resourceType: "session",
+      resourceId: "route_target",
+      outcome: "success",
+      metadata: {},
+      createdAt: "2026-08-14T12:00:00.000Z",
+    });
+
+    const response = await api.request("/api/v1/audit-logs/query", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        limit: 25,
+        search: "route_target",
+        sort: [{ field: "createdAt", direction: "desc" }],
+        filters: [{ field: "category", operator: "eq", value: "security" }],
+      }),
+    });
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      data: {
+        items: [{ id: "audit_table_route" }],
+        page: { limit: 25, nextCursor: null, previousCursor: null },
+      },
+    });
+
+    const rejected = await api.request("/api/v1/audit-logs/query", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        limit: 25,
+        sort: [{ field: "metadata", direction: "desc" }],
+        filters: [],
+      }),
+    });
+    expect(rejected.status).toBe(400);
+  });
+
   it("updates retention policy and records the change in audit logs", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
 
@@ -48,6 +94,7 @@ describe("governance API", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         auditLogRetentionDays: 90,
+        runEventRetentionDays: 30,
         fileRetentionDays: 365,
         workspaceFileRetentionDays: { workspace_default: 120 },
         userFileRetentionDays: { user_dev_admin: null },
@@ -58,7 +105,10 @@ describe("governance API", () => {
     const invalidResponse = await api.request("/api/v1/governance/retention", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ auditLogRetentionDays: 7 }),
+      body: JSON.stringify({
+        auditLogRetentionDays: 7,
+        runEventRetentionDays: 30,
+      }),
     });
     const auditResponse = await api.request(
       "/api/v1/audit-logs?action=governance.retention.update",
@@ -107,6 +157,15 @@ describe("governance API", () => {
     });
     const missing = await upload("missing.txt");
     const recent = await upload("recent.txt");
+    const expiredFile = await repository.getFileObject(expired.body.data.id);
+    if (expiredFile === undefined) throw new Error("Missing attached fixture");
+    await repository.updateFileObject({
+      ...expiredFile,
+      status: "attached",
+      lifecycleVersion: (expiredFile.lifecycleVersion ?? 0) + 1,
+      attachedAt: "2020-01-01T00:00:00.000Z",
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    });
     for (const fixture of [expired, bypassAttempt, missing]) {
       const file = await repository.getFileObject(fixture.body.data.id);
       if (file === undefined) throw new Error("Missing retention file fixture");
@@ -119,12 +178,55 @@ describe("governance API", () => {
     const missingFile = await repository.getFileObject(missing.body.data.id);
     if (missingFile === undefined) throw new Error("Missing object fixture");
     await objectStore.deleteObject(missingFile.objectKey);
+    const legacyBytes = new TextEncoder().encode("legacy available");
+    await objectStore.putObject({
+      key: "files/org_default/workspace_default/file_legacy/legacy.txt",
+      body: legacyBytes,
+      contentType: "text/plain",
+    });
+    await repository.createFileObject({
+      id: "file_legacy",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      ownerType: "user",
+      ownerId: "user_dev_admin",
+      fileName: "legacy.txt",
+      mimeType: "text/plain",
+      sizeBytes: legacyBytes.byteLength,
+      sha256: "b".repeat(64),
+      objectKey: "files/org_default/workspace_default/file_legacy/legacy.txt",
+      purpose: "general",
+      status: "available",
+      metadata: {},
+      createdAt: "2020-01-01T00:00:00.000Z",
+      updatedAt: "2020-01-01T00:00:00.000Z",
+    });
+    for (const status of ["retained", "quarantined"] as const) {
+      await repository.createFileObject({
+        id: `file_${status}`,
+        orgId: "org_default",
+        workspaceId: "workspace_default",
+        ownerType: "user",
+        ownerId: "user_dev_admin",
+        fileName: `${status}.txt`,
+        mimeType: "text/plain",
+        sizeBytes: 1,
+        sha256: "c".repeat(64),
+        objectKey: `files/org_default/workspace_default/file_${status}.txt`,
+        purpose: "general",
+        status,
+        metadata: {},
+        createdAt: "2020-01-01T00:00:00.000Z",
+        updatedAt: "2020-01-01T00:00:00.000Z",
+      });
+    }
 
     const policyResponse = await api.request("/api/v1/governance/retention", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         auditLogRetentionDays: 365,
+        runEventRetentionDays: 30,
         fileRetentionDays: 365,
         workspaceFileRetentionDays: { workspace_default: null },
         userFileRetentionDays: { user_dev_admin: 1 },
@@ -139,10 +241,12 @@ describe("governance API", () => {
     expect(policyResponse.status).toBe(200);
     expect(enforceResponse.status).toBe(200);
     expect(enforced.data).toMatchObject({
-      deletedFileObjectCount: 3,
+      deletedFileObjectCount: 4,
       missingFileObjectCount: 1,
       deletedFileObjectBytes:
-        expired.bytes.byteLength + bypassAttempt.bytes.byteLength,
+        expired.bytes.byteLength +
+        bypassAttempt.bytes.byteLength +
+        legacyBytes.byteLength,
     });
     expect(await repository.getFileObject(expired.body.data.id)).toMatchObject({
       status: "deleted",
@@ -156,7 +260,16 @@ describe("governance API", () => {
       status: "deleted",
     });
     expect(await repository.getFileObject(recent.body.data.id)).toMatchObject({
-      status: "available",
+      status: "ready",
+    });
+    expect(await repository.getFileObject("file_legacy")).toMatchObject({
+      status: "deleted",
+    });
+    expect(await repository.getFileObject("file_retained")).toMatchObject({
+      status: "retained",
+    });
+    expect(await repository.getFileObject("file_quarantined")).toMatchObject({
+      status: "quarantined",
     });
     expect(
       await objectStore.getObject(
@@ -171,22 +284,22 @@ describe("governance API", () => {
       id: "audit_old",
       orgId: "org_default",
       actorId: "user_dev_admin",
-      action: "old.audit",
+      action: "admin.organization.update",
       resourceType: "organization",
       resourceId: "org_default",
       outcome: "success",
-      metadata: { stale: true },
+      metadata: {},
       createdAt: "2020-01-01T00:00:00.000Z",
     });
     await repository.createAuditLog({
       id: "audit_recent",
       orgId: "org_default",
       actorId: "user_dev_admin",
-      action: "recent.audit",
+      action: "admin.organization.update",
       resourceType: "organization",
       resourceId: "org_default",
       outcome: "success",
-      metadata: { recent: true },
+      metadata: {},
       createdAt: new Date().toISOString(),
     });
     const api = createRomeoApi(repository);
@@ -197,11 +310,11 @@ describe("governance API", () => {
     );
     const enforced = await enforceResponse.json();
     const oldResponse = await api.request(
-      "/api/v1/audit-logs?action=old.audit",
+      "/api/v1/audit-logs?action=admin.organization.update",
     );
     const old = await oldResponse.json();
     const recentResponse = await api.request(
-      "/api/v1/audit-logs?action=recent.audit",
+      "/api/v1/audit-logs?action=admin.organization.update",
     );
     const recent = await recentResponse.json();
     const enforcementAuditResponse = await api.request(
@@ -212,12 +325,110 @@ describe("governance API", () => {
     expect(enforceResponse.status).toBe(200);
     expect(enforced.data.auditLogRetentionDays).toBe(365);
     expect(enforced.data.deletedAuditLogCount).toBe(1);
-    expect(old.data).toHaveLength(0);
+    expect(old.data).toHaveLength(1);
     expect(recent.data).toHaveLength(1);
     expect(enforcementAudit.data).toHaveLength(1);
     expect(enforcementAudit.data[0].metadata).toMatchObject({
       deletedAuditLogCount: 1,
     });
+  });
+
+  it("compacts old terminal run events while preserving the final event and legal holds", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const defaultChat = await repository.getChat("chat_welcome");
+    if (defaultChat === undefined) throw new Error("Missing default chat.");
+    await repository.createChat({
+      ...defaultChat,
+      id: "chat_run_event_legal_hold",
+      title: "Run event legal hold",
+      legalHoldUntil: "2099-01-01T00:00:00.000Z",
+      legalHoldReason: "investigation",
+    });
+    const runBase = {
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: "model_openai_compatible_default",
+      providerId: "provider_openai_compatible",
+      status: "completed" as const,
+      createdBy: "user_dev_admin",
+      createdAt: "2020-01-01T00:00:00.000Z",
+      completedAt: "2020-01-01T00:01:00.000Z",
+    };
+    await repository.createRun({
+      ...runBase,
+      id: "run_event_retention_old",
+      chatId: "chat_welcome",
+    });
+    await repository.createRun({
+      ...runBase,
+      id: "run_event_retention_held",
+      chatId: "chat_run_event_legal_hold",
+    });
+    await repository.appendRunEvents([
+      runEvent("retention_old_started", "run_event_retention_old", 1),
+      runEvent(
+        "retention_old_summary",
+        "run_event_retention_old",
+        2,
+        "reasoning.summary.delta",
+        { text: "retention-summary-secret" },
+      ),
+      runEvent(
+        "retention_old_summary_completed",
+        "run_event_retention_old",
+        3,
+        "reasoning.summary.completed",
+      ),
+      runEvent(
+        "retention_old_completed",
+        "run_event_retention_old",
+        4,
+        "run.completed",
+      ),
+      runEvent("retention_held_started", "run_event_retention_held", 1),
+      runEvent(
+        "retention_held_summary",
+        "run_event_retention_held",
+        2,
+        "reasoning.summary.delta",
+        { text: "held-summary-secret" },
+      ),
+      runEvent(
+        "retention_held_completed",
+        "run_event_retention_held",
+        3,
+        "run.completed",
+      ),
+    ]);
+    const api = createRomeoApi(repository);
+
+    const response = await api.request("/api/v1/governance/retention/enforce", {
+      method: "POST",
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data).toMatchObject({
+      runEventRetentionDays: 30,
+      deletedRunEventCount: 3,
+      runEventCompactionLimitReached: false,
+    });
+    expect(
+      (await repository.listRunEvents("run_event_retention_old")).map(
+        (event) => event.id,
+      ),
+    ).toEqual(["retention_old_completed"]);
+    expect(
+      (await repository.listRunEvents("run_event_retention_held")).map(
+        (event) => event.id,
+      ),
+    ).toEqual([
+      "retention_held_started",
+      "retention_held_summary",
+      "retention_held_completed",
+    ]);
   });
 
   it("enforces browser automation artifact retention without leaking storage keys", async () => {
@@ -307,33 +518,44 @@ describe("governance API", () => {
   });
 
   it("enforces voice artifact retention without leaking storage keys", async () => {
-    const repository = new InMemoryRomeoRepository();
-    const objectStore = new MemoryObjectStore();
-    const api = createRomeoApi(repository, {
-      objectStore,
-      voiceProvider: new DevVoiceProvider(),
-    });
-    const previewResponse = await api.request(
-      "/api/v1/voices/voice_default/preview",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: "Expired retention voice secret." }),
+    const artifactId = "voice_artifact_retention";
+    const storageKey =
+      "voice/org_default/voice_artifact_retention/expired-secret.wav";
+    const seed = createSeedData();
+    seed.usageEvents.push({
+      id: "usage_voice_artifact_retention",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      actorId: "user_dev_admin",
+      sourceType: "voice",
+      sourceId: "voice_default",
+      metric: "voice.preview.generated",
+      quantity: 1,
+      unit: "event",
+      metadata: {
+        artifactId,
+        storageKey,
+        contentType: "audio/wav",
+        durationMs: 500,
       },
-    );
-    const preview = await previewResponse.json();
+      createdAt: "2020-01-01T00:00:00.000Z",
+    });
+    const repository = new InMemoryRomeoRepository(seed);
+    const objectStore = new MemoryObjectStore();
+    await objectStore.putObject({
+      key: storageKey,
+      body: new Uint8Array([82, 73, 70, 70]),
+      contentType: "audio/wav",
+    });
+    const api = createRomeoApi(repository, { objectStore });
+    const playbackUrl = `/api/v1/voice-artifacts/${artifactId}`;
     const rawUsageBefore = await repository.listUsageEvents("org_default");
     const generated = rawUsageBefore.find(
       (event) => event.metric === "voice.preview.generated",
     );
-    const storageKey = generated?.metadata.storageKey;
-    if (generated === undefined || typeof storageKey !== "string") {
+    if (generated === undefined) {
       throw new Error("Expected generated voice artifact usage event");
     }
-    await repository.updateUsageEvent({
-      ...generated,
-      createdAt: "2020-01-01T00:00:00.000Z",
-    });
 
     const enforceResponse = await api.request(
       "/api/v1/governance/retention/enforce",
@@ -345,7 +567,7 @@ describe("governance API", () => {
       { method: "POST" },
     );
     const secondEnforced = await secondEnforceResponse.json();
-    const readAfterRetention = await api.request(preview.data.playbackUrl);
+    const readAfterRetention = await api.request(playbackUrl);
     const rawUsageAfter = await repository.listUsageEvents("org_default");
     const retained = rawUsageAfter.find(
       (event) => event.metric === "voice.preview.generated",
@@ -449,8 +671,23 @@ describe("governance API", () => {
         id: "evt_delete_1",
         runId: "run_delete",
         sequence: 1,
-        type: "run.completed",
-        data: { output: "redacted" },
+        type: "reasoning.summary.delta",
+        data: {
+          classification: "provider_safe_summary",
+          contentPolicyApplied: true,
+          text: "summary-deletion-sentinel",
+        },
+        createdAt: now,
+      },
+      {
+        id: "evt_delete_2",
+        runId: "run_delete",
+        sequence: 2,
+        type: "reasoning.summary.completed",
+        data: {
+          classification: "provider_safe_summary",
+          status: "completed",
+        },
         createdAt: now,
       },
     ]);
@@ -535,7 +772,7 @@ describe("governance API", () => {
       sourceId: "voice_default",
       metric: "voice.message.generated",
       quantity: 1,
-      unit: "ms",
+      unit: "event",
       metadata: { chatId: "chat_delete", messageId: "msg_delete" },
       createdAt: now,
     });
@@ -606,10 +843,10 @@ describe("governance API", () => {
     expect(preview.data.counts).toMatchObject({
       chats: 1,
       messages: 1,
-      messageParts: 1,
+      messageParts: 2,
       runs: 1,
       runSteps: 0,
-      runEvents: 1,
+      runEvents: 2,
       chatComments: 1,
       userNotifications: 1,
       notificationDeliveries: 1,
@@ -1176,7 +1413,7 @@ describe("governance API", () => {
       "utf8",
     );
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH: logEvidencePath,
         DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH: backupEvidencePath,
       }),
@@ -1358,8 +1595,8 @@ describe("governance API", () => {
       sourceType: "voice",
       sourceId: "voice_default",
       metric: "voice.preview.generated",
-      quantity: 1000,
-      unit: "ms",
+      quantity: 1,
+      unit: "event",
       metadata: {
         artifactId: "voice_artifact_export",
         contentType: "audio/wav",
@@ -2095,15 +2332,28 @@ describe("governance API", () => {
 
   it("exports a sanitized compliance report as JSON and CSV", async () => {
     const repository = new InMemoryRomeoRepository();
+    await expect(
+      repository.createAuditLog({
+        id: "audit_sensitive_metadata",
+        orgId: "org_default",
+        actorId: "user_dev_admin",
+        action: "admin.organization.update",
+        resourceType: "organization",
+        resourceId: "org_default",
+        outcome: "success",
+        metadata: { secret: "do-not-export" },
+        createdAt: new Date().toISOString(),
+      }),
+    ).rejects.toThrow("Audit metadata contains a forbidden key.");
     await repository.createAuditLog({
-      id: "audit_sensitive_metadata",
+      id: "audit_compliance_evidence",
       orgId: "org_default",
       actorId: "user_dev_admin",
-      action: "sensitive.audit",
+      action: "admin.organization.update",
       resourceType: "organization",
       resourceId: "org_default",
       outcome: "success",
-      metadata: { secret: "do-not-export" },
+      metadata: {},
       createdAt: new Date().toISOString(),
     });
     const api = createRomeoApi(repository);
@@ -2138,3 +2388,24 @@ describe("governance API", () => {
     expect(csv).not.toContain("do-not-export");
   });
 });
+
+function runEvent(
+  id: string,
+  runId: string,
+  sequence: number,
+  type:
+    | "reasoning.summary.completed"
+    | "reasoning.summary.delta"
+    | "run.completed"
+    | "run.started" = "run.started",
+  data: Record<string, unknown> = {},
+) {
+  return {
+    id,
+    runId,
+    sequence,
+    type,
+    data,
+    createdAt: "2020-01-01T00:00:00.000Z",
+  };
+}

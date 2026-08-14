@@ -2,17 +2,21 @@ import { seededSubject, type AuthSubject } from "@romeo/auth";
 import { readEnv } from "@romeo/config";
 import type { MiddlewareHandler } from "hono";
 
-import { ApiError } from "../errors";
+import { AuthenticationError } from "../errors";
 import type { AppBindings } from "./context";
 import type { RomeoServices } from "../services";
 import { readCookie, sessionCookieName } from "./session-cookie";
+import { normalizedRequestId } from "./request-id";
 import {
   runWithTelemetryContext,
   telemetryTraceId,
 } from "../services/telemetry-context";
 
 export interface RequestContextOptions {
+  appOriginSecure?: boolean;
   devSeededLogin?: boolean;
+  production?: boolean;
+  trustedProxy?: boolean;
 }
 
 const publicPaths = new Set([
@@ -48,7 +52,7 @@ export function requestContext(
   const devSeededLogin = options.devSeededLogin ?? readEnv().DEV_SEEDED_LOGIN;
 
   return async (context, next) => {
-    const requestId = context.req.header("x-request-id") ?? crypto.randomUUID();
+    const requestId = normalizedRequestId(context.req.header("x-request-id"));
     const incomingTraceparent = context.req.header("traceparent");
     const incomingTraceId = context.req.header("x-romeo-trace-id");
     const traceId = telemetryTraceId({
@@ -58,6 +62,15 @@ export function requestContext(
       ...(incomingTraceId === undefined ? {} : { traceId: incomingTraceId }),
     });
     context.set("requestId", requestId);
+    context.set(
+      "secureCookie",
+      options.production === true ||
+        options.appOriginSecure === true ||
+        new URL(context.req.url).protocol === "https:" ||
+        (options.trustedProxy === true &&
+          context.req.header("x-forwarded-proto")?.split(",")[0]?.trim() ===
+            "https"),
+    );
     context.set("traceId", traceId);
     context.header("x-request-id", requestId);
     context.header("x-romeo-trace-id", traceId);
@@ -108,7 +121,7 @@ async function resolveSubject(
     return services.sessions.authenticate(sessionToken);
   if (options.devSeededLogin) return seededSubject;
   if (options.allowAnonymous) return undefined;
-  throw new ApiError("unauthorized", "Authentication is required.", 401);
+  throw new AuthenticationError("Authentication is required.");
 }
 
 function isCompactJwt(token: string): boolean {

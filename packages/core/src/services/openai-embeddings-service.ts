@@ -20,6 +20,8 @@ import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import { consumeQuota } from "./consume-quota";
+import { enforceContentPolicyStrings } from "./content-policy-service";
+import { providerApiError } from "./provider-api-error";
 import type { QuotaCoordinator } from "./quota-coordination";
 import type { SecretResolver } from "./secret-resolver";
 import type { WebhookEmitter } from "./webhook-service";
@@ -44,13 +46,18 @@ export class OpenAiEmbeddingsService {
     request: OpenAiEmbeddingRequest;
     subject: AuthSubject;
   }): Promise<OpenAiEmbeddingResponse> {
+    const governed = await enforceContentPolicyStrings(
+      this.repository,
+      input.subject,
+      input.request.input,
+    );
     const target = await this.resolveTarget(input.subject, input.request.model);
     try {
       const result = await getEmbeddingAdapter(target.provider.type).embedTexts(
         {
           provider: target.provider,
           model: target.providerModel,
-          texts: input.request.input,
+          texts: governed.contents,
           ...(target.apiKey === undefined ? {} : { apiKey: target.apiKey }),
           ...(this.options.fetchImpl === undefined
             ? {}
@@ -59,7 +66,7 @@ export class OpenAiEmbeddingsService {
       );
       return embeddingResponse(result);
     } catch (error) {
-      throw embeddingApiError(error);
+      throw embeddingApiError(error, target.provider.type);
     }
   }
 
@@ -304,11 +311,9 @@ function embeddingResponse(result: EmbedTextsResult): OpenAiEmbeddingResponse {
   };
 }
 
-function embeddingApiError(error: unknown): ApiError {
-  if (error instanceof ApiError) return error;
-  return new ApiError(
-    "provider_embedding_failed",
-    "The model provider failed to create embeddings.",
-    502,
-  );
+function embeddingApiError(
+  error: unknown,
+  kind: ProviderInstance["type"],
+): ApiError {
+  return providerApiError(error, { kind, operation: "embeddings" });
 }

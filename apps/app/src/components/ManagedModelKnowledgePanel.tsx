@@ -1,13 +1,11 @@
 import { Switch } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Database from "lucide-react/dist/esm/icons/database.mjs";
 import { useCallback, useMemo } from "react";
 
-import { listKnowledgeBases } from "../features";
-import {
-  listAgentKnowledgeBindings,
-  updateAgentKnowledgeBinding,
-} from "../features/managed-models";
+import { knowledgeBasesQueryOptions } from "../features/knowledge";
+import { agentKnowledgeBindingsQueryOptions } from "../features/managed-models";
+import { updateAgentKnowledgeBindingMutationOptions } from "../features/managed-models/mutation-options";
 import type { Agent } from "../features/managed-models";
 import type { KnowledgeBase } from "../features/types";
 import { useLocale } from "../lib/i18n";
@@ -24,20 +22,13 @@ export function ManagedModelKnowledgePanel({
   workspaceId: string | undefined;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const knowledgeQuery = useQuery({
-    queryKey: ["knowledgeBases", workspaceId],
-    queryFn: () => listKnowledgeBases(workspaceId!),
-    enabled: workspaceId !== undefined,
-  });
-  const bindingsQuery = useQuery({
-    queryKey: ["agentKnowledgeBindings", activeAgent?.id],
-    queryFn: () => listAgentKnowledgeBindings(activeAgent!.id),
-    enabled: activeAgent !== undefined,
-  });
-  const updateMutation = useMutation({
-    mutationFn: updateAgentKnowledgeBinding,
-  });
+  const knowledgeQuery = useQuery(knowledgeBasesQueryOptions(workspaceId));
+  const bindingsQuery = useQuery(
+    agentKnowledgeBindingsQueryOptions(activeAgent?.id),
+  );
+  const updateMutation = useMutation(
+    updateAgentKnowledgeBindingMutationOptions(),
+  );
   const enabledByKnowledgeBase = useMemo(
     () =>
       new Map(
@@ -58,9 +49,6 @@ export function ManagedModelKnowledgePanel({
           knowledgeBaseId,
           enabled,
         });
-        await queryClient.invalidateQueries({
-          queryKey: ["agentKnowledgeBindings", activeAgent.id],
-        });
         toast(
           t(enabled ? "knowledgeBoundNotice" : "knowledgeDisabledNotice"),
           "success",
@@ -69,7 +57,7 @@ export function ManagedModelKnowledgePanel({
         toast(t("failed"), "error");
       }
     },
-    [activeAgent, queryClient, t, updateMutation],
+    [activeAgent, t, updateMutation],
   );
   const columns = useMemo(
     () => [

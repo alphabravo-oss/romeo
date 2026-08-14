@@ -11,7 +11,7 @@ import { ToolApprovalModal } from "./ToolApprovalModal";
 import type { PendingToolApproval } from "./useToolExecution";
 import { createColumnHelper, DataTable } from "./DataTable";
 import { ResourceRow } from "./ResourceRow";
-import { SettingsSection } from "./SettingsSection";
+import { Section } from "./console";
 
 const toolColumn = createColumnHelper<AgentToolSummary>();
 
@@ -93,7 +93,7 @@ export function ToolPanel({
 
   return (
     <div className="rm-console-page">
-      <SettingsSection
+      <Section
         description={t("workspaceToolsCatalogHelp")}
         title={t("workspaceToolsCatalog")}
       >
@@ -107,8 +107,8 @@ export function ToolPanel({
             preferenceKey="workspace-agent-tools"
           />
         )}
-      </SettingsSection>
-      <SettingsSection
+      </Section>
+      <Section
         description={t("workspaceToolsTryHelp")}
         title={t("workspaceToolsTry")}
       >
@@ -208,7 +208,7 @@ export function ToolPanel({
             {result}
           </pre>
         ) : null}
-      </SettingsSection>
+      </Section>
       {pendingApproval ? (
         <ToolApprovalModal
           approval={pendingApproval}

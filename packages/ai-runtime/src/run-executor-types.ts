@@ -1,7 +1,9 @@
 import type {
   ModelProviderAdapter,
+  ProviderChatParameterResolutionSummary,
   ProviderToolCallRequest,
   StreamChatInput,
+  ProviderReasoningPolicyLayers,
 } from "@romeo/providers";
 
 import type { RunEvent } from "./events";
@@ -20,6 +22,10 @@ export interface ExecuteRunInput extends StreamChatInput {
   providerFallback?: ProviderFallbackTarget;
   providerRetryPolicy?: Partial<ProviderRetryPolicy>;
   providerTimeoutMs?: number;
+  /** Re-resolves mutable governance immediately before every retry/fallback attempt. */
+  reasoningPolicyResolver?: (
+    target: Pick<ProviderFallbackTarget, "model" | "provider">,
+  ) => Promise<ProviderReasoningPolicyLayers | undefined>;
   runId: string;
 }
 
@@ -58,6 +64,7 @@ export interface ProviderFallbackTarget {
 export interface ProviderFallbackSnapshot {
   fromModelId: string;
   fromProviderId: string;
+  parameterResolution?: ProviderChatParameterResolutionSummary;
   reason: string;
   toModelId: string;
   toProviderId: string;

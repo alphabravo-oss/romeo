@@ -105,9 +105,12 @@ function isFenceLine(line: string): boolean {
 function isGarbageTitle(value: string): boolean {
   if (value.length === 0) return true;
   if (isFenceLine(value)) return true;
-  if (/^```/u.test(value) || /```$/u.test(value)) return true;
+  if (value.startsWith("```") || value.endsWith("```")) return true;
   // Bare language tags from fenced blocks ("python", "```python").
-  const stripped = value.replace(/^`+|`+$/gu, "").trim().toLowerCase();
+  const stripped = value
+    .replace(/^`+|`+$/gu, "")
+    .trim()
+    .toLowerCase();
   if (LANGUAGE_TAGS.has(stripped)) return true;
   // Punctuation / symbol only.
   if (!/[\p{L}\p{N}]/u.test(value)) return true;

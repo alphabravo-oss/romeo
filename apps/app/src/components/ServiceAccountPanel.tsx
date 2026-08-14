@@ -1,16 +1,16 @@
 import { Input, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
 import { useMemo, useState } from "react";
 
+
 import {
-  bulkDisableServiceAccounts,
-  createServiceAccount,
-  createServiceAccountApiKey,
-  disableServiceAccount,
-  listServiceAccounts,
-} from "../features";
+  bulkDisableServiceAccountsMutationOptions,
+  createServiceAccountApiKeyMutationOptions,
+  createServiceAccountMutationOptions,
+  disableServiceAccountMutationOptions,
+} from "../features/administration/mutation-options";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
@@ -21,6 +21,7 @@ import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
 import { SecretRevealCard } from "./SecretRevealCard";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const serviceAccountScopes = [
   "me:read",
@@ -35,20 +36,16 @@ const col = createColumnHelper<ServiceAccount>();
 
 export function ServiceAccountPanel() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { ask, dialog } = useConfirm();
   const [addOpen, setAddOpen] = useState(false);
   const [createdToken, setCreatedToken] = useState<string>();
-  const accountsQuery = useQuery({
-    queryKey: ["serviceAccounts"],
-    queryFn: listServiceAccounts,
-  });
-  const createMutation = useMutation({ mutationFn: createServiceAccount });
-  const keyMutation = useMutation({ mutationFn: createServiceAccountApiKey });
-  const disableMutation = useMutation({ mutationFn: disableServiceAccount });
-  const bulkDisableMutation = useMutation({
-    mutationFn: bulkDisableServiceAccounts,
-  });
+  const table = useInventoriedServerTable<ServiceAccount>("service_accounts");
+  const createMutation = useMutation(createServiceAccountMutationOptions());
+  const keyMutation = useMutation(createServiceAccountApiKeyMutationOptions());
+  const disableMutation = useMutation(disableServiceAccountMutationOptions());
+  const bulkDisableMutation = useMutation(
+    bulkDisableServiceAccountsMutationOptions(),
+  );
 
   const ServiceAccountForm = useForm({
     defaultValues: {
@@ -68,10 +65,6 @@ export function ServiceAccountPanel() {
           scopes: value.scopes,
         });
         setCreatedToken(key.token);
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["serviceAccounts"] }),
-          queryClient.invalidateQueries({ queryKey: ["apiKeys"] }),
-        ]);
         toast(t("serviceAccountCreated"), "success");
         setAddOpen(false);
         ServiceAccountForm.reset();
@@ -98,7 +91,6 @@ export function ServiceAccountPanel() {
         scopes: account.scopes,
       });
       setCreatedToken(key.token);
-      await queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
       toast(t("apiKeyCreated"), "success");
     } catch {
       toast(t("couldNotCreateApiKey"), "error");
@@ -117,7 +109,6 @@ export function ServiceAccountPanel() {
       return;
     try {
       await disableMutation.mutateAsync(serviceAccountId);
-      await queryClient.invalidateQueries({ queryKey: ["serviceAccounts"] });
       toast(t("serviceAccountDisabled"), "success");
     } catch {
       toast(t("couldNotDisableServiceAccount"), "error");
@@ -140,7 +131,6 @@ export function ServiceAccountPanel() {
       return;
     try {
       const result = await bulkDisableMutation.mutateAsync(serviceAccountIds);
-      await queryClient.invalidateQueries({ queryKey: ["serviceAccounts"] });
       clearSelection();
       const failed = result.results.filter(
         (item) => item.status === "failure",
@@ -250,22 +240,31 @@ export function ServiceAccountPanel() {
         }
         emptyDescription={t("noServiceAccountsDescription")}
         emptyIcon={<KeyRound aria-hidden size={24} />}
-        query={accountsQuery}
+        isEmpty={(page) =>
+          page.items.length === 0 &&
+          table.isFirstPage &&
+          table.search.trim() === ""
+        }
+        query={table.query}
       >
-        {(accounts) => (
+        {() => (
           <div className="grid gap-4">
             <StatRow
               items={[
-                { label: t("totalAccounts"), value: accounts.length },
+                {
+                  label: t("totalAccounts"),
+                  value: table.summary.total ?? table.estimatedTotal,
+                },
                 {
                   label: t("disabled"),
-                  value: accounts.filter((a) => a.disabledAt).length,
+                  value: table.summary.disabledTotal ?? 0,
                 },
               ]}
             />
             <DataTable
+              serverState={table.serverState}
               columns={columns}
-              data={accounts}
+              data={table.rows}
               empty={t("noServiceAccounts")}
               enableRowSelection
               getRowId={(row) => row.id}
@@ -321,7 +320,7 @@ export function ServiceAccountPanel() {
                   value={field.state.value}
                 />
                 {field.state.meta.errors.length ? (
-                  <div className="rm-composer-error">
+                  <div className="rm-composer-error" role="alert">
                     {field.state.meta.errors.join(", ")}
                   </div>
                 ) : null}

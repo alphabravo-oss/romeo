@@ -1,7 +1,11 @@
 import type { AuthSubject } from "@romeo/auth";
 
 import type { RomeoRepository } from "../domain/repository";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import type { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
 import {
   hashAuditValue,
@@ -212,11 +216,11 @@ export class ChannelMessageService {
     };
   }
 
-  protected async audit(
+  protected async audit<A extends AuditAction>(
     subject: AuthSubject,
-    action: string,
+    action: A,
     channelId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
     repository: RomeoRepository = this.repository,
   ): Promise<void> {
     await writeAuditLog(repository, {

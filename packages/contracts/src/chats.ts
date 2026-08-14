@@ -9,6 +9,8 @@ import {
   updateChatLegalHoldRoute,
 } from "./chat-collaboration-routes";
 import { streamChatEventsRoute } from "./chat-events";
+import { listMessagePageRoute } from "./chat-message-page-route";
+import { searchChatMessagesRoute } from "./chat-message-search-route";
 
 import {
   authenticationSecurity,
@@ -35,6 +37,8 @@ import {
 export * from "./chat-schemas";
 export * from "./chat-collaboration-routes";
 export * from "./chat-events";
+export * from "./chat-message-page-route";
+export * from "./chat-message-search-route";
 
 const chatPath = z.strictObject({ chatId: chatIdentifier });
 const messagePath = z.strictObject({
@@ -435,6 +439,8 @@ export const chatRoutes = [
   previewDeleteChatRoute,
   deleteChatRoute,
   listMessagesRoute,
+  listMessagePageRoute,
+  searchChatMessagesRoute,
   deleteMessageRoute,
   listMessageFeedbackRoute,
   getMessageFeedbackRoute,

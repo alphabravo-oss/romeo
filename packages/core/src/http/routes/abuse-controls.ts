@@ -1,10 +1,12 @@
 import {
   getAbuseControlsRoute,
+  simulateAbuseControlsRoute,
   UpdateAbuseControlPolicySchema,
   updateAbuseControlsRoute,
 } from "@romeo/contracts";
 import type { RomeoApi } from "../context";
 import type { UpdateAbuseControlPolicyRequest } from "../../domain/abuse-controls";
+import type { AbuseControlSimulationRequest } from "../../domain/abuse-controls";
 
 export function registerAbuseControlRoutes(app: RomeoApi): void {
   app.openapi(getAbuseControlsRoute, async (context) => {
@@ -20,6 +22,30 @@ export function registerAbuseControlRoutes(app: RomeoApi): void {
     const data = await context
       .get("services")
       .abuseControls.update({ subject, policy });
+    return context.json({ data });
+  });
+
+  app.openapi(simulateAbuseControlsRoute, async (context) => {
+    const subject = context.get("subject");
+    const body = context.req.valid("json");
+    const request: AbuseControlSimulationRequest = {
+      action: body.action,
+      ...(body.agentId === undefined ? {} : { agentId: body.agentId }),
+      ...(body.connectorId === undefined
+        ? {}
+        : { connectorId: body.connectorId }),
+      ...(body.providerId === undefined ? {} : { providerId: body.providerId }),
+      ...(body.toolId === undefined ? {} : { toolId: body.toolId }),
+      ...(body.workerClass === undefined
+        ? {}
+        : { workerClass: body.workerClass }),
+      ...(body.workspaceId === undefined
+        ? {}
+        : { workspaceId: body.workspaceId }),
+    };
+    const data = await context
+      .get("services")
+      .abuseControls.simulate({ subject, request });
     return context.json({ data });
   });
 }

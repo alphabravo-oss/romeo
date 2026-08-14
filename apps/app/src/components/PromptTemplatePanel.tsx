@@ -1,14 +1,14 @@
 import { Button, Field, Input, NativeSelect, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
 import { useMemo, useState } from "react";
 
 import {
-  createPromptTemplate,
-  deletePromptTemplate,
-  listPromptMarketplace,
-  listPromptTemplates,
+  createPromptTemplateMutationOptions,
+  deletePromptTemplateMutationOptions,
+  promptMarketplaceQueryOptions,
+  promptTemplatesQueryOptions,
 } from "../features/prompts";
 import type {
   CreatePromptTemplateInput,
@@ -29,27 +29,23 @@ import {
   promptTemplateVisibilityKey,
 } from "./prompt-template-visibility";
 import { useWorkspace } from "./WorkspaceContext";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const templateCol = createColumnHelper<PromptTemplate>();
 const marketplaceCol = createColumnHelper<PromptTemplate>();
 
 export function PromptTemplatePanel() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { workspaceId } = useWorkspace();
+  const inventoriedTable = useInventoriedServerTable<any>("prompt_templates", {
+    enabled: workspaceId !== undefined,
+    workspaceId,
+  });
   const { ask, dialog } = useConfirm();
-  const templatesQuery = useQuery({
-    queryKey: ["promptTemplates", workspaceId],
-    queryFn: () => listPromptTemplates(workspaceId),
-    enabled: workspaceId !== undefined,
-  });
-  const marketplaceQuery = useQuery({
-    queryKey: ["promptMarketplace", workspaceId],
-    queryFn: () => listPromptMarketplace(workspaceId),
-    enabled: workspaceId !== undefined,
-  });
-  const createMutation = useMutation({ mutationFn: createPromptTemplate });
-  const deleteMutation = useMutation({ mutationFn: deletePromptTemplate });
+  const templatesQuery = useQuery(promptTemplatesQueryOptions(workspaceId));
+  const marketplaceQuery = useQuery(promptMarketplaceQueryOptions(workspaceId));
+  const createMutation = useMutation(createPromptTemplateMutationOptions());
+  const deleteMutation = useMutation(deletePromptTemplateMutationOptions());
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<PromptTemplate | null>(null);
 
@@ -78,12 +74,6 @@ export function PromptTemplatePanel() {
             : { description: value.description.trim() }),
         };
         await createMutation.mutateAsync(input);
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ["promptTemplates", workspaceId],
-          }),
-          queryClient.invalidateQueries({ queryKey: ["promptMarketplace"] }),
-        ]);
         form.reset();
         toast(t("promptTemplateCreated"), "success");
         setAddOpen(false);
@@ -157,6 +147,10 @@ export function PromptTemplatePanel() {
   );
 
   async function handleDelete(promptTemplateId: string) {
+    if (workspaceId === undefined) {
+      toast(t("promptNoWorkspace"), "error");
+      return;
+    }
     if (
       !(await ask({
         title: t("promptDeleteTemplateTitle"),
@@ -166,13 +160,7 @@ export function PromptTemplatePanel() {
     )
       return;
     try {
-      await deleteMutation.mutateAsync(promptTemplateId);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["promptTemplates", workspaceId],
-        }),
-        queryClient.invalidateQueries({ queryKey: ["promptMarketplace"] }),
-      ]);
+      await deleteMutation.mutateAsync({ promptTemplateId, workspaceId });
       toast(t("promptTemplateRemoved"), "success");
     } catch {
       toast(t("promptCouldNotRemove"), "error");
@@ -335,18 +323,9 @@ export function PromptTemplatePanel() {
           <PromptTemplateEditDialog
             key={editing.id}
             template={editing}
+            workspaceId={workspaceId}
             onClose={() => setEditing(null)}
-            onSaved={async () => {
-              await Promise.all([
-                queryClient.invalidateQueries({
-                  queryKey: ["promptTemplates", workspaceId],
-                }),
-                queryClient.invalidateQueries({
-                  queryKey: ["promptMarketplace", workspaceId],
-                }),
-              ]);
-              setEditing(null);
-            }}
+            onSaved={() => setEditing(null)}
           />
         ) : null}
         <PanelState
@@ -373,7 +352,11 @@ export function PromptTemplatePanel() {
                   },
                 ]}
               />
-              <DataTable columns={columns} data={rows} />
+              <DataTable
+                serverState={inventoriedTable.serverState}
+                columns={columns}
+                data={inventoriedTable.rows}
+              />
             </>
           )}
         </PanelState>

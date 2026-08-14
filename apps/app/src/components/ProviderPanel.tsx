@@ -1,10 +1,4 @@
-import {
-  Button,
-  DropdownMenu,
-  EmptyState,
-  IconButton,
-  StatusBadge,
-} from "@romeo/ui";
+import { DropdownMenu, EmptyState, IconButton, StatusBadge } from "@romeo/ui";
 import EllipsisVertical from "lucide-react/dist/esm/icons/ellipsis-vertical.mjs";
 import { useCallback, useMemo } from "react";
 
@@ -15,7 +9,7 @@ import type {
 } from "../features/providers/types";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
-import { AddButton, Section, StatRow } from "./console";
+import { AddButton, IdentityCell, Section, StatRow } from "./console";
 import { ConnectionDialog } from "./ProviderConnectionDialog";
 import { DataTable, createColumnHelper, type ColumnDef } from "./DataTable";
 import { ProviderCatalogStatus } from "./ProviderCatalogStatus";
@@ -71,6 +65,7 @@ export function ProviderPanel({
     t,
   });
   const {
+    cancelVerify,
     confirmDialog,
     dialog,
     modelsByProvider,
@@ -174,18 +169,11 @@ export function ProviderPanel({
         cell: (context) => {
           const provider = context.row.original.provider;
           return (
-            <div className="min-w-0">
-              <strong className="block truncate" translate="no">
-                {provider.name}
-              </strong>
-              <span
-                className="mt-1 block truncate text-xs text-muted"
-                title={provider.baseUrl}
-                translate="no"
-              >
-                {provider.baseUrl}
-              </span>
-            </div>
+            <IdentityCell
+              mono
+              primary={provider.name}
+              secondary={provider.baseUrl}
+            />
           );
         },
       }),
@@ -266,16 +254,18 @@ export function ProviderPanel({
           const provider = context.row.original.provider;
           const verifying = verifyingProviderId === provider.id;
           const syncing = syncingProviderId === provider.id;
+          // One overflow, not a text button plus a kebab: the row is the
+          // subject, and a 195px action column pushed the grid wider than its
+          // card so every other column slid under the pinned edge. Opening the
+          // provider is the row's own click target.
           return (
-            <div className="flex justify-end gap-1">
-              <Button
-                onClick={() => onProviderSelectionChange(provider.id)}
-                size="sm"
-              >
-                {t("manageProvider")}
-              </Button>
+            <div className="flex justify-end">
               <DropdownMenu
                 items={[
+                  {
+                    label: t("manageProvider"),
+                    onSelect: () => onProviderSelectionChange(provider.id),
+                  },
                   {
                     disabled: verifying,
                     label: t("verify"),
@@ -356,6 +346,7 @@ export function ProviderPanel({
           onRefresh={() => void sync(selectedProvider.id)}
           onToggle={(enabled) => void updateEnabled(selectedProvider, enabled)}
           onToggleModel={updateModelEnabled}
+          onCancelVerify={cancelVerify}
           onVerify={() => void verify(selectedProvider.id)}
           provider={selectedProvider}
           pullName={pullNames[selectedProvider.id] ?? ""}

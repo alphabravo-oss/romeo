@@ -1,9 +1,9 @@
 import { Button, Input, NativeSelect, Textarea } from "@romeo/ui";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import {
-  triggerDirectorySync,
+  directorySyncMutationOptions,
   type DirectorySyncResult,
 } from "../features/administration";
 import { useLocale } from "../lib/i18n";
@@ -20,7 +20,6 @@ import { PanelStats } from "./PanelStats";
 
 export function AuthDirectorySyncDialog(props: { onClose: () => void }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { ask, dialog } = useConfirm();
   const [syncForm, setSyncForm] = useState<DirectorySyncForm>(
     defaultDirectorySyncForm,
@@ -28,7 +27,7 @@ export function AuthDirectorySyncDialog(props: { onClose: () => void }) {
   const [syncPreview, setSyncPreview] = useState<DirectorySyncResult | null>(
     null,
   );
-  const syncMutation = useMutation({ mutationFn: triggerDirectorySync });
+  const syncMutation = useMutation(directorySyncMutationOptions());
 
   function setSync<K extends keyof DirectorySyncForm>(
     key: K,
@@ -48,6 +47,8 @@ export function AuthDirectorySyncDialog(props: { onClose: () => void }) {
       setSyncPreview(await syncMutation.mutateAsync(built.request));
     } catch {
       toast(t("authDirectorySyncPreviewFailed"), "error");
+    } finally {
+      syncMutation.reset();
     }
   }
 
@@ -67,7 +68,6 @@ export function AuthDirectorySyncDialog(props: { onClose: () => void }) {
     }
     try {
       const result = await syncMutation.mutateAsync(built.request);
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
       toast(
         `${t("authDirectorySyncApplied")} — ${result.changes.userDisables.count} ${t("authDisabledLower")}, ${result.changes.membershipRemovals.count} ${t("authMembershipsRemoved")}`,
         "success",
@@ -75,6 +75,8 @@ export function AuthDirectorySyncDialog(props: { onClose: () => void }) {
       props.onClose();
     } catch {
       toast(t("authDirectorySyncFailed"), "error");
+    } finally {
+      syncMutation.reset();
     }
   }
 

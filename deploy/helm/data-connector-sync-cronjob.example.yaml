@@ -12,11 +12,23 @@ spec:
       backoffLimit: 1
       template:
         spec:
+          automountServiceAccountToken: false
           restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: data-connector-sync
               image: romeo/ops:0.1.0
               imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
               envFrom:
                 - secretRef:
                     name: romeo-data-connector-sync
@@ -29,6 +41,9 @@ spec:
                     args="$args --workspace ${DATA_CONNECTOR_SYNC_WORKSPACE_ID}"
                   fi
                   pnpm --filter @romeo/cli start -- workers data-connector-sync $args
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 requests:
                   cpu: 100m
@@ -36,3 +51,6 @@ spec:
                 limits:
                   cpu: 500m
                   memory: 512Mi
+          volumes:
+            - name: tmp
+              emptyDir: {}

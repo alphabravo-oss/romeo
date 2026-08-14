@@ -1,0 +1,5 @@
+{
+  "schemaVersion": "romeo.app-mutation-policy-baseline.v1",
+  "note": "Closed ratchet: production unmanaged mutation observers, broad invalidations, and component cache writes must remain at zero.",
+  "files": {}
+}

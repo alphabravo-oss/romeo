@@ -5,6 +5,8 @@ import { parseAllDocuments } from "yaml";
 
 import {
   buildOperationalMetrics,
+  createOperationalMonitoringServer,
+  probeOperationalReadiness,
   renderPrometheus,
 } from "./operational-monitoring-exporter.mjs";
 
@@ -25,8 +27,14 @@ const missingMetricRefs = [...referencedMetricNames].filter(
 
 assertMetricNames(metricNames);
 assertNoSentinelLeak(rendered, rawSentinel);
+assertApiDeprecationMetrics(metrics);
+assertCapabilityAssignmentMetrics(metrics);
+assertCapabilityFlagMetrics(metrics);
+assertIdempotencyMetrics(metrics);
 assertPrometheusRule(ruleDocs, alertRules);
 assertExporterDeployment(exporterDocs);
+await assertReadinessProbeBehavior();
+await assertExporterHttpBehavior();
 if (missingMetricRefs.length > 0) {
   throw new Error(
     `Prometheus rules reference unknown metrics: ${missingMetricRefs.join(", ")}`,
@@ -44,6 +52,11 @@ const evidence = {
     "prometheus_rules_parse",
     "prometheus_rules_metric_references",
     "kubernetes_exporter_example_contract",
+    "dependency_aware_exporter_readiness",
+    "api_deprecation_metadata_only_metrics",
+    "capability_assignment_metadata_only_metrics",
+    "capability_flag_metadata_only_metrics",
+    "idempotency_metadata_only_metrics",
   ],
   metricCount: metrics.length,
   metricNames,
@@ -55,6 +68,10 @@ const evidence = {
     rawProviderUrlsReturned: false,
     prometheusTextReturned: false,
     environmentReturned: false,
+    deprecatedRequestDataReturned: false,
+    capabilityFlagSubjectDataReturned: false,
+    capabilityAssignmentContextReturned: false,
+    idempotencyKeyOrBodyReturned: false,
   },
 };
 
@@ -128,6 +145,62 @@ function fixtureInput(sentinel) {
         },
       ],
       runtime: {
+        capabilityFlagAllowlist: sentinel,
+        apiDeprecations: {
+          generatedAt: "2026-06-30T00:15:00.000Z",
+          observationScope: "process",
+          observationStartedAt: "2026-06-30T00:00:00.000Z",
+          observationWindowSeconds: 900,
+          operations: [
+            {
+              firstUsedAt: "2026-06-30T00:05:00.000Z",
+              lastUsedAt: "2026-06-30T00:10:00.000Z",
+              operationId: "example.getV1",
+              requestCount: 2,
+              responseClasses: {
+                "1xx": 0,
+                "2xx": 1,
+                "3xx": 0,
+                "4xx": 1,
+                "5xx": 0,
+                other: 0,
+              },
+              zeroUsageWindowSeconds: 300,
+              zeroUsageWindowStartedAt: "2026-06-30T00:10:00.000Z",
+            },
+          ],
+        },
+        capabilityFlags: {
+          observationScope: "process",
+          total: 2,
+          resolutions: [
+            {
+              flagId: "image_jobs_v2",
+              effectiveState: "disabled",
+              reasonCode: "preview_not_allowlisted",
+              count: 2,
+            },
+          ],
+        },
+        capabilityAssignmentContext: sentinel,
+        capabilityAssignments: {
+          observationScope: "process",
+          total: 3,
+          resolutions: [
+            {
+              capabilityId: "web_retrieval",
+              status: "not_allowed",
+              count: 3,
+            },
+          ],
+        },
+        idempotencyKey: sentinel,
+        idempotency: {
+          observationScope: "process",
+          outcomes: [
+            { operation: "images.generate", outcome: "replay", count: 3 },
+          ],
+        },
         contextInputTokensAverage: 4096,
         lookbackSeconds: 900,
         objectStoreFailureCount: 2,
@@ -136,6 +209,24 @@ function fixtureInput(sentinel) {
         recoveryCount: 2,
         sseDisconnectCount: 3,
         sseReconnectCount: 4,
+        sse: {
+          activeStreams: 2,
+          bufferedBytesHighWater: 8192,
+          connectionCount: 7,
+          cursorQueryCount: 12,
+          cursorQueryRowCount: 42,
+          heartbeatFailureCount: 1,
+          lookbackSeconds: 900,
+          notifierLagAverageMs: 18,
+          notifierLagP95Ms: 75,
+          notifierUnavailableCount: 1,
+          observationScope: "process",
+          reconnectCount: 4,
+          replayedRowCount: 9,
+          slowConsumerDropCount: 1,
+          terminalCloseLatencyAverageMs: 4,
+          terminalCloseLatencyP95Ms: 12,
+        },
         timeToFirstTokenAverageMs: 1200,
         timeToFirstTokenP95Ms: 11000,
         uploadPipelineAverageMs: 230,
@@ -238,6 +329,12 @@ function fixtureInput(sentinel) {
 
 function assertMetricNames(metricNames) {
   const required = [
+    "romeo_api_deprecated_last_use_timestamp_seconds",
+    "romeo_api_deprecated_requests_total",
+    "romeo_api_deprecation_observation_window_seconds",
+    "romeo_api_deprecation_zero_usage_window_seconds",
+    "romeo_capability_resolution_total",
+    "romeo_capability_resolutions_total",
     "romeo_background_job_alert",
     "romeo_background_job_dead_letter_jobs",
     "romeo_background_job_longest_running_seconds",
@@ -265,6 +362,17 @@ function assertMetricNames(metricNames) {
     "romeo_run_time_to_first_token_milliseconds",
     "romeo_sse_disconnect_total",
     "romeo_sse_reconnect_total",
+    "romeo_sse_active_streams",
+    "romeo_sse_buffered_bytes_high_water",
+    "romeo_sse_connection_count",
+    "romeo_sse_cursor_query_count",
+    "romeo_sse_cursor_query_rows",
+    "romeo_sse_heartbeat_failures",
+    "romeo_sse_notifier_lag_milliseconds",
+    "romeo_sse_notifier_unavailable_count",
+    "romeo_sse_replayed_rows",
+    "romeo_sse_slow_consumer_drops",
+    "romeo_sse_terminal_close_latency_milliseconds",
     "romeo_web_retrieval_milliseconds",
     "romeo_file_upload_pipeline_milliseconds",
   ];
@@ -278,6 +386,78 @@ function assertNoSentinelLeak(rendered, sentinel) {
   if (rendered.includes(sentinel)) {
     throw new Error("Operational monitoring metrics leaked a raw sentinel.");
   }
+}
+
+function assertCapabilityFlagMetrics(metrics) {
+  const total = metrics.find(
+    (candidate) => candidate.name === "romeo_capability_flag_resolutions_total",
+  );
+  const resolution = metrics.find(
+    (candidate) => candidate.name === "romeo_capability_flag_resolution_total",
+  );
+  if (total?.value !== 2 || resolution?.value !== 2)
+    throw new Error("Capability flag operational counters are incomplete.");
+  if (
+    resolution.labels?.flag !== "image_jobs_v2" ||
+    resolution.labels?.state !== "disabled" ||
+    resolution.labels?.reason !== "preview_not_allowlisted"
+  )
+    throw new Error("Capability flag metrics use unexpected labels.");
+}
+
+function assertCapabilityAssignmentMetrics(metrics) {
+  const total = metrics.find(
+    (candidate) => candidate.name === "romeo_capability_resolutions_total",
+  );
+  const resolution = metrics.find(
+    (candidate) => candidate.name === "romeo_capability_resolution_total",
+  );
+  if (total?.value !== 3 || resolution?.value !== 3)
+    throw new Error("Generic capability operational counters are incomplete.");
+  if (
+    resolution.labels?.capability !== "web_retrieval" ||
+    resolution.labels?.status !== "not_allowed"
+  )
+    throw new Error("Generic capability metrics use unexpected labels.");
+}
+
+function assertIdempotencyMetrics(metrics) {
+  const replay = metrics.find(
+    (candidate) => candidate.name === "romeo_idempotency_outcome_total",
+  );
+  if (
+    replay?.value !== 3 ||
+    replay.labels?.operation !== "images.generate" ||
+    replay.labels?.outcome !== "replay"
+  )
+    throw new Error("Idempotency operational counters are incomplete.");
+}
+
+function assertApiDeprecationMetrics(allMetrics) {
+  const deprecationMetrics = allMetrics.filter((metric) =>
+    metric.name.startsWith("romeo_api_deprecat"),
+  );
+  if (deprecationMetrics.length === 0)
+    throw new Error("API deprecation metrics are missing.");
+  const forbidden = new Set([
+    "tenant",
+    "tenant_id",
+    "org_id",
+    "subject",
+    "user_id",
+    "path",
+    "resource_id",
+    "query",
+  ]);
+  for (const metric of deprecationMetrics)
+    for (const label of Object.keys(metric.labels ?? {}))
+      if (forbidden.has(label))
+        throw new Error(`API deprecation metric has forbidden label ${label}.`);
+  const requests = deprecationMetrics.filter(
+    (metric) => metric.name === "romeo_api_deprecated_requests_total",
+  );
+  if (requests.reduce((sum, metric) => sum + metric.value, 0) !== 2)
+    throw new Error("API deprecation request totals are inconsistent.");
 }
 
 function assertPrometheusRule(docs, alertRules) {
@@ -331,6 +511,11 @@ function assertExporterDeployment(docs) {
       "Operational exporter Deployment must run the monitoring exporter in listen mode.",
     );
   }
+  if (!String(container.image).startsWith("romeo/ops:")) {
+    throw new Error(
+      "Operational exporter Deployment must use the script-bearing ops image.",
+    );
+  }
   if (
     !container.env?.some(
       (env) =>
@@ -354,6 +539,84 @@ function assertExporterDeployment(docs) {
   }
   if (!service.spec?.ports?.some((port) => port.name === "metrics")) {
     throw new Error("Operational exporter Service must expose a metrics port.");
+  }
+  if (container.readinessProbe?.httpGet?.path !== "/ready") {
+    throw new Error(
+      "Operational exporter readiness must use the dependency-aware /ready endpoint.",
+    );
+  }
+  if (container.livenessProbe?.httpGet?.path !== "/health") {
+    throw new Error(
+      "Operational exporter liveness must use the process-only /health endpoint.",
+    );
+  }
+  if (
+    !commandText.includes("--timeout-ms") ||
+    Number(container.readinessProbe?.timeoutSeconds) <= 0
+  ) {
+    throw new Error(
+      "Operational exporter readiness must bound both the upstream request and Kubernetes probe.",
+    );
+  }
+}
+
+async function assertReadinessProbeBehavior() {
+  const ready = await probeOperationalReadiness({}, async () => []);
+  const unavailable = await probeOperationalReadiness({}, async () => {
+    throw new Error("synthetic upstream failure");
+  });
+  if (!ready || unavailable) {
+    throw new Error(
+      "Operational exporter readiness must pass only when its summary scrape succeeds.",
+    );
+  }
+}
+
+async function assertExporterHttpBehavior() {
+  let upstreamAvailable = true;
+  const server = createOperationalMonitoringServer(
+    {},
+    {
+      scrape: async () => {
+        if (!upstreamAvailable) throw new Error("synthetic upstream failure");
+        return metrics;
+      },
+    },
+  );
+  await new Promise((resolvePromise, rejectPromise) => {
+    server.once("error", rejectPromise);
+    server.listen(0, "127.0.0.1", resolvePromise);
+  });
+  try {
+    const address = server.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("Operational exporter test server has no TCP address.");
+    }
+    const origin = `http://127.0.0.1:${address.port}`;
+    const health = await fetch(`${origin}/health`);
+    const ready = await fetch(`${origin}/ready`);
+    upstreamAvailable = false;
+    const unavailable = await fetch(`${origin}/ready`);
+    const failureMetrics = await fetch(`${origin}/metrics`);
+    const failureBody = await failureMetrics.text();
+    if (
+      health.status !== 200 ||
+      ready.status !== 200 ||
+      unavailable.status !== 503 ||
+      failureMetrics.status !== 200 ||
+      !failureBody.includes("romeo_operational_exporter_up 0")
+    ) {
+      throw new Error(
+        "Operational exporter HTTP endpoints do not preserve liveness/readiness/failure-metric semantics.",
+      );
+    }
+  } finally {
+    await new Promise((resolvePromise, rejectPromise) => {
+      server.close((error) => {
+        if (error === undefined) resolvePromise();
+        else rejectPromise(error);
+      });
+    });
   }
 }
 

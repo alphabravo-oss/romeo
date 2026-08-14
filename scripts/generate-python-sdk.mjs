@@ -3,8 +3,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
+const rootPackage = JSON.parse(
+  await readFile(join(root, "package.json"), "utf8"),
+);
+const productVersion = String(rootPackage.version);
 const outDir = argValue("--out-dir") ?? join(root, "sdks", "python");
 const packageDir = join(outDir, "romeo_client");
+const testsDir = join(outDir, "tests");
 const openApiFile = argValue("--openapi-file");
 const openApiUrl =
   argValue("--openapi-url") ?? "http://127.0.0.1:3000/api/v1/openapi.json";
@@ -16,6 +21,7 @@ const spec =
 const operations = collectOperations(spec);
 
 mkdirSync(packageDir, { recursive: true });
+mkdirSync(testsDir, { recursive: true });
 writeFileSync(join(outDir, "pyproject.toml"), pyproject(), "utf8");
 writeFileSync(
   join(outDir, "README.md"),
@@ -26,6 +32,7 @@ writeFileSync(join(packageDir, "__init__.py"), initPy(), "utf8");
 writeFileSync(join(packageDir, "client.py"), clientPy(), "utf8");
 writeFileSync(join(packageDir, "errors.py"), errorsPy(), "utf8");
 writeFileSync(join(packageDir, "openapi.py"), openApiPy(operations), "utf8");
+writeFileSync(join(testsDir, "test_stream.py"), streamTestPy(), "utf8");
 
 console.log(
   `Generated Python SDK with ${operations.length} operations at ${outDir}`,
@@ -90,7 +97,7 @@ function operationName(method, path) {
 function pyproject() {
   return `[project]
 name = "romeo-client"
-version = "0.1.0"
+version = "${productVersion}"
 description = "Generated Python client for the Romeo API"
 requires-python = ">=3.11"
 
@@ -152,6 +159,72 @@ function errorsPy() {
         self.message = message
         self.request_id = request_id
         self.details = details or {}
+`;
+}
+
+function streamTestPy() {
+  return `import unittest
+from unittest.mock import patch
+
+from romeo_client import RomeoClient
+
+
+class FakeSseResponse:
+    def __init__(self, lines: list[bytes]):
+        self.lines = lines
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def __iter__(self):
+        return iter(self.lines)
+
+
+class RunEventStreamTests(unittest.TestCase):
+    def test_sends_cursor_ignores_heartbeats_and_deduplicates_replay(self):
+        response = FakeSseResponse(
+            [
+                b"retry: 1000\\n",
+                b"\\n",
+                b": heartbeat\\n",
+                b"\\n",
+                b"event: message.delta\\n",
+                b"id: 7\\n",
+                b'data: {"id":"evt_7","runId":"run_1","sequence":7,"type":"message.delta","data":{"text":"old"}}\\n',
+                b"\\n",
+                b"event: run.completed\\n",
+                b"id: 8\\n",
+                b'data: {"id":"evt_8","runId":"run_1","sequence":8,"schemaVersion":1,"type":"run.completed","data":{}}\\n',
+                b"\\n",
+            ]
+        )
+        captured = []
+
+        def open_request(request, timeout):
+            captured.append((request, timeout))
+            return response
+
+        client = RomeoClient("https://romeo.example", "rmk_test", timeout=9)
+        with patch("romeo_client.client.urlopen", open_request):
+            events = list(client.stream_run_events("run_1", after_sequence=7))
+
+        self.assertEqual([event["sequence"] for event in events], [8])
+        request, timeout = captured[0]
+        self.assertEqual(request.get_header("Last-event-id"), "7")
+        self.assertEqual(request.get_header("Authorization"), "Bearer rmk_test")
+        self.assertEqual(timeout, 9)
+
+    def test_rejects_invalid_cursor(self):
+        client = RomeoClient()
+        with self.assertRaises(ValueError):
+            list(client.stream_run_events("run_1", after_sequence=-1))
+
+
+if __name__ == "__main__":
+    unittest.main()
 `;
 }
 
@@ -437,24 +510,47 @@ class RomeoClient:
             body["limit"] = limit
         return self.data("POST", "/api/v1/browser-automation-tasks/expire", json_body=body)
 
-    def stream_run_events(self, run_id: str):
+    def stream_run_events(self, run_id: str, after_sequence: int = 0):
+        if isinstance(after_sequence, bool) or after_sequence < 0:
+            raise ValueError("after_sequence must be a non-negative integer")
         path = "/api/v1/runs/" + quote(run_id, safe="") + "/events"
         url = self.base_url + path
-        headers = {"accept": "text/event-stream"}
+        headers = {
+            "accept": "text/event-stream",
+            "Last-Event-ID": str(after_sequence),
+        }
         if self.api_key:
             headers["authorization"] = "Bearer " + self.api_key
         request = Request(url, headers=headers, method="GET")
         with urlopen(request, timeout=self.timeout) as response:
             event_type = None
+            event_id = None
+            data_lines: list[str] = []
             for raw_line in response:
-                line = raw_line.decode("utf-8").strip()
-                if line.startswith("event:"):
-                    event_type = line[6:].strip()
+                line = raw_line.decode("utf-8").rstrip("\\r\\n")
+                if line == "":
+                    if data_lines:
+                        data = json.loads("\\n".join(data_lines))
+                        sequence = data.get("sequence") if isinstance(data, dict) else None
+                        parsed_event_id = int(event_id) if event_id is not None and event_id.isdecimal() else None
+                        cursor = sequence if isinstance(sequence, int) and not isinstance(sequence, bool) else parsed_event_id
+                        if cursor is None or cursor > after_sequence:
+                            if event_type is not None and isinstance(data, dict):
+                                data.setdefault("event", event_type)
+                            if cursor is not None:
+                                after_sequence = cursor
+                            yield data
+                    event_type = None
+                    event_id = None
+                    data_lines = []
+                elif line.startswith(":"):
+                    continue
+                elif line.startswith("event:"):
+                    event_type = line[6:].lstrip()
+                elif line.startswith("id:"):
+                    event_id = line[3:].lstrip()
                 elif line.startswith("data:"):
-                    data = json.loads(line[5:].strip())
-                    if event_type is not None:
-                        data["event"] = event_type
-                    yield data
+                    data_lines.append(line[5:].lstrip())
 
     def _format_path(self, path: str, path_params: dict[str, Any] | None) -> str:
         formatted = path

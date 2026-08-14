@@ -9,8 +9,10 @@ import {
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { writeAuditLog } from "./audit-log";
+import { providerApiError } from "./provider-api-error";
 import type { SecretResolver } from "./secret-resolver";
 import { withTelemetryFetch } from "./telemetry-context";
+import { WorkerSupervisor } from "./worker-supervisor";
 
 export interface ProviderCatalogSyncOptions {
   enabled?: boolean;
@@ -27,8 +29,8 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const WORKER_CONCURRENCY = 3;
 
 export class ProviderCatalogSyncCoordinator {
-  private timer: ReturnType<typeof setInterval> | undefined;
   private readonly inFlight = new Map<string, Promise<BaseModel[]>>();
+  private readonly supervisor = new WorkerSupervisor("provider_catalog_sync");
 
   constructor(
     private readonly repository: RomeoRepository,
@@ -36,18 +38,21 @@ export class ProviderCatalogSyncCoordinator {
   ) {}
 
   start(): void {
-    if (this.options.enabled === false || this.timer !== undefined) return;
-    void this.runOnce();
-    this.timer = setInterval(
-      () => void this.runOnce(),
-      this.options.intervalMs ?? DEFAULT_INTERVAL_MS,
-    );
-    this.timer.unref?.();
+    if (this.options.enabled === false) return;
+    const intervalMs = this.options.intervalMs ?? DEFAULT_INTERVAL_MS;
+    this.supervisor.start((signal) => this.runOnce(signal), {
+      intervalMs,
+      maxBackoffMs: intervalMs * 16,
+      jitterRatio: 0.2,
+    });
   }
 
   stop(): void {
-    if (this.timer !== undefined) clearInterval(this.timer);
-    this.timer = undefined;
+    this.supervisor.stop();
+  }
+
+  drain(): Promise<void> {
+    return this.supervisor.drain();
   }
 
   async ensureFreshForOrg(orgId: string): Promise<void> {
@@ -58,9 +63,10 @@ export class ProviderCatalogSyncCoordinator {
     await this.syncProviders(providers);
   }
 
-  async runOnce(): Promise<number> {
+  async runOnce(signal?: AbortSignal): Promise<number> {
     if (this.options.enabled === false) return 0;
     const organizations = await this.repository.listAllOrganizations();
+    if (signal?.aborted === true) return 0;
     const providerGroups = await Promise.all(
       organizations.map((organization) =>
         this.repository.listProviders(organization.id),
@@ -69,7 +75,7 @@ export class ProviderCatalogSyncCoordinator {
     const providers = providerGroups
       .flat()
       .filter((provider) => this.shouldSync(provider));
-    await this.syncProviders(providers);
+    await this.syncProviders(providers, signal);
     return providers.length;
   }
 
@@ -101,8 +107,12 @@ export class ProviderCatalogSyncCoordinator {
     );
   }
 
-  private async syncProviders(providers: ProviderInstance[]): Promise<void> {
+  private async syncProviders(
+    providers: ProviderInstance[],
+    signal?: AbortSignal,
+  ): Promise<void> {
     for (let index = 0; index < providers.length; index += WORKER_CONCURRENCY) {
+      if (signal?.aborted === true) return;
       const batch = providers.slice(index, index + WORKER_CONCURRENCY);
       await Promise.allSettled(
         batch.map((provider) =>
@@ -135,7 +145,7 @@ export class ProviderCatalogSyncCoordinator {
         );
       }
     } catch (caught) {
-      const message = discoveryErrorMessage(caught);
+      const message = "The provider model catalog could not be refreshed.";
       await this.markError(provider, attemptAt, message);
       await writeAuditLog(this.repository, {
         subject,
@@ -145,7 +155,10 @@ export class ProviderCatalogSyncCoordinator {
         outcome: "failure",
         metadata: { error: message.slice(0, 300) },
       });
-      throw new ApiError("provider_model_discovery_failed", message, 502);
+      throw providerApiError(caught, {
+        kind: provider.type,
+        operation: "discovery",
+      });
     }
 
     try {
@@ -265,7 +278,9 @@ export class ProviderCatalogSyncCoordinator {
           id: current.id,
           available: true,
           enabled: current.enabled,
-          ...(current.pricing === undefined ? {} : { pricing: current.pricing }),
+          ...(current.pricing === undefined
+            ? {}
+            : { pricing: current.pricing }),
           ...(current.defaultParameters === undefined
             ? {}
             : { defaultParameters: current.defaultParameters }),
@@ -356,12 +371,4 @@ export function providerCatalogStaleState(
       ? {}
       : { lastSyncedAt: state.lastSyncedAt }),
   };
-}
-
-function discoveryErrorMessage(caught: unknown): string {
-  const message =
-    caught instanceof Error
-      ? caught.message
-      : "The provider model catalog could not be refreshed.";
-  return message.trim().slice(0, 1_000);
 }

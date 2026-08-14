@@ -140,12 +140,13 @@ function syncExternalEvent(context: BillingCommandContext) {
     "amount-cents",
   );
   const currency = flagValue(context.parsed.flags, "currency");
-  const occurredAt = flagValue(context.parsed.flags, "occurred-at");
+  const occurredAt = requiredFlag(context.parsed, "occurred-at");
   const planCode = flagValue(context.parsed.flags, "plan-code", "code");
   const planName = flagValue(context.parsed.flags, "plan-name", "name");
   const quotaTemplates = billingQuotaTemplates(context.parsed, false);
   const body = {
     provider: requiredFlag(context.parsed, "provider"),
+    eventId: requiredFlag(context.parsed, "event-id"),
     eventType: billingExternalEventType(
       requiredFlag(context.parsed, "event", "event-type"),
     ),
@@ -155,7 +156,7 @@ function syncExternalEvent(context: BillingCommandContext) {
     ...(invoiceStatus === undefined ? {} : { invoiceStatus }),
     ...(amountCents === undefined ? {} : { amountCents }),
     ...(currency === undefined ? {} : { currency }),
-    ...(occurredAt === undefined ? {} : { occurredAt }),
+    occurredAt,
     ...(planCode === undefined ? {} : { planCode }),
     ...(planName === undefined ? {} : { planName }),
     ...(status === undefined ? {} : { status: billingPlanStatus(status) }),

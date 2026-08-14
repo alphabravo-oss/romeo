@@ -1,19 +1,19 @@
 import { Input, LinkButton, NativeSelect, Button } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
 import { useCallback, useMemo, useState } from "react";
 
 import {
-  disableUser,
-  listUsers,
-  setUserPassword,
-  updateUserRole,
+  disableUserMutationOptions,
+  usersQueryOptions,
+  setUserPasswordMutationOptions,
+  updateUserRoleMutationOptions,
 } from "../features/administration";
 import type { User, UserRole } from "../features/administration";
 import { PanelState } from "../lib/panel-state";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
-import { Section, StatRow } from "./console";
+import { IdentityCell, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { confirmTone } from "./danger-tier";
@@ -49,26 +49,12 @@ export function UsersPanel({
   sort,
 }: UsersPanelProps) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { ask, dialog } = useConfirm();
-  const usersQuery = useQuery({
-    queryKey: ["users", query, sort, direction, page],
-    queryFn: () =>
-      listUsers({
-        direction,
-        limit: pageSize,
-        offset: page * pageSize,
-        ...(query.trim() === "" ? {} : { query }),
-        sort,
-      }),
-    placeholderData: (previous) => previous,
-  });
-  const disableMutation = useMutation({ mutationFn: disableUser });
-  const [managing, setManaging] = useState<User>();
-  const refresh = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ["users"] }),
-    [queryClient],
+  const usersQuery = useQuery(
+    usersQueryOptions({ direction, page, pageSize, query, sort }),
   );
+  const disableMutation = useMutation(disableUserMutationOptions());
+  const [managing, setManaging] = useState<User>();
 
   const handleDisable = useCallback(
     async (user: User) => {
@@ -83,27 +69,24 @@ export function UsersPanel({
         return;
       try {
         await disableMutation.mutateAsync(user.id);
-        await refresh();
         toast(t("userDisabledNotice"), "success");
       } catch {
         toast(t("userCouldNotDisable"), "error");
       }
     },
-    [ask, disableMutation, refresh, t],
+    [ask, disableMutation, t],
   );
 
   const columns = useMemo<ColumnDef<User, any>[]>(
     () => [
       userCol.accessor("name", {
         header: t("userName"),
-        cell: (c) => <span className="font-medium">{c.getValue()}</span>,
-      }),
-      userCol.accessor("email", {
-        header: t("userEmail"),
         cell: (c) => (
-          <span className="rm-cell-muted rm-mono" translate="no">
-            {c.getValue()}
-          </span>
+          <IdentityCell
+            mono
+            primary={c.getValue()}
+            secondary={c.row.original.email}
+          />
         ),
       }),
       userCol.accessor("role", {
@@ -264,7 +247,6 @@ export function UsersPanel({
       {managing !== undefined ? (
         <UserManageDialog
           key={managing.id}
-          onChanged={() => void refresh()}
           onClose={() => setManaging(undefined)}
           user={managing}
         />
@@ -277,23 +259,20 @@ export function UsersPanel({
 function UserManageDialog({
   user,
   onClose,
-  onChanged,
 }: {
   user: User;
   onClose: () => void;
-  onChanged: () => void;
 }) {
   const { t } = useLocale();
   const [role, setRole] = useState<UserRole>(user.role);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const roleMutation = useMutation({ mutationFn: updateUserRole });
-  const passwordMutation = useMutation({ mutationFn: setUserPassword });
+  const roleMutation = useMutation(updateUserRoleMutationOptions());
+  const passwordMutation = useMutation(setUserPasswordMutationOptions());
 
   async function saveRole() {
     try {
       await roleMutation.mutateAsync({ userId: user.id, role });
-      onChanged();
       toast(t("userRoleUpdated"), "success");
     } catch {
       toast(t("userCouldNotUpdateRole"), "error");
@@ -316,6 +295,8 @@ function UserManageDialog({
       setConfirmPassword("");
     } catch {
       toast(t("userCouldNotSetPassword"), "error");
+    } finally {
+      passwordMutation.reset();
     }
   }
 

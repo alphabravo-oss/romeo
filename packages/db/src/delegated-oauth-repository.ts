@@ -217,7 +217,8 @@ function asTokenEnvelope(value: unknown): DelegatedOAuthTokenEnvelope {
   if (
     typeof value === "object" &&
     value !== null &&
-    (value as { v?: unknown }).v === 1 &&
+    ((value as { v?: unknown }).v === 1 ||
+      (value as { v?: unknown }).v === 2) &&
     (value as { alg?: unknown }).alg === "A256GCM" &&
     typeof (value as { ciphertext?: unknown }).ciphertext === "string" &&
     typeof (value as { iv?: unknown }).iv === "string" &&

@@ -32,9 +32,13 @@ export async function* streamRunEvents(
     const result = await runsStreamEvents({
       path: { runId },
       query: { after: afterSequence },
-      headers: { accept: "text/event-stream" },
+      headers: {
+        accept: "text/event-stream",
+        "last-event-id": String(afterSequence),
+      },
       signal: idleController.signal,
       sseMaxRetryAttempts: 1,
+      onSseEvent: resetIdle,
       onSseError: (error) => {
         streamError = error;
       },
@@ -57,8 +61,17 @@ function isRunEvent(value: unknown): value is RunEvent {
   return (
     typeof value === "object" &&
     value !== null &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    value.id.length > 0 &&
     "type" in value &&
+    typeof value.type === "string" &&
     "runId" in value &&
-    "sequence" in value
+    typeof value.runId === "string" &&
+    value.runId.length > 0 &&
+    "sequence" in value &&
+    Number.isSafeInteger(value.sequence) &&
+    (value.sequence as number) >= 0 &&
+    (!("schemaVersion" in value) || value.schemaVersion === 1)
   );
 }

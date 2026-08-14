@@ -18,6 +18,7 @@ import type {
   ToolServiceOptions,
 } from "./tool-service-contracts";
 import { assertRunToolExecutionAllowed } from "./tool-service-helpers";
+import { enforceContentPolicyValue } from "./content-policy-service";
 
 export type {
   ToolApprovalDecisionResult,
@@ -147,15 +148,23 @@ export class ToolService {
       runId?: string;
     },
   ): Promise<unknown> {
+    const governedInput = (
+      await enforceContentPolicyValue(this.repository, subject, input)
+    ).value;
     const builtIn = this.catalog.findBuiltIn(toolId);
     if (builtIn !== undefined)
-      return this.builtInExecution.execute(subject, builtIn, input, options);
+      return this.builtInExecution.execute(
+        subject,
+        builtIn,
+        governedInput,
+        options,
+      );
     const operation = await this.catalog.getOperationTool(subject, toolId);
     if (operation !== undefined)
       return this.operationExecution.execute(
         subject,
         operation,
-        input,
+        governedInput,
         options,
       );
     await this.executionSupport.audit(subject, toolId, "failure", {

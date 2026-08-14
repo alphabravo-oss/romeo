@@ -4,9 +4,16 @@ import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
 import { append, appendMany, replaceById } from "./collection-helpers";
 import { fileTombstoneFields } from "../domain/file-tombstone";
-import { InMemoryContentRepository } from "./in-memory-content";
+import { InMemoryAuditRepository } from "./in-memory-audit";
+import {
+  activeLegalHold,
+  deleteChatDataInMemory,
+  emptyDataDeletionCounts,
+  fileObjectStorageObjectCount,
+  isChatDeletionUsageEvent,
+} from "./in-memory-data-deletion-helpers";
 
-export abstract class InMemoryRunRepository extends InMemoryContentRepository {
+export abstract class InMemoryRunRepository extends InMemoryAuditRepository {
   async createRun(run: E.RunRecord): Promise<E.RunRecord> {
     return append(this.data.runs, run);
   }
@@ -50,17 +57,122 @@ export abstract class InMemoryRunRepository extends InMemoryContentRepository {
       const existing = this.runEvents.get(event.runId) ?? [];
       existing.push(event);
       this.runEvents.set(event.runId, existing);
+      this.runEventSequences.set(
+        event.runId,
+        Math.max(this.runEventSequences.get(event.runId) ?? 0, event.sequence),
+      );
     }
+  }
+
+  async allocateRunEventSequence(runId: string): Promise<number | undefined> {
+    if (!this.data.runs.some((run) => run.id === runId)) return undefined;
+    const current =
+      this.runEventSequences.get(runId) ??
+      Math.max(
+        0,
+        ...(this.runEvents.get(runId) ?? []).map((event) => event.sequence),
+      );
+    const next = current + 1;
+    this.runEventSequences.set(runId, next);
+    return next;
+  }
+
+  async listRunEventsAfter(
+    runId: string,
+    afterSequence: number,
+    limit: number,
+    signal?: AbortSignal,
+  ): Promise<Ai.RunEvent[]> {
+    signal?.throwIfAborted();
+    return (this.runEvents.get(runId) ?? [])
+      .filter((event) => event.sequence > afterSequence)
+      .sort((left, right) => left.sequence - right.sequence)
+      .slice(0, Math.max(1, limit));
   }
 
   async listRunEvents(runId: string): Promise<Ai.RunEvent[]> {
     return this.runEvents.get(runId) ?? [];
   }
 
+  async deleteCompactedRunEventsBefore(
+    orgId: string,
+    before: string,
+    now: string,
+    limit: number,
+  ): Promise<number> {
+    const eligibleRunIds = new Set(
+      this.data.runs
+        .filter(
+          (run) =>
+            run.orgId === orgId &&
+            (run.status === "cancelled" ||
+              run.status === "completed" ||
+              run.status === "failed") &&
+            run.completedAt !== undefined &&
+            run.completedAt < before,
+        )
+        .filter((run) => {
+          const chat = this.data.chats.find((item) => item.id === run.chatId);
+          return (
+            chat?.legalHoldUntil === undefined || chat.legalHoldUntil <= now
+          );
+        })
+        .map((run) => run.id),
+    );
+    const candidates = Array.from(this.runEvents.entries())
+      .filter(([runId]) => eligibleRunIds.has(runId))
+      .flatMap(([runId, events]) => {
+        const latestSequence = Math.max(
+          0,
+          ...events.map((event) => event.sequence),
+        );
+        return events
+          .filter((event) => event.sequence < latestSequence)
+          .map((event) => ({ event, runId }));
+      })
+      .sort((left, right) =>
+        left.event.createdAt === right.event.createdAt
+          ? left.event.id.localeCompare(right.event.id)
+          : left.event.createdAt.localeCompare(right.event.createdAt),
+      )
+      .slice(0, Math.max(1, limit));
+    const candidateIds = new Set(candidates.map(({ event }) => event.id));
+    for (const runId of eligibleRunIds) {
+      const events = this.runEvents.get(runId);
+      if (events === undefined) continue;
+      this.runEvents.set(
+        runId,
+        events.filter((event) => !candidateIds.has(event.id)),
+      );
+    }
+    return candidateIds.size;
+  }
+
   async listToolCalls(orgId: string): Promise<E.ToolCallRecord[]> {
     return this.data.toolCalls
       .filter((call) => call.orgId === orgId)
       .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  }
+
+  async listToolCallsForRun(
+    orgId: string,
+    workspaceId: string,
+    runId: string,
+    limit: number,
+  ): Promise<E.ToolCallRecord[]> {
+    return this.data.toolCalls
+      .filter(
+        (call) =>
+          call.orgId === orgId &&
+          call.workspaceId === workspaceId &&
+          call.runId === runId,
+      )
+      .sort(
+        (left, right) =>
+          left.startedAt.localeCompare(right.startedAt) ||
+          left.id.localeCompare(right.id),
+      )
+      .slice(0, Math.max(1, limit));
   }
 
   async createToolCall(call: E.ToolCallRecord): Promise<E.ToolCallRecord> {
@@ -112,24 +224,6 @@ export abstract class InMemoryRunRepository extends InMemoryContentRepository {
     return replaceById(this.data.toolOperations, operation);
   }
 
-  async listAuditLogs(orgId: string): Promise<E.AuditLog[]> {
-    return this.data.auditLogs
-      .filter((log) => log.orgId === orgId)
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-  }
-
-  async createAuditLog(log: E.AuditLog): Promise<E.AuditLog> {
-    return append(this.data.auditLogs, log);
-  }
-
-  async deleteAuditLogsBefore(orgId: string, before: string): Promise<number> {
-    const initialCount = this.data.auditLogs.length;
-    this.data.auditLogs = this.data.auditLogs.filter(
-      (log) => log.orgId !== orgId || log.createdAt >= before,
-    );
-    return initialCount - this.data.auditLogs.length;
-  }
-
   async getDataDeletionPlan(
     orgId: string,
     resourceType: E.DataDeletionResourceType,
@@ -160,6 +254,10 @@ export abstract class InMemoryRunRepository extends InMemoryContentRepository {
       resourceId,
     );
     if (!plan) return undefined;
+    if (plan.legalHold !== undefined)
+      throw new Error(
+        "Cannot delete a chat while an active legal hold exists.",
+      );
 
     const runIds = new Set(
       this.data.runs
@@ -182,62 +280,15 @@ export abstract class InMemoryRunRepository extends InMemoryContentRepository {
         .map((notification) => notification.id),
     );
 
-    this.data.messageParts = this.data.messageParts.filter(
-      (part) => !messageIds.has(part.messageId),
-    );
-    this.data.chats = this.data.chats.filter(
-      (chat) => !(chat.orgId === orgId && chat.id === resourceId),
-    );
-    this.data.messages = this.data.messages.filter(
-      (message) => message.chatId !== resourceId,
-    );
-    this.data.queuedChatTurns = this.data.queuedChatTurns.filter(
-      (turn) => !(turn.orgId === orgId && turn.chatId === resourceId),
-    );
-    this.data.runs = this.data.runs.filter(
-      (run) => !(run.orgId === orgId && run.chatId === resourceId),
-    );
-    this.data.chatComments = this.data.chatComments.filter(
-      (comment) => !(comment.orgId === orgId && comment.chatId === resourceId),
-    );
-    this.data.chatTagAssignments = this.data.chatTagAssignments.filter(
-      (assignment) =>
-        !(assignment.orgId === orgId && assignment.chatId === resourceId),
-    );
-    this.data.userNotifications = this.data.userNotifications.filter(
-      (notification) => !notificationIds.has(notification.id),
-    );
-    this.data.notificationDeliveries = this.data.notificationDeliveries.filter(
-      (delivery) => !notificationIds.has(delivery.notificationId),
-    );
-    this.data.toolCalls = this.data.toolCalls.filter(
-      (call) => call.runId === undefined || !runIds.has(call.runId),
-    );
-    this.data.usageEvents = this.data.usageEvents.filter(
-      (event) =>
-        !isChatDeletionUsageEvent(event, runIds, messageIds, resourceId),
-    );
-    this.data.grants = this.data.grants.filter(
-      (grant) =>
-        !(grant.resourceType === "chat" && grant.resourceId === resourceId),
-    );
-    this.data.resourceFavorites = this.data.resourceFavorites.filter(
-      (favorite) =>
-        !(
-          favorite.orgId === orgId &&
-          favorite.resourceType === "chat" &&
-          favorite.resourceId === resourceId
-        ),
-    );
-    this.data.workspaceFolderItems = this.data.workspaceFolderItems.filter(
-      (item) =>
-        !(
-          item.orgId === orgId &&
-          item.resourceType === "chat" &&
-          item.resourceId === resourceId
-        ),
-    );
-    for (const runId of runIds) this.runEvents.delete(runId);
+    deleteChatDataInMemory({
+      data: this.data,
+      chatId: resourceId,
+      messageIds,
+      notificationIds,
+      orgId,
+      runEvents: this.runEvents,
+      runIds,
+    });
 
     return plan;
   }
@@ -358,6 +409,14 @@ export abstract class InMemoryRunRepository extends InMemoryContentRepository {
   ): Promise<E.DataDeletionPlan | undefined> {
     const plan = this.fileObjectDeletionPlan(orgId, fileId);
     if (plan === undefined) return undefined;
+    if (
+      this.data.messageFileReferences.some(
+        (reference) => reference.fileId === fileId,
+      )
+    )
+      throw new Error(
+        "Cannot delete a file while governed message references exist.",
+      );
     const now = new Date().toISOString();
     this.data.fileObjects = this.data.fileObjects.map((file) =>
       file.orgId === orgId && file.id === fileId
@@ -402,69 +461,4 @@ export abstract class InMemoryRunRepository extends InMemoryContentRepository {
       },
     };
   }
-}
-
-function isChatDeletionUsageEvent(
-  event: E.UsageEvent,
-  runIds: Set<string>,
-  messageIds: Set<string>,
-  chatId: string,
-): boolean {
-  if (event.sourceType === "run" && runIds.has(event.sourceId)) return true;
-  if (event.sourceType !== "voice") return false;
-  return (
-    event.metadata.chatId === chatId ||
-    (typeof event.metadata.messageId === "string" &&
-      messageIds.has(event.metadata.messageId))
-  );
-}
-
-function emptyDataDeletionCounts(): E.DataDeletionPlan["counts"] {
-  return {
-    chats: 0,
-    messages: 0,
-    messageParts: 0,
-    runs: 0,
-    runSteps: 0,
-    runEvents: 0,
-    chatComments: 0,
-    userNotifications: 0,
-    notificationDeliveries: 0,
-    runLinkedToolCalls: 0,
-    usageEvents: 0,
-    resourceGrants: 0,
-    resourceFavorites: 0,
-    workspaceFolderItems: 0,
-    fileObjects: 0,
-    knowledgeSources: 0,
-    knowledgeChunks: 0,
-    knowledgeEmbeddings: 0,
-    objectStoreObjects: 0,
-    objectStoreBytes: 0,
-  };
-}
-
-function fileObjectStorageObjectCount(
-  metadata: Record<string, unknown>,
-): number {
-  if (metadata.uploadMode !== "resumable_backend_composed") return 1;
-  const partCount = metadata.partCount;
-  return typeof partCount === "number" &&
-    Number.isInteger(partCount) &&
-    partCount > 0
-    ? partCount + 1
-    : 1;
-}
-
-function activeLegalHold(
-  chat: E.Chat,
-): E.DataDeletionPlan["legalHold"] | undefined {
-  if (chat.legalHoldUntil === undefined) return undefined;
-  if (new Date(chat.legalHoldUntil).getTime() <= Date.now()) return undefined;
-  return {
-    until: chat.legalHoldUntil,
-    ...(chat.legalHoldReason !== undefined
-      ? { reason: chat.legalHoldReason }
-      : {}),
-  };
 }

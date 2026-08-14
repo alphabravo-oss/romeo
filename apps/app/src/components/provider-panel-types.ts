@@ -34,7 +34,10 @@ export interface ProviderPanelProps {
       refreshModels?: boolean;
     },
   ) => Promise<void>;
-  onVerifyProvider: (providerId: string) => Promise<ProviderVerification>;
+  onVerifyProvider: (
+    providerId: string,
+    signal?: AbortSignal,
+  ) => Promise<ProviderVerification>;
   operationalSummary: ProviderOperationalSummary | undefined;
   providers: Provider[];
   models: BaseModel[];

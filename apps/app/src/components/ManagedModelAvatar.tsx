@@ -1,5 +1,6 @@
+import { resolveAvatarImageSource } from "@romeo/contracts/avatar-url";
 import Bot from "lucide-react/dist/esm/icons/bot.mjs";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { Agent } from "../features/managed-models";
 
@@ -12,8 +13,12 @@ export function ManagedModelAvatar({
   className?: string;
   size?: number;
 }) {
-  const [imageFailed, setImageFailed] = useState(false);
-  const avatarUrl = agent.avatarUrl?.trim();
+  const [failedSource, setFailedSource] = useState<string>();
+  const source = useMemo(
+    () => resolveAvatarImageSource(agent.avatarUrl),
+    [agent.avatarUrl],
+  );
+  const showImage = source !== undefined && source.src !== failedSource;
 
   return (
     <span
@@ -21,12 +26,18 @@ export function ManagedModelAvatar({
       className={`rm-managed-model-avatar ${className}`}
       style={{ height: size, width: size }}
     >
-      {avatarUrl && !imageFailed ? (
+      {showImage ? (
         <img
           alt=""
+          {...(source.kind === "remote"
+            ? {
+                crossOrigin: "anonymous" as const,
+                referrerPolicy: "no-referrer" as const,
+              }
+            : {})}
           height={size}
-          onError={() => setImageFailed(true)}
-          src={avatarUrl}
+          onError={() => setFailedSource(source.src)}
+          src={source.src}
           width={size}
         />
       ) : agent.icon?.trim() ? (

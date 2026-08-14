@@ -27,7 +27,7 @@ export function KnowledgeIngestNotice({
       <p>{message}</p>
       {isAdmin ? (
         <Button asChild className="w-fit" variant="secondary">
-          <Link search={{ section: "rag" }} to="/admin">
+          <Link preload={false} search={{ section: "rag" }} to="/admin">
             {t("knowledgeIngestOpenRag")}
           </Link>
         </Button>

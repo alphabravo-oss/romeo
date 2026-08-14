@@ -1,0 +1,15 @@
+{
+  "intents.authenticate": "Please sign in again and retry.",
+  "intents.contact_support": "Something went wrong. Contact support with the request ID.",
+  "intents.correct_content": "Review the submitted content and try again.",
+  "intents.correct_request": "Review the request and try again.",
+  "intents.reduce_payload": "Reduce the request size and try again.",
+  "intents.request_access": "You do not have access to this action. Ask an administrator if access is required.",
+  "intents.resolve_conflict": "The resource changed. Refresh it and try again.",
+  "intents.resource_missing": "The requested resource could not be found.",
+  "intents.retry_later": "Too many requests were received. Wait and try again.",
+  "intents.temporarily_unavailable": "The service is temporarily unavailable. Try again later.",
+  "intents.upstream_failure": "A dependent service could not complete the request. Try again later.",
+  "intents.upstream_timeout": "A dependent service timed out. Try again later.",
+  "intents.use_supported_media": "Use a supported file or media format and try again."
+}

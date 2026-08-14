@@ -4,6 +4,7 @@ export type {
   EvalCase,
   EvalDashboard,
   EvalReleaseCandidateEvidence,
+  EvalReasoningComparison,
   EvalResultHumanRating,
   EvalRubric,
   EvalRun,

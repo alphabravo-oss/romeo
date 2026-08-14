@@ -5,6 +5,7 @@ import {
   continueTelemetryContextFromPayload,
   telemetryTraceId,
 } from "./telemetry-context";
+import { WorkerSupervisor } from "./worker-supervisor";
 
 export interface TemporaryChatCleanupWorkerOptions {
   enabled: boolean;
@@ -15,8 +16,8 @@ export interface TemporaryChatCleanupWorkerOptions {
 }
 
 export class TemporaryChatCleanupWorker {
-  private timer: ReturnType<typeof setInterval> | undefined;
   private readonly workerId: string;
+  private readonly supervisor = new WorkerSupervisor("temporary_chat_cleanup");
 
   constructor(
     private readonly repository: RomeoRepository,
@@ -28,27 +29,32 @@ export class TemporaryChatCleanupWorker {
   }
 
   start(): void {
-    if (!this.options.enabled || this.timer !== undefined) return;
-    void this.runOnce();
-    this.timer = setInterval(
-      () => void this.runOnce(),
-      this.options.intervalMs,
-    );
-    this.timer.unref?.();
+    if (!this.options.enabled) return;
+    this.supervisor.start((signal) => this.runOnce(undefined, signal), {
+      intervalMs: this.options.intervalMs,
+      maxBackoffMs: this.options.intervalMs * 16,
+      jitterRatio: 0.2,
+    });
   }
 
   stop(): void {
-    if (this.timer === undefined) return;
-    clearInterval(this.timer);
-    this.timer = undefined;
+    this.supervisor.stop();
   }
 
-  async runOnce(now = new Date().toISOString()): Promise<void> {
+  drain(): Promise<void> {
+    return this.supervisor.drain();
+  }
+
+  async runOnce(
+    now = new Date().toISOString(),
+    signal?: AbortSignal,
+  ): Promise<void> {
     const organizations = await this.repository.listAllOrganizations();
     await Promise.all(
-      organizations.map((organization) =>
-        this.runForOrganization(organization.id, now),
-      ),
+      organizations.map((organization) => {
+        if (signal?.aborted === true) return Promise.resolve();
+        return this.runForOrganization(organization.id, now);
+      }),
     );
   }
 
@@ -84,7 +90,14 @@ export class TemporaryChatCleanupWorker {
       leaseSeconds: this.options.leaseSeconds,
       now,
     });
-    if (claimed === undefined) return;
+    if (claimed === undefined) {
+      this.supervisor.recordLease({ claimed: false });
+      return;
+    }
+    this.supervisor.recordLease({
+      claimed: true,
+      lagMs: Math.max(0, Date.parse(now) - Date.parse(claimed.createdAt)),
+    });
     continueTelemetryContextFromPayload(claimed.payload);
     try {
       const result = await this.chats.cleanupExpiredTemporaryChatsForWorker({

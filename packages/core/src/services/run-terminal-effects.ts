@@ -1,8 +1,11 @@
+import type { AuthSubject } from "@romeo/auth";
+import type { RunEvent } from "@romeo/ai-runtime";
 import type { BaseModel, ProviderTokenUsage } from "@romeo/providers";
 
 import type { RunRecord } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { advanceChatLeaf, runUserMessage } from "./run-command-service";
+import { enforceContentPolicyText } from "./content-policy-service";
 import type { RunEventSequencer } from "./run-event-sequencer";
 import type { RunKnowledgeCitation } from "./run-knowledge";
 import { recordRunTerminalUsage } from "./run-usage";
@@ -23,6 +26,8 @@ export interface RunTerminalOutboxPayload {
 
 export interface PersistTerminalRunInput {
   run: RunRecord;
+  /** Original authenticated actor, used to govern provider-generated output. */
+  subject?: AuthSubject;
   status: "cancelled" | "completed" | "failed";
   assistantContent: string;
   model?: BaseModel;
@@ -34,9 +39,14 @@ export interface PersistTerminalRunInput {
     message?: string;
   };
   terminalEvent?: {
-    type: "run.cancelled" | "run.failed";
+    type: "run.cancelled" | "run.completed" | "run.failed";
     data: Record<string, unknown>;
   };
+}
+
+export interface PersistTerminalRunResult {
+  run: RunRecord | undefined;
+  events: RunEvent[];
 }
 
 export async function persistTerminalRun(
@@ -45,14 +55,26 @@ export async function persistTerminalRun(
   input: PersistTerminalRunInput,
 ): Promise<RunRecord | undefined> {
   const completedAt = new Date().toISOString();
-  return repository.transaction((transaction) =>
+  const assistantContent =
+    input.subject === undefined || input.assistantContent.length === 0
+      ? input.assistantContent
+      : (
+          await enforceContentPolicyText(
+            repository,
+            input.subject,
+            input.assistantContent,
+          )
+        ).content;
+  const result = await repository.transaction((transaction) =>
     persistTerminalRunInRepository(
       transaction,
       runEventSequencer,
-      input,
+      { ...input, assistantContent },
       completedAt,
     ),
   );
+  await runEventSequencer.notify(result.events);
+  return result.run;
 }
 
 export async function persistTerminalRunInRepository(
@@ -60,20 +82,22 @@ export async function persistTerminalRunInRepository(
   runEventSequencer: RunEventSequencer,
   input: PersistTerminalRunInput,
   completedAt: string,
-): Promise<RunRecord | undefined> {
+): Promise<PersistTerminalRunResult> {
   const finalized = await repository.finalizeRun({
     runId: input.run.id,
     status: input.status,
     completedAt,
   });
-  if (finalized === undefined) return undefined;
+  if (finalized === undefined) return { run: undefined, events: [] };
+  const events: RunEvent[] = [];
   if (input.terminalEvent !== undefined) {
     const event = await runEventSequencer.create(repository, {
       runId: finalized.id,
       type: input.terminalEvent.type,
       data: input.terminalEvent.data,
     });
-    await repository.appendRunEvents([event]);
+    await runEventSequencer.persist(repository, [event]);
+    events.push(event);
   }
   await recordRunTerminalUsage(repository, {
     run: finalized,
@@ -85,7 +109,7 @@ export async function persistTerminalRunInRepository(
       : { providerUsage: input.providerUsage }),
     runEvents: await repository.listRunEvents(finalized.id),
   });
-  await repository.createAuditLog({
+  await writeAuditLog(repository, {
     id: `audit_run_terminal_${finalized.id}`,
     orgId: finalized.orgId,
     actorId: finalized.createdBy,
@@ -158,7 +182,7 @@ export async function persistTerminalRunInRepository(
     createdAt: completedAt,
     updatedAt: completedAt,
   });
-  return finalized;
+  return { run: finalized, events };
 }
 
 export async function drainRunTerminalOutbox(input: {
@@ -166,9 +190,11 @@ export async function drainRunTerminalOutbox(input: {
   webhooks?: WebhookEmitter;
   workerId: string;
   orgId: string;
+  signal?: AbortSignal;
 }): Promise<number> {
   let processed = 0;
   while (true) {
+    if (input.signal?.aborted === true) return processed;
     const job = await input.repository.claimBackgroundJob({
       orgId: input.orgId,
       type: runTerminalOutboxJobType,
@@ -287,3 +313,4 @@ function runTerminalOutboxPayload(
     webhookPayload: value.webhookPayload as Record<string, unknown>,
   };
 }
+import { writeAuditLog } from "./audit-log";

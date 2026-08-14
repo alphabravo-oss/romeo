@@ -6,9 +6,11 @@ import type {
   WebhookSubscription,
 } from "../domain/webhooks";
 import type { RomeoRepository } from "../domain/repository";
-import { ApiError, notFound } from "../errors";
+import { notFound } from "../errors";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
+import type { WebsiteConnectorHostLookup } from "./data-connector-network-policy";
+import type { DnsPinnedFetch } from "./dns-pinned-fetch";
 import {
   completeBackgroundJob,
   failBackgroundJob,
@@ -18,18 +20,16 @@ import { persistedSubjectActorId } from "./subject-persisted-actor";
 import {
   auditWebhook,
   auditWebhookBulkDisable,
-  encodeDeliveryCursor,
-  indexAfterDeliveryCursor,
   maxWebhookAttempts,
-  nextRetryAt,
   normalizeDeliveryLimit,
   publicWebhookDelivery,
   retryableWebhookPayload,
   stableWebhookDeliveryId,
-  summarizeWebhookPayload,
   validateEventTypes,
 } from "./webhook-service-helpers";
-import { deriveWebhookSecret, signWebhookPayload } from "./webhook-signing";
+import { WebhookDeliveryCursorCodec } from "./webhook-delivery-cursor";
+import { WebhookDeliveryEngine } from "./webhook-delivery-engine";
+import { deriveWebhookSecret } from "./webhook-signing";
 import { normalizeWebhookUrl } from "./webhook-url";
 
 export interface CreatedWebhookSubscription {
@@ -72,11 +72,33 @@ export interface WebhookBulkDisableResult {
   status: "disabled" | "already_disabled" | "not_found";
 }
 
+export interface WebhookServiceOptions {
+  fetchImpl?: typeof fetch;
+  hostLookup?: WebsiteConnectorHostLookup;
+  pinnedFetchImpl?: DnsPinnedFetch;
+  signingKey: string;
+  timeoutMs?: number;
+  retryBatchSize?: number;
+  retryConcurrency?: number;
+  retryLeaseMs?: number;
+}
+
 export class WebhookService {
+  private readonly retryWorkerId = createId("webhook_worker");
+  private readonly deliveryEngine: WebhookDeliveryEngine;
+  private readonly deliveryCursor: WebhookDeliveryCursorCodec;
+
   constructor(
     private readonly repository: RomeoRepository,
-    private readonly options: { fetchImpl?: typeof fetch; signingKey: string },
-  ) {}
+    private readonly options: WebhookServiceOptions,
+  ) {
+    this.deliveryEngine = new WebhookDeliveryEngine(
+      repository,
+      options,
+      this.retryWorkerId,
+    );
+    this.deliveryCursor = new WebhookDeliveryCursorCodec(options.signingKey);
+  }
 
   async list(
     subject: AuthSubject,
@@ -191,19 +213,47 @@ export class WebhookService {
     subject: AuthSubject,
     options: WebhookDeliveryPageOptions = {},
   ): Promise<WebhookDeliveryPage> {
-    const deliveries = await this.deliveries(subject, options.subscriptionId);
+    assertScope(subject, "webhooks:read");
+    if (options.subscriptionId !== undefined)
+      await this.getAuthorizedSubscription(
+        this.repository,
+        subject,
+        options.subscriptionId,
+      );
     const limit = normalizeDeliveryLimit(options.limit);
-    const startIndex =
-      options.cursor !== undefined
-        ? indexAfterDeliveryCursor(deliveries, options.cursor)
-        : 0;
-    const slice = deliveries.slice(startIndex, startIndex + limit);
-    const hasMore = startIndex + limit < deliveries.length;
+    const deliveries = await this.repository.listWebhookDeliveriesPage({
+      orgId: subject.orgId,
+      limit: limit + 1,
+      ...(options.subscriptionId === undefined
+        ? {}
+        : { subscriptionId: options.subscriptionId }),
+      ...(options.cursor === undefined
+        ? {}
+        : {
+            cursor: this.deliveryCursor.decode({
+              orgId: subject.orgId,
+              ...(options.subscriptionId === undefined
+                ? {}
+                : { subscriptionId: options.subscriptionId }),
+              cursor: options.cursor,
+            }),
+          }),
+    });
+    const hasMore = deliveries.length > limit;
+    const slice = deliveries.slice(0, limit).map(publicWebhookDelivery);
     const last = slice[slice.length - 1];
     return {
       data: slice,
       ...(hasMore && last !== undefined
-        ? { nextCursor: encodeDeliveryCursor(last) }
+        ? {
+            nextCursor: this.deliveryCursor.encode({
+              orgId: subject.orgId,
+              ...(options.subscriptionId === undefined
+                ? {}
+                : { subscriptionId: options.subscriptionId }),
+              delivery: last,
+            }),
+          }
         : {}),
     };
   }
@@ -282,7 +332,7 @@ export class WebhookService {
       action: "worker.enqueue",
       workerClass: "webhook.delivery",
     });
-    return this.deliver(subscription, "webhook.test", {
+    return this.deliveryEngine.deliver(subscription, "webhook.test", {
       requestedBy: input.subject.id,
       subscriptionId: subscription.id,
       ...input.payload,
@@ -303,27 +353,29 @@ export class WebhookService {
 
     try {
       const now = new Date().toISOString();
-      const dueDeliveries = (
-        await this.repository.listWebhookDeliveries(subject.orgId)
-      ).filter(
-        (delivery) =>
-          delivery.status === "failed" &&
-          delivery.nextAttemptAt !== undefined &&
-          delivery.nextAttemptAt <= now &&
-          delivery.attemptCount < maxWebhookAttempts,
+      const leaseToken = createId("webhook_lease");
+      const claimed = await this.repository.claimDueWebhookDeliveries({
+        orgId: subject.orgId,
+        leaseOwner: this.retryWorkerId,
+        leaseToken,
+        now,
+        leaseExpiresAt: this.deliveryEngine.leaseExpiresAt(now),
+        limit: normalizeRetryBatchSize(this.options.retryBatchSize),
+        maxAttempts: maxWebhookAttempts,
+      });
+      const attempted = await mapWithConcurrency(
+        claimed,
+        normalizeRetryConcurrency(this.options.retryConcurrency),
+        async (lease) => {
+          const subscription = await this.repository.getWebhookSubscription(
+            lease.delivery.subscriptionId,
+          );
+          if (!subscription || subscription.disabledAt !== undefined)
+            return this.deliveryEngine.completeUnavailableClaim(lease);
+          return this.deliveryEngine.attemptDelivery(subscription, lease);
+        },
       );
-      const deliveries: WebhookDelivery[] = [];
-      for (const delivery of dueDeliveries) {
-        const subscription = await this.repository.getWebhookSubscription(
-          delivery.subscriptionId,
-        );
-        if (!subscription || subscription.disabledAt !== undefined) continue;
-        deliveries.push(
-          publicWebhookDelivery(
-            await this.attemptDelivery(subscription, delivery),
-          ),
-        );
-      }
+      const deliveries = attempted.map(publicWebhookDelivery);
       return {
         job: await completeBackgroundJob(this.repository, job),
         deliveries,
@@ -347,11 +399,12 @@ export class WebhookService {
         subscription.disabledAt === undefined &&
         subscription.eventTypes.includes(input.eventType),
     );
-    const deliveries: WebhookDelivery[] = [];
     const payload = retryableWebhookPayload(input.eventType, input.payload);
-    for (const subscription of subscriptions)
-      deliveries.push(
-        await this.deliver(subscription, input.eventType, payload, {
+    return mapWithConcurrency(
+      subscriptions,
+      normalizeRetryConcurrency(this.options.retryConcurrency),
+      (subscription) =>
+        this.deliveryEngine.deliver(subscription, input.eventType, payload, {
           storedPayload: payload,
           ...(input.idempotencyKey === undefined
             ? {}
@@ -362,104 +415,7 @@ export class WebhookService {
                 ),
               }),
         }),
-      );
-    return deliveries;
-  }
-
-  private async deliver(
-    subscription: WebhookSubscription,
-    eventType: WebhookEventType,
-    payload: Record<string, unknown>,
-    options: {
-      deliveryId?: string;
-      storedPayload?: Record<string, unknown>;
-    } = {},
-  ): Promise<WebhookDelivery> {
-    if (subscription.disabledAt !== undefined)
-      throw new ApiError(
-        "webhook_disabled",
-        "Webhook subscription is disabled.",
-        409,
-      );
-
-    const now = new Date().toISOString();
-    const storedPayload =
-      options.storedPayload ?? summarizeWebhookPayload(payload);
-    const delivery = await this.repository.createWebhookDelivery({
-      id: options.deliveryId ?? createId("webhook_delivery"),
-      orgId: subscription.orgId,
-      subscriptionId: subscription.id,
-      eventType,
-      payload: storedPayload,
-      status: "pending",
-      attemptCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    if (delivery.status !== "pending") return publicWebhookDelivery(delivery);
-    return publicWebhookDelivery(
-      await this.attemptDelivery(subscription, delivery, payload),
     );
-  }
-
-  private async attemptDelivery(
-    subscription: WebhookSubscription,
-    delivery: WebhookDelivery,
-    payload: Record<string, unknown> = delivery.payload,
-  ): Promise<WebhookDelivery> {
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const body = JSON.stringify({
-      id: delivery.id,
-      type: delivery.eventType,
-      createdAt: delivery.createdAt,
-      data: payload,
-    });
-    const secret = await deriveWebhookSecret(
-      this.options.signingKey,
-      subscription.id,
-    );
-    const signature = await signWebhookPayload(secret, timestamp, body);
-
-    try {
-      const response = await (this.options.fetchImpl ?? fetch)(
-        subscription.url,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "user-agent": "Romeo-Webhooks/0.1",
-            "x-romeo-delivery": delivery.id,
-            "x-romeo-event": delivery.eventType,
-            "x-romeo-signature": signature,
-            "x-romeo-timestamp": timestamp,
-          },
-          body,
-        },
-      );
-      return this.repository.updateWebhookDelivery({
-        ...delivery,
-        status: response.ok ? "delivered" : "failed",
-        attemptCount: delivery.attemptCount + 1,
-        responseStatus: response.status,
-        ...(response.ok
-          ? {}
-          : {
-              errorCode: "http_error",
-              nextAttemptAt: nextRetryAt(delivery.attemptCount + 1),
-            }),
-        updatedAt: new Date().toISOString(),
-      });
-    } catch {
-      return this.repository.updateWebhookDelivery({
-        ...delivery,
-        status: "failed",
-        attemptCount: delivery.attemptCount + 1,
-        errorCode: "network_error",
-        nextAttemptAt: nextRetryAt(delivery.attemptCount + 1),
-        updatedAt: new Date().toISOString(),
-      });
-    }
   }
 
   private async getAuthorizedSubscription(
@@ -487,4 +443,34 @@ export class WebhookService {
       );
     }
   }
+}
+
+function normalizeRetryBatchSize(value: number | undefined): number {
+  if (!Number.isInteger(value)) return 100;
+  return Math.max(1, Math.min(1_000, value!));
+}
+
+function normalizeRetryConcurrency(value: number | undefined): number {
+  if (!Number.isInteger(value)) return 4;
+  return Math.max(1, Math.min(32, value!));
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  work: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = [];
+  results.length = values.length;
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      for (;;) {
+        const index = nextIndex++;
+        if (index >= values.length) return;
+        results[index] = await work(values[index]!);
+      }
+    }),
+  );
+  return results;
 }

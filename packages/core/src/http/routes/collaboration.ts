@@ -10,6 +10,7 @@ import {
   listFavoritesRoute,
   listFileSharesRoute,
   listFolderItemsRoute,
+  listFolderItemsBatchRoute,
   listFolderSharesRoute,
   listFoldersRoute,
   listKnowledgeBaseSharesRoute,
@@ -308,6 +309,16 @@ export function registerCollaborationRoutes(app: RomeoApi): void {
     const data = await context
       .get("services")
       .collaboration.folderItems(context.get("subject"), folderId);
+    return context.json({ data }, 200);
+  });
+
+  app.openapi(listFolderItemsBatchRoute, async (context) => {
+    const data = await context
+      .get("services")
+      .collaboration.folderItemsBatch(
+        context.get("subject"),
+        context.req.valid("json"),
+      );
     return context.json({ data }, 200);
   });
 

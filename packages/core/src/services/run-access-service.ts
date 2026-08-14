@@ -12,6 +12,17 @@ import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { canReadChat, canWriteChat } from "./chat-access";
 import { createUserAuthSubject } from "./auth-subject";
+import { workspaceIdsFromGrants } from "./access-visibility";
+
+/** Stable, detail-free stream termination used after headers have been sent. */
+export class RunStreamAccessEnded extends Error {
+  readonly code = "run_stream_access_ended";
+
+  constructor() {
+    super("Run stream access ended.");
+    this.name = "RunStreamAccessEnded";
+  }
+}
 
 export class RunAccessService {
   constructor(private readonly repository: RomeoRepository) {}
@@ -43,6 +54,23 @@ export class RunAccessService {
     if (!allowed)
       throw new AuthorizationError("The run is owned by another principal.");
     return run;
+  }
+
+  /**
+   * Rebuilds a long-lived stream principal from current credential, identity,
+   * membership, and grant state. Callers intentionally receive no reason for
+   * termination because the stream may already have emitted response headers.
+   */
+  async assertCurrentStreamAccess(
+    runId: string,
+    subject: AuthSubject,
+  ): Promise<void> {
+    try {
+      const current = await this.currentStreamSubject(subject);
+      await this.getAuthorizedRun(runId, current, "runs:read");
+    } catch {
+      throw new RunStreamAccessEnded();
+    }
   }
 
   async subjectFromSnapshot(input: {
@@ -98,6 +126,139 @@ export class RunAccessService {
       workspaceIds: subject.workspaceIds.filter(
         (workspaceId) => workspaceId === input.workspaceId,
       ),
+    };
+  }
+
+  private async currentStreamSubject(
+    subject: AuthSubject,
+  ): Promise<AuthSubject> {
+    if (subject.sessionId !== undefined)
+      return this.currentSessionSubject(subject);
+    if (subject.apiKeyId !== undefined)
+      return this.currentApiKeySubject(subject);
+    if (subject.type === "service_account")
+      return this.currentServiceAccountSubject(subject);
+    const user = await this.repository.getCurrentUser(subject.id);
+    if (
+      user === undefined ||
+      user.orgId !== subject.orgId ||
+      user.disabledAt !== undefined
+    )
+      throw new Error("principal unavailable");
+    return createUserAuthSubject(this.repository, user, {
+      sessionScopes: subject.scopes,
+    });
+  }
+
+  private async currentSessionSubject(
+    subject: AuthSubject,
+  ): Promise<AuthSubject> {
+    const session = await this.repository.getUserSession(subject.sessionId!);
+    const expiresAt = Date.parse(session?.expiresAt ?? "");
+    if (
+      session === undefined ||
+      session.orgId !== subject.orgId ||
+      session.userId !== subject.id ||
+      session.revokedAt !== undefined ||
+      !Number.isFinite(expiresAt) ||
+      expiresAt <= Date.now()
+    )
+      throw new Error("credential unavailable");
+    const user = await this.repository.getCurrentUser(session.userId);
+    if (
+      user === undefined ||
+      user.orgId !== subject.orgId ||
+      user.disabledAt !== undefined
+    )
+      throw new Error("principal unavailable");
+    return createUserAuthSubject(this.repository, user, {
+      sessionId: session.id,
+      sessionScopes: session.scopes,
+      // Session elevation remains bounded by the current session lifecycle.
+      forceAdmin: session.isAdmin,
+      ...(subject.supportSession === undefined
+        ? {}
+        : { supportSession: subject.supportSession }),
+    });
+  }
+
+  private async currentApiKeySubject(
+    subject: AuthSubject,
+  ): Promise<AuthSubject> {
+    const apiKey = await this.repository.getApiKey(subject.apiKeyId!);
+    if (
+      apiKey === undefined ||
+      apiKey.orgId !== subject.orgId ||
+      apiKey.revokedAt !== undefined
+    )
+      throw new Error("credential unavailable");
+    if (apiKey.serviceAccountId !== undefined) {
+      if (
+        subject.type !== "service_account" ||
+        apiKey.serviceAccountId !== subject.id
+      )
+        throw new Error("credential owner changed");
+      return this.currentServiceAccountSubject(subject, apiKey.scopes);
+    }
+    if (
+      subject.type !== "user" ||
+      apiKey.userId === undefined ||
+      apiKey.userId !== subject.id
+    )
+      throw new Error("credential owner changed");
+    const user = await this.repository.getCurrentUser(apiKey.userId);
+    if (
+      user === undefined ||
+      user.orgId !== subject.orgId ||
+      user.disabledAt !== undefined
+    )
+      throw new Error("principal unavailable");
+    const [workspaces, memberships, grants] = await Promise.all([
+      this.repository.listWorkspaces(subject.orgId),
+      this.repository.listGroupMemberships(subject.orgId, undefined, user.id),
+      this.repository.listResourceGrants(subject.orgId),
+    ]);
+    const groupIds = memberships.map((membership) => membership.groupId).sort();
+    return {
+      id: user.id,
+      type: "user",
+      apiKeyId: apiKey.id,
+      orgId: subject.orgId,
+      workspaceIds: workspaceIdsFromGrants(workspaces, grants, {
+        id: user.id,
+        type: "user",
+        groupIds,
+      }),
+      groupIds,
+      scopes: apiKey.scopes,
+      isAdmin: false,
+    };
+  }
+
+  private async currentServiceAccountSubject(
+    subject: AuthSubject,
+    credentialScopes: Scope[] = subject.scopes,
+  ): Promise<AuthSubject> {
+    const account = await this.repository.getServiceAccount(subject.id);
+    if (
+      account === undefined ||
+      account.orgId !== subject.orgId ||
+      account.disabledAt !== undefined
+    )
+      throw new Error("principal unavailable");
+    const workspaces = await this.repository.listWorkspaces(subject.orgId);
+    return {
+      id: account.id,
+      type: "service_account",
+      name: account.name,
+      ...(subject.apiKeyId === undefined ? {} : { apiKeyId: subject.apiKeyId }),
+      orgId: account.orgId,
+      workspaceIds: workspaces.map((workspace) => workspace.id),
+      groupIds: [],
+      scopes: credentialScopes.filter((scope) =>
+        account.scopes.includes(scope),
+      ),
+      isAdmin: false,
     };
   }
 }

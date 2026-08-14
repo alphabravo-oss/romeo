@@ -1,44 +1,27 @@
 import { Button } from "@romeo/ui";
 import ArrowDown from "lucide-react/dist/esm/icons/arrow-down.mjs";
-import BotMessageSquare from "lucide-react/dist/esm/icons/bot-message-square.mjs";
-import Sparkles from "lucide-react/dist/esm/icons/sparkles.mjs";
-import Zap from "lucide-react/dist/esm/icons/zap.mjs";
-import type { DragEvent, FormEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-import type {
-  BaseModel,
-  Message,
-  MessageFeedbackState,
-  Provider,
-  SpeechArtifact,
-} from "../features/types";
-import type { Agent, AgentGalleryItem } from "../features/managed-models";
-import type { RunContextPreview } from "../features/chat";
-import type { ChatSuggestion } from "../features/chat-experience";
-import type { QueuedChatTurn } from "../features/runs";
 import { ArtifactContext, type ArtifactBinding } from "../lib/markdown";
 import { useStickToBottom } from "../lib/use-stick-to-bottom";
+import { TRANSCRIPT_FEED_ID } from "./TranscriptWindow";
 import { ArtifactPane } from "./ArtifactPane";
 import { collectArtifacts, findArtifactVersion } from "./chat-artifacts";
 import { ChatMessages } from "./ChatMessages";
 import { ChatSessionBar } from "./ChatSessionBar";
 import { ChatComposer } from "./ChatComposer";
-import { suggestionSubtitle } from "./chat-suggestions";
+import { defaultStarterSuggestions } from "./chat-suggestions";
 import { ContextInspector } from "./ContextInspector";
 import { isDragOverlayVisible, nextDragDepth } from "./drag-depth";
 import { QueuedTurnGhosts } from "./QueuedTurnGhosts";
-import type { MessageVariants } from "./message-tree";
-import type { ChatRunWait } from "../lib/run-registry";
-import type { ChatToolCall } from "../lib/run-tool-calls";
-import type {
-  ChatCitation,
-  ChatReasoning,
-  ChatRunActivity,
-  PendingDocumentAttachment,
-  PendingImageAttachment,
-} from "./useWorkspaceController";
-import type { FileObject } from "../features/files";
 import {
   canPerformChatWriteAction,
   streamRecoveryLabel,
@@ -46,10 +29,26 @@ import {
 } from "./chat-enterprise";
 import { useChatUiPreferences } from "../lib/chat-ui-preferences";
 import { useLocale } from "../lib/i18n";
-import { RUN_STREAM_MAX_RECONNECT_ATTEMPTS } from "../lib/run-registry";
+import type { ChatPanelProps } from "./chat-panel-types";
+import { ChatEmptyState } from "./ChatEmptyState";
+import {
+  getActiveRun,
+  RUN_STREAM_MAX_RECONNECT_ATTEMPTS,
+} from "../lib/run-registry";
+import {
+  captureTranscriptPrependAnchor,
+  restoreTranscriptPrependAnchor,
+  type TranscriptPrependAnchor,
+} from "../lib/transcript-prepend-anchor";
+
+import "../styles/app-artifacts.css";
+import "../styles/app-composer-extras.css";
+import "../styles/app-content.css";
+import "../styles/app-message-detail.css";
 
 export function ChatPanel({
   activeVoiceProfileId,
+  activation,
   activeAgent,
   activeChatId,
   chatTitle,
@@ -67,6 +66,8 @@ export function ChatPanel({
   isGeneratingSpeech,
   isInspectingContext,
   isStreaming,
+  hasOlderMessages,
+  isLoadingOlderMessages,
   isTemporaryChat,
   queuedTurns,
   isTranscribingVoice,
@@ -90,6 +91,9 @@ export function ChatPanel({
   agenticRagAvailable,
   agenticRagForced,
   agenticRagEnabled,
+  routingMode,
+  researchMode,
+  reasoningMode,
   workspaceId,
   onAttachFiles,
   onAttachExistingFile,
@@ -98,12 +102,14 @@ export function ChatPanel({
   onCancelQueuedTurn,
   onBranch,
   onContinue,
+  onCreateFeedbackEvalCase,
   onDeleteMessage,
   onAttachmentRetention,
   onDraftChange,
   onGenerateImages,
   onGenerateSpeech,
   onInspectContext,
+  onLoadOlderMessages,
   onKnowledgeBaseIdsChange,
   onEditAndResend,
   onRateMessage,
@@ -113,12 +119,16 @@ export function ChatPanel({
   regenerateModels,
   onShareChat,
   onExportChatMarkdown,
-  onRemoveImageAttachment,
-  onRemoveDocumentAttachment,
+  onCancelAttachment, onMoveDocumentAttachment, onMoveImageAttachment,
+  onRemoveImageAttachment, onRemoveDocumentAttachment,
+  onRetryDocumentAttachment, onSelectDocumentPage,
   onRemoveUrl,
   onSelectVariant,
   onToggleWebSearch,
   onToggleAgenticRag,
+  onRoutingModeChange,
+  onResearchModeChange,
+  onReasoningModeChange,
   onTranscribeAudio,
   onTranscriptionError,
   onSubmit,
@@ -132,134 +142,54 @@ export function ChatPanel({
   speechMessageId,
   toolCalls,
   variantsByMessageId,
-}: {
-  activeVoiceProfileId: string | undefined;
-  activeAgent: Pick<Agent, "avatarUrl" | "icon" | "name"> | undefined;
-  activeChatId: string | undefined;
-  chatTitle: string | undefined;
-  /**
-   * Selected model name for the next turn: custom model when one is picked,
-   * otherwise the base model. Heads an empty chat; undefined is a neutral title.
-   */
-  nextTurnAuthorName: string | undefined;
-  /**
-   * Custom model name for rows already on screen, when it differs from the
-   * base model. Undefined when the base model is the identity.
-   */
-  transcriptAuthorName: string | undefined;
-  citations: ChatCitation[];
-  attachedUrls: string[];
-  canInspectContext: boolean;
-  contextPreview: RunContextPreview | undefined;
-  contextPreviewError: string | undefined;
-  draft: string;
-  documentAttachments: PendingDocumentAttachment[];
-  error: string | undefined;
-  imageAttachments: PendingImageAttachment[];
-  isGeneratingSpeech: boolean;
-  isInspectingContext: boolean;
-  isStreaming: boolean;
-  isTemporaryChat: boolean;
-  queuedTurns: QueuedChatTurn[];
-  isTranscribingVoice: boolean;
-  knowledgeBaseIdsOverride: string[] | undefined;
-  messages: Message[];
-  messageFeedback: Record<string, MessageFeedbackState>;
-  /** Every model known to the workspace; the composer filters to enabled ones. */
-  models: BaseModel[];
-  modelDisplayNames: Record<string, string>;
-  providers: Provider[];
-  promptSuggestions: ChatSuggestion[];
-  /** The model that will answer the next message in this chat. */
-  selectedModelId: string | undefined;
-  systemPrompt: string | undefined;
-  defaultModelId: string | undefined;
-  /** Model on the latest assistant reply in this branch, if known. */
-  lastReplyModelId: string | undefined;
-  customModels?: AgentGalleryItem[];
-  selectedCustomModelId?: string;
-  onSelectCustomModel?: (agentId: string, baseModelId: string) => void;
-  onSelectModel: (modelId: string) => void;
-  onToggleDefaultModel: (modelId: string) => void;
-  webSearchEnabled: boolean;
-  agenticRagAvailable: boolean;
-  agenticRagForced: boolean;
-  agenticRagEnabled: boolean;
-  workspaceId: string | undefined;
-  onAttachFiles: (files: File[]) => void;
-  onAttachExistingFile: (file: FileObject) => void;
-  onAddUrl: (url: string) => void;
-  onCancel: () => void;
-  onCancelQueuedTurn: (turn: QueuedChatTurn) => void;
-  onBranch: (messageId: string) => void;
-  onContinue: () => void;
-  onDeleteMessage: (messageId: string) => void;
-  onAttachmentRetention: (
-    messageId: string,
-    attachmentId: string,
-    retainedInContext: boolean,
-  ) => void;
-  onDraftChange: (value: string) => void;
-  onGenerateImages: (input: {
-    modelId: string;
-    prompt: string;
-    size: "1024x1024" | "1024x1536" | "1536x1024";
-  }) => void;
-  onGenerateSpeech: (messageId: string) => void;
-  onInspectContext: () => void;
-  onKnowledgeBaseIdsChange: (knowledgeBaseIds: string[] | undefined) => void;
-  onEditAndResend: (messageId: string, content: string) => Promise<boolean>;
-  onRateMessage: (
-    messageId: string,
-    rating: "negative" | "none" | "positive",
-    reasonCode?: string,
-  ) => void;
-  chatAccess?: "owner" | "write" | "read";
-  legalHoldUntil?: string | undefined;
-  onOpenSourceChat?: ((sourceChatId: string) => void) | undefined;
-  onRegenerate: () => void;
-  onRegenerateWith: (input: {
-    modelId?: string;
-    mode?: "again" | "shorter";
-  }) => void;
-  onFollowUp: (prompt: string) => void;
-  regenerateModels: Array<{ id: string; label: string }>;
-  onShareChat: (() => void) | undefined;
-  onExportChatMarkdown: (() => void) | undefined;
-  onRemoveImageAttachment: (attachmentId: string) => void;
-  onRemoveDocumentAttachment: (attachmentId: string) => void;
-  onRemoveUrl: (url: string) => void;
-  onSelectVariant: (messageId: string) => void;
-  onToggleWebSearch: (enabled: boolean) => void;
-  onToggleAgenticRag: (enabled: boolean) => void;
-  onTranscribeAudio: (blob: Blob) => Promise<void>;
-  onTranscriptionError: (message: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  reasoning: ChatReasoning | undefined;
-  runActivities: ChatRunActivity[];
-  runWait: ChatRunWait | undefined;
-  speechArtifacts: Record<string, SpeechArtifact>;
-  speechMessageId: string | undefined;
-  toolCalls: ChatToolCall[];
-  variantsByMessageId: Record<string, MessageVariants>;
-}) {
+}: ChatPanelProps) {
   const [dragActive, setDragActive] = useState(false);
   const dragDepth = useRef(0);
   const { t } = useLocale();
   const chatUi = useChatUiPreferences();
+  const streamingAssistantMessageId =
+    getActiveRun(activeChatId)?.assistantMessageId;
+  const effectivePromptSuggestions = useMemo(
+    () =>
+      promptSuggestions.length > 0
+        ? promptSuggestions
+        : defaultStarterSuggestions(t),
+    [promptSuggestions, t],
+  );
   const [contextInspectorOpen, setContextInspectorOpen] = useState(false);
-  // Re-runs on every token: messages is a new array each delta, so the effect
-  // fires throughout the stream, not just on message boundaries.
+  // Structural message changes drive the normal effect. The isolated active
+  // row calls notifyContentChanged after each frame without rerendering here.
   const {
     atBottom,
+    notifyContentChanged,
     ref: conversationRef,
     scrollToBottom,
   } = useStickToBottom(messages, { enabled: chatUi.stickToBottom });
-  // The messages go in as they are: `messages` is a new array on every delta,
-  // but the rows it holds are the same objects a delta did not touch, and that
-  // is what collectArtifacts caches on. Copying them into fresh source objects
-  // here is what defeated it -- every token re-prepared and re-scanned the whole
-  // conversation, and handed every code block in the transcript a new context.
+  const getConversationElement = useCallback(
+    () => conversationRef.current,
+    [conversationRef],
+  );
+  const pendingPrepend = useRef<TranscriptPrependAnchor | undefined>(undefined);
+  const handleLoadOlderMessages = useCallback(async () => {
+    const viewport = conversationRef.current;
+    pendingPrepend.current = captureTranscriptPrependAnchor(viewport);
+    try {
+      await onLoadOlderMessages();
+    } catch (error) {
+      pendingPrepend.current = undefined;
+      throw error;
+    }
+  }, [conversationRef, onLoadOlderMessages]);
+  useLayoutEffect(() => {
+    const viewport = conversationRef.current;
+    const snapshot = pendingPrepend.current;
+    if (viewport === null || snapshot === undefined) return;
+    return restoreTranscriptPrependAnchor(viewport, snapshot, () => {
+      pendingPrepend.current = undefined;
+    });
+  }, [conversationRef, messages]);
+  // Artifacts are derived from committed transcript boundaries. The growing
+  // row is deliberately excluded from this whole-transcript scan until settle.
   const artifacts = useMemo(
     () => collectArtifacts(messages, citations.length),
     [citations, messages],
@@ -268,8 +198,6 @@ export function ChatPanel({
     key: string;
     version: number;
   }>();
-  // Derived, not synchronised: switching chat or flipping a variant drops the
-  // artifact out of the list and closes the pane with no effect to run.
   const openArtifact = artifacts.find(
     (artifact) => artifact.key === artifactState?.key,
   );
@@ -359,8 +287,7 @@ export function ChatPanel({
         onInspectContext();
       }}
       onKnowledgeBaseIdsChange={onKnowledgeBaseIdsChange}
-      onRemoveDocumentAttachment={onRemoveDocumentAttachment}
-      onRemoveImageAttachment={onRemoveImageAttachment}
+      onCancelAttachment={onCancelAttachment} onMoveDocumentAttachment={onMoveDocumentAttachment} onMoveImageAttachment={onMoveImageAttachment} onRemoveDocumentAttachment={onRemoveDocumentAttachment} onRemoveImageAttachment={onRemoveImageAttachment} onRetryDocumentAttachment={onRetryDocumentAttachment} onSelectDocumentPage={onSelectDocumentPage}
       onRemoveUrl={onRemoveUrl}
       {...(customModels === undefined ? {} : { customModels })}
       {...(selectedCustomModelId === undefined
@@ -372,9 +299,15 @@ export function ChatPanel({
       onSubmit={onSubmit}
       onToggleWebSearch={onToggleWebSearch}
       onToggleAgenticRag={onToggleAgenticRag}
+      onRoutingModeChange={onRoutingModeChange}
+      onResearchModeChange={onResearchModeChange}
+      onReasoningModeChange={onReasoningModeChange}
       agenticRagAvailable={agenticRagAvailable}
       agenticRagForced={agenticRagForced}
       agenticRagEnabled={agenticRagEnabled}
+      routingMode={routingMode}
+      researchMode={researchMode}
+      reasoningMode={reasoningMode}
       onTranscribeAudio={onTranscribeAudio}
       onTranscriptionError={onTranscriptionError}
       providers={providers}
@@ -385,81 +318,24 @@ export function ChatPanel({
     />
   );
 
-  // Empty state (Open WebUI default landing): centered, logo inline with the
-  // model name, composer floating in the middle, suggestions below.
   if (messages.length === 0) {
     return (
-      <section
-        className={`rm-chat-panel rm-chat-panel-empty ${dragActive ? "drag-active" : ""}`}
-        {...dropTargetProps}
-      >
-        {dragActive ? (
-          <div className="rm-drop-overlay">{t("dropFilesToAttach")}</div>
-        ) : null}
-        <div className="rm-placeholder">
-          <div className="rm-placeholder-inner">
-            <div className="rm-placeholder-head">
-              <div className="rm-placeholder-logo">
-                <BotMessageSquare aria-hidden="true" size={20} />
-              </div>
-              <div className="rm-placeholder-copy">
-                <h1 className="rm-placeholder-title">
-                  {nextTurnAuthorName ?? t("newChat")}
-                </h1>
-                <p className="rm-placeholder-subtitle">{t("prompt")}</p>
-              </div>
-            </div>
-            {composer}
-            {chatUi.showStarterPrompts && promptSuggestions.length > 0 ? (
-              <div className="rm-suggestions">
-                <div className="rm-suggestions-label">
-                  <Zap aria-hidden="true" size={12} />
-                  <span>{t("suggested")}</span>
-                </div>
-                <div className="rm-suggestion-grid">
-                  {promptSuggestions.slice(0, 6).map((suggestion, index) => {
-                    const subtitle = suggestionSubtitle(suggestion.prompt);
-                    return (
-                      <Button
-                        className="rm-suggestion"
-                        key={`${suggestion.title}-${index}`}
-                        onClick={() => onDraftChange(suggestion.prompt)}
-                        title={suggestion.title}
-                        type="button"
-                      >
-                        <Sparkles aria-hidden="true" size={16} />
-                        <span className="rm-suggestion-text">
-                          <span className="rm-suggestion-title">
-                            {suggestion.title}
-                          </span>
-                          {subtitle === "" ||
-                          subtitle === suggestion.title ? null : (
-                            <span className="rm-suggestion-subtitle">
-                              {subtitle}
-                            </span>
-                          )}
-                        </span>
-                      </Button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        {contextInspectorOpen ? (
-          <ContextInspector
-            {...(contextPreviewError === undefined
-              ? {}
-              : { error: contextPreviewError })}
-            loading={isInspectingContext}
-            onClose={() => setContextInspectorOpen(false)}
-            {...(contextPreview === undefined
-              ? {}
-              : { preview: contextPreview })}
-          />
-        ) : null}
-      </section>
+      <ChatEmptyState
+        activation={activation}
+        chatId={isTemporaryChat ? undefined : activeChatId}
+        composer={composer}
+        contextPreview={contextPreview}
+        contextPreviewError={contextPreviewError}
+        dragActive={dragActive}
+        dropTargetProps={dropTargetProps}
+        isInspectingContext={isInspectingContext}
+        nextTurnAuthorName={nextTurnAuthorName}
+        onCloseContext={() => setContextInspectorOpen(false)}
+        onDraftChange={onDraftChange}
+        showContextInspector={contextInspectorOpen}
+        showStarterPrompts={chatUi.showStarterPrompts}
+        suggestions={effectivePromptSuggestions}
+      />
     );
   }
 
@@ -493,6 +369,7 @@ export function ChatPanel({
             ? onShareChat
             : undefined
         }
+        onSearchNavigate={onSelectVariant}
       />
       {(() => {
         const phase = streamRecoveryPhase({
@@ -515,11 +392,32 @@ export function ChatPanel({
       })()}
       <ArtifactContext.Provider value={artifactBinding}>
         <div className="rm-conversation" ref={conversationRef}>
+          {hasOlderMessages ? (
+            <>
+              <Button
+                aria-controls={TRANSCRIPT_FEED_ID}
+                aria-describedby="load-earlier-messages-description"
+                aria-busy={isLoadingOlderMessages}
+                disabled={isLoadingOlderMessages}
+                onClick={() => void handleLoadOlderMessages()}
+                type="button"
+                variant="ghost"
+              >
+                {isLoadingOlderMessages
+                  ? t("loading")
+                  : t("loadEarlierMessages")}
+              </Button>
+              <span className="sr-only" id="load-earlier-messages-description">
+                {t("loadEarlierMessagesDescription")}
+              </span>
+            </>
+          ) : null}
           <ChatMessages
             activeVoiceProfileId={activeVoiceProfileId}
             authorName={transcriptAuthorName}
             citations={citations}
             feedback={messageFeedback}
+            getScrollElement={getConversationElement}
             isGeneratingSpeech={isGeneratingSpeech}
             isStreaming={isStreaming}
             messages={messages}
@@ -527,6 +425,9 @@ export function ChatPanel({
             selectedModelId={selectedModelId}
             onBranch={onBranch}
             onContinue={onContinue}
+            {...(onCreateFeedbackEvalCase === undefined
+              ? {}
+              : { onCreateFeedbackEvalCase })}
             onDelete={onDeleteMessage}
             onAttachmentRetention={onAttachmentRetention}
             onEditAndResend={onEditAndResend}
@@ -537,6 +438,7 @@ export function ChatPanel({
             onFollowUp={onFollowUp}
             regenerateModels={regenerateModels}
             onSelectVariant={onSelectVariant}
+            onStreamingContentChange={notifyContentChanged}
             reasoning={reasoning}
             runActivities={runActivities}
             runWait={runWait}
@@ -549,6 +451,7 @@ export function ChatPanel({
             agentName={activeAgent?.name}
             speechArtifacts={speechArtifacts}
             speechMessageId={speechMessageId}
+            streamingAssistantMessageId={streamingAssistantMessageId}
             toolCalls={toolCalls}
             variantsByMessageId={variantsByMessageId}
           />
@@ -584,12 +487,11 @@ export function ChatPanel({
       )}
       {contextInspectorOpen ? (
         <ContextInspector
-          {...(contextPreviewError === undefined
-            ? {}
-            : { error: contextPreviewError })}
+          chatId={isTemporaryChat ? undefined : activeChatId}
+          error={contextPreviewError}
           loading={isInspectingContext}
           onClose={() => setContextInspectorOpen(false)}
-          {...(contextPreview === undefined ? {} : { preview: contextPreview })}
+          preview={contextPreview}
         />
       ) : null}
     </section>

@@ -2,11 +2,11 @@ import { Button, StatusBadge } from "@romeo/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import {
-  exportAccessReviewCsv,
-  exportAccessReviewReportCsv,
-  exportComplianceReportCsv,
-  getAccessReviewReport,
-  getDataRightsCoverage,
+  accessReviewReportQueryOptions,
+  dataRightsCoverageQueryOptions,
+  exportAccessReviewCsvMutationOptions,
+  exportAccessReviewReportCsvMutationOptions,
+  exportComplianceReportCsvMutationOptions,
 } from "../features";
 import type { DataRightsCoverageReport } from "../features/types";
 import { downloadCsv } from "../lib/csv";
@@ -56,10 +56,7 @@ function CoverageStatus({ value }: { value: string }) {
 
 export function DataRightsTab() {
   const { t } = useLocale();
-  const coverageQuery = useQuery({
-    queryKey: ["dataRightsCoverage"],
-    queryFn: getDataRightsCoverage,
-  });
+  const coverageQuery = useQuery(dataRightsCoverageQueryOptions());
   const report = coverageQuery.data;
 
   if (coverageQuery.isLoading)
@@ -119,26 +116,50 @@ export function DataRightsTab() {
 
 export function GovernanceReportsTab() {
   const { t } = useLocale();
-  const reportQuery = useQuery({
-    queryKey: ["accessReviewReport"],
-    queryFn: getAccessReviewReport,
-  });
-  const complianceExportMutation = useMutation({
-    mutationFn: exportComplianceReportCsv,
-    onSuccess: (csv) => downloadCsv(csv, "romeo-compliance-report.csv"),
-    onError: () => toast(t("govCouldNotExportComplianceReport"), "error"),
-  });
-  const accessExportMutation = useMutation({
-    mutationFn: exportAccessReviewCsv,
-    onSuccess: (csv) => downloadCsv(csv, "romeo-access-review.csv"),
-    onError: () => toast(t("govCouldNotExportAccessReview"), "error"),
-  });
-  const accessReportExportMutation = useMutation({
-    mutationFn: exportAccessReviewReportCsv,
-    onSuccess: (csv) => downloadCsv(csv, "romeo-access-review-report.csv"),
-    onError: () => toast(t("govCouldNotExportAccessReviewReport"), "error"),
-  });
+  const reportQuery = useQuery(accessReviewReportQueryOptions());
+  const complianceExportMutation = useMutation(
+    exportComplianceReportCsvMutationOptions(),
+  );
+  const accessExportMutation = useMutation(
+    exportAccessReviewCsvMutationOptions(),
+  );
+  const accessReportExportMutation = useMutation(
+    exportAccessReviewReportCsvMutationOptions(),
+  );
   const summary = reportQuery.data?.summary;
+
+  async function handleComplianceExport() {
+    try {
+      const csv = await complianceExportMutation.mutateAsync();
+      downloadCsv(csv, "romeo-compliance-report.csv");
+    } catch {
+      toast(t("govCouldNotExportComplianceReport"), "error");
+    } finally {
+      complianceExportMutation.reset();
+    }
+  }
+
+  async function handleAccessExport() {
+    try {
+      const csv = await accessExportMutation.mutateAsync();
+      downloadCsv(csv, "romeo-access-review.csv");
+    } catch {
+      toast(t("govCouldNotExportAccessReview"), "error");
+    } finally {
+      accessExportMutation.reset();
+    }
+  }
+
+  async function handleAccessReportExport() {
+    try {
+      const csv = await accessReportExportMutation.mutateAsync();
+      downloadCsv(csv, "romeo-access-review-report.csv");
+    } catch {
+      toast(t("govCouldNotExportAccessReviewReport"), "error");
+    } finally {
+      accessReportExportMutation.reset();
+    }
+  }
 
   return (
     <div className="grid gap-4 text-sm">
@@ -166,17 +187,17 @@ export function GovernanceReportsTab() {
         <ReportExportButton
           isPending={complianceExportMutation.isPending}
           label={t("govExportComplianceReport")}
-          onClick={() => complianceExportMutation.mutate()}
+          onClick={() => void handleComplianceExport()}
         />
         <ReportExportButton
           isPending={accessExportMutation.isPending}
           label={t("govExportAccessReview")}
-          onClick={() => accessExportMutation.mutate()}
+          onClick={() => void handleAccessExport()}
         />
         <ReportExportButton
           isPending={accessReportExportMutation.isPending}
           label={t("govExportAccessReviewReport")}
-          onClick={() => accessReportExportMutation.mutate()}
+          onClick={() => void handleAccessReportExport()}
         />
       </div>
     </div>

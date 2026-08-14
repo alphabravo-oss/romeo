@@ -3,16 +3,17 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import {
-  exportUsageEventsCsv,
-  getUsageSummary,
-  listUsageAlerts,
-  listUsageEvents,
-} from "../features";
+  usageAlertsQueryOptions,
+  usageEventsQueryOptions,
+  usageSummaryQueryOptions,
+} from "../features/operational-governance/query-options";
+import { exportUsageEventsCsv } from "../features/operational-governance/queries";
+import { usageMetricDefinitionsQueryOptions } from "../features/operational-governance/usage-metric-query-options";
 import type {
   UsageAlert,
   UsageEvent,
   UsageSummaryMetric,
-} from "../features/types";
+} from "../features/operational-governance/types";
 import { downloadCsv } from "../lib/csv";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { toast } from "../lib/toast";
@@ -26,6 +27,9 @@ import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { DateRangeSelect } from "./DateRangeSelect";
 import { PageActions } from "./PageActions";
 import { rangeToBounds, type RangePreset } from "./date-range";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
+import { UsageMetricCatalogSection } from "./UsageMetricCatalog";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const alertCol = createColumnHelper<UsageAlert>();
 
@@ -149,19 +153,12 @@ function eventColumns(t: Translate): ColumnDef<UsageEvent, any>[] {
 
 export function UsagePanel() {
   const { t } = useLocale();
+  const inventoriedTable = useInventoriedServerTable<any>("usage_events");
   const [range, setRange] = useState<RangePreset>("7d");
-  const usageQuery = useQuery({
-    queryKey: ["usageEvents", range],
-    queryFn: listUsageEvents,
-  });
-  const summaryQuery = useQuery({
-    queryKey: ["usageSummary"],
-    queryFn: getUsageSummary,
-  });
-  const alertsQuery = useQuery({
-    queryKey: ["usageAlerts"],
-    queryFn: listUsageAlerts,
-  });
+  const usageQuery = useQuery(usageEventsQueryOptions(range));
+  const summaryQuery = useQuery(usageSummaryQueryOptions());
+  const alertsQuery = useQuery(usageAlertsQueryOptions());
+  const metricDefinitionsQuery = useQuery(usageMetricDefinitionsQueryOptions());
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string>();
   const alerts = alertsQuery.data ?? [];
@@ -202,7 +199,8 @@ export function UsagePanel() {
             refreshing={
               usageQuery.isFetching ||
               summaryQuery.isFetching ||
-              alertsQuery.isFetching
+              alertsQuery.isFetching ||
+              metricDefinitionsQuery.isFetching
             }
           />
         </div>
@@ -248,9 +246,11 @@ export function UsagePanel() {
       </div>
       <DataTable
         columns={eventColumns(t)}
-        data={events}
+        data={inventoriedTable.rows}
         empty={t("usageNoEvents")}
+        serverState={inventoriedTable.serverState}
       />
+      <UsageMetricCatalogSection query={metricDefinitionsQuery} t={t} />
     </Section>
   );
 
@@ -259,6 +259,7 @@ export function UsagePanel() {
       usageQuery.refetch(),
       summaryQuery.refetch(),
       alertsQuery.refetch(),
+      metricDefinitionsQuery.refetch(),
     ]);
   }
 
@@ -269,9 +270,7 @@ export function UsagePanel() {
       const csv = await exportUsageEventsCsv();
       downloadCsv(csv, "romeo-usage-events.csv");
     } catch (caught) {
-      setExportError(
-        caught instanceof Error ? caught.message : t("usageUnableExport"),
-      );
+      setExportError(safeUserErrorMessage(caught, t("usageUnableExport")));
       toast(t("usageUnableExport"), "error");
     } finally {
       setIsExporting(false);
@@ -288,7 +287,7 @@ function metricQuantity(
     .reduce((sum, item) => sum + item.quantity, 0);
 }
 
-function tokenQuantity(totals: UsageSummaryMetric[]): number {
+export function tokenQuantity(totals: UsageSummaryMetric[]): number {
   const reportedTotal = metricQuantity(
     totals,
     (metric) => metric === "llm.total_token.reported",
@@ -321,21 +320,23 @@ function MetricLabel({
       ? t("usageRunsStarted")
       : metric === "run.completed"
         ? t("usageRunsCompleted")
-        : metric.includes("input_token")
-          ? t("usageInputTokens")
-          : metric.includes("output_token")
-            ? t("usageOutputTokens")
-            : metric.includes("total_token")
-              ? t("usageTotalTokens")
-              : metric === "tool.call"
-                ? t("usageToolCalls")
-                : metric === "image.generated"
-                  ? t("usageImagesGenerated")
-                  : metric === "storage.byte"
-                    ? t("usageStorageBytes")
-                    : metric === "pipeline_duration"
-                      ? t("usagePipelineDuration")
-                      : humanizeMetric(metric);
+        : metric === "llm.reasoning_token.reported"
+          ? t("usageReasoningTokens")
+          : metric.includes("input_token")
+            ? t("usageInputTokens")
+            : metric.includes("output_token")
+              ? t("usageOutputTokens")
+              : metric.includes("total_token")
+                ? t("usageTotalTokens")
+                : metric === "tool.call"
+                  ? t("usageToolCalls")
+                  : metric === "image.generated"
+                    ? t("usageImagesGenerated")
+                    : metric === "storage.byte"
+                      ? t("usageStorageBytes")
+                      : metric === "pipeline_duration"
+                        ? t("usagePipelineDuration")
+                        : humanizeMetric(metric);
   return <span className="font-medium">{label}</span>;
 }
 

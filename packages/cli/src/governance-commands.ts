@@ -71,7 +71,10 @@ function retentionPolicy(context: GovernanceCommandContext) {
           dataEnvelope,
         )
       : governanceUpdateRetentionPolicy({
-          body: { auditLogRetentionDays: Number(days) },
+          body: {
+            auditLogRetentionDays: Number(days),
+            runEventRetentionDays: Number(days),
+          },
           client,
           throwOnError: true,
         }).then(dataEnvelope);

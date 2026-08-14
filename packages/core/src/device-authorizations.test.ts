@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
@@ -88,13 +88,13 @@ describe("device authorization API", () => {
     expect(refreshed.data.authorization.accessApiKeyId).not.toBe(
       created.data.authorization.accessApiKeyId,
     );
-    expect(oldAccessResponse.status).toBe(403);
-    expect(oldRefreshResponse.status).toBe(403);
+    expect(oldAccessResponse.status).toBe(401);
+    expect(oldRefreshResponse.status).toBe(401);
     expect(newAccessResponse.status).toBe(200);
     expect(revokeResponse.status).toBe(200);
     expect(revoked.data.revokedAt).toBeDefined();
-    expect(revokedAccessResponse.status).toBe(403);
-    expect(revokedRefreshResponse.status).toBe(403);
+    expect(revokedAccessResponse.status).toBe(401);
+    expect(revokedRefreshResponse.status).toBe(401);
   });
 
   it("rejects device scopes that exceed the caller scopes", async () => {
@@ -131,7 +131,7 @@ describe("device authorization API", () => {
     const repository = new InMemoryRomeoRepository();
     const setupApi = createRomeoApi(repository);
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({ DEV_SEEDED_LOGIN: "false" }),
+      env: testEnv({ DEV_SEEDED_LOGIN: "false" }),
     });
     const createResponse = await setupApi.request(
       "/api/v1/device-authorizations",
@@ -167,7 +167,7 @@ describe("device authorization API", () => {
     expect(refreshResponse.status).toBe(200);
     expect(refreshed.data.accessToken).toMatch(/^rmk_[a-f0-9]{48}$/);
     expect(refreshed.data.refreshToken).toMatch(/^rmr_[a-f0-9]{48}$/);
-    expect(oldAccessResponse.status).toBe(403);
+    expect(oldAccessResponse.status).toBe(401);
     expect(newAccessResponse.status).toBe(200);
   });
 });

@@ -180,9 +180,7 @@ describe("buildRunMessages shape", () => {
     });
 
     expect(result.messages[0]?.content).toBe("You are Romeo.");
-    expect(result.messages[0]?.content).not.toContain(
-      "Knowledge context:",
-    );
+    expect(result.messages[0]?.content).not.toContain("Knowledge context:");
     const userTurn = result.messages.at(-1);
     expect(userTurn?.role).toBe("user");
     expect(userTurn?.content).toContain("Knowledge context:");
@@ -245,9 +243,7 @@ describe("buildRunMessages shape", () => {
     expect(turnTwo.messages[0]).toEqual(turnOne.messages[0]);
     expect(turnTwo.messages[0]?.content).toBe("You are Romeo.");
     expect(turnTwo.messages[1]?.content).toBe("Turn one");
-    expect(turnTwo.messages[1]?.content).not.toContain(
-      "Knowledge context:",
-    );
+    expect(turnTwo.messages[1]?.content).not.toContain("Knowledge context:");
   });
 });
 

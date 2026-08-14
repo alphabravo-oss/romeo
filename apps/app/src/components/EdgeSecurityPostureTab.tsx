@@ -2,7 +2,7 @@ import { StatusBadge } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 
 import {
-  getEdgeSecurityPosture,
+  edgeSecurityPostureQueryOptions,
   type EdgeSecurityPostureCheck,
   type EdgeSecurityPostureReport,
 } from "../features/edge-security";
@@ -61,10 +61,7 @@ function postureCheckColumns(
 
 export function EdgeSecurityPostureTab() {
   const { t } = useLocale();
-  const postureQuery = useQuery({
-    queryKey: ["edgeSecurityPosture"],
-    queryFn: getEdgeSecurityPosture,
-  });
+  const postureQuery = useQuery(edgeSecurityPostureQueryOptions());
 
   return (
     <div className="grid gap-2">

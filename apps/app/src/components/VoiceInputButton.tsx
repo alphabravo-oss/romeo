@@ -3,6 +3,7 @@ import Mic from "lucide-react/dist/esm/icons/mic.mjs";
 import Square from "lucide-react/dist/esm/icons/square.mjs";
 import { useEffect, useRef, useState } from "react";
 import { useLocale } from "../lib/i18n";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 export function VoiceInputButton({
   disabled,
@@ -59,7 +60,7 @@ export function VoiceInputButton({
       timeoutRef.current = window.setTimeout(() => stopRecording(), 60_000);
     } catch (caught) {
       cleanupRecorder();
-      onError(caught instanceof Error ? caught.message : t("voiceStartFailed"));
+      onError(safeUserErrorMessage(caught, t("voiceStartFailed")));
     }
   }
 

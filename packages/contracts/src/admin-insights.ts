@@ -46,6 +46,20 @@ const evalModel = z.strictObject({
 
 export const AdminAnalyticsSummarySchema = z
   .strictObject({
+    adoption: z.strictObject({
+      activeUserCount: nonnegative,
+      activeWorkspaceCount: nonnegative,
+      engagedUserCount: nonnegative,
+      completedRunsPerActiveUser: z.number().nonnegative(),
+      runCompletionRate: z.number().min(0).max(1).nullable(),
+      toolSuccessRate: z.number().min(0).max(1).nullable(),
+      feedback: z.strictObject({
+        negativeCount: nonnegative,
+        positiveCount: nonnegative,
+        positiveRate: z.number().min(0).max(1).nullable(),
+        totalCount: nonnegative,
+      }),
+    }),
     evals: z.strictObject({
       agentCount: nonnegative,
       agents: z.array(evalAgent),
@@ -238,6 +252,42 @@ export const UpdateAbuseControlPolicySchema = z
   )
   .openapi("UpdateAbuseControlPolicyRequest");
 
+const abuseControlAction = z.enum([
+  "connector.sync",
+  "eval.run",
+  "file.upload",
+  "knowledge.ingest",
+  "model.request",
+  "run.start",
+  "tool.dispatch",
+  "tool.execute",
+  "voice.request",
+  "workflow.run",
+  "worker.enqueue",
+]);
+
+export const SimulateAbuseControlPolicySchema = z
+  .strictObject({
+    action: abuseControlAction,
+    agentId: identifier.optional(),
+    connectorId: identifier.optional(),
+    providerId: identifier.optional(),
+    toolId: identifier.optional(),
+    workerClass: identifier.optional(),
+    workspaceId: identifier.optional(),
+  })
+  .openapi("SimulateAbuseControlPolicyRequest");
+
+export const AbuseControlSimulationResultSchema = z
+  .strictObject({
+    allowed: z.boolean(),
+    action: abuseControlAction,
+    reasonCodes: z.array(blockReason),
+    evaluatedAt: timestamp,
+    policySource: z.enum(["default", "org"]),
+  })
+  .openapi("AbuseControlSimulationResult");
+
 const metadata = { tags: ["Admin insights"], security: authenticationSecurity };
 const errors = standardErrorResponses;
 const csvResponse = {
@@ -305,10 +355,33 @@ export const updateAbuseControlsRoute = createRoute({
     ...errors,
   },
 });
+export const simulateAbuseControlsRoute = createRoute({
+  ...metadata,
+  method: "post",
+  path: "/api/v1/admin/abuse-controls/simulate",
+  operationId: "adminInsights.simulateAbuseControls",
+  summary: "Simulate abuse-control enforcement without side effects",
+  request: {
+    body: {
+      required: true,
+      content: {
+        "application/json": { schema: SimulateAbuseControlPolicySchema },
+      },
+    },
+  },
+  responses: {
+    200: jsonResponse(
+      "Abuse-control simulation",
+      dataEnvelope(AbuseControlSimulationResultSchema),
+    ),
+    ...errors,
+  },
+});
 
 export const adminInsightsRoutes = [
   getAdminAnalyticsSummaryRoute,
   exportAdminAnalyticsSummaryRoute,
   getAbuseControlsRoute,
   updateAbuseControlsRoute,
+  simulateAbuseControlsRoute,
 ] as const;

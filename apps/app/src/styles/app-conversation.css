@@ -1,3 +1,5 @@
+@import "./app-conversation-markdown.css";
+
 .rm-message-edit-actions button.primary {
   border-color: var(--rm-accent);
   background: var(--rm-accent);
@@ -268,6 +270,67 @@
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 8px;
+}
+
+.rm-tray-card {
+  display: grid;
+  width: min(220px, 80vw);
+  height: auto;
+  min-height: 40px;
+  gap: 6px;
+  padding: 8px;
+}
+
+.rm-tray-card span,
+.rm-tray-card small {
+  display: block;
+}
+
+.rm-tray-card button {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.rm-tray-card-title,
+.rm-tray-card small,
+.rm-tray-transcript,
+.rm-tray-pages,
+.rm-tray-download {
+  display: block;
+}
+
+.rm-tray-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rm-tray-progress {
+  display: grid;
+  gap: 2px;
+}
+
+.rm-tray-progress-bar {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--rm-accent);
+  transition: width 160ms ease;
+}
+
+.reduce-motion .rm-tray-progress-bar,
+@media (prefers-reduced-motion: reduce) {
+  .rm-tray-progress-bar {
+    transition: none;
+  }
+}
+
+.rm-tray-transcript {
+  max-height: 4.5rem;
+  overflow: auto;
 }
 
 /* Open WebUI image thumbnail: 40px square, rounded-xl, no caption */
@@ -596,19 +659,6 @@ html.dark .rm-send-button:disabled {
   font-size: 12px;
 }
 
-.rm-message-waiting {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.rm-message-waiting__label {
-  color: var(--rm-muted);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
 .rm-message-heading {
   display: flex;
   flex-wrap: wrap;
@@ -628,12 +678,6 @@ html.dark .rm-send-button:disabled {
 
 .rm-chat-model-default.active {
   color: var(--rm-text);
-}
-
-.rm-chat-model-default-badge {
-  color: var(--rm-muted);
-  font-size: 12px;
-  font-weight: 500;
 }
 
 /* Failed model run: sits where the assistant answer would have been. */
@@ -842,16 +886,6 @@ html.dark .rm-send-button:disabled {
     display: none;
   }
 
-  .rm-personalize-trigger > span {
-    display: none;
-  }
-
-  .rm-personalize-trigger {
-    width: 34px;
-    justify-content: center;
-    padding: 0;
-  }
-
   .rm-topbar-user-button {
     width: 32px;
     height: 32px;
@@ -880,433 +914,4 @@ html.dark .rm-send-button:disabled {
   .rm-chat-model-action {
     opacity: 1;
   }
-}
-
-/* ============================================================
- * Markdown / prose (assistant messages)
- * Block spacing is the main "cramped response" lever — keep the
- * reading column breathable without ballooning short answers.
- * ============================================================ */
-
-.rm-markdown {
-  font-size: inherit; /* track .rm-message-content; do not re-inflate to 1rem */
-  font-weight: 400;
-  font-variation-settings: "wght" 400;
-  line-height: inherit;
-  letter-spacing: inherit;
-}
-
-.rm-markdown > *:first-child {
-  margin-top: 0;
-}
-
-.rm-markdown > *:last-child {
-  margin-bottom: 0;
-}
-
-.rm-markdown h1,
-.rm-markdown h2,
-.rm-markdown h3,
-.rm-markdown h4,
-.rm-markdown h5,
-.rm-markdown h6 {
-  margin: 1.15em 0 0.45em;
-  font-weight: 600;
-  font-variation-settings: "wght" 600;
-  line-height: 1.3;
-  letter-spacing: -0.02em;
-}
-
-.rm-markdown h1 {
-  font-size: 1.45em;
-}
-
-.rm-markdown h2 {
-  font-size: 1.28em;
-}
-
-.rm-markdown h3 {
-  font-size: 1.12em;
-}
-
-.rm-markdown h4 {
-  font-size: 1em;
-}
-
-.rm-markdown p {
-  margin: 0.7em 0;
-}
-
-.rm-markdown ul,
-.rm-markdown ol {
-  margin: 0.7em 0;
-  padding-inline-start: 1.45em;
-}
-
-.rm-markdown ul {
-  list-style: disc;
-}
-
-.rm-markdown ol {
-  list-style: decimal;
-}
-
-.rm-markdown li {
-  margin: 0.35em 0;
-  padding-inline-start: 0.15em;
-}
-
-.rm-markdown li > p {
-  margin: 0.35em 0;
-}
-
-.rm-markdown li > ul,
-.rm-markdown li > ol {
-  margin: 0.35em 0;
-}
-
-.rm-markdown a {
-  color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.rm-markdown blockquote {
-  margin: 0.85em 0;
-  padding: 0.15em 0 0.15em 14px;
-  border-inline-start: 3px solid var(--rm-gray-100);
-  color: var(--rm-muted);
-  font-style: normal;
-}
-
-html.dark .rm-markdown blockquote {
-  border-inline-start-color: var(--rm-gray-800);
-}
-
-.rm-markdown hr {
-  margin: 1.35em 0;
-  border: 0;
-  border-top: 1px solid var(--rm-gray-100);
-}
-
-html.dark .rm-markdown hr {
-  border-top-color: var(--rm-gray-850);
-}
-
-/* Inline code (not inside a code block) */
-
-.rm-markdown :not(pre) > code {
-  padding: 0.15rem 0.3rem;
-  margin: 0 2px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.85em;
-  border-radius: 6px;
-  color: var(--rm-gray-800);
-  background: var(--rm-gray-100);
-}
-
-html.dark .rm-markdown :not(pre) > code {
-  color: var(--rm-gray-200);
-  background: var(--rm-gray-800);
-}
-
-/* Tables (remark-gfm) */
-
-.rm-markdown table {
-  width: 100%;
-  margin: 0.9em 0;
-  border-collapse: collapse;
-  font-size: 0.92em;
-}
-
-.rm-markdown th,
-.rm-markdown td {
-  border: 1px solid var(--rm-border);
-  padding: 8px 12px;
-  text-align: left;
-}
-
-.rm-markdown th {
-  background: var(--rm-surface-soft);
-  font-weight: 600;
-}
-
-/* Fenced code — soft elevated card. Dark shell uses a slightly lifted panel;
-   light mode keeps a dark island so the token palette stays readable. */
-
-.rm-codeblock {
-  margin: 0.85em 0;
-  border: 0;
-  border-radius: 14px;
-  overflow: hidden;
-  background: #1c1c21;
-}
-
-html.dark .rm-codeblock {
-  /* Lifted off soft shell #1e1e22 — same family, one step lighter. */
-  background: #2a2a30;
-}
-
-.rm-codeblock-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 34px;
-  padding: 2px 6px 0 12px;
-  font-size: 12px;
-  /* Fixed light-on-dark chrome — code cards are always the soft dark island. */
-  color: #a1a1aa;
-  background: transparent;
-  border-bottom: 0;
-}
-
-.rm-codeblock-label,
-.rm-codeblock-actions button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  min-width: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #a1a1aa;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 4px 6px;
-}
-
-.rm-codeblock-label {
-  justify-content: flex-start;
-  padding-inline: 0;
-  text-transform: lowercase;
-  letter-spacing: 0.01em;
-  opacity: 0.85;
-}
-
-.rm-codeblock-label:hover,
-.rm-codeblock-actions button:hover {
-  background: rgb(255 255 255 / 7%);
-  color: #f4f4f5;
-}
-
-.rm-codeblock-actions {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-/* Always show copy affordance faintly; full action row on hover/focus. */
-.rm-codeblock-actions button:last-child {
-  opacity: 0.55;
-}
-
-.rm-codeblock:hover .rm-codeblock-actions,
-.rm-codeblock:focus-within .rm-codeblock-actions {
-  opacity: 1;
-}
-
-.rm-codeblock:hover .rm-codeblock-actions button:last-child,
-.rm-codeblock:focus-within .rm-codeblock-actions button:last-child {
-  opacity: 1;
-}
-
-@media (hover: none) {
-  .rm-codeblock-actions {
-    opacity: 1;
-  }
-
-  .rm-codeblock-actions button:last-child {
-    opacity: 1;
-  }
-}
-
-.rm-codeblock pre {
-  margin: 0;
-  padding: 4px 14px 14px;
-  overflow-x: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.875em;
-  line-height: 1.55;
-}
-
-.rm-codeblock code {
-  color: #d4d4d8;
-  background: transparent;
-}
-
-.rm-code-preview {
-  display: block;
-  width: 100%;
-  min-height: 320px;
-  border: 0;
-  border-top: 1px solid var(--rm-gray-800);
-  background: white;
-}
-
-.rm-mermaid-preview,
-.rm-code-preview-loading,
-.rm-code-preview-error {
-  overflow: auto;
-  padding: 16px;
-  border-top: 1px solid var(--rm-gray-800);
-  background: white;
-  color: #111827;
-  text-align: center;
-}
-
-.rm-mermaid-preview svg {
-  max-width: 100%;
-  height: auto;
-}
-
-.rm-code-preview-error {
-  color: var(--rm-danger);
-}
-
-.rm-markdown .katex-display {
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-block: 4px;
-}
-
-/*
- * highlight.js — soft ChatGPT-ish token palette.
- * Tuned for muted code cards (not pure black): lower saturation than GitHub
- * Dark so keywords don't scream, strings read green, builtins warm orange.
- */
-
-.rm-codeblock,
-.rm-codeblock code,
-.rm-codeblock .hljs {
-  color: #d4d4d8; /* soft default text — not pure white */
-}
-
-html.dark .rm-codeblock,
-html.dark .rm-codeblock code,
-html.dark .rm-codeblock .hljs {
-  color: #dcdce2;
-}
-
-.hljs-comment,
-.hljs-quote {
-  color: #71717a;
-  font-style: italic;
-}
-
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-doctag {
-  color: #7aa2f7; /* soft blue — def, if, return */
-}
-
-.hljs-string,
-.hljs-regexp,
-.hljs-addition {
-  color: #9ece6a; /* muted green */
-}
-
-.hljs-number,
-.hljs-literal {
-  color: #ff9e64; /* warm literal */
-}
-
-.hljs-type,
-.hljs-built_in,
-.hljs-class .hljs-title {
-  color: #e0af68; /* print, len, class names */
-}
-
-.hljs-title,
-.hljs-title.function_,
-.hljs-section {
-  color: #bb9af7; /* function / def names */
-}
-
-.hljs-params,
-.hljs-attr,
-.hljs-attribute,
-.hljs-variable,
-.hljs-template-variable {
-  color: #c0caf5; /* params & attrs — slightly cooler than body */
-}
-
-.hljs-tag,
-.hljs-name,
-.hljs-selector-id,
-.hljs-selector-class {
-  color: #7dcfff;
-}
-
-.hljs-meta,
-.hljs-symbol,
-.hljs-bullet {
-  color: #e0af68;
-}
-
-.hljs-deletion {
-  color: #f7768e;
-}
-
-.hljs-emphasis {
-  font-style: italic;
-}
-
-.hljs-strong {
-  font-weight: 600;
-}
-
-/* Streaming skeleton shimmer */
-
-.rm-skeleton {
-  display: block;
-  width: 60%;
-  height: 14px;
-  border-radius: 6px;
-  background: linear-gradient(
-    90deg,
-    var(--rm-surface-soft) 25%,
-    var(--rm-hover) 50%,
-    var(--rm-surface-soft) 75%
-  );
-  background-size: 200% 100%;
-  animation: rm-shimmer 1.4s ease-in-out infinite;
-}
-
-@keyframes rm-shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-/* ============================================================
- * Enterprise console shell (Settings / Workspace / Admin pages)
- * ============================================================ */
-
-.rm-console {
-  display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
-  height: 100vh;
-  background: var(--rm-bg);
-  font-variant-numeric: tabular-nums;
-}
-
-.rm-console-nav {
-  gap: 2px;
-  padding: 12px 10px 16px;
-  overflow: hidden;
-  background: var(--rm-sidebar);
-}
-
-.rm-console-brand {
-  margin-bottom: 4px;
 }

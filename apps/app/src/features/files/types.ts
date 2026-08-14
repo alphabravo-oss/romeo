@@ -1,3 +1,5 @@
+import type { FileObject } from "@romeo/api-client/generated/sdk";
+
 export type {
   FileExtraction,
   FileObject,
@@ -11,4 +13,8 @@ export interface FilePage {
   limit: number;
   offset: number;
   total: number;
+}
+
+export function isFileReady(file: FileObject): boolean {
+  return ["available", "ready", "attached", "retained"].includes(file.status);
 }

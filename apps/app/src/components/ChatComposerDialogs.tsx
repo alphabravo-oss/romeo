@@ -1,73 +1,31 @@
 import { Button, Input, NativeSelect, Textarea } from "@romeo/ui";
-import Search from "lucide-react/dist/esm/icons/search.mjs";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 
-import type { BaseModel, Provider } from "../features/types";
-import { listPromptTemplatesPage } from "../features/prompts";
-import {
-  listFilesPage,
-  retryFileExtraction,
-  type FileObject,
-} from "../features/files";
-import { listKnowledgeBases } from "../features/knowledge";
-import { listWorkspaceContentPage } from "../features/workspace-content";
-import { ingestWebUrls } from "../features/web";
-import { formatBytes } from "../lib/locale-format";
+import { promptTemplatePageQueryOptions } from "../features/prompts";
+import { filesPageQueryOptions } from "../features/files";
+import { knowledgeBasesQueryOptions } from "../features/knowledge";
+import { workspaceContentPageQueryOptions } from "../features/workspace-content";
+import { ingestWebUrlsMutationOptions } from "../features/web/mutation-options";
 import { useLocale } from "../lib/i18n";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { CatalogPager } from "./CatalogPager";
 import {
-  fileExtractionLabel,
   listImageGenerationModels,
   materializePrompt,
 } from "./chat-composer-utils";
 import { FormDialog } from "./FormDialog";
+import { CatalogSearch, EmptyCatalog } from "./CatalogSearch";
+import { FileLibraryCatalog } from "./FileLibraryCatalog";
+import type {
+  ChatComposerDialogsProps,
+  ImageSize,
+} from "./chat-composer-dialog-types";
 
-type ImageSize = "1024x1024" | "1024x1536" | "1536x1024";
-
-export interface ChatComposerDialogState {
-  fileLibraryOpen: boolean;
-  imageDialogOpen: boolean;
-  knowledgeLibraryOpen: boolean;
-  noteLibraryOpen: boolean;
-  promptLibraryOpen: boolean;
-  setFileLibraryOpen: Dispatch<SetStateAction<boolean>>;
-  setImageDialogOpen: Dispatch<SetStateAction<boolean>>;
-  setKnowledgeLibraryOpen: Dispatch<SetStateAction<boolean>>;
-  setNoteLibraryOpen: Dispatch<SetStateAction<boolean>>;
-  setPromptLibraryOpen: Dispatch<SetStateAction<boolean>>;
-  setUrlDialogOpen: Dispatch<SetStateAction<boolean>>;
-  urlDialogOpen: boolean;
-}
-
-interface ChatComposerDialogsProps extends ChatComposerDialogState {
-  draft: string;
-  knowledgeBaseIdsOverride: string[] | undefined;
-  models: BaseModel[];
-  onAddUrl: (url: string) => void;
-  onAttachExistingFile: (file: FileObject) => void;
-  onDraftChange: (value: string) => void;
-  onGenerateImages: (input: {
-    modelId: string;
-    prompt: string;
-    size: ImageSize;
-  }) => void;
-  onKnowledgeBaseIdsChange: (knowledgeBaseIds: string[] | undefined) => void;
-  providers: Provider[];
-  selectedModelId: string | undefined;
-  workspaceId: string | undefined;
-}
+export type { ChatComposerDialogState } from "./chat-composer-dialog-types";
 
 export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
-  const { locale, t } = useLocale();
-  const queryClient = useQueryClient();
+  const { t } = useLocale();
   const [promptQuery, setPromptQuery] = useState("");
   const [promptPage, setPromptPage] = useState(0);
   const [fileQuery, setFileQuery] = useState("");
@@ -81,74 +39,42 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
   const [imageSize, setImageSize] = useState<ImageSize>("1024x1024");
   const [draftKnowledgeIds, setDraftKnowledgeIds] = useState<string[]>([]);
 
-  const promptsQuery = useQuery({
-    queryKey: [
-      "promptTemplates",
-      props.workspaceId,
-      promptQuery.trim(),
-      promptPage,
-    ],
-    queryFn: () =>
-      listPromptTemplatesPage({
-        workspaceId: props.workspaceId!,
-        limit: 20,
-        offset: promptPage * 20,
-        ...(promptQuery.trim() === "" ? {} : { query: promptQuery }),
-      }),
-    enabled: props.workspaceId !== undefined && props.promptLibraryOpen,
-  });
-  const filesQuery = useQuery({
-    queryKey: ["files", props.workspaceId, fileQuery.trim(), filePage],
-    queryFn: () =>
-      listFilesPage(props.workspaceId!, {
-        limit: 20,
-        offset: filePage * 20,
-        query: fileQuery,
-      }),
-    enabled: props.workspaceId !== undefined && props.fileLibraryOpen,
-  });
-  const notesQuery = useQuery({
-    queryKey: ["notes", props.workspaceId, noteQuery.trim(), notePage],
-    queryFn: () =>
-      listWorkspaceContentPage("notes", props.workspaceId!, {
-        limit: 20,
-        offset: notePage * 20,
-        query: noteQuery,
-      }),
-    enabled: props.workspaceId !== undefined && props.noteLibraryOpen,
-  });
-  const knowledgeBasesQuery = useQuery({
-    queryKey: ["knowledgeBases", props.workspaceId],
-    queryFn: () => listKnowledgeBases(props.workspaceId!),
-    enabled: props.workspaceId !== undefined && props.knowledgeLibraryOpen,
-  });
+  const promptsQuery = useQuery(
+    promptTemplatePageQueryOptions({
+      enabled: props.promptLibraryOpen,
+      page: promptPage,
+      pageSize: 20,
+      query: promptQuery,
+      workspaceId: props.workspaceId,
+    }),
+  );
+  const filesQuery = useQuery(
+    filesPageQueryOptions({
+      enabled: props.fileLibraryOpen,
+      page: filePage,
+      pageSize: 20,
+      query: fileQuery,
+      workspaceId: props.workspaceId,
+    }),
+  );
+  const notesQuery = useQuery(
+    workspaceContentPageQueryOptions({
+      enabled: props.noteLibraryOpen,
+      kind: "notes",
+      page: notePage,
+      pageSize: 20,
+      query: noteQuery,
+      workspaceId: props.workspaceId,
+    }),
+  );
+  const knowledgeBasesQuery = useQuery(
+    knowledgeBasesQueryOptions(props.workspaceId, props.knowledgeLibraryOpen),
+  );
   useEffect(() => {
     if (!props.knowledgeLibraryOpen) return;
     setDraftKnowledgeIds(props.knowledgeBaseIdsOverride ?? []);
   }, [props.knowledgeBaseIdsOverride, props.knowledgeLibraryOpen]);
-  const retryExtraction = useMutation({
-    mutationFn: retryFileExtraction,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["files", props.workspaceId],
-      });
-    },
-  });
-  const ingestUrl = useMutation({
-    mutationFn: async (url: string) => {
-      if (saveUrlToLibrary && props.workspaceId !== undefined) {
-        await ingestWebUrls({
-          urls: [url],
-          workspaceId: props.workspaceId,
-          saveToLibrary: true,
-        });
-        await queryClient.invalidateQueries({
-          queryKey: ["files", props.workspaceId],
-        });
-      }
-      props.onAddUrl(url);
-    },
-  });
+  const ingestUrl = useMutation(ingestWebUrlsMutationOptions());
   const imageModels = useMemo(
     () => listImageGenerationModels(props.models, props.providers),
     [props.models, props.providers],
@@ -230,47 +156,18 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
             label={t("noReusableFiles")}
           />
         ) : null}
-        {filesQuery.data?.items.map((file) => (
-          <div className="rm-list-row flex items-center gap-2" key={file.id}>
-            <Button
-              className="min-w-0 flex-1 text-left"
-              onClick={() => {
-                props.onAttachExistingFile(file);
-                props.setFileLibraryOpen(false);
-              }}
-              type="button"
-            >
-              <span>
-                <strong>{file.fileName}</strong>
-                <small className="block text-muted">
-                  {file.mimeType} · {formatBytes(file.sizeBytes, locale)} ·{" "}
-                  {fileExtractionLabel(file)}
-                </small>
-              </span>
-            </Button>
-            {file.extraction.status === "failed" ? (
-              <Button
-                aria-label={`${t("retry")} ${file.fileName}`}
-                disabled={retryExtraction.isPending}
-                onClick={() => retryExtraction.mutate(file.id)}
-                type="button"
-              >
-                {t("retry")}
-              </Button>
-            ) : null}
-          </div>
-        ))}
+        <FileLibraryCatalog
+          files={filesQuery.data?.items ?? []}
+          onAttach={props.onAttachExistingFile}
+          onClose={() => props.setFileLibraryOpen(false)}
+          workspaceId={props.workspaceId}
+        />
         <CatalogPager
           onPageChange={setFilePage}
           page={filePage}
           pageSize={20}
           total={filesQuery.data?.total ?? 0}
         />
-        {retryExtraction.isError ? (
-          <p aria-live="polite" className="rm-composer-error">
-            {retryExtraction.error.message}
-          </p>
-        ) : null}
       </FormDialog>
 
       <FormDialog
@@ -408,12 +305,27 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
           className="grid gap-3"
           onSubmit={(event) => {
             event.preventDefault();
-            ingestUrl.mutate(urlValue, {
-              onSuccess: () => {
-                setUrlValue("");
-                props.setUrlDialogOpen(false);
+            if (!saveUrlToLibrary || props.workspaceId === undefined) {
+              props.onAddUrl(urlValue);
+              setUrlValue("");
+              props.setUrlDialogOpen(false);
+              return;
+            }
+            ingestUrl.mutate(
+              {
+                saveToLibrary: true,
+                urls: [urlValue],
+                workspaceId: props.workspaceId,
               },
-            });
+              {
+                onSuccess: (_result, variables) => {
+                  props.onAddUrl(variables.urls[0] ?? "");
+                  ingestUrl.reset();
+                  setUrlValue("");
+                  props.setUrlDialogOpen(false);
+                },
+              },
+            );
           }}
         >
           <label htmlFor="webpage-url">{t("httpUrl")}</label>
@@ -440,7 +352,10 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
           </label>
           {ingestUrl.isError ? (
             <p aria-live="polite" className="rm-composer-error">
-              {ingestUrl.error.message}
+              {safeUserErrorMessage(
+                ingestUrl.error,
+                t("unexpectedAsyncFailure"),
+              )}
             </p>
           ) : null}
           <Button
@@ -517,38 +432,5 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
         </form>
       </FormDialog>
     </>
-  );
-}
-
-function CatalogSearch(props: {
-  label: string;
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  const inputId = useId();
-  return (
-    <label className="rm-model-search" htmlFor={inputId}>
-      <Search aria-hidden="true" size={15} />
-      <Input
-        aria-label={props.label}
-        id={inputId}
-        onChange={(event) => props.onChange(event.currentTarget.value)}
-        placeholder={props.label}
-        type="search"
-        value={props.value}
-      />
-    </label>
-  );
-}
-
-function EmptyCatalog(props: {
-  filtered: boolean;
-  filteredLabel: string;
-  label: string;
-}) {
-  return (
-    <p className="text-sm text-muted">
-      {props.filtered ? props.filteredLabel : props.label}
-    </p>
   );
 }

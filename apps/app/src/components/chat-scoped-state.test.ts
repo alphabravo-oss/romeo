@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { MutationObserver, QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { QueuedChatTurn } from "../features/runs";
@@ -6,6 +6,9 @@ import type { MessageFeedbackState } from "../features/types";
 import { useChatMessageState } from "./useChatMessageState";
 import { useWorkspaceChatActions } from "./useWorkspaceChatActions";
 import { useWorkspaceTurnActions } from "./useWorkspaceTurnActions";
+import { updateMessageFeedbackMutationOptions } from "../features/chats/mutation-options";
+import { completeMutationNetworkRevalidation } from "../lib/connectivity";
+import { advanceMutationSessionBoundary } from "../lib/mutation-session-boundary";
 
 // A run outlives the chat it started in, so its settle hook fires while the
 // reader is somewhere else entirely. These are the writes that hook performs;
@@ -28,6 +31,24 @@ vi.mock("../features", () => ({
   ),
 }));
 
+vi.mock("../features/chats/mutations", () => ({
+  updateMessageFeedback: vi.fn(
+    (input: { chatId: string; messageId: string; rating: string }) =>
+      Promise.resolve({
+        chatId: input.chatId,
+        configured: input.rating !== "none",
+        messageId: input.messageId,
+        rating: input.rating,
+        redaction: {
+          freeTextReturned: false,
+          messageContentReturned: false,
+          rawUsageMetadataReturned: false,
+          reviewerIdentityReturned: false,
+        },
+      }),
+  ),
+}));
+
 vi.mock("../features/runs", () => ({
   cancelQueuedTurn: vi.fn((chatId: string, turnId: string) => {
     server.cancelled.push(`${chatId}:${turnId}`);
@@ -42,6 +63,13 @@ vi.mock("../features/runs", () => ({
   ),
   startRun: vi.fn(),
   streamRunEvents: vi.fn(),
+}));
+
+vi.mock("../features/runs/mutations", () => ({
+  cancelQueuedTurn: vi.fn((chatId: string, turnId: string) => {
+    server.cancelled.push(`${chatId}:${turnId}`);
+    return Promise.resolve({});
+  }),
 }));
 
 // The hooks run outside React here; `mutateAsync` is all they use of it.
@@ -88,8 +116,8 @@ function turnActions(queryClient: QueryClient, activeChatId: string) {
   return useWorkspaceTurnActions({
     activeAgentId: "agent_1",
     activeChatId,
-    chats: [],
     allMessages: [],
+    chats: [],
     autoTitleEnabled: false,
     appendMessage: () => "msg_new",
     attachedUrls: [],
@@ -115,6 +143,9 @@ function turnActions(queryClient: QueryClient, activeChatId: string) {
     temporaryNextChat: false,
     webSearchEnabled: false,
     agenticRagEnabled: false,
+    routingMode: "selected",
+    reasoningMode: "default",
+    researchMode: "standard",
     workspaceId: "ws_1",
   });
 }
@@ -122,7 +153,6 @@ function turnActions(queryClient: QueryClient, activeChatId: string) {
 function chatActions(queryClient: QueryClient, activeChatId: string) {
   return useWorkspaceChatActions({
     activeChatId,
-    allMessages: [],
     followQueuedRuns: () => Promise.resolve(),
     queryClient,
     setActiveAgentId: () => {},
@@ -144,6 +174,8 @@ describe("a background run settling in another chat", () => {
   beforeEach(() => {
     server.cancelled.length = 0;
     server.queues.clear();
+    completeMutationNetworkRevalidation();
+    advanceMutationSessionBoundary();
     vi.stubGlobal("window", {
       setTimeout: globalThis.setTimeout,
       clearTimeout: globalThis.clearTimeout,
@@ -167,7 +199,14 @@ describe("a background run settling in another chat", () => {
       setError: () => {},
     });
 
-    await messageState.handleRateMessage("msg_b1", "positive");
+    await new MutationObserver(
+      queryClient,
+      updateMessageFeedbackMutationOptions(),
+    ).mutate({
+      chatId: "chat_b",
+      messageId: "msg_b1",
+      rating: "positive",
+    });
     expect(feedbackOf(queryClient, "chat_b").msg_b1?.rating).toBe("positive");
 
     await messageState.syncPersistedMessages("chat_a");

@@ -1,6 +1,13 @@
 {
   "$schema": "./node_modules/knip/schema-jsonc.json",
-  "ignoreFiles": ["scripts/*.ts"],
+  "ignoreFiles": [
+    "scripts/*.ts",
+    // Dynamically spawned by scripts/console-conformance.mjs.
+    "scripts/console-audit.mjs",
+    // Dynamically served by scripts/transcript-virtualization-browser-benchmark.mjs.
+    "apps/app/benchmark.vite.config.ts",
+    "apps/app/benchmarks/**",
+  ],
   "workspaces": {
     "apps/app": {
       "ignoreDependencies": ["axe-core"],

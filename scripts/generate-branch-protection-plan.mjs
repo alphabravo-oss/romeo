@@ -34,6 +34,7 @@ const expectedComposeSmokeMatrixNames = [
   "tiered-rag",
 ];
 const requiredWorkflowCommands = [
+  "pnpm check:data-table-inventory",
   "pnpm check:sdk-drift",
   "pnpm check:openapi-route-coverage",
   "OPENWEBUI_COMPATIBILITY_ENABLED=true pnpm check:openapi-route-coverage",
@@ -83,6 +84,7 @@ const requiredWorkflowCommands = [
   "pnpm review:postgres-query-plans",
   "pnpm review:pgvector-isolation",
   "pnpm test:postgres-conformance",
+  "pnpm evidence:run-sse:live",
   "pnpm smoke:kubernetes:render",
   "pnpm release:pack",
   "pnpm sbom:generate",

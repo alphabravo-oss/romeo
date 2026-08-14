@@ -3,7 +3,11 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { Group, GroupMembership } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 
 export class GroupService {
   constructor(private readonly repository: RomeoRepository) {}
@@ -128,12 +132,12 @@ export class GroupService {
     return group;
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     repository: RomeoRepository,
     subject: AuthSubject,
-    action: string,
+    action: A,
     groupId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
   ): Promise<void> {
     await writeAuditLog(repository, {
       subject,

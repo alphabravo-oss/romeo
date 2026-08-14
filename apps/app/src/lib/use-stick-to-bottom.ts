@@ -26,6 +26,7 @@ export function useStickToBottom(
   const enabled = options.enabled !== false;
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  const pendingScrollFrame = useRef<number | undefined>(undefined);
   // The same intent, published for rendering. It stays a *second* copy rather
   // than replacing the ref: the ref is read from a rAF callback once per token
   // and must never schedule a render, while the jump-to-latest button has to
@@ -65,6 +66,30 @@ export function useStickToBottom(
     return () => cancelAnimationFrame(handle);
   }, [dep, enabled]);
 
+  // The active assistant row updates outside the transcript topology. Its
+  // narrow cache observer calls this after paint so following still works
+  // without making the chat panel subscribe to every streamed frame.
+  const notifyContentChanged = useCallback(() => {
+    const node = ref.current;
+    if (node === null || !enabled || !stick.current) return;
+    if (pendingScrollFrame.current !== undefined) {
+      cancelAnimationFrame(pendingScrollFrame.current);
+    }
+    pendingScrollFrame.current = requestAnimationFrame(() => {
+      pendingScrollFrame.current = undefined;
+      node.scrollTop = node.scrollHeight;
+    });
+  }, [enabled]);
+
+  useEffect(
+    () => () => {
+      if (pendingScrollFrame.current !== undefined) {
+        cancelAnimationFrame(pendingScrollFrame.current);
+      }
+    },
+    [],
+  );
+
   // Jumps rather than animates: the button exists to rejoin an answer that is
   // still being written, and a smooth scroll would spend its whole duration
   // racing the next token's own jump to the bottom. Nothing here to gate on
@@ -77,5 +102,5 @@ export function useStickToBottom(
     node.scrollTop = node.scrollHeight;
   }, []);
 
-  return { atBottom, ref, scrollToBottom };
+  return { atBottom, notifyContentChanged, ref, scrollToBottom };
 }

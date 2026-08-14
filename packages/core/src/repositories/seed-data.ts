@@ -12,6 +12,8 @@ import type {
   AuditLog,
   BackgroundJob,
   BillingPlan,
+  BillingEventReceipt,
+  CapabilityAssignment,
   Chat,
   ChatComment,
   ChatTag,
@@ -32,10 +34,13 @@ import type {
   KnowledgeChunkEmbedding,
   KnowledgeSource,
   LocalMfaFactor,
+  LocalMfaChallenge,
   LocalPasswordCredential,
+  SamlAuthRequest,
   ManagedModelCustomizationPolicyRecord,
   ManagedModelPreferenceRecord,
   Message,
+  MessageFileReference,
   MessagePart,
   NotificationDelivery,
   NotificationDeliveryChannel,
@@ -67,6 +72,13 @@ import type {
   WorkflowRun,
   Workspace,
 } from "../domain/entities";
+import type { OrganizationCapabilityFlag } from "../domain/capability-flags";
+import type { IdempotencyReceipt } from "../domain/idempotency";
+import {
+  createKnowledgeBinding,
+  createSeedGrants,
+  createToolBinding,
+} from "./seed-data-builders";
 
 export interface SeedData {
   organizations: Organization[];
@@ -80,7 +92,9 @@ export interface SeedData {
   deviceAuthorizations: DeviceAuthorization[];
   userSessions: UserSession[];
   localPasswordCredentials: LocalPasswordCredential[];
+  samlAuthRequests: SamlAuthRequest[];
   localMfaFactors: LocalMfaFactor[];
+  localMfaChallenges: LocalMfaChallenge[];
   serviceAccounts: ServiceAccount[];
   providers: ProviderInstance[];
   models: BaseModel[];
@@ -99,6 +113,9 @@ export interface SeedData {
   queuedChatTurns: QueuedChatTurn[];
   messages: Message[];
   messageParts: MessagePart[];
+  messageFileReferences: MessageFileReference[];
+  /** Internal rollout marker; absent entries are legacy/read-both rows. */
+  messagePartSchemaVersions: Record<string, 1>;
   fileObjects: FileObject[];
   chatComments: ChatComment[];
   chatTags: ChatTag[];
@@ -119,6 +136,10 @@ export interface SeedData {
   auditLogs: AuditLog[];
   usageEvents: UsageEvent[];
   billingPlans: BillingPlan[];
+  billingEventReceipts: BillingEventReceipt[];
+  capabilityAssignments: CapabilityAssignment[];
+  organizationCapabilityFlags: OrganizationCapabilityFlag[];
+  idempotencyReceipts: IdempotencyReceipt[];
   backgroundJobs: BackgroundJob[];
   webhookSubscriptions: WebhookSubscription[];
   webhookDeliveries: WebhookDelivery[];
@@ -251,7 +272,9 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
     deviceAuthorizations: [],
     userSessions: [],
     localPasswordCredentials: [],
+    samlAuthRequests: [],
     localMfaFactors: [],
+    localMfaChallenges: [],
     serviceAccounts: [],
     providers,
     models,
@@ -324,6 +347,8 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
     queuedChatTurns: [],
     messages: [],
     messageParts: [],
+    messageFileReferences: [],
+    messagePartSchemaVersions: {},
     fileObjects: [],
     chatComments: [],
     chatTags: [],
@@ -370,6 +395,10 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
     auditLogs: [],
     usageEvents: [],
     billingPlans: [],
+    billingEventReceipts: [],
+    capabilityAssignments: [],
+    organizationCapabilityFlags: [],
+    idempotencyReceipts: [],
     backgroundJobs: [],
     webhookSubscriptions: [],
     webhookDeliveries: [],
@@ -379,6 +408,7 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
       {
         orgId: "org_default",
         auditLogRetentionDays: 365,
+        runEventRetentionDays: 30,
         fileRetentionDays: null,
         workspaceFileRetentionDays: {},
         userFileRetentionDays: {},
@@ -422,69 +452,5 @@ export function createRuntimeSeedData(
             grant.resourceId === "model_ollama_default")
         ),
     ),
-  };
-}
-
-function createSeedGrants(): ResourceGrant[] {
-  const resources: Array<
-    [ResourceGrant["resourceType"], string, ResourceGrant["permission"]]
-  > = [
-    ["chat", "chat_welcome", "write"],
-    ["agent", "agent_default", "run"],
-    ["tool", "tool_calculator", "use"],
-    ["tool", "tool_datetime", "use"],
-    ["model", "model_openai_compatible_default", "use"],
-    ["model", "model_ollama_default", "use"],
-    ["provider", "provider_openai_compatible", "use"],
-    ["provider", "provider_ollama", "use"],
-    ["knowledge_base", "kb_default", "read"],
-    ["knowledge_base", "kb_default", "use"],
-    ["knowledge_base", "kb_default", "write"],
-    ["voice_profile", "voice_default", "use"],
-    ["workspace", "workspace_default", "read"],
-  ];
-
-  return resources.map(([resourceType, resourceId, permission], index) => ({
-    id: `grant_seed_${index + 1}`,
-    resourceType,
-    resourceId,
-    principalType: "group",
-    principalId: "group_admins",
-    permission,
-  }));
-}
-
-function createToolBinding(
-  id: string,
-  toolId: string,
-  enabled: boolean,
-  approvalRequired: boolean,
-  now: string,
-): AgentToolBinding {
-  return {
-    id,
-    orgId: "org_default",
-    agentId: "agent_default",
-    toolId,
-    enabled,
-    approvalRequired,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-function createKnowledgeBinding(
-  id: string,
-  knowledgeBaseId: string,
-  now: string,
-): AgentKnowledgeBinding {
-  return {
-    id,
-    orgId: "org_default",
-    agentId: "agent_default",
-    knowledgeBaseId,
-    enabled: true,
-    createdAt: now,
-    updatedAt: now,
   };
 }

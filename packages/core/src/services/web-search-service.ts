@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
 
 import { assertScope, type AuthSubject } from "@romeo/auth";
-import type { RetrievalHit } from "@romeo/rag";
 
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
+import {
+  authorizeWebRetrieval,
+  enforceWebUrlLimit,
+} from "./capability-consumer-enforcement";
 import { consumeQuota } from "./consume-quota";
 import {
   WebsiteDataConnectorExecutor,
@@ -14,6 +17,7 @@ import {
 } from "./data-connector-executors";
 import { assertManagedSecretRef } from "./secret-refs";
 import { recordSubjectUsage } from "./record-usage";
+import { recordRetrievalUnits } from "./web-search-usage";
 import {
   configurationKey,
   connectorDomainRules,
@@ -27,13 +31,14 @@ import {
   normalizeEndpoint,
   parseSearchResponse,
   publicConfiguration,
-  resultToHit,
   type StoredWebSearchConfiguration,
   type WebSearchConfiguration,
   type WebSearchProvider,
   type WebSearchProviderHealth,
   type WebSearchResult,
 } from "./web-search-support";
+import { collectWebRetrievalHits } from "./web-retrieval-hits";
+import { readStoredWebSearchConfiguration } from "./web-search-configuration-store";
 import {
   WebSearchProviderClient,
   type WebSearchServiceOptions,
@@ -51,7 +56,7 @@ export class WebSearchService extends WebSearchProviderClient {
   async configuration(subject: AuthSubject): Promise<WebSearchConfiguration> {
     assertScope(subject, "admin:read");
     return publicConfiguration(
-      await this.readConfiguration(subject.orgId),
+      await readStoredWebSearchConfiguration(this.repository, subject.orgId),
       await this.readHealth(subject.orgId),
     );
   }
@@ -74,7 +79,10 @@ export class WebSearchService extends WebSearchProviderClient {
     assertScope(subject, "admin:write");
     if (typeof input.credentialRef === "string")
       assertManagedSecretRef(input.credentialRef);
-    const current = await this.readConfiguration(subject.orgId);
+    const current = await readStoredWebSearchConfiguration(
+      this.repository,
+      subject.orgId,
+    );
     const next: StoredWebSearchConfiguration = {
       ...current,
       ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
@@ -133,11 +141,21 @@ export class WebSearchService extends WebSearchProviderClient {
   async search(
     subject: AuthSubject,
     query: string,
+    capabilityContext: WebCapabilityContext = {},
   ): Promise<WebSearchResult[]> {
     assertScope(subject, "runs:create");
     const normalizedQuery = query.trim();
     if (normalizedQuery.length === 0) return [];
-    const config = await this.readConfiguration(subject.orgId);
+    const config = await readStoredWebSearchConfiguration(
+      this.repository,
+      subject.orgId,
+    );
+    const capability = await authorizeWebRetrieval(
+      this.options.capabilities,
+      subject,
+      { maxSearchResults: config.maxResults },
+      capabilityContext,
+    );
     if (!config.enabled) {
       throw new ApiError(
         "web_search_disabled",
@@ -145,6 +163,10 @@ export class WebSearchService extends WebSearchProviderClient {
         409,
       );
     }
+    const governedConfig = {
+      ...config,
+      maxResults: Math.min(config.maxResults, capability.maxSearchResults),
+    };
     await this.repository.transaction((repository) =>
       consumeQuota(
         repository,
@@ -157,25 +179,31 @@ export class WebSearchService extends WebSearchProviderClient {
       ),
     );
     const sourceId = createId("web_search");
-    const endpoint = new URL(config.endpointUrl);
+    const endpoint = new URL(governedConfig.endpointUrl);
     await assertConnectorHostAllowed(endpoint, {
-      ...(config.allowedDomains.length === 0
+      ...(governedConfig.allowedDomains.length === 0
         ? {}
-        : { allowedHosts: connectorDomainRules(config.allowedDomains) }),
+        : {
+            allowedHosts: connectorDomainRules(governedConfig.allowedDomains),
+          }),
       egressPolicy:
-        config.allowedDomains.length === 0
+        governedConfig.allowedDomains.length === 0
           ? "allow_public"
           : "require_allowlist",
       ...(this.options.hostLookup === undefined
         ? {}
         : { hostLookup: this.options.hostLookup }),
     });
-    this.assertDomainNotBlocked(endpoint.hostname, config);
-    const credential = await this.resolveCredential(config);
+    this.assertDomainNotBlocked(endpoint.hostname, governedConfig);
+    const credential = await this.resolveCredential(governedConfig);
     const startedAt = Date.now();
     let response: unknown;
     try {
-      response = await this.fetchSearch(config, normalizedQuery, credential);
+      response = await this.fetchSearch(
+        governedConfig,
+        normalizedQuery,
+        credential,
+      );
       await this.writeHealth(subject.orgId, {
         status: "healthy",
         lastCheckedAt: new Date().toISOString(),
@@ -211,12 +239,12 @@ export class WebSearchService extends WebSearchProviderClient {
       throw error;
     }
     const parsed = parseSearchResponse(
-      config.provider,
+      governedConfig.provider,
       response,
-      config.maxResults,
-    ).filter((result) => this.isResultAllowed(result.url, config));
+      governedConfig.maxResults,
+    ).filter((result) => this.isResultAllowed(result.url, governedConfig));
     const freshResults = parsed.filter((result) =>
-      isFreshEnough(result, config),
+      isFreshEnough(result, governedConfig),
     );
     const results = deduplicateSearchResults(freshResults);
     await writeAuditLog(this.repository, {
@@ -225,7 +253,7 @@ export class WebSearchService extends WebSearchProviderClient {
       resourceType: "organization",
       resourceId: subject.orgId,
       metadata: {
-        provider: config.provider,
+        provider: governedConfig.provider,
         queryHash: createHash("sha256").update(normalizedQuery).digest("hex"),
         resultCount: results.length,
         freshnessExcludedCount: parsed.length - freshResults.length,
@@ -239,11 +267,17 @@ export class WebSearchService extends WebSearchProviderClient {
       quantity: 1,
       unit: "request",
       metadata: {
-        provider: config.provider,
+        provider: governedConfig.provider,
         outcome: "success",
         latencyMs: Math.max(0, Date.now() - startedAt),
         resultCount: results.length,
       },
+    });
+    await recordRetrievalUnits(this.repository, subject, {
+      sourceId,
+      quantity: results.length,
+      operation: "search_result",
+      provider: governedConfig.provider,
     });
     return results;
   }
@@ -251,6 +285,7 @@ export class WebSearchService extends WebSearchProviderClient {
   async ingestUrls(
     subject: AuthSubject,
     urls: string[],
+    capabilityContext: WebCapabilityContext = {},
   ): Promise<Array<WebSearchResult & { content: string }>> {
     assertScope(subject, "runs:create");
     if (urls.length > 5)
@@ -259,7 +294,17 @@ export class WebSearchService extends WebSearchProviderClient {
         "A request can include up to five URLs.",
         400,
       );
-    const config = await this.readConfiguration(subject.orgId);
+    const config = await readStoredWebSearchConfiguration(
+      this.repository,
+      subject.orgId,
+    );
+    const capability = await authorizeWebRetrieval(
+      this.options.capabilities,
+      subject,
+      { maxUrlsPerRequest: urls.length },
+      capabilityContext,
+    );
+    enforceWebUrlLimit(urls.length, capability.maxUrlsPerRequest);
     if (!config.enabled)
       throw new ApiError(
         "web_search_disabled",
@@ -377,79 +422,31 @@ export class WebSearchService extends WebSearchProviderClient {
         latencyMs: Math.max(0, Date.now() - startedAt),
       },
     });
+    await recordRetrievalUnits(this.repository, subject, {
+      sourceId,
+      quantity: items.length,
+      operation: "url_content",
+    });
     return items;
   }
 
-  async retrievalHits(
+  retrievalHits(
     subject: AuthSubject,
-    input: { query: string; search: boolean; urls: string[] },
-  ): Promise<RetrievalHit[]> {
-    const [searchResults, urlResults] = await Promise.all([
-      input.search ? this.search(subject, input.query) : Promise.resolve([]),
-      input.urls.length === 0
-        ? Promise.resolve([])
-        : this.ingestUrls(subject, input.urls),
-    ]);
-    return [
-      ...searchResults.map((result, index) =>
-        resultToHit(result, result.snippet, 1 - index * 0.01),
-      ),
-      ...urlResults.map((result, index) =>
-        resultToHit(result, result.content, 0.95 - index * 0.01),
-      ),
-    ];
-  }
-
-  private async readConfiguration(
-    orgId: string,
-  ): Promise<StoredWebSearchConfiguration> {
-    const value =
-      (await this.repository.getSystemSetting(configurationKey(orgId)))
-        ?.value ?? {};
-    return {
-      orgId,
-      enabled: value.enabled === true,
-      provider:
-        value.provider === "brave" || value.provider === "tavily"
-          ? value.provider
-          : "searxng",
-      endpointUrl:
-        typeof value.endpointUrl === "string"
-          ? normalizeEndpoint(value.endpointUrl)
-          : "https://search.example.invalid",
-      credentialConfigured:
-        typeof value.credentialRef === "string" &&
-        value.credentialRef.length > 0,
-      ...(typeof value.credentialRef === "string"
-        ? { credentialRef: value.credentialRef }
-        : {}),
-      allowedDomains: normalizeDomains(
-        Array.isArray(value.allowedDomains)
-          ? value.allowedDomains.filter(
-              (item): item is string => typeof item === "string",
-            )
-          : [],
-      ),
-      blockedDomains: normalizeDomains(
-        Array.isArray(value.blockedDomains)
-          ? value.blockedDomains.filter(
-              (item): item is string => typeof item === "string",
-            )
-          : [],
-      ),
-      maxResults:
-        typeof value.maxResults === "number"
-          ? Math.min(Math.max(Math.trunc(value.maxResults), 1), 10)
-          : 5,
-      freshnessMaxAgeDays:
-        typeof value.freshnessMaxAgeDays === "number"
-          ? Math.min(Math.max(Math.trunc(value.freshnessMaxAgeDays), 1), 3650)
-          : null,
-      unknownPublicationDatePolicy:
-        value.unknownPublicationDatePolicy === "exclude" ? "exclude" : "allow",
-      unreachableUrlPolicy:
-        value.unreachableUrlPolicy === "skip" ? "skip" : "fail",
-    };
+    input: {
+      query: string;
+      search: boolean;
+      urls: string[];
+      workspaceId: string;
+      agentId: string;
+      agentVersionId: string;
+    },
+  ) {
+    return collectWebRetrievalHits(subject, input, {
+      search: (currentSubject, query) =>
+        this.search(currentSubject, query, input),
+      ingest: (currentSubject, urls) =>
+        this.ingestUrls(currentSubject, urls, input),
+    });
   }
 
   private async readHealth(orgId: string): Promise<WebSearchProviderHealth> {
@@ -484,3 +481,9 @@ export class WebSearchService extends WebSearchProviderClient {
     });
   }
 }
+
+type WebCapabilityContext = {
+  workspaceId?: string;
+  agentId?: string;
+  agentVersionId?: string;
+};

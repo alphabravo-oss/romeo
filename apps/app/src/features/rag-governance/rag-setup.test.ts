@@ -43,9 +43,9 @@ describe("vector backend preset", () => {
   });
 
   it("builds policy fields for each preset", () => {
-    expect(policyFieldsForVectorBackend("pgvector").externalVectorStore).toEqual(
-      expect.objectContaining({ mode: "disabled" }),
-    );
+    expect(
+      policyFieldsForVectorBackend("pgvector").externalVectorStore,
+    ).toEqual(expect.objectContaining({ mode: "disabled" }));
     expect(policyFieldsForVectorBackend("qdrant").externalVectorStore).toEqual(
       expect.objectContaining({ mode: "deployment_managed" }),
     );

@@ -8,6 +8,11 @@ import {
 } from "./schema";
 import { optionalIsoString, toIsoString } from "./repository-mapping";
 import { PgManagedModelPreferenceRepository } from "./managed-model-preference-repository";
+import {
+  asJsonRecord,
+  asVersionCapabilityDefaults as validCapabilityDefaults,
+  attachVersionCapabilityDefaults,
+} from "./agent-record-types";
 import type {
   AgentKnowledgeBindingRecord,
   AgentMemoryPolicyRecord,
@@ -289,6 +294,7 @@ export function toAgentVersionRecord(
     version.knowledgeBaseBindings = knowledgeBaseBindings;
   const toolBindings = asVersionToolBindings(row.toolBindings);
   if (toolBindings.length > 0) version.toolBindings = toolBindings;
+  attachVersionCapabilityDefaults(version, row.capabilityDefaults);
   return version;
 }
 
@@ -367,6 +373,9 @@ function toAgentVersionInsert(
     voiceProfileId: record.voiceProfileId ?? null,
     knowledgeBaseBindings: record.knowledgeBaseBindings ?? [],
     toolBindings: record.toolBindings ?? [],
+    capabilityDefaults: validCapabilityDefaults(
+      record.capabilityDefaults ?? [],
+    ),
     createdBy: record.createdBy,
     createdAt: new Date(record.createdAt),
     publishedAt: new Date(record.publishedAt),
@@ -484,10 +493,4 @@ function asVersionToolBindings(
         approvalRequired: boolean;
       } => item !== undefined,
     );
-}
-
-function asJsonRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return {};
-  return value as Record<string, unknown>;
 }

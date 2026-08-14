@@ -23,6 +23,7 @@ import { indexKnowledgeSource } from "./knowledge-source-indexing";
 import { recordSubjectUsage } from "./record-usage";
 import { emitWebhookEvent } from "./webhook-events";
 import type { WebhookEmitter } from "./webhook-service";
+import { readKnowledgeObject } from "./knowledge-object-read";
 
 export interface KnowledgeBinaryExtractor {
   extract(input: {
@@ -104,13 +105,10 @@ export async function extractUploadedKnowledgeSource(input: {
   });
 
   try {
-    const bytes = await input.objectStore.getObject(source.objectKey);
-    if (bytes === undefined)
-      throw new ApiError(
-        "upload_object_missing",
-        "Uploaded object was not found in object storage.",
-        409,
-      );
+    const bytes = await readKnowledgeObject(input.objectStore, {
+      key: source.objectKey,
+      sizeBytes: source.sizeBytes,
+    });
     const extracted = await extractKnowledgeBytes(
       input.extractor,
       source,

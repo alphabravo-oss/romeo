@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  generateOpenAiCompatibleImages,
-  ProviderSdkRequestError,
-} from "./index";
+import { generateOpenAiCompatibleImages } from "./index";
 
 describe("OpenAI-compatible image adapter", () => {
   it("uses the OpenAI SDK and returns provider-neutral image data", async () => {
@@ -54,23 +51,27 @@ describe("OpenAI-compatible image adapter", () => {
   });
 
   it("normalizes SDK HTTP failures without exposing response bodies", async () => {
+    const secret = "SENTINEL_IMAGE_PROVIDER_SECRET";
     const pending = generateOpenAiCompatibleImages({
       count: 1,
       fetchImpl: async () =>
-        Response.json(
-          { error: { message: "secret provider detail" } },
-          { status: 429 },
-        ),
+        Response.json({ error: { message: secret } }, { status: 429 }),
       model: "gpt-image-1",
       prompt: "Abstract workspace",
       provider: { baseUrl: "https://images.example.com/v1" },
       size: "1024x1024",
     });
 
-    await expect(pending).rejects.toMatchObject({
-      name: "ProviderSdkRequestError",
-      provider: "openai-compatible",
+    const caught = await pending.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(caught).toMatchObject({
+      category: "rate_limit",
+      errorCode: "provider_rate_limited",
+      operation: "imageGeneration",
       status: 429,
-    } satisfies Partial<ProviderSdkRequestError>);
+    });
+    expect(JSON.stringify(caught)).not.toContain(secret);
   });
 });

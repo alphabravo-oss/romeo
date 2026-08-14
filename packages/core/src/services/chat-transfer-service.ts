@@ -1,14 +1,25 @@
-import { assertScope, type AuthSubject } from "@romeo/auth";
+import {
+  AuthorizationError,
+  assertScope,
+  hasWorkspaceAccess,
+  type AuthSubject,
+} from "@romeo/auth";
+import type { MessagePart as TransferMessagePart } from "@romeo/contracts";
 import type { ObjectStore } from "@romeo/storage";
 
 import type { Chat, Message, MessagePart } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { notFound } from "../errors";
 import { createId } from "../ids";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import { getAuthorizedChat } from "./chat-access";
 import type { FileMalwareScanner, FileMalwareScanPolicy } from "./file-service";
 import { ChatLifecycleService } from "./chat-lifecycle-service";
+import { enforceContentPolicyStrings } from "./content-policy-service";
 import {
   attachMessageParts,
   readMessageAttachment,
@@ -16,6 +27,13 @@ import {
 } from "./message-attachments";
 import { advanceChatLeaf } from "./run-command-service";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
+import {
+  assertImportTextMatchesContent,
+  assertTransferPartsImportable,
+  copyAttachmentParts,
+  materializeTransferParts,
+  portableTransferParts,
+} from "./chat-transfer-message-parts";
 import { assertWorkspaceActive } from "./workspace-guard";
 
 export interface ChatImportInput {
@@ -27,6 +45,7 @@ export interface ChatImportInput {
     content: string;
     createdAt?: string;
     citations?: Message["citations"];
+    parts?: TransferMessagePart[];
     attachments?: Array<{
       dataBase64: string;
       fileName: string;
@@ -43,7 +62,8 @@ export interface ChatExport {
   exportedAt: string;
   chat: Chat;
   messages: Array<
-    Omit<Message, "attachments"> & {
+    Omit<Message, "attachments" | "parts"> & {
+      parts?: TransferMessagePart[];
       attachments?: Array<
         NonNullable<Message["attachments"]>[number] & { dataBase64: string }
       >;
@@ -78,12 +98,31 @@ export class ChatTransferService {
     );
     const messages = await Promise.all(
       sourceMessages.map(async (message) => {
-        const { attachments: sourceAttachments, ...base } = message;
-        if (sourceAttachments === undefined || sourceAttachments.length === 0) {
-          return base;
+        const {
+          attachments: sourceAttachments,
+          parts: sourceParts,
+          ...base
+        } = message;
+        const parts = await portableTransferParts({
+          parts: sourceParts ?? [],
+          repository: this.repository,
+          subject: input.subject,
+          workspaceId: chat.workspaceId,
+        });
+        const fileRefPartIds = new Set(
+          (sourceParts ?? [])
+            .filter((part) => "schemaVersion" in part && part.schemaVersion === 1)
+            .filter((part) => part.type !== "text")
+            .map((part) => part.id),
+        );
+        const portableAttachments = (sourceAttachments ?? []).filter(
+          (attachment) => !fileRefPartIds.has(attachment.id),
+        );
+        if (portableAttachments.length === 0) {
+          return { ...base, ...(parts.length === 0 ? {} : { parts }) };
         }
         const attachments = await Promise.all(
-          sourceAttachments.map(async (attachment) => {
+          portableAttachments.map(async (attachment) => {
             const stored = await readMessageAttachment({
               attachmentId: attachment.id,
               chatId: chat.id,
@@ -98,7 +137,11 @@ export class ChatTransferService {
             };
           }),
         );
-        return { ...base, attachments };
+        return {
+          ...base,
+          attachments,
+          ...(parts.length === 0 ? {} : { parts }),
+        };
       }),
     );
     await this.audit(input.subject, "chat.export", chat, {
@@ -113,6 +156,36 @@ export class ChatTransferService {
   }
 
   async import(input: ChatImportInput): Promise<Chat> {
+    assertScope(input.subject, "chats:write");
+    if (!hasWorkspaceAccess(input.subject, input.workspaceId)) {
+      throw new AuthorizationError(
+        "The workspace is outside the caller access.",
+      );
+    }
+    await assertWorkspaceActive(this.repository, {
+      orgId: input.subject.orgId,
+      workspaceId: input.workspaceId,
+    });
+    const governed = await enforceContentPolicyStrings(
+      this.repository,
+      input.subject,
+      input.messages.map((message) => message.content),
+    );
+    assertImportTextMatchesContent(input.messages);
+    await Promise.all(
+      input.messages.map((message) =>
+        assertTransferPartsImportable({
+          parts: message.parts ?? [],
+          repository: this.repository,
+          subject: input.subject,
+          workspaceId: input.workspaceId,
+        }),
+      ),
+    );
+    const importedMessages = input.messages.map((message, index) => ({
+      ...message,
+      content: governed.contents[index]!,
+    }));
     const chat = await this.lifecycle.create({
       workspaceId: input.workspaceId,
       title: input.title?.trim() || "Imported conversation",
@@ -130,7 +203,7 @@ export class ChatTransferService {
     // afterwards would attach at the root and hide the whole imported conversation.
     let previousId: string | undefined;
     await this.repository.transaction(async (repository) => {
-      for (const message of input.messages) {
+      for (const message of importedMessages) {
         const created = await repository.createMessage({
           id: createId("msg"),
           chatId: chat.id,
@@ -143,7 +216,7 @@ export class ChatTransferService {
           createdAt: message.createdAt ?? new Date().toISOString(),
         });
         previousId = created.id;
-        const parts = await storeMessageAttachments({
+        const legacyParts = await storeMessageAttachments({
           messageId: created.id,
           objectStore: this.objectStore,
           ...(this.malwareScanning === undefined
@@ -153,6 +226,16 @@ export class ChatTransferService {
             ? {}
             : { attachments: message.attachments }),
         });
+        const typedParts = await materializeTransferParts({
+          createdAt: created.createdAt,
+          messageId: created.id,
+          parts: message.parts ?? [],
+          positionOffset: 1 + legacyParts.length,
+          repository,
+          subject: input.subject,
+          workspaceId: chat.workspaceId,
+        });
+        const parts = [...legacyParts, ...typedParts];
         if (parts.length > 0) await repository.createMessageParts(parts);
       }
       if (previousId !== undefined)
@@ -161,7 +244,7 @@ export class ChatTransferService {
         input.subject,
         "chat.import",
         chat,
-        { messageCount: input.messages.length },
+        { messageCount: importedMessages.length },
         repository,
       );
     });
@@ -231,10 +314,24 @@ export class ChatTransferService {
         );
         copiedIds.set(message.id, copiedMessage.id);
         if (!includeAttachments) continue;
-        const copiedParts = copyAttachmentParts(
-          await repository.listMessageParts(message.id),
-          copiedMessage.id,
-        );
+        const sourceParts = await repository.listMessageParts(message.id);
+        const legacyParts = copyAttachmentParts(sourceParts, copiedMessage.id);
+        const transferParts = await portableTransferParts({
+          parts: sourceParts,
+          repository,
+          subject: input.subject,
+          workspaceId: source.workspaceId,
+        });
+        const typedParts = await materializeTransferParts({
+          createdAt: copiedMessage.createdAt,
+          messageId: copiedMessage.id,
+          parts: transferParts,
+          positionOffset: 1 + legacyParts.length,
+          repository,
+          subject: input.subject,
+          workspaceId: source.workspaceId,
+        });
+        const copiedParts = [...legacyParts, ...typedParts];
         copiedAttachmentCount += copiedParts.length;
         if (copiedParts.length > 0) {
           await repository.createMessageParts(copiedParts);
@@ -269,11 +366,11 @@ export class ChatTransferService {
     });
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     subject: AuthSubject,
-    action: string,
+    action: A,
     chat: Chat,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
     repository: RomeoRepository = this.repository,
   ) {
     await writeAuditLog(repository, {
@@ -318,19 +415,4 @@ function copyMessage(
     ...(parentId === undefined ? {} : { parentId }),
     createdAt: message.createdAt,
   };
-}
-
-function copyAttachmentParts(
-  parts: MessagePart[],
-  messageId: string,
-): MessagePart[] {
-  return parts
-    .filter((part) => part.type === "attachment")
-    .map((part) => ({
-      id: createId("msg_part"),
-      messageId,
-      type: "attachment",
-      content: part.content,
-      metadata: { ...part.metadata },
-    }));
 }

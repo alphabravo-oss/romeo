@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { AuthSubject } from "@romeo/auth";
 
 import { InMemoryRomeoRepository } from "../repositories/in-memory";
-import { AnalyticsService, formatAdminAnalyticsSummaryCsv } from "./analytics-service";
+import {
+  AnalyticsService,
+  formatAdminAnalyticsSummaryCsv,
+} from "./analytics-service";
 import { summarizeBackgroundJobs } from "./job-service";
 import type { ProviderOperationalSummary } from "./provider-operational-summary";
 
@@ -25,9 +28,8 @@ describe("AnalyticsService.summary", () => {
         name: "priced",
         displayName: "Priced",
         enabled: true,
-        capabilities: (
-          await repository.listModels(subject.orgId)
-        )[0]!.capabilities,
+        capabilities: (await repository.listModels(subject.orgId))[0]!
+          .capabilities,
         contextWindow: 8000,
         pricing: { inputTokenUsd: 0.001, outputTokenUsd: 0.002 },
         defaultParameters: { maxOutputTokens: 1024 },
@@ -41,7 +43,7 @@ describe("AnalyticsService.summary", () => {
       sourceId: "run_old",
       metric: "run.started",
       quantity: 1,
-      unit: "count",
+      unit: "run",
       metadata: {},
       createdAt: "2026-07-01T00:00:00.000Z",
     });
@@ -53,7 +55,7 @@ describe("AnalyticsService.summary", () => {
       sourceId: "run_new",
       metric: "run.started",
       quantity: 1,
-      unit: "count",
+      unit: "run",
       metadata: {},
       createdAt: "2026-08-10T12:00:00.000Z",
     });
@@ -77,9 +79,21 @@ describe("AnalyticsService.summary", () => {
       sourceId: "run_new",
       metric: "sse.reconnect",
       quantity: 1,
-      unit: "count",
+      unit: "connection",
       metadata: {},
       createdAt: "2026-08-10T12:00:02.000Z",
+    });
+    await repository.createUsageEvent({
+      id: "usage_tokens_reported",
+      orgId: subject.orgId,
+      actorId: subject.id,
+      sourceType: "run",
+      sourceId: "run_new",
+      metric: "llm.input_token.reported",
+      quantity: 12,
+      unit: "token",
+      metadata: { modelId: "model_priced" },
+      createdAt: "2026-08-10T12:00:03.000Z",
     });
 
     const summary = await new AnalyticsService(repository).summary(subject, {
@@ -93,11 +107,11 @@ describe("AnalyticsService.summary", () => {
       from: "2026-08-01T00:00:00.000Z",
       to: "2026-08-12T00:00:00.000Z",
     });
-    expect(summary.usage.eventCount).toBe(3);
-    expect(summary.usage.activityEventCount).toBe(2);
+    expect(summary.usage.eventCount).toBe(4);
+    expect(summary.usage.activityEventCount).toBe(3);
     expect(summary.usage.runsStarted).toBe(1);
-    expect(summary.usage.totalTokens).toBe(10);
-    expect(summary.usage.estimatedCostUsd).toBeCloseTo(0.01);
+    expect(summary.usage.totalTokens).toBe(12);
+    expect(summary.usage.estimatedCostUsd).toBeCloseTo(0.012);
     expect(summary.usage.unpricedTokenQuantity).toBe(0);
     expect(summary.attention.models.map((model) => model.modelId)).toEqual(
       expect.arrayContaining([
@@ -106,7 +120,9 @@ describe("AnalyticsService.summary", () => {
       ]),
     );
     expect(
-      summary.attention.models.find((model) => model.modelId === "model_priced"),
+      summary.attention.models.find(
+        (model) => model.modelId === "model_priced",
+      ),
     ).toBeUndefined();
 
     const csv = formatAdminAnalyticsSummaryCsv(summary);
@@ -131,6 +147,27 @@ function emptyProviderSummary(): ProviderOperationalSummary {
     },
     providers: [],
     runtime: {
+      apiDeprecations: {
+        generatedAt: "2026-08-12T00:00:00.000Z",
+        observationScope: "process",
+        observationStartedAt: "2026-08-12T00:00:00.000Z",
+        observationWindowSeconds: 0,
+        operations: [],
+      },
+      capabilityFlags: {
+        observationScope: "process",
+        resolutions: [],
+        total: 0,
+      },
+      capabilityAssignments: {
+        observationScope: "process",
+        resolutions: [],
+        total: 0,
+      },
+      idempotency: {
+        observationScope: "process",
+        outcomes: [],
+      },
       contextInputTokensAverage: 0,
       lookbackSeconds: 3600,
       objectStoreFailureCount: 0,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useLocale } from "../lib/i18n";
+import "../styles/app-content.css";
 import { OverlayHeader, OverlayShell } from "./OverlayShell";
 
 export function ShortcutsModal({

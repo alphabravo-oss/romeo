@@ -1,27 +1,22 @@
-import type { QueryClient } from "@tanstack/react-query";
+import { useMutation, type QueryClient } from "@tanstack/react-query";
 
+import type { Message } from "../features/types";
 import {
-  deleteMessage,
-  updateAttachmentRetention,
-  updateMessageFeedback,
-} from "../features";
-import type { Message, MessageFeedbackState } from "../features/types";
-import {
-  getActiveRun,
-  messagesQueryKey,
-  writeChatMessages,
-} from "../lib/run-registry";
+  deleteMessageMutationOptions,
+  updateAttachmentRetentionMutationOptions,
+  updateMessageFeedbackMutationOptions,
+} from "../features/chats/mutation-options";
+import { getActiveRun, writeChatMessages } from "../lib/run-registry";
 import { normalizeFeedbackReasonCode } from "./chat-enterprise";
 import { isMessageActionEnabled } from "./turn-rollback";
 import { clientMessageId } from "./workspace-controller-media";
-
-// A root's children become roots, so the key is dropped rather than set to
-// undefined: Message is exactOptionalPropertyTypes, and `parentId: undefined`
-// is not the same shape as an absent parentId to anything that reads it.
-function reparent(message: Message, parentId: string | undefined): Message {
-  const { parentId: _replaced, ...rest } = message;
-  return parentId === undefined ? rest : { ...rest, parentId };
-}
+import { safeUserErrorMessage } from "../lib/safe-user-error";
+import * as appQueryKeys from "../lib/app-query-keys";
+import { invalidateCachedResourceExactly } from "../lib/server-mutation-options";
+import {
+  activeMessagePageQueryOptions,
+  resetActiveMessagePages,
+} from "../lib/message-page-query";
 
 interface ChatMessageStateOptions {
   activeChatId: string | undefined;
@@ -36,26 +31,50 @@ export function useChatMessageState({
   queryClient,
   setError,
 }: ChatMessageStateOptions) {
+  const deleteMessageMutation = useMutation(deleteMessageMutationOptions());
+  const retentionMutation = useMutation(
+    updateAttachmentRetentionMutationOptions(),
+  );
+  const feedbackMutation = useMutation(updateMessageFeedbackMutationOptions());
   // The transcript is a query, not local state, so refreshing it is an
   // invalidation rather than a second fetch that would race the cached one.
   // This runs when a run settles, which can be long after the reader moved to
   // another chat, so every key here is addressed to `chatId` -- never to
   // whatever chat is on screen.
-  async function syncPersistedMessages(chatId: string) {
-    await queryClient.invalidateQueries({
-      queryKey: ["messageFeedback", chatId],
-    });
+  async function syncPersistedMessages(
+    chatId: string,
+    optimisticMessageIds: readonly string[] = [],
+  ) {
+    await invalidateCachedResourceExactly(
+      queryClient,
+      appQueryKeys.messageFeedback(chatId),
+    );
     // A live run owns this chat's transcript. Re-selecting the chat mid-answer
     // would otherwise replace what has streamed so far with the empty
     // assistant row the server holds until the run reaches a terminal state.
     if (getActiveRun(chatId)?.isStreaming === true) return;
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: messagesQueryKey(chatId) }),
+      resetActiveMessagePages(queryClient, chatId),
       // The chat carries the leaf pointer that selects which branch is on
       // screen, and the run just moved it. Refetched together so the pointer
       // and the rows it addresses never disagree about which turn is newest.
-      queryClient.invalidateQueries({ queryKey: ["chat", chatId] }),
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: appQueryKeys.chat(chatId),
+      }),
     ]);
+    const terminalLeafMessageId = optimisticMessageIds.at(-1);
+    if (terminalLeafMessageId !== undefined) {
+      await queryClient.fetchInfiniteQuery(
+        activeMessagePageQueryOptions(chatId, terminalLeafMessageId),
+      );
+    }
+    if (optimisticMessageIds.length > 0) {
+      const persisted = new Set(optimisticMessageIds);
+      writeChatMessages(queryClient, chatId, (current) =>
+        current.filter((message) => !persisted.has(message.id)),
+      );
+    }
   }
 
   function appendMessage(
@@ -64,9 +83,10 @@ export function useChatMessageState({
     content: string,
     attachments?: Message["attachments"],
     parentId?: string,
+    messageId = clientMessageId(),
   ): string {
     const message: Message = {
-      id: clientMessageId(),
+      id: messageId,
       chatId,
       role,
       content,
@@ -77,7 +97,7 @@ export function useChatMessageState({
     }
     if (parentId !== undefined) message.parentId = parentId;
     writeChatMessages(queryClient, chatId, (current) => [...current, message]);
-    return message.id;
+    return messageId;
   }
 
   function restoreMessages(chatId: string, snapshot: readonly Message[]): void {
@@ -93,7 +113,7 @@ export function useChatMessageState({
     setError(undefined);
     try {
       const normalizedReason = normalizeFeedbackReasonCode(rating, reasonCode);
-      const feedback = await updateMessageFeedback({
+      await feedbackMutation.mutateAsync({
         chatId: activeChatId,
         messageId,
         rating,
@@ -101,14 +121,8 @@ export function useChatMessageState({
           ? {}
           : { reasonCode: normalizedReason }),
       });
-      queryClient.setQueryData<Record<string, MessageFeedbackState>>(
-        ["messageFeedback", activeChatId],
-        (current) => ({ ...current, [messageId]: feedback }),
-      );
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Unable to save feedback.",
-      );
+      setError(safeUserErrorMessage(caught, "Unable to save feedback."));
     }
   }
 
@@ -123,35 +137,13 @@ export function useChatMessageState({
       return;
     setError(undefined);
     try {
-      await deleteMessage(activeChatId, messageId);
-      // Mirror the repository's splice rather than just dropping the row: the
-      // children of a deleted mid-conversation message would otherwise still
-      // name a parent that is gone, chatPath would stop walking there, and the
-      // whole branch above the deletion would vanish from the screen. Nothing
-      // corrects it later either -- the transcript query is staleTime: Infinity.
-      writeChatMessages(queryClient, activeChatId, (current) => {
-        const grandparentId = current.find(
-          (item) => item.id === messageId,
-        )?.parentId;
-        return current
-          .filter((item) => item.id !== messageId)
-          .map((item) =>
-            item.parentId === messageId
-              ? reparent(item, grandparentId)
-              : item,
-          );
+      await deleteMessageMutation.mutateAsync({
+        chatId: activeChatId,
+        messageId,
       });
-      // The server also retargets the chat's leaf pointer when it named the
-      // deleted row. Refetch it rather than guessing: chatPath tolerates a
-      // dangling pointer by falling back to the newest message, which is a
-      // different branch than the one the server chose.
-      await queryClient.invalidateQueries({
-        queryKey: ["chat", activeChatId],
-      });
+      await syncPersistedMessages(activeChatId);
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Unable to delete message.",
-      );
+      setError(safeUserErrorMessage(caught, "Unable to delete message."));
     }
   }
 
@@ -170,31 +162,16 @@ export function useChatMessageState({
       return;
     setError(undefined);
     try {
-      await updateAttachmentRetention({
+      await retentionMutation.mutateAsync({
         chatId: activeChatId,
         messageId,
         attachmentId,
         retainedInContext,
       });
-      writeChatMessages(queryClient, activeChatId, (current) =>
-        current.map((message) =>
-          message.id !== messageId || message.attachments === undefined
-            ? message
-            : {
-                ...message,
-                attachments: message.attachments.map((attachment) =>
-                  attachment.id === attachmentId
-                    ? { ...attachment, retainedInContext }
-                    : attachment,
-                ),
-              },
-        ),
-      );
+      await resetActiveMessagePages(queryClient, activeChatId);
     } catch (caught) {
       setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to update attachment context.",
+        safeUserErrorMessage(caught, "Unable to update attachment context."),
       );
     }
   }

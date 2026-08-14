@@ -67,6 +67,7 @@ export async function buildComplianceReport(
         {
           configured: configuredRetention !== undefined,
           auditLogRetentionDays: retention.auditLogRetentionDays,
+          runEventRetentionDays: retention.runEventRetentionDays,
           updatedAt: retention.updatedAt,
         },
       ),
@@ -258,6 +259,7 @@ function defaultRetention(
   return {
     orgId: subject.orgId,
     auditLogRetentionDays: 365,
+    runEventRetentionDays: 30,
     fileRetentionDays: null,
     workspaceFileRetentionDays: {},
     userFileRetentionDays: {},

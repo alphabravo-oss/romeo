@@ -1,26 +1,22 @@
 import { Button, EmptyState, Input, NativeSelect, Textarea } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
 import { useEffect, useState } from "react";
 
 import {
-  getWebSearchConfiguration,
-  updateWebSearchConfiguration,
+  updateWebSearchConfigurationMutationOptions,
+  webSearchConfigurationQueryOptions,
 } from "../features/web";
 import { toast } from "../lib/toast";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
 import { Section } from "./console";
 import { AdminDisclosure } from "./AdminDisclosure";
-import { SettingsSection } from "./SettingsSection";
 
 export function WebSearchPanel() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const query = useQuery({
-    queryKey: ["webSearchConfiguration"],
-    queryFn: getWebSearchConfiguration,
-  });
+  const query = useQuery(webSearchConfigurationQueryOptions());
   const [provider, setProvider] = useState<"brave" | "searxng" | "tavily">(
     "searxng",
   );
@@ -50,37 +46,8 @@ export function WebSearchPanel() {
     setUnknownPublicationDatePolicy(query.data.unknownPublicationDatePolicy);
     setUnreachableUrlPolicy(query.data.unreachableUrlPolicy);
   }, [query.data]);
-  const save = useMutation({
-    mutationFn: () =>
-      updateWebSearchConfiguration({
-        provider,
-        endpointUrl,
-        maxResults,
-        allowedDomains: lines(allowedDomains),
-        blockedDomains: lines(blockedDomains),
-        freshnessMaxAgeDays:
-          freshnessMaxAgeDays.trim() === ""
-            ? null
-            : Number(freshnessMaxAgeDays),
-        unknownPublicationDatePolicy,
-        unreachableUrlPolicy,
-        ...(credentialRef.trim()
-          ? { credentialRef: credentialRef.trim() }
-          : {}),
-      }),
-    onSuccess: async () => {
-      setCredentialRef("");
-      await queryClient.invalidateQueries({
-        queryKey: ["webSearchConfiguration"],
-      });
-      toast(t("searchSettingsSaved"), "success");
-    },
-  });
-  const toggle = useMutation({
-    mutationFn: (enabled: boolean) => updateWebSearchConfiguration({ enabled }),
-    onSuccess: async () =>
-      queryClient.invalidateQueries({ queryKey: ["webSearchConfiguration"] }),
-  });
+  const save = useMutation(updateWebSearchConfigurationMutationOptions());
+  const toggle = useMutation(updateWebSearchConfigurationMutationOptions());
   const enabled = query.data?.enabled === true;
   const isDirty =
     query.data !== undefined &&
@@ -98,6 +65,34 @@ export function WebSearchPanel() {
         query.data.unknownPublicationDatePolicy ||
       unreachableUrlPolicy !== query.data.unreachableUrlPolicy);
 
+  function saveConfiguration() {
+    save.mutate(
+      {
+        provider,
+        endpointUrl,
+        maxResults,
+        allowedDomains: lines(allowedDomains),
+        blockedDomains: lines(blockedDomains),
+        freshnessMaxAgeDays:
+          freshnessMaxAgeDays.trim() === ""
+            ? null
+            : Number(freshnessMaxAgeDays),
+        unknownPublicationDatePolicy,
+        unreachableUrlPolicy,
+        ...(credentialRef.trim()
+          ? { credentialRef: credentialRef.trim() }
+          : {}),
+      },
+      {
+        onSuccess: () => {
+          setCredentialRef("");
+          toast(t("searchSettingsSaved"), "success");
+          save.reset();
+        },
+      },
+    );
+  }
+
   return (
     <Section
       actions={
@@ -105,7 +100,9 @@ export function WebSearchPanel() {
           <Input
             checked={enabled}
             disabled={toggle.isPending || (enabled && isDirty)}
-            onChange={(event) => toggle.mutate(event.currentTarget.checked)}
+            onChange={(event) =>
+              toggle.mutate({ enabled: event.currentTarget.checked })
+            }
             type="checkbox"
           />{" "}
           {t("enabled")}
@@ -119,10 +116,10 @@ export function WebSearchPanel() {
           className="mt-4 grid gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            save.mutate();
+            saveConfiguration();
           }}
         >
-          <SettingsSection
+          <Section
             description={t("webSearchProviderDescription")}
             title={t("webSearchProviderSection")}
           >
@@ -186,12 +183,12 @@ export function WebSearchPanel() {
                 ? null
                 : ` · ${query.data.health.lastErrorCode}`}
             </div>
-          </SettingsSection>
+          </Section>
           <AdminDisclosure
             description={t("webSearchPolicyDescription")}
             title={t("webSearchPolicySection")}
           >
-            <SettingsSection
+            <Section
               description={t("webSearchPolicyDescription")}
               title={t("webSearchPolicySection")}
             >
@@ -284,10 +281,12 @@ export function WebSearchPanel() {
                   </NativeSelect>
                 </label>
               </div>
-            </SettingsSection>
+            </Section>
           </AdminDisclosure>
           {save.error ? (
-            <div className="rm-composer-error">{save.error.message}</div>
+            <div className="rm-composer-error" role="alert">
+              {safeUserErrorMessage(save.error, t("unexpectedAsyncFailure"))}
+            </div>
           ) : null}
           <Button variant="primary" disabled={save.isPending} type="submit">
             {t("saveConfiguration")}

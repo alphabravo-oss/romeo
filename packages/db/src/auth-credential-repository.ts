@@ -69,6 +69,13 @@ export class PgAuthCredentialRepository extends PgUserAuthCredentialRepository {
     return this.apiAccess.updateDeviceAuthorization(record);
   }
 
+  rotateDeviceAuthorization(input: {
+    authorization: DeviceAuthorizationRecord;
+    expectedRefreshHash: string;
+  }): Promise<DeviceAuthorizationRecord | undefined> {
+    return this.apiAccess.rotateDeviceAuthorization(input);
+  }
+
   listServiceAccounts(orgId: string): Promise<ServiceAccountRecord[]> {
     return this.apiAccess.listServiceAccounts(orgId);
   }

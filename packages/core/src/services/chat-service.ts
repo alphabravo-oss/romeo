@@ -20,6 +20,14 @@ import { ChatAttachmentService } from "./chat-attachment-service";
 import { ChatFeedbackService } from "./chat-feedback-service";
 import type { FileMalwareScanner, FileMalwareScanPolicy } from "./file-service";
 import { ChatLifecycleService } from "./chat-lifecycle-service";
+import {
+  ChatMessagePageService,
+  type ChatMessagePage,
+} from "./chat-message-page-service";
+import {
+  ChatMessageSearchService,
+  type ChatMessageSearchResult,
+} from "./chat-message-search-service";
 import { attachMessageParts } from "./message-attachments";
 import { ChatTemporaryService } from "./chat-temporary-service";
 import {
@@ -32,13 +40,17 @@ export class ChatService {
   private readonly attachments: ChatAttachmentService;
   private readonly feedback: ChatFeedbackService;
   private readonly lifecycle: ChatLifecycleService;
+  private readonly messagePages: ChatMessagePageService;
+  private readonly messageSearch: ChatMessageSearchService;
   private readonly temporaryChats: ChatTemporaryService;
   private readonly transfer: ChatTransferService;
 
   constructor(
     private readonly repository: RomeoRepository,
     objectStore: ObjectStore = disabledObjectStore,
-    malwareScanning?: {
+    options?: {
+      messagePageCursorSecrets?: readonly [string, ...string[]];
+      messageSearchCursorSecrets?: readonly [string, ...string[]];
       policy: FileMalwareScanPolicy;
       scanner?: FileMalwareScanner;
     },
@@ -46,12 +58,20 @@ export class ChatService {
     this.attachments = new ChatAttachmentService(repository, objectStore);
     this.feedback = new ChatFeedbackService(repository);
     this.lifecycle = new ChatLifecycleService(repository);
+    this.messagePages = new ChatMessagePageService(
+      repository,
+      options?.messagePageCursorSecrets,
+    );
+    this.messageSearch = new ChatMessageSearchService(
+      repository,
+      options?.messageSearchCursorSecrets,
+    );
     this.temporaryChats = new ChatTemporaryService(repository, objectStore);
     this.transfer = new ChatTransferService(
       repository,
       objectStore,
       this.lifecycle,
-      malwareScanning,
+      options,
     );
   }
 
@@ -153,6 +173,27 @@ export class ChatService {
       this.repository,
       await this.repository.listMessages(chatId),
     );
+  }
+
+  messagePage(input: {
+    branchLeafMessageId?: string;
+    chatId: string;
+    cursor?: string;
+    direction: "older";
+    limit: number;
+    subject: AuthSubject;
+  }): Promise<ChatMessagePage> {
+    return this.messagePages.list(input);
+  }
+
+  searchMessages(input: {
+    chatId: string;
+    cursor?: string;
+    limit: number;
+    query: string;
+    subject: AuthSubject;
+  }): Promise<ChatMessageSearchResult> {
+    return this.messageSearch.search(input);
   }
 
   messageFeedback(input: {

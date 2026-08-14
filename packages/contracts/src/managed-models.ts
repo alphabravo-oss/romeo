@@ -30,6 +30,7 @@ import {
   ManagedModelKnowledgeBindingSchema,
   UpdateManagedModelKnowledgeBindingSchema,
   BindManagedModelVoiceSchema,
+  PublishManagedModelSchema,
 } from "./managed-model-schemas";
 import { getManagedModelReadinessRoute } from "./managed-model-readiness";
 import {
@@ -119,7 +120,7 @@ export const updateManagedModelRoute = createRoute({
   request: {
     params: agentPath,
     body: {
-      required: true,
+      required: false,
       content: { "application/json": { schema: UpdateManagedModelSchema } },
     },
   },
@@ -300,8 +301,15 @@ export const publishManagedModelRoute = createRoute({
   path: "/api/v1/agents/{agentId}/versions",
   operationId: "managedModels.publish",
   summary: "Publish a managed-model version",
-  description: "Publishes an immutable snapshot of the current draft.",
-  request: { params: agentPath },
+  description:
+    "Creates an immutable candidate snapshot or publishes a snapshot directly to production. Candidate snapshots do not change the live managed model until promoted with the rollback/promote endpoint.",
+  request: {
+    params: agentPath,
+    body: {
+      required: true,
+      content: { "application/json": { schema: PublishManagedModelSchema } },
+    },
+  },
   responses: {
     201: jsonResponse("Published managed-model version", versionResponse),
     ...managedModelMutationErrors,

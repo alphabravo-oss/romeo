@@ -44,20 +44,41 @@ interface ResolvedOidcDiscovery extends OidcDiscoveryDocument {
   configuration: OpenidClientConfiguration;
 }
 
+interface CacheEntry<T> {
+  expiresAt: number;
+  promise: Promise<T>;
+}
+
+const defaultCacheTtlMs = 5 * 60 * 1000;
+const defaultJwksRefreshCooldownMs = 30 * 1000;
+
 export class OidcClient {
   private readonly discoveryCache = new Map<
     string,
-    Promise<ResolvedOidcDiscovery>
+    CacheEntry<ResolvedOidcDiscovery>
   >();
-  private readonly jwksCache = new Map<string, Promise<JsonWebKey[]>>();
+  private readonly jwksCache = new Map<string, CacheEntry<JsonWebKey[]>>();
+  private readonly lastJwksRefresh = new Map<string, number>();
   private readonly fetchImpl: typeof fetch;
+  private readonly cacheTtlMs: number;
+  private readonly jwksRefreshCooldownMs: number;
+  private readonly now: () => number;
 
   constructor(
     private readonly repository: RomeoRepository,
     private readonly env: RomeoEnv,
-    options: { fetchImpl?: typeof fetch } = {},
+    options: {
+      cacheTtlMs?: number;
+      fetchImpl?: typeof fetch;
+      jwksRefreshCooldownMs?: number;
+      now?: () => number;
+    } = {},
   ) {
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.cacheTtlMs = options.cacheTtlMs ?? defaultCacheTtlMs;
+    this.jwksRefreshCooldownMs =
+      options.jwksRefreshCooldownMs ?? defaultJwksRefreshCooldownMs;
+    this.now = options.now ?? Date.now;
   }
 
   async configured(orgId = "org_default"): Promise<ResolvedOidcClientConfig> {
@@ -89,12 +110,7 @@ export class OidcClient {
     options: { expectedNonce?: string; orgId?: string } = {},
   ): Promise<OidcMappedSubject> {
     const { config, discovery, orgId } = await this.configured(options.orgId);
-    const claims = await verifyOidcJwt(token, {
-      issuer: discovery.issuer,
-      audience: config.clientId,
-      jwks: await this.jwks(discovery),
-      clockToleranceSeconds: 60,
-    });
+    const claims = await this.verifyClaims(token, config, discovery);
     if (
       options.expectedNonce !== undefined &&
       claims.nonce !== options.expectedNonce
@@ -115,12 +131,7 @@ export class OidcClient {
       input.orgId,
       input.config,
     );
-    const claims = await verifyOidcJwt(token, {
-      issuer: discovery.issuer,
-      audience: config.clientId,
-      jwks: await this.jwks(discovery),
-      clockToleranceSeconds: 60,
-    });
+    const claims = await this.verifyClaims(token, config, discovery);
     if (
       input.expectedNonce !== undefined &&
       claims.nonce !== input.expectedNonce
@@ -133,19 +144,73 @@ export class OidcClient {
     issuer: string,
     clientId: string,
   ): Promise<ResolvedOidcDiscovery> {
-    const existing = this.discoveryCache.get(issuer);
-    if (existing !== undefined) return existing;
+    // openid-client Configuration objects embed the client ID. Reusing a
+    // configuration across tenants that share an issuer can therefore send
+    // one tenant's client ID in another tenant's authorization flow.
+    const cacheKey = `${issuer}\u0000${clientId}`;
+    const existing = this.discoveryCache.get(cacheKey);
+    if (existing !== undefined && existing.expiresAt > this.now())
+      return existing.promise;
+    this.discoveryCache.delete(cacheKey);
     const promise = this.fetchDiscovery(issuer, clientId);
-    this.discoveryCache.set(issuer, promise);
+    const entry = { expiresAt: this.now() + this.cacheTtlMs, promise };
+    this.discoveryCache.set(cacheKey, entry);
+    void promise.catch(() => {
+      if (this.discoveryCache.get(cacheKey) === entry)
+        this.discoveryCache.delete(cacheKey);
+    });
     return promise;
   }
 
-  private jwks(discovery: OidcDiscoveryDocument): Promise<JsonWebKey[]> {
+  private jwks(
+    discovery: OidcDiscoveryDocument,
+    forceRefresh = false,
+  ): Promise<JsonWebKey[]> {
     const existing = this.jwksCache.get(discovery.jwksUri);
-    if (existing !== undefined) return existing;
+    if (
+      !forceRefresh &&
+      existing !== undefined &&
+      existing.expiresAt > this.now()
+    )
+      return existing.promise;
     const promise = this.fetchJwks(discovery.jwksUri);
-    this.jwksCache.set(discovery.jwksUri, promise);
+    const entry = { expiresAt: this.now() + this.cacheTtlMs, promise };
+    this.jwksCache.set(discovery.jwksUri, entry);
+    void promise.catch(() => {
+      if (this.jwksCache.get(discovery.jwksUri) === entry)
+        this.jwksCache.delete(discovery.jwksUri);
+    });
     return promise;
+  }
+
+  private async verifyClaims(
+    token: string,
+    config: ResolvedSsoOidcConfig,
+    discovery: OidcDiscoveryDocument,
+  ): Promise<Record<string, unknown>> {
+    let jwks = await this.jwks(discovery);
+    const kid = tokenKeyId(token);
+    if (
+      kid !== undefined &&
+      !jwks.some((key) => (key as { kid?: unknown }).kid === kid) &&
+      this.canRefreshJwks(discovery.jwksUri)
+    ) {
+      this.lastJwksRefresh.set(discovery.jwksUri, this.now());
+      jwks = await this.jwks(discovery, true);
+    }
+    return verifyOidcJwt(token, {
+      issuer: discovery.issuer,
+      audience: config.clientId,
+      jwks,
+      clockToleranceSeconds: 60,
+    });
+  }
+
+  private canRefreshJwks(jwksUri: string): boolean {
+    const last = this.lastJwksRefresh.get(jwksUri);
+    return (
+      last === undefined || this.now() - last >= this.jwksRefreshCooldownMs
+    );
   }
 
   private async fetchDiscovery(
@@ -216,6 +281,21 @@ export class OidcClient {
   }
 }
 
+function tokenKeyId(token: string): string | undefined {
+  try {
+    const encoded = token.split(".")[0];
+    if (encoded === undefined) return undefined;
+    const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString()) as {
+      kid?: unknown;
+    };
+    return typeof parsed.kid === "string" && parsed.kid.length <= 300
+      ? parsed.kid
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const defaultOidcScopes: Scope[] = [
   "me:read",
   "organizations:read",
@@ -231,7 +311,9 @@ async function persistMappedWorkspaceMemberships(
     repository.listWorkspaces(input.orgId),
     repository.listResourceGrants(input.orgId),
   ]);
-  const knownWorkspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+  const knownWorkspaceIds = new Set(
+    workspaces.map((workspace) => workspace.id),
+  );
   for (const workspaceId of input.workspaceIds) {
     if (!knownWorkspaceIds.has(workspaceId)) continue;
     const exists = grants.some(

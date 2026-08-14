@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { platformDisabledCapabilityIdsSchema } from "./capability-platform-policy";
 
 export const platformEnvShape = {
   APP_ORIGIN: z.string().url().default("http://localhost:3000"),
@@ -29,6 +30,7 @@ export const platformEnvShape = {
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  CAPABILITY_PLATFORM_DISABLED_IDS: platformDisabledCapabilityIdsSchema,
   TENANCY_MODE: z.enum(["single", "multi"]).default("single"),
   GA_CHECKLIST_PATH: z.string().default(""),
   GA_TARGET_PREFLIGHT_PATH: z.string().default(""),

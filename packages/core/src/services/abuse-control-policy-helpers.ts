@@ -5,6 +5,7 @@ import type {
   UpdateAbuseControlPolicyRequest,
 } from "../domain/abuse-controls";
 import type { BillingPlan } from "../domain/entities";
+import type { AuditMetadata } from "./audit-log";
 import type { StoredAbuseControlPolicy } from "./abuse-control-types";
 
 const settingKeyPrefix = "abuse_controls.org.v1:";
@@ -68,7 +69,7 @@ export function uniqueReasons(
 export function policyAuditMetadata(
   previous: AbuseControlPolicyReport,
   next: AbuseControlPolicyReport,
-): Record<string, unknown> {
+): AuditMetadata<"admin.abuse_controls.update"> {
   return {
     suspended: next.suspension.suspended,
     suspensionChanged:

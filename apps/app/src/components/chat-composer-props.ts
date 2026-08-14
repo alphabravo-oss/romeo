@@ -8,6 +8,7 @@ import type {
   PendingDocumentAttachment,
   PendingImageAttachment,
 } from "./useWorkspaceAttachments";
+import type { ComposerReasoningMode } from "./composer-reasoning-policy";
 
 export interface ChatComposerProps {
   attachedUrls: string[];
@@ -46,8 +47,13 @@ export interface ChatComposerProps {
   }) => void;
   onInspectContext: () => void;
   onKnowledgeBaseIdsChange: (knowledgeBaseIds: string[] | undefined) => void;
+  onCancelAttachment: (attachmentId: string) => void;
+  onMoveDocumentAttachment: (attachmentId: string, direction: -1 | 1) => void;
+  onMoveImageAttachment: (attachmentId: string, direction: -1 | 1) => void;
   onRemoveDocumentAttachment: (attachmentId: string) => void;
   onRemoveImageAttachment: (attachmentId: string) => void;
+  onRetryDocumentAttachment: (attachmentId: string) => void;
+  onSelectDocumentPage: (attachmentId: string, page: number) => void;
   onRemoveUrl: (url: string) => void;
   customModels?: AgentGalleryItem[];
   selectedCustomModelId?: string;
@@ -57,6 +63,9 @@ export interface ChatComposerProps {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onToggleWebSearch: (enabled: boolean) => void;
   onToggleAgenticRag: (enabled: boolean) => void;
+  onRoutingModeChange: (mode: "selected" | "economy") => void;
+  onResearchModeChange: (mode: "standard" | "deep") => void;
+  onReasoningModeChange: (mode: ComposerReasoningMode) => void;
   onTranscribeAudio: (blob: Blob) => Promise<void>;
   onTranscriptionError: (message: string) => void;
   providers: Provider[];
@@ -67,5 +76,8 @@ export interface ChatComposerProps {
   agenticRagAvailable: boolean;
   agenticRagForced: boolean;
   agenticRagEnabled: boolean;
+  routingMode: "selected" | "economy";
+  researchMode: "standard" | "deep";
+  reasoningMode: ComposerReasoningMode;
   workspaceId: string | undefined;
 }

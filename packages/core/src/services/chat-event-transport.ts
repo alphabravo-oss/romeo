@@ -11,6 +11,7 @@ export interface ChatEventTransport {
     handler: (event: ChatChangedEvent) => void,
     options?: { afterEventId?: string },
   ): Promise<() => void>;
+  close?(): void;
 }
 
 /**

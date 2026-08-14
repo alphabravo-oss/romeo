@@ -13,6 +13,10 @@ import { agentModels } from "./agents";
 import { baseModels } from "./providers";
 import { organizations, workspaces } from "./tenancy";
 import { users } from "./users";
+import type {
+  EvalReasoningPolicyEvidenceRecord,
+  EvalRunMetricsRecord,
+} from "../eval-records";
 
 export const evalSuites = pgTable(
   "eval_suites",
@@ -102,6 +106,9 @@ export const evalRuns = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    reasoningPolicy:
+      jsonb("reasoning_policy").$type<EvalReasoningPolicyEvidenceRecord>(),
+    metrics: jsonb("metrics").$type<EvalRunMetricsRecord>(),
   },
   (table) => ({
     evalRunsAgentCreatedIdx: index("eval_runs_agent_created_idx").on(

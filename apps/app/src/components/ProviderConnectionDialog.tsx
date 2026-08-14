@@ -1,9 +1,19 @@
 import { useRef, useState } from "react";
 import { Button, Field, InlineError, Input, Select, Textarea } from "@romeo/ui";
+import { useQuery } from "@tanstack/react-query";
 
 import type { Provider, ProviderKind } from "../features/providers/types";
+import { providerKindsQueryOptions } from "../lib/api-query-options";
 import { useLocale } from "../lib/i18n";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { FormDialog } from "./FormDialog";
+import {
+  parseProviderModelIds,
+  providerConfigurationField,
+  providerFieldCopyKeys,
+  providerKindDefinition,
+  providerKindOptions,
+} from "./provider-connection-catalog";
 
 export interface ProviderFormInput {
   type: ProviderKind;
@@ -37,6 +47,24 @@ export function ConnectionDialog({
   );
   const [error, setError] = useState<string>();
   const submitting = useRef(false);
+  const providerKindsQuery = useQuery(providerKindsQueryOptions());
+  const definitions = providerKindsQuery.data ?? [];
+  const definition = providerKindDefinition(definitions, type);
+  const nameField = providerConfigurationField(definition, "name");
+  const baseUrlField = providerConfigurationField(definition, "baseUrl");
+  const credentialField = providerConfigurationField(
+    definition,
+    "credentialRef",
+  );
+  const modelIdsField = providerConfigurationField(definition, "modelIds");
+  const schemaReady =
+    nameField !== undefined &&
+    baseUrlField !== undefined &&
+    credentialField !== undefined &&
+    modelIdsField !== undefined;
+  const credentialRequired =
+    credentialField?.required === true && !provider?.credentialConfigured;
+  const typeOptions = providerKindOptions(definitions);
 
   const presets = [
     {
@@ -93,18 +121,34 @@ export function ConnectionDialog({
           const submittedName = formText(form, "name").trim();
           const submittedBaseUrl = formText(form, "baseUrl").trim();
           const submittedApiKey = formText(form, "apiKey").trim();
+          if (!schemaReady) {
+            setError(t("providerKindsUnavailable"));
+            submitting.current = false;
+            return;
+          }
+          const parsedModelIds = parseProviderModelIds(
+            formText(form, "modelIds"),
+            modelIdsField.maxItems ?? 2_000,
+          );
+          if (parsedModelIds.exceeded) {
+            setError(
+              t("providerModelLimitExceeded", {
+                max: modelIdsField.maxItems ?? 2_000,
+              }),
+            );
+            submitting.current = false;
+            return;
+          }
           void onSave({
             type,
             name: submittedName,
             baseUrl: submittedBaseUrl,
             ...(submittedApiKey ? { apiKey: submittedApiKey } : {}),
-            modelIds: parseModelIds(formText(form, "modelIds")),
+            modelIds: parsedModelIds.items,
           })
             .catch((caught) =>
               setError(
-                caught instanceof Error
-                  ? caught.message
-                  : t("couldNotSaveConnection"),
+                safeUserErrorMessage(caught, t("couldNotSaveConnection")),
               ),
             )
             .finally(() => {
@@ -124,10 +168,16 @@ export function ConnectionDialog({
                 setName(preset.name);
                 setBaseUrl(preset.baseUrl);
               }}
-              options={presets.map((preset) => ({
-                label: preset.label,
-                value: preset.id,
-              }))}
+              options={presets
+                .filter((preset) =>
+                  definitions.some(
+                    (definition) => definition.kind === preset.type,
+                  ),
+                )
+                .map((preset) => ({
+                  label: preset.label,
+                  value: preset.id,
+                }))}
               placeholder={t("chooseProviderPreset")}
               value={presetId}
             />
@@ -136,31 +186,54 @@ export function ConnectionDialog({
         <Field id="connection-type" label={t("connectionType")}>
           <Select
             name="type"
-            disabled={provider !== undefined}
+            disabled={provider !== undefined || providerKindsQuery.isPending}
             onValueChange={(value) => setType(value as ProviderKind)}
-            options={[
-              { label: "Anthropic", value: "anthropic" },
-              { label: "OpenAI-compatible", value: "openai-compatible" },
-              {
-                label: "OpenAI Responses-compatible",
-                value: "openai-responses-compatible",
-              },
-              { label: "Ollama", value: "ollama" },
-            ]}
+            options={
+              typeOptions.length > 0
+                ? typeOptions
+                : provider === undefined
+                  ? []
+                  : [{ label: provider.type, value: provider.type }]
+            }
             value={type}
           />
         </Field>
-        <Field id="connection-name" label={t("name")} required>
+        {definition === undefined ? null : (
+          <p className="text-sm text-muted" role="status">
+            {t("providerDeploymentClassifications", {
+              classifications: definition.supportedClassifications
+                .map((classification) =>
+                  t(
+                    classification === "local"
+                      ? "providerClassificationLocal"
+                      : "providerClassificationExternal",
+                  ),
+                )
+                .join(", "),
+            })}
+          </p>
+        )}
+        <Field
+          id="connection-name"
+          label={t(providerFieldCopyKeys.name)}
+          required={nameField?.required === true}
+        >
           <Input
+            maxLength={nameField?.maxLength}
             name="name"
             onChange={(event) => setName(event.currentTarget.value)}
             placeholder="Local Ollama"
-            required
+            required={nameField?.required === true}
             value={name}
           />
         </Field>
-        <Field id="connection-url" label={t("apiBaseUrl")} required>
+        <Field
+          id="connection-url"
+          label={t(providerFieldCopyKeys.baseUrl)}
+          required={baseUrlField?.required === true}
+        >
           <Input
+            maxLength={baseUrlField?.maxLength}
             name="baseUrl"
             onChange={(event) => setBaseUrl(event.currentTarget.value)}
             placeholder={
@@ -170,21 +243,25 @@ export function ConnectionDialog({
                   ? "http://localhost:11434"
                   : "https://api.openai.com/v1"
             }
-            required
+            required={baseUrlField?.required === true}
             type="url"
             value={baseUrl}
           />
         </Field>
         <Field
           id="connection-key"
-          label={`${t("apiKey")} ${
+          label={`${t(providerFieldCopyKeys.credentialRef)} ${
             provider?.credentialConfigured
               ? `(${t("keepCurrentCredential")})`
-              : `(${t("optional")})`
+              : credentialRequired
+                ? `(${t("providerRequired")})`
+                : `(${t("optional")})`
           }`}
+          required={credentialRequired}
         >
           <Input
             autoComplete="new-password"
+            maxLength={credentialField?.maxLength}
             name="apiKey"
             onChange={(event) => setApiKey(event.currentTarget.value)}
             placeholder={
@@ -192,6 +269,7 @@ export function ConnectionDialog({
                 ? t("credentialConfigured")
                 : t("encryptedManagedSecret")
             }
+            required={credentialRequired}
             type="password"
             value={apiKey}
           />
@@ -202,9 +280,10 @@ export function ConnectionDialog({
             <Field
               description={t("allowedModelsDescription")}
               id="connection-models"
-              label={t("allowedModelIds")}
+              label={t(providerFieldCopyKeys.modelIds)}
             >
               <Textarea
+                maxLength={modelIdsField?.maxLength}
                 name="modelIds"
                 onChange={(event) => setModelIds(event.currentTarget.value)}
                 placeholder={`${t("leaveBlankDiscovery")}\n${
@@ -218,9 +297,17 @@ export function ConnectionDialog({
             </Field>
           </div>
         </details>
+        {providerKindsQuery.isPending ? (
+          <p className="text-sm text-muted" role="status">
+            {t("providerKindsLoading")}
+          </p>
+        ) : null}
+        {providerKindsQuery.isError ? (
+          <InlineError>{t("providerKindsUnavailable")}</InlineError>
+        ) : null}
         {error ? <InlineError>{error}</InlineError> : null}
         <Button
-          disabled={busy || !name.trim() || !baseUrl.trim()}
+          disabled={busy || !schemaReady || !name.trim() || !baseUrl.trim()}
           pending={busy}
           type="submit"
           variant="primary"
@@ -230,17 +317,6 @@ export function ConnectionDialog({
       </form>
     </FormDialog>
   );
-}
-
-function parseModelIds(value: string): string[] {
-  return [
-    ...new Set(
-      value
-        .split(/[\n,]/u)
-        .map((id) => id.trim())
-        .filter(Boolean),
-    ),
-  ];
 }
 
 function formText(form: FormData, name: string): string {

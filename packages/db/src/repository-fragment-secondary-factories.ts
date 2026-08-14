@@ -1,5 +1,8 @@
 import type { RomeoDatabase } from "./client";
 import { PgAccessRepository } from "./access-repository";
+import { PgCapabilityAssignmentRepository } from "./capability-assignment-repository";
+import { PgCapabilityFlagRepository } from "./capability-flag-repository";
+import { PgIdempotencyRepository } from "./idempotency-repository";
 import { PgCollaborationChannelRepository } from "./collaboration-channel-repository";
 import { PgCollaborationRepository } from "./collaboration-repository";
 import { PgDataConnectorRepository } from "./data-connector-repository";
@@ -16,6 +19,9 @@ import { PgWebhookRepository } from "./webhook-repository";
 import { PgWorkflowRepository } from "./workflow-repository";
 import type {
   AccessRepositoryFragment,
+  CapabilityAssignmentRepositoryFragment,
+  CapabilityFlagRepositoryFragment,
+  IdempotencyRepositoryFragment,
   CollaborationChannelRepositoryFragment,
   CollaborationRepositoryFragment,
   DataConnectorRepositoryFragment,
@@ -37,11 +43,18 @@ export function createFileRepositoryFragment(
 ): FileRepositoryFragment {
   const repository = new PgFileRepository(db);
   return {
+    advanceFileLifecycleLease:
+      repository.advanceFileLifecycleLease.bind(repository),
+    claimNextFileLifecycle: repository.claimNextFileLifecycle.bind(repository),
     createFileObject: repository.createFileObject.bind(repository),
+    finishFileLifecycleLease:
+      repository.finishFileLifecycleLease.bind(repository),
     getFileObject: repository.getFileObject.bind(repository),
     listFileObjects: repository.listFileObjects.bind(repository),
     listAuthorizedFileObjectsPage:
       repository.listAuthorizedFileObjectsPage.bind(repository),
+    renewFileLifecycleLease:
+      repository.renewFileLifecycleLease.bind(repository),
     updateFileObject: repository.updateFileObject.bind(repository),
   };
 }
@@ -79,14 +92,20 @@ export function createRunRepositoryFragment(
 ): RunRepositoryFragment {
   const repository = new PgRunRepository(db);
   return {
+    allocateRunEventSequence:
+      repository.allocateRunEventSequence.bind(repository),
     appendRunEvents: repository.appendRunEvents.bind(repository),
     createRun: repository.createRun.bind(repository),
     createToolCall: repository.createToolCall.bind(repository),
+    deleteCompactedRunEventsBefore:
+      repository.deleteCompactedRunEventsBefore.bind(repository),
     finalizeRun: repository.finalizeRun.bind(repository),
     getRun: repository.getRun.bind(repository),
     listRuns: repository.listRuns.bind(repository),
+    listRunEventsAfter: repository.listRunEventsAfter.bind(repository),
     listRunEvents: repository.listRunEvents.bind(repository),
     listToolCalls: repository.listToolCalls.bind(repository),
+    listToolCallsForRun: repository.listToolCallsForRun.bind(repository),
     updateRun: repository.updateRun.bind(repository),
   };
 }
@@ -154,9 +173,11 @@ export function createOperationalRepositoryFragment(
     deleteAuditLogsBefore: repository.deleteAuditLogsBefore.bind(repository),
     getSystemSetting: repository.getSystemSetting.bind(repository),
     listAuditLogs: repository.listAuditLogs.bind(repository),
+    queryAuditLogs: repository.queryAuditLogs.bind(repository),
     listBackgroundJobs: repository.listBackgroundJobs.bind(repository),
     listSystemSettings: repository.listSystemSettings.bind(repository),
     listUsageEvents: repository.listUsageEvents.bind(repository),
+    listUsageEventsForRun: repository.listUsageEventsForRun.bind(repository),
     renewBackgroundJobLease:
       repository.renewBackgroundJobLease.bind(repository),
     updateBackgroundJobWithLease:
@@ -172,11 +193,18 @@ export function createWebhookRepositoryFragment(
 ): WebhookRepositoryFragment {
   const repository = new PgWebhookRepository(db);
   return {
+    claimDueWebhookDeliveries:
+      repository.claimDueWebhookDeliveries.bind(repository),
+    claimWebhookDelivery: repository.claimWebhookDelivery.bind(repository),
+    completeWebhookDeliveryAttempt:
+      repository.completeWebhookDeliveryAttempt.bind(repository),
     createWebhookDelivery: repository.createWebhookDelivery.bind(repository),
     createWebhookSubscription:
       repository.createWebhookSubscription.bind(repository),
     getWebhookSubscription: repository.getWebhookSubscription.bind(repository),
     listWebhookDeliveries: repository.listWebhookDeliveries.bind(repository),
+    listWebhookDeliveriesPage:
+      repository.listWebhookDeliveriesPage.bind(repository),
     listWebhookSubscriptions:
       repository.listWebhookSubscriptions.bind(repository),
     updateWebhookDelivery: repository.updateWebhookDelivery.bind(repository),
@@ -209,9 +237,13 @@ export function createGovernanceBillingRepositoryFragment(
 ): GovernanceBillingRepositoryFragment {
   const repository = new PgGovernanceBillingRepository(db);
   return {
+    acquireBillingSyncLock: repository.acquireBillingSyncLock.bind(repository),
+    createBillingEventReceipt:
+      repository.createBillingEventReceipt.bind(repository),
     createQuotaBucket: repository.createQuotaBucket.bind(repository),
     deleteQuotaBucket: repository.deleteQuotaBucket.bind(repository),
     getBillingPlan: repository.getBillingPlan.bind(repository),
+    getBillingEventReceipt: repository.getBillingEventReceipt.bind(repository),
     getRetentionPolicy: repository.getRetentionPolicy.bind(repository),
     listQuotaBuckets: repository.listQuotaBuckets.bind(repository),
     updateQuotaBucket: repository.updateQuotaBucket.bind(repository),
@@ -260,12 +292,16 @@ export function createCollaborationRepositoryFragment(
       repository.deleteWorkspaceFolderItem.bind(repository),
     getPromptTemplate: repository.getPromptTemplate.bind(repository),
     getWorkspaceFolder: repository.getWorkspaceFolder.bind(repository),
+    listAuthorizedWorkspaceFoldersByIds:
+      repository.listAuthorizedWorkspaceFoldersByIds.bind(repository),
     listPromptTemplates: repository.listPromptTemplates.bind(repository),
     listAuthorizedPromptTemplatesPage:
       repository.listAuthorizedPromptTemplatesPage.bind(repository),
     listResourceFavorites: repository.listResourceFavorites.bind(repository),
     listWorkspaceFolderItems:
       repository.listWorkspaceFolderItems.bind(repository),
+    listAuthorizedWorkspaceFolderItemsBatch:
+      repository.listAuthorizedWorkspaceFolderItemsBatch.bind(repository),
     listWorkspaceFolders: repository.listWorkspaceFolders.bind(repository),
     updatePromptTemplate: repository.updatePromptTemplate.bind(repository),
     updateWorkspaceFolder: repository.updateWorkspaceFolder.bind(repository),
@@ -282,6 +318,49 @@ export function createAccessRepositoryFragment(
     deleteResourceGrantsForPrincipal:
       repository.deleteResourceGrantsForPrincipal.bind(repository),
     listResourceGrants: repository.listResourceGrants.bind(repository),
+  };
+}
+
+export function createCapabilityAssignmentRepositoryFragment(
+  db: RomeoDatabase,
+): CapabilityAssignmentRepositoryFragment {
+  const repository = new PgCapabilityAssignmentRepository(db);
+  return {
+    listActiveCapabilityAssignments:
+      repository.listActiveCapabilityAssignments.bind(repository),
+    listCapabilityAssignmentHistory:
+      repository.listCapabilityAssignmentHistory.bind(repository),
+    replaceCapabilityAssignment:
+      repository.replaceCapabilityAssignment.bind(repository),
+  };
+}
+
+export function createCapabilityFlagRepositoryFragment(
+  db: RomeoDatabase,
+): CapabilityFlagRepositoryFragment {
+  const repository = new PgCapabilityFlagRepository(db);
+  return {
+    listActiveOrganizationCapabilityFlags:
+      repository.listActiveOrganizationCapabilityFlags.bind(repository),
+    listOrganizationCapabilityFlagHistory:
+      repository.listOrganizationCapabilityFlagHistory.bind(repository),
+    replaceOrganizationCapabilityFlag:
+      repository.replaceOrganizationCapabilityFlag.bind(repository),
+  };
+}
+
+export function createIdempotencyRepositoryFragment(
+  db: RomeoDatabase,
+): IdempotencyRepositoryFragment {
+  const repository = new PgIdempotencyRepository(db);
+  return {
+    claimIdempotencyReceipt:
+      repository.claimIdempotencyReceipt.bind(repository),
+    completeIdempotencyReceipt:
+      repository.completeIdempotencyReceipt.bind(repository),
+    failIdempotencyReceipt: repository.failIdempotencyReceipt.bind(repository),
+    deleteExpiredIdempotencyReceipts:
+      repository.deleteExpiredIdempotencyReceipts.bind(repository),
   };
 }
 

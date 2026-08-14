@@ -1,5 +1,4 @@
 import { and, count, eq, inArray, or, sql, type SQL } from "drizzle-orm";
-import { fileTombstoneFields } from "@romeo/core";
 
 import type { RomeoDatabase } from "./client";
 import {
@@ -29,6 +28,11 @@ import {
   type DataDeletionResourceTypeRecord,
 } from "./data-deletion-records";
 import { activeChatLegalHold } from "./data-deletion-legal-hold";
+import { deleteFileObjectData } from "./file-data-deletion";
+import {
+  reconcileFileReferenceIds,
+  referencedFileIdsForChat,
+} from "./message-file-reference-repository";
 
 export type * from "./data-deletion-records";
 export { activeChatLegalHold };
@@ -78,7 +82,17 @@ export class PgDataDeletionRepository {
           );
         }
 
+        const transaction = tx as unknown as RomeoDatabase;
+        const referencedFileIds = await referencedFileIdsForChat(
+          transaction,
+          resourceId,
+        );
         await deleteChatData(tx, orgId, resourceId, context);
+        await reconcileFileReferenceIds(
+          transaction,
+          referencedFileIds,
+          new Date().toISOString(),
+        );
         return context.plan;
       }
       if (resourceType === "file_object") {
@@ -300,31 +314,6 @@ async function fileObjectDeletionPlan(
       objectStoreBytes: file.sizeBytes,
     },
   };
-}
-
-async function deleteFileObjectData(
-  db: DataDeletionDatabase,
-  orgId: string,
-  fileId: string,
-): Promise<void> {
-  const deletedAt = new Date();
-  await db
-    .delete(resourceGrants)
-    .where(
-      and(
-        eq(resourceGrants.orgId, orgId),
-        eq(resourceGrants.resourceType, "file"),
-        eq(resourceGrants.resourceId, fileId),
-      ),
-    );
-  await db
-    .update(objectRecords)
-    .set({
-      ...fileTombstoneFields(fileId, deletedAt.toISOString()),
-      deletedAt,
-      updatedAt: deletedAt,
-    })
-    .where(and(eq(objectRecords.orgId, orgId), eq(objectRecords.id, fileId)));
 }
 
 async function knowledgeSourceDeletionPlan(

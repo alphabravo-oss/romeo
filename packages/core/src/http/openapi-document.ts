@@ -1,5 +1,6 @@
 import {
   contractOpenApiDocument,
+  ROMEO_PRODUCT_VERSION,
   type OpenApiDocumentResponse,
 } from "@romeo/contracts";
 
@@ -16,7 +17,7 @@ export function openApiDocument(options: OpenApiDocumentOptions = {}) {
     ...document,
     info: {
       title: "Romeo API",
-      version: "0.1.0",
+      version: ROMEO_PRODUCT_VERSION,
       description: "Romeo API contract.",
     },
     servers: [{ url: "/api/v1" }],

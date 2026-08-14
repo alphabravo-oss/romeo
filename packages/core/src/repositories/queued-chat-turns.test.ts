@@ -22,6 +22,30 @@ const baseTurn: QueuedChatTurn = {
 };
 
 describe("queued chat turn repository", () => {
+  it("preserves a bounded reasoning policy and old rows without one", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const withPolicy: QueuedChatTurn = {
+      ...baseTurn,
+      id: "queued_turn_reasoning",
+      idempotencyKey: "request_reasoning",
+      reasoningPolicy: {
+        schemaVersion: 1,
+        mode: "auto",
+        effort: "high",
+      },
+    };
+
+    await repository.createQueuedChatTurn(baseTurn);
+    await repository.createQueuedChatTurn(withPolicy);
+
+    expect(await repository.getQueuedChatTurn(withPolicy.id)).toMatchObject({
+      reasoningPolicy: { schemaVersion: 1, mode: "auto", effort: "high" },
+    });
+    expect(
+      (await repository.getQueuedChatTurn(baseTurn.id))?.reasoningPolicy,
+    ).toBeUndefined();
+  });
+
   it("deduplicates creates by organization, chat, and idempotency key", async () => {
     const repository = new InMemoryRomeoRepository();
     const first = await repository.createQueuedChatTurn(baseTurn);

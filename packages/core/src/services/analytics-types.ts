@@ -73,6 +73,21 @@ export interface AdminAnalyticsUsageSummary {
   unpricedTokenQuantity: number;
 }
 
+export interface AdminAnalyticsAdoptionSummary {
+  activeUserCount: number;
+  activeWorkspaceCount: number;
+  engagedUserCount: number;
+  completedRunsPerActiveUser: number;
+  runCompletionRate: number | null;
+  toolSuccessRate: number | null;
+  feedback: {
+    negativeCount: number;
+    positiveCount: number;
+    positiveRate: number | null;
+    totalCount: number;
+  };
+}
+
 export interface AdminAnalyticsAttention {
   models: Array<{
     displayName: string;
@@ -128,6 +143,7 @@ export interface AdminAnalyticsJobSummary {
 }
 
 export interface AdminAnalyticsSummary {
+  adoption: AdminAnalyticsAdoptionSummary;
   attention: AdminAnalyticsAttention;
   evals: AdminAnalyticsEvalSummary;
   generatedAt: string;

@@ -26,7 +26,6 @@
   "languageDescription": "Cambia inmediatamente la navegación y las etiquetas de chat compatibles.",
   "large": "Grande",
   "light": "Claro",
-  "loading": "Cargando…",
   "interfaceDensityMedium": "Mediano",
   "member": "Miembro",
   "memory": "Memoria",
@@ -88,7 +87,7 @@
   "textSize": "Tamaño del texto",
   "theme": "Tema",
   "themeDescription": "Sistema sigue la configuración clara u oscura de tu dispositivo.",
-  "updated": "actualizada",
+  "contentUpdated": "actualizada",
   "user": "Usuario",
   "visibility": "Visibilidad"
 }

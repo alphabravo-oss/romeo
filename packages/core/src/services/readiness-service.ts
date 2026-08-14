@@ -6,6 +6,7 @@ import {
   type RomeoRepository,
 } from "../domain/repository";
 import { AuthProviderSettingsService } from "./auth-provider-settings-service";
+import { capabilityPlatformPolicyCheck } from "./capability-platform-policy";
 import type { KnowledgeVectorStoreReadinessProbe } from "./knowledge-vector-store";
 import {
   type VectorStoreDeploymentPosture,
@@ -121,6 +122,7 @@ export class ReadinessService {
           )
         : pass("dev_seeded_login", "Seeded development login is disabled.", {}),
       repositoryPersistenceCheck(getRomeoRepositoryRuntime(this.repository)),
+      capabilityPlatformPolicyCheck(this.env),
       databaseUrlCheck(this.env),
       postgresConnectionSecurityCheck(this.env),
       vectorStoreCheck,
@@ -163,6 +165,7 @@ export class ReadinessService {
       retentionPolicy
         ? pass("retention_policy", "Audit retention policy is configured.", {
             auditLogRetentionDays: retentionPolicy.auditLogRetentionDays,
+            runEventRetentionDays: retentionPolicy.runEventRetentionDays,
           })
         : warn("retention_policy", "Audit retention policy is missing.", {}),
       quotas.length > 0

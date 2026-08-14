@@ -1,9 +1,12 @@
 import {
+  evalsCreateCaseFromMessageFeedback,
   evalsCreateSuite,
   evalsRateResult,
   evalsRunSuite,
   type CreateEvalSuiteRequest,
+  type CreateEvalCaseFromFeedbackRequest,
   type RateEvalResultRequest,
+  type RunEvalSuiteRequest,
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
@@ -13,11 +16,25 @@ export async function createEvalSuite(input: CreateEvalSuiteRequest) {
   return response.data.data;
 }
 
-export async function runEvalSuite(suiteId: string) {
+export async function createEvalCaseFromMessageFeedback(
+  input: CreateEvalCaseFromFeedbackRequest,
+) {
   configureBrowserApiClients();
+  const response = await evalsCreateCaseFromMessageFeedback({
+    body: input,
+    throwOnError: true,
+  });
+  return response.data.data;
+}
+
+export async function runEvalSuite(
+  input: RunEvalSuiteRequest & { suiteId: string },
+) {
+  configureBrowserApiClients();
+  const { suiteId, ...body } = input;
   const response = await evalsRunSuite({
     path: { suiteId },
-    body: {},
+    body,
     throwOnError: true,
   });
   return response.data.data;

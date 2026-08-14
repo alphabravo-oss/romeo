@@ -54,6 +54,53 @@ export interface EvalRun {
   createdBy: string;
   createdAt: string;
   completedAt: string;
+  reasoningPolicy?: EvalReasoningPolicyEvidence;
+  metrics?: EvalRunMetrics;
+}
+
+export interface EvalReasoningPolicyEvidence {
+  requested: ProviderReasoningPolicy;
+  effective: ProviderReasoningPolicy;
+}
+
+export interface EvalRunMetrics {
+  latencyMs: number;
+  usage: {
+    coverage: "complete" | "partial" | "none";
+    inputTokens?: number;
+    outputTokens?: number;
+    reasoningTokens?: number;
+    source?:
+      | "anthropic"
+      | "ollama"
+      | "openai-compatible"
+      | "openai-responses-compatible";
+  };
+  costBasis: "reported_tokens" | "unavailable";
+  estimatedCostUsd?: number;
+}
+
+export interface EvalReasoningComparison {
+  suiteId: string;
+  generatedAt: string;
+  variants: Array<{
+    modelId: string;
+    requested: ProviderReasoningPolicy;
+    effective: ProviderReasoningPolicy;
+    runCount: number;
+    averageScore: number;
+    averageLatencyMs: number;
+    reportedInputTokens: number | null;
+    reportedOutputTokens: number | null;
+    reportedReasoningTokens: number | null;
+    estimatedCostUsd: number | null;
+    trend: Array<{
+      runId: string;
+      score: number;
+      latencyMs: number;
+      completedAt: string;
+    }>;
+  }>;
 }
 
 export interface EvalRunResult {
@@ -99,6 +146,8 @@ export interface EvalDashboardRunPoint {
   status: EvalRun["status"];
   score: number;
   completedAt: string;
+  reasoningPolicy?: EvalReasoningPolicyEvidence;
+  metrics?: EvalRunMetrics;
 }
 
 export interface EvalDashboard {
@@ -186,3 +235,4 @@ export interface EvalReleaseCandidateEvidence {
     rawToolResultBodiesReturned: false;
   };
 }
+import type { ProviderReasoningPolicy } from "@romeo/providers";

@@ -8,7 +8,9 @@ import {
 } from "./model-config-attention";
 
 function model(
-  overrides: Partial<Parameters<typeof collectModelConfigAttention>[0][number]> = {},
+  overrides: Partial<
+    Parameters<typeof collectModelConfigAttention>[0][number]
+  > = {},
 ) {
   return {
     id: "model_chat",

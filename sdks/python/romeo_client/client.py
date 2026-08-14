@@ -279,24 +279,47 @@ class RomeoClient:
             body["limit"] = limit
         return self.data("POST", "/api/v1/browser-automation-tasks/expire", json_body=body)
 
-    def stream_run_events(self, run_id: str):
+    def stream_run_events(self, run_id: str, after_sequence: int = 0):
+        if isinstance(after_sequence, bool) or after_sequence < 0:
+            raise ValueError("after_sequence must be a non-negative integer")
         path = "/api/v1/runs/" + quote(run_id, safe="") + "/events"
         url = self.base_url + path
-        headers = {"accept": "text/event-stream"}
+        headers = {
+            "accept": "text/event-stream",
+            "Last-Event-ID": str(after_sequence),
+        }
         if self.api_key:
             headers["authorization"] = "Bearer " + self.api_key
         request = Request(url, headers=headers, method="GET")
         with urlopen(request, timeout=self.timeout) as response:
             event_type = None
+            event_id = None
+            data_lines: list[str] = []
             for raw_line in response:
-                line = raw_line.decode("utf-8").strip()
-                if line.startswith("event:"):
-                    event_type = line[6:].strip()
+                line = raw_line.decode("utf-8").rstrip("\r\n")
+                if line == "":
+                    if data_lines:
+                        data = json.loads("\n".join(data_lines))
+                        sequence = data.get("sequence") if isinstance(data, dict) else None
+                        parsed_event_id = int(event_id) if event_id is not None and event_id.isdecimal() else None
+                        cursor = sequence if isinstance(sequence, int) and not isinstance(sequence, bool) else parsed_event_id
+                        if cursor is None or cursor > after_sequence:
+                            if event_type is not None and isinstance(data, dict):
+                                data.setdefault("event", event_type)
+                            if cursor is not None:
+                                after_sequence = cursor
+                            yield data
+                    event_type = None
+                    event_id = None
+                    data_lines = []
+                elif line.startswith(":"):
+                    continue
+                elif line.startswith("event:"):
+                    event_type = line[6:].lstrip()
+                elif line.startswith("id:"):
+                    event_id = line[3:].lstrip()
                 elif line.startswith("data:"):
-                    data = json.loads(line[5:].strip())
-                    if event_type is not None:
-                        data["event"] = event_type
-                    yield data
+                    data_lines.append(line[5:].lstrip())
 
     def _format_path(self, path: str, path_params: dict[str, Any] | None) -> str:
         formatted = path

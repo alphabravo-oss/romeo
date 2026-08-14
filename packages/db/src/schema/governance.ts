@@ -8,6 +8,9 @@ export const retentionPolicies = pgTable("retention_policies", {
     .primaryKey()
     .references(() => organizations.id),
   auditLogRetentionDays: integer("audit_log_retention_days").notNull(),
+  runEventRetentionDays: integer("run_event_retention_days")
+    .notNull()
+    .default(30),
   fileRetentionDays: integer("file_retention_days"),
   workspaceFileRetentionDays: jsonb("workspace_file_retention_days")
     .$type<Record<string, number | null>>()

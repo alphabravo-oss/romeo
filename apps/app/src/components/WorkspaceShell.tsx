@@ -4,47 +4,54 @@ import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid.mjs";
 import SquarePen from "lucide-react/dist/esm/icons/square-pen.mjs";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Suspense,
   useCallback,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 
-import { listChatShares } from "../features/collaboration";
-import type { QueuedChatTurn } from "../features/runs";
+import { chatSharesQueryOptions } from "../features/collaboration";
 import { type AppCommand, useRegisterCommands } from "../lib/commands";
 import { useLocale } from "../lib/i18n";
 import { resolveChatAuthorNames } from "./assistant-selection";
 import { isGenericCustomModelName, resolveChatAccess } from "./chat-enterprise";
 import { ChatHeaderTitle } from "./ChatHeaderTitle";
-import { ChatPanel } from "./ChatPanel";
 import { downloadChatMarkdown } from "./workspace-nav-portability";
 import { useWorkspaceController } from "./useWorkspaceController";
+import { useWorkspaceShellMessageHandlers } from "./useWorkspaceShellMessageHandlers";
 import { useWorkspace } from "./WorkspaceContext";
 import { WorkspaceNav } from "./WorkspaceNav";
-import {
-  WorkspaceNavDialogs,
-  type WorkspaceNavDialog,
-} from "./WorkspaceNavDialogs";
+import type { WorkspaceNavDialog } from "./WorkspaceNavDialogs";
 import { WorkspaceUserMenu } from "./WorkspaceUserMenu";
 import { ThemeToggle } from "./ThemeToggle";
+import {
+  LazyChatPanel,
+  LazyWorkspaceNavDialogs,
+} from "./workspace-lazy-components";
 
 const subscribeToHydration = () => () => {};
 
 export function WorkspaceShell({
   onAgentSelection,
   onChatSelection,
+  onBranchSelection,
   requestedAgentId,
   requestedChatId,
+  requestedLeafMessageId,
 }: {
   onAgentSelection?: (agentId: string) => void;
   onChatSelection?: (
     chatId: string | undefined,
     options?: { replace: boolean },
   ) => void;
+  onBranchSelection?: (
+    leafMessageId: string | undefined,
+    options?: { replace: boolean },
+  ) => void;
   requestedAgentId?: string;
   requestedChatId?: string;
+  requestedLeafMessageId?: string;
 }) {
   const { t } = useLocale();
   const hydrated = useSyncExternalStore(
@@ -55,8 +62,10 @@ export function WorkspaceShell({
   const workspace = useWorkspaceController({
     ...(onAgentSelection === undefined ? {} : { onAgentSelection }),
     ...(onChatSelection === undefined ? {} : { onChatSelection }),
+    ...(onBranchSelection === undefined ? {} : { onBranchSelection }),
     ...(requestedAgentId === undefined ? {} : { requestedAgentId }),
     ...(requestedChatId === undefined ? {} : { requestedChatId }),
+    ...(requestedLeafMessageId === undefined ? {} : { requestedLeafMessageId }),
   });
   const { agents, handleNewChat, setActiveAgentId } = workspace;
   const namedCustomModels = useMemo(
@@ -100,12 +109,8 @@ export function WorkspaceShell({
   );
   const [sessionDialog, setSessionDialog] = useState<WorkspaceNavDialog>(null);
   const { workspaceId, workspaces, setWorkspaceId } = useWorkspace();
-  // Product stack: provider → base model → custom model. Custom models are
-  // picker entries, not a separate assistant identity.
   const authorNames = resolveChatAuthorNames({
     agentName: workspace.activeAgent?.name,
-    assistantsEnabled: true,
-    fallbackName: t("shellCustomModel"),
     modelDisplayName: workspace.models.find(
       (model) => model.id === workspace.selectedModelId,
     )?.displayName,
@@ -119,17 +124,15 @@ export function WorkspaceShell({
     (subject?.id !== undefined &&
       activeChat?.createdBy !== undefined &&
       activeChat.createdBy === subject.id);
-  // Shares are only needed when the viewer is not already the owner/admin —
-  // otherwise we would hit the list endpoint on every owned chat open.
-  const chatSharesQuery = useQuery({
-    queryKey: ["chatShares", "access", workspace.activeChatId],
-    queryFn: () => listChatShares(workspace.activeChatId!),
-    enabled:
+  const chatSharesQuery = useQuery(
+    chatSharesQueryOptions(
+      workspace.activeChatId,
+      "access",
       workspace.activeChatId !== undefined &&
-      subject !== undefined &&
-      !isOwnerOrAdmin,
-    staleTime: 30_000,
-  });
+        subject !== undefined &&
+        !isOwnerOrAdmin,
+    ),
+  );
   const chatAccess = useMemo(
     () =>
       resolveChatAccess({
@@ -152,69 +155,24 @@ export function WorkspaceShell({
   // keep their identity -- a fresh arrow per render is a changed prop on every
   // row, and this component re-renders once per streamed token. The controller
   // rebuilds its handlers every render (they close over the draft, the active
-  // chat, the transcript), so the wrappers below are pinned to [] and read the
-  // current controller through a ref instead of capturing the first one.
+  // chat, the transcript), so the wrappers below depend only on a stable ref
+  // and read its latest committed controller instead of capturing the first one.
   //
-  // ponytail: a ref written during render, which a render React then throws
-  // away (StrictMode, offscreen or suspended trees) still writes -- the pinned
-  // callbacks can read a controller from a render that never committed.
-  // Upgrade path: hoist these nine handlers into useWorkspaceController, where
+  // Upgrade path: hoist these ten handlers into useWorkspaceController, where
   // they can be memoised against their real dependencies.
-  const latest = useRef(workspace);
-  latest.current = workspace;
-  const handleAttachmentRetention = useCallback(
-    (messageId: string, attachmentId: string, retained: boolean) =>
-      void latest.current.handleAttachmentRetention(
-        messageId,
-        attachmentId,
-        retained,
-      ),
-    [],
-  );
-  const handleBranch = useCallback(
-    (messageId: string) =>
-      void latest.current.handleBranchFromMessage(messageId),
-    [],
-  );
-  const handleCancelQueuedTurn = useCallback(
-    (turn: QueuedChatTurn) => void latest.current.handleCancelQueuedTurn(turn),
-    [],
-  );
-  const handleContinue = useCallback(
-    () => void latest.current.handleContinueResponse(),
-    [],
-  );
-  const handleDeleteMessage = useCallback(
-    (messageId: string) => void latest.current.handleDeleteMessage(messageId),
-    [],
-  );
-  const handleEditAndResend = useCallback(
-    (messageId: string, content: string) =>
-      latest.current.handleEditAndResend(messageId, content),
-    [],
-  );
-  const handleGenerateSpeech = useCallback(
-    (messageId: string) => void latest.current.handleGenerateSpeech(messageId),
-    [],
-  );
-  const handleRateMessage = useCallback(
-    (
-      messageId: string,
-      rating: "negative" | "none" | "positive",
-      reasonCode?: string,
-    ) => void latest.current.handleRateMessage(messageId, rating, reasonCode),
-    [],
-  );
-  const handleRegenerate = useCallback(
-    () => void latest.current.regenerateLast(),
-    [],
-  );
-  const handleSelectVariant = useCallback(
-    (messageId: string) => void latest.current.handleSelectVariant(messageId),
-    [],
-  );
+  const {
+    handleAttachmentRetention,
+    handleBranch,
+    handleCancelQueuedTurn,
+    handleContinue,
+    handleDeleteMessage,
+    handleEditAndResend,
+    handleGenerateSpeech,
+    handleRateMessage,
+    handleRegenerate,
+    handleSelectVariant,
+  } = useWorkspaceShellMessageHandlers(workspace);
 
-  // Publish chat actions to the ⌘K command registry while this screen is mounted.
   const commands = useMemo<AppCommand[]>(
     () => [
       {
@@ -243,7 +201,7 @@ export function WorkspaceShell({
           {t("shellSkipToChat")}
         </a>
         <section id="main-content" tabIndex={-1}>
-          <div className="rm-empty" role="status">
+          <div className="rm-loading" role="status">
             {t("loading")}
           </div>
         </section>
@@ -336,165 +294,206 @@ export function WorkspaceShell({
           </div>
         </header>
 
-        <ChatPanel
-          activeVoiceProfileId={workspace.activeVoiceProfileId}
-          activeChatId={workspace.activeChatId}
-          activeAgent={
-            workspace.activeAgent === undefined
-              ? undefined
-              : {
-                  name: workspace.activeAgent.name,
-                  ...(workspace.activeAgent.avatarUrl === undefined
-                    ? {}
-                    : { avatarUrl: workspace.activeAgent.avatarUrl }),
-                  ...(workspace.activeAgent.icon === undefined
-                    ? {}
-                    : { icon: workspace.activeAgent.icon }),
+        <Suspense
+          fallback={
+            <div className="rm-loading" role="status">
+              {t("loading")}
+            </div>
+          }
+        >
+          <LazyChatPanel
+            activeVoiceProfileId={workspace.activeVoiceProfileId}
+            activation={{
+              assistantReady: workspace.activeAgent !== undefined,
+              conversationComplete: workspace.chatsTotal > 0,
+              isAdmin: workspace.subject?.isAdmin === true,
+              modelReady: workspace.models.some(
+                (model) => model.enabled && model.available !== false,
+              ),
+              providerReady: workspace.providers.some(
+                (provider) => provider.enabled && provider.credentialConfigured,
+              ),
+            }}
+            activeChatId={workspace.activeChatId}
+            activeAgent={
+              workspace.activeAgent === undefined
+                ? undefined
+                : {
+                    name: workspace.activeAgent.name,
+                    ...(workspace.activeAgent.avatarUrl === undefined
+                      ? {}
+                      : { avatarUrl: workspace.activeAgent.avatarUrl }),
+                    ...(workspace.activeAgent.icon === undefined
+                      ? {}
+                      : { icon: workspace.activeAgent.icon }),
+                  }
+            }
+            chatTitle={
+              workspace.chats.find((chat) => chat.id === workspace.activeChatId)
+                ?.title
+            }
+            nextTurnAuthorName={authorNames.nextTurn}
+            transcriptAuthorName={authorNames.transcript}
+            attachedUrls={workspace.attachedUrls}
+            citations={workspace.citations}
+            contextPreview={workspace.contextPreview}
+            contextPreviewError={workspace.contextPreviewError}
+            canInspectContext={workspace.activeChatId !== undefined}
+            models={workspace.models}
+            providers={workspace.providers}
+            promptSuggestions={
+              workspace.activeAgent?.promptSuggestions?.length
+                ? workspace.activeAgent.promptSuggestions
+                : (workspace.chatExperience?.suggestions ?? [])
+            }
+            selectedModelId={workspace.selectedModelId}
+            systemPrompt={workspace.activeAgent?.systemPrompt}
+            defaultModelId={workspace.defaultModelId}
+            lastReplyModelId={workspace.lastReplyModelId}
+            modelDisplayNames={workspace.modelDisplayNames}
+            customModels={namedCustomModels}
+            {...(workspace.activeAgent === undefined ||
+            isGenericCustomModelName(workspace.activeAgent.name)
+              ? {}
+              : { selectedCustomModelId: workspace.activeAgent.id })}
+            onSelectCustomModel={handleSelectCustomModel}
+            onSelectModel={handleSelectBaseModel}
+            onToggleDefaultModel={(modelId) =>
+              void workspace.handleToggleDefaultModel(modelId)
+            }
+            draft={workspace.draft}
+            documentAttachments={workspace.documentAttachments}
+            error={workspace.error}
+            imageAttachments={workspace.imageAttachments}
+            isGeneratingSpeech={workspace.isGeneratingSpeech}
+            isInspectingContext={workspace.isInspectingContext}
+            isStreaming={workspace.isStreaming}
+            hasOlderMessages={workspace.hasOlderMessages}
+            isLoadingOlderMessages={workspace.isLoadingOlderMessages}
+            isTemporaryChat={
+              workspace.temporaryNextChat ||
+              workspace.chats.find((chat) => chat.id === workspace.activeChatId)
+                ?.temporary === true
+            }
+            legalHoldUntil={
+              workspace.chats.find((chat) => chat.id === workspace.activeChatId)
+                ?.legalHoldUntil
+            }
+            onOpenSourceChat={(sourceChatId) => {
+              void workspace.handleSelectChat(sourceChatId);
+            }}
+            chatAccess={chatAccess}
+            queuedTurns={workspace.queuedTurns}
+            isTranscribingVoice={workspace.isTranscribingVoice}
+            messages={workspace.messages}
+            messageFeedback={workspace.messageFeedback}
+            knowledgeBaseIdsOverride={workspace.knowledgeBaseIdsOverride}
+            webSearchEnabled={workspace.webSearchEnabled}
+            agenticRagAvailable={workspace.agenticRagAvailable}
+            agenticRagForced={workspace.agenticRagForced}
+            agenticRagEnabled={workspace.agenticRagEnabled}
+            routingMode={workspace.routingMode}
+            researchMode={workspace.researchMode}
+            reasoningMode={workspace.reasoningMode}
+            workspaceId={workspace.workspace?.id}
+            onBranch={handleBranch}
+            onCancel={workspace.handleCancel}
+            onCancelQueuedTurn={handleCancelQueuedTurn}
+            onContinue={handleContinue}
+            {...(workspace.subject?.isAdmin === true
+              ? {
+                  onCreateFeedbackEvalCase: (messageId: string) =>
+                    void workspace.handleCreateFeedbackEvalCase(messageId),
                 }
-          }
-          chatTitle={
-            workspace.chats.find((chat) => chat.id === workspace.activeChatId)
-              ?.title
-          }
-          nextTurnAuthorName={authorNames.nextTurn}
-          transcriptAuthorName={authorNames.transcript}
-          attachedUrls={workspace.attachedUrls}
-          citations={workspace.citations}
-          contextPreview={workspace.contextPreview}
-          contextPreviewError={workspace.contextPreviewError}
-          canInspectContext={workspace.activeChatId !== undefined}
-          models={workspace.models}
-          providers={workspace.providers}
-          promptSuggestions={
-            workspace.activeAgent?.promptSuggestions?.length
-              ? workspace.activeAgent.promptSuggestions
-              : (workspace.chatExperience?.suggestions ?? [])
-          }
-          selectedModelId={workspace.selectedModelId}
-          systemPrompt={workspace.activeAgent?.systemPrompt}
-          defaultModelId={workspace.defaultModelId}
-          lastReplyModelId={workspace.lastReplyModelId}
-          modelDisplayNames={workspace.modelDisplayNames}
-          customModels={namedCustomModels}
-          {...(workspace.activeAgent === undefined ||
-          isGenericCustomModelName(workspace.activeAgent.name)
-            ? {}
-            : { selectedCustomModelId: workspace.activeAgent.id })}
-          onSelectCustomModel={handleSelectCustomModel}
-          onSelectModel={handleSelectBaseModel}
-          onToggleDefaultModel={(modelId) =>
-            void workspace.handleToggleDefaultModel(modelId)
-          }
-          draft={workspace.draft}
-          documentAttachments={workspace.documentAttachments}
-          error={workspace.error}
-          imageAttachments={workspace.imageAttachments}
-          isGeneratingSpeech={workspace.isGeneratingSpeech}
-          isInspectingContext={workspace.isInspectingContext}
-          isStreaming={workspace.isStreaming}
-          isTemporaryChat={
-            workspace.temporaryNextChat ||
-            workspace.chats.find((chat) => chat.id === workspace.activeChatId)
-              ?.temporary === true
-          }
-          legalHoldUntil={
-            workspace.chats.find((chat) => chat.id === workspace.activeChatId)
-              ?.legalHoldUntil
-          }
-          onOpenSourceChat={(sourceChatId) => {
-            void workspace.handleSelectChat(sourceChatId);
-          }}
-          chatAccess={chatAccess}
-          queuedTurns={workspace.queuedTurns}
-          isTranscribingVoice={workspace.isTranscribingVoice}
-          messages={workspace.messages}
-          messageFeedback={workspace.messageFeedback}
-          knowledgeBaseIdsOverride={workspace.knowledgeBaseIdsOverride}
-          webSearchEnabled={workspace.webSearchEnabled}
-          agenticRagAvailable={workspace.agenticRagAvailable}
-          agenticRagForced={workspace.agenticRagForced}
-          agenticRagEnabled={workspace.agenticRagEnabled}
-          workspaceId={workspace.workspace?.id}
-          onBranch={handleBranch}
-          onCancel={workspace.handleCancel}
-          onCancelQueuedTurn={handleCancelQueuedTurn}
-          onContinue={handleContinue}
-          onDeleteMessage={handleDeleteMessage}
-          onAttachmentRetention={handleAttachmentRetention}
-          onAttachFiles={(files) => void workspace.handleAttachFiles(files)}
-          onAttachExistingFile={(file) =>
-            void workspace.handleAttachExistingFile(file)
-          }
-          onAddUrl={workspace.handleAddUrl}
-          onDraftChange={workspace.setDraft}
-          onGenerateSpeech={handleGenerateSpeech}
-          onGenerateImages={(input) =>
-            void workspace.handleGenerateImages(input)
-          }
-          onInspectContext={() => void workspace.handleInspectContext()}
-          onKnowledgeBaseIdsChange={workspace.setKnowledgeBaseIdsOverride}
-          onEditAndResend={handleEditAndResend}
-          onRateMessage={handleRateMessage}
-          onRegenerate={handleRegenerate}
-          onRegenerateWith={(input) => void workspace.regenerateLast(input)}
-          onFollowUp={(prompt) => void workspace.handleFollowUp(prompt)}
-          regenerateModels={workspace.models
-            .filter(
-              (model) =>
-                model.enabled &&
-                model.available !== false &&
-                model.id !== workspace.selectedModelId,
-            )
-            .slice(0, 6)
-            .map((model) => ({ id: model.id, label: model.displayName }))}
-          onShareChat={
-            workspace.activeChatId === undefined || chatAccess === "read"
-              ? undefined
-              : () => {
-                  const chat = workspace.chats.find(
-                    (item) => item.id === workspace.activeChatId,
-                  );
-                  if (chat) setSessionDialog({ kind: "share", chat });
-                }
-          }
-          onExportChatMarkdown={
-            workspace.activeChatId === undefined
-              ? undefined
-              : () => {
-                  const chat = workspace.chats.find(
-                    (item) => item.id === workspace.activeChatId,
-                  );
-                  if (chat) void downloadChatMarkdown(chat);
-                }
-          }
-          onRemoveImageAttachment={workspace.handleRemoveImageAttachment}
-          onRemoveDocumentAttachment={workspace.handleRemoveDocumentAttachment}
-          onRemoveUrl={workspace.handleRemoveUrl}
-          onSelectVariant={handleSelectVariant}
-          onToggleWebSearch={workspace.setWebSearchEnabled}
-          onToggleAgenticRag={workspace.setAgenticRagRequested}
-          onTranscribeAudio={(blob) => workspace.handleTranscribeAudio(blob)}
-          onTranscriptionError={workspace.handleTranscriptionError}
-          onSubmit={workspace.handleSubmit}
-          reasoning={workspace.reasoning}
-          runActivities={workspace.runActivities}
-          runWait={workspace.runWait}
-          speechArtifacts={workspace.speechArtifacts}
-          speechMessageId={workspace.speechMessageId}
-          toolCalls={workspace.toolCalls}
-          variantsByMessageId={workspace.variantsByMessageId}
-        />
+              : {})}
+            onDeleteMessage={handleDeleteMessage}
+            onAttachmentRetention={handleAttachmentRetention}
+            onAttachFiles={(files) => void workspace.handleAttachFiles(files)}
+            onAttachExistingFile={(file) =>
+              void workspace.handleAttachExistingFile(file)
+            }
+            onAddUrl={workspace.handleAddUrl}
+            onDraftChange={workspace.setDraft}
+            onGenerateSpeech={handleGenerateSpeech}
+            onGenerateImages={(input) =>
+              void workspace.handleGenerateImages(input)
+            }
+            onInspectContext={() => void workspace.handleInspectContext()}
+            onReasoningModeChange={workspace.setReasoningMode}
+            onLoadOlderMessages={workspace.loadOlderMessages}
+            onKnowledgeBaseIdsChange={workspace.setKnowledgeBaseIdsOverride}
+            onEditAndResend={handleEditAndResend}
+            onRateMessage={handleRateMessage}
+            onRegenerate={handleRegenerate}
+            onRegenerateWith={(input) => void workspace.regenerateLast(input)}
+            onFollowUp={(prompt) => void workspace.handleFollowUp(prompt)}
+            regenerateModels={workspace.models
+              .filter(
+                (model) =>
+                  model.enabled &&
+                  model.available !== false &&
+                  model.id !== workspace.selectedModelId,
+              )
+              .slice(0, 6)
+              .map((model) => ({ id: model.id, label: model.displayName }))}
+            onShareChat={
+              workspace.activeChatId === undefined || chatAccess === "read"
+                ? undefined
+                : () => {
+                    const chat = workspace.chats.find(
+                      (item) => item.id === workspace.activeChatId,
+                    );
+                    if (chat) setSessionDialog({ kind: "share", chat });
+                  }
+            }
+            onExportChatMarkdown={
+              workspace.activeChatId === undefined
+                ? undefined
+                : () => {
+                    const chat = workspace.chats.find(
+                      (item) => item.id === workspace.activeChatId,
+                    );
+                    if (chat) void downloadChatMarkdown(chat);
+                  }
+            }
+            onCancelAttachment={workspace.handleCancelAttachment} onMoveDocumentAttachment={workspace.handleMoveDocumentAttachment} onMoveImageAttachment={workspace.handleMoveImageAttachment} onRetryDocumentAttachment={workspace.handleRetryDocumentAttachment} onSelectDocumentPage={workspace.handleSelectDocumentPage}
+            onRemoveImageAttachment={workspace.handleRemoveImageAttachment}
+            onRemoveDocumentAttachment={
+              workspace.handleRemoveDocumentAttachment
+            }
+            onRemoveUrl={workspace.handleRemoveUrl}
+            onSelectVariant={handleSelectVariant}
+            onToggleWebSearch={workspace.setWebSearchEnabled}
+            onToggleAgenticRag={workspace.setAgenticRagRequested}
+            onRoutingModeChange={workspace.setRoutingMode}
+            onResearchModeChange={workspace.setResearchMode}
+            onTranscribeAudio={(blob) => workspace.handleTranscribeAudio(blob)}
+            onTranscriptionError={workspace.handleTranscriptionError}
+            onSubmit={workspace.handleSubmit}
+            reasoning={workspace.reasoning}
+            runActivities={workspace.runActivities}
+            runWait={workspace.runWait}
+            speechArtifacts={workspace.speechArtifacts}
+            speechMessageId={workspace.speechMessageId}
+            toolCalls={workspace.toolCalls}
+            variantsByMessageId={workspace.variantsByMessageId}
+          />
+        </Suspense>
       </section>
-      <WorkspaceNavDialogs
-        dialog={sessionDialog}
-        folders={[]}
-        onClose={() => setSessionDialog(null)}
-        onRenameChat={(chatId, title) =>
-          void workspace.renameChat(chatId, title)
-        }
-        tags={[]}
-        workspaceId={workspaceId}
-      />
+      {sessionDialog === null ? null : (
+        <Suspense fallback={null}>
+          <LazyWorkspaceNavDialogs
+            dialog={sessionDialog}
+            folders={[]}
+            onClose={() => setSessionDialog(null)}
+            onRenameChat={(chatId, title) =>
+              void workspace.renameChat(chatId, title)
+            }
+            tags={[]}
+            workspaceId={workspaceId}
+          />
+        </Suspense>
+      )}
     </main>
   );
 }

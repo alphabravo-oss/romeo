@@ -442,6 +442,38 @@ function gateDefinitions() {
       exceptionAllowed: false,
       securityCritical: true,
     }),
+    gate({
+      id: "phase22.browser_engine_matrix",
+      phase: "22",
+      title: "Cross-engine browser, accessibility, and hydration matrix",
+      evidence: [
+        evidence("dist/ci/browser-engine-matrix.json", {
+          validator: (content) => {
+            const results = Array.isArray(content?.results)
+              ? content.results
+              : [];
+            const engines = new Set(
+              results
+                .filter((result) => result?.status === "passed")
+                .map((result) => result.engine),
+            );
+            return content?.schemaVersion === 1 &&
+              ["chromium", "firefox", "webkit"].every((engine) =>
+                engines.has(engine),
+              ) &&
+              results.every((result) =>
+                Array.isArray(result?.routes)
+                  ? result.routes.every((route) => route?.axeViolations === 0)
+                  : false,
+              )
+              ? { status: "pass" }
+              : { status: "fail", reason: "browser_matrix_incomplete" };
+          },
+        }),
+      ],
+      exceptionAllowed: false,
+      securityCritical: true,
+    }),
     ...(requireCiGovernanceLive
       ? [
           gate({

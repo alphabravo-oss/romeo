@@ -1,20 +1,24 @@
-import type { QueryClient } from "@tanstack/react-query";
+import { useMutation, type QueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 
-import { archiveChat, updateChat, type SpeechArtifact } from "../features";
+import type { SpeechArtifact } from "../features";
 import {
-  getServerInterfacePreferences,
-  updateServerInterfacePreferences,
-} from "../features/interface-preferences";
-import { cancelQueuedTurn, getActiveChatRun } from "../features/runs";
+  archiveWorkspaceChatMutationOptions,
+  updateWorkspaceChatMutationOptions,
+} from "../features/chats/mutation-options";
+import { workspaceModelPreferenceMutationOptions } from "../features/interface-preferences/mutation-options";
+import { getActiveChatRun } from "../features/runs";
 import type { QueuedChatTurn } from "../features/runs";
-import type { Chat, Message } from "../features/types";
+import { cancelQueuedTurnMutationOptions } from "../features/runs/mutation-options";
 import type { MessageKey } from "../lib/i18n";
-import { deepestLeaf } from "./message-tree";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
+import { apiQueryKeys } from "../lib/api-query-options";
+import * as appQueryKeys from "../lib/app-query-keys";
+import { invalidateCachedResourceExactly } from "../lib/server-mutation-options";
 
 interface WorkspaceChatActionsOptions {
   activeChatId: string | undefined;
-  allMessages: Message[];
+  onBranchSelection?: (leafMessageId: string) => void;
   followQueuedRuns: (chatId: string, previousRunId?: string) => Promise<void>;
   queryClient: QueryClient;
   setActiveAgentId: Dispatch<SetStateAction<string | undefined>>;
@@ -32,20 +36,28 @@ interface WorkspaceChatActionsOptions {
 }
 
 export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
+  const archiveChatMutation = useMutation(
+    archiveWorkspaceChatMutationOptions(),
+  );
+  const cancelQueuedTurnMutation = useMutation(
+    cancelQueuedTurnMutationOptions(),
+  );
+  const updateChatMutation = useMutation(updateWorkspaceChatMutationOptions());
+  const workspaceModelPreferenceMutation = useMutation(
+    workspaceModelPreferenceMutationOptions(),
+  );
   // Addressed by the turn's own chat, not by the chat on screen: the two agree
   // today only because each chat renders its own queue, and a cancel sent to
   // the wrong chat is a 404 rather than a visible failure.
   async function handleCancelQueuedTurn(turn: QueuedChatTurn) {
     try {
-      await cancelQueuedTurn(turn.chatId, turn.id);
-      await options.queryClient.invalidateQueries({
-        queryKey: ["queuedTurns", turn.chatId],
+      await cancelQueuedTurnMutation.mutateAsync({
+        chatId: turn.chatId,
+        turnId: turn.id,
       });
     } catch (caught) {
       options.setError(
-        caught instanceof Error
-          ? caught.message
-          : options.t("unableRemoveQueued"),
+        safeUserErrorMessage(caught, options.t("unableRemoveQueued")),
       );
     }
   }
@@ -76,26 +88,14 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     options.setTemporaryNextChat(false);
   }
 
-  // Switching variants moves the chat's leaf pointer to the bottom of the
-  // chosen sibling's branch; the displayed path is derived from that pointer,
-  // so writing the fresh chat straight into its cache re-renders immediately
-  // instead of waiting for a refetch.
-  async function handleSelectVariant(messageId: string) {
+  // Branch selection is reader-scoped. The server already returned an
+  // authorized descendant-leaf target, so navigating does not mutate the
+  // shared chat default or move another collaborator's view.
+  function handleSelectVariant(messageId: string) {
     const chatId = options.activeChatId;
     if (chatId === undefined) return;
     options.setError(undefined);
-    try {
-      const updated = await updateChat(chatId, {
-        activeLeafMessageId: deepestLeaf(options.allMessages, messageId),
-      });
-      options.queryClient.setQueryData<Chat>(["chat", chatId], updated);
-    } catch (caught) {
-      options.setError(
-        caught instanceof Error
-          ? caught.message
-          : options.t("unableSwitchVariant"),
-      );
-    }
+    options.onBranchSelection?.(messageId);
   }
 
   function handleNewTemporaryChat() {
@@ -117,28 +117,32 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     }
   }
 
-  async function handleSelectModel(
-    modelId: string,
-    persistAgentId?: string,
-  ) {
+  async function handleSelectModel(modelId: string, persistAgentId?: string) {
     options.setModelOverrideId(modelId);
     const workspaceId = options.workspaceId;
     try {
       if (workspaceId !== undefined) {
-        await rememberLastModel(options.queryClient, workspaceId, modelId);
+        await workspaceModelPreferenceMutation.mutateAsync({
+          kind: "last",
+          modelId,
+          workspaceId,
+        });
       }
       if (options.activeChatId !== undefined) {
-        await updateChat(options.activeChatId, {
-          modelId,
-          ...(persistAgentId === undefined ? {} : { agentId: persistAgentId }),
+        await updateChatMutation.mutateAsync({
+          chatId: options.activeChatId,
+          patch: {
+            modelId,
+            ...(persistAgentId === undefined
+              ? {}
+              : { agentId: persistAgentId }),
+          },
+          workspaceId,
         });
-        await invalidateWorkspaceChats(options);
       }
     } catch (caught) {
       options.setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to save the chat model.",
+        safeUserErrorMessage(caught, "Unable to save the chat model."),
       );
     }
   }
@@ -147,21 +151,14 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     const workspaceId = options.workspaceId;
     if (workspaceId === undefined) return;
     try {
-      const current = await getServerInterfacePreferences();
-      const next = { ...current.defaultModelByWorkspace };
-      if (next[workspaceId] === modelId) delete next[workspaceId];
-      else next[workspaceId] = modelId;
-      await updateServerInterfacePreferences({
-        defaultModelByWorkspace: next,
-      });
-      await options.queryClient.invalidateQueries({
-        queryKey: ["interfacePreferences"],
+      await workspaceModelPreferenceMutation.mutateAsync({
+        kind: "default",
+        modelId,
+        workspaceId,
       });
     } catch (caught) {
       options.setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to update the default model.",
+        safeUserErrorMessage(caught, "Unable to update the default model."),
       );
     }
   }
@@ -171,15 +168,29 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     await Promise.all([
       invalidateWorkspaceChats(options),
       options.queryClient.invalidateQueries({
-        queryKey: ["chatComments", chatId],
+        exact: true,
+        queryKey: appQueryKeys.chatComments(chatId),
       }),
-      options.queryClient.invalidateQueries({ queryKey: ["notifications"] }),
       options.queryClient.invalidateQueries({
-        queryKey: ["notificationDeliveries"],
+        exact: true,
+        queryKey: appQueryKeys.notifications(),
       }),
-      options.queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-      options.queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
-      options.queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
+      options.queryClient.invalidateQueries({
+        exact: true,
+        queryKey: appQueryKeys.notificationDeliveries(),
+      }),
+      invalidateCachedResourceExactly(
+        options.queryClient,
+        appQueryKeys.auditLogs(),
+      ),
+      invalidateCachedResourceExactly(
+        options.queryClient,
+        appQueryKeys.usageEvents(),
+      ),
+      options.queryClient.invalidateQueries({
+        exact: true,
+        queryKey: appQueryKeys.usageSummary(),
+      }),
     ]);
   }
 
@@ -188,10 +199,17 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     await Promise.all([
       invalidateWorkspaceChats(options),
       options.queryClient.invalidateQueries({
-        queryKey: ["chatComments", chatId],
+        exact: true,
+        queryKey: appQueryKeys.chatComments(chatId),
       }),
-      options.queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-      options.queryClient.invalidateQueries({ queryKey: ["accessReview"] }),
+      invalidateCachedResourceExactly(
+        options.queryClient,
+        appQueryKeys.auditLogs(),
+      ),
+      options.queryClient.invalidateQueries({
+        exact: true,
+        queryKey: appQueryKeys.accessReview(),
+      }),
     ]);
   }
 
@@ -200,24 +218,26 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     if (trimmed.length === 0) return;
     options.setError(undefined);
     try {
-      await updateChat(chatId, { title: trimmed });
-      await invalidateWorkspaceChats(options);
+      await updateChatMutation.mutateAsync({
+        chatId,
+        patch: { title: trimmed },
+        workspaceId: options.workspaceId,
+      });
     } catch (caught) {
-      options.setError(
-        caught instanceof Error ? caught.message : "Unable to rename chat.",
-      );
+      options.setError(safeUserErrorMessage(caught, "Unable to rename chat."));
     }
   }
 
   async function deleteChat(chatId: string): Promise<void> {
     options.setError(undefined);
     try {
-      await archiveChat(chatId);
-      await handleChatArchived(chatId);
+      await archiveChatMutation.mutateAsync({
+        chatId,
+        workspaceId: options.workspaceId,
+      });
+      resetRemovedActiveChat(options, chatId);
     } catch (caught) {
-      options.setError(
-        caught instanceof Error ? caught.message : "Unable to delete chat.",
-      );
+      options.setError(safeUserErrorMessage(caught, "Unable to delete chat."));
     }
   }
 
@@ -227,21 +247,31 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
     options.setActiveAgentId(undefined);
     options.setSpeechArtifacts({});
     await Promise.all([
-      options.queryClient.invalidateQueries({ queryKey: ["bootstrap"] }),
       options.queryClient.invalidateQueries({
-        queryKey: ["agents", workspaceId],
+        exact: true,
+        queryKey: apiQueryKeys.bootstrap(),
       }),
       options.queryClient.invalidateQueries({
-        queryKey: ["chats", workspaceId],
+        exact: true,
+        queryKey: apiQueryKeys.agents(workspaceId),
+      }),
+      invalidateWorkspaceChats(options),
+      options.queryClient.invalidateQueries({
+        exact: true,
+        queryKey: appQueryKeys.knowledgeBases(workspaceId),
       }),
       options.queryClient.invalidateQueries({
-        queryKey: ["knowledgeBases", workspaceId],
+        exact: true,
+        queryKey: apiQueryKeys.agentGallery(workspaceId),
       }),
+      invalidateCachedResourceExactly(
+        options.queryClient,
+        appQueryKeys.auditLogs(),
+      ),
       options.queryClient.invalidateQueries({
-        queryKey: ["agentGallery", workspaceId],
+        exact: true,
+        queryKey: appQueryKeys.accessReview(),
       }),
-      options.queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-      options.queryClient.invalidateQueries({ queryKey: ["accessReview"] }),
     ]);
   }
 
@@ -262,22 +292,6 @@ export function useWorkspaceChatActions(options: WorkspaceChatActionsOptions) {
   };
 }
 
-async function rememberLastModel(
-  queryClient: QueryClient,
-  workspaceId: string,
-  modelId: string,
-): Promise<void> {
-  const current = await getServerInterfacePreferences();
-  if (current.lastModelByWorkspace[workspaceId] === modelId) return;
-  await updateServerInterfacePreferences({
-    lastModelByWorkspace: {
-      ...current.lastModelByWorkspace,
-      [workspaceId]: modelId,
-    },
-  });
-  await queryClient.invalidateQueries({ queryKey: ["interfacePreferences"] });
-}
-
 function resetRemovedActiveChat(
   options: WorkspaceChatActionsOptions,
   chatId: string,
@@ -290,10 +304,11 @@ function resetRemovedActiveChat(
 
 function invalidateWorkspaceChats(
   options: WorkspaceChatActionsOptions,
-): Promise<unknown> {
+): Promise<void> {
   return options.workspaceId === undefined
     ? Promise.resolve()
-    : options.queryClient.invalidateQueries({
-        queryKey: ["chats", options.workspaceId],
-      });
+    : invalidateCachedResourceExactly(
+        options.queryClient,
+        appQueryKeys.chats(options.workspaceId),
+      );
 }

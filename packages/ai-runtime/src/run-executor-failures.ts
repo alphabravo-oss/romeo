@@ -3,6 +3,7 @@ import type { ProviderTokenUsage } from "@romeo/providers";
 import type { ProviderCircuitBreakerSnapshot } from "./provider-circuit-breaker";
 import { providerToolCallRequestedData } from "./run-executor-chunks";
 import type { ProviderFallbackSnapshot } from "./run-executor-types";
+import type { ProviderUsageSegment } from "./provider-usage-tracker";
 
 export function providerFailureData(
   error: unknown,
@@ -10,6 +11,8 @@ export function providerFailureData(
     circuit?: ProviderCircuitBreakerSnapshot | undefined;
     fallback?: ProviderFallbackSnapshot | undefined;
     retryAttempts?: number | undefined;
+    usage?: ProviderTokenUsage | undefined;
+    usageSegments?: ProviderUsageSegment[] | undefined;
   } = {},
 ): {
   errorCode: string;
@@ -17,6 +20,8 @@ export function providerFailureData(
   providerCircuit?: ProviderCircuitBreakerSnapshot;
   providerFallback?: ProviderFallbackSnapshot;
   retryAttempts?: number;
+  usage?: ProviderTokenUsage;
+  usageSegments?: ProviderUsageSegment[];
 } {
   const result: {
     errorCode: string;
@@ -24,6 +29,8 @@ export function providerFailureData(
     providerCircuit?: ProviderCircuitBreakerSnapshot;
     providerFallback?: ProviderFallbackSnapshot;
     retryAttempts?: number;
+    usage?: ProviderTokenUsage;
+    usageSegments?: ProviderUsageSegment[];
   } = isProviderFailureRecord(error)
     ? {
         errorCode: error.errorCode,
@@ -40,6 +47,9 @@ export function providerFailureData(
     result.providerCircuit = metadata.circuit;
   if (metadata.fallback !== undefined)
     result.providerFallback = metadata.fallback;
+  if (metadata.usage !== undefined) result.usage = metadata.usage;
+  if (metadata.usageSegments !== undefined)
+    result.usageSegments = metadata.usageSegments;
   return result;
 }
 
@@ -65,9 +75,11 @@ export function completionData(
   usage: ProviderTokenUsage | undefined,
   retryAttempts: number,
   fallback: ProviderFallbackSnapshot | undefined,
+  usageSegments?: ProviderUsageSegment[],
 ): Record<string, unknown> {
   return {
     ...(usage === undefined ? {} : { usage }),
+    ...(usageSegments === undefined ? {} : { usageSegments }),
     ...(fallback === undefined ? {} : { providerFallback: fallback }),
     ...(retryAttempts > 0 ? { providerRetryAttempts: retryAttempts } : {}),
   };

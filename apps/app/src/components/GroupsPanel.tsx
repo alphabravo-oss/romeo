@@ -1,16 +1,15 @@
 import { Button, Field, Input, Select } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import {
-  addGroupMember,
-  createGroup,
-  listGroupMembers,
-  listGroups,
-  removeGroupMember,
+  addGroupMemberMutationOptions,
+  createGroupMutationOptions,
+  groupMembersQueryOptions,
+  removeGroupMemberMutationOptions,
 } from "../features/administration";
-import { listShareTargets } from "../features";
+import { shareTargetsQueryOptions } from "../features/collaboration";
 import type { Group, GroupMember } from "../features/administration";
 import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
@@ -20,35 +19,33 @@ import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const groupCol = createColumnHelper<Group>();
 const memberCol = createColumnHelper<GroupMember>();
 
 export function GroupsPanel() {
-  const queryClient = useQueryClient();
   const { t } = useLocale();
   const { ask, dialog } = useConfirm();
   const [addOpen, setAddOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
 
-  const groupsQuery = useQuery({ queryKey: ["groups"], queryFn: listGroups });
-  const membersQuery = useQuery({
-    queryKey: ["groups", selectedGroupId, "members"],
-    queryFn: () => listGroupMembers(selectedGroupId),
-    enabled: selectedGroupId !== "",
-  });
-  const shareTargetsQuery = useQuery({
-    queryKey: ["shareTargets", "group-members"],
-    queryFn: () => listShareTargets(),
-    enabled: selectedGroupId !== "",
-  });
+  const table = useInventoriedServerTable<Group>("groups");
+  const membersQuery = useQuery(groupMembersQueryOptions(selectedGroupId));
+  const shareTargetsQuery = useQuery(
+    shareTargetsQueryOptions(
+      { context: "group-members" },
+      "",
+      selectedGroupId !== "",
+    ),
+  );
   const userTargets = (shareTargetsQuery.data ?? []).filter(
     (target) => target.principalType === "user",
   );
 
-  const createMutation = useMutation({ mutationFn: createGroup });
-  const addMemberMutation = useMutation({ mutationFn: addGroupMember });
-  const removeMemberMutation = useMutation({ mutationFn: removeGroupMember });
+  const createMutation = useMutation(createGroupMutationOptions());
+  const addMemberMutation = useMutation(addGroupMemberMutationOptions());
+  const removeMemberMutation = useMutation(removeGroupMemberMutationOptions());
 
   const createForm = useForm({
     defaultValues: { name: "", slug: "" },
@@ -58,7 +55,6 @@ export function GroupsPanel() {
           name: value.name,
           slug: value.slug,
         });
-        await queryClient.invalidateQueries({ queryKey: ["groups"] });
         toast(t("groupsCreated"), "success");
         setAddOpen(false);
         createForm.reset();
@@ -80,9 +76,6 @@ export function GroupsPanel() {
         await addMemberMutation.mutateAsync({
           groupId: selectedGroupId,
           userId: value.userId,
-        });
-        await queryClient.invalidateQueries({
-          queryKey: ["groups", selectedGroupId, "members"],
         });
         toast(t("groupsMemberAdded"), "success");
         memberForm.reset();
@@ -187,16 +180,13 @@ export function GroupsPanel() {
         groupId: selectedGroupId,
         userId,
       });
-      await queryClient.invalidateQueries({
-        queryKey: ["groups", selectedGroupId, "members"],
-      });
       toast(t("groupsMemberRemoved"), "success");
     } catch {
       toast(t("groupsCouldNotRemoveMember"), "error");
     }
   }
 
-  const selectedGroup = groupsQuery.data?.find(
+  const selectedGroup = table.rows.find(
     (group) => group.id === selectedGroupId,
   );
 
@@ -211,22 +201,28 @@ export function GroupsPanel() {
         }
       >
         <PanelState
-          query={groupsQuery}
           empty={t("groupsNone")}
           emptyAction={
             <AddButton onClick={() => setAddOpen(true)}>
               {t("groupsAdd")}
             </AddButton>
           }
+          isEmpty={(page) =>
+            page.items.length === 0 &&
+            table.isFirstPage &&
+            table.search.trim() === ""
+          }
+          query={table.query}
         >
-          {(groups) => (
+          {() => (
             <>
               <StatRow
-                items={[{ label: t("groupsTotal"), value: groups.length }]}
+                items={[{ label: t("groupsTotal"), value: table.estimatedTotal }]}
               />
               <DataTable
+                serverState={table.serverState}
                 columns={groupColumns}
-                data={groups}
+                data={table.rows}
                 empty={t("groupsNone")}
               />
             </>
@@ -338,7 +334,7 @@ export function GroupsPanel() {
                   value={field.state.value}
                 />
                 {field.state.meta.errors.length ? (
-                  <div className="rm-composer-error">
+                  <div className="rm-composer-error" role="alert">
                     {field.state.meta.errors.join(", ")}
                   </div>
                 ) : null}

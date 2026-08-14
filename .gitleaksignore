@@ -1,0 +1,12 @@
+# Reviewed synthetic fixtures and documentation examples. Entries are exact
+# history fingerprints, so new occurrences and changed lines still fail.
+4c2fbf6824785ddde159f4ab69f308fbf2c2b227:apps/app/src/components/chat-list-sections.ts:generic-api-key:77
+f0786077b34865939d7855778626bf31fbb55fa7:docs/plans/2026-07-16-openwebui-core-production-readiness.md:generic-api-key:361
+f0786077b34865939d7855778626bf31fbb55fa7:docs/plans/2026-07-16-openwebui-core-production-readiness.md:generic-api-key:567
+f0786077b34865939d7855778626bf31fbb55fa7:docs/plans/2026-07-16-openwebui-core-production-readiness.md:generic-api-key:1291
+e5c4d7852b9691b8aa8e5f3c0c4a3c5d76f4d569:packages/core/src/quota.test.ts:generic-api-key:1228
+e5c4d7852b9691b8aa8e5f3c0c4a3c5d76f4d569:packages/core/src/quota.test.ts:generic-api-key:1380
+f3250b0a72597d547cca59c4f3fb5fc48277d8d3:docs/backlog/enterprise-operations.md:generic-api-key:11
+f3250b0a72597d547cca59c4f3fb5fc48277d8d3:docs/backlog/phase-execution-matrix.md:generic-api-key:17
+f3250b0a72597d547cca59c4f3fb5fc48277d8d3:packages/core/src/quota.test.ts:generic-api-key:1228
+f3250b0a72597d547cca59c4f3fb5fc48277d8d3:packages/core/src/quota.test.ts:generic-api-key:1380

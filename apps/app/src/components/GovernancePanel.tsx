@@ -1,14 +1,13 @@
 import { Input, NativeSelect, Button } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import {
-  createDataExportPackage,
-  deleteDataExportPackage,
-  downloadDataExportPackageContent,
-  executeDataExport,
-  listDataExportPackages,
-  previewDataExport,
+  createDataExportPackageMutationOptions,
+  deleteDataExportPackageMutationOptions,
+  downloadDataExportPackageMutationOptions,
+  executeDataExportMutationOptions,
+  previewDataExportMutationOptions,
 } from "../features";
 import type {
   DataExportPackageList,
@@ -32,6 +31,7 @@ import { WorkspaceLifecyclePanel } from "./WorkspaceLifecyclePanel";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { OverflowMenu } from "./OverflowMenu";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 export function GovernancePanel({
   activeChatId,
@@ -49,7 +49,6 @@ export function GovernancePanel({
   const { t } = useLocale();
   return (
     <Section>
-      <div className="rm-card-title">{t("govGovernance")}</div>
       <Tabs
         tabs={[
           {
@@ -85,6 +84,7 @@ export function GovernancePanel({
         <ChatLifecyclePanel
           activeChatId={activeChatId}
           onChatArchived={onChatArchived}
+          workspaceId={workspace?.id}
         />
         <DataDeletionPanel
           activeChatId={activeChatId}
@@ -97,12 +97,10 @@ export function GovernancePanel({
 
 function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
+  const inventoriedTable = useInventoriedServerTable<
+    DataExportPackageRow & { id: string }
+  >("governance_export_packages");
   const { ask, dialog } = useConfirm();
-  const packagesQuery = useQuery({
-    queryKey: ["dataExportPackages"],
-    queryFn: listDataExportPackages,
-  });
   const [scope, setScope] = useState<DataExportScope>("org");
   const [workspaceId, setWorkspaceId] = useState("");
   const [includeContent, setIncludeContent] = useState(false);
@@ -120,45 +118,73 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
     };
   }
 
-  const previewMutation = useMutation({
-    mutationFn: previewDataExport,
-    onSuccess: (result) => {
+  const previewMutation = useMutation(previewDataExportMutationOptions());
+  const executeMutation = useMutation(executeDataExportMutationOptions());
+  const createMutation = useMutation(createDataExportPackageMutationOptions());
+  const deleteMutation = useMutation(deleteDataExportPackageMutationOptions());
+  const downloadMutation = useMutation(
+    downloadDataExportPackageMutationOptions(),
+  );
+
+  async function handlePreview(request: DataExportRequest) {
+    try {
+      const result = await previewMutation.mutateAsync(request);
       setPreview(result);
       toast(t("govExportPreviewReady"), "success");
-    },
-    onError: () => toast(t("govCouldNotPreviewExport"), "error"),
-  });
-  const executeMutation = useMutation({
-    mutationFn: executeDataExport,
-    onSuccess: () => toast(t("govExportExecuted"), "success"),
-    onError: () => toast(t("govCouldNotExecuteExport"), "error"),
-  });
-  const createMutation = useMutation({
-    mutationFn: createDataExportPackage,
-    onSuccess: async (created) => {
+    } catch {
+      toast(t("govCouldNotPreviewExport"), "error");
+    } finally {
+      previewMutation.reset();
+    }
+  }
+
+  async function handleExecute(request: DataExportRequest) {
+    try {
+      await executeMutation.mutateAsync(request);
+      toast(t("govExportExecuted"), "success");
+    } catch {
+      toast(t("govCouldNotExecuteExport"), "error");
+    } finally {
+      executeMutation.reset();
+    }
+  }
+
+  async function handleCreate(request: DataExportRequest) {
+    try {
+      const created = await createMutation.mutateAsync(request);
       toast(
         `${t("govPackage")} ${created.packageId} ${t("govCreated")}`,
         "success",
       );
-      await queryClient.invalidateQueries({ queryKey: ["dataExportPackages"] });
-    },
-    onError: () => toast(t("govCouldNotCreateExportPackage"), "error"),
-  });
-  const deleteMutation = useMutation({
-    mutationFn: deleteDataExportPackage,
-    onSuccess: async () => {
-      toast(t("govPackageDeleted"), "success");
-      await queryClient.invalidateQueries({ queryKey: ["dataExportPackages"] });
-    },
-    onError: () => toast(t("govCouldNotDeletePackage"), "error"),
-  });
-  const downloadMutation = useMutation({
-    mutationFn: downloadDataExportPackageContent,
-    onError: () => toast(t("govCouldNotDownloadPackage"), "error"),
-  });
+    } catch {
+      toast(t("govCouldNotCreateExportPackage"), "error");
+    }
+  }
 
-  const list = packagesQuery.data;
-  const packages = list?.packages ?? [];
+  async function handleDelete(packageId: string) {
+    try {
+      await deleteMutation.mutateAsync({
+        packageId,
+        confirmPackageId: packageId,
+      });
+      toast(t("govPackageDeleted"), "success");
+    } catch {
+      toast(t("govCouldNotDeletePackage"), "error");
+    }
+  }
+
+  async function handleDownload(packageId: string) {
+    try {
+      const content = await downloadMutation.mutateAsync(packageId);
+      downloadCsv(content, `romeo-data-export-${packageId}.json`);
+    } catch {
+      toast(t("govCouldNotDownloadPackage"), "error");
+    } finally {
+      downloadMutation.reset();
+    }
+  }
+
+  const packages = inventoriedTable.rows;
   const columns: ColumnDef<DataExportPackageRow, any>[] = [
     exportPackageColumn.accessor("packageId", {
       header: t("govPackage"),
@@ -204,15 +230,7 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
                 label: t("govDownloadContent"),
                 disabled: downloadMutation.isPending,
                 onClick: () => {
-                  void (async () => {
-                    const content = await downloadMutation.mutateAsync(
-                      entry.packageId,
-                    );
-                    downloadCsv(
-                      content,
-                      `romeo-data-export-${entry.packageId}.json`,
-                    );
-                  })();
+                  void handleDownload(entry.packageId);
                 },
               },
               {
@@ -228,10 +246,7 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
                       tone: "danger",
                     });
                     if (!confirmed) return;
-                    deleteMutation.mutate({
-                      packageId: entry.packageId,
-                      confirmPackageId: entry.packageId,
-                    });
+                    await handleDelete(entry.packageId);
                   })();
                 },
               },
@@ -308,7 +323,7 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
             disabled={previewMutation.isPending}
             onClick={() => {
               const request = buildRequest();
-              if (request) previewMutation.mutate(request);
+              if (request) void handlePreview(request);
             }}
             type="button"
           >
@@ -318,7 +333,7 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
             disabled={executeMutation.isPending}
             onClick={() => {
               const request = buildRequest();
-              if (request) executeMutation.mutate(request);
+              if (request) void handleExecute(request);
             }}
             type="button"
           >
@@ -329,7 +344,7 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
             disabled={createMutation.isPending}
             onClick={() => {
               const request = buildRequest();
-              if (request) createMutation.mutate(request);
+              if (request) void handleCreate(request);
             }}
             type="button"
           >
@@ -360,10 +375,13 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
       <div className="grid gap-2">
         <div className="font-medium">{t("govPackages")}</div>
         <DataTable
+          serverState={inventoriedTable.serverState}
           columns={columns}
-          data={packages}
+          data={inventoriedTable.rows}
           empty={
-            packagesQuery.isLoading ? t("govLoading") : t("govNoExportPackages")
+            inventoriedTable.query.isLoading
+              ? t("govLoading")
+              : t("govNoExportPackages")
           }
           getRowId={(entry) => entry.packageId}
           minTableWidth={780}

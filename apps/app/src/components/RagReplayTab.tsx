@@ -3,8 +3,8 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import {
-  compareTieredKnowledgeReplay as compareRagReplay,
-  replayTieredKnowledge as replayRag,
+  compareTieredKnowledgeReplayMutationOptions,
+  replayTieredKnowledgeMutationOptions,
   type KnowledgeRetrievalReplayComparisonReport,
   type KnowledgeRetrievalReplayReport,
   type RagReplayCaseInput,
@@ -39,8 +39,10 @@ export function RagReplayTab() {
   const [comparison, setComparison] =
     useState<KnowledgeRetrievalReplayComparisonReport | null>(null);
 
-  const replayMutation = useMutation({ mutationFn: replayRag });
-  const compareMutation = useMutation({ mutationFn: compareRagReplay });
+  const replayMutation = useMutation(replayTieredKnowledgeMutationOptions());
+  const compareMutation = useMutation(
+    compareTieredKnowledgeReplayMutationOptions(),
+  );
 
   function buildCase(
     rawKbIds: string,

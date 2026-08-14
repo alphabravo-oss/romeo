@@ -1,4 +1,5 @@
 import { ApiError } from "../errors";
+import { requirePublicApiErrorCode } from "../public-api-error-registry";
 
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -26,7 +27,7 @@ export function assertFileContentMatchesMimeType(
 ): void {
   if (!matchesDeclaredMimeType(bytes, mimeType)) {
     throw new ApiError(
-      options.code ?? "file_mime_mismatch",
+      requirePublicApiErrorCode(options.code ?? "file_mime_mismatch"),
       options.message ?? "File bytes do not match the declared MIME type.",
       415,
       { mimeType },

@@ -1,3 +1,14 @@
+import {
+  collaborationListKnowledgeBaseShares,
+  collaborationListModelShares,
+  collaborationListWorkspaceMembers,
+  collaborationRevokeKnowledgeBaseShare,
+  collaborationRevokeModelShare,
+  collaborationRevokeWorkspaceMember,
+  collaborationShareKnowledgeBase,
+  collaborationShareModel,
+  collaborationShareWorkspace,
+} from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
 export interface AccessGrant {
@@ -16,105 +27,100 @@ export interface SharePrincipal {
   permissions: Array<"read" | "write" | "use" | "run">;
 }
 
-async function requestJson<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+export async function listModelShares(modelId: string): Promise<AccessGrant[]> {
   configureBrowserApiClients();
-  const headers = new Headers(init.headers);
-  if (!headers.has("content-type") && init.body !== undefined) {
-    headers.set("content-type", "application/json");
-  }
-  if (!headers.has("x-request-id")) {
-    headers.set("x-request-id", crypto.randomUUID());
-  }
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    ...init,
-    headers,
+  const response = await collaborationListModelShares({
+    path: { modelId },
+    throwOnError: true,
   });
-  const payload = (await response.json().catch(() => undefined)) as
-    | { data?: T; error?: { message?: string } }
-    | undefined;
-  if (!response.ok) {
-    throw new Error(payload?.error?.message ?? response.statusText);
-  }
-  if (payload?.data === undefined) {
-    throw new Error("The access API returned an empty response.");
-  }
-  return payload.data;
-}
-
-export function listModelShares(modelId: string): Promise<AccessGrant[]> {
-  return requestJson(`/api/v1/models/${modelId}/shares`);
+  return response.data.data;
 }
 
 export function shareModel(
   modelId: string,
   share: SharePrincipal,
 ): Promise<AccessGrant[]> {
-  return requestJson(`/api/v1/models/${modelId}/shares`, {
-    method: "POST",
-    body: JSON.stringify(share),
-  });
+  configureBrowserApiClients();
+  return collaborationShareModel({
+    path: { modelId },
+    body: share,
+    throwOnError: true,
+  }).then((response) => response.data.data);
 }
 
 export function revokeModelShare(
   modelId: string,
   grantId: string,
 ): Promise<AccessGrant> {
-  return requestJson(`/api/v1/models/${modelId}/shares/${grantId}`, {
-    method: "DELETE",
-  });
+  configureBrowserApiClients();
+  return collaborationRevokeModelShare({
+    path: { modelId, grantId },
+    throwOnError: true,
+  }).then((response) => response.data.data);
 }
 
 export function listKnowledgeShares(
   knowledgeBaseId: string,
 ): Promise<AccessGrant[]> {
-  return requestJson(`/api/v1/knowledge-bases/${knowledgeBaseId}/shares`);
+  configureBrowserApiClients();
+  return collaborationListKnowledgeBaseShares({
+    path: { knowledgeBaseId },
+    throwOnError: true,
+  }).then((response) => response.data.data);
 }
 
 export function shareKnowledge(
   knowledgeBaseId: string,
   share: SharePrincipal,
 ): Promise<AccessGrant[]> {
-  return requestJson(`/api/v1/knowledge-bases/${knowledgeBaseId}/shares`, {
-    method: "POST",
-    body: JSON.stringify(share),
-  });
+  configureBrowserApiClients();
+  return collaborationShareKnowledgeBase({
+    path: { knowledgeBaseId },
+    body: share,
+    throwOnError: true,
+  }).then((response) => response.data.data);
 }
 
 export function revokeKnowledgeShare(
   knowledgeBaseId: string,
   grantId: string,
 ): Promise<AccessGrant> {
-  return requestJson(
-    `/api/v1/knowledge-bases/${knowledgeBaseId}/shares/${grantId}`,
-    { method: "DELETE" },
-  );
+  configureBrowserApiClients();
+  return collaborationRevokeKnowledgeBaseShare({
+    path: { knowledgeBaseId, grantId },
+    throwOnError: true,
+  }).then((response) => response.data.data);
 }
 
 export function listWorkspaceMembers(
   workspaceId: string,
 ): Promise<AccessGrant[]> {
-  return requestJson(`/api/v1/workspaces/${workspaceId}/members`);
+  configureBrowserApiClients();
+  return collaborationListWorkspaceMembers({
+    path: { workspaceId },
+    throwOnError: true,
+  }).then((response) => response.data.data);
 }
 
 export function shareWorkspace(
   workspaceId: string,
   share: SharePrincipal,
 ): Promise<AccessGrant[]> {
-  return requestJson(`/api/v1/workspaces/${workspaceId}/members`, {
-    method: "POST",
-    body: JSON.stringify(share),
-  });
+  configureBrowserApiClients();
+  return collaborationShareWorkspace({
+    path: { workspaceId },
+    body: share,
+    throwOnError: true,
+  }).then((response) => response.data.data);
 }
 
 export function revokeWorkspaceMember(
   workspaceId: string,
   grantId: string,
 ): Promise<AccessGrant> {
-  return requestJson(`/api/v1/workspaces/${workspaceId}/members/${grantId}`, {
-    method: "DELETE",
-  });
+  configureBrowserApiClients();
+  return collaborationRevokeWorkspaceMember({
+    path: { workspaceId, grantId },
+    throwOnError: true,
+  }).then((response) => response.data.data);
 }

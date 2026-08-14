@@ -17,10 +17,12 @@ import {
   listChatsRoute,
   listMessageFeedbackRoute,
   listMessagesRoute,
+  listMessagePageRoute,
   previewAttachmentRoute,
   previewDeleteChatRoute,
   readAttachmentRoute,
   searchChatsRoute,
+  searchChatMessagesRoute,
   unarchiveChatRoute,
   updateAttachmentRetentionRoute,
   updateChatLegalHoldRoute,
@@ -138,6 +140,7 @@ export function registerChatRoutes(app: RomeoApi): void {
                   : { retainedInContext: attachment.retainedInContext }),
               })),
             }),
+        ...(message.parts === undefined ? {} : { parts: message.parts }),
         ...(message.createdAt === undefined
           ? {}
           : { createdAt: message.createdAt }),
@@ -236,6 +239,36 @@ export function registerChatRoutes(app: RomeoApi): void {
       .get("services")
       .chats.messages(context.req.valid("param").chatId, subject);
     return context.json({ data });
+  });
+
+  app.openapi(listMessagePageRoute, async (context) => {
+    const subject = context.get("subject");
+    const params = context.req.valid("param");
+    const query = context.req.valid("query");
+    const page = await context.get("services").chats.messagePage({
+      chatId: params.chatId,
+      direction: query.direction,
+      limit: query.limit ?? 50,
+      subject,
+      ...(query.branchLeafMessageId === undefined
+        ? {}
+        : { branchLeafMessageId: query.branchLeafMessageId }),
+      ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+    });
+    return context.json(page, 200);
+  });
+
+  app.openapi(searchChatMessagesRoute, async (context) => {
+    const params = context.req.valid("param");
+    const query = context.req.valid("query");
+    const page = await context.get("services").chats.searchMessages({
+      chatId: params.chatId,
+      limit: query.limit ?? 25,
+      query: query.q,
+      subject: context.get("subject"),
+      ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+    });
+    return context.json(page, 200);
   });
 
   app.openapi(deleteMessageRoute, async (context) => {

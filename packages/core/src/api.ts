@@ -20,10 +20,16 @@ import { registerBillingRoutes } from "./http/routes/billing";
 import { registerBrowserAutomationRoutes } from "./http/routes/browser-automation";
 import { registerBootstrapRoutes } from "./http/routes/bootstrap";
 import { registerChannelRoutes } from "./http/routes/channels";
+import { registerCapabilityRoutes } from "./http/routes/capabilities";
+import { registerEnterpriseSurfaceRoutes } from "./http/routes/enterprise-surfaces";
+import { registerComputeArtifactSurfaceRoutes } from "./http/routes/compute-artifact-surfaces";
+import { registerTableSurfaceRoutes } from "./http/routes/table-surfaces";
+import { registerCapabilityFlagRoutes } from "./http/routes/capability-flags";
 import { registerChatRoutes } from "./http/routes/chats";
 import { registerChatExperienceRoutes } from "./http/routes/chat-experience";
 import { registerChatTagRoutes } from "./http/routes/chat-tags";
 import { registerCollaborationRoutes } from "./http/routes/collaboration";
+import { registerContentPolicyRoutes } from "./http/routes/content-policy";
 import { registerCompatibilityRoutes } from "./http/routes/compatibility";
 import { registerDataConnectorRoutes } from "./http/routes/data-connectors";
 import { registerDelegatedOAuthRoutes } from "./http/routes/delegated-oauth";
@@ -62,6 +68,10 @@ import { registerWorkspaceRoutes } from "./http/routes/workspaces";
 import { registerWorkspaceContentRoutes } from "./http/routes/workspace-content";
 import { registerWebSearchRoutes } from "./http/routes/web-search";
 import type { AppBindings } from "./http/context";
+import {
+  apiDeprecationMiddleware,
+  apiDeprecationUsageStore,
+} from "./http/api-deprecation";
 import { createServices } from "./services";
 
 export type CreateRomeoApiOptions = NonNullable<
@@ -70,18 +80,18 @@ export type CreateRomeoApiOptions = NonNullable<
   startBackgroundWorkers?: boolean;
 };
 
-export function createRomeoApi(
+export function createRomeoApiRuntime(
   repository: RomeoRepository = defaultRepository,
   serviceOptions?: CreateRomeoApiOptions,
 ) {
   const env = serviceOptions?.env ?? readEnv();
   const services = createServices(repository, { ...serviceOptions, env });
-  if (serviceOptions?.startBackgroundWorkers !== false) {
-    services.temporaryChatCleanup.start();
-    services.runs.startTerminalOutboxWorker();
-    services.providers.startCatalogSyncWorker();
-  }
-  const requestContextOptions = { devSeededLogin: env.DEV_SEEDED_LOGIN };
+  const requestContextOptions = {
+    appOriginSecure: new URL(env.APP_ORIGIN).protocol === "https:",
+    devSeededLogin: env.DEV_SEEDED_LOGIN,
+    production: env.ROMEO_ENV === "production",
+    trustedProxy: env.EDGE_TRUSTED_PROXY_MODE === "trusted_proxy",
+  };
   const app = new OpenAPIHono<AppBindings>({
     defaultHook: (result) => {
       if (!result.success) throw result.error;
@@ -89,6 +99,7 @@ export function createRomeoApi(
   });
 
   app.use("*", securityHeaders(env));
+  app.use("*", apiDeprecationMiddleware({ store: apiDeprecationUsageStore }));
   app.use("*", requestBodyLimit(env));
   app.use("*", preAuthRateLimit(env));
   app.use("*", csrfProtection(env));
@@ -119,7 +130,13 @@ export function createRomeoApi(
   registerChatExperienceRoutes(app);
   registerChatTagRoutes(app);
   registerChannelRoutes(app);
+  registerCapabilityRoutes(app);
+  registerEnterpriseSurfaceRoutes(app);
+  registerComputeArtifactSurfaceRoutes(app);
+  registerTableSurfaceRoutes(app);
+  registerCapabilityFlagRoutes(app);
   registerCollaborationRoutes(app);
+  registerContentPolicyRoutes(app);
   registerDataConnectorRoutes(app);
   registerDelegatedOAuthRoutes(app);
   registerDeviceAuthorizationRoutes(app);
@@ -153,7 +170,58 @@ export function createRomeoApi(
   registerWorkspaceContentRoutes(app);
   registerWorkspaceRoutes(app);
 
-  return app;
+  let started = false;
+  let closed = false;
+  return {
+    app,
+    services,
+    start() {
+      if (closed) throw new Error("Romeo API runtime is closed.");
+      if (started) return;
+      started = true;
+      services.temporaryChatCleanup.start();
+      services.runs.startTerminalOutboxWorker();
+      services.providers.startCatalogSyncWorker();
+    },
+    stop() {
+      if (!started) return;
+      started = false;
+      services.temporaryChatCleanup.stop();
+      services.runs.stopTerminalOutboxWorker();
+      services.providers.stopCatalogSyncWorker();
+    },
+    async drain() {
+      await Promise.all([
+        services.temporaryChatCleanup.drain(),
+        services.runs.drainTerminalOutboxWorker(),
+        services.providers.drainCatalogSyncWorker(),
+      ]);
+    },
+    async close() {
+      if (closed) return;
+      closed = true;
+      if (started) {
+        started = false;
+        services.temporaryChatCleanup.stop();
+        services.runs.stopTerminalOutboxWorker();
+        services.providers.stopCatalogSyncWorker();
+      }
+      await Promise.all([
+        services.temporaryChatCleanup.drain(),
+        services.runs.drainTerminalOutboxWorker(),
+        services.providers.drainCatalogSyncWorker(),
+      ]);
+      services.runs.closeRunEventTransport();
+      services.chatEvents.close();
+    },
+  };
 }
 
-export const romeoApi = createRomeoApi();
+export function createRomeoApi(
+  repository: RomeoRepository = defaultRepository,
+  serviceOptions?: CreateRomeoApiOptions,
+) {
+  const runtime = createRomeoApiRuntime(repository, serviceOptions);
+  if (serviceOptions?.startBackgroundWorkers === true) runtime.start();
+  return runtime.app;
+}

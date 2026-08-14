@@ -5,6 +5,9 @@ import {
   agentToolBindings,
   chatComments,
   chatTagAssignments,
+  capabilityAssignments,
+  organizationCapabilityFlags,
+  idempotencyReceipts,
   collaborationChannelMembers,
   evalCases,
   evalResultHumanRatings,
@@ -36,6 +39,28 @@ export async function purgeTenantPhaseOne({
   database,
   orgId,
 }: TenantPurgeState): Promise<void> {
+  await deleteWhere(
+    database,
+    counts,
+    "capability_assignments",
+    capabilityAssignments,
+    eq(capabilityAssignments.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "idempotency_receipts",
+    idempotencyReceipts,
+    eq(idempotencyReceipts.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "organization_capability_flags",
+    organizationCapabilityFlags,
+    eq(organizationCapabilityFlags.orgId, orgId),
+  );
+
   await deleteWhere(
     database,
     counts,

@@ -83,7 +83,12 @@ html.dark {
   height: 2.25rem;
   padding: 0;
 }
-:where(.rm-ui-button--default, .rm-ui-button--outline) {
+/* Not :where() — that is specificity 0, and `.rm-ui-button`'s own
+   `border: 1px solid transparent` (0,1,0) then wins the border-color, leaving
+   outline buttons invisible against a light background. The box-shadow landed
+   because nothing else set it, which is what made the bug look cosmetic. */
+.rm-ui-button--default,
+.rm-ui-button--outline {
   border-color: var(--rm-ui-border);
   box-shadow: 0 1px 2px #0000000f;
 }
@@ -127,6 +132,9 @@ html.dark {
 
 .rm-ui-field {
   display: grid;
+  /* Without this the row track stretches, so a field whose neighbour has a
+     description renders a 45.5px control next to the neighbour's 39px one. */
+  align-content: start;
   gap: 0.375rem;
 }
 .rm-ui-field__label {
@@ -138,15 +146,31 @@ html.dark {
   font-size: 0.8125rem;
 }
 .rm-ui-control {
-  width: 100%;
-  min-height: 2.375rem;
+  /* 36px, matching .rm-ui-button — 38px sat above the entire control scale, so
+     a select beside a button never lined up. */
+  min-height: 2.25rem;
   box-sizing: border-box;
   padding: 0.5rem 0.7rem;
   border: 1px solid var(--rm-ui-border);
   border-radius: var(--rm-ui-radius);
-  background: var(--rm-ui-surface);
+  /* background-COLOR, not the shorthand: the shorthand also resets
+     background-image, which wiped the chevron that app-foundation.css draws on
+     every native <select>. */
+  background-color: var(--rm-ui-surface);
   color: var(--rm-ui-fg);
   font: inherit;
+  /* input and select carry different UA line-heights, so identical padding
+     produced a 36px input beside a 39px select in the same toolbar row. */
+  line-height: 1.25;
+}
+
+/* Full width belongs to a field stack, not to every control everywhere. As a
+   base rule it made a loose date-range select span the whole 1188px page column
+   and forced toolbar rows to wrap. */
+
+.rm-ui-field .rm-ui-control,
+.cs-fields .rm-ui-control {
+  width: 100%;
 }
 .rm-ui-control.rm-ui-visually-hidden {
   position: absolute;
@@ -520,26 +544,40 @@ html.dark {
   height: 100%;
 }
 
+/* An empty group is a bounded thing, not text floating in the page. The dashed
+   card gives it the same edges a table would have, so a section reads as
+   "this exists and is empty" rather than "this failed to render". */
+
 .rm-ui-empty {
   display: grid;
-  max-width: 32rem;
   justify-items: center;
   gap: 0.5rem;
-  margin: auto;
-  padding: 2.5rem 1.5rem;
+  padding: 3.5rem 1.5rem;
+  border: 1px dashed var(--rm-ui-border);
+  border-radius: 12px;
   color: var(--rm-ui-muted);
   text-align: center;
 }
 .rm-ui-empty__icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 0.25rem;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--rm-ui-soft);
   color: var(--rm-ui-muted);
 }
 .rm-ui-empty__title {
   margin: 0;
   color: var(--rm-ui-fg);
-  font-size: 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
 }
 .rm-ui-empty__description {
+  max-width: 46ch;
   line-height: 1.5;
+  text-wrap: pretty;
 }
 .rm-ui-skeleton {
   min-height: 1rem;
@@ -564,13 +602,27 @@ html.dark {
   width: 1.5rem;
   height: 1.5rem;
 }
+/* Status pill. Tone tints are derived from the live status token with
+   color-mix, so a pill stays legible in both themes instead of carrying a
+   hardcoded hex that only worked against one background. */
+
+/* Grid blockifies inline-level children, so an inline-flex control becomes a
+   full-width block the moment its parent is `display: grid`. This keeps
+   intrinsic-width controls intrinsic; it is a no-op in flex and block flow. */
+.rm-ui-button,
+.rm-ui-status-badge,
+.rm-ui-check-label {
+  justify-self: start;
+}
+
 .rm-ui-status-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.2rem 0.5rem;
-  border-radius: 1rem;
-  font-size: 0.75rem;
-  font-weight: 575;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5625rem;
+  border-radius: 999px;
+  font-size: 0.71875rem;
+  font-weight: 600;
   /* A pill that wraps stops reading as a pill. Long values (protocol names,
      sync states) tore into two lines inside the rounded shape and left a
      lumpy blob in the middle of otherwise even table rows. */
@@ -578,23 +630,23 @@ html.dark {
 }
 .rm-ui-status-badge--neutral {
   background: var(--rm-ui-soft);
-  color: var(--rm-ui-status-neutral);
+  color: var(--rm-muted, var(--rm-ui-muted));
 }
 .rm-ui-status-badge--info {
-  background: #2563eb20;
-  color: var(--rm-ui-status-info);
+  background: color-mix(in srgb, var(--rm-accent, #3b82f6) 14%, transparent);
+  color: var(--rm-accent-strong, #2563eb);
 }
 .rm-ui-status-badge--success {
-  background: #15803d20;
-  color: var(--rm-ui-status-success);
+  background: color-mix(in srgb, var(--rm-success, #047857) 14%, transparent);
+  color: var(--rm-success, #047857);
 }
 .rm-ui-status-badge--warning {
-  background: #a1620726;
-  color: var(--rm-ui-status-warning);
+  background: color-mix(in srgb, var(--rm-warning, #b45309) 16%, transparent);
+  color: var(--rm-warning, #b45309);
 }
 .rm-ui-status-badge--danger {
-  background: #dc262620;
-  color: var(--rm-ui-status-danger);
+  background: color-mix(in srgb, var(--rm-danger, #dc2626) 14%, transparent);
+  color: var(--rm-danger, #dc2626);
 }
 [data-sonner-toaster] {
   z-index: 100 !important;

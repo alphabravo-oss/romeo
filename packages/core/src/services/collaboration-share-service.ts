@@ -1,29 +1,25 @@
-import {
-  AuthorizationError,
-  assertScope,
-  hasGrant,
-  hasWorkspaceAccess,
-  type AuthSubject,
-  type ResourceGrant,
-} from "@romeo/auth";
+import type { AuthSubject, ResourceGrant } from "@romeo/auth";
 
 import type { FileObject } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
-import { createId } from "../ids";
 import { getAuthorizedAgent } from "./agent-access";
-import { writeAuditLog } from "./audit-log";
+import type { AuditAction, AuditMetadata } from "./audit-log";
 import { getAuthorizedChat } from "./chat-access";
 import { getAuthorizedKnowledgeBase } from "./knowledge-access";
-import { filterVisibleServiceAccounts } from "./service-account-access";
+import type { ShareInput, ShareTarget } from "./collaboration-share-model";
 import {
-  groupLabel,
-  principalOrder,
-  type ShareInput,
-  type ShareTarget,
-  targetMatches,
-  validateSharePrincipal,
-} from "./collaboration-share-model";
+  auditShare,
+  createResourceShares,
+  deleteResourceShare,
+  findShareTargets,
+  getAuthorizedSharedFile,
+  requireOrgModel,
+  requireOrgWorkspace,
+  revokeAgentShare,
+  revokeKnowledgeBaseShare,
+  sharesForResource,
+} from "./collaboration-share-support";
 
 export type { ShareInput, ShareTarget } from "./collaboration-share-model";
 
@@ -35,61 +31,7 @@ export class CollaborationShareService {
     query = "",
     limit = 20,
   ): Promise<ShareTarget[]> {
-    assertScope(subject, "me:read");
-    const normalizedQuery = query.trim().toLowerCase();
-    const boundedLimit =
-      Number.isInteger(limit) && limit > 0 && limit <= 50 ? limit : 20;
-    const [users, grants, serviceAccounts, groups] = await Promise.all([
-      this.repository.listUsers(subject.orgId),
-      this.repository.listResourceGrants(subject.orgId),
-      this.repository.listServiceAccounts(subject.orgId),
-      this.repository.listGroups(subject.orgId),
-    ]);
-    const groupIds = new Set<string>(subject.groupIds);
-    for (const grant of grants) {
-      if (grant.principalType === "group") groupIds.add(grant.principalId);
-    }
-    const durableGroupIds = new Set(groups.map((group) => group.id));
-    const targets: ShareTarget[] = [
-      ...users.map((user) => ({
-        principalType: "user" as const,
-        principalId: user.id,
-        label: user.name,
-        detail: user.email,
-      })),
-      ...groups.map((group) => ({
-        principalType: "group" as const,
-        principalId: group.id,
-        label: group.name,
-      })),
-      ...[...groupIds]
-        .filter((groupId) => !durableGroupIds.has(groupId))
-        .sort()
-        .map((groupId) => ({
-          principalType: "group" as const,
-          principalId: groupId,
-          label: groupLabel(groupId),
-        })),
-      ...filterVisibleServiceAccounts(subject, serviceAccounts).map(
-        (account) => ({
-          principalType: "service_account" as const,
-          principalId: account.id,
-          label: account.name,
-          ...(account.disabledAt === undefined ? {} : { detail: "disabled" }),
-        }),
-      ),
-    ];
-
-    return targets
-      .filter((target) => targetMatches(target, normalizedQuery))
-      .sort(
-        (left, right) =>
-          principalOrder(left.principalType) -
-            principalOrder(right.principalType) ||
-          left.label.localeCompare(right.label) ||
-          left.principalId.localeCompare(right.principalId),
-      )
-      .slice(0, boundedLimit);
+    return findShareTargets(this.repository, subject, query, limit);
   }
 
   async listAgentShares(
@@ -143,23 +85,7 @@ export class CollaborationShareService {
     agentId: string;
     grantId: string;
   }): Promise<ResourceGrant> {
-    const agent = await getAuthorizedAgent(this.repository, {
-      agentId: input.agentId,
-      subject: input.subject,
-      scope: "agents:write",
-    });
-    const grant = (
-      await this.sharesFor("agent", agent.id, input.subject.orgId)
-    ).find((item) => item.id === input.grantId);
-    if (grant === undefined) throw notFound("Managed-model grant");
-    const deleted = await this.repository.deleteResourceGrant(grant.id);
-    if (deleted === undefined) throw notFound("Managed-model grant");
-    await this.audit(input.subject, "agent.share.revoke", "agent", agent.id, {
-      principalType: grant.principalType,
-      principalId: grant.principalId,
-      permission: grant.permission,
-    });
-    return deleted;
+    return revokeAgentShare(this.repository, input);
   }
 
   async revokeKnowledgeBaseGrant(input: {
@@ -167,41 +93,19 @@ export class CollaborationShareService {
     knowledgeBaseId: string;
     grantId: string;
   }): Promise<ResourceGrant> {
-    const knowledgeBase = await getAuthorizedKnowledgeBase(this.repository, {
-      knowledgeBaseId: input.knowledgeBaseId,
-      subject: input.subject,
-      scope: "knowledge:write",
-      permission: "write",
-    });
-    const grant = (
-      await this.sharesFor(
-        "knowledge_base",
-        knowledgeBase.id,
-        input.subject.orgId,
-      )
-    ).find((item) => item.id === input.grantId);
-    if (grant === undefined) throw notFound("Knowledge grant");
-    const deleted = await this.repository.deleteResourceGrant(grant.id);
-    if (deleted === undefined) throw notFound("Knowledge grant");
-    await this.audit(
-      input.subject,
-      "knowledge_base.share.revoke",
-      "knowledge_base",
-      knowledgeBase.id,
-      {
-        principalType: grant.principalType,
-        principalId: grant.principalId,
-        permission: grant.permission,
-      },
-    );
-    return deleted;
+    return revokeKnowledgeBaseShare(this.repository, input);
   }
 
   async listModelShares(
     subject: AuthSubject,
     modelId: string,
   ): Promise<ResourceGrant[]> {
-    const model = await this.requireOrgModel(subject, modelId, "admin:read");
+    const model = await requireOrgModel(
+      this.repository,
+      subject,
+      modelId,
+      "admin:read",
+    );
     return this.sharesFor("model", model.id, subject.orgId);
   }
 
@@ -210,7 +114,8 @@ export class CollaborationShareService {
     modelId: string;
     share: ShareInput;
   }): Promise<ResourceGrant[]> {
-    const model = await this.requireOrgModel(
+    const model = await requireOrgModel(
+      this.repository,
       input.subject,
       input.modelId,
       "admin:write",
@@ -253,17 +158,21 @@ export class CollaborationShareService {
     modelId: string;
     grantId: string;
   }): Promise<ResourceGrant> {
-    const model = await this.requireOrgModel(
+    const model = await requireOrgModel(
+      this.repository,
       input.subject,
       input.modelId,
       "admin:write",
     );
-    const grant = (
-      await this.sharesFor("model", model.id, input.subject.orgId)
-    ).find((item) => item.id === input.grantId);
-    if (grant === undefined) throw notFound("Model grant");
-    const deleted = await this.repository.deleteResourceGrant(grant.id);
-    if (deleted === undefined) throw notFound("Model grant");
+    const deleted = await deleteResourceShare({
+      repository: this.repository,
+      orgId: input.subject.orgId,
+      resourceType: "model",
+      resourceId: model.id,
+      grantId: input.grantId,
+      missingLabel: "Model grant",
+    });
+    const grant = deleted;
     await this.audit(input.subject, "model.share.revoke", "model", model.id, {
       principalType: grant.principalType,
       principalId: grant.principalId,
@@ -276,7 +185,12 @@ export class CollaborationShareService {
     subject: AuthSubject,
     workspaceId: string,
   ): Promise<ResourceGrant[]> {
-    await this.requireOrgWorkspace(subject, workspaceId, "admin:read");
+    await requireOrgWorkspace(
+      this.repository,
+      subject,
+      workspaceId,
+      "admin:read",
+    );
     return this.sharesFor("workspace", workspaceId, subject.orgId);
   }
 
@@ -285,7 +199,8 @@ export class CollaborationShareService {
     workspaceId: string;
     share: ShareInput;
   }): Promise<ResourceGrant[]> {
-    await this.requireOrgWorkspace(
+    await requireOrgWorkspace(
+      this.repository,
       input.subject,
       input.workspaceId,
       "admin:write",
@@ -319,17 +234,21 @@ export class CollaborationShareService {
     workspaceId: string;
     grantId: string;
   }): Promise<ResourceGrant> {
-    await this.requireOrgWorkspace(
+    await requireOrgWorkspace(
+      this.repository,
       input.subject,
       input.workspaceId,
       "admin:write",
     );
-    const grant = (
-      await this.sharesFor("workspace", input.workspaceId, input.subject.orgId)
-    ).find((item) => item.id === input.grantId);
-    if (grant === undefined) throw notFound("Workspace membership");
-    const deleted = await this.repository.deleteResourceGrant(grant.id);
-    if (deleted === undefined) throw notFound("Workspace membership");
+    const deleted = await deleteResourceShare({
+      repository: this.repository,
+      orgId: input.subject.orgId,
+      resourceType: "workspace",
+      resourceId: input.workspaceId,
+      grantId: input.grantId,
+      missingLabel: "Workspace membership",
+    });
+    const grant = deleted;
     await this.audit(
       input.subject,
       "workspace.member.remove",
@@ -528,50 +447,8 @@ export class CollaborationShareService {
     allowedPermissions: ResourceGrant["permission"][];
     share: ShareInput;
   }): Promise<ResourceGrant[]> {
-    validateSharePrincipal(input.share);
-    const invalid = input.share.permissions.filter(
-      (permission) => !input.allowedPermissions.includes(permission),
-    );
-    if (invalid.length > 0)
-      throw new ApiError(
-        "invalid_share_permission",
-        "Share includes an unsupported permission.",
-        400,
-        { permissions: invalid },
-      );
-
     const repository = input.repository ?? this.repository;
-    const existing = await this.sharesFor(
-      input.resourceType,
-      input.resourceId,
-      input.subject.orgId,
-      repository,
-    );
-    const created: ResourceGrant[] = [];
-    for (const permission of new Set(input.share.permissions)) {
-      const grant = existing.find(
-        (item) =>
-          item.principalType === input.share.principalType &&
-          item.principalId === input.share.principalId &&
-          item.permission === permission,
-      );
-      if (grant) {
-        created.push(grant);
-        continue;
-      }
-
-      created.push(
-        await repository.createResourceGrant({
-          id: createId("grant"),
-          resourceType: input.resourceType,
-          resourceId: input.resourceId,
-          principalType: input.share.principalType,
-          principalId: input.share.principalId,
-          permission,
-        }),
-      );
-    }
-    return created;
+    return createResourceShares({ ...input, repository });
   }
 
   protected async sharesFor(
@@ -580,38 +457,7 @@ export class CollaborationShareService {
     orgId: string,
     repository: RomeoRepository = this.repository,
   ): Promise<ResourceGrant[]> {
-    return (await repository.listResourceGrants(orgId)).filter(
-      (grant) =>
-        grant.resourceType === resourceType && grant.resourceId === resourceId,
-    );
-  }
-
-  private async requireOrgModel(
-    subject: AuthSubject,
-    modelId: string,
-    scope: "admin:read" | "admin:write",
-  ) {
-    assertScope(subject, scope);
-    const model = await this.repository.getModel(modelId);
-    if (model === undefined) throw notFound("Model");
-    const provider = await this.repository.getProvider(model.providerId);
-    if (provider === undefined || provider.orgId !== subject.orgId) {
-      throw notFound("Model");
-    }
-    return model;
-  }
-
-  private async requireOrgWorkspace(
-    subject: AuthSubject,
-    workspaceId: string,
-    scope: "admin:read" | "admin:write",
-  ) {
-    assertScope(subject, scope);
-    const workspace = await this.repository.getWorkspace(workspaceId);
-    if (workspace === undefined || workspace.orgId !== subject.orgId) {
-      throw notFound("Workspace");
-    }
-    return workspace;
+    return sharesForResource(repository, resourceType, resourceId, orgId);
   }
 
   protected async getAuthorizedFile(
@@ -619,47 +465,29 @@ export class CollaborationShareService {
     fileId: string,
     permission: "read" | "write",
   ): Promise<FileObject> {
-    assertScope(subject, permission === "read" ? "files:read" : "files:write");
-    const file = await this.repository.getFileObject(fileId);
-    if (
-      file === undefined ||
-      file.orgId !== subject.orgId ||
-      file.status === "deleted"
-    ) {
-      throw notFound("File");
-    }
-    if (!hasWorkspaceAccess(subject, file.workspaceId)) {
-      throw new AuthorizationError(
-        "The file workspace is outside the caller access.",
-      );
-    }
-    const grants = await this.repository.listResourceGrants(subject.orgId);
-    if (
-      subject.isAdmin !== true &&
-      !(file.ownerType === subject.type && file.ownerId === subject.id) &&
-      !hasGrant(subject, grants, "file", file.id, permission)
-    ) {
-      throw new AuthorizationError(
-        `Missing ${permission} permission for file:${file.id}`,
-      );
-    }
-    return file;
+    return getAuthorizedSharedFile(
+      this.repository,
+      subject,
+      fileId,
+      permission,
+    );
   }
 
-  protected async audit(
+  protected async audit<A extends AuditAction>(
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceType: string,
     resourceId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
     repository: RomeoRepository = this.repository,
   ): Promise<void> {
-    await writeAuditLog(repository, {
+    await auditShare(
+      repository,
       subject,
       action,
       resourceType,
       resourceId,
       metadata,
-    });
+    );
   }
 }

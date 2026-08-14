@@ -18,6 +18,10 @@ import { notFound } from "../errors";
 import { createId } from "../ids";
 import { createAgentOwnerGrants, getAuthorizedAgent } from "./agent-access";
 import {
+  normalizeAgentTags,
+  normalizePromptSuggestions,
+} from "./agent-input-normalization";
+import {
   applyAgentBindingSnapshot,
   applyAgentImportBindings,
   buildAgentExportDocument,
@@ -40,8 +44,12 @@ import {
   hasSafetySettings,
   parameterKeys,
 } from "./agent-service-support";
-import { diffAgentVersions, type AgentVersionDiff } from "./agent-version-diff";
+import { diffAuthorizedAgentVersions } from "./agent-version-diff-operation";
+import type { AgentVersionDiff } from "./agent-version-diff";
 import { writeAuditLog } from "./audit-log";
+import { snapshotAgentCapabilityDefaults } from "./agent-version-capability-defaults";
+import type { AuditAction, AuditMetadata } from "../audit-taxonomy";
+import { enforceContentPolicyText } from "./content-policy-service";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
 import { assertWorkspaceActive } from "./workspace-guard";
 
@@ -76,6 +84,13 @@ export class AgentService extends AgentReadService {
       input.subject,
       input.baseModelId,
     );
+    const systemPrompt = (
+      await enforceContentPolicyText(
+        this.repository,
+        input.subject,
+        input.systemPrompt,
+      )
+    ).content;
 
     const createdBy = await persistedSubjectActorId(
       this.repository,
@@ -97,7 +112,7 @@ export class AgentService extends AgentReadService {
       }),
       createdBy,
       baseModelId: input.baseModelId,
-      systemPrompt: input.systemPrompt,
+      systemPrompt,
       parameters: input.parameters ?? {},
       memoryPolicy: normalizeAgentMemoryPolicy(input.memoryPolicy),
       promptSuggestions: normalizePromptSuggestions(input.promptSuggestions),
@@ -106,7 +121,7 @@ export class AgentService extends AgentReadService {
       updatedAt: new Date().toISOString(),
     });
     await createAgentOwnerGrants(this.repository, input.subject, agent.id);
-    await this.audit(input.subject, "agent.create", "agent", agent.id, {
+    await this.audit(input.subject, "agent.create", agent.id, {
       workspaceId: agent.workspaceId,
       baseModelId: agent.baseModelId,
       memoryMode: agent.memoryPolicy.mode,
@@ -127,7 +142,7 @@ export class AgentService extends AgentReadService {
       new Date().toISOString(),
     );
     if (!archived) throw notFound("Agent");
-    await this.audit(subject, "agent.archive", "agent", agent.id, {
+    await this.audit(subject, "agent.archive", agent.id, {
       workspaceId: agent.workspaceId,
     });
     return archived;
@@ -159,6 +174,16 @@ export class AgentService extends AgentReadService {
     });
     const baseModelId = input.baseModelId ?? agent.baseModelId;
     await assertUsableAgentModel(this.repository, input.subject, baseModelId);
+    const systemPrompt =
+      input.systemPrompt === undefined
+        ? agent.systemPrompt
+        : (
+            await enforceContentPolicyText(
+              this.repository,
+              input.subject,
+              input.systemPrompt,
+            )
+          ).content;
 
     const updated = await this.repository.updateAgent({
       ...agent,
@@ -169,7 +194,7 @@ export class AgentService extends AgentReadService {
         avatarUrl: input.avatarUrl ?? agent.avatarUrl,
       }),
       baseModelId,
-      systemPrompt: input.systemPrompt ?? agent.systemPrompt,
+      systemPrompt,
       parameters: input.parameters ?? agent.parameters,
       memoryPolicy:
         input.memoryPolicy === undefined
@@ -189,7 +214,7 @@ export class AgentService extends AgentReadService {
           : normalizeAgentTags(input.tags),
       updatedAt: new Date().toISOString(),
     });
-    await this.audit(input.subject, "agent.update", "agent", updated.id, {
+    await this.audit(input.subject, "agent.update", updated.id, {
       workspaceId: updated.workspaceId,
       changedFields: changedAgentFields(agent, updated),
       memoryMode: updated.memoryPolicy.mode,
@@ -206,9 +231,22 @@ export class AgentService extends AgentReadService {
     name?: string;
     systemPrompt?: string;
   }): Promise<Agent> {
-    const result = await cloneManagedModel(this.repository, input);
+    const systemPrompt =
+      input.systemPrompt === undefined
+        ? undefined
+        : (
+            await enforceContentPolicyText(
+              this.repository,
+              input.subject,
+              input.systemPrompt,
+            )
+          ).content;
+    const result = await cloneManagedModel(this.repository, {
+      ...input,
+      ...(systemPrompt === undefined ? {} : { systemPrompt }),
+    });
     const { cloned } = result;
-    await this.audit(input.subject, "agent.clone", "agent", cloned.id, {
+    await this.audit(input.subject, "agent.clone", cloned.id, {
       workspaceId: cloned.workspaceId,
       sourceAgentId: result.sourceAgentId,
       baseModelId: cloned.baseModelId,
@@ -227,7 +265,7 @@ export class AgentService extends AgentReadService {
       scope: "agents:read",
     });
     const document = await buildAgentExportDocument(this.repository, agent);
-    await this.audit(subject, "agent.export", "agent", agent.id, {
+    await this.audit(subject, "agent.export", agent.id, {
       workspaceId: agent.workspaceId,
       baseModelId: agent.baseModelId,
       bindingCounts: bindingCounts(document.agent),
@@ -263,18 +301,12 @@ export class AgentService extends AgentReadService {
       imported,
       bindings,
     );
-    await this.audit(
-      input.subject,
-      "agent.import",
-      "agent",
-      importedWithBindings.id,
-      {
-        workspaceId: importedWithBindings.workspaceId,
-        baseModelId: importedWithBindings.baseModelId,
-        bindingCounts: bindingCounts(input.agent),
-        parameterKeys: parameterKeys(imported.parameters),
-      },
-    );
+    await this.audit(input.subject, "agent.import", importedWithBindings.id, {
+      workspaceId: importedWithBindings.workspaceId,
+      baseModelId: importedWithBindings.baseModelId,
+      bindingCounts: bindingCounts(input.agent),
+      parameterKeys: parameterKeys(imported.parameters),
+    });
     return importedWithBindings;
   }
 
@@ -291,7 +323,11 @@ export class AgentService extends AgentReadService {
     return attachAgentEvalSummaries(this.repository, agentId, versions);
   }
 
-  async publish(agentId: string, subject: AuthSubject): Promise<AgentVersion> {
+  async publish(
+    agentId: string,
+    subject: AuthSubject,
+    channel: "candidate" | "production" = "production",
+  ): Promise<AgentVersion> {
     const agent = await getAuthorizedAgent(this.repository, {
       agentId,
       subject,
@@ -308,6 +344,10 @@ export class AgentService extends AgentReadService {
     const published = await this.repository.transaction(async (repository) => {
       const versions = await repository.listAgentVersions(agent.id);
       const bindingSnapshot = await snapshotAgentBindings(repository, agent.id);
+      const capabilityDefaults = await snapshotAgentCapabilityDefaults(
+        repository,
+        { agentId: agent.id, orgId: agent.orgId, at: publishedAt },
+      );
       const createdBy = await persistedSubjectActorId(repository, subject, {
         kind: "service_account_agent_version_owner",
         name: "Service Account Agent Version Owner",
@@ -328,6 +368,7 @@ export class AgentService extends AgentReadService {
         tags: agent.tags ?? [],
         knowledgeBaseBindings: bindingSnapshot.knowledgeBaseBindings,
         toolBindings: bindingSnapshot.toolBindings,
+        capabilityDefaults,
         createdBy,
         createdAt: publishedAt,
         publishedAt,
@@ -336,21 +377,23 @@ export class AgentService extends AgentReadService {
         version.voiceProfileId = agent.voiceProfileId;
 
       const created = await repository.createAgentVersion(version);
-      await repository.updateAgent({
-        ...agent,
-        publishedVersionId: created.id,
-        updatedAt: publishedAt,
-      });
+      if (channel === "production") {
+        await repository.updateAgent({
+          ...agent,
+          publishedVersionId: created.id,
+          updatedAt: publishedAt,
+        });
+      }
       await this.audit(
         subject,
         "agent.version.publish",
-        "agent_version",
         created.id,
         {
           agentId: agent.id,
           workspaceId: agent.workspaceId,
           baseModelId: created.baseModelId,
           version: created.version,
+          channel,
         },
         repository,
       );
@@ -414,17 +457,11 @@ export class AgentService extends AgentReadService {
         toolBindings: version.toolBindings,
       });
     }
-    await this.audit(
-      input.subject,
-      "agent.version.rollback",
-      "agent",
-      rolledBack.id,
-      {
-        workspaceId: rolledBack.workspaceId,
-        versionId: version.id,
-        baseModelId: version.baseModelId,
-      },
-    );
+    await this.audit(input.subject, "agent.version.rollback", rolledBack.id, {
+      workspaceId: rolledBack.workspaceId,
+      versionId: version.id,
+      baseModelId: version.baseModelId,
+    });
     return rolledBack;
   }
 
@@ -434,64 +471,23 @@ export class AgentService extends AgentReadService {
     leftVersionId: string;
     rightVersionId: string;
   }): Promise<AgentVersionDiff> {
-    await getAuthorizedAgent(this.repository, {
-      agentId: input.agentId,
-      subject: input.subject,
-      scope: "agents:read",
-    });
-    const [left, right] = await Promise.all([
-      getAgentVersionForAgent(
-        this.repository,
-        input.agentId,
-        input.leftVersionId,
-      ),
-      getAgentVersionForAgent(
-        this.repository,
-        input.agentId,
-        input.rightVersionId,
-      ),
-    ]);
-
-    return diffAgentVersions(left, right);
+    return diffAuthorizedAgentVersions(this.repository, input);
   }
 
-  private audit(
+  private audit<A extends AuditAction>(
     subject: AuthSubject,
-    action: string,
-    resourceType: string,
+    action: A,
     resourceId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
     repository: RomeoRepository = this.repository,
   ): Promise<void> {
     return writeAuditLog(repository, {
       subject,
       action,
-      resourceType,
+      resourceType:
+        action === "agent.version.publish" ? "agent_version" : "agent",
       resourceId,
       metadata,
     });
   }
-}
-
-function normalizeAgentTags(tags: string[] | undefined): string[] {
-  return [
-    ...new Set(
-      (tags ?? [])
-        .map((tag) => tag.trim())
-        .filter(Boolean)
-        .map((tag) => tag.slice(0, 60)),
-    ),
-  ].slice(0, 20);
-}
-
-function normalizePromptSuggestions(
-  suggestions: AgentPromptSuggestion[] | undefined,
-): AgentPromptSuggestion[] {
-  return (suggestions ?? [])
-    .map((suggestion) => ({
-      title: suggestion.title.trim().slice(0, 120),
-      prompt: suggestion.prompt.trim().slice(0, 2_000),
-    }))
-    .filter((suggestion) => suggestion.title && suggestion.prompt)
-    .slice(0, 12);
 }

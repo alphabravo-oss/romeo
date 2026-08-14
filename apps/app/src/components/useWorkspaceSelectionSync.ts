@@ -8,6 +8,7 @@ import {
   shouldAutoSelectChat,
   shouldClearActiveChat,
 } from "./chat-selection";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 interface WorkspaceSelectionSyncOptions {
   activeAgentId: string | undefined;
@@ -126,9 +127,7 @@ export function useWorkspaceSelectionSync(
     if (!shouldApplyRequestedChat(requestedChat)) return;
     void selectChatFromEffect(requestedChat.requestedChatId, false).catch(
       (caught) =>
-        setError(
-          caught instanceof Error ? caught.message : "Unable to load chat.",
-        ),
+        setError(safeUserErrorMessage(caught, "Unable to load chat.")),
     );
   }, [activeChatId, isDraftingNewChat, requestedChatId, setError]);
 
@@ -169,9 +168,7 @@ export function useWorkspaceSelectionSync(
     )
       return;
     void selectChatFromEffect(firstChatId, true).catch((caught) =>
-      setError(
-        caught instanceof Error ? caught.message : "Unable to load chat.",
-      ),
+      setError(safeUserErrorMessage(caught, "Unable to load chat.")),
     );
   }, [activeChatId, firstChatId, isDraftingNewChat, isStreaming, setError]);
 }

@@ -1,3 +1,4 @@
+import { Button } from "@romeo/ui";
 import type { ReactNode } from "react";
 
 /**
@@ -86,13 +87,14 @@ export function PageTab({
     );
   }
   return (
-    <button
+    <Button
       aria-current={active ? "page" : undefined}
       className={className}
       onClick={onClick}
       type="button"
+      variant="ghost"
     >
       {children}
-    </button>
+    </Button>
   );
 }

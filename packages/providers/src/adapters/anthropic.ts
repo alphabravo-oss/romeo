@@ -9,19 +9,55 @@ import type {
 import { anthropicCapabilities } from "../capabilities";
 import { profileDiscoveredModel } from "../model-discovery";
 import { MAX_DISCOVERED_MODELS } from "../model-catalog";
-import { normalizeProviderToolCall } from "../tool-calls";
+import { translateProviderChatParameters } from "../parameter-translation";
+import {
+  normalizeProviderToolCall,
+  type ProviderToolCallRequest,
+} from "../tool-calls";
 import type {
   BaseModel,
   ChatMessage,
-  ModelProviderAdapter,
+  ProviderChatAdapter,
+  ProviderDiscoveryAdapter,
+  ProviderHealthAdapter,
   ProviderInstance,
-  ProviderTokenUsage,
+  ProviderUsageParser,
   StreamChatChunk,
   StreamChatInput,
 } from "../types";
 import { normalizeProviderSdkError } from "./provider-sdk";
 
-export const anthropicAdapter: ModelProviderAdapter = {
+export const anthropicUsageParser: ProviderUsageParser = {
+  kind: "anthropic",
+  parseUsage(payload, previous) {
+    const event = asRecord(payload);
+    const usage =
+      event?.type === "message_start"
+        ? asRecord(asRecord(event.message)?.usage)
+        : event?.type === "message_delta"
+          ? asRecord(event.usage)
+          : undefined;
+    if (usage === undefined) return undefined;
+    const inputTokens =
+      nonnegativeInteger(usage.input_tokens) ?? previous?.inputTokens;
+    const cachedInputTokens =
+      nonnegativeInteger(usage.cache_read_input_tokens) ??
+      previous?.cachedInputTokens;
+    const outputTokens = nonnegativeInteger(usage.output_tokens);
+    return {
+      ...(inputTokens === undefined ? {} : { inputTokens }),
+      ...(cachedInputTokens === undefined ? {} : { cachedInputTokens }),
+      ...(outputTokens === undefined ? {} : { outputTokens }),
+      // Anthropic reports the two components independently. Do not relabel
+      // their local sum as a provider-reported total.
+      source: "anthropic",
+    };
+  },
+};
+
+export const anthropicAdapter: ProviderHealthAdapter &
+  ProviderDiscoveryAdapter &
+  ProviderChatAdapter = {
   kind: "anthropic",
   async health(provider, options) {
     const models = await discoverAnthropicModels(
@@ -47,7 +83,7 @@ export const anthropicAdapter: ModelProviderAdapter = {
 };
 
 async function discoverAnthropicModels(
-  provider: Parameters<ModelProviderAdapter["listModels"]>[0],
+  provider: Parameters<ProviderDiscoveryAdapter["listModels"]>[0],
   options?: {
     apiKey?: string;
     fetchImpl?: typeof fetch;
@@ -69,7 +105,8 @@ async function discoverAnthropicModels(
         if (model.id.trim()) ids.push(model.id.trim());
         if (ids.length >= MAX_DISCOVERED_MODELS) break;
       }
-    } catch {
+    } catch (caught) {
+      normalizeProviderSdkError(caught, "anthropic", "discovery");
       return [];
     }
   }
@@ -104,11 +141,10 @@ async function* credentialUnavailableStream(): AsyncIterable<StreamChatChunk> {
 async function* streamAnthropicChat(
   input: StreamChatInput,
 ): AsyncIterable<StreamChatChunk> {
-  const client = createAnthropicClient(
-    input.provider,
-    input.apiKey!,
-    input.fetchImpl,
-  );
+  const parameters = translateProviderChatParameters({
+    ...input,
+    kind: "anthropic",
+  }).effective;
   const system = input.messages
     .filter((message) => message.role === "system")
     .map((message) => message.content)
@@ -119,32 +155,47 @@ async function* streamAnthropicChat(
     // max_tokens is required here, so a pinned cap overrides the context-derived default rather
     // than being spread in alongside it.
     max_tokens:
-      input.sampling?.maxTokens ?? outputTokenLimit(input.model.contextWindow),
+      parameters.sampling?.maxTokens ??
+      outputTokenLimit(input.model.contextWindow),
     stream: true,
-    ...(input.sampling?.temperature === undefined
+    ...(parameters.sampling?.temperature === undefined
       ? {}
-      : { temperature: input.sampling.temperature }),
-    ...(input.sampling?.topP === undefined
+      : { temperature: parameters.sampling.temperature }),
+    ...(parameters.sampling?.topP === undefined
       ? {}
-      : { top_p: input.sampling.topP }),
+      : { top_p: parameters.sampling.topP }),
     ...(system ? { system } : {}),
     messages: input.messages
       .filter((message) => message.role !== "system")
       .map(toAnthropicMessage),
-    ...(input.tools?.length ? { tools: input.tools.map(toAnthropicTool) } : {}),
+    ...(parameters.tools?.length
+      ? { tools: parameters.tools.map(toAnthropicTool) }
+      : {}),
   };
 
   const tools = new AnthropicToolAccumulator();
   let inputTokens: number | undefined;
+  let cachedInputTokens: number | undefined;
   try {
+    const client = createAnthropicClient(
+      input.provider,
+      input.apiKey!,
+      input.fetchImpl,
+    );
     const stream = await client.messages.create(
       request,
       input.signal === undefined ? {} : { signal: input.signal },
     );
+    const completedToolCalls: ProviderToolCallRequest[] = [];
     for await (const event of stream) {
-      const usage = usageFromAnthropicEvent(event, inputTokens);
-      if (event.type === "message_start")
+      const usage = anthropicUsageParser.parseUsage(event, {
+        ...(inputTokens === undefined ? {} : { inputTokens }),
+        ...(cachedInputTokens === undefined ? {} : { cachedInputTokens }),
+      });
+      if (event.type === "message_start") {
         inputTokens = event.message.usage.input_tokens;
+        cachedInputTokens = usage?.cachedInputTokens;
+      }
       if (usage !== undefined) yield { type: "usage", usage };
 
       if (
@@ -155,12 +206,18 @@ async function* streamAnthropicChat(
         yield event.delta.text;
       }
       const calls = tools.merge(event);
-      if (calls.length === 1) yield { type: "tool_call", toolCall: calls[0]! };
-      if (calls.length > 1)
-        yield { type: "tool_call", toolCall: calls[0]!, toolCalls: calls };
+      completedToolCalls.push(...calls);
     }
+    if (completedToolCalls.length === 1)
+      yield { type: "tool_call", toolCall: completedToolCalls[0]! };
+    if (completedToolCalls.length > 1)
+      yield {
+        type: "tool_call",
+        toolCall: completedToolCalls[0]!,
+        toolCalls: completedToolCalls,
+      };
   } catch (caught) {
-    throw normalizeProviderSdkError(caught, "anthropic");
+    throw normalizeProviderSdkError(caught, "anthropic", "chat");
   }
 }
 
@@ -286,30 +343,16 @@ class AnthropicToolAccumulator {
   }
 }
 
-function usageFromAnthropicEvent(
-  event: RawMessageStreamEvent,
-  priorInputTokens: number | undefined,
-): ProviderTokenUsage | undefined {
-  const usage =
-    event.type === "message_start"
-      ? event.message.usage
-      : event.type === "message_delta"
-        ? event.usage
-        : undefined;
-  if (usage === undefined) return undefined;
-  const inputTokens =
-    "input_tokens" in usage && typeof usage.input_tokens === "number"
-      ? usage.input_tokens
-      : priorInputTokens;
-  const outputTokens = usage.output_tokens;
-  return {
-    ...(inputTokens === undefined ? {} : { inputTokens }),
-    outputTokens,
-    ...(inputTokens === undefined
-      ? {}
-      : { totalTokens: inputTokens + outputTokens }),
-    source: "anthropic",
-  };
+function nonnegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 function outputTokenLimit(contextWindow: number): number {

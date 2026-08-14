@@ -3,29 +3,24 @@ import type {
   RenewBackgroundJobLeaseInput,
   UpdateBackgroundJobWithLeaseInput,
 } from "@romeo/core";
-import { and, asc, desc, eq, lt, lte, or, sql } from "drizzle-orm";
+import { assertUsageEventTaxonomy, assertUsageEventUpdate } from "@romeo/core";
+import { and, asc, desc, eq, isNull, lte, or, sql } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
-import {
-  auditLogs,
-  backgroundJobs,
-  systemSettings,
-  usageEvents,
-} from "./schema";
+import { backgroundJobs, systemSettings, usageEvents } from "./schema";
 import {
   optionalDate,
   optionalIsoString,
   toIsoString,
 } from "./repository-mapping";
 import type {
-  AuditLogRecord,
-  AuditOutcomeRecord,
   BackgroundJobRecord,
   BackgroundJobStatusRecord,
   SystemSettingRecord,
   UsageEventRecord,
   UsageSourceTypeRecord,
 } from "./operational-records";
+import { PgAuditRepository } from "./audit-repository";
 import {
   applyWorkerLease,
   readWorkerLease,
@@ -33,9 +28,12 @@ import {
 } from "./operational-worker-lease";
 
 export type * from "./operational-records";
+export { toAuditLogRecord } from "./audit-repository";
 
-export class PgOperationalRepository {
-  constructor(private readonly db: RomeoDatabase) {}
+export class PgOperationalRepository extends PgAuditRepository {
+  constructor(db: RomeoDatabase) {
+    super(db);
+  }
 
   async getSystemSetting(
     key: string,
@@ -73,36 +71,6 @@ export class PgOperationalRepository {
     return row === undefined ? setting : toSystemSettingRecord(row);
   }
 
-  async listAuditLogs(orgId: string): Promise<AuditLogRecord[]> {
-    const rows = await this.db
-      .select()
-      .from(auditLogs)
-      .where(eq(auditLogs.orgId, orgId))
-      .orderBy(desc(auditLogs.createdAt), asc(auditLogs.id));
-    return rows.map(toAuditLogRecord);
-  }
-
-  async createAuditLog(log: AuditLogRecord): Promise<AuditLogRecord> {
-    const [row] = await this.db
-      .insert(auditLogs)
-      .values(toAuditLogInsert(log))
-      .returning();
-    return row === undefined ? log : toAuditLogRecord(row);
-  }
-
-  async deleteAuditLogsBefore(orgId: string, before: string): Promise<number> {
-    const rows = await this.db
-      .delete(auditLogs)
-      .where(
-        and(
-          eq(auditLogs.orgId, orgId),
-          lt(auditLogs.createdAt, new Date(before)),
-        ),
-      )
-      .returning({ id: auditLogs.id });
-    return rows.length;
-  }
-
   async listUsageEvents(orgId: string): Promise<UsageEventRecord[]> {
     const rows = await this.db
       .select()
@@ -112,7 +80,30 @@ export class PgOperationalRepository {
     return rows.map(toUsageEventRecord);
   }
 
+  async listUsageEventsForRun(
+    orgId: string,
+    workspaceId: string,
+    runId: string,
+    limit: number,
+  ): Promise<UsageEventRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(usageEvents)
+      .where(
+        and(
+          eq(usageEvents.orgId, orgId),
+          eq(usageEvents.workspaceId, workspaceId),
+          eq(usageEvents.sourceType, "run"),
+          eq(usageEvents.sourceId, runId),
+        ),
+      )
+      .orderBy(desc(usageEvents.createdAt), asc(usageEvents.id))
+      .limit(Math.max(0, limit));
+    return rows.map(toUsageEventRecord);
+  }
+
   async createUsageEvent(event: UsageEventRecord): Promise<UsageEventRecord> {
+    assertUsageEventTaxonomy(event);
     const [row] = await this.db
       .insert(usageEvents)
       .values(toUsageEventInsert(event))
@@ -121,12 +112,39 @@ export class PgOperationalRepository {
   }
 
   async updateUsageEvent(event: UsageEventRecord): Promise<UsageEventRecord> {
+    const [currentRow] = await this.db
+      .select()
+      .from(usageEvents)
+      .where(eq(usageEvents.id, event.id))
+      .limit(1);
+    if (currentRow === undefined)
+      throw new Error(`Usage event ${event.id} does not exist.`);
+    const current = toUsageEventRecord(currentRow);
+    assertUsageEventUpdate(current, event);
     const [row] = await this.db
       .update(usageEvents)
-      .set(toUsageEventInsert(event))
-      .where(eq(usageEvents.id, event.id))
+      .set({ quantity: event.quantity, metadata: event.metadata })
+      .where(
+        and(
+          eq(usageEvents.id, currentRow.id),
+          eq(usageEvents.orgId, currentRow.orgId),
+          currentRow.workspaceId === null
+            ? isNull(usageEvents.workspaceId)
+            : eq(usageEvents.workspaceId, currentRow.workspaceId),
+          eq(usageEvents.actorId, currentRow.actorId),
+          eq(usageEvents.sourceType, currentRow.sourceType),
+          eq(usageEvents.sourceId, currentRow.sourceId),
+          eq(usageEvents.metric, currentRow.metric),
+          eq(usageEvents.quantity, currentRow.quantity),
+          eq(usageEvents.unit, currentRow.unit),
+          eq(usageEvents.metadata, currentRow.metadata),
+          eq(usageEvents.createdAt, currentRow.createdAt),
+        ),
+      )
       .returning();
-    return row === undefined ? event : toUsageEventRecord(row);
+    if (row === undefined)
+      throw new Error(`Usage event ${event.id} changed concurrently.`);
+    return toUsageEventRecord(row);
   }
 
   async listBackgroundJobs(orgId: string): Promise<BackgroundJobRecord[]> {
@@ -286,22 +304,6 @@ export class PgOperationalRepository {
   }
 }
 
-export function toAuditLogRecord(
-  row: typeof auditLogs.$inferSelect,
-): AuditLogRecord {
-  return {
-    id: row.id,
-    orgId: row.orgId,
-    actorId: row.actorId,
-    action: row.action,
-    resourceType: row.resourceType,
-    resourceId: row.resourceId,
-    outcome: asAuditOutcome(row.outcome),
-    metadata: asJsonRecord(row.metadata),
-    createdAt: toIsoString(row.createdAt),
-  };
-}
-
 export function toUsageEventRecord(
   row: typeof usageEvents.$inferSelect,
 ): UsageEventRecord {
@@ -348,22 +350,6 @@ export function toSystemSettingRecord(
     key: row.key,
     value: asJsonRecord(row.value),
     updatedAt: toIsoString(row.updatedAt),
-  };
-}
-
-function toAuditLogInsert(
-  record: AuditLogRecord,
-): typeof auditLogs.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    actorId: record.actorId,
-    action: record.action,
-    resourceType: record.resourceType,
-    resourceId: record.resourceId,
-    outcome: record.outcome,
-    metadata: record.metadata,
-    createdAt: new Date(record.createdAt),
   };
 }
 
@@ -430,11 +416,6 @@ function claimableBackgroundJobWhere(
       ),
     ),
   );
-}
-
-function asAuditOutcome(value: string): AuditOutcomeRecord {
-  if (value === "failure" || value === "success") return value;
-  return "failure";
 }
 
 function asUsageSourceType(value: string): UsageSourceTypeRecord {

@@ -14,6 +14,7 @@ import {
   adminInsightsExportAnalyticsSummary,
   adminInsightsGetAbuseControls,
   adminInsightsGetAnalyticsSummary,
+  adminInsightsSimulateAbuseControls,
   adminInsightsUpdateAbuseControls,
   administrationAddGroupMember,
   administrationBulkDisableServiceAccounts,
@@ -30,6 +31,7 @@ import {
   administrationListGroups,
   administrationListServiceAccounts,
   administrationListUsers,
+  administrationQueryUsers,
   administrationRemoveGroupMember,
   administrationRevokeApiKey,
   administrationSetUserLocalPassword,
@@ -59,6 +61,22 @@ import {
   browserAutomationGetPosture,
   browserAutomationReadArtifact,
   browserAutomationRenewTaskLease,
+  capabilitiesApprovePublication,
+  capabilitiesExplainAdmin,
+  capabilitiesGetAdminOverview,
+  capabilitiesGetAssignmentHistory,
+  capabilitiesGetPlatformPosture,
+  capabilitiesListDefinitions,
+  capabilitiesPatchAssignment,
+  capabilitiesPreviewAssignment,
+  capabilitiesPreviewImpact,
+  capabilitiesPublishAssignment,
+  capabilitiesResolveEffective,
+  capabilitiesUpdateAssignment,
+  capabilityFlagsGetAdminReport,
+  capabilityFlagsGetHistory,
+  capabilityFlagsListEffective,
+  capabilityFlagsUpdate,
   channelsAddMembers,
   channelsAddReaction,
   channelsCreate,
@@ -96,11 +114,13 @@ import {
   chatsList,
   chatsListComments,
   chatsListMessageFeedback,
+  chatsListMessagePage,
   chatsListMessages,
   chatsPreviewAttachment,
   chatsPreviewDelete,
   chatsReadAttachment,
   chatsSearch,
+  chatsSearchMessages,
   chatsUnarchive,
   chatsUpdate,
   chatsUpdateAttachmentRetention,
@@ -121,17 +141,48 @@ import {
   collaborationListFavorites,
   collaborationListFileShares,
   collaborationListFolderItems,
+  collaborationListFolderItemsBatch,
   collaborationListFolders,
   collaborationListFolderShares,
   collaborationListKnowledgeBaseShares,
+  collaborationListModelShares,
   collaborationListShareTargets,
+  collaborationListWorkspaceMembers,
   collaborationRemoveChatTag,
   collaborationRevokeChatShare,
+  collaborationRevokeKnowledgeBaseShare,
+  collaborationRevokeModelShare,
+  collaborationRevokeWorkspaceMember,
   collaborationShareChat,
   collaborationShareFile,
   collaborationShareFolder,
   collaborationShareKnowledgeBase,
+  collaborationShareModel,
+  collaborationShareWorkspace,
   collaborationUpdateFolder,
+  compareCreateSession,
+  compareSynthesisPreview,
+  computeArtifactsCreateVersion,
+  computeArtifactsIntake,
+  computeArtifactsLifecycle,
+  computeArtifactsPreview,
+  computeArtifactsProvenance,
+  computeCreateJob,
+  computeOperationsPosture,
+  computeRuntimeImagesAuthorize,
+  computeSandboxPosture,
+  contentPolicyApprovalsList,
+  contentPolicyApprovalsRequest,
+  contentPolicyApprovalsResolve,
+  contentPolicyDecisionsList,
+  contentPolicyGet,
+  contentPolicyRollback,
+  contentPolicySimulate,
+  contentPolicyUpdate,
+  contentPolicyVersionsCreate,
+  contentPolicyVersionsDryRun,
+  contentPolicyVersionsList,
+  contentPolicyVersionsPublish,
   dataConnectorsCreate,
   dataConnectorsGetCatalog,
   dataConnectorsGetPosture,
@@ -149,8 +200,10 @@ import {
   deviceAuthorizationsRefresh,
   deviceAuthorizationsRevoke,
   edgeSecurityGetPosture,
+  evalsCreateCaseFromMessageFeedback,
   evalsCreateSuite,
   evalsGetDashboard,
+  evalsGetReasoningComparison,
   evalsGetReleaseCandidateEvidence,
   evalsListRatings,
   evalsListResults,
@@ -179,6 +232,8 @@ import {
   filesList,
   filesReadContent,
   filesRetryExtraction,
+  filesRetryLifecycle,
+  firewallEvaluateOutput,
   governanceCreateDataExportPackage,
   governanceDeleteDataExportPackage,
   governanceEnforceRetention,
@@ -200,6 +255,8 @@ import {
   governanceUpdateRetentionPolicy,
   identityGetCurrentPrincipal,
   identityUpdateCurrentProfile,
+  imagesCancelJob,
+  imagesCreateJob,
   imagesGenerate,
   impersonationApproveRequest,
   impersonationCreateRequest,
@@ -212,6 +269,7 @@ import {
   interfacePreferencesUpdateCurrent,
   jobsGetOperationalSummary,
   jobsList,
+  knowledgeAclFreshness,
   knowledgeCompareTieredReplay,
   knowledgeCompleteUpload,
   knowledgeCreateBase,
@@ -219,10 +277,13 @@ import {
   knowledgeCreateUpload,
   knowledgeDeleteSource,
   knowledgeExtractSource,
+  knowledgeGetAgenticSettings,
   knowledgeGetBase,
+  knowledgeGetIngestReadiness,
   knowledgeIndexEmbeddings,
   knowledgeListBases,
   knowledgeListSources,
+  knowledgePrefilterAcl,
   knowledgeQueryBase,
   knowledgeQueryTiered,
   knowledgeReindexSource,
@@ -260,6 +321,9 @@ import {
   managedModelsUpdateCustomizationPolicy,
   managedModelsUpdateKnowledgeBinding,
   managedModelsUpdatePreferences,
+  modelsCapabilityOverridesUpdate,
+  modelsCompatibilityPreview,
+  modelsProbe,
   notificationsCreateChannel,
   notificationsGetPolicy,
   notificationsList,
@@ -338,6 +402,8 @@ import {
   operationalGovernanceListQuotaBuckets,
   operationalGovernanceListUsageAlerts,
   operationalGovernanceListUsageEvents,
+  operationalGovernanceListUsageMetricDefinitions,
+  operationalGovernanceQueryAuditLogs,
   operationalGovernanceUpdateQuotaBucket,
   operationalPostureGetGaEvidence,
   operationalPostureGetPostgres,
@@ -352,10 +418,15 @@ import {
   promptsUpdateTemplate,
   providersCreateConnection,
   providersDeleteOllamaModel,
+  providersGetCapabilityReport,
+  providersGetModelCapabilityReport,
   providersGetOperationalSummary,
   providersListConnections,
+  providersListKinds,
   providersListModels,
   providersPullOllamaModel,
+  providersSyncJobsGet,
+  providersSyncJobsRun,
   providersSyncModels,
   providersUpdateConnection,
   providersUpdateModelCapabilities,
@@ -370,12 +441,15 @@ import {
   ragGovernanceRejectPolicyChangeRequest,
   ragGovernanceUpdatePolicy,
   readinessGetReport,
+  realtimeAdaptersPreview,
+  realtimeCreateSession,
   runsCancel,
   runsCancelQueuedTurn,
   runsEnqueueTurn,
   runsGet,
   runsGetActiveForChat,
   runsInspectContext,
+  runsInspectPersistedContext,
   runsListQueuedTurns,
   runsStart,
   scimCreateGroup,
@@ -406,6 +480,12 @@ import {
   systemGetApiDocs,
   systemGetHealth,
   systemGetOpenApiDocument,
+  tableExportsCreate,
+  tableExportsGet,
+  tableExportsRun,
+  tablePagesQuery,
+  tableViewsList,
+  tableViewsReplace,
   tenancyArchiveWorkspace,
   tenancyCreateWorkspace,
   tenancyExportWorkspace,
@@ -454,6 +534,11 @@ import {
   toolsListAgentBindings,
   toolsListCalls,
   toolsUpdateAgentBinding,
+  trustAuditSegmentsSeal,
+  trustBreakGlassAuthorize,
+  trustCryptoShredPreview,
+  trustGetPosture,
+  trustSiemExportCheckpoint,
   voicesCreate,
   voicesDeleteArtifact,
   voicesGenerateMessageSpeech,
@@ -502,6 +587,9 @@ import type {
   AdminInsightsGetAnalyticsSummaryData,
   AdminInsightsGetAnalyticsSummaryError,
   AdminInsightsGetAnalyticsSummaryResponse,
+  AdminInsightsSimulateAbuseControlsData,
+  AdminInsightsSimulateAbuseControlsError,
+  AdminInsightsSimulateAbuseControlsResponse,
   AdminInsightsUpdateAbuseControlsData,
   AdminInsightsUpdateAbuseControlsError,
   AdminInsightsUpdateAbuseControlsResponse,
@@ -550,6 +638,9 @@ import type {
   AdministrationListUsersData,
   AdministrationListUsersError,
   AdministrationListUsersResponse,
+  AdministrationQueryUsersData,
+  AdministrationQueryUsersError,
+  AdministrationQueryUsersResponse,
   AdministrationRemoveGroupMemberData,
   AdministrationRemoveGroupMemberError,
   AdministrationRemoveGroupMemberResponse,
@@ -637,6 +728,54 @@ import type {
   BrowserAutomationRenewTaskLeaseData,
   BrowserAutomationRenewTaskLeaseError,
   BrowserAutomationRenewTaskLeaseResponse,
+  CapabilitiesApprovePublicationData,
+  CapabilitiesApprovePublicationError,
+  CapabilitiesApprovePublicationResponse,
+  CapabilitiesExplainAdminData,
+  CapabilitiesExplainAdminError,
+  CapabilitiesExplainAdminResponse,
+  CapabilitiesGetAdminOverviewData,
+  CapabilitiesGetAdminOverviewError,
+  CapabilitiesGetAdminOverviewResponse,
+  CapabilitiesGetAssignmentHistoryData,
+  CapabilitiesGetAssignmentHistoryError,
+  CapabilitiesGetAssignmentHistoryResponse,
+  CapabilitiesGetPlatformPostureData,
+  CapabilitiesGetPlatformPostureError,
+  CapabilitiesGetPlatformPostureResponse,
+  CapabilitiesListDefinitionsData,
+  CapabilitiesListDefinitionsError,
+  CapabilitiesListDefinitionsResponse,
+  CapabilitiesPatchAssignmentData,
+  CapabilitiesPatchAssignmentError,
+  CapabilitiesPatchAssignmentResponse,
+  CapabilitiesPreviewAssignmentData,
+  CapabilitiesPreviewAssignmentError,
+  CapabilitiesPreviewAssignmentResponse,
+  CapabilitiesPreviewImpactData,
+  CapabilitiesPreviewImpactError,
+  CapabilitiesPreviewImpactResponse,
+  CapabilitiesPublishAssignmentData,
+  CapabilitiesPublishAssignmentError,
+  CapabilitiesPublishAssignmentResponse,
+  CapabilitiesResolveEffectiveData,
+  CapabilitiesResolveEffectiveError,
+  CapabilitiesResolveEffectiveResponse,
+  CapabilitiesUpdateAssignmentData,
+  CapabilitiesUpdateAssignmentError,
+  CapabilitiesUpdateAssignmentResponse,
+  CapabilityFlagsGetAdminReportData,
+  CapabilityFlagsGetAdminReportError,
+  CapabilityFlagsGetAdminReportResponse,
+  CapabilityFlagsGetHistoryData,
+  CapabilityFlagsGetHistoryError,
+  CapabilityFlagsGetHistoryResponse,
+  CapabilityFlagsListEffectiveData,
+  CapabilityFlagsListEffectiveError,
+  CapabilityFlagsListEffectiveResponse,
+  CapabilityFlagsUpdateData,
+  CapabilityFlagsUpdateError,
+  CapabilityFlagsUpdateResponse,
   ChannelsAddMembersData,
   ChannelsAddMembersError,
   ChannelsAddMembersResponse,
@@ -747,6 +886,9 @@ import type {
   ChatsListMessageFeedbackData,
   ChatsListMessageFeedbackError,
   ChatsListMessageFeedbackResponse,
+  ChatsListMessagePageData,
+  ChatsListMessagePageError,
+  ChatsListMessagePageResponse,
   ChatsListMessagesData,
   ChatsListMessagesError,
   ChatsListMessagesResponse,
@@ -762,6 +904,9 @@ import type {
   ChatsReadAttachmentResponse,
   ChatsSearchData,
   ChatsSearchError,
+  ChatsSearchMessagesData,
+  ChatsSearchMessagesError,
+  ChatsSearchMessagesResponse,
   ChatsSearchResponse,
   ChatsUnarchiveData,
   ChatsUnarchiveError,
@@ -820,6 +965,9 @@ import type {
   CollaborationListFileSharesData,
   CollaborationListFileSharesError,
   CollaborationListFileSharesResponse,
+  CollaborationListFolderItemsBatchData,
+  CollaborationListFolderItemsBatchError,
+  CollaborationListFolderItemsBatchResponse,
   CollaborationListFolderItemsData,
   CollaborationListFolderItemsError,
   CollaborationListFolderItemsResponse,
@@ -832,15 +980,30 @@ import type {
   CollaborationListKnowledgeBaseSharesData,
   CollaborationListKnowledgeBaseSharesError,
   CollaborationListKnowledgeBaseSharesResponse,
+  CollaborationListModelSharesData,
+  CollaborationListModelSharesError,
+  CollaborationListModelSharesResponse,
   CollaborationListShareTargetsData,
   CollaborationListShareTargetsError,
   CollaborationListShareTargetsResponse,
+  CollaborationListWorkspaceMembersData,
+  CollaborationListWorkspaceMembersError,
+  CollaborationListWorkspaceMembersResponse,
   CollaborationRemoveChatTagData,
   CollaborationRemoveChatTagError,
   CollaborationRemoveChatTagResponse,
   CollaborationRevokeChatShareData,
   CollaborationRevokeChatShareError,
   CollaborationRevokeChatShareResponse,
+  CollaborationRevokeKnowledgeBaseShareData,
+  CollaborationRevokeKnowledgeBaseShareError,
+  CollaborationRevokeKnowledgeBaseShareResponse,
+  CollaborationRevokeModelShareData,
+  CollaborationRevokeModelShareError,
+  CollaborationRevokeModelShareResponse,
+  CollaborationRevokeWorkspaceMemberData,
+  CollaborationRevokeWorkspaceMemberError,
+  CollaborationRevokeWorkspaceMemberResponse,
   CollaborationShareChatData,
   CollaborationShareChatError,
   CollaborationShareChatResponse,
@@ -853,9 +1016,84 @@ import type {
   CollaborationShareKnowledgeBaseData,
   CollaborationShareKnowledgeBaseError,
   CollaborationShareKnowledgeBaseResponse,
+  CollaborationShareModelData,
+  CollaborationShareModelError,
+  CollaborationShareModelResponse,
+  CollaborationShareWorkspaceData,
+  CollaborationShareWorkspaceError,
+  CollaborationShareWorkspaceResponse,
   CollaborationUpdateFolderData,
   CollaborationUpdateFolderError,
   CollaborationUpdateFolderResponse,
+  CompareCreateSessionData,
+  CompareCreateSessionError,
+  CompareCreateSessionResponse,
+  CompareSynthesisPreviewData,
+  CompareSynthesisPreviewError,
+  CompareSynthesisPreviewResponse,
+  ComputeArtifactsCreateVersionData,
+  ComputeArtifactsCreateVersionError,
+  ComputeArtifactsCreateVersionResponse,
+  ComputeArtifactsIntakeData,
+  ComputeArtifactsIntakeError,
+  ComputeArtifactsIntakeResponse,
+  ComputeArtifactsLifecycleData,
+  ComputeArtifactsLifecycleError,
+  ComputeArtifactsLifecycleResponse,
+  ComputeArtifactsPreviewData,
+  ComputeArtifactsPreviewError,
+  ComputeArtifactsPreviewResponse,
+  ComputeArtifactsProvenanceData,
+  ComputeArtifactsProvenanceError,
+  ComputeArtifactsProvenanceResponse,
+  ComputeCreateJobData,
+  ComputeCreateJobError,
+  ComputeCreateJobResponse,
+  ComputeOperationsPostureData,
+  ComputeOperationsPostureError,
+  ComputeOperationsPostureResponse,
+  ComputeRuntimeImagesAuthorizeData,
+  ComputeRuntimeImagesAuthorizeError,
+  ComputeRuntimeImagesAuthorizeResponse,
+  ComputeSandboxPostureData,
+  ComputeSandboxPostureError,
+  ComputeSandboxPostureResponse,
+  ContentPolicyApprovalsListData,
+  ContentPolicyApprovalsListError,
+  ContentPolicyApprovalsListResponse,
+  ContentPolicyApprovalsRequestData,
+  ContentPolicyApprovalsRequestError,
+  ContentPolicyApprovalsRequestResponse,
+  ContentPolicyApprovalsResolveData,
+  ContentPolicyApprovalsResolveError,
+  ContentPolicyApprovalsResolveResponse,
+  ContentPolicyDecisionsListData,
+  ContentPolicyDecisionsListError,
+  ContentPolicyDecisionsListResponse,
+  ContentPolicyGetData,
+  ContentPolicyGetError,
+  ContentPolicyGetResponse,
+  ContentPolicyRollbackData,
+  ContentPolicyRollbackError,
+  ContentPolicyRollbackResponse,
+  ContentPolicySimulateData,
+  ContentPolicySimulateError,
+  ContentPolicySimulateResponse,
+  ContentPolicyUpdateData,
+  ContentPolicyUpdateError,
+  ContentPolicyUpdateResponse,
+  ContentPolicyVersionsCreateData,
+  ContentPolicyVersionsCreateError,
+  ContentPolicyVersionsCreateResponse,
+  ContentPolicyVersionsDryRunData,
+  ContentPolicyVersionsDryRunError,
+  ContentPolicyVersionsDryRunResponse,
+  ContentPolicyVersionsListData,
+  ContentPolicyVersionsListError,
+  ContentPolicyVersionsListResponse,
+  ContentPolicyVersionsPublishData,
+  ContentPolicyVersionsPublishError,
+  ContentPolicyVersionsPublishResponse,
   DataConnectorsCreateData,
   DataConnectorsCreateError,
   DataConnectorsCreateResponse,
@@ -906,12 +1144,18 @@ import type {
   EdgeSecurityGetPostureData,
   EdgeSecurityGetPostureError,
   EdgeSecurityGetPostureResponse,
+  EvalsCreateCaseFromMessageFeedbackData,
+  EvalsCreateCaseFromMessageFeedbackError,
+  EvalsCreateCaseFromMessageFeedbackResponse,
   EvalsCreateSuiteData,
   EvalsCreateSuiteError,
   EvalsCreateSuiteResponse,
   EvalsGetDashboardData,
   EvalsGetDashboardError,
   EvalsGetDashboardResponse,
+  EvalsGetReasoningComparisonData,
+  EvalsGetReasoningComparisonError,
+  EvalsGetReasoningComparisonResponse,
   EvalsGetReleaseCandidateEvidenceData,
   EvalsGetReleaseCandidateEvidenceError,
   EvalsGetReleaseCandidateEvidenceResponse,
@@ -993,6 +1237,12 @@ import type {
   FilesRetryExtractionData,
   FilesRetryExtractionError,
   FilesRetryExtractionResponse,
+  FilesRetryLifecycleData,
+  FilesRetryLifecycleError,
+  FilesRetryLifecycleResponse,
+  FirewallEvaluateOutputData,
+  FirewallEvaluateOutputError,
+  FirewallEvaluateOutputResponse,
   GovernanceCreateDataExportPackageData,
   GovernanceCreateDataExportPackageError,
   GovernanceCreateDataExportPackageResponse,
@@ -1056,6 +1306,12 @@ import type {
   IdentityUpdateCurrentProfileData,
   IdentityUpdateCurrentProfileError,
   IdentityUpdateCurrentProfileResponse,
+  ImagesCancelJobData,
+  ImagesCancelJobError,
+  ImagesCancelJobResponse,
+  ImagesCreateJobData,
+  ImagesCreateJobError,
+  ImagesCreateJobResponse,
   ImagesGenerateData,
   ImagesGenerateError,
   ImagesGenerateResponse,
@@ -1092,6 +1348,9 @@ import type {
   JobsListData,
   JobsListError,
   JobsListResponse,
+  KnowledgeAclFreshnessData,
+  KnowledgeAclFreshnessError,
+  KnowledgeAclFreshnessResponse,
   KnowledgeCompareTieredReplayData,
   KnowledgeCompareTieredReplayError,
   KnowledgeCompareTieredReplayResponse,
@@ -1113,9 +1372,15 @@ import type {
   KnowledgeExtractSourceData,
   KnowledgeExtractSourceError,
   KnowledgeExtractSourceResponse,
+  KnowledgeGetAgenticSettingsData,
+  KnowledgeGetAgenticSettingsError,
+  KnowledgeGetAgenticSettingsResponse,
   KnowledgeGetBaseData,
   KnowledgeGetBaseError,
   KnowledgeGetBaseResponse,
+  KnowledgeGetIngestReadinessData,
+  KnowledgeGetIngestReadinessError,
+  KnowledgeGetIngestReadinessResponse,
   KnowledgeIndexEmbeddingsData,
   KnowledgeIndexEmbeddingsError,
   KnowledgeIndexEmbeddingsResponse,
@@ -1125,6 +1390,9 @@ import type {
   KnowledgeListSourcesData,
   KnowledgeListSourcesError,
   KnowledgeListSourcesResponse,
+  KnowledgePrefilterAclData,
+  KnowledgePrefilterAclError,
+  KnowledgePrefilterAclResponse,
   KnowledgeQueryBaseData,
   KnowledgeQueryBaseError,
   KnowledgeQueryBaseResponse,
@@ -1236,6 +1504,15 @@ import type {
   ManagedModelsUpdatePreferencesError,
   ManagedModelsUpdatePreferencesResponse,
   ManagedModelsUpdateResponse,
+  ModelsCapabilityOverridesUpdateData,
+  ModelsCapabilityOverridesUpdateError,
+  ModelsCapabilityOverridesUpdateResponse,
+  ModelsCompatibilityPreviewData,
+  ModelsCompatibilityPreviewError,
+  ModelsCompatibilityPreviewResponse,
+  ModelsProbeData,
+  ModelsProbeError,
+  ModelsProbeResponse,
   NotificationsCreateChannelData,
   NotificationsCreateChannelError,
   NotificationsCreateChannelResponse,
@@ -1470,6 +1747,12 @@ import type {
   OperationalGovernanceListUsageEventsData,
   OperationalGovernanceListUsageEventsError,
   OperationalGovernanceListUsageEventsResponse,
+  OperationalGovernanceListUsageMetricDefinitionsData,
+  OperationalGovernanceListUsageMetricDefinitionsError,
+  OperationalGovernanceListUsageMetricDefinitionsResponse,
+  OperationalGovernanceQueryAuditLogsData,
+  OperationalGovernanceQueryAuditLogsError,
+  OperationalGovernanceQueryAuditLogsResponse,
   OperationalGovernanceUpdateQuotaBucketData,
   OperationalGovernanceUpdateQuotaBucketError,
   OperationalGovernanceUpdateQuotaBucketResponse,
@@ -1509,18 +1792,33 @@ import type {
   ProvidersDeleteOllamaModelData,
   ProvidersDeleteOllamaModelError,
   ProvidersDeleteOllamaModelResponse,
+  ProvidersGetCapabilityReportData,
+  ProvidersGetCapabilityReportError,
+  ProvidersGetCapabilityReportResponse,
+  ProvidersGetModelCapabilityReportData,
+  ProvidersGetModelCapabilityReportError,
+  ProvidersGetModelCapabilityReportResponse,
   ProvidersGetOperationalSummaryData,
   ProvidersGetOperationalSummaryError,
   ProvidersGetOperationalSummaryResponse,
   ProvidersListConnectionsData,
   ProvidersListConnectionsError,
   ProvidersListConnectionsResponse,
+  ProvidersListKindsData,
+  ProvidersListKindsError,
+  ProvidersListKindsResponse,
   ProvidersListModelsData,
   ProvidersListModelsError,
   ProvidersListModelsResponse,
   ProvidersPullOllamaModelData,
   ProvidersPullOllamaModelError,
   ProvidersPullOllamaModelResponse,
+  ProvidersSyncJobsGetData,
+  ProvidersSyncJobsGetError,
+  ProvidersSyncJobsGetResponse,
+  ProvidersSyncJobsRunData,
+  ProvidersSyncJobsRunError,
+  ProvidersSyncJobsRunResponse,
   ProvidersSyncModelsData,
   ProvidersSyncModelsError,
   ProvidersSyncModelsResponse,
@@ -1563,6 +1861,12 @@ import type {
   ReadinessGetReportData,
   ReadinessGetReportError,
   ReadinessGetReportResponse,
+  RealtimeAdaptersPreviewData,
+  RealtimeAdaptersPreviewError,
+  RealtimeAdaptersPreviewResponse,
+  RealtimeCreateSessionData,
+  RealtimeCreateSessionError,
+  RealtimeCreateSessionResponse,
   RunsCancelData,
   RunsCancelError,
   RunsCancelQueuedTurnData,
@@ -1581,6 +1885,9 @@ import type {
   RunsInspectContextData,
   RunsInspectContextError,
   RunsInspectContextResponse,
+  RunsInspectPersistedContextData,
+  RunsInspectPersistedContextError,
+  RunsInspectPersistedContextResponse,
   RunsListQueuedTurnsData,
   RunsListQueuedTurnsError,
   RunsListQueuedTurnsResponse,
@@ -1670,6 +1977,24 @@ import type {
   SystemGetOpenApiDocumentData,
   SystemGetOpenApiDocumentError,
   SystemGetOpenApiDocumentResponse,
+  TableExportsCreateData,
+  TableExportsCreateError,
+  TableExportsCreateResponse,
+  TableExportsGetData,
+  TableExportsGetError,
+  TableExportsGetResponse,
+  TableExportsRunData,
+  TableExportsRunError,
+  TableExportsRunResponse,
+  TablePagesQueryData,
+  TablePagesQueryError,
+  TablePagesQueryResponse,
+  TableViewsListData,
+  TableViewsListError,
+  TableViewsListResponse,
+  TableViewsReplaceData,
+  TableViewsReplaceError,
+  TableViewsReplaceResponse,
   TenancyArchiveWorkspaceData,
   TenancyArchiveWorkspaceError,
   TenancyArchiveWorkspaceResponse,
@@ -1814,6 +2139,21 @@ import type {
   ToolsUpdateAgentBindingData,
   ToolsUpdateAgentBindingError,
   ToolsUpdateAgentBindingResponse,
+  TrustAuditSegmentsSealData,
+  TrustAuditSegmentsSealError,
+  TrustAuditSegmentsSealResponse,
+  TrustBreakGlassAuthorizeData,
+  TrustBreakGlassAuthorizeError,
+  TrustBreakGlassAuthorizeResponse,
+  TrustCryptoShredPreviewData,
+  TrustCryptoShredPreviewError,
+  TrustCryptoShredPreviewResponse,
+  TrustGetPostureData,
+  TrustGetPostureError,
+  TrustGetPostureResponse,
+  TrustSiemExportCheckpointData,
+  TrustSiemExportCheckpointError,
+  TrustSiemExportCheckpointResponse,
   VoicesCreateData,
   VoicesCreateError,
   VoicesCreateResponse,
@@ -2080,6 +2420,33 @@ export const administrationListUsersInfiniteOptions = (
     },
   );
   return opts as Omit<typeof opts, "initialData">;
+};
+
+/**
+ * Query organization users with server-driven keyset pagination
+ */
+export const administrationQueryUsersMutation = (
+  options?: Partial<Options<AdministrationQueryUsersData>>,
+): UseMutationOptions<
+  AdministrationQueryUsersResponse,
+  AdministrationQueryUsersError,
+  Options<AdministrationQueryUsersData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AdministrationQueryUsersResponse,
+    AdministrationQueryUsersError,
+    Options<AdministrationQueryUsersData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await administrationQueryUsers({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
 };
 
 /**
@@ -2837,6 +3204,33 @@ export const adminInsightsUpdateAbuseControlsMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await adminInsightsUpdateAbuseControls({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Simulate abuse-control enforcement without side effects
+ */
+export const adminInsightsSimulateAbuseControlsMutation = (
+  options?: Partial<Options<AdminInsightsSimulateAbuseControlsData>>,
+): UseMutationOptions<
+  AdminInsightsSimulateAbuseControlsResponse,
+  AdminInsightsSimulateAbuseControlsError,
+  Options<AdminInsightsSimulateAbuseControlsData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    AdminInsightsSimulateAbuseControlsResponse,
+    AdminInsightsSimulateAbuseControlsError,
+    Options<AdminInsightsSimulateAbuseControlsData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await adminInsightsSimulateAbuseControls({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -4703,7 +5097,7 @@ export const managedModelsListVersionsOptions = (
 /**
  * Publish a managed-model version
  *
- * Publishes an immutable snapshot of the current draft.
+ * Creates an immutable candidate snapshot or publishes a snapshot directly to production. Candidate snapshots do not change the live managed model until promoted with the rollback/promote endpoint.
  */
 export const managedModelsPublishMutation = (
   options?: Partial<Options<ManagedModelsPublishData>>,
@@ -5530,6 +5924,33 @@ export const operationalGovernanceListAuditLogsInfiniteOptions = (
   return opts as Omit<typeof opts, "initialData">;
 };
 
+/**
+ * Query audit logs with server-driven keyset pagination
+ */
+export const operationalGovernanceQueryAuditLogsMutation = (
+  options?: Partial<Options<OperationalGovernanceQueryAuditLogsData>>,
+): UseMutationOptions<
+  OperationalGovernanceQueryAuditLogsResponse,
+  OperationalGovernanceQueryAuditLogsError,
+  Options<OperationalGovernanceQueryAuditLogsData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    OperationalGovernanceQueryAuditLogsResponse,
+    OperationalGovernanceQueryAuditLogsError,
+    Options<OperationalGovernanceQueryAuditLogsData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await operationalGovernanceQueryAuditLogs({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const operationalGovernanceExportAuditLogsQueryKey = (
   options?: Options<OperationalGovernanceExportAuditLogsData>,
 ) => createQueryKey("operationalGovernanceExportAuditLogs", options);
@@ -5584,6 +6005,34 @@ export const operationalGovernanceListUsageEventsOptions = (
       return data;
     },
     queryKey: operationalGovernanceListUsageEventsQueryKey(options),
+  });
+
+export const operationalGovernanceListUsageMetricDefinitionsQueryKey = (
+  options?: Options<OperationalGovernanceListUsageMetricDefinitionsData>,
+) => createQueryKey("operationalGovernanceListUsageMetricDefinitions", options);
+
+/**
+ * List canonical usage metric definitions
+ */
+export const operationalGovernanceListUsageMetricDefinitionsOptions = (
+  options?: Options<OperationalGovernanceListUsageMetricDefinitionsData>,
+) =>
+  queryOptions<
+    OperationalGovernanceListUsageMetricDefinitionsResponse,
+    OperationalGovernanceListUsageMetricDefinitionsError,
+    OperationalGovernanceListUsageMetricDefinitionsResponse,
+    ReturnType<typeof operationalGovernanceListUsageMetricDefinitionsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await operationalGovernanceListUsageMetricDefinitions({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: operationalGovernanceListUsageMetricDefinitionsQueryKey(options),
   });
 
 export const operationalGovernanceExportUsageEventsQueryKey = (
@@ -5863,6 +6312,96 @@ export const operationalPostureGetPostgresOptions = (
     queryKey: operationalPostureGetPostgresQueryKey(options),
   });
 
+export const providersGetCapabilityReportQueryKey = (
+  options: Options<ProvidersGetCapabilityReportData>,
+) => createQueryKey("providersGetCapabilityReport", options);
+
+/**
+ * Get an authorized provider capability report
+ *
+ * Separates registry defaults, configured provider capability posture, dialect operations, catalog freshness, and authorized model counts. It never returns endpoints or credentials.
+ */
+export const providersGetCapabilityReportOptions = (
+  options: Options<ProvidersGetCapabilityReportData>,
+) =>
+  queryOptions<
+    ProvidersGetCapabilityReportResponse,
+    ProvidersGetCapabilityReportError,
+    ProvidersGetCapabilityReportResponse,
+    ReturnType<typeof providersGetCapabilityReportQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await providersGetCapabilityReport({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: providersGetCapabilityReportQueryKey(options),
+  });
+
+export const providersGetModelCapabilityReportQueryKey = (
+  options: Options<ProvidersGetModelCapabilityReportData>,
+) => createQueryKey("providersGetModelCapabilityReport", options);
+
+/**
+ * Get an authorized provider-model capability report
+ *
+ * Reports detected or overridden model capability truth and current provider/model operational availability. Operational usability is not a substitute for workspace policy or action-time authorization.
+ */
+export const providersGetModelCapabilityReportOptions = (
+  options: Options<ProvidersGetModelCapabilityReportData>,
+) =>
+  queryOptions<
+    ProvidersGetModelCapabilityReportResponse,
+    ProvidersGetModelCapabilityReportError,
+    ProvidersGetModelCapabilityReportResponse,
+    ReturnType<typeof providersGetModelCapabilityReportQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await providersGetModelCapabilityReport({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: providersGetModelCapabilityReportQueryKey(options),
+  });
+
+export const providersListKindsQueryKey = (
+  options?: Options<ProvidersListKindsData>,
+) => createQueryKey("providersListKinds", options);
+
+/**
+ * List installed provider kinds and safe setup metadata
+ *
+ * Returns static provider protocol and configuration-field metadata. It never returns configured endpoints, credential references, secret values, or tenant provider instances.
+ */
+export const providersListKindsOptions = (
+  options?: Options<ProvidersListKindsData>,
+) =>
+  queryOptions<
+    ProvidersListKindsResponse,
+    ProvidersListKindsError,
+    ProvidersListKindsResponse,
+    ReturnType<typeof providersListKindsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await providersListKinds({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: providersListKindsQueryKey(options),
+  });
+
 export const providersListConnectionsQueryKey = (
   options?: Options<ProvidersListConnectionsData>,
 ) => createQueryKey("providersListConnections", options);
@@ -5975,7 +6514,7 @@ export const providersVerifyConnectionMutation = (
 /**
  * Discover and synchronize provider models
  *
- * Preserves administrative capability and enabled-state overrides while synchronizing the remote catalog.
+ * Preserves administrative capability and enabled-state overrides while synchronizing the remote catalog. Large catalogs must use mode=async_job.
  */
 export const providersSyncModelsMutation = (
   options?: Partial<Options<ProvidersSyncModelsData>>,
@@ -6000,6 +6539,61 @@ export const providersSyncModelsMutation = (
   };
   return mutationOptions;
 };
+
+/**
+ * Run one provider catalog sync job tick
+ */
+export const providersSyncJobsRunMutation = (
+  options?: Partial<Options<ProvidersSyncJobsRunData>>,
+): UseMutationOptions<
+  ProvidersSyncJobsRunResponse,
+  ProvidersSyncJobsRunError,
+  Options<ProvidersSyncJobsRunData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ProvidersSyncJobsRunResponse,
+    ProvidersSyncJobsRunError,
+    Options<ProvidersSyncJobsRunData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await providersSyncJobsRun({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const providersSyncJobsGetQueryKey = (
+  options: Options<ProvidersSyncJobsGetData>,
+) => createQueryKey("providersSyncJobsGet", options);
+
+/**
+ * Read a provider catalog sync job
+ */
+export const providersSyncJobsGetOptions = (
+  options: Options<ProvidersSyncJobsGetData>,
+) =>
+  queryOptions<
+    ProvidersSyncJobsGetResponse,
+    ProvidersSyncJobsGetError,
+    ProvidersSyncJobsGetResponse,
+    ReturnType<typeof providersSyncJobsGetQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await providersSyncJobsGet({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: providersSyncJobsGetQueryKey(options),
+  });
 
 /**
  * Pull a model into an Ollama connection
@@ -6244,6 +6838,87 @@ export const providersGetOperationalSummaryOptions = (
     },
     queryKey: providersGetOperationalSummaryQueryKey(options),
   });
+
+/**
+ * Probe advertised model capabilities with synthetic inputs
+ */
+export const modelsProbeMutation = (
+  options?: Partial<Options<ModelsProbeData>>,
+): UseMutationOptions<
+  ModelsProbeResponse,
+  ModelsProbeError,
+  Options<ModelsProbeData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ModelsProbeResponse,
+    ModelsProbeError,
+    Options<ModelsProbeData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await modelsProbe({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Set an expiring administrator capability override
+ */
+export const modelsCapabilityOverridesUpdateMutation = (
+  options?: Partial<Options<ModelsCapabilityOverridesUpdateData>>,
+): UseMutationOptions<
+  ModelsCapabilityOverridesUpdateResponse,
+  ModelsCapabilityOverridesUpdateError,
+  Options<ModelsCapabilityOverridesUpdateData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ModelsCapabilityOverridesUpdateResponse,
+    ModelsCapabilityOverridesUpdateError,
+    Options<ModelsCapabilityOverridesUpdateData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await modelsCapabilityOverridesUpdate({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Preview whether a model satisfies turn requirements without executing
+ */
+export const modelsCompatibilityPreviewMutation = (
+  options?: Partial<Options<ModelsCompatibilityPreviewData>>,
+): UseMutationOptions<
+  ModelsCompatibilityPreviewResponse,
+  ModelsCompatibilityPreviewError,
+  Options<ModelsCompatibilityPreviewData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ModelsCompatibilityPreviewResponse,
+    ModelsCompatibilityPreviewError,
+    Options<ModelsCompatibilityPreviewData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await modelsCompatibilityPreview({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
 
 export const promptsListTemplatesQueryKey = (
   options: Options<PromptsListTemplatesData>,
@@ -6739,9 +7414,9 @@ export const readinessGetReportOptions = (
   });
 
 /**
- * Inspect the exact governed context for a proposed run
+ * Inspect a privacy-safe context summary for a proposed run
  *
- * Uses the same context builder as run execution and returns redacted messages, retained context, citations, memory metadata, and the estimated token budget.
+ * Uses the same context builder as run execution and returns safe role/image counts, retained-context metadata, citations, memory metadata, and the estimated token budget. Provider-ready message text is deliberately withheld.
  */
 export const runsInspectContextMutation = (
   options?: Partial<Options<RunsInspectContextData>>,
@@ -6766,6 +7441,36 @@ export const runsInspectContextMutation = (
   };
   return mutationOptions;
 };
+
+export const runsInspectPersistedContextQueryKey = (
+  options: Options<RunsInspectPersistedContextData>,
+) => createQueryKey("runsInspectPersistedContext", options);
+
+/**
+ * Inspect privacy-safe context provenance for a chat run
+ *
+ * Returns bounded persisted run provenance and currently authorized visible sources without provider request bodies, hidden reasoning, secret values, or policy match text. The latest run is selected when runId is omitted.
+ */
+export const runsInspectPersistedContextOptions = (
+  options: Options<RunsInspectPersistedContextData>,
+) =>
+  queryOptions<
+    RunsInspectPersistedContextResponse,
+    RunsInspectPersistedContextError,
+    RunsInspectPersistedContextResponse,
+    ReturnType<typeof runsInspectPersistedContextQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await runsInspectPersistedContext({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: runsInspectPersistedContextQueryKey(options),
+  });
 
 export const runsGetActiveForChatQueryKey = (
   options: Options<RunsGetActiveForChatData>,
@@ -7833,6 +8538,166 @@ export const chatsListMessagesOptions = (
     },
     queryKey: chatsListMessagesQueryKey(options),
   });
+
+export const chatsListMessagePageQueryKey = (
+  options: Options<ChatsListMessagePageData>,
+) => createQueryKey("chatsListMessagePage", options);
+
+/**
+ * Page upward through the selected chat branch
+ */
+export const chatsListMessagePageOptions = (
+  options: Options<ChatsListMessagePageData>,
+) =>
+  queryOptions<
+    ChatsListMessagePageResponse,
+    ChatsListMessagePageError,
+    ChatsListMessagePageResponse,
+    ReturnType<typeof chatsListMessagePageQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await chatsListMessagePage({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: chatsListMessagePageQueryKey(options),
+  });
+
+export const chatsListMessagePageInfiniteQueryKey = (
+  options: Options<ChatsListMessagePageData>,
+): QueryKey<Options<ChatsListMessagePageData>> =>
+  createQueryKey("chatsListMessagePage", options, true);
+
+/**
+ * Page upward through the selected chat branch
+ */
+export const chatsListMessagePageInfiniteOptions = (
+  options: Options<ChatsListMessagePageData>,
+) => {
+  const opts = infiniteQueryOptions<
+    ChatsListMessagePageResponse,
+    ChatsListMessagePageError,
+    InfiniteData<ChatsListMessagePageResponse>,
+    QueryKey<Options<ChatsListMessagePageData>>,
+    | string
+    | Pick<
+        QueryKey<Options<ChatsListMessagePageData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<ChatsListMessagePageData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await chatsListMessagePage({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: chatsListMessagePageInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
+
+export const chatsSearchMessagesQueryKey = (
+  options: Options<ChatsSearchMessagesData>,
+) => createQueryKey("chatsSearchMessages", options);
+
+/**
+ * Search persisted messages within one authorized chat
+ */
+export const chatsSearchMessagesOptions = (
+  options: Options<ChatsSearchMessagesData>,
+) =>
+  queryOptions<
+    ChatsSearchMessagesResponse,
+    ChatsSearchMessagesError,
+    ChatsSearchMessagesResponse,
+    ReturnType<typeof chatsSearchMessagesQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await chatsSearchMessages({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: chatsSearchMessagesQueryKey(options),
+  });
+
+export const chatsSearchMessagesInfiniteQueryKey = (
+  options: Options<ChatsSearchMessagesData>,
+): QueryKey<Options<ChatsSearchMessagesData>> =>
+  createQueryKey("chatsSearchMessages", options, true);
+
+/**
+ * Search persisted messages within one authorized chat
+ */
+export const chatsSearchMessagesInfiniteOptions = (
+  options: Options<ChatsSearchMessagesData>,
+) => {
+  const opts = infiniteQueryOptions<
+    ChatsSearchMessagesResponse,
+    ChatsSearchMessagesError,
+    InfiniteData<ChatsSearchMessagesResponse>,
+    QueryKey<Options<ChatsSearchMessagesData>>,
+    | string
+    | Pick<
+        QueryKey<Options<ChatsSearchMessagesData>>[0],
+        "body" | "headers" | "path" | "query"
+      >
+  >(
+    // @ts-ignore
+    {
+      queryFn: async ({ pageParam, queryKey, signal }) => {
+        // @ts-ignore
+        const page: Pick<
+          QueryKey<Options<ChatsSearchMessagesData>>[0],
+          "body" | "headers" | "path" | "query"
+        > =
+          typeof pageParam === "object"
+            ? pageParam
+            : {
+                query: {
+                  cursor: pageParam,
+                },
+              };
+        const params = createInfiniteParams(queryKey, page);
+        const { data } = await chatsSearchMessages({
+          ...options,
+          ...params,
+          signal,
+          throwOnError: true,
+        });
+        return data;
+      },
+      queryKey: chatsSearchMessagesInfiniteQueryKey(options),
+    },
+  );
+  return opts as Omit<typeof opts, "initialData">;
+};
 
 /**
  * Delete a single chat message
@@ -8969,6 +9834,448 @@ export const channelsRemoveReactionMutation = (
   return mutationOptions;
 };
 
+export const capabilitiesListDefinitionsQueryKey = (
+  options?: Options<CapabilitiesListDefinitionsData>,
+) => createQueryKey("capabilitiesListDefinitions", options);
+
+/**
+ * List governed capability definitions
+ */
+export const capabilitiesListDefinitionsOptions = (
+  options?: Options<CapabilitiesListDefinitionsData>,
+) =>
+  queryOptions<
+    CapabilitiesListDefinitionsResponse,
+    CapabilitiesListDefinitionsError,
+    CapabilitiesListDefinitionsResponse,
+    ReturnType<typeof capabilitiesListDefinitionsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await capabilitiesListDefinitions({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: capabilitiesListDefinitionsQueryKey(options),
+  });
+
+export const capabilitiesGetPlatformPostureQueryKey = (
+  options?: Options<CapabilitiesGetPlatformPostureData>,
+) => createQueryKey("capabilitiesGetPlatformPosture", options);
+
+/**
+ * Get global operator capability posture
+ *
+ * Returns the deployment-controlled capability ceiling to global administrators. This layer is read-only through tenant APIs and contains no environment values or secrets.
+ */
+export const capabilitiesGetPlatformPostureOptions = (
+  options?: Options<CapabilitiesGetPlatformPostureData>,
+) =>
+  queryOptions<
+    CapabilitiesGetPlatformPostureResponse,
+    CapabilitiesGetPlatformPostureError,
+    CapabilitiesGetPlatformPostureResponse,
+    ReturnType<typeof capabilitiesGetPlatformPostureQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await capabilitiesGetPlatformPosture({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: capabilitiesGetPlatformPostureQueryKey(options),
+  });
+
+/**
+ * Resolve capabilities for the authenticated subject
+ */
+export const capabilitiesResolveEffectiveMutation = (
+  options?: Partial<Options<CapabilitiesResolveEffectiveData>>,
+): UseMutationOptions<
+  CapabilitiesResolveEffectiveResponse,
+  CapabilitiesResolveEffectiveError,
+  Options<CapabilitiesResolveEffectiveData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CapabilitiesResolveEffectiveResponse,
+    CapabilitiesResolveEffectiveError,
+    Options<CapabilitiesResolveEffectiveData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await capabilitiesResolveEffective({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const capabilitiesGetAdminOverviewQueryKey = (
+  options: Options<CapabilitiesGetAdminOverviewData>,
+) => createQueryKey("capabilitiesGetAdminOverview", options);
+
+/**
+ * Get layered capability administration overview
+ */
+export const capabilitiesGetAdminOverviewOptions = (
+  options: Options<CapabilitiesGetAdminOverviewData>,
+) =>
+  queryOptions<
+    CapabilitiesGetAdminOverviewResponse,
+    CapabilitiesGetAdminOverviewError,
+    CapabilitiesGetAdminOverviewResponse,
+    ReturnType<typeof capabilitiesGetAdminOverviewQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await capabilitiesGetAdminOverview({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: capabilitiesGetAdminOverviewQueryKey(options),
+  });
+
+export const capabilitiesGetAssignmentHistoryQueryKey = (
+  options: Options<CapabilitiesGetAssignmentHistoryData>,
+) => createQueryKey("capabilitiesGetAssignmentHistory", options);
+
+/**
+ * Get capability assignment history
+ */
+export const capabilitiesGetAssignmentHistoryOptions = (
+  options: Options<CapabilitiesGetAssignmentHistoryData>,
+) =>
+  queryOptions<
+    CapabilitiesGetAssignmentHistoryResponse,
+    CapabilitiesGetAssignmentHistoryError,
+    CapabilitiesGetAssignmentHistoryResponse,
+    ReturnType<typeof capabilitiesGetAssignmentHistoryQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await capabilitiesGetAssignmentHistory({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: capabilitiesGetAssignmentHistoryQueryKey(options),
+  });
+
+export const capabilitiesExplainAdminQueryKey = (
+  options: Options<CapabilitiesExplainAdminData>,
+) => createQueryKey("capabilitiesExplainAdmin", options);
+
+/**
+ * Explain a layered capability decision
+ */
+export const capabilitiesExplainAdminOptions = (
+  options: Options<CapabilitiesExplainAdminData>,
+) =>
+  queryOptions<
+    CapabilitiesExplainAdminResponse,
+    CapabilitiesExplainAdminError,
+    CapabilitiesExplainAdminResponse,
+    ReturnType<typeof capabilitiesExplainAdminQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await capabilitiesExplainAdmin({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: capabilitiesExplainAdminQueryKey(options),
+  });
+
+/**
+ * Replace a versioned capability assignment
+ */
+export const capabilitiesPatchAssignmentMutation = (
+  options?: Partial<Options<CapabilitiesPatchAssignmentData>>,
+): UseMutationOptions<
+  CapabilitiesPatchAssignmentResponse,
+  CapabilitiesPatchAssignmentError,
+  Options<CapabilitiesPatchAssignmentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CapabilitiesPatchAssignmentResponse,
+    CapabilitiesPatchAssignmentError,
+    Options<CapabilitiesPatchAssignmentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await capabilitiesPatchAssignment({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Create or replace a versioned capability assignment
+ */
+export const capabilitiesUpdateAssignmentMutation = (
+  options?: Partial<Options<CapabilitiesUpdateAssignmentData>>,
+): UseMutationOptions<
+  CapabilitiesUpdateAssignmentResponse,
+  CapabilitiesUpdateAssignmentError,
+  Options<CapabilitiesUpdateAssignmentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CapabilitiesUpdateAssignmentResponse,
+    CapabilitiesUpdateAssignmentError,
+    Options<CapabilitiesUpdateAssignmentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await capabilitiesUpdateAssignment({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Preview a capability assignment without persisting it
+ */
+export const capabilitiesPreviewAssignmentMutation = (
+  options?: Partial<Options<CapabilitiesPreviewAssignmentData>>,
+): UseMutationOptions<
+  CapabilitiesPreviewAssignmentResponse,
+  CapabilitiesPreviewAssignmentError,
+  Options<CapabilitiesPreviewAssignmentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CapabilitiesPreviewAssignmentResponse,
+    CapabilitiesPreviewAssignmentError,
+    Options<CapabilitiesPreviewAssignmentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await capabilitiesPreviewAssignment({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Preview capability-change impact counts without user content
+ */
+export const capabilitiesPreviewImpactMutation = (
+  options?: Partial<Options<CapabilitiesPreviewImpactData>>,
+): UseMutationOptions<
+  CapabilitiesPreviewImpactResponse,
+  CapabilitiesPreviewImpactError,
+  Options<CapabilitiesPreviewImpactData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CapabilitiesPreviewImpactResponse,
+    CapabilitiesPreviewImpactError,
+    Options<CapabilitiesPreviewImpactData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await capabilitiesPreviewImpact({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Publish a capability assignment, using dual approval when required
+ */
+export const capabilitiesPublishAssignmentMutation = (
+  options?: Partial<Options<CapabilitiesPublishAssignmentData>>,
+): UseMutationOptions<
+  CapabilitiesPublishAssignmentResponse,
+  CapabilitiesPublishAssignmentError,
+  Options<CapabilitiesPublishAssignmentData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CapabilitiesPublishAssignmentResponse,
+    CapabilitiesPublishAssignmentError,
+    Options<CapabilitiesPublishAssignmentData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await capabilitiesPublishAssignment({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Approve a high-risk capability publication as a distinct actor
+ */
+export const capabilitiesApprovePublicationMutation = (
+  options?: Partial<Options<CapabilitiesApprovePublicationData>>,
+): UseMutationOptions<
+  CapabilitiesApprovePublicationResponse,
+  CapabilitiesApprovePublicationError,
+  Options<CapabilitiesApprovePublicationData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CapabilitiesApprovePublicationResponse,
+    CapabilitiesApprovePublicationError,
+    Options<CapabilitiesApprovePublicationData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await capabilitiesApprovePublication({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const capabilityFlagsListEffectiveQueryKey = (
+  options?: Options<CapabilityFlagsListEffectiveData>,
+) => createQueryKey("capabilityFlagsListEffective", options);
+
+/**
+ * List the caller's effective organization capability flags
+ */
+export const capabilityFlagsListEffectiveOptions = (
+  options?: Options<CapabilityFlagsListEffectiveData>,
+) =>
+  queryOptions<
+    CapabilityFlagsListEffectiveResponse,
+    CapabilityFlagsListEffectiveError,
+    CapabilityFlagsListEffectiveResponse,
+    ReturnType<typeof capabilityFlagsListEffectiveQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await capabilityFlagsListEffective({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: capabilityFlagsListEffectiveQueryKey(options),
+  });
+
+export const capabilityFlagsGetAdminReportQueryKey = (
+  options?: Options<CapabilityFlagsGetAdminReportData>,
+) => createQueryKey("capabilityFlagsGetAdminReport", options);
+
+/**
+ * Get organization capability flag configuration
+ */
+export const capabilityFlagsGetAdminReportOptions = (
+  options?: Options<CapabilityFlagsGetAdminReportData>,
+) =>
+  queryOptions<
+    CapabilityFlagsGetAdminReportResponse,
+    CapabilityFlagsGetAdminReportError,
+    CapabilityFlagsGetAdminReportResponse,
+    ReturnType<typeof capabilityFlagsGetAdminReportQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await capabilityFlagsGetAdminReport({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: capabilityFlagsGetAdminReportQueryKey(options),
+  });
+
+export const capabilityFlagsGetHistoryQueryKey = (
+  options: Options<CapabilityFlagsGetHistoryData>,
+) => createQueryKey("capabilityFlagsGetHistory", options);
+
+/**
+ * Get capability flag revision history
+ */
+export const capabilityFlagsGetHistoryOptions = (
+  options: Options<CapabilityFlagsGetHistoryData>,
+) =>
+  queryOptions<
+    CapabilityFlagsGetHistoryResponse,
+    CapabilityFlagsGetHistoryError,
+    CapabilityFlagsGetHistoryResponse,
+    ReturnType<typeof capabilityFlagsGetHistoryQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await capabilityFlagsGetHistory({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: capabilityFlagsGetHistoryQueryKey(options),
+  });
+
+/**
+ * Replace an organization capability flag revision
+ */
+export const capabilityFlagsUpdateMutation = (
+  options?: Partial<Options<CapabilityFlagsUpdateData>>,
+): UseMutationOptions<
+  CapabilityFlagsUpdateResponse,
+  CapabilityFlagsUpdateError,
+  Options<CapabilityFlagsUpdateData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CapabilityFlagsUpdateResponse,
+    CapabilityFlagsUpdateError,
+    Options<CapabilityFlagsUpdateData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await capabilityFlagsUpdate({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const collaborationListShareTargetsQueryKey = (
   options?: Options<CollaborationListShareTargetsData>,
 ) => createQueryKey("collaborationListShareTargets", options);
@@ -9042,6 +10349,197 @@ export const collaborationShareKnowledgeBaseMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await collaborationShareKnowledgeBase({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Revoke a knowledge-base share
+ */
+export const collaborationRevokeKnowledgeBaseShareMutation = (
+  options?: Partial<Options<CollaborationRevokeKnowledgeBaseShareData>>,
+): UseMutationOptions<
+  CollaborationRevokeKnowledgeBaseShareResponse,
+  CollaborationRevokeKnowledgeBaseShareError,
+  Options<CollaborationRevokeKnowledgeBaseShareData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CollaborationRevokeKnowledgeBaseShareResponse,
+    CollaborationRevokeKnowledgeBaseShareError,
+    Options<CollaborationRevokeKnowledgeBaseShareData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await collaborationRevokeKnowledgeBaseShare({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const collaborationListModelSharesQueryKey = (
+  options: Options<CollaborationListModelSharesData>,
+) => createQueryKey("collaborationListModelShares", options);
+
+/**
+ * List model use grants
+ */
+export const collaborationListModelSharesOptions = (
+  options: Options<CollaborationListModelSharesData>,
+) =>
+  queryOptions<
+    CollaborationListModelSharesResponse,
+    CollaborationListModelSharesError,
+    CollaborationListModelSharesResponse,
+    ReturnType<typeof collaborationListModelSharesQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await collaborationListModelShares({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: collaborationListModelSharesQueryKey(options),
+  });
+
+/**
+ * Grant model use to a principal
+ */
+export const collaborationShareModelMutation = (
+  options?: Partial<Options<CollaborationShareModelData>>,
+): UseMutationOptions<
+  CollaborationShareModelResponse,
+  CollaborationShareModelError,
+  Options<CollaborationShareModelData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CollaborationShareModelResponse,
+    CollaborationShareModelError,
+    Options<CollaborationShareModelData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await collaborationShareModel({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Revoke a model use grant
+ */
+export const collaborationRevokeModelShareMutation = (
+  options?: Partial<Options<CollaborationRevokeModelShareData>>,
+): UseMutationOptions<
+  CollaborationRevokeModelShareResponse,
+  CollaborationRevokeModelShareError,
+  Options<CollaborationRevokeModelShareData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CollaborationRevokeModelShareResponse,
+    CollaborationRevokeModelShareError,
+    Options<CollaborationRevokeModelShareData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await collaborationRevokeModelShare({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const collaborationListWorkspaceMembersQueryKey = (
+  options: Options<CollaborationListWorkspaceMembersData>,
+) => createQueryKey("collaborationListWorkspaceMembers", options);
+
+/**
+ * List workspace membership grants
+ */
+export const collaborationListWorkspaceMembersOptions = (
+  options: Options<CollaborationListWorkspaceMembersData>,
+) =>
+  queryOptions<
+    CollaborationListWorkspaceMembersResponse,
+    CollaborationListWorkspaceMembersError,
+    CollaborationListWorkspaceMembersResponse,
+    ReturnType<typeof collaborationListWorkspaceMembersQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await collaborationListWorkspaceMembers({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: collaborationListWorkspaceMembersQueryKey(options),
+  });
+
+/**
+ * Add a workspace member
+ */
+export const collaborationShareWorkspaceMutation = (
+  options?: Partial<Options<CollaborationShareWorkspaceData>>,
+): UseMutationOptions<
+  CollaborationShareWorkspaceResponse,
+  CollaborationShareWorkspaceError,
+  Options<CollaborationShareWorkspaceData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CollaborationShareWorkspaceResponse,
+    CollaborationShareWorkspaceError,
+    Options<CollaborationShareWorkspaceData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await collaborationShareWorkspace({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Remove a workspace member
+ */
+export const collaborationRevokeWorkspaceMemberMutation = (
+  options?: Partial<Options<CollaborationRevokeWorkspaceMemberData>>,
+): UseMutationOptions<
+  CollaborationRevokeWorkspaceMemberResponse,
+  CollaborationRevokeWorkspaceMemberError,
+  Options<CollaborationRevokeWorkspaceMemberData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CollaborationRevokeWorkspaceMemberResponse,
+    CollaborationRevokeWorkspaceMemberError,
+    Options<CollaborationRevokeWorkspaceMemberData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await collaborationRevokeWorkspaceMember({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -9519,6 +11017,33 @@ export const collaborationAddFolderItemMutation = (
 };
 
 /**
+ * List authorized items for a bounded folder batch
+ */
+export const collaborationListFolderItemsBatchMutation = (
+  options?: Partial<Options<CollaborationListFolderItemsBatchData>>,
+): UseMutationOptions<
+  CollaborationListFolderItemsBatchResponse,
+  CollaborationListFolderItemsBatchError,
+  Options<CollaborationListFolderItemsBatchData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CollaborationListFolderItemsBatchResponse,
+    CollaborationListFolderItemsBatchError,
+    Options<CollaborationListFolderItemsBatchData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await collaborationListFolderItemsBatch({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Delete a folder item
  */
 export const collaborationDeleteFolderItemMutation = (
@@ -9673,6 +11198,334 @@ export const collaborationRemoveChatTagMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await collaborationRemoveChatTag({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const contentPolicyGetQueryKey = (
+  options?: Options<ContentPolicyGetData>,
+) => createQueryKey("contentPolicyGet", options);
+
+/**
+ * Get organization content policy
+ */
+export const contentPolicyGetOptions = (
+  options?: Options<ContentPolicyGetData>,
+) =>
+  queryOptions<
+    ContentPolicyGetResponse,
+    ContentPolicyGetError,
+    ContentPolicyGetResponse,
+    ReturnType<typeof contentPolicyGetQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await contentPolicyGet({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: contentPolicyGetQueryKey(options),
+  });
+
+/**
+ * Update organization content policy
+ */
+export const contentPolicyUpdateMutation = (
+  options?: Partial<Options<ContentPolicyUpdateData>>,
+): UseMutationOptions<
+  ContentPolicyUpdateResponse,
+  ContentPolicyUpdateError,
+  Options<ContentPolicyUpdateData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ContentPolicyUpdateResponse,
+    ContentPolicyUpdateError,
+    Options<ContentPolicyUpdateData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await contentPolicyUpdate({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Simulate content policy without returning sensitive content
+ */
+export const contentPolicySimulateMutation = (
+  options?: Partial<Options<ContentPolicySimulateData>>,
+): UseMutationOptions<
+  ContentPolicySimulateResponse,
+  ContentPolicySimulateError,
+  Options<ContentPolicySimulateData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ContentPolicySimulateResponse,
+    ContentPolicySimulateError,
+    Options<ContentPolicySimulateData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await contentPolicySimulate({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const contentPolicyVersionsListQueryKey = (
+  options?: Options<ContentPolicyVersionsListData>,
+) => createQueryKey("contentPolicyVersionsList", options);
+
+/**
+ * List immutable content-policy versions
+ */
+export const contentPolicyVersionsListOptions = (
+  options?: Options<ContentPolicyVersionsListData>,
+) =>
+  queryOptions<
+    ContentPolicyVersionsListResponse,
+    ContentPolicyVersionsListError,
+    ContentPolicyVersionsListResponse,
+    ReturnType<typeof contentPolicyVersionsListQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await contentPolicyVersionsList({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: contentPolicyVersionsListQueryKey(options),
+  });
+
+/**
+ * Create an immutable content-policy draft
+ */
+export const contentPolicyVersionsCreateMutation = (
+  options?: Partial<Options<ContentPolicyVersionsCreateData>>,
+): UseMutationOptions<
+  ContentPolicyVersionsCreateResponse,
+  ContentPolicyVersionsCreateError,
+  Options<ContentPolicyVersionsCreateData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ContentPolicyVersionsCreateResponse,
+    ContentPolicyVersionsCreateError,
+    Options<ContentPolicyVersionsCreateData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await contentPolicyVersionsCreate({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Dry-run a content-policy version without returning matches
+ */
+export const contentPolicyVersionsDryRunMutation = (
+  options?: Partial<Options<ContentPolicyVersionsDryRunData>>,
+): UseMutationOptions<
+  ContentPolicyVersionsDryRunResponse,
+  ContentPolicyVersionsDryRunError,
+  Options<ContentPolicyVersionsDryRunData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ContentPolicyVersionsDryRunResponse,
+    ContentPolicyVersionsDryRunError,
+    Options<ContentPolicyVersionsDryRunData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await contentPolicyVersionsDryRun({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Publish a staged or draft content-policy version
+ */
+export const contentPolicyVersionsPublishMutation = (
+  options?: Partial<Options<ContentPolicyVersionsPublishData>>,
+): UseMutationOptions<
+  ContentPolicyVersionsPublishResponse,
+  ContentPolicyVersionsPublishError,
+  Options<ContentPolicyVersionsPublishData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ContentPolicyVersionsPublishResponse,
+    ContentPolicyVersionsPublishError,
+    Options<ContentPolicyVersionsPublishData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await contentPolicyVersionsPublish({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Roll back to a previous published content-policy version
+ */
+export const contentPolicyRollbackMutation = (
+  options?: Partial<Options<ContentPolicyRollbackData>>,
+): UseMutationOptions<
+  ContentPolicyRollbackResponse,
+  ContentPolicyRollbackError,
+  Options<ContentPolicyRollbackData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ContentPolicyRollbackResponse,
+    ContentPolicyRollbackError,
+    Options<ContentPolicyRollbackData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await contentPolicyRollback({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const contentPolicyDecisionsListQueryKey = (
+  options?: Options<ContentPolicyDecisionsListData>,
+) => createQueryKey("contentPolicyDecisionsList", options);
+
+/**
+ * List sanitized content-policy decisions
+ */
+export const contentPolicyDecisionsListOptions = (
+  options?: Options<ContentPolicyDecisionsListData>,
+) =>
+  queryOptions<
+    ContentPolicyDecisionsListResponse,
+    ContentPolicyDecisionsListError,
+    ContentPolicyDecisionsListResponse,
+    ReturnType<typeof contentPolicyDecisionsListQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await contentPolicyDecisionsList({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: contentPolicyDecisionsListQueryKey(options),
+  });
+
+export const contentPolicyApprovalsListQueryKey = (
+  options?: Options<ContentPolicyApprovalsListData>,
+) => createQueryKey("contentPolicyApprovalsList", options);
+
+/**
+ * List scoped content-policy approvals
+ */
+export const contentPolicyApprovalsListOptions = (
+  options?: Options<ContentPolicyApprovalsListData>,
+) =>
+  queryOptions<
+    ContentPolicyApprovalsListResponse,
+    ContentPolicyApprovalsListError,
+    ContentPolicyApprovalsListResponse,
+    ReturnType<typeof contentPolicyApprovalsListQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await contentPolicyApprovalsList({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: contentPolicyApprovalsListQueryKey(options),
+  });
+
+/**
+ * Pause a run for a scoped, expiring, content-minimized approval
+ */
+export const contentPolicyApprovalsRequestMutation = (
+  options?: Partial<Options<ContentPolicyApprovalsRequestData>>,
+): UseMutationOptions<
+  ContentPolicyApprovalsRequestResponse,
+  ContentPolicyApprovalsRequestError,
+  Options<ContentPolicyApprovalsRequestData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ContentPolicyApprovalsRequestResponse,
+    ContentPolicyApprovalsRequestError,
+    Options<ContentPolicyApprovalsRequestData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await contentPolicyApprovalsRequest({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Resolve a scoped content-policy approval
+ */
+export const contentPolicyApprovalsResolveMutation = (
+  options?: Partial<Options<ContentPolicyApprovalsResolveData>>,
+): UseMutationOptions<
+  ContentPolicyApprovalsResolveResponse,
+  ContentPolicyApprovalsResolveError,
+  Options<ContentPolicyApprovalsResolveData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ContentPolicyApprovalsResolveResponse,
+    ContentPolicyApprovalsResolveError,
+    Options<ContentPolicyApprovalsResolveData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await contentPolicyApprovalsResolve({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -10152,6 +12005,789 @@ export const edgeSecurityGetPostureOptions = (
     queryKey: edgeSecurityGetPostureQueryKey(options),
   });
 
+/**
+ * Create an authenticated realtime voice session or fail closed
+ */
+export const realtimeCreateSessionMutation = (
+  options?: Partial<Options<RealtimeCreateSessionData>>,
+): UseMutationOptions<
+  RealtimeCreateSessionResponse,
+  RealtimeCreateSessionError,
+  Options<RealtimeCreateSessionData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    RealtimeCreateSessionResponse,
+    RealtimeCreateSessionError,
+    Options<RealtimeCreateSessionData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await realtimeCreateSession({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Queue an isolated compute job or fail closed when uninstalled
+ */
+export const computeCreateJobMutation = (
+  options?: Partial<Options<ComputeCreateJobData>>,
+): UseMutationOptions<
+  ComputeCreateJobResponse,
+  ComputeCreateJobError,
+  Options<ComputeCreateJobData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ComputeCreateJobResponse,
+    ComputeCreateJobError,
+    Options<ComputeCreateJobData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await computeCreateJob({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Preflight a multi-model compare session before any child starts
+ */
+export const compareCreateSessionMutation = (
+  options?: Partial<Options<CompareCreateSessionData>>,
+): UseMutationOptions<
+  CompareCreateSessionResponse,
+  CompareCreateSessionError,
+  Options<CompareCreateSessionData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CompareCreateSessionResponse,
+    CompareCreateSessionError,
+    Options<CompareCreateSessionData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await compareCreateSession({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Evaluate streamed output against rolling detectors before persist
+ */
+export const firewallEvaluateOutputMutation = (
+  options?: Partial<Options<FirewallEvaluateOutputData>>,
+): UseMutationOptions<
+  FirewallEvaluateOutputResponse,
+  FirewallEvaluateOutputError,
+  Options<FirewallEvaluateOutputData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    FirewallEvaluateOutputResponse,
+    FirewallEvaluateOutputError,
+    Options<FirewallEvaluateOutputData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await firewallEvaluateOutput({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Resolve allowed knowledge document IDs before rank
+ */
+export const knowledgePrefilterAclMutation = (
+  options?: Partial<Options<KnowledgePrefilterAclData>>,
+): UseMutationOptions<
+  KnowledgePrefilterAclResponse,
+  KnowledgePrefilterAclError,
+  Options<KnowledgePrefilterAclData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgePrefilterAclResponse,
+    KnowledgePrefilterAclError,
+    Options<KnowledgePrefilterAclData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgePrefilterAcl({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const trustGetPostureQueryKey = (
+  options?: Options<TrustGetPostureData>,
+) => createQueryKey("trustGetPosture", options);
+
+/**
+ * Report key, residency, DLP, and ACL posture without synthetic green
+ */
+export const trustGetPostureOptions = (
+  options?: Options<TrustGetPostureData>,
+) =>
+  queryOptions<
+    TrustGetPostureResponse,
+    TrustGetPostureError,
+    TrustGetPostureResponse,
+    ReturnType<typeof trustGetPostureQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await trustGetPosture({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: trustGetPostureQueryKey(options),
+  });
+
+/**
+ * Create a file-ref image generation, edit, or variation job
+ */
+export const imagesCreateJobMutation = (
+  options?: Partial<Options<ImagesCreateJobData>>,
+): UseMutationOptions<
+  ImagesCreateJobResponse,
+  ImagesCreateJobError,
+  Options<ImagesCreateJobData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ImagesCreateJobResponse,
+    ImagesCreateJobError,
+    Options<ImagesCreateJobData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await imagesCreateJob({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Cancel a durable image job
+ */
+export const imagesCancelJobMutation = (
+  options?: Partial<Options<ImagesCancelJobData>>,
+): UseMutationOptions<
+  ImagesCancelJobResponse,
+  ImagesCancelJobError,
+  Options<ImagesCancelJobData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ImagesCancelJobResponse,
+    ImagesCancelJobError,
+    Options<ImagesCancelJobData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await imagesCancelJob({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Preview native or pipeline realtime adapter selection
+ */
+export const realtimeAdaptersPreviewMutation = (
+  options?: Partial<Options<RealtimeAdaptersPreviewData>>,
+): UseMutationOptions<
+  RealtimeAdaptersPreviewResponse,
+  RealtimeAdaptersPreviewError,
+  Options<RealtimeAdaptersPreviewData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    RealtimeAdaptersPreviewResponse,
+    RealtimeAdaptersPreviewError,
+    Options<RealtimeAdaptersPreviewData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await realtimeAdaptersPreview({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Preview an independently authorized compare synthesis
+ */
+export const compareSynthesisPreviewMutation = (
+  options?: Partial<Options<CompareSynthesisPreviewData>>,
+): UseMutationOptions<
+  CompareSynthesisPreviewResponse,
+  CompareSynthesisPreviewError,
+  Options<CompareSynthesisPreviewData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    CompareSynthesisPreviewResponse,
+    CompareSynthesisPreviewError,
+    Options<CompareSynthesisPreviewData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await compareSynthesisPreview({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Evaluate ACL freshness and fail closed for restricted sources
+ */
+export const knowledgeAclFreshnessMutation = (
+  options?: Partial<Options<KnowledgeAclFreshnessData>>,
+): UseMutationOptions<
+  KnowledgeAclFreshnessResponse,
+  KnowledgeAclFreshnessError,
+  Options<KnowledgeAclFreshnessData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    KnowledgeAclFreshnessResponse,
+    KnowledgeAclFreshnessError,
+    Options<KnowledgeAclFreshnessData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await knowledgeAclFreshness({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Preview crypto-shred after hold, backup, and dual-approval checks
+ */
+export const trustCryptoShredPreviewMutation = (
+  options?: Partial<Options<TrustCryptoShredPreviewData>>,
+): UseMutationOptions<
+  TrustCryptoShredPreviewResponse,
+  TrustCryptoShredPreviewError,
+  Options<TrustCryptoShredPreviewData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TrustCryptoShredPreviewResponse,
+    TrustCryptoShredPreviewError,
+    Options<TrustCryptoShredPreviewData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await trustCryptoShredPreview({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Seal a hash-chained audit segment
+ */
+export const trustAuditSegmentsSealMutation = (
+  options?: Partial<Options<TrustAuditSegmentsSealData>>,
+): UseMutationOptions<
+  TrustAuditSegmentsSealResponse,
+  TrustAuditSegmentsSealError,
+  Options<TrustAuditSegmentsSealData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TrustAuditSegmentsSealResponse,
+    TrustAuditSegmentsSealError,
+    Options<TrustAuditSegmentsSealData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await trustAuditSegmentsSeal({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Checkpoint a SIEM or WORM audit-segment export
+ */
+export const trustSiemExportCheckpointMutation = (
+  options?: Partial<Options<TrustSiemExportCheckpointData>>,
+): UseMutationOptions<
+  TrustSiemExportCheckpointResponse,
+  TrustSiemExportCheckpointError,
+  Options<TrustSiemExportCheckpointData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TrustSiemExportCheckpointResponse,
+    TrustSiemExportCheckpointError,
+    Options<TrustSiemExportCheckpointData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await trustSiemExportCheckpoint({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Authorize time-limited break-glass without disabling mandatory controls
+ */
+export const trustBreakGlassAuthorizeMutation = (
+  options?: Partial<Options<TrustBreakGlassAuthorizeData>>,
+): UseMutationOptions<
+  TrustBreakGlassAuthorizeResponse,
+  TrustBreakGlassAuthorizeError,
+  Options<TrustBreakGlassAuthorizeData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TrustBreakGlassAuthorizeResponse,
+    TrustBreakGlassAuthorizeError,
+    Options<TrustBreakGlassAuthorizeData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await trustBreakGlassAuthorize({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Evaluate required Kata guest sandbox posture before claim
+ */
+export const computeSandboxPostureMutation = (
+  options?: Partial<Options<ComputeSandboxPostureData>>,
+): UseMutationOptions<
+  ComputeSandboxPostureResponse,
+  ComputeSandboxPostureError,
+  Options<ComputeSandboxPostureData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ComputeSandboxPostureResponse,
+    ComputeSandboxPostureError,
+    Options<ComputeSandboxPostureData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await computeSandboxPosture({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Authorize a signed digest-pinned runtime image and package policy
+ */
+export const computeRuntimeImagesAuthorizeMutation = (
+  options?: Partial<Options<ComputeRuntimeImagesAuthorizeData>>,
+): UseMutationOptions<
+  ComputeRuntimeImagesAuthorizeResponse,
+  ComputeRuntimeImagesAuthorizeError,
+  Options<ComputeRuntimeImagesAuthorizeData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ComputeRuntimeImagesAuthorizeResponse,
+    ComputeRuntimeImagesAuthorizeError,
+    Options<ComputeRuntimeImagesAuthorizeData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await computeRuntimeImagesAuthorize({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Admit a compute artifact after path, size, scan, and DLP checks
+ */
+export const computeArtifactsIntakeMutation = (
+  options?: Partial<Options<ComputeArtifactsIntakeData>>,
+): UseMutationOptions<
+  ComputeArtifactsIntakeResponse,
+  ComputeArtifactsIntakeError,
+  Options<ComputeArtifactsIntakeData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ComputeArtifactsIntakeResponse,
+    ComputeArtifactsIntakeError,
+    Options<ComputeArtifactsIntakeData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await computeArtifactsIntake({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Record runtime, code, input, output, and policy provenance
+ */
+export const computeArtifactsProvenanceMutation = (
+  options?: Partial<Options<ComputeArtifactsProvenanceData>>,
+): UseMutationOptions<
+  ComputeArtifactsProvenanceResponse,
+  ComputeArtifactsProvenanceError,
+  Options<ComputeArtifactsProvenanceData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ComputeArtifactsProvenanceResponse,
+    ComputeArtifactsProvenanceError,
+    Options<ComputeArtifactsProvenanceData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await computeArtifactsProvenance({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Create an immutable artifact version instead of overwriting
+ */
+export const computeArtifactsCreateVersionMutation = (
+  options?: Partial<Options<ComputeArtifactsCreateVersionData>>,
+): UseMutationOptions<
+  ComputeArtifactsCreateVersionResponse,
+  ComputeArtifactsCreateVersionError,
+  Options<ComputeArtifactsCreateVersionData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ComputeArtifactsCreateVersionResponse,
+    ComputeArtifactsCreateVersionError,
+    Options<ComputeArtifactsCreateVersionData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await computeArtifactsCreateVersion({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Authorize a hardened or sandboxed artifact preview and download
+ */
+export const computeArtifactsPreviewMutation = (
+  options?: Partial<Options<ComputeArtifactsPreviewData>>,
+): UseMutationOptions<
+  ComputeArtifactsPreviewResponse,
+  ComputeArtifactsPreviewError,
+  Options<ComputeArtifactsPreviewData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ComputeArtifactsPreviewResponse,
+    ComputeArtifactsPreviewError,
+    Options<ComputeArtifactsPreviewData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await computeArtifactsPreview({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Authorize artifact quota, hold, export, delete, shred, or cleanup
+ */
+export const computeArtifactsLifecycleMutation = (
+  options?: Partial<Options<ComputeArtifactsLifecycleData>>,
+): UseMutationOptions<
+  ComputeArtifactsLifecycleResponse,
+  ComputeArtifactsLifecycleError,
+  Options<ComputeArtifactsLifecycleData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ComputeArtifactsLifecycleResponse,
+    ComputeArtifactsLifecycleError,
+    Options<ComputeArtifactsLifecycleData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await computeArtifactsLifecycle({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Report compute worker, lease, image, and cleanup posture
+ */
+export const computeOperationsPostureMutation = (
+  options?: Partial<Options<ComputeOperationsPostureData>>,
+): UseMutationOptions<
+  ComputeOperationsPostureResponse,
+  ComputeOperationsPostureError,
+  Options<ComputeOperationsPostureData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    ComputeOperationsPostureResponse,
+    ComputeOperationsPostureError,
+    Options<ComputeOperationsPostureData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await computeOperationsPosture({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * List server saved views with optional local-preference fallback
+ */
+export const tableViewsListMutation = (
+  options?: Partial<Options<TableViewsListData>>,
+): UseMutationOptions<
+  TableViewsListResponse,
+  TableViewsListError,
+  Options<TableViewsListData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TableViewsListResponse,
+    TableViewsListError,
+    Options<TableViewsListData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tableViewsList({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Persist a per-user workspace saved view
+ */
+export const tableViewsReplaceMutation = (
+  options?: Partial<Options<TableViewsReplaceData>>,
+): UseMutationOptions<
+  TableViewsReplaceResponse,
+  TableViewsReplaceError,
+  Options<TableViewsReplaceData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TableViewsReplaceResponse,
+    TableViewsReplaceError,
+    Options<TableViewsReplaceData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tableViewsReplace({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Queue an async table export from a frozen query snapshot
+ */
+export const tableExportsCreateMutation = (
+  options?: Partial<Options<TableExportsCreateData>>,
+): UseMutationOptions<
+  TableExportsCreateResponse,
+  TableExportsCreateError,
+  Options<TableExportsCreateData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TableExportsCreateResponse,
+    TableExportsCreateError,
+    Options<TableExportsCreateData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tableExportsCreate({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Run one table-export worker tick to an expiring artifact
+ */
+export const tableExportsRunMutation = (
+  options?: Partial<Options<TableExportsRunData>>,
+): UseMutationOptions<
+  TableExportsRunResponse,
+  TableExportsRunError,
+  Options<TableExportsRunData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TableExportsRunResponse,
+    TableExportsRunError,
+    Options<TableExportsRunData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tableExportsRun({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+export const tableExportsGetQueryKey = (
+  options: Options<TableExportsGetData>,
+) => createQueryKey("tableExportsGet", options);
+
+/**
+ * Read a table export job and expire stale artifacts
+ */
+export const tableExportsGetOptions = (options: Options<TableExportsGetData>) =>
+  queryOptions<
+    TableExportsGetResponse,
+    TableExportsGetError,
+    TableExportsGetResponse,
+    ReturnType<typeof tableExportsGetQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tableExportsGet({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tableExportsGetQueryKey(options),
+  });
+
+/**
+ * Page an inventoried admin dataset with a signed cursor
+ */
+export const tablePagesQueryMutation = (
+  options?: Partial<Options<TablePagesQueryData>>,
+): UseMutationOptions<
+  TablePagesQueryResponse,
+  TablePagesQueryError,
+  Options<TablePagesQueryData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TablePagesQueryResponse,
+    TablePagesQueryError,
+    Options<TablePagesQueryData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tablePagesQuery({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const evalsListSuitesQueryKey = (
   options: Options<EvalsListSuitesData>,
 ) => createQueryKey("evalsListSuites", options);
@@ -10195,6 +12831,33 @@ export const evalsCreateSuiteMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await evalsCreateSuite({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Create an eval case from negative message feedback
+ */
+export const evalsCreateCaseFromMessageFeedbackMutation = (
+  options?: Partial<Options<EvalsCreateCaseFromMessageFeedbackData>>,
+): UseMutationOptions<
+  EvalsCreateCaseFromMessageFeedbackResponse,
+  EvalsCreateCaseFromMessageFeedbackError,
+  Options<EvalsCreateCaseFromMessageFeedbackData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    EvalsCreateCaseFromMessageFeedbackResponse,
+    EvalsCreateCaseFromMessageFeedbackError,
+    Options<EvalsCreateCaseFromMessageFeedbackData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await evalsCreateCaseFromMessageFeedback({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -10312,6 +12975,34 @@ export const evalsRunSuiteMutation = (
   };
   return mutationOptions;
 };
+
+export const evalsGetReasoningComparisonQueryKey = (
+  options: Options<EvalsGetReasoningComparisonData>,
+) => createQueryKey("evalsGetReasoningComparison", options);
+
+/**
+ * Compare reasoning-policy eval runs
+ */
+export const evalsGetReasoningComparisonOptions = (
+  options: Options<EvalsGetReasoningComparisonData>,
+) =>
+  queryOptions<
+    EvalsGetReasoningComparisonResponse,
+    EvalsGetReasoningComparisonError,
+    EvalsGetReasoningComparisonResponse,
+    ReturnType<typeof evalsGetReasoningComparisonQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await evalsGetReasoningComparison({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: evalsGetReasoningComparisonQueryKey(options),
+  });
 
 export const evalsListResultsQueryKey = (
   options: Options<EvalsListResultsData>,
@@ -10786,6 +13477,33 @@ export const filesRetryExtractionMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await filesRetryExtraction({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Retry an authorized failed file lifecycle
+ */
+export const filesRetryLifecycleMutation = (
+  options?: Partial<Options<FilesRetryLifecycleData>>,
+): UseMutationOptions<
+  FilesRetryLifecycleResponse,
+  FilesRetryLifecycleError,
+  Options<FilesRetryLifecycleData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    FilesRetryLifecycleResponse,
+    FilesRetryLifecycleError,
+    Options<FilesRetryLifecycleData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await filesRetryLifecycle({
         ...options,
         ...fnOptions,
         throwOnError: true,
@@ -11346,6 +14064,62 @@ export const governanceGetIdentityLifecyclePolicyOptions = (
       return data;
     },
     queryKey: governanceGetIdentityLifecyclePolicyQueryKey(options),
+  });
+
+export const knowledgeGetAgenticSettingsQueryKey = (
+  options?: Options<KnowledgeGetAgenticSettingsData>,
+) => createQueryKey("knowledgeGetAgenticSettings", options);
+
+/**
+ * Get whether agentic RAG is available for this organization
+ */
+export const knowledgeGetAgenticSettingsOptions = (
+  options?: Options<KnowledgeGetAgenticSettingsData>,
+) =>
+  queryOptions<
+    KnowledgeGetAgenticSettingsResponse,
+    KnowledgeGetAgenticSettingsError,
+    KnowledgeGetAgenticSettingsResponse,
+    ReturnType<typeof knowledgeGetAgenticSettingsQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetAgenticSettings({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetAgenticSettingsQueryKey(options),
+  });
+
+export const knowledgeGetIngestReadinessQueryKey = (
+  options?: Options<KnowledgeGetIngestReadinessData>,
+) => createQueryKey("knowledgeGetIngestReadiness", options);
+
+/**
+ * Whether this org can upload and embed knowledge sources
+ */
+export const knowledgeGetIngestReadinessOptions = (
+  options?: Options<KnowledgeGetIngestReadinessData>,
+) =>
+  queryOptions<
+    KnowledgeGetIngestReadinessResponse,
+    KnowledgeGetIngestReadinessError,
+    KnowledgeGetIngestReadinessResponse,
+    ReturnType<typeof knowledgeGetIngestReadinessQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await knowledgeGetIngestReadiness({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: knowledgeGetIngestReadinessQueryKey(options),
   });
 
 export const knowledgeListBasesQueryKey = (

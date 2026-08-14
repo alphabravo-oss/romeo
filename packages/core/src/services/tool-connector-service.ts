@@ -9,7 +9,11 @@ import type {
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import { parseManagedSecretRef } from "./secret-refs";
 import { disabledSecretResolver, type SecretResolver } from "./secret-resolver";
 import { normalizeToolNetworkPolicy } from "./tool-network-policy";
@@ -432,13 +436,13 @@ export class ToolConnectorService extends ToolConnectorDispatchService {
     return connector;
   }
 
-  private async auditConfigurationUpdate(
+  private async auditConfigurationUpdate<A extends AuditAction>(
     repository: RomeoRepository,
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceType: string,
     resourceId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
   ): Promise<void> {
     await writeAuditLog(repository, {
       subject,

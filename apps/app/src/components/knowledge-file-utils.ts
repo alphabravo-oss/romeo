@@ -24,10 +24,7 @@ export function mimeTypeFor(fileName: string, reportedType = ""): string {
 
 export function canInlineUpload(mimeType: string): boolean {
   const normalized = normalizeMime(mimeType);
-  return (
-    normalized.startsWith("text/") ||
-    INLINE_MIME.has(normalized)
-  );
+  return normalized.startsWith("text/") || INLINE_MIME.has(normalized);
 }
 
 export function isDeferredKnowledgeMime(mimeType: string): boolean {
@@ -75,7 +72,10 @@ export const KNOWLEDGE_FILE_ACCEPT = [
 
 const INLINE_LIMIT_BYTES = 200_000;
 
-export function shouldInlineKnowledgeFile(file: File, mimeType: string): boolean {
+export function shouldInlineKnowledgeFile(
+  file: File,
+  mimeType: string,
+): boolean {
   return canInlineUpload(mimeType) && file.size <= INLINE_LIMIT_BYTES;
 }
 

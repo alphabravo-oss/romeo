@@ -8,9 +8,12 @@ import PanelRight from "lucide-react/dist/esm/icons/panel-right.mjs";
 import type { ComponentProps, ReactNode } from "react";
 import {
   createContext,
+  Fragment,
   memo,
   useContext,
   useEffect,
+  useMemo,
+  useRef,
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
@@ -18,9 +21,17 @@ import remarkGfm from "remark-gfm";
 import { writeTextToClipboard } from "./clipboard";
 import { citationHrefPrefix, renderableContent } from "./chat-citations";
 import { useLocale } from "./i18n";
+import {
+  absoluteMarkdownOffset,
+  advanceMarkdownSegmentation,
+  detectMarkdownFeatures,
+  type MarkdownSegmentation,
+} from "./markdown-segments";
 import { downloadText } from "./download";
 import type { ChatCitation } from "./run-registry";
 import { toast } from "./toast";
+import { MermaidPreview } from "../components/MermaidPreview";
+import { useTranscriptRowVisibility } from "../components/transcript-row-visibility";
 
 type RehypePlugins = NonNullable<
   ComponentProps<typeof ReactMarkdown>["rehypePlugins"]
@@ -28,8 +39,9 @@ type RehypePlugins = NonNullable<
 type RemarkPlugins = NonNullable<
   ComponentProps<typeof ReactMarkdown>["remarkPlugins"]
 >;
-const fencedCodePattern = /(^|\n)\s*(?:```|~~~)/u;
-const mathPattern = /(^|[^\\])(?:\$\$|\\\(|\\\[)/u;
+type MarkdownComponents = NonNullable<
+  ComponentProps<typeof ReactMarkdown>["components"]
+>;
 
 /**
  * How a fenced block reaches the canvas pane. Supplied by ChatPanel and read
@@ -141,10 +153,13 @@ function CodeBlock({
               onClick={() => artifacts.open(placement.key, placement.version)}
               title={
                 placement.total > 1
-                  ? `${promoted ? t("artifactInCanvas") : t("openInCanvas")} · ${t("artifactVersion", {
-                      total: placement.total,
-                      version: placement.version + 1,
-                    })}`
+                  ? `${promoted ? t("artifactInCanvas") : t("openInCanvas")} · ${t(
+                      "artifactVersion",
+                      {
+                        total: placement.total,
+                        version: placement.version + 1,
+                      },
+                    )}`
                   : promoted
                     ? t("artifactInCanvas")
                     : t("openInCanvas")
@@ -190,45 +205,8 @@ function CodeBlock({
   );
 }
 
-function MermaidPreview({ code }: { code: string }) {
-  const { t } = useLocale();
-  const [svg, setSvg] = useState<string>();
-  const [error, setError] = useState<string>();
-
-  useEffect(() => {
-    let active = true;
-    void import("mermaid")
-      .then(async ({ default: mermaid }) => {
-        mermaid.initialize({ startOnLoad: false, securityLevel: "strict" });
-        const result = await mermaid.render(
-          `rm-mermaid-${crypto.randomUUID()}`,
-          code,
-        );
-        if (active) setSvg(result.svg);
-      })
-      .catch(() => {
-        if (active) setError(t("diagramError"));
-      });
-    return () => {
-      active = false;
-    };
-  }, [code, t]);
-
-  if (error) return <div className="rm-code-preview-error">{error}</div>;
-  if (!svg)
-    return <div className="rm-code-preview-loading">{t("diagramLoading")}</div>;
-  return (
-    <div
-      className="rm-mermaid-preview"
-      // Mermaid strict mode sanitizes generated SVG and disables HTML labels.
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
-  );
-}
-
 /**
- * Safe rich response renderer. Raw model HTML remains text; explicit HTML
- * fences remain inert text. Mermaid diagrams use the strict renderer only.
+ * Raw model HTML stays inert; Mermaid uses the strict renderer only.
  */
 export const Markdown = memo(function Markdown({
   citations = noCitations,
@@ -245,17 +223,81 @@ export const Markdown = memo(function Markdown({
   previewDiagrams?: boolean;
   streaming?: boolean;
 }) {
-  // ChatGPT-like: paint every byte already in the cache. No typewriter lag —
-  // provider token cadence is the only source of "chunks".
   const renderedContent = renderableContent(content, citations.length);
-  const usesFencedCode = fencedCodePattern.test(renderedContent);
-  const usesMath = mathPattern.test(renderedContent);
+  const planCache = useRef<MarkdownSegmentation | undefined>(undefined);
+  const plan = streaming
+    ? advanceMarkdownSegmentation(planCache.current, renderedContent)
+    : undefined;
+  planCache.current = plan;
+  const stableDocuments = useMemo(
+    () =>
+      plan?.stable.map((segment) => (
+        <Fragment key={segment.start}>
+          <MarkdownDocument
+            citations={citations}
+            content={segment.content}
+            messageId={messageId}
+            previewDiagrams={previewDiagrams}
+            sourceOffset={segment.start}
+          />
+          {"\n"}
+        </Fragment>
+      )),
+    [citations, messageId, plan?.stable, previewDiagrams],
+  );
+
+  return (
+    <div className={streaming ? "rm-markdown streaming" : "rm-markdown"}>
+      {plan === undefined ? (
+        <MarkdownDocument
+          citations={citations}
+          content={renderedContent}
+          messageId={messageId}
+          previewDiagrams={previewDiagrams}
+          sourceOffset={0}
+        />
+      ) : (
+        <>
+          {stableDocuments}
+          <MarkdownDocument
+            citations={citations}
+            content={plan.tail.content}
+            key="streaming-tail"
+            messageId={messageId}
+            previewDiagrams={previewDiagrams}
+            sourceOffset={plan.tail.start}
+          />
+        </>
+      )}
+    </div>
+  );
+});
+
+const MarkdownDocument = memo(function MarkdownDocument({
+  citations,
+  content,
+  messageId,
+  previewDiagrams,
+  sourceOffset,
+}: {
+  citations: ChatCitation[];
+  content: string;
+  messageId: string | undefined;
+  previewDiagrams: boolean;
+  sourceOffset: number;
+}) {
+  const visible = useTranscriptRowVisibility();
+  const { fencedCode: usesFencedCode, math: usesMath } =
+    detectMarkdownFeatures(content);
+  const featureKey = `${usesFencedCode ? "code" : ""}:${usesMath ? "math" : ""}`;
   const [rehypePlugins, setRehypePlugins] = useState<RehypePlugins>([]);
   const [remarkPlugins, setRemarkPlugins] = useState<RemarkPlugins>([
     remarkGfm,
   ]);
+  const loadedFeatureKey = useRef(":");
 
   useEffect(() => {
+    if (!visible || (!usesFencedCode && !usesMath)) return;
     let active = true;
     void Promise.all([
       usesFencedCode
@@ -272,6 +314,7 @@ export const Markdown = memo(function Markdown({
         : Promise.resolve(undefined),
     ]).then(([highlight, katex, math]) => {
       if (!active) return;
+      loadedFeatureKey.current = featureKey;
       setRehypePlugins([
         ...(highlight === undefined
           ? []
@@ -288,60 +331,64 @@ export const Markdown = memo(function Markdown({
     return () => {
       active = false;
     };
-  }, [usesFencedCode, usesMath]);
+  }, [featureKey, usesFencedCode, usesMath, visible]);
+
+  const activeRehypePlugins =
+    loadedFeatureKey.current === featureKey ? rehypePlugins : [];
+  const activeRemarkPlugins =
+    loadedFeatureKey.current === featureKey ? remarkPlugins : [remarkGfm];
+  const components = useMemo<MarkdownComponents>(
+    () => ({
+      a: ({ children, node: _node, ...props }) => {
+        const citation = citationForHref(props.href, citations);
+        if (citation !== undefined) {
+          return (
+            <CitationMarker citation={citation}>{children}</CitationMarker>
+          );
+        }
+        return (
+          <a {...props} rel="noreferrer nofollow" target="_blank">
+            {children}
+          </a>
+        );
+      },
+      pre: ({ children, node }) => {
+        const codeElement = Array.isArray(children) ? children[0] : children;
+        const className =
+          codeElement &&
+          typeof codeElement === "object" &&
+          "props" in codeElement
+            ? ((codeElement.props as { className?: string }).className ?? "")
+            : "";
+        const language =
+          /(?:^|\s)language-([^\s]+)/u.exec(className)?.[1]?.toLowerCase() ??
+          "text";
+        return (
+          <CodeBlock
+            code={extractText(children).replace(/\n$/u, "")}
+            highlighted={children}
+            language={language}
+            messageId={messageId}
+            offset={absoluteMarkdownOffset(
+              sourceOffset,
+              node?.position?.start.offset,
+            )}
+            previewDiagrams={previewDiagrams}
+          />
+        );
+      },
+    }),
+    [citations, messageId, previewDiagrams, sourceOffset],
+  );
 
   return (
-    // The streaming class alone drives the caret at the token frontier: it is a
-    // ::after on the last block, so it costs no element, no prop and no render.
-    <div className={streaming ? "rm-markdown streaming" : "rm-markdown"}>
-      <ReactMarkdown
-        components={{
-          a: ({ children, node: _node, ...props }) => {
-            const citation = citationForHref(props.href, citations);
-            if (citation !== undefined) {
-              return (
-                <CitationMarker citation={citation}>{children}</CitationMarker>
-              );
-            }
-            return (
-              <a {...props} rel="noreferrer nofollow" target="_blank">
-                {children}
-              </a>
-            );
-          },
-          pre: ({ children, node }) => {
-            const codeElement = Array.isArray(children)
-              ? children[0]
-              : children;
-            const className =
-              codeElement &&
-              typeof codeElement === "object" &&
-              "props" in codeElement
-                ? ((codeElement.props as { className?: string }).className ??
-                  "")
-                : "";
-            const language =
-              /(?:^|\s)language-([^\s]+)/u
-                .exec(className)?.[1]
-                ?.toLowerCase() ?? "text";
-            return (
-              <CodeBlock
-                code={extractText(children).replace(/\n$/u, "")}
-                highlighted={children}
-                language={language}
-                messageId={messageId}
-                offset={node?.position?.start.offset}
-                previewDiagrams={previewDiagrams}
-              />
-            );
-          },
-        }}
-        rehypePlugins={rehypePlugins}
-        remarkPlugins={remarkPlugins}
-      >
-        {renderedContent}
-      </ReactMarkdown>
-    </div>
+    <ReactMarkdown
+      components={components}
+      rehypePlugins={activeRehypePlugins}
+      remarkPlugins={activeRemarkPlugins}
+    >
+      {content}
+    </ReactMarkdown>
   );
 });
 

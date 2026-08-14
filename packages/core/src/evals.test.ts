@@ -1,9 +1,311 @@
-import { describe, expect, it } from "vitest";
+import { createApiKeyToken, hashApiKey, seededSubject } from "@romeo/auth";
+import { describe, expect, it, vi } from "vitest";
 
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
+import { testEnv } from "./test-support/env";
+import { ContentPolicyService } from "./services/content-policy-service";
+import { CapabilityService } from "./services/capability-resolver";
 
 describe("eval API", () => {
+  it("creates one privacy-minimal eval case from negative message feedback", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository);
+    const createdAt = new Date().toISOString();
+    await repository.createMessage({
+      id: "msg_feedback_eval_user",
+      chatId: "chat_welcome",
+      role: "user",
+      content: "Keep only this user prompt as the regression input.",
+      createdAt,
+    });
+    await repository.createMessage({
+      id: "msg_feedback_eval_assistant",
+      chatId: "chat_welcome",
+      role: "assistant",
+      content: "RAW_NEGATIVE_ASSISTANT_RESPONSE_MUST_NOT_PERSIST",
+      parentId: "msg_feedback_eval_user",
+      createdAt,
+    });
+    const feedbackResponse = await api.request(
+      "/api/v1/chats/chat_welcome/messages/msg_feedback_eval_assistant/feedback",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          rating: "negative",
+          reasonCode: "RAW_FEEDBACK_REASON_MUST_NOT_PERSIST_IN_EVAL",
+        }),
+      },
+    );
+    const request = {
+      agentId: "agent_default",
+      chatId: "chat_welcome",
+      messageId: "msg_feedback_eval_assistant",
+      suiteName: "Product feedback regressions",
+    };
+    const firstResponse = await api.request(
+      "/api/v1/eval-cases/from-message-feedback",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+    const first = await firstResponse.json();
+    const replayResponse = await api.request(
+      "/api/v1/eval-cases/from-message-feedback",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+    const replay = await replayResponse.json();
+    const cases = await repository.listEvalCases(first.data.suiteId);
+    const suite = await repository.getEvalSuite(first.data.suiteId);
+    const audits = (await repository.listAuditLogs("org_default")).filter(
+      (log) => log.action === "eval.case.create_from_feedback",
+    );
+    const publicPayload = JSON.stringify({ first, replay, audits });
+
+    expect(feedbackResponse.status).toBe(200);
+    expect(firstResponse.status).toBe(201);
+    expect(first.data).toMatchObject({
+      created: true,
+      redaction: {
+        evalInputReturned: false,
+        assistantContentPersisted: false,
+        assistantContentReturned: false,
+        feedbackReasonPersisted: false,
+        feedbackReasonReturned: false,
+        reviewerIdentityPersisted: false,
+        reviewerIdentityReturned: false,
+      },
+    });
+    expect(replayResponse.status).toBe(200);
+    expect(replay.data).toMatchObject({
+      suiteId: first.data.suiteId,
+      caseId: first.data.caseId,
+      created: false,
+    });
+    expect(suite?.name).toBe("Product feedback regressions");
+    expect(cases).toHaveLength(1);
+    expect(cases[0]).toMatchObject({
+      id: first.data.caseId,
+      input: "Keep only this user prompt as the regression input.",
+      requiresCitation: false,
+    });
+    expect(audits).toHaveLength(1);
+    expect(audits[0]?.metadata).toMatchObject({
+      agentId: "agent_default",
+      suiteId: first.data.suiteId,
+      chatId: "chat_welcome",
+      messageId: "msg_feedback_eval_assistant",
+      sourceRating: "negative",
+    });
+    expect(audits[0]?.metadata).not.toHaveProperty("input");
+    expect(audits[0]?.metadata).not.toHaveProperty("reviewerId");
+    expect(publicPayload).not.toContain(
+      "Keep only this user prompt as the regression input.",
+    );
+    expect(JSON.stringify(cases)).not.toContain(
+      "RAW_NEGATIVE_ASSISTANT_RESPONSE_MUST_NOT_PERSIST",
+    );
+    expect(JSON.stringify(cases)).not.toContain(
+      "RAW_FEEDBACK_REASON_MUST_NOT_PERSIST_IN_EVAL",
+    );
+  });
+
+  it("appends feedback to an existing agent suite and rejects non-negative sources", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository);
+    const createdAt = new Date().toISOString();
+    await repository.createMessage({
+      id: "msg_feedback_append_user",
+      chatId: "chat_welcome",
+      role: "user",
+      content: "Append this prompt.",
+      createdAt,
+    });
+    await repository.createMessage({
+      id: "msg_feedback_append_assistant",
+      chatId: "chat_welcome",
+      role: "assistant",
+      content: "An answer that received negative feedback.",
+      parentId: "msg_feedback_append_user",
+      createdAt,
+    });
+    await repository.createMessage({
+      id: "msg_feedback_positive_assistant",
+      chatId: "chat_welcome",
+      role: "assistant",
+      content: "An answer without negative feedback.",
+      parentId: "msg_feedback_append_user",
+      createdAt,
+    });
+    await api.request(
+      "/api/v1/chats/chat_welcome/messages/msg_feedback_append_assistant/feedback",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rating: "negative" }),
+      },
+    );
+    await api.request(
+      "/api/v1/chats/chat_welcome/messages/msg_feedback_positive_assistant/feedback",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rating: "positive" }),
+      },
+    );
+    const suiteResponse = await api.request("/api/v1/eval-suites", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agentId: "agent_default",
+        name: "Existing suite",
+        cases: [{ input: "Existing case." }],
+      }),
+    });
+    const suite = await suiteResponse.json();
+    const appendResponse = await api.request(
+      "/api/v1/eval-cases/from-message-feedback",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agentId: "agent_default",
+          chatId: "chat_welcome",
+          messageId: "msg_feedback_append_assistant",
+          suiteId: suite.data.suite.id,
+        }),
+      },
+    );
+    const appended = await appendResponse.json();
+    const rejectedResponse = await api.request(
+      "/api/v1/eval-cases/from-message-feedback",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agentId: "agent_default",
+          chatId: "chat_welcome",
+          messageId: "msg_feedback_positive_assistant",
+          suiteId: suite.data.suite.id,
+        }),
+      },
+    );
+    const rejected = await rejectedResponse.json();
+    const cases = await repository.listEvalCases(suite.data.suite.id);
+
+    expect(appendResponse.status).toBe(201);
+    expect(appended.data).toMatchObject({
+      suiteId: suite.data.suite.id,
+      created: true,
+    });
+    expect(cases.map((item) => item.input)).toEqual([
+      "Existing case.",
+      "Append this prompt.",
+    ]);
+    expect(rejectedResponse.status).toBe(409);
+    expect(rejected.error.code).toBe("negative_message_feedback_required");
+  });
+
+  it("requires agent edit authority and permits a granted non-admin editor", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const seededApi = createRomeoApi(repository, {
+      startBackgroundWorkers: false,
+    });
+    const createdAt = new Date().toISOString();
+    await repository.createMessage({
+      id: "msg_feedback_auth_user",
+      chatId: "chat_welcome",
+      role: "user",
+      content: "Authorization regression prompt.",
+      createdAt,
+    });
+    await repository.createMessage({
+      id: "msg_feedback_auth_assistant",
+      chatId: "chat_welcome",
+      role: "assistant",
+      content: "Negatively rated answer.",
+      parentId: "msg_feedback_auth_user",
+      createdAt,
+    });
+    await seededApi.request(
+      "/api/v1/chats/chat_welcome/messages/msg_feedback_auth_assistant/feedback",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rating: "negative" }),
+      },
+    );
+    await repository.createResourceGrant({
+      id: "grant_feedback_eval_editor",
+      resourceType: "agent",
+      resourceId: "agent_default",
+      principalType: "user",
+      principalId: "user_dev_admin",
+      permission: "write",
+    });
+    const readerToken = createApiKeyToken();
+    const editorToken = createApiKeyToken();
+    await repository.createApiKey({
+      id: "api_key_feedback_eval_reader",
+      orgId: "org_default",
+      userId: "user_dev_admin",
+      name: "Feedback eval reader",
+      hashedToken: await hashApiKey(readerToken),
+      scopes: ["chats:read"],
+      createdAt,
+    });
+    await repository.createApiKey({
+      id: "api_key_feedback_eval_editor",
+      orgId: "org_default",
+      userId: "user_dev_admin",
+      name: "Feedback eval editor",
+      hashedToken: await hashApiKey(editorToken),
+      scopes: ["chats:read", "agents:write"],
+      createdAt,
+    });
+    const secureApi = createRomeoApi(repository, {
+      env: testEnv({ DEV_SEEDED_LOGIN: "false" }),
+      startBackgroundWorkers: false,
+    });
+    const body = JSON.stringify({
+      agentId: "agent_default",
+      chatId: "chat_welcome",
+      messageId: "msg_feedback_auth_assistant",
+    });
+    const readerResponse = await secureApi.request(
+      "/api/v1/eval-cases/from-message-feedback",
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${readerToken}`,
+          "content-type": "application/json",
+        },
+        body,
+      },
+    );
+    const editorResponse = await secureApi.request(
+      "/api/v1/eval-cases/from-message-feedback",
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${editorToken}`,
+          "content-type": "application/json",
+        },
+        body,
+      },
+    );
+
+    expect(readerResponse.status).toBe(403);
+    expect(editorResponse.status).toBe(201);
+  });
+
   it("creates and runs a passing eval suite, then allows publish", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
     const createResponse = await api.request("/api/v1/eval-suites", {
@@ -162,6 +464,210 @@ describe("eval API", () => {
     expect(versions.data[0].evalSummary.status).toBe("passed");
   });
 
+  it("persists safe reasoning evidence and reconciled reported usage", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const model = await repository.getModel("model_openai_compatible_default");
+    const provider = await repository.getProvider("provider_openai_compatible");
+    await repository.updateProvider({
+      ...provider!,
+      credentialRef: "env://EVAL_TEST_KEY",
+    });
+    await repository.updateModel({
+      ...model!,
+      pricing: { inputTokenUsd: 0.01, outputTokenUsd: 0.02 },
+    });
+    await new ContentPolicyService(repository).update({
+      subject: seededSubject,
+      detectors: { email_address: "redact" },
+    });
+    const rawReasoning = "RAW_PRIVATE_REASONING_private@example.com";
+    const providerFetch = vi.fn<typeof fetch>(
+      async () =>
+        new Response(
+          evalSse([
+            { choices: [{ delta: { reasoning_content: rawReasoning } }] },
+            { choices: [{ delta: { content: "Answer private@example.com" } }] },
+            {
+              choices: [],
+              usage: {
+                prompt_tokens: 5,
+                completion_tokens: 8,
+                completion_tokens_details: { reasoning_tokens: 3 },
+                total_tokens: 13,
+              },
+            },
+          ]),
+          { status: 200 },
+        ),
+    );
+    const api = createRomeoApi(repository, {
+      providerFetch,
+      secretResolver: {
+        async check() {
+          return { available: true, scheme: "env" };
+        },
+        async resolveValue() {
+          return { available: true, scheme: "env", value: "test-key" };
+        },
+      },
+    });
+    const created = await (
+      await api.request("/api/v1/eval-suites", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agentId: "agent_default",
+          name: "Reasoning accounting",
+          cases: [
+            {
+              input: "Return the governed answer",
+              expectedContains: "[REDACTED:EMAIL_ADDRESS]",
+            },
+          ],
+        }),
+      })
+    ).json();
+    const runResponse = await api.request(
+      `/api/v1/eval-suites/${created.data.suite.id}/runs`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          reasoningPolicy: { schemaVersion: 1, mode: "off" },
+        }),
+      },
+    );
+    const completed = await runResponse.json();
+    const repeatedResponse = await api.request(
+      `/api/v1/eval-suites/${created.data.suite.id}/runs`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          reasoningPolicy: { schemaVersion: 1, mode: "off" },
+        }),
+      },
+    );
+    const repeated = await repeatedResponse.json();
+    const comparisonResponse = await api.request(
+      `/api/v1/eval-suites/${created.data.suite.id}/reasoning-comparison`,
+    );
+    const comparison = await comparisonResponse.json();
+    await new CapabilityService(repository).updateAssignment({
+      subject: seededSubject,
+      capabilityId: "reasoning_policy",
+      scope: { scopeType: "workspace", scopeId: "workspace_default" },
+      state: "disabled",
+      configuration: {},
+      reason: "Eval policy cap regression",
+      expectedVersion: 0,
+    });
+    const rejectedResponse = await api.request(
+      `/api/v1/eval-suites/${created.data.suite.id}/runs`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          reasoningPolicy: {
+            schemaVersion: 1,
+            mode: "auto",
+            effort: "high",
+          },
+        }),
+      },
+    );
+    const serialized = JSON.stringify({ completed, comparison });
+
+    expect(runResponse.status).toBe(202);
+    expect(completed.data.run.reasoningPolicy).toEqual({
+      requested: { schemaVersion: 1, mode: "off" },
+      effective: { schemaVersion: 1, mode: "off" },
+    });
+    expect(completed.data.run.metrics).toMatchObject({
+      usage: {
+        coverage: "complete",
+        inputTokens: 5,
+        outputTokens: 8,
+        reasoningTokens: 3,
+        source: "openai-compatible",
+      },
+      costBasis: "reported_tokens",
+    });
+    expect(completed.data.run.metrics.estimatedCostUsd).toBeCloseTo(0.21);
+    expect(completed.data.results[0].output).toContain(
+      "[REDACTED:EMAIL_ADDRESS]",
+    );
+    expect(comparisonResponse.status).toBe(200);
+    expect(comparison.data.variants[0]).toMatchObject({
+      runCount: 2,
+      reportedInputTokens: 10,
+      reportedOutputTokens: 16,
+      reportedReasoningTokens: 6,
+    });
+    expect(comparison.data.variants[0].estimatedCostUsd).toBeCloseTo(0.42);
+    expect(repeated.data.run.id).not.toBe(completed.data.run.id);
+    expect(repeated.data.run.metrics.usage).toEqual(
+      completed.data.run.metrics.usage,
+    );
+    expect(repeated.data.run.metrics.estimatedCostUsd).toBeCloseTo(
+      completed.data.run.metrics.estimatedCostUsd,
+    );
+    expect(rejectedResponse.status).toBe(400);
+    expect(providerFetch).toHaveBeenCalledTimes(2);
+    expect(serialized).not.toContain(rawReasoning);
+    expect(serialized).not.toContain("private@example.com");
+  });
+
+  it("does not persist a run or retry implicitly after a network failure", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const provider = await repository.getProvider("provider_openai_compatible");
+    await repository.updateProvider({
+      ...provider!,
+      credentialRef: "env://EVAL_NETWORK_KEY",
+    });
+    const providerFetch = vi.fn<typeof fetch>(async () => {
+      throw new TypeError("network failure with sk-private-secret");
+    });
+    const api = createRomeoApi(repository, {
+      providerFetch,
+      secretResolver: {
+        async check() {
+          return { available: true, scheme: "env" };
+        },
+        async resolveValue() {
+          return { available: true, scheme: "env", value: "test-key" };
+        },
+      },
+    });
+    const created = await (
+      await api.request("/api/v1/eval-suites", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agentId: "agent_default",
+          name: "Network failure",
+          cases: [{ input: "Safe input" }],
+        }),
+      })
+    ).json();
+    const response = await api.request(
+      `/api/v1/eval-suites/${created.data.suite.id}/runs`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          reasoningPolicy: { schemaVersion: 1, mode: "off" },
+        }),
+      },
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(providerFetch).toHaveBeenCalledTimes(1);
+    expect(await repository.listEvalRuns("agent_default")).toEqual([]);
+    expect(JSON.stringify(body)).not.toContain("sk-private-secret");
+  });
+
   it("summarizes admin analytics without raw eval, usage, job, or tool payloads", async () => {
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository);
@@ -173,7 +679,7 @@ describe("eval API", () => {
       actorId: "user_default",
       sourceType: "run",
       sourceId: "run_admin_analytics",
-      metric: "tokens.total",
+      metric: "llm.total_token.reported",
       quantity: 42,
       unit: "token",
       metadata: {
@@ -678,3 +1184,17 @@ describe("eval API", () => {
     expect(passAudit.metadata).not.toHaveProperty("comment");
   });
 });
+
+function evalSse(events: unknown[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const event of events)
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+        );
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+}

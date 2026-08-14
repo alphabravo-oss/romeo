@@ -1,34 +1,39 @@
-import { Button, Field, Input, Select, StatusBadge } from "@romeo/ui";
+import { Button, Field, Input, Select } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import {
-  addFolderItem,
-  createFolder,
-  favoriteResource,
-  listChats,
-  listFavorites,
-  listFolderItems,
-  listFolders,
-  listKnowledgeBases,
-  listShareTargets,
-  shareChat,
-  shareFolder,
-  shareKnowledgeBase,
-  type ShareTarget,
-} from "../features";
-import { listAgentGallery, shareAgent } from "../features/managed-models";
-import { useLocale, type MessageKey } from "../lib/i18n";
+  favoritesQueryOptions,
+  folderItemsQueryOptions,
+  foldersQueryOptions,
+  shareTargetsQueryOptions,
+} from "../features/collaboration/query-options";
+import { chatsQueryOptions } from "../features/chats/query-options";
+import { knowledgeBasesQueryOptions } from "../features/knowledge/query-options";
+import {
+  addFolderItemMutationOptions,
+  createFolderMutationOptions,
+  favoriteResourceMutationOptions,
+  shareChatMutationOptions,
+  shareFolderMutationOptions,
+  shareKnowledgeBaseMutationOptions,
+} from "../features/collaboration/mutation-options";
+import { shareAgentMutationOptions } from "../features/managed-models/mutation-options";
+import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
+import { agentGalleryQueryOptions } from "../lib/api-query-options";
+import { useRouterApiClient } from "../lib/router-context";
 import type { Agent } from "../features/types";
-import { AddButton } from "./AddButton";
 import { resolveKnowledgeBaseBinding } from "./data-connector-binding";
 import { FormDialog } from "./FormDialog";
 import { ResourceRow } from "./ResourceRow";
-import { SettingsSection } from "./SettingsSection";
+import { Section } from "./console";
+import { CollaborationFolderSection } from "./CollaborationFolderSection";
+import { CollaborationDiscoverableModels } from "./CollaborationDiscoverableModels";
+import { shareTargetKey } from "./collaboration-target";
 
 export function CollaborationPanel({
   activeAgent,
@@ -39,7 +44,7 @@ export function CollaborationPanel({
   activeChatId: string | undefined;
   workspaceId: string | undefined;
 }) {
-  const queryClient = useQueryClient();
+  const apiClient = useRouterApiClient();
   const { t } = useLocale();
   const [targetKey, setTargetKey] = useState("");
   const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] =
@@ -48,62 +53,37 @@ export function CollaborationPanel({
   const [selectedChatId, setSelectedChatId] = useState<string>();
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
 
-  const targetsQuery = useQuery({
-    queryKey: ["shareTargets", "collaboration"],
-    queryFn: () => listShareTargets(),
-  });
-  const galleryQuery = useQuery({
-    queryKey: ["agentGallery", workspaceId],
-    queryFn: () => listAgentGallery(workspaceId),
-    enabled: workspaceId !== undefined,
-  });
-  const favoritesQuery = useQuery({
-    queryKey: ["favorites"],
-    queryFn: listFavorites,
-  });
-  const knowledgeBasesQuery = useQuery({
-    queryKey: ["knowledgeBases", workspaceId],
-    queryFn: () => listKnowledgeBases(workspaceId!),
-    enabled: workspaceId !== undefined,
-  });
-  const foldersQuery = useQuery({
-    queryKey: ["folders", workspaceId],
-    queryFn: () => listFolders(workspaceId!),
-    enabled: workspaceId !== undefined,
-  });
-  const chatsQuery = useQuery({
-    queryKey: ["chats", workspaceId, "collaboration"],
-    queryFn: () => listChats(workspaceId!),
-    enabled: workspaceId !== undefined,
-  });
-
-  const shareAgentMutation = useMutation({ mutationFn: shareAgent });
-  const shareChatMutation = useMutation({ mutationFn: shareChat });
-  const shareKnowledgeMutation = useMutation({
-    mutationFn: shareKnowledgeBase,
-  });
-  const createFolderMutation = useMutation({ mutationFn: createFolder });
-  const shareFolderMutation = useMutation({ mutationFn: shareFolder });
-  const addFolderItemMutation = useMutation({ mutationFn: addFolderItem });
-  const favoriteMutation = useMutation({ mutationFn: favoriteResource });
-
+  const targetsQuery = useQuery(
+    shareTargetsQueryOptions({ context: "collaboration" }),
+  );
+  const galleryQuery = useQuery(
+    agentGalleryQueryOptions(workspaceId, apiClient),
+  );
+  const favoritesQuery = useQuery(favoritesQueryOptions());
+  const knowledgeBasesQuery = useQuery(knowledgeBasesQueryOptions(workspaceId));
+  const foldersQuery = useQuery(foldersQueryOptions(workspaceId));
+  const chatsQuery = useQuery(chatsQueryOptions(workspaceId, "collaboration"));
+  const shareAgentMutation = useMutation(shareAgentMutationOptions());
+  const shareChatMutation = useMutation(shareChatMutationOptions());
+  const shareKnowledgeMutation = useMutation(
+    shareKnowledgeBaseMutationOptions(),
+  );
+  const createFolderMutation = useMutation(createFolderMutationOptions());
+  const shareFolderMutation = useMutation(shareFolderMutationOptions());
+  const addFolderItemMutation = useMutation(addFolderItemMutationOptions());
+  const favoriteMutation = useMutation(favoriteResourceMutationOptions());
   const targets = targetsQuery.data ?? [];
   const folders = foldersQuery.data ?? [];
   const chats = chatsQuery.data ?? [];
   const knowledgeBases = knowledgeBasesQuery.data ?? [];
   const gallery = galleryQuery.data ?? [];
 
-  const selectedTarget = useMemo(
-    () => targets.find((target) => shareTargetKey(target) === targetKey),
-    [targetKey, targets],
+  const selectedTarget = targets.find(
+    (target) => shareTargetKey(target) === targetKey,
   );
   const activeFolder =
     folders.find((folder) => folder.id === selectedFolderId) ?? folders[0];
-  const folderItemsQuery = useQuery({
-    queryKey: ["folderItems", activeFolder?.id],
-    queryFn: () => listFolderItems(activeFolder!.id),
-    enabled: activeFolder !== undefined,
-  });
+  const folderItemsQuery = useQuery(folderItemsQueryOptions(activeFolder?.id));
   const chatId = selectedChatId ?? activeChatId ?? chats[0]?.id;
   const selectedChat = chats.find((chat) => chat.id === chatId);
   const activeAgentFavorite = (favoritesQuery.data ?? []).find(
@@ -120,7 +100,6 @@ export function CollaborationPanel({
         principalId: selectedTarget.principalId,
         principalType: selectedTarget.principalType,
       });
-      await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
       toast(t("workspaceShared"), "success");
     } catch {
       toast(t("workspaceCouldNotShareAgent"), "error");
@@ -139,7 +118,6 @@ export function CollaborationPanel({
         principalId: selectedTarget.principalId,
         principalType: selectedTarget.principalType,
       });
-      await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
       toast(t("workspaceShared"), "success");
     } catch {
       toast(t("workspaceCouldNotShareKnowledge"), "error");
@@ -154,7 +132,6 @@ export function CollaborationPanel({
         principalId: selectedTarget.principalId,
         principalType: selectedTarget.principalType,
       });
-      await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
       toast(t("workspaceShared"), "success");
     } catch {
       toast(t("workspaceCouldNotShareChat"), "error");
@@ -162,18 +139,13 @@ export function CollaborationPanel({
   }
 
   async function handleFavoriteAgent() {
-    if (!activeAgent) return;
+    if (!activeAgent || workspaceId === undefined) return;
     try {
       await favoriteMutation.mutateAsync({
         resourceType: "agent",
         resourceId: activeAgent.id,
+        workspaceId,
       });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["favorites"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["agentGallery", workspaceId],
-        }),
-      ]);
       toast(t("workspaceFavorited"), "success");
     } catch {
       toast(t("workspaceCouldNotFavoriteAgent"), "error");
@@ -188,7 +160,6 @@ export function CollaborationPanel({
         principalId: selectedTarget.principalId,
         principalType: selectedTarget.principalType,
       });
-      await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
       toast(t("workspaceShared"), "success");
     } catch {
       toast(t("workspaceCouldNotShareFolder"), "error");
@@ -199,19 +170,16 @@ export function CollaborationPanel({
     resourceType: "agent" | "chat" | "knowledge_base",
     resourceId: string | undefined,
   ) {
-    if (!activeFolder || resourceId === undefined) return;
+    if (!activeFolder || resourceId === undefined || workspaceId === undefined)
+      return;
     try {
       await addFolderItemMutation.mutateAsync({
         folderId: activeFolder.id,
+        folderIds: folders.map((folder) => folder.id),
         resourceType,
         resourceId,
+        workspaceId,
       });
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["folderItems", activeFolder.id],
-        }),
-        queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-      ]);
       toast(t("workspaceAdded"), "success");
     } catch {
       toast(t("workspaceCouldNotAddItem"), "error");
@@ -226,9 +194,6 @@ export function CollaborationPanel({
         const folder = await createFolderMutation.mutateAsync({
           workspaceId,
           name: value.name.trim(),
-        });
-        await queryClient.invalidateQueries({
-          queryKey: ["folders", workspaceId],
         });
         setSelectedFolderId(folder.id);
         setFolderDialogOpen(false);
@@ -247,7 +212,7 @@ export function CollaborationPanel({
 
   return (
     <div className="rm-console-page">
-      <SettingsSection
+      <Section
         description={t("workspaceShareSectionHelp")}
         title={t("workspaceShareSection")}
       >
@@ -378,127 +343,24 @@ export function CollaborationPanel({
             )}
           </PanelState>
         </div>
-      </SettingsSection>
+      </Section>
 
-      <SettingsSection
-        actions={
-          <AddButton onClick={() => setFolderDialogOpen(true)}>
-            {t("workspaceNewFolder")}
-          </AddButton>
-        }
-        description={t("workspaceFoldersHelp")}
-        title={t("workspaceFolders")}
-      >
-        <PanelState
-          empty={t("workspaceNoFolders")}
-          emptyAction={
-            <Button
-              onClick={() => setFolderDialogOpen(true)}
-              type="button"
-              variant="primary"
-            >
-              {t("workspaceNewFolder")}
-            </Button>
-          }
-          query={foldersQuery}
-        >
-          {(allFolders) => (
-            <div className="rm-resource-list">
-              {allFolders.map((folder) => (
-                <ResourceRow
-                  actions={
-                    folder.id === activeFolder?.id ? (
-                      <Button
-                        data-testid="folder-share"
-                        disabled={!canShare || shareFolderMutation.isPending}
-                        onClick={() => void handleShareFolder()}
-                        size="sm"
-                        type="button"
-                      >
-                        {t("workspaceShare")}
-                      </Button>
-                    ) : null
-                  }
-                  key={folder.id}
-                  meta={
-                    folder.id === activeFolder?.id
-                      ? t("workspaceFolderSelected")
-                      : t("workspaceFolderOpen")
-                  }
-                  onSelect={() => setSelectedFolderId(folder.id)}
-                  selected={folder.id === activeFolder?.id}
-                  title={folder.name}
-                />
-              ))}
-            </div>
-          )}
-        </PanelState>
-        {activeFolder ? (
-          <div className="grid gap-3" data-testid="folder-controls">
-            <div className="rm-resource-row__actions rm-resource-row__actions--start">
-              <Button
-                data-testid="folder-add-chat"
-                disabled={
-                  chatId === undefined || addFolderItemMutation.isPending
-                }
-                onClick={() => void handleAddFolderItem("chat", chatId)}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                {t("workspaceAddChat")}
-              </Button>
-              <Button
-                data-testid="folder-add-agent"
-                disabled={!activeAgent || addFolderItemMutation.isPending}
-                onClick={() =>
-                  void handleAddFolderItem("agent", activeAgent?.id)
-                }
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                {t("workspaceAddAgent")}
-              </Button>
-              <Button
-                data-testid="folder-add-kb"
-                disabled={
-                  selectedKnowledgeBaseId === undefined ||
-                  addFolderItemMutation.isPending
-                }
-                onClick={() =>
-                  void handleAddFolderItem(
-                    "knowledge_base",
-                    selectedKnowledgeBaseId,
-                  )
-                }
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                {t("workspaceAddKnowledge")}
-              </Button>
-            </div>
-            {(folderItemsQuery.data ?? []).length === 0 ? (
-              <p className="rm-list-empty">{t("workspaceFolderEmpty")}</p>
-            ) : (
-              <div className="rm-resource-list">
-                {(folderItemsQuery.data ?? []).map((item) => (
-                  <ResourceRow
-                    key={item.id}
-                    meta={resolveFolderItemName(item, {
-                      chats,
-                      gallery,
-                      knowledgeBases,
-                    })}
-                    title={t(resourceTypeMessageKey(item.resourceType))}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        ) : null}
-      </SettingsSection>
+      <CollaborationFolderSection
+        activeAgent={activeAgent}
+        activeFolder={activeFolder}
+        addPending={addFolderItemMutation.isPending}
+        canShare={canShare}
+        catalogs={{ chats, gallery, knowledgeBases }}
+        chatId={chatId}
+        folderItems={folderItemsQuery.data ?? []}
+        foldersQuery={foldersQuery}
+        onAddItem={(type, id) => void handleAddFolderItem(type, id)}
+        onCreate={() => setFolderDialogOpen(true)}
+        onSelect={setSelectedFolderId}
+        onShare={() => void handleShareFolder()}
+        selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+        sharePending={shareFolderMutation.isPending}
+      />
 
       <FormDialog
         description={t("workspaceFoldersHelp")}
@@ -574,95 +436,13 @@ export function CollaborationPanel({
         </form>
       </FormDialog>
 
-      <SettingsSection
-        description={t("workspaceDiscoverableHelp")}
-        title={t("workspaceDiscoverableModels")}
-      >
-        <PanelState empty={t("workspaceNoDiscoverable")} query={galleryQuery}>
-          {(agents) => (
-            <div className="rm-resource-list">
-              {agents.map((agent) => {
-                const isActiveFavorite =
-                  agent.id === activeAgent?.id &&
-                  activeAgentFavorite !== undefined;
-                return (
-                  <ResourceRow
-                    actions={
-                      agent.id === activeAgent?.id ? (
-                        <Button
-                          disabled={
-                            favoriteMutation.isPending || isActiveFavorite
-                          }
-                          onClick={() => void handleFavoriteAgent()}
-                          size="sm"
-                          type="button"
-                          variant="ghost"
-                        >
-                          {isActiveFavorite
-                            ? t("workspaceFavorited")
-                            : t("workspaceFavoriteAgent")}
-                        </Button>
-                      ) : null
-                    }
-                    badge={
-                      <StatusBadge
-                        tone={agent.favorite ? "success" : "neutral"}
-                      >
-                        {agent.favorite
-                          ? t("workspaceFavorite")
-                          : t("workspaceDiscoverable")}
-                      </StatusBadge>
-                    }
-                    key={agent.id}
-                    title={agent.name}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </PanelState>
-      </SettingsSection>
+      <CollaborationDiscoverableModels
+        activeAgentId={activeAgent?.id}
+        activeFavorite={activeAgentFavorite !== undefined}
+        favoritePending={favoriteMutation.isPending}
+        galleryQuery={galleryQuery}
+        onFavorite={() => void handleFavoriteAgent()}
+      />
     </div>
   );
-}
-
-function shareTargetKey(target: ShareTarget): string {
-  return `${target.principalType}:${target.principalId}`;
-}
-
-function resolveFolderItemName(
-  item: {
-    resourceType: "agent" | "chat" | "knowledge_base";
-    resourceId: string;
-  },
-  catalogs: {
-    chats: Array<{ id: string; title: string }>;
-    gallery: Array<{ id: string; name: string }>;
-    knowledgeBases: Array<{ id: string; name: string }>;
-  },
-): string {
-  if (item.resourceType === "agent") {
-    return (
-      catalogs.gallery.find((agent) => agent.id === item.resourceId)?.name ??
-      item.resourceId
-    );
-  }
-  if (item.resourceType === "chat") {
-    return (
-      catalogs.chats.find((chat) => chat.id === item.resourceId)?.title ??
-      item.resourceId
-    );
-  }
-  return (
-    catalogs.knowledgeBases.find((base) => base.id === item.resourceId)?.name ??
-    item.resourceId
-  );
-}
-
-function resourceTypeMessageKey(
-  resourceType: "agent" | "chat" | "knowledge_base",
-): MessageKey {
-  if (resourceType === "agent") return "workspaceResourceAgent";
-  if (resourceType === "chat") return "workspaceResourceChat";
-  return "workspaceResourceKnowledge";
 }

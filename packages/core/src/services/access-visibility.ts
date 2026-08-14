@@ -1,8 +1,4 @@
-import {
-  hasGrant,
-  type AuthSubject,
-  type ResourceGrant,
-} from "@romeo/auth";
+import { hasGrant, type AuthSubject, type ResourceGrant } from "@romeo/auth";
 
 export function workspaceIdsFromGrants(
   workspaces: readonly { id: string }[],

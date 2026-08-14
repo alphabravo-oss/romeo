@@ -23,7 +23,6 @@ import type { SessionService } from "./session-service";
 import { auditSamlFailure, auditSamlSuccess } from "./saml-auth-audit";
 import {
   base64Url,
-  compactLedger,
   invalidSamlLogin,
   isSamlStateCookie,
   mapSamlProfile,
@@ -31,8 +30,6 @@ import {
   normalizeOrgId,
   normalizeSamlProviderId,
   parseJsonState,
-  parseLedger,
-  pruneLedger,
   randomToken,
   requestKey,
   samlLoginDenied,
@@ -51,7 +48,6 @@ export * from "./saml-auth-types";
 export { samlUserId };
 
 const defaultSessionTtlHours = 12;
-const samlRequestLedgerKey = "auth_saml_request_state.v1";
 const samlStateTtlMs = 10 * 60 * 1000;
 const samlLoginScopes: Scope[] = localUserScopes;
 
@@ -322,59 +318,34 @@ export class SamlAuthService {
     requestId: string;
     requestInstant: string;
   }): Promise<void> {
-    await this.repository.transaction(async (repository) => {
-      const ledger = parseLedger(
-        (await repository.getSystemSetting(samlRequestLedgerKey))?.value,
-      );
-      const pruned = pruneLedger(ledger);
-      pruned.requests[requestKey(input.requestId)] = {
-        expiresAt: input.expiresAt,
-        orgId: input.orgId,
-        providerId: input.providerId,
-        relayStateHash: stableHash(input.relayState),
-        requestInstant: input.requestInstant,
-      };
-      await repository.upsertSystemSetting({
-        key: samlRequestLedgerKey,
-        value: compactLedger(pruned),
-        updatedAt: new Date().toISOString(),
-      });
+    const createdAt = new Date().toISOString();
+    await this.repository.createSamlAuthRequest({
+      id: requestKey(input.requestId),
+      expiresAt: input.expiresAt,
+      orgId: input.orgId,
+      providerId: input.providerId,
+      relayStateHash: stableHash(input.relayState),
+      requestInstant: input.requestInstant,
+      createdAt,
     });
   }
 
   private async consumeRequestState(
     state: SamlStateCookie,
   ): Promise<SamlRequestRecord> {
-    return this.repository.transaction(async (repository) => {
-      const ledger = parseLedger(
-        (await repository.getSystemSetting(samlRequestLedgerKey))?.value,
-      );
-      const pruned = pruneLedger(ledger);
-      const key = requestKey(state.requestId);
-      const record = pruned.requests[key];
-      if (
-        record === undefined ||
-        record.consumedAt !== undefined ||
-        record.orgId !== state.orgId ||
-        record.providerId !== state.providerId ||
-        record.relayStateHash !== stableHash(state.relayState) ||
-        new Date(record.expiresAt).getTime() <= Date.now()
-      ) {
-        throw new ApiError(
-          "saml_request_state_invalid",
-          "SAML request state is invalid or already consumed.",
-          400,
-        );
-      }
-      const consumed = { ...record, consumedAt: new Date().toISOString() };
-      pruned.requests[key] = consumed;
-      await repository.upsertSystemSetting({
-        key: samlRequestLedgerKey,
-        value: compactLedger(pruned),
-        updatedAt: consumed.consumedAt,
-      });
-      return record;
+    const record = await this.repository.consumeSamlAuthRequest({
+      id: requestKey(state.requestId),
+      orgId: state.orgId,
+      providerId: state.providerId,
+      relayStateHash: stableHash(state.relayState),
+      consumedAt: new Date().toISOString(),
     });
+    if (record !== undefined) return record;
+    throw new ApiError(
+      "saml_request_state_invalid",
+      "SAML request state is invalid or already consumed.",
+      400,
+    );
   }
 
   private signState(state: SamlStateCookie): string {

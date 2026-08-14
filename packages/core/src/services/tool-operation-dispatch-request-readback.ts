@@ -10,7 +10,11 @@ import type {
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import type { ToolDispatchPayload } from "./tool-dispatch-payload-store";
 import {
   jobPayloadStorage,
@@ -84,13 +88,13 @@ export async function findCancellableDispatchRequest(
   return job;
 }
 
-export async function auditDispatchRequestReadback(
+export async function auditDispatchRequestReadback<A extends AuditAction>(
   repository: RomeoRepository,
   subject: AuthSubject,
   job: BackgroundJob,
-  action: string,
+  action: A,
   outcome: "failure" | "success",
-  metadata: Record<string, unknown>,
+  metadata: AuditMetadata<A>,
 ): Promise<void> {
   await writeAuditLog(repository, {
     subject,

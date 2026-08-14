@@ -14,9 +14,7 @@ const labels = {
 
 describe("suggestFollowUps", () => {
   it("returns empty for blank answers", () => {
-    expect(
-      suggestFollowUps({ assistantContent: "   ", labels }),
-    ).toEqual([]);
+    expect(suggestFollowUps({ assistantContent: "   ", labels })).toEqual([]);
   });
 
   it("prefers code follow-ups when the answer has a fence", () => {

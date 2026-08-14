@@ -3,6 +3,7 @@ import type { GeneratedApiClient } from "@romeo/api-client/runtime/generated-cli
 import { hasFlag, type ParsedArgs } from "./args";
 import { CliUsageError } from "./cli-errors";
 import type { CliIo } from "./io";
+import type { ToolDispatchPinnedFetch } from "./dns-pinned-fetch";
 import { executeAdministrationCommand } from "./administration-commands";
 import { executeAuditCommand } from "./audit-commands";
 import { executeBillingCommand } from "./billing-commands";
@@ -32,6 +33,7 @@ export interface CommandContext {
   ) => Promise<Array<{ address: string; family?: number }>>;
   fetchImpl: typeof fetch;
   io: CliIo;
+  pinnedFetchImpl?: ToolDispatchPinnedFetch;
   parsed: ParsedArgs;
   readFile: (path: string) => Promise<Uint8Array>;
 }
@@ -119,7 +121,7 @@ Usage:
   romeo billing lifecycle
   romeo billing enforce-lifecycle
   romeo billing apply-plan --code pro --name "Pro" --quota run.started:1000:monthly,tool.call:5000:monthly
-  romeo billing sync-external --provider stripe --event invoice.paid --external-customer cus_123 --external-subscription sub_123 --plan-code pro --plan-name "Pro" --quota run.started:1000:monthly
+  romeo billing sync-external --provider stripe --event-id evt_123 --event invoice.paid --occurred-at 2026-08-13T20:00:00.000Z --external-customer cus_123 --external-subscription sub_123 --plan-code pro --plan-name "Pro" --quota run.started:1000:monthly
   romeo sessions request-impersonation --target-user user_123 --confirm-target-user user_123 --reason "Support ticket investigation" --ticket TICKET-123 --ttl-minutes 15
   romeo sessions approve-impersonation --request support_request_123
   romeo sessions impersonate --target-user user_123 --confirm-target-user user_123 --reason "Support ticket investigation" --ticket TICKET-123 --ttl-minutes 15

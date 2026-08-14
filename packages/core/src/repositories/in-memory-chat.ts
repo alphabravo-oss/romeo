@@ -22,6 +22,10 @@ export abstract class InMemoryChatRepository extends InMemoryCatalogRepository {
   }
 
   async createEvalSuite(suite: E.EvalSuite): Promise<E.EvalSuite> {
+    const existing = this.data.evalSuites.find(
+      (candidate) => candidate.id === suite.id,
+    );
+    if (existing !== undefined) return existing;
     return append(this.data.evalSuites, suite);
   }
 
@@ -32,7 +36,13 @@ export abstract class InMemoryChatRepository extends InMemoryCatalogRepository {
   }
 
   async createEvalCases(cases: E.EvalCase[]): Promise<E.EvalCase[]> {
-    return appendMany(this.data.evalCases, cases);
+    const existingIds = new Set(this.data.evalCases.map((item) => item.id));
+    const created = cases.filter((item) => {
+      if (existingIds.has(item.id)) return false;
+      existingIds.add(item.id);
+      return true;
+    });
+    return appendMany(this.data.evalCases, created);
   }
 
   async listEvalRuns(agentId: string): Promise<E.EvalRun[]> {
@@ -156,11 +166,23 @@ export abstract class InMemoryChatRepository extends InMemoryCatalogRepository {
   }
 
   async createChat(chat: E.Chat): Promise<E.Chat> {
-    return append(this.data.chats, chat);
+    return append(this.data.chats, {
+      ...chat,
+      transcriptVersion: chat.transcriptVersion ?? "0",
+    });
   }
 
   async updateChat(chat: E.Chat): Promise<E.Chat> {
-    return replaceById(this.data.chats, chat);
+    const current = this.data.chats.find((item) => item.id === chat.id);
+    const version = current?.transcriptVersion ?? chat.transcriptVersion ?? "0";
+    return replaceById(this.data.chats, {
+      ...chat,
+      transcriptVersion:
+        current !== undefined &&
+        current.activeLeafMessageId !== chat.activeLeafMessageId
+          ? incrementVersion(version)
+          : version,
+    });
   }
 
   async getChat(chatId: string): Promise<E.Chat | undefined> {
@@ -335,4 +357,8 @@ export abstract class InMemoryChatRepository extends InMemoryCatalogRepository {
   ): Promise<E.QueuedChatTurn> {
     return replaceById(this.data.queuedChatTurns, turn);
   }
+}
+
+function incrementVersion(version: string): string {
+  return (BigInt(version) + 1n).toString();
 }

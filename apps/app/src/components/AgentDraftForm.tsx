@@ -2,13 +2,9 @@ import { useForm } from "@tanstack/react-form";
 import { useStore } from "@tanstack/react-store";
 import { useEffect, useMemo } from "react";
 import { Button, Field, Input, Select, Textarea } from "@romeo/ui";
+import { isAllowedAvatarUrl } from "@romeo/contracts/avatar-url";
 
-import type {
-  Agent,
-  AgentMemoryPolicy,
-  AgentSafetySettings,
-} from "../features/managed-models/types";
-import type { BaseModel, Provider } from "../features/providers/types";
+import type { AgentMemoryPolicy } from "../features/managed-models/types";
 import { useLocale } from "../lib/i18n";
 import { AdminDisclosure } from "./AdminDisclosure";
 import { AgentParameterControls } from "./AgentParameterControls";
@@ -27,33 +23,10 @@ import {
 } from "./agent-draft-model";
 import { shouldResetDraftForm } from "./agent-publish-gate";
 import { ManagedModelIdentityFields } from "./ManagedModelIdentityFields";
-
-export interface AgentDraftInput {
-  agentId: string;
-  name: string;
-  description: string;
-  icon: string;
-  avatarUrl: string;
-  baseModelId: string;
-  systemPrompt: string;
-  parameters: Record<string, unknown>;
-  memoryPolicy: AgentMemoryPolicy;
-  safetySettings: AgentSafetySettings;
-  promptSuggestions: Array<{ title: string; prompt: string }>;
-  tags: string[];
-}
-
-interface AgentDraftFormProps {
-  activeAgent: Agent | undefined;
-  formId?: string;
-  isSaving: boolean;
-  models: BaseModel[];
-  providers: Provider[];
-  onDirtyChange: (dirty: boolean) => void;
-  onNotice: (message: string) => void;
-  onSave: (input: AgentDraftInput) => Promise<Agent>;
-  showSubmit?: boolean;
-}
+import type { AgentDraftFormProps } from "./agent-draft-types";
+import { agentPromptPresets } from "./agent-draft-presets";
+import { findAgentDraftModel } from "./agent-draft-selection";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 export function AgentDraftForm({
   activeAgent,
@@ -67,18 +40,16 @@ export function AgentDraftForm({
   showSubmit = true,
 }: AgentDraftFormProps) {
   const { locale, t } = useLocale();
-  const promptPresets = [
-    { label: t("agentPresetSupport"), prompt: t("agentPresetSupportPrompt") },
-    { label: t("agentPresetResearch"), prompt: t("agentPresetResearchPrompt") },
-    {
-      label: t("agentPresetOperations"),
-      prompt: t("agentPresetOperationsPrompt"),
-    },
-  ];
+  const promptPresets = agentPromptPresets(t);
   const form = useForm({
     defaultValues: buildDefaults(activeAgent),
     onSubmit: async ({ value }) => {
       if (!activeAgent) return;
+      const avatarUrl = value.avatarUrl.trim();
+      if (!isAllowedAvatarUrl(avatarUrl)) {
+        onNotice(t("managedModelPhotoInvalidUrl"));
+        return;
+      }
 
       const parsedTemperature = parseBoundedNumber(
         value.temperature,
@@ -159,7 +130,7 @@ export function AgentDraftForm({
           name: value.name.trim(),
           description: value.description.trim(),
           icon: value.icon.trim(),
-          avatarUrl: value.avatarUrl.trim(),
+          avatarUrl,
           baseModelId: value.baseModelId,
           systemPrompt: value.systemPrompt,
           parameters,
@@ -181,9 +152,7 @@ export function AgentDraftForm({
         form.reset(buildDefaults(saved));
         onNotice(t("agentDraftSaved"));
       } catch (caught) {
-        onNotice(
-          caught instanceof Error ? caught.message : t("agentUnableSaveDraft"),
-        );
+        onNotice(safeUserErrorMessage(caught, t("agentUnableSaveDraft")));
       }
     },
   });
@@ -198,10 +167,7 @@ export function AgentDraftForm({
     [activeAgent?.baseModelId, locale, models, providers, t],
   );
   const selectedModel = useMemo(
-    () =>
-      modelGroups
-        .flatMap((group) => group.models)
-        .find((model) => model.id === baseModelId),
+    () => findAgentDraftModel(modelGroups, baseModelId),
     [baseModelId, modelGroups],
   );
 

@@ -12,6 +12,3 @@ data:
   {{- end }}
   {{- end }}
   PORT: {{ .Values.service.port | toString | quote }}
-  {{- if .Values.otel.endpoint }}
-  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.otel.endpoint | quote }}
-  {{- end }}

@@ -15,6 +15,7 @@ const outputPath = resolve(
 );
 const tempDir = mkdtempSync(join(tmpdir(), "romeo-support-bundle-"));
 const rawSentinel = `RAW_SUPPORT_BUNDLE_SENTINEL_${process.pid}`;
+const capabilityPolicySentinel = "image_generation,secure_compute";
 const logFile = join(tempDir, "romeo-app.log");
 const evidenceDir = join(tempDir, "evidence");
 const supportBundle = join(tempDir, "support-bundle.json");
@@ -88,6 +89,7 @@ try {
       env: {
         ...process.env,
         AWS_SECRET_ACCESS_KEY: rawSentinel,
+        CAPABILITY_PLATFORM_DISABLED_IDS: capabilityPolicySentinel,
         DATA_CONNECTOR_EXECUTION_DRIVER: rawSentinel,
         DATABASE_URL: `postgres://romeo:${rawSentinel}@db.example/romeo`,
         LOCAL_AUTH_SECRET_ENCRYPTION_KEY: rawSentinel,
@@ -108,6 +110,9 @@ try {
   const serialized = readFileSync(supportBundle, "utf8");
   if (serialized.includes(rawSentinel)) {
     throw new Error("Support bundle leaked a raw sentinel.");
+  }
+  if (serialized.includes("secure_compute")) {
+    throw new Error("Support bundle leaked a raw capability policy value.");
   }
   const bundle = JSON.parse(serialized);
   if (bundle.schemaVersion !== "romeo.support-bundle.v1") {
@@ -150,6 +155,18 @@ try {
   ) {
     throw new Error("Support bundle did not redact unrecognized enum posture.");
   }
+  if (
+    bundle.configuration?.capabilityPlatformPolicy?.recognized !== true ||
+    bundle.configuration?.capabilityPlatformPolicy?.disabledCount !== 2 ||
+    bundle.configuration?.capabilityPlatformPolicy?.imageGeneration?.allowed !==
+      false ||
+    bundle.configuration?.capabilityPlatformPolicy?.imageGeneration?.reason !==
+      "platform_disabled" ||
+    bundle.configuration?.capabilityPlatformPolicy?.rawConfigurationReturned !==
+      false
+  ) {
+    throw new Error("Support bundle did not redact capability policy input.");
+  }
 
   const evidence = {
     schemaVersion: "romeo.support-bundle-redaction.v1",
@@ -163,6 +180,7 @@ try {
       "environment_secret_values_not_included",
       "configured_secret_posture_recorded",
       "unrecognized_enum_values_not_included",
+      "capability_platform_policy_values_not_included",
     ],
     supportBundle: {
       schemaVersion: bundle.schemaVersion,
@@ -183,6 +201,7 @@ try {
       accessReviewRawContentReturned: false,
       environmentSecretValuesReturned: false,
       unrecognizedEnumValuesReturned: false,
+      capabilityPlatformPolicyValuesReturned: false,
     },
   };
   mkdirSync(dirname(outputPath), { recursive: true });

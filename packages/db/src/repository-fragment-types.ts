@@ -3,6 +3,9 @@ import { PgAgentRepository } from "./agent-repository";
 import { PgAuthCredentialRepository } from "./auth-credential-repository";
 import { PgChatRepository } from "./chat-repository";
 import { PgChatTagRepository } from "./chat-tag-repository";
+import { PgCapabilityAssignmentRepository } from "./capability-assignment-repository";
+import { PgCapabilityFlagRepository } from "./capability-flag-repository";
+import { PgIdempotencyRepository } from "./idempotency-repository";
 import { PgCollaborationRepository } from "./collaboration-repository";
 import { PgDataConnectorRepository } from "./data-connector-repository";
 import { PgDataDeletionRepository } from "./data-deletion-repository";
@@ -67,6 +70,7 @@ export type TenantIdentityRepositoryFragment = Pick<
   | "listGroups"
   | "listUsers"
   | "listUsersPage"
+  | "queryUsers"
   | "updateGroup"
   | "updateUser"
   | "upsertSsoOidcSettings"
@@ -90,7 +94,12 @@ export type AuthCredentialRepositoryFragment = Pick<
   | "createApiKey"
   | "createDeviceAuthorization"
   | "createLocalMfaFactor"
+  | "createLocalMfaChallenge"
+  | "consumeLocalMfaFactor"
+  | "consumeLocalMfaChallenge"
+  | "consumeSamlAuthRequest"
   | "createLocalPasswordCredential"
+  | "createSamlAuthRequest"
   | "createServiceAccount"
   | "createUserSession"
   | "getApiKey"
@@ -107,10 +116,12 @@ export type AuthCredentialRepositoryFragment = Pick<
   | "listDeviceAuthorizations"
   | "listLocalMfaFactors"
   | "listLocalMfaFactorsForOrg"
+  | "recordFailedLocalPasswordAttempt"
   | "listServiceAccounts"
   | "listUserSessions"
   | "updateApiKey"
   | "updateDeviceAuthorization"
+  | "rotateDeviceAuthorization"
   | "updateLocalMfaFactor"
   | "updateLocalPasswordCredential"
   | "updateServiceAccount"
@@ -177,7 +188,9 @@ export type ChatRepositoryFragment = Pick<
   | "createChatComment"
   | "createQueuedChatTurn"
   | "createMessage"
+  | "backfillLegacyMessageTextParts"
   | "createMessageParts"
+  | "countMessageFileReferences"
   | "deleteMessage"
   | "getChat"
   | "getMessage"
@@ -188,13 +201,17 @@ export type ChatRepositoryFragment = Pick<
   | "listChats"
   | "listAuthorizedChatsPage"
   | "listMessageParts"
+  | "listMessagePartsForMessages"
   | "listMessages"
+  | "queryAuthorizedMessagesPage"
+  | "reconcileChatFileReferences"
   | "listQueuedChatTurns"
   | "claimNextQueuedChatTurn"
   | "cancelQueuedChatTurn"
   | "finishQueuedChatTurnLease"
   | "renewQueuedChatTurnLease"
   | "searchChatContent"
+  | "searchAuthorizedChatMessages"
   | "updateChat"
   | "updateMessagePart"
   | "updateQueuedChatTurn"
@@ -214,11 +231,15 @@ export type ChatTagRepositoryFragment = Pick<
 
 export type FileRepositoryFragment = Pick<
   PgFileRepository,
+  | "advanceFileLifecycleLease"
   | "createFileObject"
+  | "claimNextFileLifecycle"
+  | "finishFileLifecycleLease"
   | "getFileObject"
   | "listFileObjects"
   | "updateFileObject"
   | "listAuthorizedFileObjectsPage"
+  | "renewFileLifecycleLease"
 >;
 
 export type CollaborationChannelRepositoryFragment = Pick<
@@ -237,14 +258,18 @@ export type CollaborationChannelRepositoryFragment = Pick<
 
 export type RunRepositoryFragment = Pick<
   PgRunRepository,
+  | "allocateRunEventSequence"
   | "appendRunEvents"
   | "createRun"
   | "createToolCall"
+  | "deleteCompactedRunEventsBefore"
   | "finalizeRun"
   | "getRun"
   | "listRuns"
+  | "listRunEventsAfter"
   | "listRunEvents"
   | "listToolCalls"
+  | "listToolCallsForRun"
   | "updateRun"
 >;
 
@@ -288,9 +313,11 @@ export type OperationalRepositoryFragment = Pick<
   | "deleteAuditLogsBefore"
   | "getSystemSetting"
   | "listAuditLogs"
+  | "queryAuditLogs"
   | "listBackgroundJobs"
   | "listSystemSettings"
   | "listUsageEvents"
+  | "listUsageEventsForRun"
   | "renewBackgroundJobLease"
   | "updateBackgroundJobWithLease"
   | "upsertSystemSetting"
@@ -300,10 +327,14 @@ export type OperationalRepositoryFragment = Pick<
 
 export type WebhookRepositoryFragment = Pick<
   PgWebhookRepository,
+  | "claimDueWebhookDeliveries"
+  | "claimWebhookDelivery"
+  | "completeWebhookDeliveryAttempt"
   | "createWebhookDelivery"
   | "createWebhookSubscription"
   | "getWebhookSubscription"
   | "listWebhookDeliveries"
+  | "listWebhookDeliveriesPage"
   | "listWebhookSubscriptions"
   | "updateWebhookDelivery"
   | "updateWebhookSubscription"
@@ -323,9 +354,12 @@ export type WorkflowRepositoryFragment = Pick<
 
 export type GovernanceBillingRepositoryFragment = Pick<
   PgGovernanceBillingRepository,
+  | "acquireBillingSyncLock"
+  | "createBillingEventReceipt"
   | "createQuotaBucket"
   | "deleteQuotaBucket"
   | "getBillingPlan"
+  | "getBillingEventReceipt"
   | "getRetentionPolicy"
   | "listQuotaBuckets"
   | "updateQuotaBucket"
@@ -358,10 +392,12 @@ export type CollaborationRepositoryFragment = Pick<
   | "deleteWorkspaceFolderItem"
   | "getPromptTemplate"
   | "getWorkspaceFolder"
+  | "listAuthorizedWorkspaceFoldersByIds"
   | "listPromptTemplates"
   | "listAuthorizedPromptTemplatesPage"
   | "listResourceFavorites"
   | "listWorkspaceFolderItems"
+  | "listAuthorizedWorkspaceFolderItemsBatch"
   | "listWorkspaceFolders"
   | "updatePromptTemplate"
   | "updateWorkspaceFolder"
@@ -373,6 +409,28 @@ export type AccessRepositoryFragment = Pick<
   | "deleteResourceGrant"
   | "deleteResourceGrantsForPrincipal"
   | "listResourceGrants"
+>;
+
+export type CapabilityAssignmentRepositoryFragment = Pick<
+  PgCapabilityAssignmentRepository,
+  | "listActiveCapabilityAssignments"
+  | "listCapabilityAssignmentHistory"
+  | "replaceCapabilityAssignment"
+>;
+
+export type CapabilityFlagRepositoryFragment = Pick<
+  PgCapabilityFlagRepository,
+  | "listActiveOrganizationCapabilityFlags"
+  | "listOrganizationCapabilityFlagHistory"
+  | "replaceOrganizationCapabilityFlag"
+>;
+
+export type IdempotencyRepositoryFragment = Pick<
+  PgIdempotencyRepository,
+  | "claimIdempotencyReceipt"
+  | "completeIdempotencyReceipt"
+  | "failIdempotencyReceipt"
+  | "deleteExpiredIdempotencyReceipts"
 >;
 
 export type VoiceRepositoryFragment = Pick<

@@ -45,6 +45,9 @@ export const scopeValues = [
   "voices:manage",
   "tools:use",
   "tools:manage",
+  "capabilities:read",
+  "capabilities:manage",
+  "capabilities:approve",
   "admin:read",
   "admin:write",
 ] as const;

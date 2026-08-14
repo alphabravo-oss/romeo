@@ -141,6 +141,31 @@ export class PgApiAccessCredentialRepository {
     return row === undefined ? record : toDeviceAuthorizationRecord(row);
   }
 
+  async rotateDeviceAuthorization(input: {
+    authorization: DeviceAuthorizationRecord;
+    expectedRefreshHash: string;
+  }): Promise<DeviceAuthorizationRecord | undefined> {
+    const [row] = await this.db
+      .update(deviceAuthorizations)
+      .set({
+        accessApiKeyId: input.authorization.accessApiKeyId,
+        hashedRefreshToken: input.authorization.hashedRefreshToken,
+        lastRefreshedAt: optionalDate(input.authorization.lastRefreshedAt),
+        updatedAt: new Date(input.authorization.updatedAt),
+      })
+      .where(
+        and(
+          eq(deviceAuthorizations.id, input.authorization.id),
+          eq(
+            deviceAuthorizations.hashedRefreshToken,
+            input.expectedRefreshHash,
+          ),
+        ),
+      )
+      .returning();
+    return row === undefined ? undefined : toDeviceAuthorizationRecord(row);
+  }
+
   async listServiceAccounts(orgId: string): Promise<ServiceAccountRecord[]> {
     const rows = await this.db
       .select()

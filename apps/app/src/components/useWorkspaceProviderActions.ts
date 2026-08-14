@@ -1,26 +1,32 @@
-import { useMutation, type QueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import {
+  createProviderMutationOptions,
+  syncProviderModelsMutationOptions,
+  updateModelPricingMutationOptions,
+} from "../features/providers/mutation-options";
+import type {
   createProvider,
-  syncProviderModels,
   updateModelPricing,
 } from "../features/providers/mutations";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 interface WorkspaceProviderActionsOptions {
-  queryClient: QueryClient;
   setError: (error: string | undefined) => void;
 }
 
 export function useWorkspaceProviderActions({
-  queryClient,
   setError,
 }: WorkspaceProviderActionsOptions) {
   const [syncingProviderId, setSyncingProviderId] = useState<string>();
-  const createProviderMutation = useMutation({ mutationFn: createProvider });
-  const updateModelPricingMutation = useMutation({
-    mutationFn: updateModelPricing,
-  });
+  const createProviderMutation = useMutation(createProviderMutationOptions());
+  const syncProviderModelsMutation = useMutation(
+    syncProviderModelsMutationOptions(),
+  );
+  const updateModelPricingMutation = useMutation(
+    updateModelPricingMutationOptions(),
+  );
 
   async function handleCreateProvider(
     input: Parameters<typeof createProvider>[0],
@@ -28,16 +34,8 @@ export function useWorkspaceProviderActions({
     setError(undefined);
     try {
       await createProviderMutation.mutateAsync(input);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["providers"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["providerOperationalSummary"],
-        }),
-      ]);
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Unable to create provider.",
-      );
+      setError(safeUserErrorMessage(caught, "Unable to create provider."));
     }
   }
 
@@ -45,19 +43,9 @@ export function useWorkspaceProviderActions({
     setError(undefined);
     setSyncingProviderId(providerId);
     try {
-      await syncProviderModels(providerId);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["models"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["providerOperationalSummary"],
-        }),
-      ]);
+      await syncProviderModelsMutation.mutateAsync(providerId);
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to sync provider models.",
-      );
+      setError(safeUserErrorMessage(caught, "Unable to sync provider models."));
     } finally {
       setSyncingProviderId(undefined);
     }
@@ -69,16 +57,8 @@ export function useWorkspaceProviderActions({
     setError(undefined);
     try {
       await updateModelPricingMutation.mutateAsync(input);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["models"] }),
-        queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-      ]);
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to update model pricing.",
-      );
+      setError(safeUserErrorMessage(caught, "Unable to update model pricing."));
     }
   }
 

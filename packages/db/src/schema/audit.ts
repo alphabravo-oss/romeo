@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 import { organizations } from "./tenancy";
@@ -27,6 +28,11 @@ export const auditLogs = pgTable(
       table.orgId,
       table.createdAt,
     ),
+    auditLogsOrgCreatedIdIdx: index("audit_logs_org_created_id_idx").on(
+      table.orgId,
+      table.createdAt,
+      table.id,
+    ),
     auditLogsResourceIdx: index("audit_logs_resource_idx").on(
       table.orgId,
       table.resourceType,
@@ -36,6 +42,10 @@ export const auditLogs = pgTable(
       table.orgId,
       table.actorId,
       table.createdAt,
+    ),
+    auditLogsSearchTrgmIdx: index("audit_logs_search_trgm_idx").using(
+      "gin",
+      sql`(lower(${table.action} || chr(31) || ${table.actorId} || chr(31) || ${table.resourceType} || chr(31) || ${table.resourceId})) gin_trgm_ops`,
     ),
   }),
 );

@@ -6,6 +6,8 @@ import { InMemoryRomeoRepository } from "./repositories/in-memory";
 describe("Romeo usage summaries", () => {
   it("aggregates run usage by metric, actor, and provider", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
+    const taxonomyResponse = await api.request("/api/v1/usage/taxonomy");
+    const taxonomy = await taxonomyResponse.json();
     const pricingResponse = await api.request(
       "/api/v1/models/model_openai_compatible_default/pricing",
       {
@@ -42,6 +44,15 @@ describe("Romeo usage summaries", () => {
     const exportedCsv = await exportResponse.text();
 
     expect(pricingResponse.status).toBe(200);
+    expect(taxonomyResponse.status).toBe(200);
+    expect(taxonomy.data).toHaveLength(48);
+    expect(taxonomy.data).toContainEqual(
+      expect.objectContaining({
+        metric: "llm.reasoning_token.reported",
+        unit: "token",
+        overlapPolicy: "component_of_total",
+      }),
+    );
     expect(runResponse.status).toBe(202);
     expect(exportResponse.status).toBe(200);
     expect(exportResponse.headers.get("content-type")).toContain("text/csv");
@@ -66,7 +77,7 @@ describe("Romeo usage summaries", () => {
         (item) =>
           item.metric === "llm.input_token.estimated" &&
           item.quantity > 0 &&
-          item.estimatedCostUsd > 0,
+          item.estimatedCostUsd === 0,
       ),
     ).toBe(true);
     expect(
@@ -74,7 +85,7 @@ describe("Romeo usage summaries", () => {
         (item) =>
           item.metric === "llm.output_token.estimated" &&
           item.quantity > 0 &&
-          item.estimatedCostUsd > 0,
+          item.estimatedCostUsd === 0,
       ),
     ).toBe(true);
     expect(
@@ -130,7 +141,7 @@ describe("Romeo usage summaries", () => {
       events.data.some(
         (event: { metric: string; metadata: Record<string, unknown> }) =>
           event.metric === "llm.total_token.reported" &&
-          event.metadata.usageSource === "dev-echo",
+          event.metadata.usageSource === "openai-compatible",
       ),
     ).toBe(true);
     expect(run.data.id).toMatch(/^run_/);

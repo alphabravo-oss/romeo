@@ -1,0 +1,366 @@
+{
+  "schemaVersion": "romeo.enterprise-data-inventory.v1",
+  "reviewedAt": "2026-08-14",
+  "owners": ["platform-security", "data-governance"],
+  "classifications": {
+    "public": {
+      "rank": 0,
+      "description": "Approved for intentional public release. No tenant or subject data."
+    },
+    "internal": {
+      "rank": 1,
+      "description": "Romeo operational or catalog metadata that is not public and contains no customer content or credentials."
+    },
+    "confidential": {
+      "rank": 2,
+      "description": "Tenant configuration, identifiers, relationship metadata, usage, audit, prompts, messages, documents, media, vectors, results, or derived customer content."
+    },
+    "restricted": {
+      "rank": 3,
+      "description": "Credentials, authentication material, security factors, external identities, personal account data, storage locators, or encrypted/hashed secret material."
+    }
+  },
+  "database": {
+    "schemaModules": ["packages/db/src/schema/index.ts"],
+    "classificationByTable": {
+      "public": [],
+      "internal": [
+        "base_models",
+        "billing_plans",
+        "feature_flags",
+        "permissions",
+        "provider_capabilities"
+      ],
+      "confidential": [
+        "agent_knowledge_bindings",
+        "agent_models",
+        "agent_tool_bindings",
+        "agent_versions",
+        "audit_logs",
+        "background_jobs",
+        "billing_event_receipts",
+        "capability_assignments",
+        "chat_comments",
+        "chat_tag_assignments",
+        "chat_tags",
+        "chats",
+        "collaboration_channel_members",
+        "collaboration_channels",
+        "data_connector_syncs",
+        "data_connectors",
+        "eval_cases",
+        "eval_result_human_ratings",
+        "eval_run_results",
+        "eval_runs",
+        "eval_suites",
+        "group_memberships",
+        "groups",
+        "knowledge_bases",
+        "knowledge_chunk_embeddings",
+        "knowledge_chunks",
+        "knowledge_sources",
+        "managed_model_customization_policies",
+        "managed_model_preferences",
+        "message_file_references",
+        "message_parts",
+        "messages",
+        "notification_deliveries",
+        "notification_delivery_channels",
+        "object_records",
+        "organization_capability_flags",
+        "organizations",
+        "prompt_templates",
+        "provider_instances",
+        "queued_chat_turns",
+        "quota_buckets",
+        "resource_favorites",
+        "resource_grants",
+        "retention_policies",
+        "role_permissions",
+        "roles",
+        "run_events",
+        "run_steps",
+        "runs",
+        "service_accounts",
+        "tool_calls",
+        "tool_connectors",
+        "tool_operations",
+        "usage_events",
+        "user_notifications",
+        "voice_profiles",
+        "webhook_deliveries",
+        "webhook_subscriptions",
+        "workflow_definitions",
+        "workflow_runs",
+        "workspace_folder_items",
+        "workspace_folders",
+        "workspaces"
+      ],
+      "restricted": [
+        "api_keys",
+        "delegated_oauth_connections",
+        "device_authorizations",
+        "idempotency_receipts",
+        "identities",
+        "local_mfa_challenges",
+        "local_mfa_factors",
+        "local_password_credentials",
+        "org_sso_oidc_settings",
+        "provider_credentials",
+        "saml_auth_requests",
+        "sessions",
+        "system_settings",
+        "user_sessions",
+        "users"
+      ]
+    },
+    "restrictedColumnNames": [
+      "authConfig",
+      "credentialHash",
+      "credentialRef",
+      "encodedCustomInstructions",
+      "hashedRefreshToken",
+      "hashedToken",
+      "idempotencyKey",
+      "keyHash",
+      "leaseToken",
+      "objectKey",
+      "passwordHash",
+      "relayStateHash",
+      "requestHash",
+      "scopeSnapshot",
+      "secretEncrypted",
+      "secretRef",
+      "token"
+    ],
+    "requirements": {
+      "tenantPredicate": "Every tenant-owned access path requires an organization predicate or an authorized parent join.",
+      "encryption": "Encrypted storage and transport are mandatory; restricted fields additionally require application envelopes or one-way hashes where the field semantics permit.",
+      "search": "Plaintext indexes are allowed only for declared product search. Indexes inherit the source classification, tenant predicates, retention, legal hold, deletion, backup, and access controls.",
+      "deletion": "Tenant purge and data-rights workflows must cover every tenant-owned table. Legal hold may retain only through an explicit governed state.",
+      "logging": "Row bodies and SQL parameter values are prohibited from logs, metrics, traces, support bundles, and migration evidence."
+    }
+  },
+  "stores": [
+    {
+      "id": "postgres_primary",
+      "kind": "database",
+      "classification": "restricted",
+      "contains": ["all classified database fields"],
+      "prohibited": [
+        "cross-tenant queries",
+        "unbounded support export",
+        "plaintext credentials"
+      ],
+      "retentionAuthority": "governance retention policies, legal hold, tenant purge, and resource-specific deletion",
+      "encryption": "TLS in transit; encrypted volumes; application envelopes or hashes for designated restricted fields"
+    },
+    {
+      "id": "postgres_wal_and_backups",
+      "kind": "backup",
+      "classification": "restricted",
+      "contains": ["physical or logical copies of PostgreSQL state"],
+      "prohibited": [
+        "public buckets",
+        "unreviewed restores",
+        "retention beyond policy"
+      ],
+      "retentionAuthority": "backup retention and legal-hold policy with tenant-deletion limitations documented",
+      "encryption": "encrypted transport and backup objects with operator-controlled keys"
+    },
+    {
+      "id": "object_store_uploads",
+      "kind": "object_store",
+      "classification": "restricted",
+      "contains": [
+        "original uploads",
+        "documents",
+        "images",
+        "audio",
+        "video",
+        "malware quarantine tombstones"
+      ],
+      "prohibited": [
+        "raw object keys in public APIs",
+        "serving before lifecycle ready",
+        "unsigned access"
+      ],
+      "retentionAuthority": "file lifecycle, effective retention, legal hold, data rights, tenant purge",
+      "encryption": "TLS and encrypted objects; signed short-lived access after authorization"
+    },
+    {
+      "id": "object_store_generated_media_and_artifacts",
+      "kind": "object_store",
+      "classification": "confidential",
+      "contains": [
+        "image outputs",
+        "voice artifacts",
+        "browser artifacts",
+        "future compute artifacts and previews"
+      ],
+      "prohibited": [
+        "unscanned publication",
+        "mutable overwrite of evidence versions",
+        "storage locator disclosure"
+      ],
+      "retentionAuthority": "artifact/file retention, legal hold, deletion, tenant purge, orphan cleanup",
+      "encryption": "TLS and encrypted objects with access-controlled download tickets"
+    },
+    {
+      "id": "valkey_operational_state",
+      "kind": "cache_and_bus",
+      "classification": "confidential",
+      "contains": [
+        "rate and quota state",
+        "run notification transport",
+        "bounded operational coordination"
+      ],
+      "prohibited": [
+        "durable source of truth",
+        "prompt or output bodies outside an explicitly versioned encrypted contract",
+        "credentials"
+      ],
+      "retentionAuthority": "short TTL or stream trimming; PostgreSQL remains durable replay source",
+      "encryption": "authenticated TLS in production and namespace-isolated keys"
+    },
+    {
+      "id": "postgres_vector_and_search_indexes",
+      "kind": "search_index",
+      "classification": "confidential",
+      "contains": [
+        "knowledge embeddings",
+        "normalized trigram documents",
+        "tenant-scoped query indexes"
+      ],
+      "prohibited": [
+        "cross-tenant nearest-neighbor or text search",
+        "index retention after source deletion",
+        "index-body logs"
+      ],
+      "retentionAuthority": "same policy, hold, ACL, and deletion state as source rows",
+      "encryption": "database storage and transport controls; tenant predicate at query time"
+    },
+    {
+      "id": "application_logs_metrics_and_traces",
+      "kind": "telemetry",
+      "classification": "internal",
+      "contains": [
+        "bounded codes",
+        "counts",
+        "durations",
+        "safe IDs where explicitly approved"
+      ],
+      "prohibited": [
+        "prompts",
+        "messages",
+        "media",
+        "tool arguments/results",
+        "provider bodies",
+        "credentials",
+        "raw errors",
+        "storage keys"
+      ],
+      "retentionAuthority": "operator telemetry retention with no customer-content exception",
+      "encryption": "TLS and backend encryption with operator access control"
+    },
+    {
+      "id": "audit_records",
+      "kind": "audit",
+      "classification": "confidential",
+      "contains": [
+        "typed actions",
+        "resource references",
+        "bounded canonical metadata",
+        "outcome"
+      ],
+      "prohibited": [
+        "content matches",
+        "prompts",
+        "outputs",
+        "media",
+        "sources",
+        "secrets",
+        "stack traces",
+        "raw errors"
+      ],
+      "retentionAuthority": "audit retention and legal hold",
+      "encryption": "database controls and future tenant-key policy; export is authorized and DLP-governed"
+    },
+    {
+      "id": "browser_and_ssr_query_caches",
+      "kind": "client_cache",
+      "classification": "confidential",
+      "contains": [
+        "authorized response projections",
+        "streaming assistant row",
+        "sanitized SSR snapshots"
+      ],
+      "prohibited": [
+        "credential identifiers in dehydration",
+        "cross-request QueryClient reuse",
+        "administrative policy graph hydration"
+      ],
+      "retentionAuthority": "resource cache profiles plus cancel-and-clear on logout or identity transition",
+      "encryption": "browser origin and transport controls; no claim of encrypted browser memory"
+    },
+    {
+      "id": "worker_and_runner_ephemeral_storage",
+      "kind": "ephemeral_storage",
+      "classification": "restricted",
+      "contains": [
+        "bounded scanner/extractor scratch",
+        "future job-scoped compute input/output staging"
+      ],
+      "prohibited": [
+        "cross-job reuse",
+        "host mounts",
+        "unbounded archives",
+        "survival after terminal cleanup"
+      ],
+      "retentionAuthority": "job terminal cleanup plus independently monitored orphan cleanup",
+      "encryption": "encrypted node storage where supported; unique job scope and deterministic destruction"
+    },
+    {
+      "id": "support_and_release_evidence",
+      "kind": "evidence",
+      "classification": "internal",
+      "contains": [
+        "versions",
+        "digests",
+        "counts",
+        "policy decisions",
+        "metadata-only test evidence"
+      ],
+      "prohibited": [
+        "customer content",
+        "tenant identifiers",
+        "credentials",
+        "endpoints",
+        "raw environment",
+        "raw scanner findings with secrets"
+      ],
+      "retentionAuthority": "operator support/evidence policy",
+      "encryption": "signed/hash-inventoried release evidence and access-controlled support bundles"
+    },
+    {
+      "id": "release_and_airgap_artifacts",
+      "kind": "supply_chain",
+      "classification": "internal",
+      "contains": [
+        "images",
+        "packages",
+        "SBOMs",
+        "signatures",
+        "attestations",
+        "migration and schema artifacts"
+      ],
+      "prohibited": [
+        "mutable promotion",
+        "embedded deployment secrets",
+        "unverified components"
+      ],
+      "retentionAuthority": "release and vulnerability-support policy",
+      "encryption": "digest verification, signatures, provenance and controlled distribution"
+    }
+  ]
+}

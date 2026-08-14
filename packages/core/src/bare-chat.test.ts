@@ -86,6 +86,30 @@ describe("bare chat prompt suppression", () => {
     expect(systemTurns[0]?.content).not.toContain("Answer in limericks.");
   });
 
+  it("applies the user-requested deep research protocol even in bare mode", () => {
+    const messages = buildCanonicalRunContext({
+      agentVersion: {
+        memoryPolicy: { mode: "disabled" },
+        safetySettings: {},
+        systemPrompt: "This persona must remain hidden.",
+      },
+      assistantsEnabled: false,
+      history: [],
+      knowledgeHits: [],
+      memories: [],
+      model: testModel,
+      preferences: {},
+      researchMode: "deep",
+      userContent: "Compare the deployment options.",
+    }).messages;
+    const serialized = JSON.stringify(messages);
+
+    expect(serialized).toContain("Deep research protocol");
+    expect(serialized).toContain("distinguish evidence from inference");
+    expect(serialized).toContain("Compare the deployment options");
+    expect(serialized).not.toContain("persona must remain hidden");
+  });
+
   it("sends the persona system turn with assistants on", () => {
     const systemTurns = assembledMessages(true).filter(
       (message) => message.role === "system",
@@ -132,7 +156,7 @@ describe("bare chat prompt suppression", () => {
 });
 
 describe("custom model chat over the API", () => {
-  it("always applies the custom model system prompt (dual bare mode retired)", async () => {
+  it("withholds the custom model system prompt from context previews", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       startBackgroundWorkers: false,
     });
@@ -148,9 +172,7 @@ describe("custom model chat over the API", () => {
 
     expect(persona.systemPrompt.trim().length).toBeGreaterThan(0);
     expect(personaTurns.length).toBeGreaterThanOrEqual(1);
-    expect(
-      personaTurns.some((turn) => turn.content.includes(persona.systemPrompt)),
-    ).toBe(true);
+    expect(personaTurns.every((turn) => turn.content === "")).toBe(true);
   });
 
   it("pins the custom model version and enforces safety settings", async () => {
@@ -186,6 +208,42 @@ describe("custom model chat over the API", () => {
     expect(blocked.error.code).toBe("agent_safety_blocked_term");
     expect(allowedResponse.status).toBe(202);
     expect(allowed.data.agentVersionId).toBe(published.data.id);
+  });
+
+  it("stages an immutable candidate without changing live traffic until promotion", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, { startBackgroundWorkers: false });
+    const originalVersionId = (await repository.getAgent("agent_default"))
+      ?.publishedVersionId;
+
+    const candidateResponse = await api.request(
+      "/api/v1/agents/agent_default/versions",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ channel: "candidate" }),
+      },
+    );
+    const candidate = await candidateResponse.json();
+
+    expect(candidateResponse.status).toBe(201);
+    expect(
+      (await repository.getAgent("agent_default"))?.publishedVersionId,
+    ).toBe(originalVersionId);
+    expect(
+      (await repository.listAuditLogs("org_default")).find(
+        (event) => event.resourceId === candidate.data.id,
+      )?.metadata,
+    ).toMatchObject({ channel: "candidate" });
+
+    const promoteResponse = await api.request(
+      `/api/v1/agents/agent_default/versions/${candidate.data.id}/rollback`,
+      { method: "POST" },
+    );
+    expect(promoteResponse.status).toBe(200);
+    expect(
+      (await repository.getAgent("agent_default"))?.publishedVersionId,
+    ).toBe(candidate.data.id);
   });
 });
 

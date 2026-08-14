@@ -1,0 +1,13 @@
+# Default ownership. GitHub branch protection must separately require review
+# from Code Owners for this file to become an enforcement boundary.
+* @mjtechguy
+
+# Security- and release-sensitive surfaces.
+/.github/ @mjtechguy
+/SECURITY.md @mjtechguy
+/deploy/ @mjtechguy
+/packages/auth/ @mjtechguy
+/packages/core/src/http/ @mjtechguy
+/packages/core/src/services/ @mjtechguy
+/packages/secrets/ @mjtechguy
+/scripts/ @mjtechguy

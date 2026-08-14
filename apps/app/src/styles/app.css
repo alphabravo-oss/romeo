@@ -1,13 +1,5 @@
 @import "tailwindcss";
 @import "@romeo/ui/styles.css";
 @import "./app-foundation.css";
-@import "./app-sidebar-controls.css";
 @import "./app-navigation.css";
 @import "./app-conversation.css";
-@import "./app-message-detail.css";
-@import "./app-composer-extras.css";
-@import "./app-artifacts.css";
-@import "./app-content.css";
-/* Console design system (admin + workspace). Loaded last so it wins over the
-   legacy console rules still being retired from app-content.css. */
-@import "./console.css";

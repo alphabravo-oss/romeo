@@ -84,8 +84,65 @@ export const OpenAiChatCompletionRequestSchema = z
           streamOptions: { includeUsage: request.stream_options.include_usage },
         }),
     ...(request.tools === undefined ? {} : { tools: request.tools }),
+    ...openAiChatParameters(request as Record<string, unknown>),
   }))
   .openapi("OpenAiChatCompletionRequest");
+
+function openAiChatParameters(request: Record<string, unknown>) {
+  const sampling = {
+    ...(finiteNumber(request.temperature)
+      ? { temperature: request.temperature }
+      : {}),
+    ...(finiteNumber(request.top_p) ? { topP: request.top_p } : {}),
+    ...(finiteNumber(request.max_tokens)
+      ? { maxTokens: request.max_tokens }
+      : {}),
+  };
+  const reasoning = reasoningEffort(request.reasoning_effort)
+    ? { effort: request.reasoning_effort }
+    : undefined;
+  const structuredOutput = openAiStructuredOutput(request.response_format);
+  return {
+    ...(Object.keys(sampling).length === 0 ? {} : { sampling }),
+    ...(reasoning === undefined ? {} : { reasoning }),
+    ...(structuredOutput === undefined ? {} : { structuredOutput }),
+  };
+}
+
+function openAiStructuredOutput(value: unknown) {
+  const format = objectRecord(value);
+  if (format?.type === "json_object") return { type: "json_object" as const };
+  const definition = objectRecord(format?.json_schema);
+  const schema = objectRecord(definition?.schema);
+  if (
+    format?.type !== "json_schema" ||
+    typeof definition?.name !== "string" ||
+    schema === undefined ||
+    (definition.strict !== undefined && typeof definition.strict !== "boolean")
+  ) {
+    return undefined;
+  }
+  return {
+    type: "json_schema" as const,
+    name: definition.name,
+    schema,
+    ...(definition.strict === undefined ? {} : { strict: definition.strict }),
+  };
+}
+
+function finiteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function reasoningEffort(value: unknown): value is "high" | "low" | "medium" {
+  return value === "high" || value === "low" || value === "medium";
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
 
 export const OpenAiEmbeddingRequestSchema = z
   .object({
@@ -123,6 +180,12 @@ const usage = z
   .strictObject({
     ...usageFields,
     completion_tokens: z.number().int().optional(),
+    prompt_tokens_details: z
+      .strictObject({ cached_tokens: z.number().int().nonnegative() })
+      .optional(),
+    completion_tokens_details: z
+      .strictObject({ reasoning_tokens: z.number().int().nonnegative() })
+      .optional(),
   })
   .nullable();
 const toolCall = z.strictObject({

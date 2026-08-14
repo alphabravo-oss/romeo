@@ -1,5 +1,16 @@
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
+import {
+  isBlockedNetworkAddress,
+  isNetworkIpAddress,
+  isPrivateNetworkHost,
+  normalizeNetworkHost,
+  normalizeResolvedNetworkAddress,
+} from "./network-host-policy";
+import type {
+  ToolDispatchDnsAddress,
+  ToolDispatchDnsLookup,
+} from "./tool-dispatch-worker";
 import { workerSignalAborted } from "./worker-control";
 
 export interface BrowserAutomationWorkerClient {
@@ -61,6 +72,7 @@ export interface BrowserAutomationCompletionResult {
 
 export interface RunBrowserAutomationWorkerInput {
   client: BrowserAutomationWorkerClient;
+  dnsLookup?: ToolDispatchDnsLookup;
   fetchImpl: typeof fetch;
   intervalMs: number;
   io: CliIo;
@@ -165,7 +177,16 @@ async function executeClaimedBrowserTask(
         errorCode: "browser_automation_claim_invalid",
       });
     }
-    const result = await callBrowserRunner(input, runnerUrl, claim);
+    const approvedTargetAddresses = await assertBrowserTargetAllowed(
+      input,
+      claim.request,
+    );
+    const result = await callBrowserRunner(
+      input,
+      runnerUrl,
+      claim,
+      approvedTargetAddresses,
+    );
     await input.client.workflows.completeBrowserTask({ jobId, result });
     return claimedJobSummary(claim, "completed");
   } catch (error) {
@@ -179,6 +200,7 @@ async function callBrowserRunner(
   input: RunBrowserAutomationWorkerInput,
   runnerUrl: string,
   claim: BrowserAutomationTaskClaimResult,
+  approvedTargetAddresses: ToolDispatchDnsAddress[],
 ): Promise<BrowserAutomationCompletionResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
@@ -188,6 +210,11 @@ async function callBrowserRunner(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         jobId: claim.job?.id,
+        networkPolicy: {
+          approvedAddresses: approvedTargetAddresses,
+          dnsPinningRequired: approvedTargetAddresses.length > 0,
+          targetOrigin: claim.request?.targetOrigin,
+        },
         request: claim.request,
         sandboxPolicy: claim.sandboxPolicy,
         workflow: claim.workflow,
@@ -207,6 +234,58 @@ async function callBrowserRunner(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function assertBrowserTargetAllowed(
+  input: Pick<RunBrowserAutomationWorkerInput, "dnsLookup">,
+  request: NonNullable<BrowserAutomationTaskClaimResult["request"]>,
+): Promise<ToolDispatchDnsAddress[]> {
+  let url: URL;
+  try {
+    url = new URL(request.targetUrl);
+  } catch {
+    throw new Error("browser_target_url_invalid");
+  }
+  const host = normalizeNetworkHost(url.hostname);
+  if (
+    url.protocol !== "https:" ||
+    url.username.length > 0 ||
+    url.password.length > 0 ||
+    url.search.length > 0 ||
+    url.hash.length > 0 ||
+    host !== normalizeNetworkHost(request.targetHost) ||
+    url.origin !== request.targetOrigin
+  ) {
+    throw new Error("browser_target_url_invalid");
+  }
+  if (isPrivateNetworkHost(host)) throw new Error("browser_target_host_denied");
+  if (isNetworkIpAddress(host) || input.dnsLookup === undefined) return [];
+  let addresses: ToolDispatchDnsAddress[];
+  try {
+    addresses = await input.dnsLookup(host);
+  } catch {
+    throw new Error("browser_target_dns_lookup_failed");
+  }
+  const normalizedAddresses = addresses.map((address) =>
+    normalizeResolvedNetworkAddress(address.address, address.family),
+  );
+  if (
+    normalizedAddresses.length === 0 ||
+    normalizedAddresses.some((address) => address === undefined)
+  ) {
+    throw new Error("browser_target_dns_lookup_failed");
+  }
+  const approvedAddresses = normalizedAddresses.filter(
+    (address): address is NonNullable<typeof address> => address !== undefined,
+  );
+  if (
+    approvedAddresses.some((address) =>
+      isBlockedNetworkAddress(address.address),
+    )
+  ) {
+    throw new Error("browser_target_host_denied");
+  }
+  return approvedAddresses;
 }
 
 function sanitizeRunnerResult(

@@ -1,17 +1,65 @@
+@import "./app-content-tables.css";
+
+/* Rail top: leave-the-console link, then the console switcher. */
+
+.rm-console-railtop {
+  display: grid;
+  flex: none;
+  gap: 10px;
+  padding: 12px 12px 10px;
+}
+
 .rm-console-back {
   display: flex;
   align-items: center;
   gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--rm-border);
+  border-radius: 8px;
+  background: var(--rm-surface);
   color: var(--rm-muted);
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 500;
   text-decoration: none;
-  padding: 6px 8px;
-  border-radius: var(--rm-radius-item);
 }
 
 .rm-console-back:hover {
-  color: var(--rm-text);
   background: var(--rm-hover);
+  color: var(--rm-text);
+}
+
+/* Segmented switch between the two consoles. */
+
+.rm-console-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--rm-border);
+  border-radius: 9px;
+  background: var(--rm-surface-soft-2);
+}
+
+.rm-console-switch__tab {
+  display: grid;
+  height: 28px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--rm-muted);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+
+.rm-console-switch__tab:hover {
+  color: var(--rm-text);
+}
+
+.rm-console-switch__tab.is-active {
+  background: var(--rm-surface);
+  color: var(--rm-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 10%);
 }
 
 .rm-console-title {
@@ -23,13 +71,32 @@
   text-transform: uppercase;
 }
 
+/* Topbar breadcrumb. */
+
+.rm-console-crumb {
+  color: var(--rm-muted);
+  font-size: 13px;
+}
+
+.rm-console-crumb-sep {
+  color: var(--rm-faint);
+}
+
+.rm-console-crumb-current {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rm-console-sections {
   display: grid;
   min-height: 0;
   flex: 1;
   align-content: start;
   grid-auto-rows: max-content;
-  gap: 18px;
+  gap: 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 2px;
@@ -44,11 +111,15 @@
 
 .rm-console-group-label,
 .rm-console-group-toggle {
-  padding: 8px 8px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--rm-muted);
+  height: 26px;
+  padding: 0 10px;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  color: var(--rm-faint);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .rm-console-group-toggle {
@@ -80,13 +151,16 @@
 
 .rm-ui-button.rm-console-item {
   justify-content: flex-start;
-  gap: 8px;
-  min-height: 30px;
+  gap: 9px;
+  min-height: var(--rm-nav-h);
   border: 0;
-  border-radius: 6px;
+  /* De-chroming a Button means clearing its shadow too, not just its border and
+     background — every other de-chroming rule in this file pairs them. */
+  box-shadow: none;
+  border-radius: 8px;
   background: transparent;
-  padding: 5px 8px;
-  color: var(--rm-text);
+  padding: 0 10px;
+  color: var(--rm-muted);
   font-size: 13px;
   font-weight: 450;
   text-align: left;
@@ -94,11 +168,13 @@
 
 .rm-console-item:hover {
   background: var(--rm-hover);
+  color: var(--rm-text);
 }
 
 .rm-console-item.active {
   background: var(--rm-surface-soft);
-  font-weight: 500;
+  color: var(--rm-text);
+  font-weight: 560;
 }
 
 .rm-console-item svg {
@@ -122,57 +198,28 @@
   background: color-mix(in srgb, var(--rm-bg) 88%, transparent);
 }
 
+/* One measure for every console page. Cards give data its own edges now, so a
+   settings page and a data grid can share a column without either looking
+   stranded — which is why the earlier split measure is gone. */
+
 .rm-console-inner {
   display: grid;
   align-content: start;
-  gap: 28px;
+  gap: 22px;
   width: 100%;
-  /* The console is a reading surface, not a canvas. Capping the column is what
-     keeps inputs, dividers, and toolbars sharing one right edge on a wide
-     monitor instead of each finding its own. */
-  max-width: var(--rm-console-measure, var(--rm-measure-console));
+  max-width: var(--rm-measure-console);
   margin-inline: auto;
-  padding: 28px 40px 96px;
+  padding: 26px var(--rm-page-pad) 64px;
 }
 
-/* A page holding a data grid switches to the wide measure. Detected from the
-   content rather than declared per-route, so any page that grows a table gets
-   the right width without a second class to remember. */
-
-.rm-console-content:has(.rm-table-wrap) {
-  --rm-console-measure: var(--rm-measure-console-wide);
-}
-
-/* Same cap for the sticky topbar's contents, so the page title sits directly
-   above the page it belongs to rather than hard against the window edge. */
+/* Same cap for the sticky topbar, so the breadcrumb sits directly above the
+   page it belongs to rather than hard against the window edge. */
 
 .rm-console-topbar {
   padding-inline: max(
     16px,
-    calc(
-      (100% - var(--rm-console-measure, var(--rm-measure-console))) / 2 + 40px
-    )
+    calc((100% - var(--rm-measure-console)) / 2 + var(--rm-page-pad))
   );
-}
-
-/*
- * Console content sits flat on the page: elevation comes from surface colour
- * and hairlines, not floating rounded cards. <ConsoleSection> owns that now —
- * the rules that used to *undo* panel markup after the fact (flattening
- * .rm-panel, stripping borders off .rounded-md) are gone, along with the
- * selector collision that mangled inline chips into hairline fragments.
- *
- * Panels that have not been converted yet still render .rm-panel, so it keeps
- * a flattening rule until the last one moves over.
- * ponytail: delete when no console panel renders .rm-panel.
- */
-
-.rm-console-content .rm-panel {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
 }
 
 .rm-console-agentpicker {
@@ -271,17 +318,17 @@
   min-height: 2.25rem;
 }
 
-/* Section titles that still live outside <ConsoleSection> — nested groups inside
-   a panel, mostly. They inherit the same type as .rm-section__title so a page
-   never shows two heading styles.
+/* Section titles that still live outside the shared Section primitive — nested
+   groups inside a panel, mostly. They inherit the same type so a page never
+   shows two heading styles.
 
    This list is the remaining conversion debt, not a design decision: as those
    call sites move to <ConsoleSection>, entries come off it.
    ponytail: delete each selector as its call sites convert. */
 
-.rm-console-inner :where(
+.rm-console-inner
+  :where(
     .rm-card-title,
-    .rm-settings-section__title,
     .rm-managed-model-section__header h3,
     .rm-provider-zone__label
   ) {
@@ -293,8 +340,7 @@
   text-transform: none;
 }
 
-.rm-card-header > div:first-child > p,
-.rm-card-header__description {
+.rm-card-header > div:first-child > p {
   max-width: var(--rm-measure-prose);
   margin: 0.25rem 0 0;
   color: var(--rm-muted);
@@ -307,9 +353,8 @@
 /* Header actions: utilities collapse to quiet icons, the page's real action is
    the only filled button in the row. */
 
-.rm-card-header .rm-ui-button:not(.rm-ui-button--primary):not(
-    .rm-ui-button--danger
-  ) {
+.rm-card-header
+  .rm-ui-button:not(.rm-ui-button--primary):not(.rm-ui-button--danger) {
   border-color: var(--rm-border);
   background: transparent;
 }
@@ -320,7 +365,7 @@
    destructive actions read as outlined danger and confirm before acting. */
 
 .rm-console-inner
-  :where(.rm-card-header, .rm-console-toolbar, .rm-settings-section__head)
+  :where(.rm-card-header, .rm-console-toolbar)
   .rm-ui-button--danger {
   border-color: color-mix(in srgb, var(--rm-danger) 45%, var(--rm-border));
   background: transparent;
@@ -329,110 +374,11 @@
 }
 
 .rm-console-inner
-  :where(.rm-card-header, .rm-console-toolbar, .rm-settings-section__head)
+  :where(.rm-card-header, .rm-console-toolbar)
   .rm-ui-button--danger:hover:not(:disabled) {
   border-color: var(--rm-danger);
   background: color-mix(in srgb, var(--rm-danger) 12%, transparent);
   color: var(--rm-danger);
-}
-
-/* ============================================================
- * Section contract — see components/ConsoleSection.tsx
- *
- * One rule set owns section rhythm, heading type, description measure, and the
- * action slot. Panels render <ConsoleSection> and describe nothing about their
- * own appearance, which is what stops the console drifting back into a dozen
- * competing structures.
- * ============================================================ */
-
-.rm-section {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
-/* Sections separate from each other with one hairline, drawn by the section
-   below. The page's first section never draws one — the page header is already
-   its boundary. */
-
-.rm-section + .rm-section {
-  margin-block-start: 28px;
-  border-block-start: 1px solid var(--rm-border);
-  padding-block-start: 28px;
-}
-
-.rm-section__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  min-width: 0;
-}
-
-.rm-section__copy {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-/* One heading type for every section in the console. */
-
-.rm-section__title {
-  margin: 0;
-  color: var(--rm-text);
-  font-size: 0.875rem;
-  font-weight: 600;
-  letter-spacing: -0.006em;
-  line-height: 1.4;
-}
-
-.rm-section__description {
-  max-width: var(--rm-measure-prose);
-  margin: 0;
-  color: var(--rm-muted);
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  text-wrap: pretty;
-}
-
-.rm-section__actions {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.rm-section__body {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-}
-
-/* Destructive controls get a visible boundary so they are never adjacent to a
-   Save, and the boundary is the section's own — not a second nested box. */
-
-.rm-section--danger {
-  margin-block-start: 32px;
-  border-block-start: 1px solid
-    color-mix(in srgb, var(--rm-danger) 40%, transparent);
-  padding-block-start: 24px;
-}
-
-.rm-section--danger .rm-section__title {
-  color: var(--rm-danger);
-}
-
-@media (min-width: 60rem) {
-  /* Wide viewports get the label rail: heading on the left, controls on the
-     right, so a column of settings reads as a form rather than a stack. */
-  .rm-section--split {
-    grid-template-columns: minmax(12rem, 17rem) minmax(0, 1fr);
-    gap: 32px;
-  }
-
-  .rm-section--split .rm-section__head {
-    display: block;
-  }
 }
 
 /* Page header: title + one-line description at the top of each console section */
@@ -754,669 +700,4 @@ select:focus-visible {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
   }
-}
-
-/* ============================================================
- * Data tables (TanStack Table) — Linear-dense
- * ============================================================ */
-
-.rm-table-wrap {
-  border: 0;
-  border-top: 1px solid var(--rm-border);
-  border-bottom: 1px solid var(--rm-border);
-  border-radius: 0;
-  overflow-x: auto;
-  background: transparent;
-}
-
-.rm-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.rm-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--rm-surface);
-  text-align: left;
-  font-weight: 510;
-  font-size: 11px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--rm-muted);
-  padding: 9px 10px;
-  border-bottom: 1px solid var(--rm-border);
-  white-space: nowrap;
-  user-select: none;
-}
-
-.rm-th-sortable {
-  cursor: pointer;
-}
-
-.rm-th-sortable:hover {
-  color: var(--rm-text);
-}
-
-.rm-th-inner {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.rm-th-sort {
-  display: inline-flex;
-  opacity: 0.45;
-}
-
-.rm-th-sortable:hover .rm-th-sort {
-  opacity: 0.9;
-}
-
-.rm-table tbody td {
-  padding: 10px 10px;
-  border-bottom: 1px solid var(--rm-border);
-  color: var(--rm-text);
-  vertical-align: middle;
-  /* A cap the auto table-layout algorithm honours. Without it one long
-     description sets the table's width, every other column is squeezed, and
-     the last column is pushed off the edge — cells already carry `truncate`,
-     but truncation needs a width to truncate against. */
-  max-width: 24rem;
-}
-
-.rm-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.rm-table tbody tr:hover td {
-  background: var(--rm-hover);
-}
-
-.rm-table-row-action {
-  cursor: pointer;
-  outline: none;
-}
-
-.rm-table-row-action:focus-visible td {
-  background: color-mix(in srgb, var(--rm-accent) 9%, var(--rm-surface));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--rm-accent) 45%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--rm-accent) 45%, transparent);
-}
-
-.rm-table-empty {
-  padding: 32px 14px !important;
-  text-align: center;
-  color: var(--rm-muted);
-}
-
-/* Row actions pin to the right edge. A table wide enough to scroll used to
-   slice its own buttons in half at the container edge — the single loudest
-   "unfinished" signal in the console. Pinned, the actions stay reachable and
-   the horizontal scroll reads as intentional. */
-
-.rm-table :where(th, td)[data-col="actions"] {
-  position: sticky;
-  right: 0;
-  z-index: 2;
-  width: 1%;
-  max-width: none;
-  padding-left: 18px;
-  text-align: right;
-  white-space: nowrap;
-}
-
-/* Row actions must refuse to wrap. Several action rows ship `flex-wrap`, which
-   creates a feedback loop with the auto table-layout algorithm: the cell wraps
-   its buttons instead of demanding width, so the algorithm concludes the column
-   is narrow, so it wraps harder. Three actions became three stacked lines and
-   rows ended up different heights. Refusing to wrap makes the cell state its
-   real width once; the sticky pin above keeps it reachable either way. */
-
-.rm-table td[data-col="actions"] > * {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-/* A pinned cell must be opaque, and it has to match the backdrop it sits on or
-   it reads as a highlighted block: body rows sit on the page, the header sits
-   on the header band. */
-
-.rm-table tbody td[data-col="actions"] {
-  background: var(--rm-bg);
-}
-
-.rm-table thead th[data-col="actions"] {
-  z-index: 3;
-  background: var(--rm-surface);
-}
-
-/* Hover must repaint the pinned cell too, or it stays lit while the row dims. */
-
-.rm-table tbody tr:hover td[data-col="actions"] {
-  background: color-mix(in srgb, var(--rm-hover), var(--rm-bg));
-}
-
-/* Hairline that fades in only once content actually slides under the pin, so a
-   table that fits shows no stray divider. Driven by the scroll container
-   itself — no listener, no state. Browsers without scroll-driven animations
-   simply keep the hairline hidden, which is the pre-existing behaviour. */
-
-.rm-table :where(th, td)[data-col="actions"]::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  width: 1px;
-  background: var(--rm-border);
-  opacity: 0;
-}
-
-@supports (animation-timeline: scroll(inline nearest)) {
-  .rm-table :where(th, td)[data-col="actions"]::before {
-    animation: rm-table-pin-edge linear both;
-    animation-timeline: scroll(inline nearest);
-    animation-range: 1px 12px;
-  }
-}
-
-@keyframes rm-table-pin-edge {
-  to {
-    opacity: 1;
-  }
-}
-
-/* Row actions are quiet by default: the row is the subject, the buttons are
-   not. Two filled buttons per row turned every table into a wall of chrome. */
-
-.rm-table td[data-col="actions"] .rm-ui-button {
-  min-height: 1.75rem;
-  padding-inline: 0.5rem;
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-  color: var(--rm-muted);
-  font-size: 0.8125rem;
-}
-
-.rm-table td[data-col="actions"] .rm-ui-button:hover:not(:disabled) {
-  background: var(--rm-hover);
-  color: var(--rm-text);
-}
-
-.rm-table td[data-col="actions"] .rm-ui-button--danger {
-  color: var(--rm-danger);
-}
-
-/* muted secondary cell text */
-
-.rm-cell-muted {
-  color: var(--rm-muted);
-}
-
-/* ============================================================
- * Dashboard stat cards (admin Overview)
- * ============================================================ */
-
-.rm-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 0;
-  border-top: 1px solid var(--rm-border);
-  border-bottom: 1px solid var(--rm-border);
-}
-
-.rm-stat {
-  min-width: 0;
-  border: 0;
-  border-right: 1px solid var(--rm-border);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  /* Symmetric gutters so the divider sits midway between two stats instead of
-     hard against the next one's label. First stat keeps a flush left edge to
-     stay on the page's text column. */
-  padding: 16px 20px;
-}
-
-.rm-stat:first-child {
-  padding-left: 0;
-}
-
-.rm-stat:last-child {
-  border-right: 0;
-}
-
-.rm-stat-label {
-  font-size: 11px;
-  font-weight: 510;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--rm-muted);
-}
-
-.rm-stat-value {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  font-size: 1.375rem;
-  font-weight: 590;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  text-transform: capitalize;
-}
-
-.rm-stat-value--text {
-  flex-wrap: wrap;
-  font-size: 1.0625rem;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.rm-stat-sub {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--rm-muted);
-}
-
-@media (max-width: 520px) {
-  .rm-stat-grid {
-    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
-    gap: 8px;
-  }
-
-  .rm-stat {
-    padding: 12px 0;
-    border-right: 0;
-    border-bottom: 1px solid var(--rm-border);
-  }
-
-  .rm-stat-value {
-    margin-top: 6px;
-    font-size: 1.25rem;
-  }
-
-  .rm-stat-value--text {
-    font-size: 1rem;
-  }
-}
-
-.rm-status-dot {
-  width: 9px;
-  height: 9px;
-  flex-shrink: 0;
-  border-radius: 9999px;
-  background: var(--rm-gray-400);
-}
-
-.rm-status-dot.pass {
-  background: var(--rm-success);
-}
-
-.rm-status-dot.warn {
-  background: var(--rm-warning);
-}
-
-.rm-status-dot.fail {
-  background: var(--rm-danger);
-}
-
-/* ============================================================
- * Command palette (⌘K)
- * ============================================================ */
-
-.rm-cmdk-input {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--rm-border);
-  color: var(--rm-muted);
-}
-
-.rm-cmdk-input input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--rm-text);
-  font: inherit;
-  font-size: 15px;
-}
-
-.rm-cmdk-input:focus-within {
-  box-shadow: inset 0 -2px 0 var(--rm-accent);
-}
-
-.rm-kbd {
-  font-size: 10px;
-  font-weight: 510;
-  letter-spacing: 0.04em;
-  color: var(--rm-muted);
-  border: 1px solid var(--rm-border);
-  border-radius: 5px;
-  padding: 2px 6px;
-  background: var(--rm-surface-soft);
-}
-
-.rm-cmdk-list {
-  overflow: auto;
-  padding: 6px;
-}
-
-.rm-cmdk-group {
-  padding: 8px 10px 4px;
-  font-size: 11px;
-  font-weight: 590;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--rm-muted);
-}
-
-.rm-cmdk-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  padding: 9px 10px;
-  color: var(--rm-text);
-  font: inherit;
-  font-size: 14px;
-  text-align: left;
-}
-
-.rm-cmdk-item svg {
-  color: var(--rm-muted);
-  flex-shrink: 0;
-}
-
-.rm-cmdk-item.active {
-  background: var(--rm-accent);
-  color: var(--rm-on-accent);
-}
-
-.rm-cmdk-item.active svg {
-  color: var(--rm-on-accent);
-}
-
-.rm-cmdk-empty {
-  padding: 28px 12px;
-  text-align: center;
-  color: var(--rm-muted);
-  font-size: 14px;
-}
-
-/* Data-table toolbar (search) + pager */
-
-.rm-table-block {
-  display: grid;
-  gap: 10px;
-}
-
-.rm-table-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 280px;
-  padding: 7px 10px;
-  border: 1px solid var(--rm-border);
-  border-radius: 8px;
-  background: var(--rm-surface);
-  color: var(--rm-muted);
-}
-
-.rm-table-search input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--rm-text);
-  font: inherit;
-  font-size: 13px;
-}
-
-.rm-table-search:focus-within {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rm-accent) 35%, transparent);
-}
-
-.rm-table-pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.rm-table-pager-info {
-  font-size: 12px;
-  color: var(--rm-muted);
-}
-
-.rm-table-pager-nav {
-  display: flex;
-  gap: 4px;
-}
-
-.rm-table-pager-nav .rm-icon-button {
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  border: 1px solid var(--rm-border);
-  border-radius: 8px;
-  color: var(--rm-text);
-}
-
-/* ============================================================
- * Type scale tokens (documented reference; sizes stay in px)
- * xs 11 · sm 12 · base 13 · md 14 · lg 15 · xl 18 · 2xl 22 · 3xl 28
- * ============================================================ */
-
-:root {
-  --rm-text-xs: 11px;
-  --rm-text-sm: 12px;
-  --rm-text-base: 13px;
-  --rm-text-md: 14px;
-  --rm-text-lg: 15px;
-  --rm-text-xl: 18px;
-  --rm-text-2xl: 22px;
-  --rm-text-3xl: 28px;
-}
-
-.rm-shortcuts-body {
-  padding: 8px 10px;
-}
-
-.rm-shortcuts-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 9px 6px;
-  font-size: 13px;
-}
-
-.rm-shortcuts-row + .rm-shortcuts-row {
-  border-top: 1px solid var(--rm-border);
-}
-
-.rm-shortcuts-keys {
-  display: flex;
-  gap: 4px;
-}
-
-/* ---- Table view menu (columns + density) + compact density ---- */
-
-.rm-table-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.rm-table-view {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  position: relative;
-}
-
-.rm-table-view-btn {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  min-height: 34px;
-  border: 1px solid var(--rm-border);
-  border-radius: 8px;
-  color: var(--rm-text);
-}
-
-.rm-table-view-menu {
-  display: grid;
-  gap: 4px;
-  width: 220px;
-  max-height: min(70vh, 32rem);
-  overflow-y: auto;
-}
-
-.rm-table-view-label {
-  padding: 4px 4px 2px;
-  font-size: 10px;
-  font-weight: 590;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--rm-muted);
-}
-
-.rm-table-density {
-  width: 100%;
-  margin-bottom: 4px;
-}
-
-.rm-table-density .rm-segmented-item {
-  flex: 1;
-  min-height: 26px;
-  padding: 0 8px;
-  font-size: 12px;
-}
-
-.rm-table-view-col {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 4px;
-  border-radius: 7px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.rm-table-view-col:hover {
-  background: var(--rm-hover);
-}
-
-.rm-table-view-menu .rm-ui-native-select {
-  width: 100%;
-}
-
-.rm-table-saved-view-create {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px;
-}
-
-.rm-table-saved-view-create .rm-ui-input {
-  min-width: 0;
-}
-
-.rm-table-saved-views {
-  display: grid;
-  gap: 2px;
-}
-
-.rm-table-saved-view {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-}
-
-.rm-table-saved-view-name {
-  min-width: 0;
-  justify-content: flex-start;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rm-table-reset {
-  width: 100%;
-  margin-top: 6px;
-}
-
-.rm-table-wrap.compact .rm-table thead th {
-  padding: 6px 12px;
-}
-
-.rm-table-wrap.compact .rm-table tbody td {
-  padding: 5px 12px;
-}
-
-/* ── Route error / not-found boundary ───────────────────────────────────── */
-
-/* align-content rather than `margin: auto`: the boundary renders both as a
-   whole page (not-found) and nested inside the workspace shell (route throw),
-   and only one of those parents is a full-height flex container. */
-
-.rm-route-error {
-  display: grid;
-  min-height: 60dvh;
-  align-content: center;
-  justify-items: center;
-  margin-inline: auto;
-  padding: 2.5rem 1.5rem;
-  gap: 0.5rem;
-  text-align: center;
-}
-
-.rm-route-error-icon {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--rm-danger) 14%, transparent);
-  color: var(--rm-danger);
-}
-
-.rm-route-error-title,
-.rm-route-error-body {
-  margin: 0;
-}
-
-.rm-route-error-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-}
-
-.rm-route-error-body {
-  color: var(--rm-muted);
-}
-
-.rm-route-error-actions {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
 }

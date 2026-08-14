@@ -10,6 +10,7 @@ import {
   type RagPolicyReport,
   type UpdateRagPolicyRequest,
 } from "../domain/rag-policy";
+import type { AuditMetadata } from "./audit-log";
 import {
   defaultExternalVectorStorePolicy,
   defaultPhysicalVectorIsolationPolicy,
@@ -341,7 +342,7 @@ function isRejectReasonCode(
 export function policyAuditMetadata(
   before: RagPolicyReport,
   after: RagPolicyReport,
-): Record<string, unknown> {
+): AuditMetadata<"admin.rag_policy.update"> {
   return {
     changedFields: changedPolicyFields(before, after),
     enabledTierCount: after.enabledTiers.length,

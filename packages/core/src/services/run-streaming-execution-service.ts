@@ -9,7 +9,10 @@ import {
   type BaseModel,
   ChatMessage,
   ProviderInstance,
+  type ProviderReasoningParameters,
+  type ProviderReasoningPolicyLayers,
   type ProviderSampling,
+  type ProviderStructuredOutput,
   ProviderToolDefinition,
 } from "@romeo/providers";
 
@@ -23,6 +26,16 @@ import type { ProviderRoutePlan } from "./provider-routing";
 import type { RunServiceOptions } from "./run-service-contracts";
 import { routedRunTarget } from "./run-stream-service";
 import { modelToolExecutionResult } from "./run-tool-service";
+import { reasoningPolicyLayersAtDispatch } from "./run-reasoning-policy";
+import { ReasoningSummaryGovernor } from "./run-reasoning-summary-policy";
+import {
+  contentPolicyActionsFor,
+} from "./content-policy-service";
+import { OutputPolicyBuffer } from "./output-policy-buffer";
+import {
+  gateStreamedOutputDelta,
+  persistAndEmitOutputParts,
+} from "./run-output-policy-gate";
 import {
   continueTelemetryContext,
   withTelemetryFetch,
@@ -40,6 +53,9 @@ export interface RunStreamingExecutionInput {
   assistantContentPrefix?: string;
   emitRunStarted?: boolean;
   sampling?: ProviderSampling;
+  reasoning?: ProviderReasoningParameters;
+  reasoningPolicy?: ProviderReasoningPolicyLayers;
+  structuredOutput?: ProviderStructuredOutput;
 }
 
 export class RunStreamingExecutionService {
@@ -58,6 +74,7 @@ export class RunStreamingExecutionService {
       assistantContent: string,
       model: BaseModel,
       citations: RunKnowledgeCitation[],
+      subject: AuthSubject,
     ) => Promise<void>,
   ) {}
 
@@ -88,6 +105,19 @@ export class RunStreamingExecutionService {
     let executionJob = claimedExecution.job;
     let executionCheckpoint = claimedExecution.checkpoint;
     let executionFinalized = false;
+    const reasoningSummaryGovernor = new ReasoningSummaryGovernor(
+      this.repository,
+      input.subject,
+    );
+    const outputPolicyBuffer = new OutputPolicyBuffer({
+      mode: "rolling",
+      detectors: await contentPolicyActionsFor(
+        this.repository,
+        input.subject.orgId,
+      ),
+      failClosed: true,
+    });
+    const persistedOutputParts: Array<{ type: string; fileId?: string }> = [];
     const heartbeat = setInterval(() => {
       void this.repository
         .renewBackgroundJobLease({
@@ -101,12 +131,13 @@ export class RunStreamingExecutionService {
         });
     }, this.heartbeatMs());
     heartbeat.unref?.();
-    const providerApiKeys = await this.resolveProviderApiKeys([
-      input.provider,
-      input.routePlan.fallback?.provider,
-    ]);
-
     try {
+      // Everything after claiming the job must be inside this cleanup scope.
+      // Secret resolution can fail before provider streaming begins.
+      const providerApiKeys = await this.resolveProviderApiKeys([
+        input.provider,
+        input.routePlan.fallback?.provider,
+      ]);
       for await (const rawEvent of streamRunEvents({
         adapter,
         provider: input.provider,
@@ -140,6 +171,24 @@ export class RunStreamingExecutionService {
         runId: input.run.id,
         messages: input.messages,
         ...(input.sampling === undefined ? {} : { sampling: input.sampling }),
+        ...(input.reasoning === undefined
+          ? {}
+          : { reasoning: input.reasoning }),
+        ...(input.reasoningPolicy === undefined
+          ? {}
+          : {
+              reasoningPolicy: input.reasoningPolicy,
+              reasoningPolicyResolver: () =>
+                reasoningPolicyLayersAtDispatch(
+                  this.repository,
+                  input.run,
+                  input.reasoningPolicy!,
+                  this.options.capabilityPlatformPolicy,
+                ),
+            }),
+        ...(input.structuredOutput === undefined
+          ? {}
+          : { structuredOutput: input.structuredOutput }),
         ...providerTimeoutFields(
           this.options.providerStreamTimeoutMs,
           input.model,
@@ -155,53 +204,115 @@ export class RunStreamingExecutionService {
         },
         signal: controller.signal,
       })) {
-        const event = await this.sequencer.assign(this.repository, rawEvent);
-        await this.repository.appendRunEvents([event]);
-        if (event.type === "message.delta")
-          assistantContent += (event.data as { text: string }).text;
-        executionCheckpoint = { ...executionCheckpoint, assistantContent };
-        executionJob = await this.executionState.checkpoint(
-          executionJob,
-          event,
-          executionCheckpoint,
-        );
-        if (event.type === "run.waiting_tool_approval") {
-          await this.executionState.markWaiting(input.run);
-          await this.executionState.finish(
-            executionJob,
-            "waiting_tool_approval",
-          );
-          executionFinalized = true;
-          return;
-        }
-        if (event.type === "run.waiting_tool_dispatch") {
-          await this.executionState.markQueued(input.run);
-          await this.executionState.finish(
-            executionJob,
-            "waiting_tool_dispatch",
-          );
-          executionFinalized = true;
-          return;
-        }
-        if (terminalRunEvents.has(event.type)) {
+        if (terminalRunEvents.has(rawEvent.type)) {
+          const flushed = outputPolicyBuffer.finish();
+          if (flushed.action === "release") assistantContent += flushed.text;
           const routed = routedRunTarget(
             input.run,
             input.model,
             input.routePlan,
-            event,
+            rawEvent,
           );
           await this.completeRun(
             routed.run,
-            event,
+            rawEvent,
             assistantContent,
             routed.model,
             input.citations,
+            input.subject,
           );
           await this.executionState.finish(
             executionJob,
-            event.type === "run.completed" ? "completed" : "failed",
+            rawEvent.type === "run.completed" && flushed.action !== "block"
+              ? "completed"
+              : "failed",
           );
           executionFinalized = true;
+          return;
+        }
+        const outputPartEvents = await persistAndEmitOutputParts({
+          event: rawEvent,
+          store: async () => ({ fileId: `file_${input.run.id}_${persistedOutputParts.length}` }),
+          persistPart: async (part) => {
+            persistedOutputParts.push(part);
+          },
+        });
+        const governedEvents = await reasoningSummaryGovernor.consume(rawEvent);
+        for (const governedEvent of [
+          ...governedEvents,
+          ...outputPartEvents.map((partEvent) => ({
+            ...rawEvent,
+            type: "output.part.ready" as const,
+            data: partEvent.partRef,
+          })),
+        ]) {
+          if (governedEvent.type === "message.delta") {
+            const gated = gateStreamedOutputDelta({
+              buffer: outputPolicyBuffer,
+              text: (governedEvent.data as { text: string }).text,
+            });
+            if (gated.outcome === "hold") continue;
+            if (gated.outcome === "block" || gated.outcome === "pause") {
+              const blocked = await this.sequencer.assign(this.repository, {
+                ...governedEvent,
+                type: gated.outcome === "pause"
+                  ? "run.waiting_tool_approval"
+                  : "run.failed",
+                data: {
+                  code: gated.code,
+                  channel: "content_policy",
+                },
+              });
+              if (gated.outcome === "pause")
+                await this.executionState.markWaiting(input.run);
+              await this.sequencer.append(this.repository, [blocked]);
+              await this.executionState.finish(
+                executionJob,
+                gated.outcome === "pause" ? "waiting_tool_approval" : "failed",
+              );
+              executionFinalized = true;
+              return;
+            }
+            assistantContent += gated.text;
+            governedEvent.data = { text: gated.text };
+          }
+          const event = await this.sequencer.assign(
+            this.repository,
+            governedEvent,
+          );
+          executionCheckpoint = { ...executionCheckpoint, assistantContent };
+          if (
+            event.type === "run.waiting_tool_approval" ||
+            event.type === "run.waiting_tool_dispatch"
+          ) {
+            if (event.type === "run.waiting_tool_approval") {
+              await this.executionState.markWaiting(input.run);
+            } else {
+              await this.executionState.markQueued(input.run);
+            }
+            executionJob = await this.executionState.checkpoint(
+              executionJob,
+              event,
+              executionCheckpoint,
+            );
+            await this.executionState.finish(
+              executionJob,
+              event.type === "run.waiting_tool_approval"
+                ? "waiting_tool_approval"
+                : "waiting_tool_dispatch",
+            );
+            executionFinalized = true;
+            clearInterval(heartbeat);
+            this.activeRuns.delete(input.run.id);
+            await this.sequencer.append(this.repository, [event]);
+            return;
+          }
+          await this.sequencer.append(this.repository, [event]);
+          executionJob = await this.executionState.checkpoint(
+            executionJob,
+            event,
+            executionCheckpoint,
+          );
         }
       }
     } finally {

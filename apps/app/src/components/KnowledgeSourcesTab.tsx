@@ -11,6 +11,7 @@ import { AddButton } from "./AddButton";
 import { AgentKnowledgeBindingControls } from "./AgentKnowledgeBindingControls";
 import { KnowledgeSourceList } from "./KnowledgeSourceList";
 import { PanelStats } from "./PanelStats";
+import { summarizeKnowledgeQuality } from "./knowledge-quality";
 
 export function KnowledgeSourcesTab({
   activeAgent,
@@ -35,7 +36,7 @@ export function KnowledgeSourcesTab({
   onDelete: (sourceId: string) => void;
   onExtract: (sourceId: string) => void;
   onReindex: (sourceId: string) => void;
-  sourcesQuery: UseQueryResult<KnowledgeSource[], Error>;
+  sourcesQuery: UseQueryResult<KnowledgeSource[], unknown>;
 }) {
   const { t } = useLocale();
   return (
@@ -57,30 +58,57 @@ export function KnowledgeSourcesTab({
           </AddButton>
         }
       >
-        {(sources) => (
-          <div className="grid gap-4">
-            <PanelStats
-              items={[
-                { label: t("knowledgeTotalSources"), value: sources.length },
-                {
-                  label: t("knowledgeIndexed"),
-                  value: sources.filter((source) => source.status === "indexed")
-                    .length,
-                },
-              ]}
-            />
-            <KnowledgeSourceList
-              canUpload={canUpload}
-              isDeleting={isDeleting}
-              isExtracting={isExtracting}
-              isReindexing={isReindexing}
-              onDelete={onDelete}
-              onExtract={onExtract}
-              onReindex={onReindex}
-              sources={sources}
-            />
-          </div>
-        )}
+        {(sources) => {
+          const quality = summarizeKnowledgeQuality(sources);
+          return (
+            <div className="grid gap-4">
+              <div>
+                <h3>{t("knowledgeQualityTitle")}</h3>
+                <p className="rm-section-help">
+                  {t("knowledgeQualityDescription")}
+                </p>
+              </div>
+              <PanelStats
+                items={[
+                  {
+                    label: t("knowledgeHealthySources"),
+                    value: quality.healthySources,
+                  },
+                  {
+                    label: t("knowledgeNeedsFreshnessReview"),
+                    value: quality.staleSources,
+                  },
+                  {
+                    label: t("knowledgeFailedSources"),
+                    value: quality.failedSources,
+                  },
+                  {
+                    label: t("knowledgePendingSources"),
+                    value: quality.pendingSources,
+                  },
+                  {
+                    label: t("knowledgeChunks"),
+                    value: quality.totalChunks,
+                  },
+                  {
+                    label: t("knowledgeDuplicateSources"),
+                    value: quality.duplicateSources,
+                  },
+                ]}
+              />
+              <KnowledgeSourceList
+                canUpload={canUpload}
+                isDeleting={isDeleting}
+                isExtracting={isExtracting}
+                isReindexing={isReindexing}
+                onDelete={onDelete}
+                onExtract={onExtract}
+                onReindex={onReindex}
+                sources={sources}
+              />
+            </div>
+          );
+        }}
       </PanelState>
     </div>
   );

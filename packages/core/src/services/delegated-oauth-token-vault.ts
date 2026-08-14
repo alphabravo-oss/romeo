@@ -18,6 +18,15 @@ export interface DelegatedOAuthStoredToken {
   tokenType: "bearer";
 }
 
+export interface DelegatedOAuthTokenContext {
+  connectionId: string;
+  connectorType: string;
+  orgId: string;
+  providerId: string;
+  userId: string;
+  workspaceId: string;
+}
+
 export class DelegatedOAuthTokenVault {
   private readonly key: Buffer;
 
@@ -36,15 +45,19 @@ export class DelegatedOAuthTokenVault {
       .digest();
   }
 
-  encrypt(token: DelegatedOAuthStoredToken): DelegatedOAuthTokenEnvelope {
+  encrypt(
+    token: DelegatedOAuthStoredToken,
+    context: DelegatedOAuthTokenContext,
+  ): DelegatedOAuthTokenEnvelope {
     const iv = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", this.key, iv);
+    cipher.setAAD(delegatedOAuthTokenAad(context));
     const ciphertext = Buffer.concat([
       cipher.update(JSON.stringify(token), "utf8"),
       cipher.final(),
     ]);
     const envelope: DelegatedOAuthTokenEnvelope = {
-      v: 1,
+      v: 2,
       alg: "A256GCM",
       iv: iv.toString("base64url"),
       ciphertext: ciphertext.toString("base64url"),
@@ -54,12 +67,16 @@ export class DelegatedOAuthTokenVault {
     return envelope;
   }
 
-  decrypt(envelope: DelegatedOAuthTokenEnvelope): DelegatedOAuthStoredToken {
+  decrypt(
+    envelope: DelegatedOAuthTokenEnvelope,
+    context: DelegatedOAuthTokenContext,
+  ): DelegatedOAuthStoredToken {
     const decipher = createDecipheriv(
       "aes-256-gcm",
       this.key,
       Buffer.from(envelope.iv, "base64url"),
     );
+    if (envelope.v === 2) decipher.setAAD(delegatedOAuthTokenAad(context));
     decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
     const plaintext = Buffer.concat([
       decipher.update(Buffer.from(envelope.ciphertext, "base64url")),
@@ -75,6 +92,39 @@ export class DelegatedOAuthTokenVault {
     }
     return token;
   }
+}
+
+export function delegatedOAuthTokenContext(connection: {
+  connectorType: string;
+  id: string;
+  orgId: string;
+  providerId: string;
+  userId: string;
+  workspaceId: string;
+}): DelegatedOAuthTokenContext {
+  return {
+    connectionId: connection.id,
+    connectorType: connection.connectorType,
+    orgId: connection.orgId,
+    providerId: connection.providerId,
+    userId: connection.userId,
+    workspaceId: connection.workspaceId,
+  };
+}
+
+function delegatedOAuthTokenAad(context: DelegatedOAuthTokenContext): Buffer {
+  return Buffer.from(
+    JSON.stringify([
+      "romeo.delegated-oauth-token",
+      context.orgId,
+      context.workspaceId,
+      context.userId,
+      context.connectionId,
+      context.providerId,
+      context.connectorType,
+    ]),
+    "utf8",
+  );
 }
 
 function isStoredToken(value: unknown): value is DelegatedOAuthStoredToken {

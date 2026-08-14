@@ -1,8 +1,12 @@
 import { Input, Button } from "@romeo/ui";
 import { useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useStore } from "@tanstack/react-store";
+import Bot from "lucide-react/dist/esm/icons/bot.mjs";
+import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
 import Keyboard from "lucide-react/dist/esm/icons/keyboard.mjs";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid.mjs";
+import Library from "lucide-react/dist/esm/icons/library.mjs";
 import MessageSquare from "lucide-react/dist/esm/icons/message-square.mjs";
 import Monitor from "lucide-react/dist/esm/icons/monitor.mjs";
 import Moon from "lucide-react/dist/esm/icons/moon.mjs";
@@ -10,6 +14,8 @@ import Search from "lucide-react/dist/esm/icons/search.mjs";
 import Settings from "lucide-react/dist/esm/icons/settings.mjs";
 import Shield from "lucide-react/dist/esm/icons/shield.mjs";
 import Sun from "lucide-react/dist/esm/icons/sun.mjs";
+import Workflow from "lucide-react/dist/esm/icons/workflow.mjs";
+import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
 import { useEffect, useMemo, useState } from "react";
 
 import { type AppCommand, commandStore } from "../lib/commands";
@@ -17,6 +23,14 @@ import { setTheme } from "../lib/theme";
 import { useLocale } from "../lib/i18n";
 import { OverlayShell } from "./OverlayShell";
 import { useWorkspace } from "./WorkspaceContext";
+import "../styles/app-content.css";
+import {
+  commandAgentsQueryOptions,
+  commandKnowledgeQueryOptions,
+  commandPromptsQueryOptions,
+  commandToolsQueryOptions,
+  commandWorkflowsQueryOptions,
+} from "./command-catalog-query-options";
 
 type Command = AppCommand;
 
@@ -43,34 +57,50 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
-  const { subject } = useWorkspace();
+  const { subject, workspace } = useWorkspace();
   const isAdmin = subject?.isAdmin === true;
   // Context-bound actions published by the active screen (e.g. New chat, Switch agent).
   const dynamic = useStore(commandStore);
+  const agentsCatalog = useQuery(
+    commandAgentsQueryOptions(workspace?.id, open),
+  );
+  const knowledgeCatalog = useQuery(
+    commandKnowledgeQueryOptions(workspace?.id, open),
+  );
+  const promptsCatalog = useQuery(
+    commandPromptsQueryOptions(workspace?.id, open && isAdmin),
+  );
+  const toolsCatalog = useQuery(
+    commandToolsQueryOptions(open && workspace !== undefined),
+  );
+  const workflowsCatalog = useQuery(
+    commandWorkflowsQueryOptions(workspace?.id, open && isAdmin),
+  );
 
   const commands = useMemo<Command[]>(() => {
-    const go = (to: string) => () => void navigate({ to });
+    const workspaceSearch =
+      workspace?.id === undefined ? {} : { workspace: workspace.id };
     const staticCommands: Command[] = [
       {
         id: "nav-chat",
         group: t("goTo"),
         label: t("chat"),
         icon: MessageSquare,
-        run: go("/"),
+        run: () => void navigate({ search: workspaceSearch, to: "/" }),
       },
       {
         id: "nav-ws",
         group: t("goTo"),
         label: t("workspace"),
         icon: LayoutGrid,
-        run: go("/workspace"),
+        run: () => void navigate({ search: workspaceSearch, to: "/workspace" }),
       },
       {
         id: "nav-settings",
         group: t("goTo"),
         label: t("settings"),
         icon: Settings,
-        run: go("/settings"),
+        run: () => void navigate({ search: workspaceSearch, to: "/settings" }),
       },
     ];
     if (isAdmin) {
@@ -79,7 +109,7 @@ export function CommandPalette({
         group: t("goTo"),
         label: t("adminConsole"),
         icon: Shield,
-        run: go("/admin"),
+        run: () => void navigate({ search: workspaceSearch, to: "/admin" }),
       });
     }
     staticCommands.push(
@@ -112,11 +142,94 @@ export function CommandPalette({
         run: () => window.dispatchEvent(new CustomEvent("rm-shortcuts")),
       },
     );
-    return [...dynamic, ...staticCommands];
-  }, [isAdmin, navigate, dynamic, t]);
+    const catalogCommands: Command[] = [
+      ...(agentsCatalog.data ?? []).map((agent) => ({
+        id: `catalog-agent-${agent.id}`,
+        group: t("catalogAgents"),
+        label: agent.name,
+        keywords: [agent.description ?? "", "custom model"],
+        icon: Bot,
+        run: () =>
+          void navigate({
+            to: "/",
+            search: { ...workspaceSearch, agent: agent.id },
+          }),
+      })),
+      ...(knowledgeCatalog.data ?? []).map((base) => ({
+        id: `catalog-knowledge-${base.id}`,
+        group: t("catalogKnowledge"),
+        label: base.name,
+        keywords: [base.description ?? "", "knowledge base"],
+        icon: Library,
+        run: () =>
+          void navigate({
+            to: "/workspace",
+            search: {
+              ...workspaceSearch,
+              resource: base.id,
+              section: "knowledge",
+            },
+          }),
+      })),
+      ...(promptsCatalog.data ?? []).map((prompt) => ({
+        id: `catalog-prompt-${prompt.id}`,
+        group: t("catalogPrompts"),
+        label: prompt.name,
+        keywords: [prompt.description ?? "", ...(prompt.tags ?? [])],
+        icon: FileText,
+        run: () =>
+          void navigate({
+            to: "/admin",
+            search: { ...workspaceSearch, section: "prompt-templates" },
+          }),
+      })),
+      ...(toolsCatalog.data ?? []).map((tool) => ({
+        id: `catalog-tool-${tool.id}`,
+        group: t("catalogTools"),
+        label: tool.name,
+        keywords: [tool.description ?? "", "tool"],
+        icon: Wrench,
+        run: () =>
+          void navigate({
+            to: "/workspace",
+            search: { ...workspaceSearch, section: "tools" },
+          }),
+      })),
+      ...(workflowsCatalog.data ?? []).map((workflow) => ({
+        id: `catalog-workflow-${workflow.id}`,
+        group: t("catalogWorkflows"),
+        label: workflow.name,
+        keywords: [workflow.description ?? "", "workflow"],
+        icon: Workflow,
+        run: () =>
+          void navigate({
+            to: "/admin",
+            search: { ...workspaceSearch, section: "workflows" },
+          }),
+      })),
+    ];
+    return [...dynamic, ...catalogCommands, ...staticCommands];
+  }, [
+    agentsCatalog.data,
+    dynamic,
+    isAdmin,
+    knowledgeCatalog.data,
+    navigate,
+    promptsCatalog.data,
+    t,
+    toolsCatalog.data,
+    workflowsCatalog.data,
+    workspace?.id,
+  ]);
 
   const filtered = useMemo(
-    () => commands.filter((c) => matches(c.label, query)),
+    () =>
+      commands.filter((command) =>
+        matches(
+          [command.label, command.group, ...(command.keywords ?? [])].join(" "),
+          query,
+        ),
+      ),
     [commands, query],
   );
 
@@ -130,8 +243,16 @@ export function CommandPalette({
         setOpen(false);
       }
     };
+    // The console topbar's search affordance opens the same palette. It asks
+    // by name rather than synthesising a ⌘K keystroke, so the two entry points
+    // stay independent of each other's implementation.
+    const onRequest = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("romeo:command-palette", onRequest);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("romeo:command-palette", onRequest);
+    };
   }, []);
 
   useEffect(() => {

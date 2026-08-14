@@ -407,7 +407,7 @@ export class KnowledgeService {
 
   private async audit(
     subject: AuthSubject,
-    action: string,
+    action: "knowledge_base.create" | "knowledge_base.update",
     knowledgeBase: KnowledgeBase,
     metadata: { changedFields?: string[]; scope?: string },
     repository: RomeoRepository,
@@ -422,7 +422,7 @@ export class KnowledgeService {
               orgId: subject.orgId,
             })
           ).id;
-    await repository.createAuditLog({
+    await writeAuditLog(repository, {
       id: createId("audit"),
       orgId: subject.orgId,
       actorId,
@@ -457,12 +457,10 @@ async function assignKnowledgeBaseTier(
     now: string;
   },
 ): Promise<void> {
-  const { applyPolicyPatch, defaultStoredPolicy } = await import(
-    "./rag-policy-normalization"
-  );
-  const { readStoredRagPolicy, settingKey } = await import(
-    "./rag-policy-storage"
-  );
+  const { applyPolicyPatch, defaultStoredPolicy } =
+    await import("./rag-policy-normalization");
+  const { readStoredRagPolicy, settingKey } =
+    await import("./rag-policy-storage");
   const { serializeStoredPolicy } = await import("./rag-policy-reporting");
   const existing = await readStoredRagPolicy(repository, input.orgId);
   const base = existing ?? defaultStoredPolicy(input.orgId);
@@ -486,3 +484,4 @@ async function assignKnowledgeBaseTier(
     updatedAt: input.now,
   });
 }
+import { writeAuditLog } from "./audit-log";

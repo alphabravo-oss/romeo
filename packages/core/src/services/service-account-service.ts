@@ -6,7 +6,7 @@ import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { ApiKeyService } from "./api-key-service";
 import { createId } from "../ids";
-import { writeAuditLog } from "./audit-log";
+import { type AuditAction, writeAuditLog } from "./audit-log";
 import {
   canManageServiceAccount,
   filterVisibleServiceAccounts,
@@ -158,10 +158,10 @@ export class ServiceAccountService {
     }
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     repository: RomeoRepository,
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceId: string,
     outcome: "success" | "failure",
   ): Promise<void> {

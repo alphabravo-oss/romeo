@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { RomeoEnv } from "@romeo/config";
 
 import { invalidLocalLogin } from "./local-auth-errors";
@@ -9,22 +9,33 @@ export class LocalMfaChallengeCodec {
   constructor(private readonly env: RomeoEnv) {}
 
   create(input: { orgId: string; userId: string }): {
+    challengeId: string;
     expiresAt: string;
     token: string;
   } {
+    const challengeId = randomBytes(24).toString("base64url");
     const expiresAt = new Date(Date.now() + challengeTtlMs).toISOString();
     const payload = Buffer.from(
       JSON.stringify({
         v: 1,
+        challengeId,
         orgId: input.orgId,
         userId: input.userId,
         exp: expiresAt,
       }),
     ).toString("base64url");
-    return { expiresAt, token: `lmc_${payload}.${this.sign(payload)}` };
+    return {
+      challengeId,
+      expiresAt,
+      token: `lmc_${payload}.${this.sign(payload)}`,
+    };
   }
 
-  verify(token: string): { orgId: string; userId: string } {
+  verify(token: string): {
+    challengeId: string;
+    orgId: string;
+    userId: string;
+  } {
     if (!token.startsWith("lmc_")) throw invalidLocalLogin();
     const [payload, signature] = token.slice("lmc_".length).split(".");
     if (payload === undefined || signature === undefined)
@@ -33,16 +44,27 @@ export class LocalMfaChallengeCodec {
       throw invalidLocalLogin();
     const parsed = JSON.parse(
       Buffer.from(payload, "base64url").toString("utf8"),
-    ) as { exp?: unknown; orgId?: unknown; userId?: unknown; v?: unknown };
+    ) as {
+      challengeId?: unknown;
+      exp?: unknown;
+      orgId?: unknown;
+      userId?: unknown;
+      v?: unknown;
+    };
     if (
       parsed.v !== 1 ||
+      typeof parsed.challengeId !== "string" ||
       typeof parsed.orgId !== "string" ||
       typeof parsed.userId !== "string" ||
       typeof parsed.exp !== "string" ||
       new Date(parsed.exp).getTime() <= Date.now()
     )
       throw invalidLocalLogin();
-    return { orgId: parsed.orgId, userId: parsed.userId };
+    return {
+      challengeId: parsed.challengeId,
+      orgId: parsed.orgId,
+      userId: parsed.userId,
+    };
   }
 
   private sign(payload: string): string {

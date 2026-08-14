@@ -2,6 +2,7 @@ import type { DataConnectorSync } from "../features/types";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const col = createColumnHelper<DataConnectorSync>();
 
@@ -69,6 +70,13 @@ export function DataConnectorSyncHistory({
   syncs: DataConnectorSync[];
 }) {
   const { t } = useLocale();
+  const inventoriedTable = useInventoriedServerTable<DataConnectorSync>(
+    "data_connector_sync_runs",
+    {
+      enabled: syncs[0]?.connectorId !== undefined,
+      parentId: syncs[0]?.connectorId,
+    },
+  );
   const latestFailure = syncs.find((sync) => sync.status === "failed");
   return (
     <div className="mt-3 grid gap-2 text-xs">
@@ -85,8 +93,9 @@ export function DataConnectorSyncHistory({
       ) : null}
 
       <DataTable
+        serverState={inventoriedTable.serverState}
         columns={syncColumns(t)}
-        data={syncs}
+        data={inventoriedTable.rows}
         empty={t("connectorSyncNone")}
       />
     </div>

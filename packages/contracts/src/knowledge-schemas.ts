@@ -341,7 +341,7 @@ export const CreateKnowledgeUploadSchema = z
   .strictObject({
     fileName: z.string().min(1),
     mimeType: z.string().min(1),
-    sizeBytes: z.number().int().positive(),
+    sizeBytes: z.number().int().positive().max(25_000_000),
   })
   .openapi("CreateKnowledgeUploadRequest");
 export const ReindexKnowledgeSourceSchema = z

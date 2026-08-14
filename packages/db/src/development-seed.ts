@@ -82,6 +82,7 @@ export async function seedPostgresDevelopmentData(
         target: retentionPolicies.orgId,
         set: {
           auditLogRetentionDays: 365,
+          runEventRetentionDays: 30,
           fileRetentionDays: null,
           workspaceFileRetentionDays: {},
           userFileRetentionDays: {},
@@ -341,6 +342,7 @@ function defaultRetentionPolicy(now: Date) {
   return {
     orgId: "org_default",
     auditLogRetentionDays: 365,
+    runEventRetentionDays: 30,
     fileRetentionDays: null,
     workspaceFileRetentionDays: {},
     userFileRetentionDays: {},

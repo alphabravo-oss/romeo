@@ -1,16 +1,16 @@
 import { Button, StatusBadge } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link2 from "lucide-react/dist/esm/icons/link-2.mjs";
 import { useMemo } from "react";
 
 import {
-  getDelegatedOauthPosture,
+  delegatedOAuthConnectionsQueryOptions,
+  delegatedOAuthPostureQueryOptions,
+  delegatedOAuthProvidersQueryOptions,
   type DelegatedOAuthConnectionSummary,
   type DelegatedOAuthProvider,
-  listDelegatedOAuthConnections,
-  listDelegatedOAuthProviders,
-  revokeDelegatedOAuthConnection,
-  startDelegatedOAuth,
+  revokeDelegatedOAuthConnectionMutationOptions,
+  startDelegatedOAuthMutationOptions,
 } from "../features/delegated-oauth";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
@@ -27,27 +27,19 @@ import { useWorkspace } from "./WorkspaceContext";
 const connectionCol = createColumnHelper<DelegatedOAuthConnectionSummary>();
 
 export function ConnectedAppsPanel() {
-  const queryClient = useQueryClient();
   const { t } = useLocale();
   const { workspaceId } = useWorkspace();
   const { ask, dialog } = useConfirm();
 
-  const providersQuery = useQuery({
-    queryKey: ["delegatedOAuthProviders"],
-    queryFn: listDelegatedOAuthProviders,
-  });
-  const connectionsQuery = useQuery({
-    queryKey: ["delegatedOAuthConnections", workspaceId ?? null],
-    queryFn: () => listDelegatedOAuthConnections(workspaceId),
-  });
-  const postureQuery = useQuery({
-    queryKey: ["delegatedOAuthPosture"],
-    queryFn: getDelegatedOauthPosture,
-  });
-  const startMutation = useMutation({ mutationFn: startDelegatedOAuth });
-  const revokeMutation = useMutation({
-    mutationFn: revokeDelegatedOAuthConnection,
-  });
+  const providersQuery = useQuery(delegatedOAuthProvidersQueryOptions());
+  const connectionsQuery = useQuery(
+    delegatedOAuthConnectionsQueryOptions(workspaceId),
+  );
+  const postureQuery = useQuery(delegatedOAuthPostureQueryOptions());
+  const startMutation = useMutation(startDelegatedOAuthMutationOptions());
+  const revokeMutation = useMutation(
+    revokeDelegatedOAuthConnectionMutationOptions(),
+  );
 
   async function handleConnect(provider: DelegatedOAuthProvider) {
     if (workspaceId === undefined) {
@@ -69,6 +61,8 @@ export function ConnectedAppsPanel() {
       toast(t("connectedAppsAuthorizationOpened"), "success");
     } catch {
       toast(t("connectedAppsCouldNotStart"), "error");
+    } finally {
+      startMutation.reset();
     }
   }
 
@@ -84,9 +78,6 @@ export function ConnectedAppsPanel() {
       return;
     try {
       await revokeMutation.mutateAsync(connectionId);
-      await queryClient.invalidateQueries({
-        queryKey: ["delegatedOAuthConnections"],
-      });
       toast(t("connectedAppsRevoked"), "success");
     } catch {
       toast(t("connectedAppsCouldNotRevoke"), "error");
@@ -174,7 +165,6 @@ export function ConnectedAppsPanel() {
           refreshing={connectionsQuery.isFetching}
         />
       }
-      title={t("connectedAppsTitle")}
     >
       <div className="text-sm text-muted">{t("connectedAppsPosture")}</div>
       <PanelState

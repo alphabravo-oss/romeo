@@ -1,17 +1,22 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Button, StatusBadge } from "@romeo/ui";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left.mjs";
 
-import { listVoices, previewVoice, syncVoices } from "../features";
-import { bindAgentVoice } from "../features/managed-models";
+import {
+  previewVoiceMutationOptions,
+  syncVoicesMutationOptions,
+  voicesQueryOptions,
+} from "../features";
+import { bindAgentVoiceMutationOptions } from "../features/managed-models/mutation-options";
 import type { SpeechArtifact, VoiceProfile } from "../features/voices";
 import type { Agent } from "../features/managed-models";
 import { useLocale, type Locale } from "../lib/i18n";
 import { formatNumber, LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { createColumnHelper, DataTable } from "./DataTable";
-import { SettingsSection } from "./SettingsSection";
+import { Section } from "./console";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 const voiceColumn = createColumnHelper<VoiceProfile>();
 
@@ -26,16 +31,15 @@ export function VoicePanel({
   selectedVoiceId: string | undefined;
   workspaceId: string | undefined;
 }) {
-  const queryClient = useQueryClient();
   const { locale, t } = useLocale();
-  const voicesQuery = useQuery({ queryKey: ["voices"], queryFn: listVoices });
+  const voicesQuery = useQuery(voicesQueryOptions());
   const voices = useMemo(() => voicesQuery.data ?? [], [voicesQuery.data]);
   const [notice, setNotice] = useState<string>();
   const [previewArtifact, setPreviewArtifact] = useState<SpeechArtifact>();
 
-  const bindMutation = useMutation({ mutationFn: bindAgentVoice });
-  const previewMutation = useMutation({ mutationFn: previewVoice });
-  const syncMutation = useMutation({ mutationFn: syncVoices });
+  const bindMutation = useMutation(bindAgentVoiceMutationOptions(workspaceId));
+  const previewMutation = useMutation(previewVoiceMutationOptions());
+  const syncMutation = useMutation(syncVoicesMutationOptions());
 
   const selectedVoice = voices.find((voice) => voice.id === selectedVoiceId);
   const voiceProfileId = selectedVoice?.id ?? "";
@@ -91,17 +95,9 @@ export function VoicePanel({
         voiceProfileId,
       });
       setNotice(t("workspaceVoiceBoundNotice"));
-      if (workspaceId)
-        await queryClient.invalidateQueries({
-          queryKey: ["agents", workspaceId],
-        });
       toast(t("workspaceVoiceBound"), "success");
     } catch (caught) {
-      setNotice(
-        caught instanceof Error
-          ? caught.message
-          : t("workspaceVoiceBindFailed"),
-      );
+      setNotice(safeUserErrorMessage(caught, t("workspaceVoiceBindFailed")));
       toast(t("workspaceVoiceCouldNotBind"), "error");
     }
   }
@@ -114,14 +110,11 @@ export function VoicePanel({
         text: t("workspaceVoicePreviewText"),
       });
       setPreviewArtifact(artifact);
+      previewMutation.reset();
       setNotice(t("workspaceVoicePreviewGeneratedNotice"));
       toast(t("workspaceVoicePreviewGenerated"), "success");
     } catch (caught) {
-      setNotice(
-        caught instanceof Error
-          ? caught.message
-          : t("workspaceVoicePreviewFailed"),
-      );
+      setNotice(safeUserErrorMessage(caught, t("workspaceVoicePreviewFailed")));
       toast(t("workspaceVoiceCouldNotPreview"), "error");
     }
   }
@@ -132,13 +125,10 @@ export function VoicePanel({
       setNotice(
         `${t("workspaceVoiceCatalogSynced")}: ${formatNumber(result.imported, locale)} ${t("workspaceVoiceNew")}, ${formatNumber(result.existing, locale)} ${t("workspaceVoiceExisting")}.`,
       );
-      await queryClient.invalidateQueries({ queryKey: ["voices"] });
       toast(t("workspaceVoiceCatalogSynced"), "success");
     } catch (caught) {
       setNotice(
-        caught instanceof Error
-          ? caught.message
-          : t("workspaceVoiceCatalogSyncFailed"),
+        safeUserErrorMessage(caught, t("workspaceVoiceCatalogSyncFailed")),
       );
       toast(t("workspaceVoiceCouldNotSync"), "error");
     }
@@ -171,7 +161,11 @@ export function VoicePanel({
           }
           searchVisibility="always"
         />
-        {notice ? <p className="rm-list-empty">{notice}</p> : null}
+        {notice ? (
+          <p className="rm-list-empty" role="status">
+            {notice}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -188,7 +182,7 @@ export function VoicePanel({
       </Button>
       {selectedVoice ? (
         <>
-          <SettingsSection
+          <Section
             description={`${selectedVoice.providerId} · ${selectedVoice.providerVoiceId}`}
             title={selectedVoice.name}
           >
@@ -242,8 +236,8 @@ export function VoicePanel({
               {selectedVoice.styleTags.join(", ") ||
                 t("workspaceVoiceNoStyles")}
             </p>
-          </SettingsSection>
-          <SettingsSection
+          </Section>
+          <Section
             description={t("workspaceVoiceCatalogDescription")}
             title={t("preview")}
           >
@@ -266,7 +260,11 @@ export function VoicePanel({
                 {t("workspaceVoiceBind")}
               </Button>
             </div>
-            {notice ? <p className="rm-list-empty">{notice}</p> : null}
+            {notice ? (
+              <p className="rm-list-empty" role="status">
+                {notice}
+              </p>
+            ) : null}
             {previewArtifact ? (
               <div className="grid gap-2">
                 <p className="rm-list-empty">
@@ -285,7 +283,7 @@ export function VoicePanel({
                 ) : null}
               </div>
             ) : null}
-          </SettingsSection>
+          </Section>
         </>
       ) : (
         <p className="rm-list-empty">{t("workspaceVoiceNotFound")}</p>

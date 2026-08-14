@@ -2,10 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { streamRunEvents } from "./stream";
 
-const sdk = vi.hoisted(() => ({ source: undefined as unknown }));
+const sdk = vi.hoisted(() => ({
+  source: undefined as unknown,
+  options: undefined as
+    | {
+        headers: Record<string, string>;
+        onSseEvent?: () => void;
+        signal: AbortSignal;
+      }
+    | undefined,
+}));
 
 vi.mock("@romeo/api-client/generated/sdk", () => ({
-  runsStreamEvents: vi.fn((options: { signal: AbortSignal }) => {
+  runsStreamEvents: vi.fn((options: NonNullable<typeof sdk.options>) => {
+    sdk.options = options;
     seen.signal = options.signal;
     return Promise.resolve({ stream: sdk.source });
   }),
@@ -18,7 +28,13 @@ vi.mock("@romeo/api-client/runtime/browser", () => ({
 const seen: { signal?: AbortSignal } = {};
 
 function event(sequence: number) {
-  return { id: `evt_${sequence}`, runId: "run_1", sequence, type: "message.delta" };
+  return {
+    id: `evt_${sequence}`,
+    runId: "run_1",
+    sequence,
+    schemaVersion: 1,
+    type: "message.delta",
+  };
 }
 
 // The window is meant to measure SILENCE between events, not the total length
@@ -38,6 +54,7 @@ describe("streamRunEvents idle timeout", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     delete seen.signal;
+    sdk.options = undefined;
   });
 
   it("survives an answer longer than the window when events keep arriving", async () => {
@@ -74,5 +91,26 @@ describe("streamRunEvents idle timeout", () => {
     }
 
     expect(received).toEqual([1]);
+  });
+
+  it("treats SSE heartbeat comments as traffic and sends the resume cursor", async () => {
+    sdk.source = (async function* () {
+      await vi.advanceTimersByTimeAsync(10_000);
+      sdk.options?.onSseEvent?.();
+      await vi.advanceTimersByTimeAsync(10_000);
+      if (seen.signal?.aborted === true) return;
+      yield event(8);
+    })();
+
+    const received: number[] = [];
+    for await (const value of streamRunEvents("run_1", undefined, 7)) {
+      received.push(value.sequence);
+    }
+
+    expect(received).toEqual([8]);
+    expect(sdk.options?.headers).toMatchObject({
+      accept: "text/event-stream",
+      "last-event-id": "7",
+    });
   });
 });

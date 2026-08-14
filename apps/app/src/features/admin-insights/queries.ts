@@ -5,10 +5,12 @@ import {
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
-export async function getAdminAnalyticsSummary(input: {
-  from?: string;
-  to?: string;
-} = {}) {
+export async function getAdminAnalyticsSummary(
+  input: {
+    from?: string;
+    to?: string;
+  } = {},
+) {
   configureBrowserApiClients();
   const response = await adminInsightsGetAnalyticsSummary({
     query: analyticsWindowQuery(input),

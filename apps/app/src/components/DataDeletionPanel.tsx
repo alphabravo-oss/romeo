@@ -4,11 +4,15 @@ import { useMutation } from "@tanstack/react-query";
 import { useStore } from "@tanstack/react-store";
 import { useEffect, useState } from "react";
 
-import { executeDataDeletion, previewDataDeletion } from "../features";
-import type { DataDeletionPreview } from "../features/types";
+import {
+  executeDataDeletionMutationOptions,
+  previewDataDeletionMutationOptions,
+} from "../features/governance/mutation-options";
+import type { DataDeletionPreview } from "../features/governance/types";
 import { toast } from "../lib/toast";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { type MessageKey, useLocale } from "../lib/i18n";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 export function DataDeletionPanel({
   activeChatId,
@@ -21,8 +25,8 @@ export function DataDeletionPanel({
   const [confirmResourceId, setConfirmResourceId] = useState("");
   const [preview, setPreview] = useState<DataDeletionPreview>();
   const [notice, setNotice] = useState<string>();
-  const previewMutation = useMutation({ mutationFn: previewDataDeletion });
-  const executeMutation = useMutation({ mutationFn: executeDataDeletion });
+  const previewMutation = useMutation(previewDataDeletionMutationOptions());
+  const executeMutation = useMutation(executeDataDeletionMutationOptions());
 
   const form = useForm({
     defaultValues: { chatId: "" },
@@ -41,9 +45,7 @@ export function DataDeletionPanel({
         toast(t("deletionPreviewReady"), "success");
       } catch (caught) {
         setPreview(undefined);
-        setNotice(
-          caught instanceof Error ? caught.message : t("unablePreviewDeletion"),
-        );
+        setNotice(safeUserErrorMessage(caught, t("unablePreviewDeletion")));
         toast(t("couldNotPreviewDeletion"), "error");
       }
     },
@@ -76,9 +78,7 @@ export function DataDeletionPanel({
       setNotice(t("deletionCompleted"));
       toast(t("chatDeleted"), "success");
     } catch (caught) {
-      setNotice(
-        caught instanceof Error ? caught.message : t("unableDeleteData"),
-      );
+      setNotice(safeUserErrorMessage(caught, t("unableDeleteData")));
       toast(t("couldNotDeleteData"), "error");
     }
   }
@@ -154,7 +154,11 @@ export function DataDeletionPanel({
           </Button>
         </div>
       ) : null}
-      {notice ? <div className="text-xs text-muted">{notice}</div> : null}
+      {notice ? (
+        <div className="text-xs text-muted" role="status">
+          {notice}
+        </div>
+      ) : null}
     </div>
   );
 }

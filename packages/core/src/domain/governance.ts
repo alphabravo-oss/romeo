@@ -1,6 +1,7 @@
 export interface RetentionPolicy {
   orgId: string;
   auditLogRetentionDays: number;
+  runEventRetentionDays: number;
   fileRetentionDays: number | null;
   workspaceFileRetentionDays: Record<string, number | null>;
   userFileRetentionDays: Record<string, number | null>;
@@ -11,7 +12,9 @@ export interface RetentionPolicy {
 export interface RetentionEnforcementResult {
   orgId: string;
   auditLogRetentionDays: number;
+  runEventRetentionDays: number;
   cutoffAt: string;
+  runEventCutoffAt: string;
   cleanedBrowserAutomationJobCount?: number;
   deletedBrowserAutomationArtifactCount?: number;
   cleanedVoiceArtifactUsageEventCount?: number;
@@ -23,6 +26,8 @@ export interface RetentionEnforcementResult {
   missingFileObjectCount?: number;
   deletedFileObjectBytes?: number;
   deletedAuditLogCount: number;
+  deletedRunEventCount: number;
+  runEventCompactionLimitReached: boolean;
   enforcedAt: string;
 }
 

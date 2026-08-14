@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type ChatSelectionState,
   isActiveChatRemoval,
+  readerScopedBranchLeaf,
   shouldApplyRequestedChat,
   shouldAutoSelectChat,
   shouldClearActiveChat,
@@ -173,6 +174,28 @@ describe("isActiveChatRemoval", () => {
         chatId: "chat_1",
       }),
     ).toBe(false);
+  });
+});
+
+describe("readerScopedBranchLeaf", () => {
+  it("drops a leftover leaf while chat selection is ahead of the URL", () => {
+    expect(
+      readerScopedBranchLeaf({
+        activeChatId: "chat_2",
+        requestedChatId: "chat_1",
+        requestedLeafMessageId: "leaf_from_chat_1",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("keeps a deep-linked leaf once the named chat is open", () => {
+    expect(
+      readerScopedBranchLeaf({
+        activeChatId: "chat_1",
+        requestedChatId: "chat_1",
+        requestedLeafMessageId: "leaf_1",
+      }),
+    ).toBe("leaf_1");
   });
 });
 

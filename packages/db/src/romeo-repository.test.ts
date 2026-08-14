@@ -1,8 +1,13 @@
 import {
+  CapabilityAssignmentVersionConflictError,
+  CapabilityFlagVersionConflictError,
   ROMEO_REPOSITORY_METHOD_NAMES,
   InMemoryRomeoRepository,
+  persistedTextPartId,
+  parseMessagePartV1,
   createServices,
   createRomeoApi,
+  transitionFileLifecycle,
   type RomeoServices,
   type RomeoRepository,
 } from "@romeo/core";
@@ -16,8 +21,14 @@ import {
 } from "./romeo-repository";
 import {
   createLivePostgresRepositoryFixture,
+  explainAuditLogSearch,
+  explainChatMessageSearch,
+  explainMessagePageQueries,
   POSTGRES_CONFORMANCE_DATABASE_URL_ENV,
   postgresConformanceDatabaseUrl,
+  seedAuditSearchHistory,
+  seedLegacyMessagePartFixture,
+  seedMessagePageHistory,
 } from "./test-support/postgres-conformance-harness";
 
 interface RepositoryFixture {
@@ -79,6 +90,240 @@ describe("RomeoRepository conformance", () => {
 
   for (const subject of subjects) {
     describe(`${subject.name}`, () => {
+      it("tracks durable message file references through attach, hold, release, and detach", async () => {
+        await withRepository(subject, async (repository) => {
+          const file = await repository.createFileObject({
+            id: "file_message_reference",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            ownerType: "user",
+            ownerId: "user_dev_admin",
+            fileName: "reference.txt",
+            mimeType: "text/plain",
+            sizeBytes: 9,
+            sha256: "a".repeat(64),
+            objectKey: "files/org_default/workspace_default/reference.txt",
+            purpose: "general",
+            status: "ready",
+            lifecycleVersion: 1,
+            lifecycleAttempts: 1,
+            metadata: {},
+            createdAt: "2026-08-14T12:00:00.000Z",
+            updatedAt: "2026-08-14T12:00:00.000Z",
+          });
+          const createReferencedMessage = async (
+            id: string,
+            minute: number,
+          ) => {
+            const createdAt = `2026-08-14T12:${String(minute).padStart(2, "0")}:00.000Z`;
+            await repository.createMessage({
+              id,
+              chatId: "chat_welcome",
+              role: "user",
+              content: "reference",
+              createdAt,
+            });
+            await repository.createMessageParts([
+              parseMessagePartV1({
+                schemaVersion: 1,
+                type: "document_ref",
+                id: `${id}_file_part`,
+                messageId: id,
+                position: 1,
+                createdAt,
+                fileId: file.id,
+                fileName: file.fileName,
+                mediaType: "text/plain",
+                provenance: { source: "upload", sourceId: file.id },
+              }),
+            ]);
+          };
+
+          await createReferencedMessage("message_file_reference_one", 1);
+          await createReferencedMessage("message_file_reference_two", 2);
+          expect(await repository.countMessageFileReferences(file.id)).toBe(2);
+          expect(await repository.getFileObject(file.id)).toMatchObject({
+            status: "attached",
+            lifecycleVersion: 2,
+          });
+
+          await repository.deleteMessage("message_file_reference_one");
+          expect(await repository.countMessageFileReferences(file.id)).toBe(1);
+          expect(await repository.getFileObject(file.id)).toMatchObject({
+            status: "attached",
+          });
+
+          const chat = (await repository.getChat("chat_welcome"))!;
+          await repository.updateChat({
+            ...chat,
+            legalHoldUntil: "2099-08-14T12:00:00.000Z",
+            legalHoldReason: "conformance",
+            updatedAt: "2026-08-14T12:03:00.000Z",
+          });
+          await repository.reconcileChatFileReferences(
+            chat.id,
+            "2026-08-14T12:03:00.000Z",
+          );
+          expect(await repository.getFileObject(file.id)).toMatchObject({
+            status: "retained",
+            retainedAt: "2026-08-14T12:03:00.000Z",
+          });
+          await expect(
+            repository.deleteMessage("message_file_reference_two"),
+          ).rejects.toThrow("legal hold");
+
+          const heldChat = (await repository.getChat(chat.id))!;
+          const releasedChat = { ...heldChat };
+          delete releasedChat.legalHoldUntil;
+          delete releasedChat.legalHoldReason;
+          releasedChat.updatedAt = "2026-08-14T12:04:00.000Z";
+          await repository.updateChat(releasedChat);
+          await repository.reconcileChatFileReferences(
+            chat.id,
+            releasedChat.updatedAt,
+          );
+          expect(await repository.getFileObject(file.id)).toMatchObject({
+            status: "attached",
+          });
+          await repository.deleteMessage("message_file_reference_two");
+          expect(await repository.countMessageFileReferences(file.id)).toBe(0);
+          expect(await repository.getFileObject(file.id)).toMatchObject({
+            status: "ready",
+          });
+        });
+      });
+
+      it("claims file lifecycle work exclusively and rejects stale completion", async () => {
+        await withRepository(subject, async (repository) => {
+          const failed = await repository.createFileObject({
+            id: "file_lifecycle_lease",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            ownerType: "user",
+            ownerId: "user_dev_admin",
+            fileName: "lease.txt",
+            mimeType: "text/plain",
+            sizeBytes: 5,
+            sha256: "a".repeat(64),
+            objectKey: "files/org_default/workspace_default/lease.txt",
+            purpose: "general",
+            status: "failed",
+            lifecycleVersion: 3,
+            lifecycleAttempts: 1,
+            lifecycleNextAttemptAt: "2026-08-14T11:59:00.000Z",
+            metadata: {},
+            createdAt: "2026-08-14T11:00:00.000Z",
+            updatedAt: "2026-08-14T11:00:00.000Z",
+          });
+          const first = await repository.claimNextFileLifecycle({
+            leaseOwner: "worker_a",
+            leaseToken: "token_a",
+            now: "2026-08-14T12:00:00.000Z",
+            leaseExpiresAt: "2026-08-14T12:01:00.000Z",
+          });
+          expect(first).toMatchObject({
+            id: failed.id,
+            status: "quarantined",
+            lifecycleAttempts: 2,
+          });
+          expect(
+            await repository.claimNextFileLifecycle({
+              leaseOwner: "worker_b",
+              leaseToken: "token_b",
+              now: "2026-08-14T12:00:30.000Z",
+              leaseExpiresAt: "2026-08-14T12:01:30.000Z",
+            }),
+          ).toBeUndefined();
+          const scanning = transitionFileLifecycle(
+            first!,
+            "scanning",
+            "2026-08-14T12:00:01.000Z",
+          );
+          expect(
+            await repository.advanceFileLifecycleLease({
+              file: scanning,
+              leaseOwner: "worker_a",
+              leaseToken: "token_a",
+              now: "2026-08-14T12:00:01.000Z",
+            }),
+          ).toMatchObject({ status: "scanning" });
+          const staleReady = transitionFileLifecycle(
+            scanning,
+            "ready",
+            "2026-08-14T12:02:00.000Z",
+          );
+          expect(
+            await repository.finishFileLifecycleLease({
+              file: staleReady,
+              leaseOwner: "worker_a",
+              leaseToken: "token_a",
+              now: "2026-08-14T12:02:00.000Z",
+            }),
+          ).toBeUndefined();
+          expect(
+            await repository.claimNextFileLifecycle({
+              leaseOwner: "worker_b",
+              leaseToken: "token_b",
+              now: "2026-08-14T12:02:00.000Z",
+              leaseExpiresAt: "2026-08-14T12:03:00.000Z",
+            }),
+          ).toMatchObject({
+            lifecycleAttempts: 3,
+            lifecycleLeaseOwner: "worker_b",
+          });
+        });
+      });
+
+      it("rejects taxonomy bypasses at the repository boundary", async () => {
+        await withRepository(subject, async (repository) => {
+          const privateSentinel = "PRIVATE_REPOSITORY_AUDIT_SENTINEL";
+          const invalidLogs = [
+            {
+              id: "audit_unregistered_action",
+              action: "unregistered.audit.action",
+              metadata: {},
+            },
+            {
+              id: "audit_unregistered_metadata",
+              action: "model.pricing.update",
+              metadata: { arbitraryNewField: privateSentinel },
+            },
+          ];
+          for (const invalid of invalidLogs) {
+            await expect(
+              repository.createAuditLog({
+                ...invalid,
+                orgId: "org_default",
+                actorId: "user_dev_admin",
+                resourceType: "model",
+                resourceId: "model_audit_taxonomy",
+                outcome: "success",
+                createdAt: "2026-08-14T12:00:00.000Z",
+              }),
+            ).rejects.toThrow(TypeError);
+            try {
+              await repository.createAuditLog({
+                ...invalid,
+                orgId: "org_default",
+                actorId: "user_dev_admin",
+                resourceType: "model",
+                resourceId: "model_audit_taxonomy",
+                outcome: "success",
+                createdAt: "2026-08-14T12:00:00.000Z",
+              });
+            } catch (error) {
+              expect(String(error)).not.toContain(privateSentinel);
+              expect(String(error)).not.toContain(invalid.action);
+            }
+          }
+          expect(
+            (await repository.listAuditLogs("org_default")).some((log) =>
+              invalidLogs.some((invalid) => invalid.id === log.id),
+            ),
+          ).toBe(false);
+        });
+      });
+
       it("rolls back failed repository transactions", async () => {
         await withRepository(subject, async (repository) => {
           await expect(
@@ -95,6 +340,453 @@ describe("RomeoRepository conformance", () => {
           expect(
             await repository.getCurrentUser("user_transaction_rollback"),
           ).toBeUndefined();
+        });
+      });
+
+      it("advances structural transcript versions atomically", async () => {
+        await withRepository(subject, async (repository) => {
+          const chat = await repository.createChat({
+            createdBy: "user_dev_admin",
+            id: "chat_transcript_version_conformance",
+            orgId: "org_default",
+            title: "Versioned transcript",
+            updatedAt: "2026-08-14T12:00:00.000Z",
+            workspaceId: "workspace_default",
+          });
+          expect(chat.transcriptVersion).toBe("0");
+          const renamed = await repository.updateChat({
+            ...chat,
+            title: "Versioned transcript renamed",
+          });
+          expect(renamed.transcriptVersion).toBe("0");
+
+          const root = await repository.createMessage({
+            chatId: chat.id,
+            content: "root",
+            createdAt: "2026-08-14T12:00:01.000Z",
+            id: "message_transcript_version_root",
+            role: "user",
+          });
+          const afterCreate = await repository.getChat(chat.id);
+          expect(BigInt(afterCreate?.transcriptVersion ?? "0")).toBeGreaterThan(
+            0n,
+          );
+          const afterLeaf = await repository.updateChat({
+            ...afterCreate!,
+            activeLeafMessageId: root.id,
+          });
+          expect(BigInt(afterLeaf.transcriptVersion ?? "0")).toBeGreaterThan(
+            BigInt(afterCreate?.transcriptVersion ?? "0"),
+          );
+
+          await repository.deleteMessage(root.id);
+          const afterDelete = await repository.getChat(chat.id);
+          const afterDeleteVersion = afterDelete?.transcriptVersion;
+          expect(BigInt(afterDelete?.transcriptVersion ?? "0")).toBeGreaterThan(
+            BigInt(afterLeaf.transcriptVersion ?? "0"),
+          );
+
+          await expect(
+            repository.transaction(async (transaction) => {
+              await transaction.createMessage({
+                chatId: chat.id,
+                content: "rolled back",
+                createdAt: "2026-08-14T12:00:02.000Z",
+                id: "message_transcript_version_rollback",
+                role: "assistant",
+              });
+              throw new Error("rollback transcript structure");
+            }),
+          ).rejects.toThrow("rollback transcript structure");
+          expect(
+            await repository.getMessage("message_transcript_version_rollback"),
+          ).toBeUndefined();
+          expect((await repository.getChat(chat.id))?.transcriptVersion).toBe(
+            afterDeleteVersion,
+          );
+        });
+      });
+
+      it("enforces optimistic capability-assignment replacement", async () => {
+        await withRepository(subject, async (repository) => {
+          const baseAssignment = {
+            orgId: "org_default",
+            scopeType: "organization" as const,
+            scopeId: "org_default",
+            capabilityId: "image_generation",
+            configuration: {},
+            actorId: "user_dev_admin",
+            reason: "Repository conformance test.",
+            effectiveAt: "2026-08-14T10:00:00.000Z",
+          };
+          const first = await repository.replaceCapabilityAssignment({
+            assignment: {
+              ...baseAssignment,
+              id: "capability_assignment_conformance_1",
+              state: "enabled",
+              createdAt: "2026-08-14T10:00:00.000Z",
+            },
+          });
+          expect(first.version).toBe(1);
+
+          await expect(
+            repository.replaceCapabilityAssignment({
+              assignment: {
+                ...baseAssignment,
+                id: "capability_assignment_conformance_stale",
+                state: "disabled",
+                createdAt: "2026-08-14T10:01:00.000Z",
+              },
+              expectedVersion: 0,
+            }),
+          ).rejects.toBeInstanceOf(CapabilityAssignmentVersionConflictError);
+
+          const second = await repository.replaceCapabilityAssignment({
+            assignment: {
+              ...baseAssignment,
+              id: "capability_assignment_conformance_2",
+              state: "disabled",
+              createdAt: "2026-08-14T10:02:00.000Z",
+            },
+            expectedVersion: 1,
+          });
+          expect(second).toMatchObject({
+            supersedesId: first.id,
+            version: 2,
+          });
+          expect(
+            await repository.listCapabilityAssignmentHistory({
+              orgId: "org_default",
+              scope: {
+                scopeType: "organization",
+                scopeId: "org_default",
+              },
+              capabilityId: "image_generation",
+              limit: 10,
+            }),
+          ).toHaveLength(2);
+          const web = await repository.replaceCapabilityAssignment({
+            assignment: {
+              ...baseAssignment,
+              id: "capability_assignment_web_retrieval",
+              capabilityId: "web_retrieval",
+              state: "enabled",
+              configuration: {
+                maxSearchResults: 3,
+                maxUrlsPerRequest: 2,
+              },
+              createdAt: "2026-08-14T10:03:00.000Z",
+            },
+            expectedVersion: 0,
+          });
+          expect(web).toMatchObject({
+            capabilityId: "web_retrieval",
+            configuration: { maxSearchResults: 3, maxUrlsPerRequest: 2 },
+            version: 1,
+          });
+          expect(
+            await repository.listActiveCapabilityAssignments({
+              orgId: "org_default",
+              scopes: [{ scopeType: "organization", scopeId: "org_default" }],
+              capabilityIds: ["image_generation", "web_retrieval"],
+              at: "2026-08-14T10:04:00.000Z",
+            }),
+          ).toEqual(expect.arrayContaining([second, web]));
+          expect(
+            await repository.listActiveCapabilityAssignments({
+              orgId: "org_foreign",
+              scopes: [{ scopeType: "organization", scopeId: "org_foreign" }],
+              capabilityIds: ["web_retrieval"],
+              at: "2026-08-14T10:04:00.000Z",
+            }),
+          ).toEqual([]);
+          for (const [scopeType, scopeId] of [
+            ["agent", "agent_default"],
+            ["group", "group_admins"],
+            ["user", "user_dev_admin"],
+          ] as const) {
+            const scoped = await repository.replaceCapabilityAssignment({
+              assignment: {
+                ...baseAssignment,
+                id: `capability_assignment_${scopeType}`,
+                scopeType,
+                scopeId,
+                state: scopeType === "group" ? "disabled" : "enabled",
+                createdAt: "2026-08-14T10:05:00.000Z",
+              },
+              expectedVersion: 0,
+            });
+            expect(scoped).toMatchObject({ scopeType, scopeId, version: 1 });
+            expect(
+              await repository.listActiveCapabilityAssignments({
+                orgId: "org_default",
+                scopes: [{ scopeType, scopeId }],
+                capabilityIds: ["image_generation"],
+                at: "2026-08-14T10:06:00.000Z",
+              }),
+            ).toEqual([scoped]);
+          }
+        });
+      });
+
+      it("keeps organization capability flags tenant-scoped, immutable, and idempotent", async () => {
+        await withRepository(subject, async (repository) => {
+          const baseFlag = {
+            orgId: "org_default",
+            flagId: "image_jobs_v2" as const,
+            allowlistedSubjects: [],
+            actorId: "user_dev_admin",
+            reason: "Repository capability flag conformance.",
+          };
+          const first = await repository.replaceOrganizationCapabilityFlag({
+            flag: {
+              ...baseFlag,
+              id: "capability_flag_conformance_1",
+              state: "disabled",
+              createdAt: "2026-08-14T10:00:00.000Z",
+            },
+            expectedVersion: 0,
+          });
+          expect(first.version).toBe(1);
+          const repeated = await repository.replaceOrganizationCapabilityFlag({
+            flag: {
+              ...baseFlag,
+              id: "capability_flag_conformance_repeat",
+              state: "disabled",
+              createdAt: "2026-08-14T10:01:00.000Z",
+            },
+            expectedVersion: 0,
+          });
+          expect(repeated.id).toBe(first.id);
+          await expect(
+            repository.replaceOrganizationCapabilityFlag({
+              flag: {
+                ...baseFlag,
+                id: "capability_flag_conformance_stale",
+                state: "enabled",
+                createdAt: "2026-08-14T10:02:00.000Z",
+              },
+              expectedVersion: 0,
+            }),
+          ).rejects.toBeInstanceOf(CapabilityFlagVersionConflictError);
+          const second = await repository.replaceOrganizationCapabilityFlag({
+            flag: {
+              ...baseFlag,
+              id: "capability_flag_conformance_2",
+              state: "enabled",
+              createdAt: "2026-08-14T10:03:00.000Z",
+            },
+            expectedVersion: 1,
+          });
+          expect(second).toMatchObject({ version: 2, supersedesId: first.id });
+          expect(
+            await repository.listActiveOrganizationCapabilityFlags({
+              orgId: "org_default",
+              flagIds: ["image_jobs_v2"],
+            }),
+          ).toEqual([second]);
+          expect(
+            await repository.listActiveOrganizationCapabilityFlags({
+              orgId: "org_foreign",
+              flagIds: ["image_jobs_v2"],
+            }),
+          ).toEqual([]);
+          expect(
+            await repository.listOrganizationCapabilityFlagHistory({
+              orgId: "org_default",
+              flagId: "image_jobs_v2",
+              limit: 10,
+            }),
+          ).toHaveLength(2);
+        });
+      });
+
+      it("serializes concurrent organization capability flag replacements", async () => {
+        await withRepository(subject, async (repository) => {
+          const base = {
+            orgId: "org_default",
+            flagId: "trust_plane_v1" as const,
+            allowlistedSubjects: [],
+            actorId: "user_dev_admin",
+            reason: "Concurrent capability flag conformance.",
+          };
+          await repository.replaceOrganizationCapabilityFlag({
+            flag: {
+              ...base,
+              id: "capability_flag_race_base",
+              state: "disabled",
+              createdAt: "2026-08-14T11:00:00.000Z",
+            },
+            expectedVersion: 0,
+          });
+          const settled = await Promise.allSettled([
+            repository.replaceOrganizationCapabilityFlag({
+              flag: {
+                ...base,
+                id: "capability_flag_race_enabled",
+                state: "enabled",
+                createdAt: "2026-08-14T11:01:00.000Z",
+              },
+              expectedVersion: 1,
+            }),
+            repository.replaceOrganizationCapabilityFlag({
+              flag: {
+                ...base,
+                id: "capability_flag_race_preview",
+                state: "preview",
+                allowlistedSubjects: [
+                  { subjectType: "user" as const, subjectId: "user_dev_admin" },
+                ],
+                createdAt: "2026-08-14T11:02:00.000Z",
+              },
+              expectedVersion: 1,
+            }),
+          ]);
+          expect(
+            settled.filter((result) => result.status === "fulfilled"),
+          ).toHaveLength(1);
+          expect(
+            settled.filter((result) => result.status === "rejected"),
+          ).toHaveLength(1);
+        });
+      });
+
+      it("conforms durable idempotency ownership, replay, conflict, takeover, and cleanup", async () => {
+        await withRepository(subject, async (repository) => {
+          const base = {
+            id: "idempotency_receipt_conformance",
+            orgId: "org_default",
+            actorType: "user" as const,
+            actorId: "user_dev_admin",
+            credentialHash: "a".repeat(64),
+            operation: "runs.start",
+            keyHash: "b".repeat(64),
+            requestHash: "c".repeat(64),
+            state: "in_progress" as const,
+            leaseToken: "lease_one",
+            leaseExpiresAt: "2026-08-14T10:10:00.000Z",
+            createdAt: "2026-08-14T10:00:00.000Z",
+            updatedAt: "2026-08-14T10:00:00.000Z",
+            expiresAt: "2026-08-15T10:00:00.000Z",
+          };
+          expect(
+            await repository.claimIdempotencyReceipt({
+              receipt: base,
+              now: "2026-08-14T10:00:00.000Z",
+            }),
+          ).toMatchObject({ outcome: "owner" });
+          expect(
+            await repository.claimIdempotencyReceipt({
+              receipt: { ...base, id: "other", leaseToken: "lease_two" },
+              now: "2026-08-14T10:01:00.000Z",
+            }),
+          ).toMatchObject({ outcome: "in_progress" });
+          expect(
+            await repository.claimIdempotencyReceipt({
+              receipt: { ...base, id: "conflict", requestHash: "d".repeat(64) },
+              now: "2026-08-14T10:01:00.000Z",
+            }),
+          ).toMatchObject({ outcome: "conflict" });
+          expect(
+            await repository.claimIdempotencyReceipt({
+              receipt: {
+                ...base,
+                id: "takeover",
+                leaseToken: "lease_takeover",
+                leaseExpiresAt: "2026-08-14T11:30:00.000Z",
+              },
+              now: "2026-08-14T11:00:00.000Z",
+            }),
+          ).toMatchObject({
+            outcome: "owner",
+            receipt: { id: base.id, leaseToken: "lease_takeover" },
+          });
+          expect(
+            await repository.completeIdempotencyReceipt({
+              id: base.id,
+              orgId: base.orgId,
+              leaseToken: "lease_takeover",
+              now: "2026-08-14T11:01:00.000Z",
+              responseStatus: 202,
+              responseBody: { runId: "run_conformance" },
+            }),
+          ).toMatchObject({ state: "completed" });
+          expect(
+            await repository.claimIdempotencyReceipt({
+              receipt: { ...base, id: "replay" },
+              now: "2026-08-14T11:02:00.000Z",
+            }),
+          ).toMatchObject({
+            outcome: "replay",
+            receipt: { responseBody: { runId: "run_conformance" } },
+          });
+          expect(
+            await repository.claimIdempotencyReceipt({
+              receipt: {
+                ...base,
+                id: "idempotency_active_past_ttl",
+                keyHash: "9".repeat(64),
+                requestHash: "8".repeat(64),
+                leaseToken: "lease_active",
+                leaseExpiresAt: "2026-08-17T00:00:00.000Z",
+                expiresAt: "2026-08-14T09:00:00.000Z",
+              },
+              now: "2026-08-14T11:03:00.000Z",
+            }),
+          ).toMatchObject({ outcome: "owner" });
+          expect(
+            await repository.deleteExpiredIdempotencyReceipts({
+              before: "2026-08-16T00:00:00.000Z",
+              limit: 1,
+            }),
+          ).toBe(1);
+          expect(
+            await repository.deleteExpiredIdempotencyReceipts({
+              before: "2026-08-18T00:00:00.000Z",
+              limit: 1,
+            }),
+          ).toBe(1);
+        });
+      });
+
+      it("grants exactly one concurrent idempotency owner", async () => {
+        await withRepository(subject, async (repository) => {
+          const candidate = {
+            id: "idempotency_race_a",
+            orgId: "org_default",
+            actorType: "user" as const,
+            actorId: "user_dev_admin",
+            credentialHash: "e".repeat(64),
+            operation: "images.generate",
+            keyHash: "f".repeat(64),
+            requestHash: "0".repeat(64),
+            state: "in_progress" as const,
+            leaseToken: "race_a",
+            leaseExpiresAt: "2026-08-14T12:00:00.000Z",
+            createdAt: "2026-08-14T11:00:00.000Z",
+            updatedAt: "2026-08-14T11:00:00.000Z",
+            expiresAt: "2026-08-15T11:00:00.000Z",
+          };
+          const claims = await Promise.all([
+            repository.claimIdempotencyReceipt({
+              receipt: candidate,
+              now: candidate.createdAt,
+            }),
+            repository.claimIdempotencyReceipt({
+              receipt: {
+                ...candidate,
+                id: "idempotency_race_b",
+                leaseToken: "race_b",
+              },
+              now: candidate.createdAt,
+            }),
+          ]);
+          expect(
+            claims.filter((claim) => claim.outcome === "owner"),
+          ).toHaveLength(1);
+          expect(
+            claims.filter((claim) => claim.outcome === "in_progress"),
+          ).toHaveLength(1);
         });
       });
 
@@ -168,6 +860,11 @@ describe("RomeoRepository conformance", () => {
             chatId: "chat_welcome",
             agentId: "agent_default",
             content: "Lifecycle prompt",
+            reasoningPolicy: {
+              schemaVersion: 1 as const,
+              mode: "auto" as const,
+              effort: "high" as const,
+            },
             createdBy: "user_dev_admin",
             principalId: "user_dev_admin",
             principalType: "user" as const,
@@ -591,6 +1288,49 @@ describe("RomeoRepository conformance", () => {
           expect(
             (await repository.listUsers("org_default")).map((user) => user.id),
           ).toEqual(["user_ada", "user_dev_admin", "user_zed"]);
+          expect(
+            await repository.listUsersPage("org_default", {
+              limit: 1,
+              offset: 0,
+              query: "user",
+              sort: "email",
+            }),
+          ).toMatchObject({
+            items: [expect.objectContaining({ id: "user_ada" })],
+            total: 2,
+            userTotal: 3,
+            adminTotal: 1,
+            disabledTotal: 0,
+          });
+          const firstUserTablePage = await repository.queryUsers(
+            "org_default",
+            {
+              direction: "asc",
+              filter: {},
+              limit: 1,
+              sort: "name",
+            },
+          );
+          expect(firstUserTablePage).toMatchObject({
+            hasMore: true,
+            items: [expect.objectContaining({ id: "user_ada" })],
+            total: 3,
+            userTotal: 3,
+          });
+          expect(
+            await repository.queryUsers("org_default", {
+              direction: "asc",
+              filter: { roles: ["user"] },
+              limit: 2,
+              position: { id: "user_ada", value: "Ada User" },
+              search: "user",
+              sort: "name",
+            }),
+          ).toMatchObject({
+            hasMore: false,
+            items: [expect.objectContaining({ id: "user_zed" })],
+            total: 2,
+          });
 
           const disabledAt = "2026-06-30T10:00:00.000Z";
           await repository.updateUser({
@@ -929,6 +1669,27 @@ describe("RomeoRepository conformance", () => {
               updatedAt: "2026-06-30T10:16:00.000Z",
             }),
           ).toMatchObject({ lastRefreshedAt: "2026-06-30T10:16:00.000Z" });
+          const rotatedAuthorization = {
+            ...authorization,
+            hashedRefreshToken: "refresh_hash_rotated",
+            lastRefreshedAt: "2026-06-30T10:17:00.000Z",
+            updatedAt: "2026-06-30T10:17:00.000Z",
+          };
+          expect(
+            await repository.rotateDeviceAuthorization({
+              authorization: rotatedAuthorization,
+              expectedRefreshHash: "refresh_hash_conformance",
+            }),
+          ).toEqual(rotatedAuthorization);
+          expect(
+            await repository.rotateDeviceAuthorization({
+              authorization: {
+                ...rotatedAuthorization,
+                hashedRefreshToken: "must_not_rotate",
+              },
+              expectedRefreshHash: "refresh_hash_conformance",
+            }),
+          ).toBeUndefined();
 
           const session = await repository.createUserSession({
             id: "session_conformance",
@@ -988,6 +1749,24 @@ describe("RomeoRepository conformance", () => {
             failedAttemptCount: 2,
             lockedUntil: "2026-06-30T10:35:00.000Z",
           });
+          await Promise.all(
+            Array.from({ length: 10 }, (_, index) =>
+              repository.recordFailedLocalPasswordAttempt({
+                credentialId: localPassword.id,
+                attemptedAt: `2026-06-30T10:${String(21 + index).padStart(2, "0")}:00.000Z`,
+                lockedUntil: "2026-06-30T11:00:00.000Z",
+                maxFailedAttempts: 10,
+              }),
+            ),
+          );
+          expect(
+            await repository.getLocalPasswordCredentialByUserId(
+              "user_dev_admin",
+            ),
+          ).toMatchObject({
+            failedAttemptCount: 12,
+            lockedUntil: "2026-06-30T11:00:00.000Z",
+          });
 
           const factor = await repository.createLocalMfaFactor({
             id: "mfa_factor_conformance",
@@ -1010,19 +1789,83 @@ describe("RomeoRepository conformance", () => {
             await repository.listLocalMfaFactorsForOrg("org_default"),
           ).toEqual([factor]);
           expect(await repository.getLocalMfaFactor(factor.id)).toEqual(factor);
-          expect(
-            await repository.updateLocalMfaFactor({
-              ...factor,
-              status: "active",
-              confirmedAt: "2026-06-30T10:22:00.000Z",
-              lastUsedAt: "2026-06-30T10:23:00.000Z",
-              updatedAt: "2026-06-30T10:23:00.000Z",
+          const samlRequest = await repository.createSamlAuthRequest({
+            id: "saml_request_conformance",
+            orgId: "org_default",
+            providerId: "saml",
+            relayStateHash: "relay_hash_conformance",
+            requestInstant: "2099-06-30T10:20:00.000Z",
+            expiresAt: "2099-06-30T10:40:00.000Z",
+            createdAt: "2099-06-30T10:20:00.000Z",
+          });
+          const consumed = await Promise.all([
+            repository.consumeSamlAuthRequest({
+              id: samlRequest.id,
+              orgId: samlRequest.orgId,
+              providerId: "saml",
+              relayStateHash: samlRequest.relayStateHash,
+              consumedAt: "2099-06-30T10:21:00.000Z",
             }),
-          ).toMatchObject({
+            repository.consumeSamlAuthRequest({
+              id: samlRequest.id,
+              orgId: samlRequest.orgId,
+              providerId: "saml",
+              relayStateHash: samlRequest.relayStateHash,
+              consumedAt: "2099-06-30T10:21:00.000Z",
+            }),
+          ]);
+          expect(consumed.filter(Boolean)).toHaveLength(1);
+          const mfaChallenge = await repository.createLocalMfaChallenge({
+            id: "local_mfa_challenge_conformance",
+            orgId: "org_default",
+            userId: "user_dev_admin",
+            expiresAt: "2099-06-30T10:40:00.000Z",
+            createdAt: "2099-06-30T10:20:00.000Z",
+          });
+          const challengeConsumption = await Promise.all([
+            repository.consumeLocalMfaChallenge({
+              id: mfaChallenge.id,
+              orgId: mfaChallenge.orgId,
+              userId: mfaChallenge.userId,
+              consumedAt: "2099-06-30T10:21:00.000Z",
+            }),
+            repository.consumeLocalMfaChallenge({
+              id: mfaChallenge.id,
+              orgId: mfaChallenge.orgId,
+              userId: mfaChallenge.userId,
+              consumedAt: "2099-06-30T10:21:00.000Z",
+            }),
+          ]);
+          expect(challengeConsumption.filter(Boolean)).toHaveLength(1);
+          const activeFactor = await repository.updateLocalMfaFactor({
+            ...factor,
+            status: "active",
+            confirmedAt: "2026-06-30T10:22:00.000Z",
+            lastUsedAt: "2026-06-30T10:23:00.000Z",
+            updatedAt: "2026-06-30T10:23:00.000Z",
+          });
+          expect(activeFactor).toMatchObject({
             status: "active",
             confirmedAt: "2026-06-30T10:22:00.000Z",
             lastUsedAt: "2026-06-30T10:23:00.000Z",
           });
+          const consumedFactor = {
+            ...activeFactor,
+            lastUsedAt: "2026-06-30T10:24:00.000Z",
+            updatedAt: "2026-06-30T10:24:00.000Z",
+          };
+          expect(
+            await repository.consumeLocalMfaFactor({
+              factor: consumedFactor,
+              expectedSecretEncrypted: factor.secretEncrypted,
+            }),
+          ).toEqual(consumedFactor);
+          expect(
+            await repository.consumeLocalMfaFactor({
+              factor: consumedFactor,
+              expectedSecretEncrypted: "stale-secret",
+            }),
+          ).toBeUndefined();
         });
       });
 
@@ -1138,6 +1981,14 @@ describe("RomeoRepository conformance", () => {
                 approvalRequired: true,
               },
             ],
+            capabilityDefaults: [
+              {
+                capabilityId: "web_retrieval",
+                state: "disabled",
+                configuration: { maxSearchResults: 2 },
+                assignmentVersion: 3,
+              },
+            ],
             createdBy: "user_dev_admin",
             createdAt: "2026-06-30T11:15:00.000Z",
             publishedAt: "2026-06-30T11:15:00.000Z",
@@ -1159,6 +2010,12 @@ describe("RomeoRepository conformance", () => {
           });
           expect(await repository.getEvalSuite(suite.id)).toEqual(suite);
           expect(await repository.listEvalSuites(agent.id)).toEqual([suite]);
+          expect(
+            await repository.listEvalSuitesForAgents([
+              "missing_agent",
+              agent.id,
+            ]),
+          ).toEqual([suite]);
           const [evalCase] = await repository.createEvalCases([
             {
               id: "eval_case_conformance",
@@ -1186,6 +2043,9 @@ describe("RomeoRepository conformance", () => {
           });
           expect(await repository.getEvalRun(evalRun.id)).toEqual(evalRun);
           expect(await repository.listEvalRuns(agent.id)).toEqual([evalRun]);
+          expect(
+            await repository.listEvalRunsForAgents([agent.id, "missing_agent"]),
+          ).toEqual([evalRun]);
           const [result] = await repository.createEvalRunResults([
             {
               id: "eval_result_conformance",
@@ -1358,6 +2218,26 @@ describe("RomeoRepository conformance", () => {
               messageId: firstMessage.id,
             }),
           );
+          const searchChat = await repository.getChat(chat.id);
+          const messageSearch = await repository.searchAuthorizedChatMessages({
+            chatId: chat.id,
+            limit: 1,
+            normalizedQuery: "first",
+            orgId: "org_default",
+            transcriptVersion: searchChat?.transcriptVersion ?? "0",
+            workspaceId: "workspace_default",
+          });
+          expect(messageSearch).toMatchObject({
+            hasMore: false,
+            items: [
+              {
+                activeBranch: true,
+                messageId: firstMessage.id,
+                snippet: "first",
+              },
+            ],
+            total: 1,
+          });
 
           await repository.createMessageParts([
             {
@@ -1379,7 +2259,11 @@ describe("RomeoRepository conformance", () => {
             (await repository.listMessageParts(firstMessage.id)).map(
               (item) => item.id,
             ),
-          ).toEqual(["part_two", "part_one"]);
+          ).toEqual([
+            persistedTextPartId(firstMessage.id),
+            "part_two",
+            "part_one",
+          ]);
           expect(await repository.getMessagePart("part_one")).toMatchObject({
             id: "part_one",
           });
@@ -1420,7 +2304,7 @@ describe("RomeoRepository conformance", () => {
             ["message_variant_two", firstMessage.id],
             ["message_second", undefined],
           ]);
-          await repository.updateChat({
+          const branchedChat = await repository.updateChat({
             ...chat,
             title: "Conformance Chat Updated",
             activeLeafMessageId: firstVariant.id,
@@ -1429,6 +2313,50 @@ describe("RomeoRepository conformance", () => {
           expect(await repository.getChat(chat.id)).toMatchObject({
             activeLeafMessageId: firstVariant.id,
           });
+          expect(
+            await repository.queryAuthorizedMessagesPage({
+              branchLeafMessageId: firstVariant.id,
+              chatId: chat.id,
+              limit: 2,
+              mode: "branch",
+              orgId: chat.orgId,
+              transcriptVersion: branchedChat.transcriptVersion ?? "0",
+              workspaceId: chat.workspaceId,
+            }),
+          ).toMatchObject({
+            branchVariants: [
+              {
+                index: 0,
+                messageId: firstMessage.id,
+                nextLeafMessageId: "message_second",
+                total: 2,
+              },
+              {
+                index: 0,
+                messageId: firstVariant.id,
+                nextLeafMessageId: "message_variant_two",
+                total: 2,
+              },
+            ],
+            hasMore: false,
+            items: [
+              expect.objectContaining({ id: firstMessage.id }),
+              expect.objectContaining({ id: firstVariant.id }),
+            ],
+          });
+          expect(
+            (
+              await repository.listMessagePartsForMessages([
+                firstMessage.id,
+                firstVariant.id,
+              ])
+            ).map((part) => part.id),
+          ).toEqual([
+            persistedTextPartId(firstMessage.id),
+            "part_two",
+            "part_one",
+            persistedTextPartId(firstVariant.id),
+          ]);
           await repository.deleteMessage("message_variant_one");
           await repository.deleteMessage("message_variant_two");
 
@@ -1507,17 +2435,19 @@ describe("RomeoRepository conformance", () => {
           });
           await repository.updateFileObject({
             ...file,
-            status: "uploading",
+            status: "ready",
+            lifecycleVersion: 1,
             updatedAt: "2026-06-30T11:05:30.000Z",
           });
           expect(await repository.getFileObject(file.id)).toMatchObject({
             id: file.id,
-            status: "uploading",
+            status: "ready",
             updatedAt: "2026-06-30T11:05:30.000Z",
           });
           await repository.updateFileObject({
             ...file,
             status: "deleted",
+            lifecycleVersion: 2,
             deletedAt: "2026-06-30T11:06:00.000Z",
             updatedAt: "2026-06-30T11:06:00.000Z",
           });
@@ -1878,6 +2808,17 @@ describe("RomeoRepository conformance", () => {
             deliveredAt: "2026-06-30T11:35:00.000Z",
             status: "sent",
           });
+          const failedDelivery = await repository.createNotificationDelivery({
+            ...delivery,
+            id: "notification_delivery_failed_conformance",
+            status: "failed",
+            attemptCount: 2,
+            errorCode: "provider_timeout",
+            updatedAt: "2026-06-30T11:36:00.000Z",
+          });
+          expect(
+            await repository.listFailedNotificationDeliveries("org_default", 1),
+          ).toEqual([failedDelivery]);
         });
       });
 
@@ -2251,6 +3192,65 @@ describe("RomeoRepository conformance", () => {
           expect(
             (await repository.listRunEvents(run.id)).map((item) => item.id),
           ).toEqual(["run_event_started", "run_event_completed"]);
+          expect(
+            (await repository.listRunEventsAfter(run.id, 1, 1)).map(
+              (item) => item.id,
+            ),
+          ).toEqual(["run_event_completed"]);
+          expect(await repository.allocateRunEventSequence(run.id)).toBe(3);
+          const concurrentSequences = await Promise.all([
+            repository.allocateRunEventSequence(run.id),
+            repository.allocateRunEventSequence(run.id),
+          ]);
+          expect(concurrentSequences.sort()).toEqual([4, 5]);
+
+          const heldChat = await repository.createChat({
+            id: "chat_run_event_retention_held",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            title: "Held run event retention",
+            createdBy: "user_dev_admin",
+            legalHoldUntil: "2099-01-01T00:00:00.000Z",
+            legalHoldReason: "conformance retention hold",
+            updatedAt: "2026-06-30T12:10:00.000Z",
+          });
+          const heldRun = await repository.createRun({
+            ...run,
+            id: "run_conformance_held",
+            chatId: heldChat.id,
+          });
+          await repository.appendRunEvents([
+            {
+              id: "run_event_held_started",
+              runId: heldRun.id,
+              sequence: 1,
+              type: "run.started",
+              data: { status: "running" },
+              createdAt: "2026-06-30T12:10:01.000Z",
+            },
+            {
+              id: "run_event_held_completed",
+              runId: heldRun.id,
+              sequence: 2,
+              type: "run.completed",
+              data: { status: "completed" },
+              createdAt: "2026-06-30T12:11:00.000Z",
+            },
+          ]);
+          expect(
+            await repository.deleteCompactedRunEventsBefore(
+              run.orgId,
+              "2026-07-01T00:00:00.000Z",
+              "2026-07-02T00:00:00.000Z",
+              100,
+            ),
+          ).toBe(1);
+          expect(
+            (await repository.listRunEvents(run.id)).map((item) => item.id),
+          ).toEqual(["run_event_completed"]);
+          expect(
+            (await repository.listRunEvents(heldRun.id)).map((item) => item.id),
+          ).toEqual(["run_event_held_started", "run_event_held_completed"]);
 
           const toolCall = await repository.createToolCall({
             id: "tool_call_conformance",
@@ -2324,6 +3324,12 @@ describe("RomeoRepository conformance", () => {
           expect(await repository.listToolOperations(connector.id)).toEqual([
             operation,
           ]);
+          expect(
+            await repository.listToolOperationsForConnectors([
+              "missing_connector",
+              connector.id,
+            ]),
+          ).toEqual([operation]);
           expect(
             await repository.updateToolOperation({
               ...operation!,
@@ -2547,6 +3553,26 @@ describe("RomeoRepository conformance", () => {
               "workspace_default",
             ),
           ).toEqual([folder]);
+          const folderAccessQuery = {
+            folderIds: [folder.id],
+            groupIds: [],
+            isAdmin: false,
+            orgId: "org_default",
+            principalType: "user" as const,
+            workspaceId: "workspace_default",
+          };
+          expect(
+            await repository.listAuthorizedWorkspaceFoldersByIds({
+              ...folderAccessQuery,
+              principalId: "user_dev_admin",
+            }),
+          ).toEqual([folder]);
+          expect(
+            await repository.listAuthorizedWorkspaceFoldersByIds({
+              ...folderAccessQuery,
+              principalId: "user_without_folder_access",
+            }),
+          ).toEqual([]);
           const updatedFolder = await repository.updateWorkspaceFolder({
             ...folder,
             name: "Shared Updated",
@@ -2575,6 +3601,27 @@ describe("RomeoRepository conformance", () => {
           expect(
             await repository.listWorkspaceFolderItems(updatedFolder.id),
           ).toEqual([folderItem]);
+          expect(
+            await repository.listAuthorizedWorkspaceFolderItemsBatch({
+              canReadAgents: true,
+              canReadChats: true,
+              canReadKnowledgeBases: true,
+              folderIds: [updatedFolder.id],
+              groupIds: [],
+              isAdmin: true,
+              limitPerFolder: 1,
+              orgId: "org_default",
+              principalId: "user_dev_admin",
+              principalType: "user",
+              workspaceId: "workspace_default",
+            }),
+          ).toEqual([
+            {
+              folderId: updatedFolder.id,
+              hasMore: false,
+              items: [folderItem],
+            },
+          ]);
           expect(
             await repository.deleteWorkspaceFolderItem(folderItem.id),
           ).toMatchObject({ id: folderItem.id });
@@ -2757,14 +3804,14 @@ describe("RomeoRepository conformance", () => {
             resourceType: "agent",
             resourceId: "agent_default",
             outcome: "success",
-            metadata: { changedKeys: ["name"] },
+            metadata: { changedFields: ["name"] },
             createdAt: "2026-06-30T12:00:00.000Z",
           });
           await repository.createAuditLog({
             id: "audit_new",
             orgId: "org_default",
             actorId: "user_dev_admin",
-            action: "agent.publish",
+            action: "agent.version.publish",
             resourceType: "agent",
             resourceId: "agent_default",
             outcome: "success",
@@ -2888,6 +3935,35 @@ describe("RomeoRepository conformance", () => {
               workspaceId: "workspace_default",
             }),
           );
+          await repository.createUsageEvent({
+            id: "usage_other_run",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            actorId: "user_dev_admin",
+            sourceType: "run",
+            sourceId: "run_other",
+            metric: "run.output_throughput",
+            quantity: 1,
+            unit: "token_per_second",
+            metadata: {},
+            createdAt: "2026-06-30T12:03:00.000Z",
+          });
+          expect(
+            await repository.listUsageEventsForRun(
+              "org_default",
+              "workspace_default",
+              "run_1",
+              1,
+            ),
+          ).toEqual([expect.objectContaining({ id: "usage_throughput" })]);
+          expect(
+            await repository.listUsageEventsForRun(
+              "org_default",
+              "workspace_default",
+              "run_1",
+              0,
+            ),
+          ).toEqual([]);
           expect(
             await repository.updateUsageEvent({
               id: "usage_throughput",
@@ -2907,6 +3983,36 @@ describe("RomeoRepository conformance", () => {
             quantity: 512.25,
             metadata: { providerId: "provider_1", redacted: true },
           });
+          await expect(
+            repository.updateUsageEvent({
+              id: "usage_throughput",
+              orgId: "org_default",
+              workspaceId: "workspace_default",
+              actorId: "user_dev_admin",
+              sourceType: "run",
+              sourceId: "run_1",
+              metric: "run.output_throughput",
+              quantity: 512.25,
+              unit: "count",
+              metadata: { providerId: "provider_1" },
+              createdAt: "2026-06-30T12:02:00.000Z",
+            }),
+          ).rejects.toThrow("identity and classification are immutable");
+          await expect(
+            repository.createUsageEvent({
+              id: "usage_unregistered",
+              orgId: "org_default",
+              workspaceId: "workspace_default",
+              actorId: "user_dev_admin",
+              sourceType: "run",
+              sourceId: "run_1",
+              metric: "provider.raw_tokens",
+              quantity: 1,
+              unit: "token",
+              metadata: {},
+              createdAt: "2026-06-30T12:02:01.000Z",
+            }),
+          ).rejects.toThrow("Unregistered usage metric");
 
           const job = await repository.createBackgroundJob({
             id: "job_connector_sync",
@@ -3043,6 +4149,69 @@ describe("RomeoRepository conformance", () => {
         });
       });
 
+      it("preserves audit keyset query parity across intervening mutations", async () => {
+        await withRepository(subject, async (repository) => {
+          for (const [id, minute] of [
+            ["audit_query_5", "05"],
+            ["audit_query_4", "04"],
+            ["audit_query_3", "03"],
+            ["audit_query_2", "02"],
+          ] as const) {
+            await repository.createAuditLog({
+              id,
+              orgId: "org_default",
+              actorId: "user_dev_admin",
+              action: "local_auth.login",
+              resourceType: "session",
+              resourceId: id,
+              outcome: "success",
+              metadata: {},
+              createdAt: `2026-08-14T12:${minute}:00.000Z`,
+            });
+          }
+
+          const query = {
+            filter: { category: "security" as const },
+            limit: 2,
+            orgId: "org_default",
+            search: "audit_query",
+            sort: { direction: "desc" as const, field: "createdAt" as const },
+          };
+          const first = await repository.queryAuditLogs(query);
+          expect(first.items.map((item) => item.id)).toEqual([
+            "audit_query_5",
+            "audit_query_4",
+          ]);
+          expect(first.hasMore).toBe(true);
+
+          await repository.createAuditLog({
+            id: "audit_query_inserted",
+            orgId: "org_default",
+            actorId: "user_dev_admin",
+            action: "local_auth.login",
+            resourceType: "session",
+            resourceId: "audit_query_inserted",
+            outcome: "success",
+            metadata: {},
+            createdAt: "2026-08-14T12:06:00.000Z",
+          });
+          await repository.deleteAuditLogsBefore(
+            "org_default",
+            "2026-08-14T12:03:00.000Z",
+          );
+
+          const last = first.items.at(-1)!;
+          const second = await repository.queryAuditLogs({
+            ...query,
+            position: { createdAt: last.createdAt, id: last.id },
+          });
+          expect(second.items.map((item) => item.id)).toEqual([
+            "audit_query_3",
+          ]);
+          expect(second.hasMore).toBe(false);
+        });
+      });
+
       it("preserves webhook subscription and delivery lifecycle", async () => {
         await withRepository(subject, async (repository) => {
           const subscription = await repository.createWebhookSubscription({
@@ -3085,6 +4254,29 @@ describe("RomeoRepository conformance", () => {
               payload: { runId: "must_not_replace_existing_delivery" },
             }),
           ).toEqual(delivery);
+          const claimedDelivery = await repository.claimWebhookDelivery({
+            deliveryId: delivery.id,
+            orgId: delivery.orgId,
+            leaseOwner: "webhook_initial_worker",
+            leaseToken: "webhook_initial_lease",
+            now: "2026-06-30T13:02:30.000Z",
+            leaseExpiresAt: "2026-06-30T13:03:30.000Z",
+          });
+          expect(claimedDelivery).toMatchObject({
+            delivery: { id: delivery.id },
+            leaseOwner: "webhook_initial_worker",
+            leaseToken: "webhook_initial_lease",
+          });
+          expect(
+            await repository.claimWebhookDelivery({
+              deliveryId: delivery.id,
+              orgId: delivery.orgId,
+              leaseOwner: "webhook_competing_worker",
+              leaseToken: "webhook_competing_lease",
+              now: "2026-06-30T13:03:00.000Z",
+              leaseExpiresAt: "2026-06-30T13:04:00.000Z",
+            }),
+          ).toBeUndefined();
           expect(
             await repository.updateWebhookDelivery({
               ...delivery,
@@ -3110,12 +4302,118 @@ describe("RomeoRepository conformance", () => {
         });
       });
 
+      it("keyset-pages and exclusively claims webhook retries across workers", async () => {
+        await withRepository(subject, async (repository) => {
+          const subscription = await repository.createWebhookSubscription({
+            id: "webhook_sub_claim_conformance",
+            orgId: "org_default",
+            url: "https://hooks.example.com/claim-conformance",
+            eventTypes: ["webhook.test"],
+            createdBy: "user_dev_admin",
+            createdAt: "2026-08-13T12:00:00.000Z",
+            updatedAt: "2026-08-13T12:00:00.000Z",
+          });
+          for (const id of [
+            "delivery_1",
+            "delivery_2",
+            "delivery_3",
+            "delivery_4",
+          ])
+            await repository.createWebhookDelivery({
+              id: `webhook_claim_${id}`,
+              orgId: "org_default",
+              subscriptionId: subscription.id,
+              eventType: "webhook.test",
+              payload: {},
+              status: "failed",
+              attemptCount: 1,
+              nextAttemptAt: "2026-08-13T12:01:00.000Z",
+              createdAt: "2026-08-13T12:00:00.000Z",
+              updatedAt: "2026-08-13T12:00:00.000Z",
+            });
+
+          const firstPage = await repository.listWebhookDeliveriesPage({
+            orgId: "org_default",
+            subscriptionId: subscription.id,
+            limit: 2,
+          });
+          const secondPage = await repository.listWebhookDeliveriesPage({
+            orgId: "org_default",
+            subscriptionId: subscription.id,
+            limit: 2,
+            cursor: {
+              createdAt: firstPage[1]!.createdAt,
+              id: firstPage[1]!.id,
+            },
+          });
+          expect(firstPage.map((delivery) => delivery.id)).toEqual([
+            "webhook_claim_delivery_1",
+            "webhook_claim_delivery_2",
+          ]);
+          expect(secondPage.map((delivery) => delivery.id)).toEqual([
+            "webhook_claim_delivery_3",
+            "webhook_claim_delivery_4",
+          ]);
+
+          const [workerOne, workerTwo] = await Promise.all([
+            repository.claimDueWebhookDeliveries({
+              orgId: "org_default",
+              leaseOwner: "webhook_worker_one",
+              leaseToken: "webhook_lease_one",
+              now: "2026-08-13T12:02:00.000Z",
+              leaseExpiresAt: "2026-08-13T12:03:00.000Z",
+              limit: 3,
+              maxAttempts: 5,
+            }),
+            repository.claimDueWebhookDeliveries({
+              orgId: "org_default",
+              leaseOwner: "webhook_worker_two",
+              leaseToken: "webhook_lease_two",
+              now: "2026-08-13T12:02:00.000Z",
+              leaseExpiresAt: "2026-08-13T12:03:00.000Z",
+              limit: 3,
+              maxAttempts: 5,
+            }),
+          ]);
+          const claimedIds = [...workerOne, ...workerTwo].map(
+            (lease) => lease.delivery.id,
+          );
+          expect(claimedIds).toHaveLength(4);
+          expect(new Set(claimedIds).size).toBe(4);
+
+          const lease = workerOne[0] ?? workerTwo[0]!;
+          const completed = {
+            ...lease.delivery,
+            status: "delivered" as const,
+            attemptCount: 2,
+            updatedAt: "2026-08-13T12:02:30.000Z",
+          };
+          expect(
+            await repository.completeWebhookDeliveryAttempt({
+              delivery: completed,
+              leaseOwner: lease.leaseOwner,
+              leaseToken: "wrong-token",
+              now: "2026-08-13T12:02:30.000Z",
+            }),
+          ).toBeUndefined();
+          expect(
+            await repository.completeWebhookDeliveryAttempt({
+              delivery: completed,
+              leaseOwner: lease.leaseOwner,
+              leaseToken: lease.leaseToken,
+              now: "2026-08-13T12:02:30.000Z",
+            }),
+          ).toMatchObject({ status: "delivered", attemptCount: 2 });
+        });
+      });
+
       it("preserves governance, billing, quota, and voice upsert semantics", async () => {
         await withRepository(subject, async (repository) => {
           expect(
             await repository.upsertRetentionPolicy({
               orgId: "org_default",
               auditLogRetentionDays: 365,
+              runEventRetentionDays: 30,
               fileRetentionDays: null,
               workspaceFileRetentionDays: {},
               userFileRetentionDays: {},
@@ -3127,6 +4425,7 @@ describe("RomeoRepository conformance", () => {
             await repository.upsertRetentionPolicy({
               orgId: "org_default",
               auditLogRetentionDays: 180,
+              runEventRetentionDays: 14,
               fileRetentionDays: 90,
               workspaceFileRetentionDays: { workspace_default: 30 },
               userFileRetentionDays: { user_dev_admin: null },
@@ -3138,7 +4437,7 @@ describe("RomeoRepository conformance", () => {
             await repository.getRetentionPolicy("org_default"),
           ).toMatchObject({ auditLogRetentionDays: 180 });
 
-          await repository.upsertBillingPlan({
+          const billingPlan = await repository.upsertBillingPlan({
             id: "billing_plan_conformance",
             orgId: "org_default",
             code: "enterprise",
@@ -3156,6 +4455,35 @@ describe("RomeoRepository conformance", () => {
             code: "enterprise",
             metadata: { salesAssisted: true },
           });
+          await expect(
+            repository.acquireBillingSyncLock("org_default"),
+          ).resolves.toBeUndefined();
+          const receipt = {
+            id: "billing_event_receipt_conformance",
+            orgId: "org_default",
+            provider: "stripe",
+            eventId: "evt_repository_conformance",
+            eventType: "customer.subscription.updated",
+            occurredAt: "2026-06-30T14:02:30.000Z",
+            result: { plan: billingPlan, quotas: [] },
+            createdAt: "2026-06-30T14:02:31.000Z",
+          };
+          expect(await repository.createBillingEventReceipt(receipt)).toEqual(
+            receipt,
+          );
+          expect(
+            await repository.createBillingEventReceipt({
+              ...receipt,
+              id: "billing_event_receipt_duplicate",
+            }),
+          ).toEqual(receipt);
+          expect(
+            await repository.getBillingEventReceipt(
+              receipt.orgId,
+              receipt.provider,
+              receipt.eventId,
+            ),
+          ).toEqual(receipt);
 
           const bucket = await repository.createQuotaBucket({
             id: "quota_bucket_conformance",
@@ -3222,6 +4550,91 @@ describe("RomeoRepository conformance", () => {
   }
 });
 
+describe("live Postgres indexed audit search", () => {
+  if (livePostgresUrl === undefined) {
+    it.skip(`runs when ${POSTGRES_CONFORMANCE_DATABASE_URL_ENV} is set`, () =>
+      undefined);
+  } else {
+    it("preserves literal search semantics and exposes the trigram plan", async () => {
+      const fixture =
+        await createLivePostgresRepositoryFixture(livePostgresUrl);
+      try {
+        for (const [id, resourceId] of [
+          ["audit_search_literal", "literal_%_\\marker"],
+          ["audit_search_wildcard_trap", "literal_ax_marker"],
+        ] as const) {
+          await fixture.repository.createAuditLog({
+            id,
+            orgId: "org_default",
+            actorId: "user_dev_admin",
+            action: "admin.organization.update",
+            resourceType: "session",
+            resourceId,
+            outcome: "success",
+            metadata: {},
+            createdAt: "2026-08-14T12:00:00.000Z",
+          });
+        }
+
+        const result = await fixture.repository.queryAuditLogs({
+          filter: { includeNoise: true },
+          limit: 10,
+          orgId: "org_default",
+          search: "%_\\",
+          sort: { direction: "desc", field: "createdAt" },
+        });
+        expect(result.items.map((item) => item.id)).toEqual([
+          "audit_search_literal",
+        ]);
+
+        await seedAuditSearchHistory(fixture.databaseUrl);
+        const plan = await explainAuditLogSearch(
+          fixture.databaseUrl,
+          "org_default",
+          "indexed-marker",
+        );
+        expect(collectPlanIndexes(plan)).toContain(
+          "audit_logs_search_trgm_idx",
+        );
+      } finally {
+        await fixture.close();
+      }
+    });
+  }
+});
+
+describe("live Postgres 100k-message page plan", () => {
+  if (livePostgresUrl === undefined) {
+    it.skip(`runs when ${POSTGRES_CONFORMANCE_DATABASE_URL_ENV} is set`, () =>
+      undefined);
+  } else {
+    it("uses bounded keyset and parent indexes for linear and branch paging", async () => {
+      const fixture =
+        await createLivePostgresRepositoryFixture(livePostgresUrl);
+      try {
+        const history = await seedMessagePageHistory(fixture.databaseUrl);
+        const plan = await explainMessagePageQueries(
+          fixture.databaseUrl,
+          history,
+        );
+        expect(collectPlanIndexes(plan.linear)).toContain(
+          "messages_chat_created_id_idx",
+        );
+        expect(collectPlanIndexes(plan.branch)).toContain("messages_pkey");
+        const searchPlan = await explainChatMessageSearch(
+          fixture.databaseUrl,
+          history.chatId,
+        );
+        expect(collectPlanIndexes(searchPlan)).toContain(
+          "messages_content_trgm_idx",
+        );
+      } finally {
+        await fixture.close();
+      }
+    });
+  }
+});
+
 describe("live Postgres API readiness smoke", () => {
   if (livePostgresUrl === undefined) {
     it.skip(`runs when ${POSTGRES_CONFORMANCE_DATABASE_URL_ENV} is set`, () =>
@@ -3233,6 +4646,7 @@ describe("live Postgres API readiness smoke", () => {
       try {
         await seedReadinessData(fixture.repository);
         const devApi = createRomeoApi(fixture.repository, {
+          env: readEnv({ DEV_SEEDED_LOGIN: "true" }),
           startBackgroundWorkers: false,
         });
         const keyResponse = await devApi.request("/api/v1/api-keys", {
@@ -3306,9 +4720,11 @@ describe("live Postgres queued-turn API concurrency", () => {
           createdAt: new Date().toISOString(),
         });
         const firstApi = createRomeoApi(fixture.repository, {
+          env: readEnv({ DEV_SEEDED_LOGIN: "true" }),
           startBackgroundWorkers: false,
         });
         const secondApi = createRomeoApi(fixture.repository, {
+          env: readEnv({ DEV_SEEDED_LOGIN: "true" }),
           startBackgroundWorkers: false,
         });
         const enqueue = (
@@ -3392,10 +4808,12 @@ describe("live Postgres portable chat deployment transfer", () => {
       ]);
       try {
         const sourceApi = createRomeoApi(source.repository, {
+          env: readEnv({ DEV_SEEDED_LOGIN: "true" }),
           objectStore: new MemoryObjectStore(),
           startBackgroundWorkers: false,
         });
         const targetApi = createRomeoApi(target.repository, {
+          env: readEnv({ DEV_SEEDED_LOGIN: "true" }),
           objectStore: new MemoryObjectStore(),
           startBackgroundWorkers: false,
         });
@@ -3483,6 +4901,68 @@ describe("live Postgres portable chat deployment transfer", () => {
         ).toBe(true);
       } finally {
         await Promise.all([source.close(), target.close()]);
+      }
+    });
+  }
+});
+
+describe("live Postgres typed message-part rollout", () => {
+  if (livePostgresUrl === undefined) {
+    it.skip(`runs when ${POSTGRES_CONFORMANCE_DATABASE_URL_ENV} is set`, () =>
+      undefined);
+  } else {
+    it("backfills duplicate legacy positions once and resumes cleanly", async () => {
+      const fixture =
+        await createLivePostgresRepositoryFixture(livePostgresUrl);
+      try {
+        await seedLegacyMessagePartFixture(fixture.databaseUrl);
+        const first = await fixture.repository.backfillLegacyMessageTextParts({
+          maxMessages: 500,
+          maxPartRows: 10_000,
+        });
+        expect(first.messagesCompleted).toBeGreaterThan(0);
+        expect(first.remainingMessages).toBe(0);
+        expect(
+          await fixture.repository.listMessageParts("message_parts_legacy"),
+        ).toMatchObject([
+          { id: "legacy_part_a" },
+          { id: "legacy_part_b" },
+          { position: 2, type: "text", text: "legacy body" },
+        ]);
+        await expect(
+          fixture.repository.backfillLegacyMessageTextParts({
+            maxMessages: 500,
+            maxPartRows: 10_000,
+          }),
+        ).resolves.toMatchObject({
+          messagesCompleted: 0,
+          remainingMessages: 0,
+          textPartsCreated: 0,
+        });
+        await expect(
+          fixture.repository.transaction(async (transaction) => {
+            await transaction.createMessage({
+              id: "message_parts_rollback",
+              chatId: "chat_welcome",
+              role: "assistant",
+              content: "must roll back",
+              createdAt: "2026-08-14T12:01:00.000Z",
+            });
+            throw new Error("rollback typed message");
+          }),
+        ).rejects.toThrow("rollback typed message");
+        expect(
+          await fixture.repository.getMessage("message_parts_rollback"),
+        ).toBeUndefined();
+        expect(
+          await fixture.repository.listMessageParts("message_parts_rollback"),
+        ).toEqual([]);
+        await fixture.repository.deleteMessage("message_parts_legacy");
+        expect(
+          await fixture.repository.listMessageParts("message_parts_legacy"),
+        ).toEqual([]);
+      } finally {
+        await fixture.close();
       }
     });
   }
@@ -3612,6 +5092,7 @@ async function seedReadinessData(repository: RomeoRepository): Promise<void> {
   await repository.upsertRetentionPolicy({
     orgId: "org_default",
     auditLogRetentionDays: 365,
+    runEventRetentionDays: 30,
     fileRetentionDays: null,
     workspaceFileRetentionDays: {},
     userFileRetentionDays: {},
@@ -3648,4 +5129,17 @@ function providerCapabilities() {
     toolCalling: true,
     vision: false,
   };
+}
+
+function collectPlanIndexes(value: unknown, indexes: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const item of value) collectPlanIndexes(item, indexes);
+    return indexes;
+  }
+  if (typeof value !== "object" || value === null) return indexes;
+  for (const [key, item] of Object.entries(value)) {
+    if (key === "Index Name" && typeof item === "string") indexes.push(item);
+    else collectPlanIndexes(item, indexes);
+  }
+  return indexes;
 }

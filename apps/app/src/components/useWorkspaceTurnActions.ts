@@ -1,92 +1,48 @@
-import { useMutation, type QueryClient } from "@tanstack/react-query";
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import { useMutation } from "@tanstack/react-query";
+import type { FormEvent } from "react";
 
-import { createChat, forkChat, updateChat } from "../features";
-import type { Chat, Message } from "../features/types";
-import { RomeoApiError } from "@romeo/api-client";
+import { updateChat } from "../features";
 import {
-  enqueueChatTurn,
-  getActiveChatRun,
-  listQueuedTurns,
-  startRun,
-  type QueuedChatTurn,
-} from "../features/runs";
-import type { MessageKey } from "../lib/i18n";
+  createWorkspaceChatMutationOptions,
+  forkWorkspaceChatMutationOptions,
+} from "../features/chats/mutation-options";
+import type { Message } from "../features/types";
+import { RomeoApiError } from "@romeo/api-client";
+import { getActiveChatRun, listQueuedTurns } from "../features/runs";
+import {
+  enqueueChatTurnMutationOptions,
+  startRunMutationOptions,
+} from "../features/runs/mutation-options";
+import { replaceQueuedTurnsCache } from "../features/runs/cache-policy";
 import {
   fallbackChatTitle,
   generateAutomaticChatTitle,
 } from "../lib/chat-titles";
 import { trackRun } from "../lib/run-registry";
+import {
+  readyDocuments,
+  readyImages,
+  trayBlocksSend,
+} from "./composer-tray-lifecycle";
 import { optimisticTurnAttachments } from "./optimistic-turn-attachments";
 import { resolveAttachmentsForResend } from "./resend-attachments";
+import { formatBranchTitle, rememberBranchOrigin } from "./chat-enterprise";
+import { isMessageActionEnabled, resolveTurnOutcome } from "./turn-rollback";
 import type {
   PendingDocumentAttachment,
   PendingImageAttachment,
 } from "./useWorkspaceAttachments";
-import {
-  formatBranchTitle,
-  rememberBranchOrigin,
-} from "./chat-enterprise";
-import { isMessageActionEnabled, resolveTurnOutcome } from "./turn-rollback";
-
-interface WorkspaceTurnActionsOptions {
-  activeAgentId: string | undefined;
-  activeChatId: string | undefined;
-  /** Sidebar chat list — used for branch origin titles. */
-  chats: Chat[];
-  /** Every message, sibling branches included; `messages` is the visible one. */
-  allMessages: Message[];
-  autoTitleEnabled: boolean;
-  appendMessage: (
-    chatId: string,
-    role: Message["role"],
-    content: string,
-    attachments?: Message["attachments"],
-    parentId?: string,
-  ) => string;
-  attachedUrls: string[];
-  clearPendingAttachments: () => void;
-  documentAttachments: PendingDocumentAttachment[];
-  draft: string;
-  imageAttachments: PendingImageAttachment[];
-  isStreaming: boolean;
-  /**
-   * When set, startRun sends these knowledge base ids (empty disables RAG for
-   * the turn). When undefined, the custom model's enabled bindings apply.
-   */
-  knowledgeBaseIdsOverride?: string[];
-  messages: Message[];
-  onChatCreated?: (chatId: string) => void;
-  queryClient: QueryClient;
-  refreshUsageControls: () => Promise<void>;
-  restoreMessages: (chatId: string, snapshot: readonly Message[]) => void;
-  restorePendingAttachments: (
-    images: readonly PendingImageAttachment[],
-    documents: readonly PendingDocumentAttachment[],
-  ) => void;
-  selectedModelId: string | undefined;
-  setActiveChatId: Dispatch<SetStateAction<string | undefined>>;
-  setAttachedUrls: Dispatch<SetStateAction<string[]>>;
-  setDraft: Dispatch<SetStateAction<string>>;
-  setError: Dispatch<SetStateAction<string | undefined>>;
-  setIsDraftingNewChat: Dispatch<SetStateAction<boolean>>;
-  setTemporaryNextChat: Dispatch<SetStateAction<boolean>>;
-  syncPersistedMessages: (chatId: string) => Promise<void>;
-  t: (key: MessageKey) => string;
-  temporaryNextChat: boolean;
-  webSearchEnabled: boolean;
-  agenticRagEnabled: boolean;
-  workspaceId: string | undefined;
-}
+import type { WorkspaceTurnActionsOptions } from "./workspace-turn-actions-types";
+import { workspaceTurnExecutionMode } from "./workspace-turn-execution-mode";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
-  const createChatMutation = useMutation({ mutationFn: createChat });
-  const startRunMutation = useMutation({ mutationFn: startRun });
+  const createChatMutation = useMutation(createWorkspaceChatMutationOptions());
+  const startRunMutation = useMutation(startRunMutationOptions());
+  const enqueueTurnMutation = useMutation(enqueueChatTurnMutationOptions());
+  const forkChatMutation = useMutation(forkWorkspaceChatMutationOptions());
+  const executionMode = workspaceTurnExecutionMode(options);
 
-  // Hands the run to the module-level registry and returns immediately. The
-  // follow-up work runs when the stream settles, wherever the user is by then.
-  // `afterRefresh` fires once the optimistic rows have been replaced by the
-  // persisted ones, which is the earliest point their previews are disposable.
   function trackChatRun(
     chatId: string,
     runId: string,
@@ -100,38 +56,38 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       queryClient: options.queryClient,
       t: options.t,
       onSettled: async () => {
-        await options.syncPersistedMessages(chatId);
-        afterRefresh?.();
+        options.onBranchSelection?.(chatId, `msg_run_terminal_${runId}`);
+        try {
+          await options.syncPersistedMessages(chatId, [
+            ...(parentMessageId === undefined ? [] : [parentMessageId]),
+            `msg_run_terminal_${runId}`,
+          ]);
+          afterRefresh?.();
+        } catch (caught) {
+          options.setError(
+            safeUserErrorMessage(caught, options.t("unexpectedAsyncFailure")),
+          );
+        }
         await options.refreshUsageControls();
         await followQueuedRuns(chatId, runId);
       },
     });
   }
 
-  // Appends the optimistic user row and points the chat at it: a variant's row
-  // hangs off an older parent, so without the pointer it would stream into a
-  // branch the reader is not looking at. The server sets the same pointer.
-  //
-  // ponytail: a run always mints a user message, so a variant is always a
-  // *user* sibling and the "‹ 2 / 3 ›" picker lands on the prompt, not on the
-  // answer where ChatGPT puts it. Fixing that needs a user-message-free start.
   function appendTurnRow(
     chatId: string,
     content: string,
     attachments: Message["attachments"],
     parentId: string | undefined,
+    messageId: string,
   ): string {
-    const messageId = options.appendMessage(
+    options.appendMessage(
       chatId,
       "user",
       content,
       attachments,
       parentId,
-    );
-    options.queryClient.setQueryData<Chat>(["chat", chatId], (current) =>
-      current === undefined
-        ? current
-        : { ...current, activeLeafMessageId: messageId },
+      messageId,
     );
     return messageId;
   }
@@ -150,6 +106,10 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       options.workspaceId === undefined ||
       options.activeAgentId === undefined
     ) {
+      return;
+    }
+    if (trayBlocksSend([...options.imageAttachments, ...options.documentAttachments])) {
+      options.setError(options.t("trayWaitForUploads"));
       return;
     }
     if (options.isStreaming) {
@@ -185,13 +145,15 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     )
       return;
     try {
-      await enqueueChatTurn({
+      await enqueueTurnMutation.mutateAsync({
         chatId: options.activeChatId,
         agentId: options.activeAgentId,
         content,
+        parentMessageId: options.messages.at(-1)?.id ?? null,
         ...(options.selectedModelId === undefined
           ? {}
           : { modelId: options.selectedModelId }),
+        ...executionMode,
         ...(options.webSearchEnabled ? { webSearch: true } : {}),
         ...(options.agenticRagEnabled ? { agenticRag: true } : {}),
         ...(options.attachedUrls.length === 0
@@ -201,16 +163,10 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           ? {}
           : { knowledgeBaseIds: options.knowledgeBaseIdsOverride }),
       });
-      options.queryClient.setQueryData<QueuedChatTurn[]>(
-        ["queuedTurns", options.activeChatId],
-        await listQueuedTurns(options.activeChatId),
-      );
       options.setDraft("");
       options.setAttachedUrls([]);
     } catch (caught) {
-      options.setError(
-        caught instanceof Error ? caught.message : options.t("unableQueue"),
-      );
+      options.setError(safeUserErrorMessage(caught, options.t("unableQueue")));
     }
   }
 
@@ -255,23 +211,23 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       }
       options.setIsDraftingNewChat(false);
       options.setTemporaryNextChat(false);
-      await options.queryClient.invalidateQueries({
-        queryKey: ["chats", options.workspaceId],
-      });
+      const parentMessageId = options.messages.at(-1)?.id ?? null;
       const run = await startRunMutation.mutateAsync({
         chatId: chat.id,
         agentId: options.activeAgentId,
         content,
+        parentMessageId,
         ...(options.selectedModelId === undefined
           ? {}
           : { modelId: options.selectedModelId }),
-        ...(documents.length === 0
+        ...executionMode,
+        ...(readyDocuments(documents).length === 0
           ? {}
-          : { fileIds: documents.map((attachment) => attachment.fileId) }),
-        ...(images.length === 0
+          : { fileIds: readyDocuments(documents).map((item) => item.fileId) }),
+        ...(readyImages(images).length === 0
           ? {}
           : {
-              attachments: images.map((attachment) => ({
+              attachments: readyImages(images).map((attachment) => ({
                 dataBase64: attachment.dataBase64,
                 fileName: attachment.fileName,
                 mimeType: attachment.mimeType,
@@ -292,8 +248,10 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
         chat.id,
         content,
         optimisticTurnAttachments(images, documents),
-        options.messages.at(-1)?.id,
+        parentMessageId ?? undefined,
+        run.inputMessageId,
       );
+      options.onBranchSelection?.(chat.id, run.inputMessageId);
       options.setAttachedUrls([]);
       const outcome = resolveTurnOutcome({ snapshot, accepted });
       trackChatRun(chat.id, run.id, userMessageId, () => {
@@ -326,7 +284,7 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
         return;
       }
       options.setError(
-        caught instanceof Error ? caught.message : options.t("unableStartRun"),
+        safeUserErrorMessage(caught, options.t("unableStartRun")),
       );
       const outcome = resolveTurnOutcome({ snapshot, accepted });
       if (!accepted) {
@@ -355,9 +313,7 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     // "Shorter" is a new follow-up turn, not a sibling regenerate: the user is
     // asking for a rewrite, so it should sit after the previous answer.
     if (mode === "shorter") {
-      await submitTurn(
-        options.t("regenerateShorterPrompt"),
-      );
+      await submitTurn(options.t("regenerateShorterPrompt"));
       return;
     }
     const lastUser = [...options.messages]
@@ -380,6 +336,7 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
         content: lastUser.content,
         parentMessageId: lastUser.parentId ?? null,
         ...(modelId === undefined ? {} : { modelId }),
+        ...executionMode,
         ...(attachments.length === 0 ? {} : { attachments }),
         ...(options.webSearchEnabled ? { webSearch: true } : {}),
         ...(options.agenticRagEnabled ? { agenticRag: true } : {}),
@@ -392,13 +349,13 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
         lastUser.content,
         lastUser.attachments,
         lastUser.parentId,
+        run.inputMessageId,
       );
+      options.onBranchSelection?.(chatId, run.inputMessageId);
       trackChatRun(chatId, run.id, userMessageId);
     } catch (caught) {
       options.setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to regenerate the response.",
+        safeUserErrorMessage(caught, "Unable to regenerate the response."),
       );
     }
   }
@@ -415,10 +372,7 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       ]);
       // Keyed by the chat being drained, not by the chat on screen: this loop
       // runs from a settled background run and polls for up to three seconds.
-      options.queryClient.setQueryData<QueuedChatTurn[]>(
-        ["queuedTurns", chatId],
-        queue,
-      );
+      replaceQueuedTurnsCache(options.queryClient, chatId, queue);
       // Hand the drained turn to the registry and stop: its own settle hook
       // calls back here, so the queue drains without holding this loop open.
       if (activeRun !== null && activeRun.id !== previousRunId) {
@@ -447,26 +401,22 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       const sourceTitle =
         options.chats.find((c) => c.id === sourceChat)?.title ??
         "Untitled chat";
-      const fork = await forkChat({
+      const fork = await forkChatMutation.mutateAsync({
         chatId: options.activeChatId,
         throughMessageId: messageId,
         includeAttachments: true,
         title: formatBranchTitle(sourceTitle),
+        workspaceId: options.workspaceId,
       });
       rememberBranchOrigin({
         forkChatId: fork.id,
         sourceChatId: sourceChat,
         sourceTitle,
       });
-      await options.queryClient.invalidateQueries({
-        queryKey: ["chats", options.workspaceId],
-      });
       options.setActiveChatId(fork.id);
       await options.syncPersistedMessages(fork.id);
     } catch (caught) {
-      options.setError(
-        caught instanceof Error ? caught.message : "Unable to branch chat.",
-      );
+      options.setError(safeUserErrorMessage(caught, "Unable to branch chat."));
     }
   }
 
@@ -503,6 +453,7 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
         ...(options.selectedModelId === undefined
           ? {}
           : { modelId: options.selectedModelId }),
+        ...executionMode,
         ...(attachments.length === 0 ? {} : { attachments }),
         ...(options.webSearchEnabled ? { webSearch: true } : {}),
         ...(options.agenticRagEnabled ? { agenticRag: true } : {}),
@@ -515,14 +466,14 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
         content.trim(),
         message.attachments,
         message.parentId,
+        run.inputMessageId,
       );
+      options.onBranchSelection?.(chatId, run.inputMessageId);
       trackChatRun(chatId, run.id, userMessageId);
       return true;
     } catch (caught) {
       options.setError(
-        caught instanceof Error
-          ? caught.message
-          : options.t("workspaceUnableEditMessage"),
+        safeUserErrorMessage(caught, options.t("workspaceUnableEditMessage")),
       );
       return false;
     }

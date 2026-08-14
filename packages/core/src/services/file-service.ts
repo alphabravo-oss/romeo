@@ -28,6 +28,10 @@ import { FilePipelineSupport } from "./file-pipeline-support";
 import { publicFileObject } from "./file-object-state";
 import { FileResumableUploadService } from "./file-resumable-upload-service";
 import {
+  FileLifecycleWorker,
+  type FileLifecycleWorkerResult,
+} from "./file-lifecycle-worker";
+import {
   type CreateFileObjectInput,
   type CreateFileResumableUploadSessionInput,
   type CreateFileUploadSessionInput,
@@ -152,11 +156,6 @@ export class FileService {
     });
 
     const normalized = normalizeFileInput(input, this.limits.inlineMaxBytes);
-    await this.pipeline.assertMalwareScanClean(
-      normalized.bytes,
-      normalized.fileName,
-      normalized.mimeType,
-    );
     await assertAbuseControlsAllow(this.repository, subject, {
       action: "file.upload",
       workspaceId: input.workspaceId,
@@ -182,10 +181,8 @@ export class FileService {
           contentType: normalized.mimeType,
         }),
     );
-    const extraction = await this.pipeline.extractFile(normalized, 1);
-
     const now = new Date().toISOString();
-    const file = await this.repository
+    const pending = await this.repository
       .transaction(async (repository) => {
         await consumeQuota(
           repository,
@@ -209,11 +206,12 @@ export class FileService {
           sha256,
           objectKey,
           purpose: input.purpose ?? "general",
-          status: "available",
+          status: "uploading",
+          lifecycleVersion: 0,
           metadata: {
             ...input.metadata,
             ...duplicateMetadata,
-            extraction,
+            uploadMode: "inline",
           },
           createdAt: now,
           updatedAt: now,
@@ -238,6 +236,13 @@ export class FileService {
           .catch(() => {});
         throw error;
       });
+    const file = await this.pipeline.processFileLifecycle({
+      subject,
+      file: pending,
+      bytes: normalized.bytes,
+      objectKeys: [objectKey],
+      metadata: duplicateMetadata,
+    });
     await this.pipeline.recordUploadPipeline(
       subject,
       file,
@@ -301,6 +306,26 @@ export class FileService {
     fileId: string,
   ): Promise<FileObjectResponse> {
     return this.access.retryExtraction(subject, fileId);
+  }
+
+  retryLifecycle(
+    subject: AuthSubject,
+    fileId: string,
+  ): Promise<FileObjectResponse> {
+    return this.access.retryLifecycle(subject, fileId);
+  }
+
+  processLifecycleJob(input: {
+    workerId: string;
+    leaseMs?: number;
+    now?: string;
+  }): Promise<FileLifecycleWorkerResult> {
+    return new FileLifecycleWorker(
+      this.repository,
+      this.objectStore,
+      this.pipeline,
+      this.limits,
+    ).runOnce(input);
   }
 
   delete(subject: AuthSubject, fileId: string): Promise<FileObjectResponse> {

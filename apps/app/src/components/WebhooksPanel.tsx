@@ -1,21 +1,16 @@
 import { Input, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Webhook from "lucide-react/dist/esm/icons/webhook.mjs";
 import { useMemo, useState } from "react";
 
 import {
-  bulkDisableWebhooks,
-  createWebhook,
-  disableWebhook,
-  listWebhookDeliveriesPage,
-  listWebhooks,
-  testWebhook,
+  bulkDisableWebhooksMutationOptions,
+  createWebhookMutationOptions,
+  disableWebhookMutationOptions,
+  testWebhookMutationOptions,
+  webhookDeliveriesQueryOptions,
+  webhooksQueryOptions,
 } from "../features/webhooks";
 import {
   type WebhookDelivery,
@@ -38,15 +33,13 @@ import { Drawer } from "./Drawer";
 import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
 import { PageActions } from "./PageActions";
+import { useWebhookDeliveryPager } from "./useWebhookDeliveryPager";
 import { useWorkspace } from "./WorkspaceContext";
-
-const DELIVERIES_PAGE_SIZE = 25;
 
 const webhookCol = createColumnHelper<WebhookSubscription>();
 const deliveryCol = createColumnHelper<WebhookDelivery>();
 
 export function WebhooksPanel() {
-  const queryClient = useQueryClient();
   const { locale, t } = useLocale();
   const { workspaceId } = useWorkspace();
   const { ask, dialog } = useConfirm();
@@ -55,37 +48,30 @@ export function WebhooksPanel() {
     WebhookSubscription | undefined
   >(undefined);
   const selectedWebhookId = selectedWebhook?.id;
-  // Cursor stack for the deliveries pager: index 0 is the first page (undefined
-  // cursor); each push is the nextCursor that opened the following page.
-  const [deliveryCursors, setDeliveryCursors] = useState<
-    Array<string | undefined>
-  >([undefined]);
-  const deliveryCursor = deliveryCursors[deliveryCursors.length - 1];
+  const deliveryPager = useWebhookDeliveryPager();
+  const deliveryCursor = deliveryPager.cursor;
 
-  const webhooksQuery = useQuery({
-    queryKey: ["webhooks", workspaceId],
-    queryFn: () => listWebhooks(workspaceId),
-  });
-  const deliveriesQuery = useQuery({
-    queryKey: ["webhookDeliveries", selectedWebhookId, deliveryCursor],
-    queryFn: () =>
-      listWebhookDeliveriesPage({
-        webhookId: selectedWebhookId!,
-        limit: DELIVERIES_PAGE_SIZE,
-        ...(deliveryCursor !== undefined ? { cursor: deliveryCursor } : {}),
-      }),
-    enabled: selectedWebhookId !== undefined,
-    placeholderData: keepPreviousData,
-  });
+  const webhooksQuery = useQuery(webhooksQueryOptions(workspaceId));
+  const deliveriesQuery = useQuery(
+    webhookDeliveriesQueryOptions({
+      cursor: deliveryCursor,
+      pageSize: deliveryPager.pageSize,
+      webhookId: selectedWebhookId,
+    }),
+  );
 
-  const createMutation = useMutation({ mutationFn: createWebhook });
-  const disableMutation = useMutation({ mutationFn: disableWebhook });
-  const bulkDisableMutation = useMutation({ mutationFn: bulkDisableWebhooks });
-  const testMutation = useMutation({ mutationFn: testWebhook });
+  const createMutation = useMutation(createWebhookMutationOptions(workspaceId));
+  const disableMutation = useMutation(
+    disableWebhookMutationOptions(workspaceId),
+  );
+  const bulkDisableMutation = useMutation(
+    bulkDisableWebhooksMutationOptions(workspaceId),
+  );
+  const testMutation = useMutation(testWebhookMutationOptions());
 
   function openDeliveries(webhook: WebhookSubscription) {
     setSelectedWebhook(webhook);
-    setDeliveryCursors([undefined]);
+    deliveryPager.reset();
   }
 
   const createForm = useForm({
@@ -98,9 +84,6 @@ export function WebhooksPanel() {
         await createMutation.mutateAsync({
           url: value.url,
           eventTypes: value.eventTypes,
-        });
-        await queryClient.invalidateQueries({
-          queryKey: ["webhooks", workspaceId],
         });
         toast(t("webhooksCreated"), "success");
         createForm.reset();
@@ -123,9 +106,6 @@ export function WebhooksPanel() {
       return;
     try {
       await disableMutation.mutateAsync(webhookId);
-      await queryClient.invalidateQueries({
-        queryKey: ["webhooks", workspaceId],
-      });
       toast(t("webhooksDisabled"), "success");
     } catch {
       toast(t("webhooksCouldNotDisable"), "error");
@@ -135,9 +115,6 @@ export function WebhooksPanel() {
   async function handleTest(webhookId: string) {
     try {
       await testMutation.mutateAsync(webhookId);
-      await queryClient.invalidateQueries({
-        queryKey: ["webhookDeliveries", webhookId],
-      });
       toast(t("webhooksTestSent"), "success");
     } catch {
       toast(t("webhooksCouldNotTest"), "error");
@@ -158,9 +135,6 @@ export function WebhooksPanel() {
       return;
     try {
       const results = await bulkDisableMutation.mutateAsync(webhookIds);
-      await queryClient.invalidateQueries({
-        queryKey: ["webhooks", workspaceId],
-      });
       clearSelection();
       const disabled = results.filter(
         (result) => result.status === "disabled",
@@ -292,7 +266,6 @@ export function WebhooksPanel() {
           />
         </div>
       }
-      title={t("webhooksTitle")}
     >
       <FormDialog
         open={addOpen}
@@ -446,7 +419,7 @@ export function WebhooksPanel() {
           emptyDescription={t("webhooksNoDeliveriesDescription")}
           emptyIcon={<Webhook aria-hidden size={24} />}
           isEmpty={(page) =>
-            page.data.length === 0 && deliveryCursors.length === 1
+            page.data.length === 0 && deliveryPager.isFirstPage
           }
           query={deliveriesQuery}
         >
@@ -454,21 +427,15 @@ export function WebhooksPanel() {
             <DataTable
               columns={deliveryColumns}
               data={page.data}
-              serverPagination={{
-                pageSize: DELIVERIES_PAGE_SIZE,
-                hasNextPage: page.nextCursor !== undefined,
+              serverState={deliveryPager.tableState({
                 isFetching: deliveriesQuery.isFetching,
-                onNextPage: () => {
-                  if (page.nextCursor !== undefined)
-                    setDeliveryCursors((stack) => [...stack, page.nextCursor]);
-                },
-                ...(deliveryCursors.length > 1
-                  ? {
-                      onPrevPage: () =>
-                        setDeliveryCursors((stack) => stack.slice(0, -1)),
-                    }
-                  : {}),
-              }}
+                ...(page.nextCursor === undefined
+                  ? {}
+                  : { nextCursor: page.nextCursor }),
+                ...(selectedWebhookId === undefined
+                  ? {}
+                  : { webhookId: selectedWebhookId }),
+              })}
             />
           )}
         </PanelState>

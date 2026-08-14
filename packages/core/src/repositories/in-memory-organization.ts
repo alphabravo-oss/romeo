@@ -129,6 +129,23 @@ export abstract class InMemoryOrganizationRepository extends InMemoryOperationsR
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
+  async listAuthorizedWorkspaceFoldersByIds(
+    input: E.AuthorizedWorkspaceFoldersByIdsInput,
+  ): Promise<E.WorkspaceFolder[]> {
+    const folderIds = new Set(input.folderIds);
+    return this.data.workspaceFolders
+      .filter(
+        (folder) =>
+          folderIds.has(folder.id) &&
+          folder.orgId === input.orgId &&
+          folder.workspaceId === input.workspaceId &&
+          (input.isAdmin ||
+            folder.createdBy === input.principalId ||
+            this.hasFolderReadGrant(input, folder.id)),
+      )
+      .sort((left, right) => left.id.localeCompare(right.id));
+  }
+
   async getWorkspaceFolder(
     folderId: string,
   ): Promise<E.WorkspaceFolder | undefined> {
@@ -167,6 +184,36 @@ export abstract class InMemoryOrganizationRepository extends InMemoryOperationsR
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
+  async listAuthorizedWorkspaceFolderItemsBatch(
+    input: E.AuthorizedWorkspaceFolderItemsBatchInput,
+  ): Promise<E.WorkspaceFolderItemsBatchGroup[]> {
+    const folderIds = [...new Set(input.folderIds)].sort();
+    const allowedFolderIds = new Set(folderIds);
+    const visibleItems = this.data.workspaceFolderItems
+      .filter(
+        (item) =>
+          item.orgId === input.orgId &&
+          item.workspaceId === input.workspaceId &&
+          allowedFolderIds.has(item.folderId),
+      )
+      .filter((item) => this.canReadWorkspaceFolderItem(input, item))
+      .sort(compareWorkspaceFolderItems);
+    const itemsByFolderId = new Map<string, E.WorkspaceFolderItem[]>();
+    for (const item of visibleItems) {
+      const items = itemsByFolderId.get(item.folderId) ?? [];
+      items.push(item);
+      itemsByFolderId.set(item.folderId, items);
+    }
+    return folderIds.map((folderId) => {
+      const items = itemsByFolderId.get(folderId) ?? [];
+      return {
+        folderId,
+        hasMore: items.length > input.limitPerFolder,
+        items: items.slice(0, input.limitPerFolder),
+      };
+    });
+  }
+
   async createWorkspaceFolderItem(
     item: E.WorkspaceFolderItem,
   ): Promise<E.WorkspaceFolderItem> {
@@ -184,4 +231,106 @@ export abstract class InMemoryOrganizationRepository extends InMemoryOperationsR
   ): Promise<E.WorkspaceFolderItem | undefined> {
     return removeById(this.data.workspaceFolderItems, itemId);
   }
+
+  private canReadWorkspaceFolderItem(
+    input: E.AuthorizedWorkspaceFolderItemsBatchInput,
+    item: E.WorkspaceFolderItem,
+  ): boolean {
+    if (item.resourceType === "agent") {
+      const agent = this.data.agents.find(
+        (candidate) =>
+          candidate.id === item.resourceId &&
+          candidate.orgId === input.orgId &&
+          candidate.workspaceId === input.workspaceId &&
+          candidate.archivedAt === undefined &&
+          candidate.publishedVersionId !== undefined,
+      );
+      return (
+        input.canReadAgents &&
+        agent !== undefined &&
+        this.hasFolderItemGrant(input, "agent", item.resourceId, [
+          "read",
+          "run",
+        ])
+      );
+    }
+    if (item.resourceType === "chat") {
+      const chat = this.data.chats.find(
+        (candidate) =>
+          candidate.id === item.resourceId &&
+          candidate.orgId === input.orgId &&
+          candidate.workspaceId === input.workspaceId,
+      );
+      return (
+        input.canReadChats &&
+        chat !== undefined &&
+        (input.isAdmin ||
+          chat.createdBy === input.principalId ||
+          this.hasFolderItemGrant(input, "chat", item.resourceId, [
+            "read",
+            "write",
+          ]))
+      );
+    }
+    const knowledgeBase = this.data.knowledgeBases.find(
+      (candidate) =>
+        candidate.id === item.resourceId &&
+        candidate.orgId === input.orgId &&
+        candidate.workspaceId === input.workspaceId,
+    );
+    return (
+      input.canReadKnowledgeBases &&
+      knowledgeBase !== undefined &&
+      this.hasFolderItemGrant(input, "knowledge_base", item.resourceId, [
+        "read",
+      ])
+    );
+  }
+
+  private hasFolderItemGrant(
+    input: E.AuthorizedWorkspaceFolderItemsBatchInput,
+    resourceType: E.WorkspaceFolderItem["resourceType"],
+    resourceId: string,
+    permissions: Array<"read" | "run" | "write">,
+  ): boolean {
+    if (input.isAdmin) return true;
+    return this.data.grants.some(
+      (grant) =>
+        grant.resourceType === resourceType &&
+        grant.resourceId === resourceId &&
+        permissions.includes(
+          grant.permission as (typeof permissions)[number],
+        ) &&
+        ((grant.principalType === input.principalType &&
+          grant.principalId === input.principalId) ||
+          (grant.principalType === "group" &&
+            input.groupIds.includes(grant.principalId))),
+    );
+  }
+
+  private hasFolderReadGrant(
+    input: E.AuthorizedWorkspaceFoldersByIdsInput,
+    folderId: string,
+  ): boolean {
+    return this.data.grants.some(
+      (grant) =>
+        grant.resourceType === "folder" &&
+        grant.resourceId === folderId &&
+        (grant.permission === "read" || grant.permission === "write") &&
+        ((grant.principalType === input.principalType &&
+          grant.principalId === input.principalId) ||
+          (grant.principalType === "group" &&
+            input.groupIds.includes(grant.principalId))),
+    );
+  }
+}
+
+function compareWorkspaceFolderItems(
+  left: E.WorkspaceFolderItem,
+  right: E.WorkspaceFolderItem,
+): number {
+  const folder = left.folderId.localeCompare(right.folderId);
+  if (folder !== 0) return folder;
+  const createdAt = left.createdAt.localeCompare(right.createdAt);
+  return createdAt === 0 ? left.id.localeCompare(right.id) : createdAt;
 }

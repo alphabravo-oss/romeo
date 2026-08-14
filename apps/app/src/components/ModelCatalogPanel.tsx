@@ -1,26 +1,28 @@
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left.mjs";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles.mjs";
-import { Button, Input, Select, StatusBadge, Switch } from "@romeo/ui";
+import { Button, Input, Select } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
-import { listModelsPage } from "../features/providers/queries";
 import type { BaseModel } from "../features/providers/types";
-import { LocalizedTokens } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
 import { modelConfigIssues } from "../lib/model-config-attention";
 import { Section, StatRow } from "./console";
 import { BaseModelDetails } from "./BaseModelDetails";
-import { createColumnHelper, DataTable } from "./DataTable";
+import { DataTable } from "./DataTable";
 import { CreateManagedModelDialog } from "./CreateManagedModelDialog";
 import { useConfirm } from "./ConfirmDialog";
+import { ModelCatalogDiagnostics } from "./ModelCatalogDiagnostics";
 import type {
   ModelCatalogPanelProps,
   ModelSort,
 } from "./model-catalog-navigation";
-
-const columnHelper = createColumnHelper<BaseModel>();
+import { useModelCatalogColumns } from "./model-catalog-columns";
+import {
+  modelCatalogQueryOptions,
+  modelCatalogRequest,
+} from "./model-catalog-query";
 
 export function ModelCatalogPanel({
   availability,
@@ -42,39 +44,29 @@ export function ModelCatalogPanel({
 }: ModelCatalogPanelProps) {
   const { t } = useLocale();
   const { ask, dialog } = useConfirm();
-  const pageSize = 50;
+  const catalogRequest = modelCatalogRequest({
+    availability,
+    direction,
+    page,
+    providerId,
+    query,
+    sort,
+  });
+  const pageSize = catalogRequest.limit;
   const providerById = useMemo(
     () => new Map(providers.map((provider) => [provider.id, provider])),
     [providers],
   );
-  const catalogQuery = useQuery({
-    queryKey: [
-      "models",
-      "catalog",
-      query,
-      providerId,
+  const catalogQuery = useQuery(
+    modelCatalogQueryOptions({
       availability,
-      sort,
       direction,
       page,
-    ],
-    queryFn: () =>
-      listModelsPage({
-        limit: pageSize,
-        offset: page * pageSize,
-        direction,
-        ...(query.trim() === "" ? {} : { query }),
-        ...(providerId === "all" ? {} : { providerId }),
-        ...(availability === "available" || availability === "unavailable"
-          ? { available: availability === "available" }
-          : {}),
-        ...(availability === "enabled" || availability === "disabled"
-          ? { enabled: availability === "enabled" }
-          : {}),
-        sort,
-      }),
-    placeholderData: (previous) => previous,
-  });
+      providerId,
+      query,
+      sort,
+    }),
+  );
   const catalogModels = catalogQuery.data?.items ?? [];
   const catalogTotal = catalogQuery.data?.total ?? 0;
   const selectedModel = catalogModels.find(
@@ -147,99 +139,11 @@ export function ModelCatalogPanel({
       modelIds.map((modelId) => onUpdateModel({ modelId, enabled })),
     );
   };
-  const columns = useMemo(
-    () => [
-      columnHelper.accessor("displayName", {
-        header: t("models"),
-        cell: ({ row }) => (
-          <span className="block min-w-0">
-            <strong className="block truncate">
-              {row.original.displayName}
-            </strong>
-            <small className="block truncate text-muted">
-              {row.original.name}
-            </small>
-          </span>
-        ),
-      }),
-      columnHelper.accessor("name", {
-        header: t("modelId"),
-        cell: ({ getValue }) => (
-          <span className="font-mono text-xs">{getValue()}</span>
-        ),
-      }),
-      columnHelper.accessor("providerId", {
-        header: t("provider"),
-        enableSorting: false,
-        cell: ({ getValue }) =>
-          providerById.get(getValue())?.name ?? getValue(),
-      }),
-      columnHelper.accessor((model) => (model.available === false ? 0 : 1), {
-        id: "availability",
-        header: t("availability"),
-        cell: ({ row }) => (
-          <StatusBadge
-            tone={row.original.available === false ? "danger" : "success"}
-          >
-            {row.original.available === false
-              ? t("unavailable")
-              : t("available")}
-          </StatusBadge>
-        ),
-      }),
-      columnHelper.accessor("contextWindow", {
-        header: t("context"),
-        cell: ({ getValue }) => <LocalizedTokens value={getValue()} />,
-      }),
-      columnHelper.accessor(
-        (model) =>
-          [
-            model.capabilities.toolCalling ? t("tools") : undefined,
-            model.capabilities.vision ? t("vision") : undefined,
-            model.capabilities.reasoning ? t("reasoning") : undefined,
-          ]
-            .filter(Boolean)
-            .join(", ") || t("chat"),
-        {
-          id: "capabilities",
-          header: t("capabilities"),
-          enableSorting: false,
-          cell: ({ getValue }) => (
-            <span className="text-xs text-muted">{getValue()}</span>
-          ),
-        },
-      ),
-      columnHelper.accessor((model) => modelConfigIssues(model).length, {
-        id: "attention",
-        header: t("modelNeedsAttention"),
-        enableSorting: false,
-        cell: ({ row }) => {
-          const issues = modelConfigIssues(row.original);
-          if (issues.length === 0) return <span className="text-muted">—</span>;
-          return (
-            <StatusBadge tone="warning">{t("modelNeedsAttention")}</StatusBadge>
-          );
-        },
-      }),
-      columnHelper.accessor("enabled", {
-        header: t("enabled"),
-        cell: ({ row }) => (
-          <Switch
-            checked={row.original.enabled}
-            disabled={isUpdating}
-            label={t("enabled")}
-            onCheckedChange={(checked) =>
-              void updateModelWithImpact({
-                modelId: row.original.id,
-                enabled: checked === true,
-              })
-            }
-          />
-        ),
-      }),
-    ],
-    [isUpdating, providerById, t, updateModelWithImpact],
-  );
+  const columns = useModelCatalogColumns({
+    isUpdating,
+    providerById,
+    updateModelWithImpact,
+  });
 
   if (selectedModelId) {
     return (
@@ -284,6 +188,10 @@ export function ModelCatalogPanel({
                   workspaceId={workspaceId}
                 />
               </div>
+              <ModelCatalogDiagnostics
+                model={selectedModel}
+                provider={providerById.get(selectedModel.providerId)}
+              />
               <BaseModelDetails
                 dependentAgents={agents.filter(
                   (agent) => agent.baseModelId === selectedModel.id,
@@ -304,10 +212,9 @@ export function ModelCatalogPanel({
       </div>
     );
   }
-
   return (
     <>
-      <section className="rm-panel p-4">
+      <section>
         <div>
           <div className="rm-card-title">{t("models")}</div>
           <p className="text-sm text-muted">{t("modelCatalogDescription")}</p>
@@ -411,7 +318,7 @@ export function ModelCatalogPanel({
               getRowId={(model) => model.id}
               manualFiltering
               manualSorting
-              minTableWidth={920}
+              minTableWidth={1280}
               onRowActivate={(model) => onNavigationChange({ model: model.id })}
               onSortingChange={(updater) => {
                 const next =

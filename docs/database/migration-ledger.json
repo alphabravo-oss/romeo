@@ -1,0 +1,344 @@
+{
+  "schemaVersion": 1,
+  "strictPolicyStartsAt": 20,
+  "lockedBaseline": [
+    [
+      "0000_greenfield_baseline.sql",
+      "ae9db08ffb22821bf9bc289c2f99ffd515a60dd0ab3ff1e90c1e8f23fb484899",
+      "baseline"
+    ],
+    [
+      "0001_message_tree.sql",
+      "da28d944ae2a9b73a7123f37904cdfda6a475c35f191fa0d4137632358861370",
+      "backfill"
+    ],
+    [
+      "0002_message_run_error.sql",
+      "749d936b1916f9a5ada2db51aab5fde6c82d9eb7db9871004f9b192bd8b162cc",
+      "expand"
+    ],
+    [
+      "0003_message_model_id.sql",
+      "83a74eca5e222d6330175d67764e79e1f8db5e9d5b1460ea6d817b07b502f667",
+      "expand"
+    ],
+    [
+      "0004_base_model_default_parameters.sql",
+      "efa8682a3aace50deabeb9122dfca2dfc2064755a727fe7a32e7a5754c4085d6",
+      "expand"
+    ],
+    [
+      "0005_workspace_membership_backfill.sql",
+      "a8881bb239e9302d63ce81355230a1402941b71422ed19116b92484f86b1c22a",
+      "backfill"
+    ],
+    [
+      "0006_queued_turn_agentic_rag.sql",
+      "13bc2eb65a9a5500b55bca3bbbb0d0107eb3abc5dbf38e6ead6b4ce65e9093bf",
+      "expand"
+    ],
+    [
+      "0007_billing_event_receipts.sql",
+      "57ceef4ddd3ab46ac311bff1ea64bc68b1ac4fa2e8614426ccc1dd75224f50fa",
+      "expand"
+    ],
+    [
+      "0008_saml_auth_requests.sql",
+      "570573a482277493ef2fcee1ea25cbff77a0e96f9361465332ac2de52bdfdb40",
+      "expand"
+    ],
+    [
+      "0009_local_mfa_challenges.sql",
+      "a81964b1e97ae858a366a91b68d956bcda3bf0137f2aed4bd1f8484aa4e47499",
+      "expand"
+    ],
+    [
+      "0010_queued_turn_routing_mode.sql",
+      "3df92afee01d373e0101ca2978bb6c99e24baf9a931676a4de38613d71cf9b7b",
+      "expand"
+    ],
+    [
+      "0011_queued_turn_research_mode.sql",
+      "f1f3da61fabfae91b0f37fcb7be697d8bb5dbd1232694d2900c29517ee90f987",
+      "expand"
+    ],
+    [
+      "0012_webhook_delivery_leases.sql",
+      "59a4cb8d9ab052d3be580cf9bfe2b177e3539a72b648f70ba1d192fe7da73103",
+      "expand"
+    ],
+    [
+      "0013_run_event_sequences.sql",
+      "8f5245cde115f556dc25231a526cbba9efab66c2cf42acd6c7db7ab555dc0302",
+      "backfill"
+    ],
+    [
+      "0014_run_event_retention.sql",
+      "a446915ba6cc97165858f01d69f47b2508ed5d90cb8f969bcf115ba8d134bcc2",
+      "expand"
+    ],
+    [
+      "0015_capability_assignments.sql",
+      "4a014cbd560a91e052aaffbc803367a74d69fc534e5ea12aa755807c779c9b37",
+      "expand"
+    ],
+    [
+      "0016_audit_log_keyset_index.sql",
+      "f10e6f26d16b4eb75fc175a007252b5115aa411710160f1fd211417750046d90",
+      "expand"
+    ],
+    [
+      "0017_audit_log_search_trigram.sql",
+      "e5f5abd11f22db767c6b22baed2fe434270286b3fbb8ca63e49550c55813aa06",
+      "expand"
+    ],
+    [
+      "0018_workspace_folder_item_batch_index.sql",
+      "7ddab22e89ac49b5b455c1deaf4e84ff9842e72334bc85e1f7dd7d513c612046",
+      "expand"
+    ],
+    [
+      "0019_message_page_keyset_index.sql",
+      "d789d9d4738a5aa0dd6e5534b5c19238063d64d4a83c6578e0297ceeafb14d88",
+      "expand"
+    ]
+  ],
+  "migrations": [
+    {
+      "file": "0020_chat_transcript_version.sql",
+      "sha256": "dcf17041240234a10243f2192ffab18a57152008718e968073f0fc0439dbc063",
+      "phase": "expand",
+      "changesExistingData": true,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Keep the additive version column, disable the four version triggers if necessary, and roll forward with a corrected trigger migration; the previous application safely ignores the new column.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/chat-transcript-version-upgrade.json",
+        "restart": "dist/ci/chat-transcript-version-restart.json",
+        "rollback-or-forward-repair": "dist/ci/chat-transcript-version-repair.json",
+        "backup-restore": "dist/ci/chat-transcript-version-backup-restore.json",
+        "tenant-purge": "dist/ci/chat-transcript-version-tenant-purge.json",
+        "schema-contract": "dist/ci/chat-transcript-version-schema-contract.json"
+      }
+    },
+    {
+      "file": "0021_exact_chat_branch_selection.sql",
+      "sha256": "cb86d6a437f84f69f2175fba838208d00c549fe782649e4f94349bcf4e74d7b0",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive queue parent columns and sibling-navigation index, roll back the application, and roll forward with a corrected additive migration if required.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/exact-chat-branch-upgrade.json",
+        "restart": "dist/ci/exact-chat-branch-restart.json",
+        "rollback-or-forward-repair": "dist/ci/exact-chat-branch-repair.json",
+        "backup-restore": "dist/ci/exact-chat-branch-backup-restore.json",
+        "tenant-purge": "dist/ci/exact-chat-branch-tenant-purge.json",
+        "schema-contract": "dist/ci/exact-chat-branch-schema-contract.json"
+      }
+    },
+    {
+      "file": "0022_organization_capability_flags.sql",
+      "sha256": "250aac329f6b0a681ad6d7e6957e4baa2e0c219511dd5bb300986f6633a8f4a6",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive capability flag table, roll back the application, and roll forward with a corrected additive migration if required.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/organization-capability-flags-upgrade.json",
+        "restart": "dist/ci/organization-capability-flags-restart.json",
+        "rollback-or-forward-repair": "dist/ci/organization-capability-flags-repair.json",
+        "backup-restore": "dist/ci/organization-capability-flags-backup-restore.json",
+        "tenant-purge": "dist/ci/organization-capability-flags-tenant-purge.json",
+        "schema-contract": "dist/ci/organization-capability-flags-schema-contract.json"
+      }
+    },
+    {
+      "file": "0023_idempotency_receipts.sql",
+      "sha256": "598eee5d985ad8e2db32e7f18c1c70088018cfd490595599805cbd380b87b41b",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive idempotency receipt table, roll back command integration, and roll forward with a corrected additive migration if required.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/idempotency-receipts-upgrade.json",
+        "restart": "dist/ci/idempotency-receipts-restart.json",
+        "rollback-or-forward-repair": "dist/ci/idempotency-receipts-repair.json",
+        "backup-restore": "dist/ci/idempotency-receipts-backup-restore.json",
+        "tenant-purge": "dist/ci/idempotency-receipts-tenant-purge.json",
+        "schema-contract": "dist/ci/idempotency-receipts-schema-contract.json"
+      }
+    },
+    {
+      "file": "0024_versioned_capability_assignment_scopes.sql",
+      "sha256": "922f8e751f2ed3337feb651528ab233cf8a8190d073901a9101001198c0688f3",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive agent-version JSON snapshot and widened assignment scope constraint; older applications continue reading organization/workspace rows while a corrected migration can roll forward safely.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/versioned-capability-assignments-upgrade.json",
+        "restart": "dist/ci/versioned-capability-assignments-restart.json",
+        "rollback-or-forward-repair": "dist/ci/versioned-capability-assignments-repair.json",
+        "backup-restore": "dist/ci/versioned-capability-assignments-backup-restore.json",
+        "tenant-purge": "dist/ci/versioned-capability-assignments-tenant-purge.json",
+        "schema-contract": "dist/ci/versioned-capability-assignments-schema-contract.json"
+      }
+    },
+    {
+      "file": "0025_queued_turn_reasoning_policy.sql",
+      "sha256": "9a32269fa9a8434912ca835b374aeaf20efd585f49784760503c73b570d8211d",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the nullable bounded queued-turn policy snapshot, roll back application use, and roll forward with a corrected parser or constraint if required; old applications ignore the additive column.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/queued-turn-reasoning-policy-upgrade.json",
+        "restart": "dist/ci/queued-turn-reasoning-policy-restart.json",
+        "rollback-or-forward-repair": "dist/ci/queued-turn-reasoning-policy-repair.json",
+        "backup-restore": "dist/ci/queued-turn-reasoning-policy-backup-restore.json",
+        "tenant-purge": "dist/ci/queued-turn-reasoning-policy-tenant-purge.json",
+        "schema-contract": "dist/ci/queued-turn-reasoning-policy-schema-contract.json"
+      }
+    },
+    {
+      "file": "0026_typed_message_part_rollout.sql",
+      "sha256": "ec2c5767b68c165543949646b41b1cec625c663853c873033202682df70b8c50",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive columns, indexes, and compatibility trigger; stop the bounded backfill command, keep read-both projection enabled, and roll forward with corrected decoding or batching before resuming.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/typed-message-parts-upgrade.json",
+        "restart": "dist/ci/typed-message-parts-restart.json",
+        "rollback-or-forward-repair": "dist/ci/typed-message-parts-repair.json",
+        "backup-restore": "dist/ci/typed-message-parts-backup-restore.json",
+        "tenant-purge": "dist/ci/typed-message-parts-tenant-purge.json",
+        "schema-contract": "dist/ci/typed-message-parts-schema-contract.json"
+      }
+    },
+    {
+      "file": "0027_secure_file_lifecycle.sql",
+      "sha256": "5865e207d24d839abaeaa3912c08ee3a81e0e01af3548ea645201709e00e0d26",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive lifecycle columns and NOT VALID checks, roll back worker/API use while legacy available rows remain readable, and roll forward with corrected validation or lease processing before validating constraints.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/secure-file-lifecycle-upgrade.json",
+        "restart": "dist/ci/secure-file-lifecycle-restart.json",
+        "rollback-or-forward-repair": "dist/ci/secure-file-lifecycle-repair.json",
+        "backup-restore": "dist/ci/secure-file-lifecycle-backup-restore.json",
+        "tenant-purge": "dist/ci/secure-file-lifecycle-tenant-purge.json",
+        "schema-contract": "dist/ci/secure-file-lifecycle-schema-contract.json"
+      }
+    },
+    {
+      "file": "0028_eval_reasoning_policy_metrics.sql",
+      "sha256": "6403767109ec22883d1e5094686e8d1e12863f9d20bb4418bd562cfab9635e2c",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive nullable eval-run JSON evidence columns and bounded constraints, roll back application writes while old rows remain readable, and roll forward with a corrected strict mapper or constraint if required.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/eval-reasoning-policy-metrics-upgrade.json",
+        "restart": "dist/ci/eval-reasoning-policy-metrics-restart.json",
+        "rollback-or-forward-repair": "dist/ci/eval-reasoning-policy-metrics-repair.json",
+        "backup-restore": "dist/ci/eval-reasoning-policy-metrics-backup-restore.json",
+        "tenant-purge": "dist/ci/eval-reasoning-policy-metrics-tenant-purge.json",
+        "schema-contract": "dist/ci/eval-reasoning-policy-metrics-schema-contract.json"
+      }
+    },
+    {
+      "file": "0029_message_file_references.sql",
+      "sha256": "198eba9482f8948d741b4f1ca94e432a9308417d724089c1bd1ce3d8e7d4bc38",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive reference table and indexes, keep legacy copied attachments and pre-existing typed parts on the read-both path, and roll forward repository reconciliation fixes without fabricating references for historical rows.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/message-file-references-upgrade.json",
+        "restart": "dist/ci/message-file-references-restart.json",
+        "rollback-or-forward-repair": "dist/ci/message-file-references-repair.json",
+        "backup-restore": "dist/ci/message-file-references-backup-restore.json",
+        "tenant-purge": "dist/ci/message-file-references-tenant-purge.json",
+        "schema-contract": "dist/ci/message-file-references-schema-contract.json"
+      }
+    },
+    {
+      "file": "0030_reasoning_summary_event_shape.sql",
+      "sha256": "769fe02901c1c17465b2ae4e9eff85e285eaeddbb4074856fd13e80fa07ac12e",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive NOT VALID run-event shape constraint so historical rows remain readable, keep strict application mapping enabled, and roll forward with a corrected bounded constraint before separately validating historical data.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/reasoning-summary-event-shape-upgrade.json",
+        "restart": "dist/ci/reasoning-summary-event-shape-restart.json",
+        "rollback-or-forward-repair": "dist/ci/reasoning-summary-event-shape-repair.json",
+        "backup-restore": "dist/ci/reasoning-summary-event-shape-backup-restore.json",
+        "tenant-purge": "dist/ci/reasoning-summary-event-shape-tenant-purge.json",
+        "schema-contract": "dist/ci/reasoning-summary-event-shape-schema-contract.json"
+      }
+    },
+    {
+      "file": "0031_inventoried_table_sort_indexes.sql",
+      "sha256": "e873c46a4dc70d94f89ed4c4574d38349a51931b4a7bcb1a06d414864293f5ed",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive tenant+sort indexes on base_models. Roll back application use of the new indexes if needed; historical rows remain readable without them.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/inventoried-table-sort-indexes-upgrade.json",
+        "restart": "dist/ci/inventoried-table-sort-indexes-restart.json",
+        "rollback-or-forward-repair": "dist/ci/inventoried-table-sort-indexes-repair.json",
+        "backup-restore": "dist/ci/inventoried-table-sort-indexes-backup-restore.json",
+        "tenant-purge": "dist/ci/inventoried-table-sort-indexes-tenant-purge.json",
+        "schema-contract": "dist/ci/inventoried-table-sort-indexes-schema-contract.json"
+      }
+    }
+  ],
+  "requiredEvidence": [
+    "upgrade-from-current",
+    "restart",
+    "rollback-or-forward-repair",
+    "backup-restore",
+    "tenant-purge",
+    "schema-contract"
+  ]
+}

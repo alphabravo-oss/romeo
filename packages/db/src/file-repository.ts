@@ -5,8 +5,12 @@ import {
   desc,
   eq,
   exists,
+  gt,
   ilike,
   inArray,
+  isNull,
+  lte,
+  ne,
   notInArray,
   or,
   sql,
@@ -14,17 +18,22 @@ import {
 
 import type {
   AuthorizedFileCatalogQuery,
+  ClaimFileLifecycleInput,
   FileObjectPurpose,
   FileObjectStatus,
+  FinishFileLifecycleLeaseInput,
+  RenewFileLifecycleLeaseInput,
 } from "@romeo/core";
+import { assertFileLifecycleTransition } from "@romeo/core";
 
 import type { RomeoDatabase } from "./client";
-import { objectRecords, resourceGrants } from "./schema";
 import {
-  optionalDate,
-  optionalIsoString,
-  toIsoString,
-} from "./repository-mapping";
+  lifecycleVersionConflict,
+  toFileObjectInsert,
+  toFileObjectRecord,
+  toFileObjectUpdate,
+} from "./file-record-mapping";
+import { objectRecords, resourceGrants } from "./schema";
 
 export interface FileObjectRecord {
   id: string;
@@ -39,6 +48,15 @@ export interface FileObjectRecord {
   objectKey: string;
   purpose: FileObjectPurpose;
   status: FileObjectStatus;
+  lifecycleVersion?: number;
+  lifecycleAttempts?: number;
+  lifecycleFailureCode?: string;
+  lifecycleNextAttemptAt?: string;
+  lifecycleLeaseOwner?: string;
+  lifecycleLeaseToken?: string;
+  lifecycleLeaseExpiresAt?: string;
+  attachedAt?: string;
+  retainedAt?: string;
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -104,7 +122,7 @@ export class PgFileRepository {
     const predicate = and(
       eq(objectRecords.orgId, input.orgId),
       eq(objectRecords.workspaceId, input.workspaceId),
-      eq(objectRecords.status, "available"),
+      ne(objectRecords.status, "deleted"),
       input.purposes === undefined
         ? undefined
         : inArray(objectRecords.purpose, input.purposes),
@@ -161,103 +179,166 @@ export class PgFileRepository {
   }
 
   async updateFileObject(file: FileObjectRecord): Promise<FileObjectRecord> {
+    const current = await this.getFileObject(file.id);
+    if (current === undefined) return file;
+    assertFileLifecycleTransition(current, file);
+    const [row] = await this.db
+      .update(objectRecords)
+      .set(toFileObjectUpdate(file))
+      .where(
+        and(
+          eq(objectRecords.id, file.id),
+          eq(objectRecords.lifecycleVersion, current.lifecycleVersion ?? 0),
+        ),
+      )
+      .returning();
+    if (row === undefined) throw lifecycleVersionConflict();
+    return toFileObjectRecord(row);
+  }
+
+  async claimNextFileLifecycle(
+    input: ClaimFileLifecycleInput,
+  ): Promise<FileObjectRecord | undefined> {
+    return this.db.transaction(async (transaction) => {
+      const now = new Date(input.now);
+      const [candidate] = await transaction
+        .select()
+        .from(objectRecords)
+        .where(
+          and(
+            inArray(objectRecords.status, [
+              "quarantined",
+              "scanning",
+              "extracting",
+              "transcoding",
+              "failed",
+            ]),
+            lte(objectRecords.lifecycleAttempts, 99),
+            or(
+              isNull(objectRecords.lifecycleNextAttemptAt),
+              lte(objectRecords.lifecycleNextAttemptAt, now),
+            ),
+            or(
+              isNull(objectRecords.lifecycleLeaseExpiresAt),
+              lte(objectRecords.lifecycleLeaseExpiresAt, now),
+            ),
+          ),
+        )
+        .orderBy(
+          asc(objectRecords.lifecycleNextAttemptAt),
+          asc(objectRecords.updatedAt),
+          asc(objectRecords.id),
+        )
+        .limit(1)
+        .for("update", { skipLocked: true });
+      if (candidate === undefined) return undefined;
+      const current = toFileObjectRecord(candidate);
+      const claimed: FileObjectRecord = {
+        ...current,
+        status: current.status === "failed" ? "quarantined" : current.status,
+        lifecycleVersion: (current.lifecycleVersion ?? 0) + 1,
+        lifecycleAttempts: (current.lifecycleAttempts ?? 0) + 1,
+        lifecycleLeaseOwner: input.leaseOwner,
+        lifecycleLeaseToken: input.leaseToken,
+        lifecycleLeaseExpiresAt: input.leaseExpiresAt,
+        updatedAt: input.now,
+      };
+      delete claimed.lifecycleFailureCode;
+      delete claimed.lifecycleNextAttemptAt;
+      assertFileLifecycleTransition(current, claimed);
+      const [row] = await transaction
+        .update(objectRecords)
+        .set({
+          status: claimed.status,
+          lifecycleVersion: candidate.lifecycleVersion + 1,
+          lifecycleAttempts: candidate.lifecycleAttempts + 1,
+          lifecycleFailureCode: null,
+          lifecycleNextAttemptAt: null,
+          lifecycleLeaseOwner: input.leaseOwner,
+          lifecycleLeaseToken: input.leaseToken,
+          lifecycleLeaseExpiresAt: new Date(input.leaseExpiresAt),
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(objectRecords.id, candidate.id),
+            eq(objectRecords.lifecycleVersion, candidate.lifecycleVersion),
+          ),
+        )
+        .returning();
+      return row === undefined ? undefined : toFileObjectRecord(row);
+    });
+  }
+
+  async renewFileLifecycleLease(
+    input: RenewFileLifecycleLeaseInput,
+  ): Promise<FileObjectRecord | undefined> {
+    const now = new Date(input.now);
     const [row] = await this.db
       .update(objectRecords)
       .set({
-        deletedAt: optionalDate(file.deletedAt),
-        fileName: file.fileName,
-        metadata: file.metadata,
-        mimeType: file.mimeType,
-        objectKey: file.objectKey,
-        ownerId: file.ownerId,
-        ownerType: file.ownerType,
-        purpose: file.purpose,
-        sha256: file.sha256,
-        sizeBytes: file.sizeBytes,
-        status: file.status,
-        updatedAt: new Date(file.updatedAt),
+        lifecycleVersion: sql`${objectRecords.lifecycleVersion} + 1`,
+        lifecycleLeaseExpiresAt: new Date(input.leaseExpiresAt),
+        updatedAt: now,
       })
-      .where(eq(objectRecords.id, file.id))
+      .where(
+        and(
+          eq(objectRecords.id, input.fileId),
+          eq(objectRecords.lifecycleLeaseOwner, input.leaseOwner),
+          eq(objectRecords.lifecycleLeaseToken, input.leaseToken),
+          gt(objectRecords.lifecycleLeaseExpiresAt, now),
+        ),
+      )
       .returning();
-    return row === undefined ? file : toFileObjectRecord(row);
+    return row === undefined ? undefined : toFileObjectRecord(row);
+  }
+
+  async advanceFileLifecycleLease(
+    input: FinishFileLifecycleLeaseInput,
+  ): Promise<FileObjectRecord | undefined> {
+    return this.writeClaimedFileLifecycle(input, false);
+  }
+
+  async finishFileLifecycleLease(
+    input: FinishFileLifecycleLeaseInput,
+  ): Promise<FileObjectRecord | undefined> {
+    return this.writeClaimedFileLifecycle(input, true);
+  }
+
+  private async writeClaimedFileLifecycle(
+    input: FinishFileLifecycleLeaseInput,
+    clearLease: boolean,
+  ): Promise<FileObjectRecord | undefined> {
+    const current = await this.getFileObject(input.file.id);
+    if (current === undefined) return undefined;
+    if (
+      (input.file.lifecycleVersion ?? 0) !==
+      (current.lifecycleVersion ?? 0) + 1
+    )
+      return undefined;
+    assertFileLifecycleTransition(current, input.file);
+    const now = new Date(input.now);
+    const completed = { ...input.file };
+    if (clearLease) {
+      delete completed.lifecycleLeaseOwner;
+      delete completed.lifecycleLeaseToken;
+      delete completed.lifecycleLeaseExpiresAt;
+    }
+    const [row] = await this.db
+      .update(objectRecords)
+      .set(toFileObjectUpdate(completed))
+      .where(
+        and(
+          eq(objectRecords.id, input.file.id),
+          eq(objectRecords.lifecycleVersion, current.lifecycleVersion ?? 0),
+          eq(objectRecords.lifecycleLeaseOwner, input.leaseOwner),
+          eq(objectRecords.lifecycleLeaseToken, input.leaseToken),
+          gt(objectRecords.lifecycleLeaseExpiresAt, now),
+        ),
+      )
+      .returning();
+    return row === undefined ? undefined : toFileObjectRecord(row);
   }
 }
 
-export function toFileObjectRecord(
-  row: typeof objectRecords.$inferSelect,
-): FileObjectRecord {
-  const record: FileObjectRecord = {
-    id: row.id,
-    orgId: row.orgId,
-    workspaceId: row.workspaceId,
-    ownerType: row.ownerType === "service_account" ? "service_account" : "user",
-    ownerId: row.ownerId,
-    fileName: row.fileName,
-    mimeType: row.mimeType,
-    sizeBytes: row.sizeBytes,
-    sha256: row.sha256,
-    objectKey: row.objectKey,
-    purpose: normalizePurpose(row.purpose),
-    status:
-      row.status === "deleted"
-        ? "deleted"
-        : row.status === "uploading"
-          ? "uploading"
-          : "available",
-    metadata: asJsonRecord(row.metadata),
-    createdAt: toIsoString(row.createdAt),
-    updatedAt: toIsoString(row.updatedAt),
-  };
-  const deletedAt = optionalIsoString(row.deletedAt);
-  if (deletedAt !== undefined) record.deletedAt = deletedAt;
-  return record;
-}
-
-function toFileObjectInsert(
-  record: FileObjectRecord,
-): typeof objectRecords.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    workspaceId: record.workspaceId,
-    ownerType: record.ownerType,
-    ownerId: record.ownerId,
-    fileName: record.fileName,
-    mimeType: record.mimeType,
-    sizeBytes: record.sizeBytes,
-    sha256: record.sha256,
-    objectKey: record.objectKey,
-    purpose: record.purpose,
-    status: record.status,
-    metadata: record.metadata,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
-    deletedAt: optionalDate(record.deletedAt),
-  };
-}
-
-function normalizePurpose(value: string): FileObjectPurpose {
-  return fileObjectPurposes.has(value)
-    ? (value as FileObjectPurpose)
-    : "general";
-}
-
-const fileObjectPurposes = new Set<string>([
-  "browser_artifact",
-  "chat_attachment",
-  "connector_import",
-  "export_bundle",
-  "general",
-  "generated_image",
-  "knowledge_source",
-  "memory",
-  "note",
-  "web_source",
-  "voice_artifact",
-]);
-
-function asJsonRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return {};
-  return value as Record<string, unknown>;
-}
+export { toFileObjectRecord } from "./file-record-mapping";

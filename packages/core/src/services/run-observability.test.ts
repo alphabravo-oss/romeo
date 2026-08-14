@@ -8,12 +8,145 @@ import { InMemoryRomeoRepository } from "../repositories/in-memory";
 import { recordRunTerminalUsage } from "./run-usage";
 import { RunEventSequencer } from "./run-event-sequencer";
 import { RunService } from "./run-service";
+import {
+  recordedUsageCostUsd,
+  selectUsageCostEventIds,
+} from "./usage-cost-reconciliation";
 
 describe("run observability usage", () => {
+  it("prices retry and fallback reasoning segments against their actual models", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const primarySeed = await repository.getModel(
+      "model_openai_compatible_default",
+    );
+    const fallbackSeed = await repository.getModel("model_ollama_default");
+    if (primarySeed === undefined || fallbackSeed === undefined)
+      throw new Error("Expected seeded models");
+    const primary = {
+      ...primarySeed,
+      pricing: { inputTokenUsd: 0.001, outputTokenUsd: 0.002 },
+    };
+    const fallback = {
+      ...fallbackSeed,
+      pricing: { inputTokenUsd: 0.003, outputTokenUsd: 0.004 },
+    };
+    await repository.updateModel(primary);
+    await repository.updateModel(fallback);
+    const run: RunRecord = {
+      id: "run_segmented_reasoning_cost",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      chatId: "chat_welcome",
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: fallback.id,
+      providerId: fallback.providerId,
+      status: "completed",
+      createdBy: "user_dev_admin",
+      createdAt: "2026-07-16T12:00:00.000Z",
+      completedAt: "2026-07-16T12:00:04.000Z",
+    };
+    const completed = event(
+      run.id,
+      1,
+      "run.completed",
+      "2026-07-16T12:00:04.000Z",
+      {
+        usageSegments: [
+          {
+            modelId: primary.id,
+            providerId: primary.providerId,
+            usage: {
+              outputTokens: 10,
+              reasoningTokens: 8,
+              source: "openai-compatible",
+            },
+          },
+          {
+            modelId: fallback.id,
+            providerId: fallback.providerId,
+            usage: {
+              outputTokens: 5,
+              reasoningTokens: 3,
+              source: "private-upstream-source-sentinel",
+            },
+          },
+        ],
+      },
+    );
+
+    await recordRunTerminalUsage(repository, {
+      run,
+      status: "completed",
+      assistantContent: "",
+      model: fallback,
+      runEvents: [completed],
+    });
+    const usage = (await repository.listUsageEvents(run.orgId)).filter(
+      (item) => item.sourceId === run.id,
+    );
+    const outputs = usage.filter(
+      (item) => item.metric === "llm.output_token.reported",
+    );
+    const reasoning = usage.filter(
+      (item) => item.metric === "llm.reasoning_token.reported",
+    );
+
+    expect(
+      outputs.map((item) => item.metadata.estimatedCostUsd).sort(),
+    ).toEqual([0.02, 0.02]);
+    const selectedCosts = selectUsageCostEventIds(usage);
+    expect(outputs.filter((item) => selectedCosts.has(item.id))).toHaveLength(
+      2,
+    );
+    expect(
+      outputs.reduce(
+        (sum, item) =>
+          sum +
+          (selectedCosts.has(item.id) ? (recordedUsageCostUsd(item) ?? 0) : 0),
+        0,
+      ),
+    ).toBeCloseTo(0.04);
+    expect(
+      reasoning
+        .map((item) => ({
+          modelId: item.metadata.modelId,
+          quantity: item.quantity,
+          componentCost: item.metadata.estimatedComponentCostUsd,
+          selectedIn: item.metadata.costIncludedIn,
+        }))
+        .sort((left, right) =>
+          String(left.modelId).localeCompare(String(right.modelId)),
+        ),
+    ).toEqual([
+      {
+        modelId: fallback.id,
+        quantity: 3,
+        componentCost: 0.012,
+        selectedIn: "llm.output_token.reported",
+      },
+      {
+        modelId: primary.id,
+        quantity: 8,
+        componentCost: 0.016,
+        selectedIn: "llm.output_token.reported",
+      },
+    ]);
+    expect(JSON.stringify(usage)).not.toContain(
+      "private-upstream-source-sentinel",
+    );
+  });
+
   it("records metadata-only latency, throughput, recovery, and provider failures", async () => {
     const repository = new InMemoryRomeoRepository();
-    const model = await repository.getModel("model_openai_compatible_default");
-    if (model === undefined) throw new Error("Expected seeded model");
+    const seededModel = await repository.getModel(
+      "model_openai_compatible_default",
+    );
+    if (seededModel === undefined) throw new Error("Expected seeded model");
+    const model = {
+      ...seededModel,
+      pricing: { inputTokenUsd: 0.001, outputTokenUsd: 0.002 },
+    };
     const run: RunRecord = {
       id: "run_observability",
       orgId: "org_default",
@@ -47,6 +180,14 @@ describe("run observability usage", () => {
       status: "failed",
       assistantContent: "secret first secret second",
       model,
+      providerUsage: {
+        inputTokens: 120,
+        cachedInputTokens: 80,
+        outputTokens: 30,
+        reasoningTokens: 20,
+        totalTokens: 150,
+        source: "sk-private-usage-source-sentinel",
+      },
       runEvents: events,
     });
     const usage = await repository.listUsageEvents(run.orgId);
@@ -56,12 +197,29 @@ describe("run observability usage", () => {
     expect(byMetric.get("run.duration")?.quantity).toBe(4000);
     expect(byMetric.get("run.output_throughput")?.quantity).toBeGreaterThan(0);
     expect(byMetric.get("run.recovery")?.quantity).toBe(1);
+    expect(byMetric.get("llm.cached_input_token.reported")).toMatchObject({
+      quantity: 80,
+      unit: "token",
+      metadata: { usageSource: "provider" },
+    });
+    expect(byMetric.get("llm.reasoning_token.reported")).toMatchObject({
+      quantity: 20,
+      unit: "token",
+      metadata: {
+        usageSource: "provider",
+        costIncludedIn: "llm.output_token.reported",
+        estimatedComponentCostUsd: model.pricing!.outputTokenUsd * 20,
+      },
+    });
     expect(byMetric.get("provider.error")?.metadata).toMatchObject({
       errorCode: "provider_timeout",
       providerId: run.providerId,
       modelId: run.modelId,
     });
     expect(JSON.stringify(usage)).not.toContain("secret");
+    expect(JSON.stringify(usage)).not.toContain(
+      "sk-private-usage-source-sentinel",
+    );
   });
 
   it("resumes SSE after a committed sequence and records reconnect telemetry", async () => {

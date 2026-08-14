@@ -232,12 +232,11 @@ function hashKeyPart(value: string): string {
 }
 
 function quotaCoordinationUnavailable(error: unknown): ApiError {
-  const reason =
-    error instanceof Error ? error.message : "quota_coordination_unavailable";
+  void error;
   return new ApiError(
     "quota_coordination_unavailable",
     "Quota coordination is unavailable.",
     503,
-    { driver: "valkey", reason },
+    { driver: "valkey" },
   );
 }

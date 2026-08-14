@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MemoryObjectStore } from "./memory-object-store";
+import { ObjectSizeLimitError } from "./types";
 
 describe("MemoryObjectStore", () => {
   it("stores, reads, signs, and deletes objects by key", async () => {
@@ -25,5 +26,23 @@ describe("MemoryObjectStore", () => {
     expect(new TextDecoder().decode(read)).toBe("romeo storage");
     expect(upload.url).toBe("memory://object-store/knowledge%2Fsource.txt");
     expect(await store.getObject(stored.key)).toBeUndefined();
+  });
+
+  it("reports metadata and refuses reads beyond a caller byte limit", async () => {
+    const store = new MemoryObjectStore();
+    const bytes = new TextEncoder().encode("bounded object");
+    const stored = await store.putObject({
+      key: "bounded.txt",
+      body: bytes,
+      contentType: "text/plain",
+    });
+
+    await expect(store.headObject(stored.key)).resolves.toMatchObject({
+      key: stored.key,
+      sizeBytes: bytes.byteLength,
+    });
+    await expect(
+      store.getObject(stored.key, { maxBytes: bytes.byteLength - 1 }),
+    ).rejects.toBeInstanceOf(ObjectSizeLimitError);
   });
 });

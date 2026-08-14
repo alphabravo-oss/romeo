@@ -1,16 +1,22 @@
 import { Button, IconButton, Input } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useStore } from "@tanstack/react-store";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
 import { useEffect, useState } from "react";
 
 import {
-  enforceRetention,
+  enforceRetentionMutationOptions,
+  updateRetentionPolicyMutationOptions,
+} from "../features/governance/mutation-options";
+import {
+  accessReviewQueryOptions,
+  retentionPolicyQueryOptions,
+} from "../features/governance/query-options";
+import {
   getRetentionPolicy,
   listAccessReviewGrants,
-  updateRetentionPolicy,
-} from "../features";
+} from "../features/governance/queries";
 import { type MessageKey, useLocale } from "../lib/i18n";
 import {
   formatRetentionOverrides,
@@ -27,6 +33,8 @@ import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { confirmTone } from "./danger-tier";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { isDirty } from "./settings-dirty-state";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 type AccessGrant = Awaited<ReturnType<typeof listAccessReviewGrants>>[number];
 
@@ -39,6 +47,7 @@ interface RetentionOverrideRow {
 
 interface RetentionDraft {
   days: number;
+  runEventDays: number;
   fileDays: string;
   workspaceOverrides: string;
   userOverrides: string;
@@ -57,31 +66,12 @@ const retentionValidationMessageKeys: Record<
 
 export function GovernanceRetentionTab() {
   const { t } = useLocale();
+  const inventoriedTable = useInventoriedServerTable<any>("governance_access_grants");
   const { ask, dialog } = useConfirm();
-  const queryClient = useQueryClient();
-  const retentionQuery = useQuery({
-    queryKey: ["retentionPolicy"],
-    queryFn: getRetentionPolicy,
-  });
-  const accessQuery = useQuery({
-    queryKey: ["accessReview"],
-    queryFn: listAccessReviewGrants,
-  });
-  const updateMutation = useMutation({ mutationFn: updateRetentionPolicy });
-  const enforceMutation = useMutation({
-    mutationFn: enforceRetention,
-    onSuccess: async (result) => {
-      toast(
-        `${t("govRetentionEnforced")} — ${result.deletedAuditLogCount} ${t("govAuditLogsAnd")} ${result.deletedFileObjectCount ?? 0} ${t("govExpiredFilesRemoved")}`,
-        "success",
-      );
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-        queryClient.invalidateQueries({ queryKey: ["dataExportPackages"] }),
-      ]);
-    },
-    onError: () => toast(t("govCouldNotEnforceRetention"), "error"),
-  });
+  const retentionQuery = useQuery(retentionPolicyQueryOptions());
+  const accessQuery = useQuery(accessReviewQueryOptions());
+  const updateMutation = useMutation(updateRetentionPolicyMutationOptions());
+  const enforceMutation = useMutation(enforceRetentionMutationOptions());
   const [initial, setInitial] = useState<RetentionDraft>(() =>
     retentionDraft(retentionQuery.data),
   );
@@ -122,6 +112,7 @@ export function GovernanceRetentionTab() {
       try {
         const saved = await updateMutation.mutateAsync({
           auditLogRetentionDays: value.days,
+          runEventRetentionDays: value.runEventDays,
           fileRetentionDays: parseOptionalRetentionDays(value.fileDays),
           workspaceFileRetentionDays: parseRetentionOverrides(
             value.workspaceOverrides,
@@ -132,17 +123,11 @@ export function GovernanceRetentionTab() {
         setInitial(savedDraft);
         form.reset(savedDraft);
         toast(t("govRetentionPolicySaved"), "success");
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["retentionPolicy"] }),
-          queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-        ]);
       } catch (error) {
         toast(
           error instanceof RetentionValidationError
             ? t(retentionValidationMessageKeys[error.code])
-            : error instanceof Error
-              ? error.message
-              : t("govCouldNotSaveRetentionPolicy"),
+            : safeUserErrorMessage(error, t("govCouldNotSaveRetentionPolicy")),
           "error",
         );
       }
@@ -170,7 +155,15 @@ export function GovernanceRetentionTab() {
       confirmPhrase: t("governanceRunRetentionPhrase"),
     });
     if (!ok) return;
-    await enforceMutation.mutateAsync();
+    try {
+      const result = await enforceMutation.mutateAsync();
+      toast(
+        `${t("govRetentionEnforced")} — ${result.deletedAuditLogCount} ${t("govAuditLogsAnd")} ${result.deletedFileObjectCount ?? 0} ${t("govExpiredFilesRemoved")}; ${result.deletedRunEventCount} ${t("govRunEventsCompacted")}`,
+        "success",
+      );
+    } catch {
+      toast(t("govCouldNotEnforceRetention"), "error");
+    }
   }
 
   return (
@@ -204,6 +197,26 @@ export function GovernanceRetentionTab() {
             />
           )}
         </form.Field>
+        <label className="text-muted" htmlFor="run-event-retention-days">
+          {t("govRunEventRetentionDays")}
+        </label>
+        <form.Field name="runEventDays">
+          {(field) => (
+            <Input
+              name="runEventDays"
+              id="run-event-retention-days"
+              max={3650}
+              min={1}
+              onBlur={field.handleBlur}
+              onChange={(event) =>
+                field.handleChange(Number(event.currentTarget.value))
+              }
+              type="number"
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+        <p className="text-muted">{t("govRunEventRetentionGuidance")}</p>
         <label className="text-muted" htmlFor="file-retention-days">
           {t("govDefaultFileRetentionDays")}
         </label>
@@ -279,8 +292,9 @@ export function GovernanceRetentionTab() {
         {(grants) => (
           <div className="grid gap-2 text-sm">
             <DataTable
+              serverState={inventoriedTable.serverState}
               columns={accessGrantColumns}
-              data={grants}
+              data={inventoriedTable.rows}
               empty={t("noAccessGrants")}
               getRowId={(grant) => grant.id}
               maxBodyHeight={320}
@@ -298,6 +312,7 @@ function retentionDraft(
 ): RetentionDraft {
   return {
     days: policy?.auditLogRetentionDays ?? 365,
+    runEventDays: policy?.runEventRetentionDays ?? 30,
     fileDays: policy?.fileRetentionDays?.toString() ?? "",
     workspaceOverrides: formatRetentionOverrides(
       policy?.workspaceFileRetentionDays ?? {},

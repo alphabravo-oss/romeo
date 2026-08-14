@@ -24,6 +24,41 @@ const filePurpose = z.enum([
   "web_source",
   "voice_artifact",
 ]);
+export const FileLifecycleStatusSchema = z.enum([
+  "uploading",
+  "quarantined",
+  "scanning",
+  "extracting",
+  "transcoding",
+  "ready",
+  "attached",
+  "retained",
+  "failed",
+  "deleted",
+  // Additive read compatibility for rows created before lifecycle v1.
+  "available",
+]);
+export const FileLifecycleSchema = z
+  .strictObject({
+    schemaVersion: z.literal(1),
+    state: FileLifecycleStatusSchema,
+    version: z.number().int().nonnegative(),
+    attempts: z.number().int().nonnegative().max(100),
+    retryable: z.boolean(),
+    failureCode: z.union([
+      z
+        .string()
+        .min(1)
+        .max(80)
+        .regex(/^[a-z0-9_]+$/u),
+      z.null(),
+    ]),
+    nextAttemptAt: nullableTimestamp,
+    leaseExpiresAt: nullableTimestamp,
+    attachedAt: nullableTimestamp,
+    retainedAt: nullableTimestamp,
+  })
+  .openapi("FileLifecycle");
 
 export const FileExtractionSchema = z
   .strictObject({
@@ -58,7 +93,8 @@ export const FileObjectSchema = z
     sizeBytes: z.number().int().nonnegative(),
     sha256: z.string(),
     purpose: filePurpose,
-    status: z.enum(["available", "deleted", "uploading"]),
+    status: FileLifecycleStatusSchema,
+    lifecycle: FileLifecycleSchema,
     metadata: z.record(z.string(), z.unknown()),
     extraction: FileExtractionSchema,
     contentUrl: z.union([z.string(), z.null()]),
@@ -347,6 +383,19 @@ export const retryFileExtractionRoute = createRoute({
   },
 });
 
+export const retryFileLifecycleRoute = createRoute({
+  ...metadata,
+  method: "post",
+  path: "/api/v1/files/{fileId}/lifecycle/retry",
+  operationId: "files.retryLifecycle",
+  summary: "Retry an authorized failed file lifecycle",
+  request: { params: filePath },
+  responses: {
+    200: jsonResponse("Updated file lifecycle", dataEnvelope(FileObjectSchema)),
+    ...errors,
+  },
+});
+
 export const deleteFileRoute = createRoute({
   ...metadata,
   method: "delete",
@@ -393,6 +442,7 @@ export const fileRoutes = [
   cancelFileUploadSessionRoute,
   getFileRoute,
   retryFileExtractionRoute,
+  retryFileLifecycleRoute,
   readFileContentRoute,
   deleteFileRoute,
 ] as const;

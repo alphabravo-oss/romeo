@@ -3,9 +3,25 @@ import { createRoute, z } from "@hono/zod-openapi";
 import {
   authenticationSecurity,
   dataEnvelope,
+  idempotentJsonResponse,
   jsonResponse,
+  optionalIdempotencyHeaders,
   standardErrorResponses,
 } from "./common";
+import { inspectPersistedRunContextRoute } from "./persisted-run-context";
+import { ReasoningPolicySchema } from "./reasoning";
+import { RunEventSchema } from "./run-event-contracts";
+export {
+  ReasoningSummaryCompletedEventDataSchema,
+  ReasoningSummaryDeltaEventDataSchema,
+  RunContinuingEventDataSchema,
+  RunEventSchema,
+} from "./run-event-contracts";
+
+export {
+  inspectPersistedRunContextRoute,
+  PersistedRunContextInspectionSchema,
+} from "./persisted-run-context";
 
 const identifier = z.string().trim().min(1).max(300);
 const timestamp = z.iso.datetime();
@@ -17,6 +33,8 @@ const runStatus = z.enum([
   "completed",
   "failed",
 ]);
+const modelRoutingMode = z.enum(["selected", "economy"]);
+const researchMode = z.enum(["standard", "deep"]);
 
 export const RunSchema = z
   .strictObject({
@@ -35,60 +53,23 @@ export const RunSchema = z
   })
   .openapi("RunRecord");
 
+export const StartedRunSchema = RunSchema.extend({
+  inputMessageId: identifier,
+}).openapi("StartedRunRecord");
+
 export const QueuedChatTurnSchema = z
   .strictObject({
     id: identifier,
     chatId: identifier,
     content: z.string().min(1).max(200_000),
     idempotencyKey: z.string().min(1).max(200),
+    parentMessageId: z.union([identifier, z.null()]).optional(),
+    reasoningPolicy: ReasoningPolicySchema.optional(),
     status: z.enum(["queued", "leased", "failed", "cancelled", "completed"]),
     error: z.string().optional(),
     createdAt: timestamp,
   })
   .openapi("QueuedChatTurn");
-
-export const RunContinuingEventDataSchema = z
-  .strictObject({
-    reason: z.enum(["tool_approval", "tool_dispatch"]),
-    toolId: identifier,
-    approvalRequestId: identifier.optional(),
-    jobId: identifier.optional(),
-    outcome: z.enum(["completed", "failed"]).optional(),
-    errorCode: z.string().optional(),
-  })
-  .openapi("RunContinuingEventData");
-
-export const RunEventSchema = z
-  .strictObject({
-    id: identifier,
-    runId: identifier,
-    sequence: z.number().int().nonnegative(),
-    type: z.enum([
-      "run.started",
-      "message.started",
-      "message.delta",
-      "message.reasoning",
-      "message.completed",
-      "retrieval.completed",
-      "tool.requested",
-      "tool.started",
-      "tool.approval_required",
-      "tool.completed",
-      "tool.failed",
-      "run.cancelled",
-      "run.completed",
-      "run.failed",
-      "run.continuing",
-      "run.waiting_tool_approval",
-      "run.waiting_tool_dispatch",
-    ]),
-    data: z.union([
-      RunContinuingEventDataSchema,
-      z.record(z.string(), z.unknown()),
-    ]),
-    createdAt: timestamp,
-  })
-  .openapi("RunEvent");
 
 const imageAttachment = z.strictObject({
   fileName: z.string().min(1).max(160),
@@ -103,6 +84,9 @@ export const StartRunSchema = z
     agentId: identifier,
     content: z.string().min(1).max(200_000),
     modelId: identifier.optional(),
+    routingMode: modelRoutingMode.optional(),
+    researchMode: researchMode.optional(),
+    reasoningPolicy: ReasoningPolicySchema.optional(),
     historyBoundaryMessageId: identifier.optional(),
     // Attaches the new turn under an existing message instead of extending the
     // active branch: `null` forks from the chat root, absent extends the leaf.
@@ -118,6 +102,7 @@ export const StartRunSchema = z
      */
     knowledgeBaseIds: z.array(identifier).max(25).optional(),
     agenticRag: z.boolean().optional(),
+    idempotencyKey: z.string().trim().min(1).max(200).optional(),
   })
   .openapi("StartRunRequest");
 
@@ -126,7 +111,6 @@ export const EnqueueChatTurnSchema = StartRunSchema.omit({
   attachments: true,
   fileIds: true,
   historyBoundaryMessageId: true,
-  parentMessageId: true,
 })
   .extend({ idempotencyKey: z.string().min(1).max(200).optional() })
   .openapi("EnqueueChatTurnRequest");
@@ -137,6 +121,9 @@ export const InspectRunContextSchema = z
     agentId: identifier,
     content: z.string().min(1).max(200_000),
     modelId: identifier.optional(),
+    routingMode: modelRoutingMode.optional(),
+    researchMode: researchMode.optional(),
+    reasoningPolicy: ReasoningPolicySchema.optional(),
     fileIds: z.array(z.string().trim().min(1).max(160)).max(8).optional(),
     imageCount: z.number().int().min(0).max(4).optional(),
     webSearch: z.boolean().optional(),
@@ -159,11 +146,43 @@ const citationSchema = z.strictObject({
 
 export const RunContextPreviewSchema = z
   .strictObject({
+    routing: z.strictObject({
+      mode: modelRoutingMode,
+      requestedModelId: identifier,
+      selectedModelId: identifier,
+      candidateCount: z.number().int().nonnegative(),
+      estimatedBlendedTokenUsd: z.number().nonnegative().optional(),
+    }),
     model: z.strictObject({
       id: identifier,
       name: z.string().min(1).max(300),
       contextWindow: z.number().int().positive(),
     }),
+    reasoningPolicy: z
+      .strictObject({
+        requested: ReasoningPolicySchema,
+        effective: ReasoningPolicySchema,
+        source: z.enum(["agent_default", "run_request"]),
+        rejected: z.boolean(),
+        adjustments: z.array(
+          z.strictObject({
+            parameter: z.enum([
+              "effort",
+              "maxReasoningTokens",
+              "mode",
+              "retainSummary",
+              "summaryDetail",
+            ]),
+            reason: z.enum([
+              "capped_by_governance",
+              "summary_persistence_not_implemented",
+              "unsupported_by_dialect",
+              "unsupported_by_model_or_provider",
+            ]),
+          }),
+        ),
+      })
+      .optional(),
     budget: z.strictObject({
       estimatedInputTokens: z.number().int().nonnegative(),
       usableInputTokens: z.number().int().nonnegative(),
@@ -209,9 +228,9 @@ export const inspectRunContextRoute = createRoute({
   operationId: "runs.inspectContext",
   tags: ["Runs"],
   security: authenticationSecurity,
-  summary: "Inspect the exact governed context for a proposed run",
+  summary: "Inspect a privacy-safe context summary for a proposed run",
   description:
-    "Uses the same context builder as run execution and returns redacted messages, retained context, citations, memory metadata, and the estimated token budget.",
+    "Uses the same context builder as run execution and returns safe role/image counts, retained-context metadata, citations, memory metadata, and the estimated token budget. Provider-ready message text is deliberately withheld.",
   request: {
     body: {
       required: true,
@@ -318,13 +337,14 @@ export const startRunRoute = createRoute({
   operationId: "runs.start",
   summary: "Start a streamed chat run",
   request: {
+    headers: optionalIdempotencyHeaders,
     body: {
       required: true,
       content: { "application/json": { schema: StartRunSchema } },
     },
   },
   responses: {
-    202: jsonResponse("Started run", dataEnvelope(RunSchema)),
+    202: idempotentJsonResponse("Started run", dataEnvelope(StartedRunSchema)),
     ...authenticatedErrors,
   },
 });
@@ -350,6 +370,9 @@ export const streamRunEventsRoute = createRoute({
   summary: "Stream or replay run events",
   request: {
     params: path,
+    headers: z.object({
+      "last-event-id": z.string().trim().min(1).max(20).optional(),
+    }),
     query: z.strictObject({
       after: z.coerce.number().int().min(0).max(10_000_000).optional(),
     }),
@@ -388,6 +411,7 @@ export const cancelRunRoute = createRoute({
 
 export const runRoutes = [
   inspectRunContextRoute,
+  inspectPersistedRunContextRoute,
   getActiveRunRoute,
   listQueuedChatTurnsRoute,
   enqueueChatTurnRoute,

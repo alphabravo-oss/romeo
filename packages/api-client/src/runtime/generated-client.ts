@@ -1,6 +1,7 @@
 import { createClient, type Client } from "../generated/sdk/client";
 import { RomeoApiError } from "../errors";
 import type { ApiErrorEnvelope, RomeoClientOptions } from "./types";
+import { adaptGeneratedFetch } from "./generated-transport";
 
 export type GeneratedApiClient = Client;
 
@@ -8,7 +9,7 @@ export function createGeneratedClient(options: RomeoClientOptions): Client {
   const client = createClient({
     auth: options.apiKey,
     baseUrl: apiBaseUrl(options.baseUrl),
-    fetch: adaptFetch(options.fetchImpl ?? globalThis.fetch),
+    fetch: adaptGeneratedFetch(options.fetchImpl ?? globalThis.fetch),
     responseStyle: "fields",
     throwOnError: true,
   });
@@ -39,30 +40,6 @@ export async function unwrapGeneratedData<T>(
 function apiBaseUrl(baseUrl: string): string {
   const normalized = baseUrl.replace(/\/+$/u, "");
   return normalized.endsWith("/api/v1") ? normalized : `${normalized}/api/v1`;
-}
-
-function adaptFetch(fetchImpl: typeof fetch): typeof fetch {
-  return async (input, init) => {
-    if (!(input instanceof Request)) return fetchImpl(input, init);
-
-    const body = ["GET", "HEAD"].includes(input.method)
-      ? undefined
-      : await input.clone().text();
-    return fetchImpl(input.url, {
-      ...(body === undefined || body === "" ? {} : { body }),
-      cache: input.cache,
-      credentials: input.credentials,
-      headers: Object.fromEntries(input.headers.entries()),
-      integrity: input.integrity,
-      keepalive: input.keepalive,
-      method: input.method,
-      mode: input.mode,
-      redirect: input.redirect,
-      referrer: input.referrer,
-      referrerPolicy: input.referrerPolicy,
-      signal: input.signal,
-    });
-  };
 }
 
 function isApiErrorEnvelope(value: unknown): value is ApiErrorEnvelope {

@@ -8,6 +8,7 @@ import {
   filesCreateUploadSession,
   filesDelete,
   filesRetryExtraction,
+  filesRetryLifecycle,
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
@@ -115,6 +116,15 @@ export const deleteChatFile = deleteFile;
 export async function retryFileExtraction(fileId: string): Promise<FileObject> {
   configureBrowserApiClients();
   const response = await filesRetryExtraction({
+    path: { fileId },
+    throwOnError: true,
+  });
+  return response.data.data;
+}
+
+export async function retryFileLifecycle(fileId: string): Promise<FileObject> {
+  configureBrowserApiClients();
+  const response = await filesRetryLifecycle({
     path: { fileId },
     throwOnError: true,
   });

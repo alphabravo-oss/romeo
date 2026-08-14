@@ -4,6 +4,16 @@ import X from "lucide-react/dist/esm/icons/x.mjs";
 
 import type { QueuedChatTurn } from "../features/runs";
 import { useLocale } from "../lib/i18n";
+import { reasoningModeFromPolicy } from "./composer-reasoning-policy";
+
+const reasoningLabels = {
+  automatic: "reasoningAutomatic",
+  default: "reasoningAgentDefault",
+  high: "reasoningHigh",
+  low: "reasoningLow",
+  medium: "reasoningMedium",
+  off: "reasoningOff",
+} as const;
 
 /**
  * Turns typed while the answer is still streaming, shown where they will land:
@@ -32,6 +42,9 @@ export function QueuedTurnGhosts({
             <div className="rm-message-queued-meta">
               <span>
                 {turn.status === "failed" ? t("failed") : t("queued")}
+                {turn.reasoningPolicy
+                  ? ` · ${t(reasoningLabels[reasoningModeFromPolicy(turn.reasoningPolicy)])}`
+                  : ""}
               </span>
               <IconButton
                 aria-label={`${t("removeQueued")}: ${turn.content}`}

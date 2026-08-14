@@ -28,10 +28,11 @@ import {
   payloadString,
 } from "./run-tool-service";
 import type { WebhookEmitter } from "./webhook-service";
+import { WorkerSupervisor } from "./worker-supervisor";
 
 export class RunTerminalService {
   private readonly workerId = createId("terminal_worker");
-  private timer: ReturnType<typeof setInterval> | undefined;
+  private readonly supervisor = new WorkerSupervisor("run_terminal_outbox");
 
   constructor(
     private readonly repository: RomeoRepository,
@@ -44,27 +45,37 @@ export class RunTerminalService {
   ) {}
 
   startWorker(intervalMs = 1_000): void {
-    if (this.timer !== undefined) return;
-    void this.runOnce();
-    this.timer = setInterval(
-      () => void this.runOnce(),
-      Math.max(100, intervalMs),
-    );
-    this.timer.unref?.();
+    const normalizedIntervalMs = Math.max(100, intervalMs);
+    this.supervisor.start((signal) => this.runOnce(signal), {
+      intervalMs: normalizedIntervalMs,
+      maxBackoffMs: normalizedIntervalMs * 16,
+      jitterRatio: 0.2,
+    });
   }
 
   stopWorker(): void {
-    if (this.timer === undefined) return;
-    clearInterval(this.timer);
-    this.timer = undefined;
+    this.supervisor.stop();
   }
 
-  async runOnce(): Promise<number> {
+  drainWorker(): Promise<void> {
+    return this.supervisor.drain();
+  }
+
+  async runOnce(signal?: AbortSignal): Promise<number> {
     const organizations = await this.repository.listAllOrganizations();
     const counts = await Promise.all(
-      organizations.map((organization) => this.drain(organization.id)),
+      organizations.map((organization) =>
+        signal?.aborted === true
+          ? Promise.resolve(0)
+          : this.drain(organization.id, signal),
+      ),
     );
-    return counts.reduce((total, count) => total + count, 0);
+    const processed = counts.reduce((total, count) => total + count, 0);
+    this.supervisor.recordLease({
+      claimed: processed > 0,
+      count: Math.max(1, processed),
+    });
+    return processed;
   }
 
   async cancel(runId: string, subject: AuthSubject): Promise<RunRecord> {
@@ -78,7 +89,7 @@ export class RunTerminalService {
     const model = await this.repository.getModel(run.modelId);
     const payloadReferences: ToolOperationDispatchPayloadStoreReference[] = [];
     const completedAt = new Date().toISOString();
-    const cancelled = await this.repository.transaction(async (repository) => {
+    const persisted = await this.repository.transaction(async (repository) => {
       const result = await persistTerminalRunInRepository(
         repository,
         this.sequencer,
@@ -87,13 +98,11 @@ export class RunTerminalService {
           status: "cancelled",
           assistantContent: "",
           ...(model === undefined ? {} : { model }),
-          ...(run.status === "waiting_tool_approval" || run.status === "queued"
-            ? { terminalEvent: { type: "run.cancelled", data: {} } }
-            : {}),
+          terminalEvent: { type: "run.cancelled", data: {} },
         },
         completedAt,
       );
-      if (result !== undefined && run.status === "queued")
+      if (result.run !== undefined && run.status === "queued")
         payloadReferences.push(
           ...(await this.cancelLinkedDispatchRequests(
             repository,
@@ -103,13 +112,14 @@ export class RunTerminalService {
         );
       return result;
     });
+    await this.sequencer.notify(persisted.events);
     await deleteDispatchPayloadObjects(
       this.options.dispatchPayloadStore,
       payloadReferences,
     );
     void this.drain(run.orgId);
     this.drainQueue(run.chatId);
-    return cancelled ?? (await this.repository.getRun(runId)) ?? run;
+    return persisted.run ?? (await this.repository.getRun(runId)) ?? run;
   }
 
   async complete(
@@ -118,11 +128,13 @@ export class RunTerminalService {
     assistantContent: string,
     model: BaseModel,
     citations: RunKnowledgeCitation[],
+    subject: AuthSubject,
   ): Promise<void> {
+    const terminalEventType = runTerminalEventType(event);
     const status =
-      event.type === "run.completed"
+      terminalEventType === "run.completed"
         ? "completed"
-        : event.type === "run.cancelled"
+        : terminalEventType === "run.cancelled"
           ? "cancelled"
           : "failed";
     const providerUsage = providerUsageFromEvent(event);
@@ -132,12 +144,17 @@ export class RunTerminalService {
         : undefined;
     await this.persist({
       run,
+      subject,
       status,
       assistantContent: appendRunCitations(assistantContent, citations),
       model,
       ...(providerUsage === undefined ? {} : { providerUsage }),
       ...(citations.length === 0 ? {} : { citations }),
       ...(error === undefined ? {} : { error }),
+      terminalEvent: {
+        type: terminalEventType,
+        data: event.data as Record<string, unknown>,
+      },
     });
     void this.drain(run.orgId);
     this.drainQueue(run.chatId);
@@ -147,12 +164,13 @@ export class RunTerminalService {
     return persistTerminalRun(this.repository, this.sequencer, input);
   }
 
-  drain(orgId: string): Promise<number> {
+  drain(orgId: string, signal?: AbortSignal): Promise<number> {
     return drainRunTerminalOutbox({
       repository: this.repository,
       workerId: this.workerId,
       orgId,
       ...(this.webhooks === undefined ? {} : { webhooks: this.webhooks }),
+      ...(signal === undefined ? {} : { signal }),
     });
   }
 
@@ -208,6 +226,18 @@ export class RunTerminalService {
           reference !== undefined,
       );
   }
+}
+
+function runTerminalEventType(
+  event: RunEvent,
+): "run.cancelled" | "run.completed" | "run.failed" {
+  if (
+    event.type === "run.cancelled" ||
+    event.type === "run.completed" ||
+    event.type === "run.failed"
+  )
+    return event.type;
+  throw new Error("Run terminal persistence requires a terminal event.");
 }
 
 function runErrorFromEvent(

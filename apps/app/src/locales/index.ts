@@ -13,9 +13,11 @@ export const namespaceNames = [
   "admin-overview",
   "admin-section",
   "agent-studio",
+  "api-errors",
   "auth",
   "auth-provider-admin",
   "billing-admin",
+  "capability-admin",
   "chat-supplement",
   "core",
   "device-impersonation",
@@ -35,6 +37,7 @@ export const namespaceNames = [
   "settings",
   "shared-control",
   "tool-connector-admin",
+  "trust-compute",
   "user-admin",
   "web-search-admin",
   "workflow-admin",
@@ -83,9 +86,11 @@ type EnglishMessages = typeof coreEN &
   typeof import("./en/admin-overview.json") &
   typeof import("./en/admin-section.json") &
   typeof import("./en/agent-studio.json") &
+  typeof import("./en/api-errors.json") &
   typeof import("./en/auth.json") &
   typeof import("./en/auth-provider-admin.json") &
   typeof import("./en/billing-admin.json") &
+  typeof import("./en/capability-admin.json") &
   typeof import("./en/chat-supplement.json") &
   typeof import("./en/device-impersonation.json") &
   typeof import("./en/eval-workspace.json") &
@@ -104,6 +109,7 @@ type EnglishMessages = typeof coreEN &
   typeof import("./en/settings.json") &
   typeof import("./en/shared-control.json") &
   typeof import("./en/tool-connector-admin.json") &
+  typeof import("./en/trust-compute.json") &
   typeof import("./en/user-admin.json") &
   typeof import("./en/web-search-admin.json") &
   typeof import("./en/workflow-admin.json") &

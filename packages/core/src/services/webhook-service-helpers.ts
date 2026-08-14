@@ -5,17 +5,17 @@ import type { WebhookDelivery, WebhookEventType } from "../domain/webhooks";
 import { webhookEventTypes } from "../domain/webhooks";
 import { ApiError } from "../errors";
 import type { RomeoRepository } from "../domain/repository";
-import { writeAuditLog } from "./audit-log";
+import { type AuditAction, writeAuditLog } from "./audit-log";
 
 const webhookEventTypeSet = new Set<string>(webhookEventTypes);
 
 export const WEBHOOK_DELIVERY_PAGE_DEFAULT_LIMIT = 50;
 export const WEBHOOK_DELIVERY_PAGE_MAX_LIMIT = 1000;
 
-export async function auditWebhook(
+export async function auditWebhook<A extends AuditAction>(
   repository: RomeoRepository,
   subject: AuthSubject,
-  action: string,
+  action: A,
   webhookId: string,
 ): Promise<void> {
   await writeAuditLog(repository, {
@@ -223,30 +223,4 @@ export function normalizeDeliveryLimit(limit: number | undefined): number {
   if (truncated > WEBHOOK_DELIVERY_PAGE_MAX_LIMIT)
     return WEBHOOK_DELIVERY_PAGE_MAX_LIMIT;
   return truncated;
-}
-
-// Cursor is an opaque token identifying the last row of the previous page.
-// Deliveries come back newest-first; we page by (createdAt, id) so rows sharing
-// a createdAt still paginate deterministically.
-export function encodeDeliveryCursor(delivery: WebhookDelivery): string {
-  return Buffer.from(`${delivery.createdAt}|${delivery.id}`, "utf8").toString(
-    "base64url",
-  );
-}
-
-export function indexAfterDeliveryCursor(
-  deliveries: WebhookDelivery[],
-  cursor: string,
-): number {
-  let decoded: string;
-  try {
-    decoded = Buffer.from(cursor, "base64url").toString("utf8");
-  } catch {
-    return deliveries.length;
-  }
-  const separator = decoded.lastIndexOf("|");
-  if (separator === -1) return deliveries.length;
-  const id = decoded.slice(separator + 1);
-  const position = deliveries.findIndex((delivery) => delivery.id === id);
-  return position === -1 ? deliveries.length : position + 1;
 }

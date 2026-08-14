@@ -20,6 +20,9 @@ export {
   type ColumnDef,
   type ServerPagination,
 } from "../DataTable";
+export { AvatarPicker } from "./AvatarPicker";
+export { IdentityCell } from "./IdentityCell";
+export { MasterDetail, MasterList, MasterListItem } from "./MasterDetail";
 export { Disclosure, Section, StatRow } from "./Section";
 export {
   AddButton,

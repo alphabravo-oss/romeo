@@ -37,6 +37,12 @@ OPERATIONS = {
         "path": "/api/v1/admin/abuse-controls",
         "summary": "Update abuse controls"
     },
+    "post_admin_abuse_controls_simulate": {
+        "name": "post_admin_abuse_controls_simulate",
+        "method": "POST",
+        "path": "/api/v1/admin/abuse-controls/simulate",
+        "summary": "Simulate abuse-control enforcement without side effects"
+    },
     "get_admin_analytics_summary": {
         "name": "get_admin_analytics_summary",
         "method": "GET",
@@ -79,6 +85,90 @@ OPERATIONS = {
         "path": "/api/v1/admin/browser-automation/posture",
         "summary": "Get sanitized browser automation operational posture"
     },
+    "get_admin_capabilities_definitions": {
+        "name": "get_admin_capabilities_definitions",
+        "method": "GET",
+        "path": "/api/v1/admin/capabilities/definitions",
+        "summary": "List governed capability definitions"
+    },
+    "get_admin_capabilities_overview": {
+        "name": "get_admin_capabilities_overview",
+        "method": "GET",
+        "path": "/api/v1/admin/capabilities/overview",
+        "summary": "Get layered capability administration overview"
+    },
+    "get_admin_capabilities_platform": {
+        "name": "get_admin_capabilities_platform",
+        "method": "GET",
+        "path": "/api/v1/admin/capabilities/platform",
+        "summary": "Get global operator capability posture"
+    },
+    "post_admin_capabilities_publications_bundleid_approve": {
+        "name": "post_admin_capabilities_publications_bundleid_approve",
+        "method": "POST",
+        "path": "/api/v1/admin/capabilities/publications/{bundleId}/approve",
+        "summary": "Approve a high-risk capability publication as a distinct actor"
+    },
+    "patch_admin_capabilities_capabilityid_assignment": {
+        "name": "patch_admin_capabilities_capabilityid_assignment",
+        "method": "PATCH",
+        "path": "/api/v1/admin/capabilities/{capabilityId}/assignment",
+        "summary": "Replace a versioned capability assignment"
+    },
+    "put_admin_capabilities_capabilityid_assignment": {
+        "name": "put_admin_capabilities_capabilityid_assignment",
+        "method": "PUT",
+        "path": "/api/v1/admin/capabilities/{capabilityId}/assignment",
+        "summary": "Create or replace a versioned capability assignment"
+    },
+    "post_admin_capabilities_capabilityid_assignment_impact": {
+        "name": "post_admin_capabilities_capabilityid_assignment_impact",
+        "method": "POST",
+        "path": "/api/v1/admin/capabilities/{capabilityId}/assignment/impact",
+        "summary": "Preview capability-change impact counts without user content"
+    },
+    "post_admin_capabilities_capabilityid_assignment_preview": {
+        "name": "post_admin_capabilities_capabilityid_assignment_preview",
+        "method": "POST",
+        "path": "/api/v1/admin/capabilities/{capabilityId}/assignment/preview",
+        "summary": "Preview a capability assignment without persisting it"
+    },
+    "post_admin_capabilities_capabilityid_assignment_publish": {
+        "name": "post_admin_capabilities_capabilityid_assignment_publish",
+        "method": "POST",
+        "path": "/api/v1/admin/capabilities/{capabilityId}/assignment/publish",
+        "summary": "Publish a capability assignment, using dual approval when required"
+    },
+    "get_admin_capabilities_capabilityid_explain": {
+        "name": "get_admin_capabilities_capabilityid_explain",
+        "method": "GET",
+        "path": "/api/v1/admin/capabilities/{capabilityId}/explain",
+        "summary": "Explain a layered capability decision"
+    },
+    "get_admin_capabilities_capabilityid_history": {
+        "name": "get_admin_capabilities_capabilityid_history",
+        "method": "GET",
+        "path": "/api/v1/admin/capabilities/{capabilityId}/history",
+        "summary": "Get capability assignment history"
+    },
+    "get_admin_capability_flags": {
+        "name": "get_admin_capability_flags",
+        "method": "GET",
+        "path": "/api/v1/admin/capability-flags",
+        "summary": "Get organization capability flag configuration"
+    },
+    "put_admin_capability_flags_flagid": {
+        "name": "put_admin_capability_flags_flagid",
+        "method": "PUT",
+        "path": "/api/v1/admin/capability-flags/{flagId}",
+        "summary": "Replace an organization capability flag revision"
+    },
+    "get_admin_capability_flags_flagid_history": {
+        "name": "get_admin_capability_flags_flagid_history",
+        "method": "GET",
+        "path": "/api/v1/admin/capability-flags/{flagId}/history",
+        "summary": "Get capability flag revision history"
+    },
     "put_admin_chat_experience": {
         "name": "put_admin_chat_experience",
         "method": "PUT",
@@ -90,6 +180,84 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/admin/chats/cleanup-expired",
         "summary": "Physically delete expired temporary chats"
+    },
+    "get_admin_content_policy": {
+        "name": "get_admin_content_policy",
+        "method": "GET",
+        "path": "/api/v1/admin/content-policy",
+        "summary": "Get organization content policy"
+    },
+    "patch_admin_content_policy": {
+        "name": "patch_admin_content_policy",
+        "method": "PATCH",
+        "path": "/api/v1/admin/content-policy",
+        "summary": "Update organization content policy"
+    },
+    "get_admin_content_policy_approvals": {
+        "name": "get_admin_content_policy_approvals",
+        "method": "GET",
+        "path": "/api/v1/admin/content-policy/approvals",
+        "summary": "List scoped content-policy approvals"
+    },
+    "post_admin_content_policy_approvals": {
+        "name": "post_admin_content_policy_approvals",
+        "method": "POST",
+        "path": "/api/v1/admin/content-policy/approvals",
+        "summary": "Pause a run for a scoped, expiring, content-minimized approval"
+    },
+    "post_admin_content_policy_approvals_approvalid_resolve": {
+        "name": "post_admin_content_policy_approvals_approvalid_resolve",
+        "method": "POST",
+        "path": "/api/v1/admin/content-policy/approvals/{approvalId}/resolve",
+        "summary": "Resolve a scoped content-policy approval"
+    },
+    "get_admin_content_policy_decisions": {
+        "name": "get_admin_content_policy_decisions",
+        "method": "GET",
+        "path": "/api/v1/admin/content-policy/decisions",
+        "summary": "List sanitized content-policy decisions"
+    },
+    "post_admin_content_policy_output_buffer_evaluate": {
+        "name": "post_admin_content_policy_output_buffer_evaluate",
+        "method": "POST",
+        "path": "/api/v1/admin/content-policy/output-buffer/evaluate",
+        "summary": "Evaluate streamed output against rolling detectors before persist"
+    },
+    "post_admin_content_policy_rollback": {
+        "name": "post_admin_content_policy_rollback",
+        "method": "POST",
+        "path": "/api/v1/admin/content-policy/rollback",
+        "summary": "Roll back to a previous published content-policy version"
+    },
+    "post_admin_content_policy_simulate": {
+        "name": "post_admin_content_policy_simulate",
+        "method": "POST",
+        "path": "/api/v1/admin/content-policy/simulate",
+        "summary": "Simulate content policy without returning sensitive content"
+    },
+    "get_admin_content_policy_versions": {
+        "name": "get_admin_content_policy_versions",
+        "method": "GET",
+        "path": "/api/v1/admin/content-policy/versions",
+        "summary": "List immutable content-policy versions"
+    },
+    "post_admin_content_policy_versions": {
+        "name": "post_admin_content_policy_versions",
+        "method": "POST",
+        "path": "/api/v1/admin/content-policy/versions",
+        "summary": "Create an immutable content-policy draft"
+    },
+    "post_admin_content_policy_versions_versionid_dry_run": {
+        "name": "post_admin_content_policy_versions_versionid_dry_run",
+        "method": "POST",
+        "path": "/api/v1/admin/content-policy/versions/{versionId}/dry-run",
+        "summary": "Dry-run a content-policy version without returning matches"
+    },
+    "post_admin_content_policy_versions_versionid_publish": {
+        "name": "post_admin_content_policy_versions_versionid_publish",
+        "method": "POST",
+        "path": "/api/v1/admin/content-policy/versions/{versionId}/publish",
+        "summary": "Publish a staged or draft content-policy version"
     },
     "get_admin_data_connectors_posture": {
         "name": "get_admin_data_connectors_posture",
@@ -348,6 +516,72 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/admin/sso/oidc/deprovision",
         "summary": "Disable a user mapped from an OIDC issuer and subject"
+    },
+    "post_admin_table_exports": {
+        "name": "post_admin_table_exports",
+        "method": "POST",
+        "path": "/api/v1/admin/table-exports",
+        "summary": "Queue an async table export from a frozen query snapshot"
+    },
+    "get_admin_table_exports_jobid": {
+        "name": "get_admin_table_exports_jobid",
+        "method": "GET",
+        "path": "/api/v1/admin/table-exports/{jobId}",
+        "summary": "Read a table export job and expire stale artifacts"
+    },
+    "post_admin_table_exports_jobid_run": {
+        "name": "post_admin_table_exports_jobid_run",
+        "method": "POST",
+        "path": "/api/v1/admin/table-exports/{jobId}/run",
+        "summary": "Run one table-export worker tick to an expiring artifact"
+    },
+    "post_admin_table_pages": {
+        "name": "post_admin_table_pages",
+        "method": "POST",
+        "path": "/api/v1/admin/table-pages",
+        "summary": "Page an inventoried admin dataset with a signed cursor"
+    },
+    "put_admin_table_views": {
+        "name": "put_admin_table_views",
+        "method": "PUT",
+        "path": "/api/v1/admin/table-views",
+        "summary": "Persist a per-user workspace saved view"
+    },
+    "post_admin_table_views_list": {
+        "name": "post_admin_table_views_list",
+        "method": "POST",
+        "path": "/api/v1/admin/table-views/list",
+        "summary": "List server saved views with optional local-preference fallback"
+    },
+    "post_admin_trust_audit_segments": {
+        "name": "post_admin_trust_audit_segments",
+        "method": "POST",
+        "path": "/api/v1/admin/trust/audit-segments",
+        "summary": "Seal a hash-chained audit segment"
+    },
+    "post_admin_trust_break_glass": {
+        "name": "post_admin_trust_break_glass",
+        "method": "POST",
+        "path": "/api/v1/admin/trust/break-glass",
+        "summary": "Authorize time-limited break-glass without disabling mandatory controls"
+    },
+    "post_admin_trust_crypto_shred": {
+        "name": "post_admin_trust_crypto_shred",
+        "method": "POST",
+        "path": "/api/v1/admin/trust/crypto/shred",
+        "summary": "Preview crypto-shred after hold, backup, and dual-approval checks"
+    },
+    "get_admin_trust_posture": {
+        "name": "get_admin_trust_posture",
+        "method": "GET",
+        "path": "/api/v1/admin/trust/posture",
+        "summary": "Report key, residency, DLP, and ACL posture without synthetic green"
+    },
+    "post_admin_trust_siem_export": {
+        "name": "post_admin_trust_siem_export",
+        "method": "POST",
+        "path": "/api/v1/admin/trust/siem-export",
+        "summary": "Checkpoint a SIEM or WORM audit-segment export"
     },
     "get_admin_web_search": {
         "name": "get_admin_web_search",
@@ -625,6 +859,12 @@ OPERATIONS = {
         "path": "/api/v1/audit-logs.csv",
         "summary": "Export audit logs as CSV"
     },
+    "post_audit_logs_query": {
+        "name": "post_audit_logs_query",
+        "method": "POST",
+        "path": "/api/v1/audit-logs/query",
+        "summary": "Query audit logs with server-driven keyset pagination"
+    },
     "post_auth_ldap_login": {
         "name": "post_auth_ldap_login",
         "method": "POST",
@@ -822,6 +1062,18 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/browser-automation-tasks/{jobId}/renew-lease",
         "summary": "Renew an active browser automation task lease"
+    },
+    "post_capabilities_effective": {
+        "name": "post_capabilities_effective",
+        "method": "POST",
+        "path": "/api/v1/capabilities/effective",
+        "summary": "Resolve capabilities for the authenticated subject"
+    },
+    "get_capability_flags_effective": {
+        "name": "get_capability_flags_effective",
+        "method": "GET",
+        "path": "/api/v1/capability-flags/effective",
+        "summary": "List the caller's effective organization capability flags"
     },
     "get_channels": {
         "name": "get_channels",
@@ -1111,6 +1363,12 @@ OPERATIONS = {
         "path": "/api/v1/chats/{chatId}/comments",
         "summary": "Create a chat comment"
     },
+    "get_chats_chatid_context_inspection": {
+        "name": "get_chats_chatid_context_inspection",
+        "method": "GET",
+        "path": "/api/v1/chats/{chatId}/context-inspection",
+        "summary": "Inspect privacy-safe context provenance for a chat run"
+    },
     "get_chats_chatid_delete_preview": {
         "name": "get_chats_chatid_delete_preview",
         "method": "GET",
@@ -1158,6 +1416,18 @@ OPERATIONS = {
         "method": "GET",
         "path": "/api/v1/chats/{chatId}/messages",
         "summary": "List messages for a chat"
+    },
+    "get_chats_chatid_messages_page": {
+        "name": "get_chats_chatid_messages_page",
+        "method": "GET",
+        "path": "/api/v1/chats/{chatId}/messages/page",
+        "summary": "Page upward through the selected chat branch"
+    },
+    "get_chats_chatid_messages_search": {
+        "name": "get_chats_chatid_messages_search",
+        "method": "GET",
+        "path": "/api/v1/chats/{chatId}/messages/search",
+        "summary": "Search persisted messages within one authorized chat"
     },
     "delete_chats_chatid_messages_messageid": {
         "name": "delete_chats_chatid_messages_messageid",
@@ -1417,6 +1687,12 @@ OPERATIONS = {
         "path": "/api/v1/collaboration/channels/{channelId}/read",
         "summary": "Mark a channel as read"
     },
+    "post_collaboration_folder_items_batch": {
+        "name": "post_collaboration_folder_items_batch",
+        "method": "POST",
+        "path": "/api/v1/collaboration/folder-items/batch",
+        "summary": "List authorized items for a bounded folder batch"
+    },
     "get_collaboration_folders": {
         "name": "get_collaboration_folders",
         "method": "GET",
@@ -1476,6 +1752,60 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/collaboration/folders/{folderId}/shares",
         "summary": "Share a folder"
+    },
+    "post_compute_artifacts_intake": {
+        "name": "post_compute_artifacts_intake",
+        "method": "POST",
+        "path": "/api/v1/compute/artifacts/intake",
+        "summary": "Admit a compute artifact after path, size, scan, and DLP checks"
+    },
+    "post_compute_artifacts_lifecycle": {
+        "name": "post_compute_artifacts_lifecycle",
+        "method": "POST",
+        "path": "/api/v1/compute/artifacts/lifecycle",
+        "summary": "Authorize artifact quota, hold, export, delete, shred, or cleanup"
+    },
+    "post_compute_artifacts_preview": {
+        "name": "post_compute_artifacts_preview",
+        "method": "POST",
+        "path": "/api/v1/compute/artifacts/preview",
+        "summary": "Authorize a hardened or sandboxed artifact preview and download"
+    },
+    "post_compute_artifacts_provenance": {
+        "name": "post_compute_artifacts_provenance",
+        "method": "POST",
+        "path": "/api/v1/compute/artifacts/provenance",
+        "summary": "Record runtime, code, input, output, and policy provenance"
+    },
+    "post_compute_artifacts_versions": {
+        "name": "post_compute_artifacts_versions",
+        "method": "POST",
+        "path": "/api/v1/compute/artifacts/versions",
+        "summary": "Create an immutable artifact version instead of overwriting"
+    },
+    "post_compute_jobs": {
+        "name": "post_compute_jobs",
+        "method": "POST",
+        "path": "/api/v1/compute/jobs",
+        "summary": "Queue an isolated compute job or fail closed when uninstalled"
+    },
+    "post_compute_operations_posture": {
+        "name": "post_compute_operations_posture",
+        "method": "POST",
+        "path": "/api/v1/compute/operations/posture",
+        "summary": "Report compute worker, lease, image, and cleanup posture"
+    },
+    "post_compute_runtime_images_authorize": {
+        "name": "post_compute_runtime_images_authorize",
+        "method": "POST",
+        "path": "/api/v1/compute/runtime-images/authorize",
+        "summary": "Authorize a signed digest-pinned runtime image and package policy"
+    },
+    "post_compute_sandbox_posture": {
+        "name": "post_compute_sandbox_posture",
+        "method": "POST",
+        "path": "/api/v1/compute/sandbox/posture",
+        "summary": "Evaluate required Kata guest sandbox posture before claim"
     },
     "get_data_connectors": {
         "name": "get_data_connectors",
@@ -1573,6 +1903,12 @@ OPERATIONS = {
         "path": "/api/v1/embeddings",
         "summary": "Create OpenAI-compatible embeddings"
     },
+    "post_eval_cases_from_message_feedback": {
+        "name": "post_eval_cases_from_message_feedback",
+        "method": "POST",
+        "path": "/api/v1/eval-cases/from-message-feedback",
+        "summary": "Create an eval case from negative message feedback"
+    },
     "post_eval_run_results_resultid_rating": {
         "name": "post_eval_run_results_resultid_rating",
         "method": "POST",
@@ -1596,6 +1932,12 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/eval-suites",
         "summary": "Create suite"
+    },
+    "get_eval_suites_suiteid_reasoning_comparison": {
+        "name": "get_eval_suites_suiteid_reasoning_comparison",
+        "method": "GET",
+        "path": "/api/v1/eval-suites/{suiteId}/reasoning-comparison",
+        "summary": "Compare reasoning-policy eval runs"
     },
     "post_eval_suites_suiteid_runs": {
         "name": "post_eval_suites_suiteid_runs",
@@ -1704,6 +2046,12 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/files/{fileId}/extraction/retry",
         "summary": "Retry authorized file text extraction"
+    },
+    "post_files_fileid_lifecycle_retry": {
+        "name": "post_files_fileid_lifecycle_retry",
+        "method": "POST",
+        "path": "/api/v1/files/{fileId}/lifecycle/retry",
+        "summary": "Retry an authorized failed file lifecycle"
     },
     "get_files_fileid_shares": {
         "name": "get_files_fileid_shares",
@@ -1891,6 +2239,18 @@ OPERATIONS = {
         "path": "/api/v1/images/generations",
         "summary": "Generate governed image artifacts"
     },
+    "post_images_jobs": {
+        "name": "post_images_jobs",
+        "method": "POST",
+        "path": "/api/v1/images/jobs",
+        "summary": "Create a file-ref image generation, edit, or variation job"
+    },
+    "post_images_jobs_jobid_cancel": {
+        "name": "post_images_jobs_jobid_cancel",
+        "method": "POST",
+        "path": "/api/v1/images/jobs/{jobId}/cancel",
+        "summary": "Cancel a durable image job"
+    },
     "get_jobs": {
         "name": "get_jobs",
         "method": "GET",
@@ -1957,6 +2317,12 @@ OPERATIONS = {
         "path": "/api/v1/knowledge-bases/{knowledgeBaseId}/shares",
         "summary": "Share a knowledge base"
     },
+    "delete_knowledge_bases_knowledgebaseid_shares_grantid": {
+        "name": "delete_knowledge_bases_knowledgebaseid_shares_grantid",
+        "method": "DELETE",
+        "path": "/api/v1/knowledge-bases/{knowledgeBaseId}/shares/{grantId}",
+        "summary": "Revoke a knowledge-base share"
+    },
     "get_knowledge_bases_knowledgebaseid_sources": {
         "name": "get_knowledge_bases_knowledgebaseid_sources",
         "method": "GET",
@@ -1998,6 +2364,30 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/knowledge-bases/{knowledgeBaseId}/uploads",
         "summary": "Create a presigned knowledge source upload"
+    },
+    "post_knowledge_acl_freshness": {
+        "name": "post_knowledge_acl_freshness",
+        "method": "POST",
+        "path": "/api/v1/knowledge/acl/freshness",
+        "summary": "Evaluate ACL freshness and fail closed for restricted sources"
+    },
+    "post_knowledge_acl_prefilter": {
+        "name": "post_knowledge_acl_prefilter",
+        "method": "POST",
+        "path": "/api/v1/knowledge/acl/prefilter",
+        "summary": "Resolve allowed knowledge document IDs before rank"
+    },
+    "get_knowledge_agentic": {
+        "name": "get_knowledge_agentic",
+        "method": "GET",
+        "path": "/api/v1/knowledge/agentic",
+        "summary": "Get whether agentic RAG is available for this organization"
+    },
+    "get_knowledge_ingest_readiness": {
+        "name": "get_knowledge_ingest_readiness",
+        "method": "GET",
+        "path": "/api/v1/knowledge/ingest-readiness",
+        "summary": "Whether this org can upload and embed knowledge sources"
     },
     "get_me": {
         "name": "get_me",
@@ -2059,11 +2449,29 @@ OPERATIONS = {
         "path": "/api/v1/models",
         "summary": "List authorized provider models"
     },
+    "post_models_compatibility_preview": {
+        "name": "post_models_compatibility_preview",
+        "method": "POST",
+        "path": "/api/v1/models/compatibility/preview",
+        "summary": "Preview whether a model satisfies turn requirements without executing"
+    },
     "patch_models_modelid_capabilities": {
         "name": "patch_models_modelid_capabilities",
         "method": "PATCH",
         "path": "/api/v1/models/{modelId}/capabilities",
         "summary": "Override provider-model capabilities"
+    },
+    "patch_models_modelid_capability_overrides": {
+        "name": "patch_models_modelid_capability_overrides",
+        "method": "PATCH",
+        "path": "/api/v1/models/{modelId}/capability-overrides",
+        "summary": "Set an expiring administrator capability override"
+    },
+    "get_models_modelid_capability_report": {
+        "name": "get_models_modelid_capability_report",
+        "method": "GET",
+        "path": "/api/v1/models/{modelId}/capability-report",
+        "summary": "Get an authorized provider-model capability report"
     },
     "patch_models_modelid_enabled": {
         "name": "patch_models_modelid_enabled",
@@ -2076,6 +2484,30 @@ OPERATIONS = {
         "method": "PATCH",
         "path": "/api/v1/models/{modelId}/pricing",
         "summary": "Update provider-model pricing"
+    },
+    "post_models_modelid_probe": {
+        "name": "post_models_modelid_probe",
+        "method": "POST",
+        "path": "/api/v1/models/{modelId}/probe",
+        "summary": "Probe advertised model capabilities with synthetic inputs"
+    },
+    "get_models_modelid_shares": {
+        "name": "get_models_modelid_shares",
+        "method": "GET",
+        "path": "/api/v1/models/{modelId}/shares",
+        "summary": "List model use grants"
+    },
+    "post_models_modelid_shares": {
+        "name": "post_models_modelid_shares",
+        "method": "POST",
+        "path": "/api/v1/models/{modelId}/shares",
+        "summary": "Grant model use to a principal"
+    },
+    "delete_models_modelid_shares_grantid": {
+        "name": "delete_models_modelid_shares_grantid",
+        "method": "DELETE",
+        "path": "/api/v1/models/{modelId}/shares/{grantId}",
+        "summary": "Revoke a model use grant"
     },
     "get_notes": {
         "name": "get_notes",
@@ -2227,6 +2659,12 @@ OPERATIONS = {
         "path": "/api/v1/prompt-templates/{promptTemplateId}/shares",
         "summary": "Share template"
     },
+    "get_provider_kinds": {
+        "name": "get_provider_kinds",
+        "method": "GET",
+        "path": "/api/v1/provider-kinds",
+        "summary": "List installed provider kinds and safe setup metadata"
+    },
     "get_providers": {
         "name": "get_providers",
         "method": "GET",
@@ -2251,6 +2689,12 @@ OPERATIONS = {
         "path": "/api/v1/providers/{providerId}",
         "summary": "Update a provider connection"
     },
+    "get_providers_providerid_capability_report": {
+        "name": "get_providers_providerid_capability_report",
+        "method": "GET",
+        "path": "/api/v1/providers/{providerId}/capability-report",
+        "summary": "Get an authorized provider capability report"
+    },
     "delete_providers_providerid_ollama_models_model": {
         "name": "delete_providers_providerid_ollama_models_model",
         "method": "DELETE",
@@ -2268,6 +2712,18 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/providers/{providerId}/sync",
         "summary": "Discover and synchronize provider models"
+    },
+    "get_providers_providerid_sync_jobs_jobid": {
+        "name": "get_providers_providerid_sync_jobs_jobid",
+        "method": "GET",
+        "path": "/api/v1/providers/{providerId}/sync-jobs/{jobId}",
+        "summary": "Read a provider catalog sync job"
+    },
+    "post_providers_providerid_sync_jobs_jobid_run": {
+        "name": "post_providers_providerid_sync_jobs_jobid_run",
+        "method": "POST",
+        "path": "/api/v1/providers/{providerId}/sync-jobs/{jobId}/run",
+        "summary": "Run one provider catalog sync job tick"
     },
     "post_providers_providerid_verify": {
         "name": "post_providers_providerid_verify",
@@ -2305,6 +2761,30 @@ OPERATIONS = {
         "path": "/api/v1/quotas/{quotaBucketId}",
         "summary": "Update a quota bucket"
     },
+    "post_realtime_adapters_preview": {
+        "name": "post_realtime_adapters_preview",
+        "method": "POST",
+        "path": "/api/v1/realtime/adapters/preview",
+        "summary": "Preview native or pipeline realtime adapter selection"
+    },
+    "post_realtime_sessions": {
+        "name": "post_realtime_sessions",
+        "method": "POST",
+        "path": "/api/v1/realtime/sessions",
+        "summary": "Create an authenticated realtime voice session or fail closed"
+    },
+    "post_run_groups": {
+        "name": "post_run_groups",
+        "method": "POST",
+        "path": "/api/v1/run-groups",
+        "summary": "Preflight a multi-model compare session before any child starts"
+    },
+    "post_run_groups_synthesis_preview": {
+        "name": "post_run_groups_synthesis_preview",
+        "method": "POST",
+        "path": "/api/v1/run-groups/synthesis/preview",
+        "summary": "Preview an independently authorized compare synthesis"
+    },
     "post_runs": {
         "name": "post_runs",
         "method": "POST",
@@ -2315,7 +2795,7 @@ OPERATIONS = {
         "name": "post_runs_context_preview",
         "method": "POST",
         "path": "/api/v1/runs/context-preview",
-        "summary": "Inspect the exact governed context for a proposed run"
+        "summary": "Inspect a privacy-safe context summary for a proposed run"
     },
     "get_runs_runid": {
         "name": "get_runs_runid",
@@ -2689,11 +3169,23 @@ OPERATIONS = {
         "path": "/api/v1/usage/summary",
         "summary": "Summarize usage"
     },
+    "get_usage_taxonomy": {
+        "name": "get_usage_taxonomy",
+        "method": "GET",
+        "path": "/api/v1/usage/taxonomy",
+        "summary": "List canonical usage metric definitions"
+    },
     "get_users": {
         "name": "get_users",
         "method": "GET",
         "path": "/api/v1/users",
         "summary": "List organization users"
+    },
+    "post_users_query": {
+        "name": "post_users_query",
+        "method": "POST",
+        "path": "/api/v1/users/query",
+        "summary": "Query organization users with server-driven keyset pagination"
     },
     "post_users_userid_disable": {
         "name": "post_users_userid_disable",
@@ -2904,5 +3396,23 @@ OPERATIONS = {
         "method": "GET",
         "path": "/api/v1/workspaces/{workspaceId}/export",
         "summary": "Export a sanitized workspace inventory"
+    },
+    "get_workspaces_workspaceid_members": {
+        "name": "get_workspaces_workspaceid_members",
+        "method": "GET",
+        "path": "/api/v1/workspaces/{workspaceId}/members",
+        "summary": "List workspace membership grants"
+    },
+    "post_workspaces_workspaceid_members": {
+        "name": "post_workspaces_workspaceid_members",
+        "method": "POST",
+        "path": "/api/v1/workspaces/{workspaceId}/members",
+        "summary": "Add a workspace member"
+    },
+    "delete_workspaces_workspaceid_members_grantid": {
+        "name": "delete_workspaces_workspaceid_members_grantid",
+        "method": "DELETE",
+        "path": "/api/v1/workspaces/{workspaceId}/members/{grantId}",
+        "summary": "Remove a workspace member"
     }
 }

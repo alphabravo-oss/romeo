@@ -1,10 +1,16 @@
 import { z } from "zod";
 import { platformEnvShape } from "./platform-env-shape";
-import { validateToolDispatchPayloadStore } from "./env-validation";
+import {
+  validateProductionEnvironment,
+  validateToolDispatchPayloadStore,
+} from "./env-validation";
 
 export const envSchema = z
   .object({
     ...platformEnvShape,
+    ROMEO_ENV: z
+      .enum(["development", "test", "production"])
+      .default("development"),
     POSTGRES_POOL_MAX: z.coerce.number().int().min(1).max(1_000).default(10),
     REQUEST_BODY_MAX_BYTES: z.coerce
       .number()
@@ -164,6 +170,7 @@ export const envSchema = z
     EDGE_TRUSTED_PROXY_MODE: z
       .enum(["direct", "trusted_proxy"])
       .default("direct"),
+    EDGE_TRUSTED_PROXY_HOPS: z.coerce.number().int().min(1).max(10).default(1),
     EDGE_WAF_MODE: z.enum(["disabled", "monitor", "block"]).default("disabled"),
     EDGE_ALLOWED_ORIGINS: z.string().default(""),
     EDGE_HSTS_ENABLED: z
@@ -296,7 +303,7 @@ export const envSchema = z
     PDFTOTEXT_PATH: z.string().min(1).default("pdftotext"),
     FILE_OCR_DRIVER: z
       .enum(["disabled", "local-tesseract"])
-      .default("local-tesseract"),
+      .default("disabled"),
     FILE_OCR_TESSERACT_PATH: z.string().min(1).default("tesseract"),
     FILE_OCR_PDFTOPPM_PATH: z.string().min(1).default("pdftoppm"),
     FILE_OCR_LANGUAGE: z
@@ -477,22 +484,14 @@ export const envSchema = z
       .transform((value) => value === "true"),
     DEV_SEEDED_LOGIN: z
       .enum(["true", "false"])
-      .default("true")
+      .default("false")
       .transform((value) => value === "true"),
   })
-  .superRefine(validateToolDispatchPayloadStore);
+  .superRefine(validateToolDispatchPayloadStore)
+  .superRefine(validateProductionEnvironment);
 
 export type RomeoEnv = z.infer<typeof envSchema>;
 
 export function readEnv(input: NodeJS.ProcessEnv = process.env): RomeoEnv {
   return envSchema.parse(input);
 }
-
-export const featureFlags = {
-  milestone1Api: true,
-  devSeededLogin: true,
-  toolApprovals: false,
-  rag: false,
-  voice: false,
-  webhooks: false,
-} as const;

@@ -195,10 +195,14 @@ export async function updateAgent(input: {
   return response.data.data;
 }
 
-export async function publishAgent(agentId: string): Promise<AgentVersion> {
+export async function publishAgent(input: {
+  agentId: string;
+  channel: "candidate" | "production";
+}): Promise<AgentVersion> {
   configureBrowserApiClients();
   const response = await managedModelsPublish({
-    path: { agentId },
+    path: { agentId: input.agentId },
+    body: { channel: input.channel },
     throwOnError: true,
   });
   return response.data.data;

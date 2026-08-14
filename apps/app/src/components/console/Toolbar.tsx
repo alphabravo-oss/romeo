@@ -1,4 +1,4 @@
-import { Button } from "@romeo/ui";
+import { Button, Input } from "@romeo/ui";
 import Plus from "lucide-react/dist/esm/icons/plus.mjs";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
 import SearchIcon from "lucide-react/dist/esm/icons/search.mjs";
@@ -28,21 +28,22 @@ export function Toolbar({
   searchValue?: string;
 }): ReactNode {
   const hasSearch = onSearchChange !== undefined;
-  if (!hasSearch && children === undefined && actions === undefined) return null;
+  if (!hasSearch && children === undefined && actions === undefined)
+    return null;
   return (
     <div className="cs-toolbar">
       <div className="cs-toolbar__filters">
         {hasSearch ? (
-          <label className="cs-search">
+          <div className="cs-search">
             <SearchIcon aria-hidden="true" size={15} />
-            <input
+            <Input
               aria-label={searchLabel}
               onChange={(event) => onSearchChange(event.currentTarget.value)}
               placeholder={searchPlaceholder}
               type="search"
               value={searchValue ?? ""}
             />
-          </label>
+          </div>
         ) : null}
         {children}
       </div>
@@ -86,16 +87,17 @@ export function RefreshButton({
   refreshing?: boolean;
 }): ReactNode {
   return (
-    <button
+    <Button
       aria-label={label}
       className="cs-icon-button"
       disabled={refreshing}
       onClick={onRefresh}
       title={label}
       type="button"
+      variant="ghost"
     >
       <RefreshCw aria-hidden="true" size={15} />
-    </button>
+    </Button>
   );
 }
 
@@ -159,7 +161,12 @@ export function SaveBar({
     <div className="cs-savebar" role="status">
       <span className="cs-savebar__summary">{summary}</span>
       <div className="cs-savebar__actions">
-        <Button disabled={busy} onClick={onCancel} type="button" variant="ghost">
+        <Button
+          disabled={busy}
+          onClick={onCancel}
+          type="button"
+          variant="ghost"
+        >
           {cancelLabel}
         </Button>
         <Button

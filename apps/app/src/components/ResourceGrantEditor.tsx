@@ -1,11 +1,16 @@
 import { Button, Select } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
-import { listShareTargets, type ShareTarget } from "../features";
+import { shareTargetsQueryOptions, type ShareTarget } from "../features";
 import type { AccessGrant, SharePrincipal } from "../features/access/api";
+import {
+  grantResourceMutationOptions,
+  revokeResourceGrantMutationOptions,
+} from "../features/access/mutation-options";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 export function ResourceGrantEditor({
   grants,
@@ -18,21 +23,22 @@ export function ResourceGrantEditor({
   onGrant: (share: SharePrincipal) => Promise<unknown>;
   onRevoke: (grantId: string) => Promise<unknown>;
   permissionOptions: Array<"read" | "write" | "use" | "run">;
-  queryKey: unknown[];
+  queryKey: readonly unknown[];
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const [targetKey, setTargetKey] = useState("");
-  const targetsQuery = useQuery({
-    queryKey: ["shareTargets", "access-editor"],
-    queryFn: () => listShareTargets(),
-  });
+  const targetsQuery = useQuery(
+    shareTargetsQueryOptions({ context: "access-editor" }),
+  );
   const targets = targetsQuery.data ?? [];
-  const grantMutation = useMutation({ mutationFn: onGrant });
-  const revokeMutation = useMutation({ mutationFn: onRevoke });
-  const selected = useMemo(
-    () => targets.find((target) => shareTargetKey(target) === targetKey),
-    [targetKey, targets],
+  const grantMutation = useMutation(
+    grantResourceMutationOptions({ mutationFn: onGrant, queryKey }),
+  );
+  const revokeMutation = useMutation(
+    revokeResourceGrantMutationOptions({ mutationFn: onRevoke, queryKey }),
+  );
+  const selected = targets.find(
+    (target) => shareTargetKey(target) === targetKey,
   );
 
   async function handleGrant() {
@@ -43,32 +49,24 @@ export function ResourceGrantEditor({
         principalId: selected.principalId,
         permissions: permissionOptions,
       });
-      await queryClient.invalidateQueries({ queryKey });
       toast(t("accessGrantSaved"), "success");
     } catch (caught) {
-      toast(
-        caught instanceof Error ? caught.message : t("accessGrantFailed"),
-        "error",
-      );
+      toast(safeUserErrorMessage(caught, t("accessGrantFailed")), "error");
     }
   }
 
   async function handleRevoke(grantId: string) {
     try {
       await revokeMutation.mutateAsync(grantId);
-      await queryClient.invalidateQueries({ queryKey });
       toast(t("accessGrantRevoked"), "success");
     } catch (caught) {
-      toast(
-        caught instanceof Error ? caught.message : t("accessRevokeFailed"),
-        "error",
-      );
+      toast(safeUserErrorMessage(caught, t("accessRevokeFailed")), "error");
     }
   }
 
   return (
     <div className="grid gap-3">
-      <div className="flex flex-wrap items-end gap-2">
+      <div className="cs-fields flex flex-wrap items-end gap-2">
         <div className="min-w-56 flex-1">
           <Select
             name="access-principal"
@@ -89,21 +87,26 @@ export function ResourceGrantEditor({
           {t("accessGrant")}
         </Button>
       </div>
+      {/* Grants are an inventory, so they get the same bordered rows every
+          other list in the console has — not bare text lines with a link. */}
       {grants.length === 0 ? (
         <p className="text-sm text-muted">{t("accessNoGrants")}</p>
       ) : (
-        <ul className="grid gap-2">
+        <ul className="rm-grant-list">
           {grants.map((grant) => (
-            <li
-              className="flex items-center justify-between gap-2 text-sm"
-              key={grant.id}
-            >
-              <span>
-                {grant.principalType} · {grant.principalId} · {grant.permission}
+            <li className="rm-grant-row" key={grant.id}>
+              <span className="rm-grant-row__copy">
+                <span className="rm-grant-row__principal" translate="no">
+                  {grant.principalId}
+                </span>
+                <span className="rm-grant-row__meta">
+                  {grant.principalType} · {grant.permission}
+                </span>
               </span>
               <Button
                 disabled={revokeMutation.isPending}
                 onClick={() => void handleRevoke(grant.id)}
+                size="sm"
                 type="button"
                 variant="ghost"
               >

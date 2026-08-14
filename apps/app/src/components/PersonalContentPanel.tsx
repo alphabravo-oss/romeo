@@ -1,17 +1,17 @@
 import { Input, Textarea, NativeSelect, Button } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
 
 import {
-  createWorkspaceContent,
-  deleteWorkspaceContent,
-  listWorkspaceContentPage,
-  updateWorkspaceContent,
+  deleteWorkspaceContentMutationOptions,
+  saveWorkspaceContentMutationOptions,
+  workspaceContentPageQueryOptions,
   type ContentKind,
   type WorkspaceContentItem,
 } from "../features/workspace-content";
 import { toast } from "../lib/toast";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { useLocale } from "../lib/i18n";
 import { AddButton, Section } from "./console";
 import { CatalogPager } from "./CatalogPager";
@@ -24,7 +24,6 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
   const pageSize = 25;
   const { t } = useLocale();
   const { workspaceId } = useWorkspace();
-  const queryClient = useQueryClient();
   const { ask, dialog } = useConfirm();
   const [editing, setEditing] = useState<WorkspaceContentItem | "new" | null>(
     null,
@@ -37,64 +36,85 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
   const [expiresAt, setExpiresAt] = useState("");
   const [catalogQuery, setCatalogQuery] = useState("");
   const [page, setPage] = useState(0);
-  const contentQuery = useQuery({
-    queryKey: [kind, workspaceId, catalogQuery.trim(), page],
-    queryFn: () =>
-      listWorkspaceContentPage(kind, workspaceId!, {
-        limit: pageSize,
-        offset: page * pageSize,
-        query: catalogQuery,
-      }),
-    enabled: workspaceId !== undefined,
-  });
+  const [saveError, setSaveError] = useState<string>();
+  const contentQuery = useQuery(
+    workspaceContentPageQueryOptions({
+      enabled: true,
+      kind,
+      page,
+      pageSize,
+      query: catalogQuery,
+      workspaceId,
+    }),
+  );
   const catalog = {
     items: contentQuery.data?.items ?? [],
     page,
     total: contentQuery.data?.total ?? 0,
   };
-  const save = useMutation({
-    mutationFn: async () => {
+  const save = useMutation(saveWorkspaceContentMutationOptions());
+  const deleteMutation = useMutation(deleteWorkspaceContentMutationOptions());
+  const label = kind === "memories" ? t("memory") : t("note");
+
+  async function handleSave() {
+    setSaveError(undefined);
+    try {
       if (workspaceId === undefined)
         throw new Error(t("settingsNoWorkspaceSelected"));
-      return editing === "new"
-        ? createWorkspaceContent(kind, {
-            workspaceId,
-            title,
-            body,
-            scope,
-            enabled,
-            pinned,
-            ...(expiresAt === ""
-              ? {}
-              : { expiresAt: new Date(expiresAt).toISOString() }),
-          })
-        : updateWorkspaceContent(kind, editing!.id, {
-            title,
-            body,
-            scope,
-            enabled,
-            pinned,
-            expiresAt:
-              expiresAt === "" ? null : new Date(expiresAt).toISOString(),
-          });
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: [kind, workspaceId] });
-      setEditing(null);
-      toast(
-        `${kind === "memories" ? t("memory") : t("note")} ${t("saved")}`,
-        "success",
+      await save.mutateAsync(
+        editing === "new"
+          ? {
+              operation: "create",
+              kind,
+              workspaceId,
+              input: {
+                workspaceId,
+                title,
+                body,
+                scope,
+                enabled,
+                pinned,
+                ...(expiresAt === ""
+                  ? {}
+                  : { expiresAt: new Date(expiresAt).toISOString() }),
+              },
+            }
+          : {
+              operation: "update",
+              kind,
+              workspaceId,
+              contentId: editing!.id,
+              input: {
+                title,
+                body,
+                scope,
+                enabled,
+                pinned,
+                expiresAt:
+                  expiresAt === "" ? null : new Date(expiresAt).toISOString(),
+              },
+            },
       );
-    },
-    onError: (caught) => {
-      toast(
-        caught instanceof Error ? caught.message : `${label} ${t("failed")}`,
-        "error",
-      );
-    },
-  });
+      closeEditor();
+      toast(`${label} ${t("saved")}`, "success");
+    } catch (caught) {
+      const message = safeUserErrorMessage(caught, `${label} ${t("failed")}`);
+      setSaveError(message);
+      toast(message, "error");
+    } finally {
+      save.reset();
+    }
+  }
+
+  function closeEditor() {
+    setEditing(null);
+    setTitle("");
+    setBody("");
+    setExpiresAt("");
+  }
 
   function open(item: WorkspaceContentItem | "new") {
+    setSaveError(undefined);
     setEditing(item);
     setTitle(item === "new" ? "" : item.title);
     setBody(item === "new" ? "" : item.body);
@@ -112,15 +132,19 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
     item: WorkspaceContentItem,
     update: { enabled?: boolean; pinned?: boolean },
   ) {
+    if (workspaceId === undefined) return;
     try {
-      await updateWorkspaceContent(kind, item.id, update);
-      await queryClient.invalidateQueries({ queryKey: [kind, workspaceId] });
+      await save.mutateAsync({
+        operation: "update",
+        kind,
+        workspaceId,
+        contentId: item.id,
+        input: update,
+      });
     } catch (caught) {
-      await queryClient.invalidateQueries({ queryKey: [kind, workspaceId] });
-      toast(
-        caught instanceof Error ? caught.message : `${label} ${t("failed")}`,
-        "error",
-      );
+      toast(safeUserErrorMessage(caught, `${label} ${t("failed")}`), "error");
+    } finally {
+      save.reset();
     }
   }
 
@@ -134,17 +158,19 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
     )
       return;
     try {
-      await deleteWorkspaceContent(kind, item.id);
-      await queryClient.invalidateQueries({ queryKey: [kind, workspaceId] });
+      if (workspaceId === undefined) return;
+      await deleteMutation.mutateAsync({
+        kind,
+        workspaceId,
+        contentId: item.id,
+      });
     } catch (caught) {
-      toast(
-        caught instanceof Error ? caught.message : `${label} ${t("failed")}`,
-        "error",
-      );
+      toast(safeUserErrorMessage(caught, `${label} ${t("failed")}`), "error");
+    } finally {
+      deleteMutation.reset();
     }
   }
 
-  const label = kind === "memories" ? t("memory") : t("note");
   return (
     <Section
       actions={
@@ -218,13 +244,13 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
               ? t("editMemory")
               : t("editNote")
         }
-        onClose={() => setEditing(null)}
+        onClose={closeEditor}
       >
         <form
           className="grid gap-3"
           onSubmit={(event) => {
             event.preventDefault();
-            save.mutate();
+            void handleSave();
           }}
         >
           <label className="rm-field-name" htmlFor="content-title">
@@ -293,8 +319,10 @@ export function PersonalContentPanel({ kind }: { kind: ContentKind }) {
             type="datetime-local"
             value={expiresAt}
           />
-          {save.error ? (
-            <div className="rm-composer-error">{save.error.message}</div>
+          {saveError ? (
+            <div className="rm-composer-error" role="alert">
+              {saveError}
+            </div>
           ) : null}
           <Button variant="primary" disabled={save.isPending} type="submit">
             {t("save")}

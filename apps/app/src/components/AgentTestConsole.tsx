@@ -7,7 +7,9 @@ import { useState } from "react";
 import { createChat } from "../features";
 import type { Agent } from "../features/managed-models";
 import { startRun, streamRunEvents } from "../features/runs";
+import { refreshAgentTestRunQueries } from "../features/runs/mutation-options";
 import { useLocale } from "../lib/i18n";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 interface AgentTestConsoleProps {
   activeAgent: Agent | undefined;
@@ -67,28 +69,14 @@ export function AgentTestConsole({
           if (event.type === "run.failed") setStatus("failed");
           if (event.type === "run.completed") setStatus("completed");
         }
-        await refreshRunData(workspaceId);
+        await refreshAgentTestRunQueries(queryClient, workspaceId);
       } catch (caught) {
-        setError(
-          caught instanceof Error ? caught.message : t("agentUnableRunTest"),
-        );
+        setError(safeUserErrorMessage(caught, t("agentUnableRunTest")));
         setStatus("failed");
       }
     },
   });
   const promptValue = useStore(form.store, (state) => state.values.prompt);
-
-  async function refreshRunData(currentWorkspaceId: string) {
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: ["chats", currentWorkspaceId],
-      }),
-      queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
-      queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-      queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-      queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-    ]);
-  }
 
   function appendDelta(delta: string) {
     setResult((current) => current + delta);

@@ -1,7 +1,13 @@
 import OpenAI from "openai";
 import { Ollama } from "ollama";
 
-import type { ProviderInstance } from "../types";
+import { normalizeProviderError } from "../error-normalization";
+import type {
+  ProviderInstance,
+  ProviderKind,
+  ProviderNormalizedError,
+  ProviderRequestOperation,
+} from "../types";
 
 export function createOpenAiClient(
   provider: Pick<ProviderInstance, "baseUrl">,
@@ -41,47 +47,39 @@ export function createOllamaClient(
   });
 }
 
-export function normalizeProviderSdkError(caught: unknown, provider: string) {
-  if (caught instanceof Error && caught.name === "AbortError") return caught;
-  if (typeof caught === "object" && caught !== null && "errorCode" in caught)
-    return caught;
-  const status =
-    typeof caught === "object" &&
-    caught !== null &&
-    "status" in caught &&
-    typeof caught.status === "number"
-      ? caught.status
-      : undefined;
-  return {
-    errorCode:
-      status === undefined ? "provider_stream_error" : "provider_http_error",
-    errorType:
-      status === undefined
-        ? `${provider}_sdk_error`
-        : `${provider}_http_${status}`,
-  };
+export function normalizeProviderSdkError(
+  caught: unknown,
+  provider: ProviderKind,
+  operation: ProviderRequestOperation = "chat",
+): ProviderNormalizedError {
+  return normalizeProviderError(provider, caught, operation);
 }
 
 export class ProviderSdkRequestError extends Error {
   readonly status: number | undefined;
+  readonly category: ProviderNormalizedError["category"];
+  readonly code: ProviderNormalizedError["code"];
+  readonly errorCode: ProviderNormalizedError["errorCode"];
+  readonly errorType: ProviderNormalizedError["errorType"];
+  readonly operation: ProviderRequestOperation;
+  readonly retryable: boolean;
 
   constructor(
-    readonly provider: string,
+    readonly provider: ProviderKind,
     caught: unknown,
+    operation: ProviderRequestOperation = "chat",
   ) {
-    super(`${provider} provider request failed.`, { cause: caught });
+    const normalized = normalizeProviderError(provider, caught, operation);
+    super(normalized.safeMessage);
     this.name = "ProviderSdkRequestError";
-    this.status = providerSdkStatus(caught);
+    this.category = normalized.category;
+    this.code = normalized.code;
+    this.errorCode = normalized.errorCode;
+    this.errorType = normalized.errorType;
+    this.operation = normalized.operation;
+    this.retryable = normalized.retryable;
+    this.status = normalized.status;
   }
-}
-
-function providerSdkStatus(caught: unknown): number | undefined {
-  return typeof caught === "object" &&
-    caught !== null &&
-    "status" in caught &&
-    typeof caught.status === "number"
-    ? caught.status
-    : undefined;
 }
 
 function withRequestControls(

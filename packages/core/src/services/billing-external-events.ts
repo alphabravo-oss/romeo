@@ -6,6 +6,7 @@ import type { BillingLifecycleInput } from "./billing-lifecycle";
 import { ensureSystemAuditActor } from "./system-audit-actor";
 
 export interface ExternalBillingEventInput {
+  eventId: string;
   amountCents?: number | undefined;
   currency?: string | undefined;
   eventType:
@@ -21,7 +22,7 @@ export interface ExternalBillingEventInput {
   invoiceStatus?: string | undefined;
   lifecycle?: BillingLifecycleInput | undefined;
   metadata?: Record<string, unknown> | undefined;
-  occurredAt?: string | undefined;
+  occurredAt: string;
   planCode?: string | undefined;
   planName?: string | undefined;
   provider: string;
@@ -60,6 +61,8 @@ export function statusFromExternalEvent(
     eventType === "subscription.updated" ||
     eventType === "invoice.paid"
   ) {
+    if (eventType === "invoice.paid" && fallback === "canceled")
+      return "canceled";
     return fallback === "trialing" ? "trialing" : "active";
   }
   return fallback ?? "active";
@@ -73,7 +76,8 @@ export function externalBillingMetadata(
     ...existing,
     billingProvider: event.provider,
     lastExternalEventType: event.eventType,
-    lastExternalEventAt: event.occurredAt ?? new Date().toISOString(),
+    lastExternalEventAt: event.occurredAt,
+    lastExternalEventId: event.eventId,
     ...(event.externalInvoiceId === undefined
       ? {}
       : {

@@ -20,13 +20,65 @@ env:
   CI: "true"
 
 jobs:
+  security:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Enforce supply-chain policy
+        run: node scripts/check-supply-chain-policy.mjs
+
+      - name: Scan Git history for secrets
+        run: >-
+          docker run --rm
+          --volume "$PWD:/repo"
+          --workdir /repo
+          zricethezav/gitleaks@sha256:691af3c7c5a48b16f187ce3446d5f194838f91238f27270ed36eef6359a574d9
+          git --redact=100 --no-banner --exit-code 1 /repo
+
+      - name: Run deterministic Semgrep SAST
+        run: >-
+          docker run --rm
+          --volume "$PWD:/src"
+          --workdir /src
+          semgrep/semgrep@sha256:9fb6f44dc162b1e0aada85f072a95141844c61e3bfcedf40b8a46fecf208e986
+          semgrep scan --config .semgrep.yml --error
+          --exclude node_modules --exclude dist --exclude .output .
+
+      - name: Scan repository filesystem
+        run: >-
+          docker run --rm
+          --volume "$PWD:/repo"
+          --workdir /repo
+          aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+          fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL
+          --ignore-unfixed --exit-code 1 --skip-dirs .git /repo
+
+      - name: Build the serving image
+        run: >-
+          docker build --target app-runtime --tag romeo:security-scan
+          --file deploy/compose/Dockerfile .
+
+      - name: Scan the serving image
+        run: >-
+          docker run --rm
+          --volume /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+          image --scanners vuln,secret --severity HIGH,CRITICAL
+          --ignore-unfixed --exit-code 1 romeo:security-scan
+
   quality:
     name: Quality Gates
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
@@ -36,7 +88,7 @@ jobs:
           corepack prepare pnpm@${PNPM_VERSION} --activate
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -81,11 +133,47 @@ jobs:
       - name: Check UI form contracts
         run: pnpm check:ui-form-contracts
 
+      - name: Check application query-key contracts
+        run: pnpm check:query-key-contracts
+
+      - name: Check application query-option contracts
+        run: pnpm check:query-option-contracts
+
+      - name: Check application mutation-policy contracts
+        run: pnpm check:mutation-policy-contracts
+
+      - name: Check data table ownership inventory
+        run: pnpm check:data-table-inventory
+
+      - name: Check enterprise data inventory
+        run: pnpm check:data-inventory
+
       - name: Lint OpenAPI contracts
         run: pnpm contract:lint
 
       - name: Check OpenAPI breaking changes
         run: pnpm contract:breaking
+
+      - name: Check API evolution and deprecation policy
+        run: pnpm check:api-evolution-policy
+
+      - name: Check public API error registry
+        run: pnpm check:public-api-errors
+
+      - name: Check audit taxonomy
+        run: pnpm check:audit-taxonomy
+
+      - name: Check usage and cost taxonomy
+        run: pnpm check:usage-taxonomy
+
+      - name: Check database evolution policy
+        run: pnpm check:database-evolution-policy
+
+      - name: Check program evidence manifest
+        run: pnpm check:program-evidence-manifest
+
+      - name: Check enterprise AI fixture corpus
+        run: pnpm check:enterprise-test-fixtures
 
       - name: Check generated SDK drift
         run: pnpm check:sdk-typescript-drift
@@ -236,7 +324,7 @@ jobs:
 
       - name: Upload quality evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: quality-evidence
           path: dist/ci/**
@@ -265,7 +353,7 @@ jobs:
       ROMEO_POSTGRES_CONFORMANCE_DATABASE_URL: postgres://romeo:romeo@localhost:5432/romeo
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Set up pnpm
         run: |
@@ -273,7 +361,7 @@ jobs:
           corepack prepare pnpm@${PNPM_VERSION} --activate
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -301,9 +389,12 @@ jobs:
       - name: Run live Postgres repository conformance
         run: pnpm test:postgres-conformance
 
+      - name: Run live run SSE scale acceptance
+        run: pnpm evidence:run-sse:live -- --output dist/ci/live-run-sse-acceptance.json
+
       - name: Upload Postgres evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: postgres-evidence
           path: dist/ci/**
@@ -315,7 +406,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Set up pnpm
         run: |
@@ -323,13 +414,13 @@ jobs:
           corepack prepare pnpm@${PNPM_VERSION} --activate
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -339,7 +430,7 @@ jobs:
 
       - name: Upload Kubernetes evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: kubernetes-render-evidence
           path: dist/ci/**
@@ -353,7 +444,7 @@ jobs:
       - quality
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Set up pnpm
         run: |
@@ -361,7 +452,7 @@ jobs:
           corepack prepare pnpm@${PNPM_VERSION} --activate
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -416,7 +507,7 @@ jobs:
 
       - name: Upload release evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: release-evidence
           path: dist/release/**
@@ -459,7 +550,7 @@ jobs:
             command: pnpm smoke:compose:tiered-rag -- --output dist/ci/compose-tiered-rag-smoke.json
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Set up pnpm
         run: |
@@ -467,7 +558,7 @@ jobs:
           corepack prepare pnpm@${PNPM_VERSION} --activate
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -485,7 +576,7 @@ jobs:
 
       - name: Upload Compose smoke evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: compose-smoke-evidence-${{ matrix.name }}
           path: dist/ci/**

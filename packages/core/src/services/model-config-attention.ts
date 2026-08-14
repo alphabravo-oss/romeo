@@ -84,5 +84,9 @@ function needsMaxOutput(model: BaseModel): boolean {
 
 function hasMaxOutput(model: BaseModel): boolean {
   const maxOutput = model.defaultParameters?.maxOutputTokens;
-  return typeof maxOutput === "number" && Number.isInteger(maxOutput) && maxOutput > 0;
+  return (
+    typeof maxOutput === "number" &&
+    Number.isInteger(maxOutput) &&
+    maxOutput > 0
+  );
 }

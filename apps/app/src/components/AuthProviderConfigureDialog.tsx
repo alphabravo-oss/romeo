@@ -13,7 +13,7 @@ import { toast } from "../lib/toast";
 import { linesToArray } from "./auth-provider-lines";
 import { AuthProviderProtocolFields } from "./AuthProviderProtocolFields";
 import { FormDialog } from "./FormDialog";
-import { SettingsSection } from "./SettingsSection";
+import { Section } from "./console";
 
 export function ConfigureDialog(props: {
   entry: AuthProviderCatalogEntry;
@@ -203,7 +203,7 @@ export function ConfigureDialog(props: {
         onSubmit={(event) => void handleSubmit(event)}
       >
         {isLocal ? null : (
-          <SettingsSection
+          <Section
             description={t("authConnectionSectionDescription")}
             title={t("authConnectionSection")}
           >
@@ -309,10 +309,10 @@ export function ConfigureDialog(props: {
                 {t("authExistingSecretReferenceGuidance")}
               </span>
             </details>
-          </SettingsSection>
+          </Section>
         )}
 
-        <SettingsSection
+        <Section
           description={t("authMappingSectionDescription")}
           title={t("authMappingSection")}
         >
@@ -399,9 +399,9 @@ export function ConfigureDialog(props: {
             protocol={entry.protocol}
             setting={setting}
           />
-        </SettingsSection>
+        </Section>
 
-        <SettingsSection
+        <Section
           description={t("authPresentationSectionDescription")}
           title={t("authPresentationSection")}
         >
@@ -426,7 +426,7 @@ export function ConfigureDialog(props: {
             type="number"
             value={loginOrder}
           />
-        </SettingsSection>
+        </Section>
 
         <div className="flex justify-end gap-2">
           <Button onClick={onClose} type="button">

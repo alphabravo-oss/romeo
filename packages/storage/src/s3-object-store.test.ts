@@ -95,4 +95,44 @@ describe("S3ObjectStore", () => {
     expect(stored.etag).toBe("etag-from-rustfs");
     expect(stored.sizeBytes).toBe("romeo storage".length);
   });
+
+  it("signs the declared upload length and bounds streamed object reads", async () => {
+    const upload = await createS3PresignedRequest({
+      ...config,
+      key: "bounded.txt",
+      method: "PUT",
+      contentType: "text/plain",
+      contentLength: 12,
+      expiresInSeconds: 60,
+      now: new Date("2026-06-27T12:00:00.000Z"),
+    });
+    expect(
+      new URL(upload.url).searchParams.get("X-Amz-SignedHeaders"),
+    ).toContain("content-length");
+
+    const store = new S3ObjectStore(config, async (_url, init) => {
+      if (init?.method === "HEAD") {
+        return new Response(null, {
+          status: 200,
+          headers: {
+            "content-length": "20",
+            "content-type": "text/plain",
+            etag: '"bounded-etag"',
+          },
+        });
+      }
+      return new Response("twenty bytes payload!", {
+        status: 200,
+        headers: { "content-length": "20" },
+      });
+    });
+
+    await expect(store.headObject("bounded.txt")).resolves.toMatchObject({
+      sizeBytes: 20,
+      etag: "bounded-etag",
+    });
+    await expect(
+      store.getObject("bounded.txt", { maxBytes: 10 }),
+    ).rejects.toMatchObject({ name: "ObjectSizeLimitError", maxBytes: 10 });
+  });
 });

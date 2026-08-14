@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
-
 import type { RomeoDatabase } from "./client";
+import { evalRunEvidenceFromUnknown } from "./eval-run-evidence-mapping";
 import {
   evalCases,
   evalResultHumanRatings,
@@ -66,8 +66,10 @@ export class PgEvalRepository {
     const [row] = await this.db
       .insert(evalSuites)
       .values(toEvalSuiteInsert(suite))
+      .onConflictDoNothing({ target: evalSuites.id })
       .returning();
-    return row === undefined ? suite : toEvalSuiteRecord(row);
+    if (row !== undefined) return toEvalSuiteRecord(row);
+    return (await this.getEvalSuite(suite.id)) ?? suite;
   }
 
   async listEvalCases(suiteId: string): Promise<EvalCaseRecord[]> {
@@ -84,6 +86,7 @@ export class PgEvalRepository {
     const rows = await this.db
       .insert(evalCases)
       .values(cases.map(toEvalCaseInsert))
+      .onConflictDoNothing({ target: evalCases.id })
       .returning();
     return rows.map(toEvalCaseRecord);
   }
@@ -245,7 +248,7 @@ export function toEvalCaseRecord(
 export function toEvalRunRecord(
   row: typeof evalRuns.$inferSelect,
 ): EvalRunRecord {
-  return {
+  const run: EvalRunRecord = {
     id: row.id,
     orgId: row.orgId,
     workspaceId: row.workspaceId,
@@ -257,6 +260,13 @@ export function toEvalRunRecord(
     createdBy: row.createdBy,
     createdAt: toIsoString(row.createdAt),
     completedAt: toIsoString(row.completedAt),
+  };
+  return {
+    ...run,
+    ...evalRunEvidenceFromUnknown({
+      reasoningPolicy: row.reasoningPolicy,
+      metrics: row.metrics,
+    }),
   };
 }
 
@@ -337,6 +347,8 @@ function toEvalRunInsert(record: EvalRunRecord): typeof evalRuns.$inferInsert {
     createdBy: record.createdBy,
     createdAt: new Date(record.createdAt),
     completedAt: new Date(record.completedAt),
+    reasoningPolicy: record.reasoningPolicy,
+    metrics: record.metrics,
   };
 }
 

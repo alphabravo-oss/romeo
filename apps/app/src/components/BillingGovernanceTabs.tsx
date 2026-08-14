@@ -1,12 +1,12 @@
 import { Button } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import {
-  enforceBillingLifecycle,
-  getBillingEntitlements,
-  getBillingLifecycle,
-  reconcileBillingEntitlements,
+  enforceBillingLifecycleMutationOptions,
+  billingEntitlementsQueryOptions,
+  billingLifecycleQueryOptions,
+  reconcileBillingEntitlementsMutationOptions,
   type BillingEntitlementQuotaReport,
 } from "../features/billing";
 import { useLocale } from "../lib/i18n";
@@ -33,14 +33,10 @@ export function EntitlementsTab() {
     }),
     [t],
   );
-  const queryClient = useQueryClient();
-  const entitlementsQuery = useQuery({
-    queryKey: ["billingEntitlements"],
-    queryFn: getBillingEntitlements,
-  });
-  const reconcileMutation = useMutation({
-    mutationFn: reconcileBillingEntitlements,
-  });
+  const entitlementsQuery = useQuery(billingEntitlementsQueryOptions());
+  const reconcileMutation = useMutation(
+    reconcileBillingEntitlementsMutationOptions(),
+  );
 
   const columns = useMemo<ColumnDef<BillingEntitlementQuotaReport, any>[]>(
     () => [
@@ -98,11 +94,6 @@ export function EntitlementsTab() {
   async function handleReconcile() {
     try {
       const result = await reconcileMutation.mutateAsync();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["billingEntitlements"] }),
-        queryClient.invalidateQueries({ queryKey: ["billingPlan"] }),
-        queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-      ]);
       const { createdQuotaIds, updatedQuotaIds } = result.actions;
       toast(
         `${t("reconciledEntitlements")} (${createdQuotaIds.length} ${t("entitlementsCreated")}, ${updatedQuotaIds.length} ${t("entitlementsUpdated")})`,
@@ -181,13 +172,9 @@ export function EntitlementsTab() {
 
 export function LifecycleTab() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { ask, dialog } = useConfirm();
-  const lifecycleQuery = useQuery({
-    queryKey: ["billingLifecycle"],
-    queryFn: getBillingLifecycle,
-  });
-  const enforceMutation = useMutation({ mutationFn: enforceBillingLifecycle });
+  const lifecycleQuery = useQuery(billingLifecycleQueryOptions());
+  const enforceMutation = useMutation(enforceBillingLifecycleMutationOptions());
 
   async function handleEnforce() {
     const confirmed = await ask({
@@ -199,11 +186,6 @@ export function LifecycleTab() {
     if (!confirmed) return;
     try {
       const result = await enforceMutation.mutateAsync();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["billingLifecycle"] }),
-        queryClient.invalidateQueries({ queryKey: ["billingPlan"] }),
-        queryClient.invalidateQueries({ queryKey: ["billingEntitlements"] }),
-      ]);
       toast(
         result.action.statusChanged
           ? `${t("lifecycleEnforced")}: ${result.action.previousStatus} → ${result.action.newStatus}`

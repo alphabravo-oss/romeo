@@ -18,6 +18,7 @@ import Search from "lucide-react/dist/esm/icons/search.mjs";
 import Server from "lucide-react/dist/esm/icons/server.mjs";
 import ShieldAlert from "lucide-react/dist/esm/icons/shield-alert.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
+import Cpu from "lucide-react/dist/esm/icons/cpu.mjs";
 import UserCog from "lucide-react/dist/esm/icons/user-cog.mjs";
 import Users from "lucide-react/dist/esm/icons/users.mjs";
 import UsersRound from "lucide-react/dist/esm/icons/users-round.mjs";
@@ -35,7 +36,9 @@ export const ADMIN_GROUPS: Array<{
   }>;
 }> = [
   {
-    items: [{ key: "overview", labelKey: "navOverview", icon: LayoutDashboard }],
+    items: [
+      { key: "overview", labelKey: "navOverview", icon: LayoutDashboard },
+    ],
   },
   {
     labelKey: "navConfiguration",
@@ -83,6 +86,8 @@ export const ADMIN_GROUPS: Array<{
   {
     labelKey: "navTrust",
     items: [
+      { key: "capabilities", labelKey: "navCapabilities", icon: ShieldCheck },
+      { key: "compute", labelKey: "navComputeTrust", icon: Cpu },
       { key: "governance", labelKey: "navGovernance", icon: ShieldCheck },
       { key: "abuse", labelKey: "navAbuseSecurity", icon: ShieldAlert },
       { key: "billing", labelKey: "navBilling", icon: CreditCard },
@@ -140,6 +145,14 @@ export const ADMIN_META: Record<
   governance: {
     titleKey: "navGovernance",
     descriptionKey: "adminGovernanceDescription",
+  },
+  capabilities: {
+    titleKey: "navCapabilities",
+    descriptionKey: "adminCapabilitiesDescription",
+  },
+  compute: {
+    titleKey: "navComputeTrust",
+    descriptionKey: "adminComputeTrustDescription",
   },
   rag: { titleKey: "navRagGovernance", descriptionKey: "adminRagDescription" },
   abuse: {

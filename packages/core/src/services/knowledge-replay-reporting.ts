@@ -1,5 +1,7 @@
 import type { RetrievalHit } from "@romeo/rag";
 
+import type { AuditMetadata } from "./audit-log";
+
 import type {
   KnowledgeRetrievalPlan,
   KnowledgeRetrievalPlanEntry,
@@ -278,7 +280,7 @@ export function vectorEmbeddingModels(
 
 export function replayAuditMetadata(
   report: KnowledgeRetrievalReplayReport,
-): Record<string, unknown> {
+): AuditMetadata<"knowledge.replay.tiered"> {
   return {
     averageLatencyMs: report.metrics.averageLatencyMs,
     averagePrecision: report.metrics.averagePrecision,

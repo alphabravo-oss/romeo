@@ -22,11 +22,24 @@ export interface PresignedUpload {
 
 export interface ObjectStore {
   putObject(input: PutObjectInput): Promise<StoredObject>;
-  getObject(key: string): Promise<Uint8Array | undefined>;
+  getObject(
+    key: string,
+    options?: { maxBytes?: number },
+  ): Promise<Uint8Array | undefined>;
+  headObject?(key: string): Promise<StoredObject | undefined>;
   deleteObject(key: string): Promise<void>;
   createPresignedUpload(input: {
     key: string;
     contentType: string;
     expiresInSeconds: number;
+    sha256?: string;
+    sizeBytes?: number;
   }): Promise<PresignedUpload>;
+}
+
+export class ObjectSizeLimitError extends Error {
+  constructor(readonly maxBytes: number) {
+    super(`Object exceeds the configured ${maxBytes} byte read limit.`);
+    this.name = "ObjectSizeLimitError";
+  }
 }

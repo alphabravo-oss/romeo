@@ -5,12 +5,13 @@ import {
   type DataTableLabels,
   type DataTableProps,
   type ServerPagination,
+  type ServerTableState,
 } from "@romeo/ui";
 import { formatNumber } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
 
 export { createColumnHelper };
-export type { ColumnDef, ServerPagination };
+export type { ColumnDef, ServerPagination, ServerTableState };
 
 export function DataTable<T>(
   props: Omit<DataTableProps<T>, "formatNumber" | "labels">,

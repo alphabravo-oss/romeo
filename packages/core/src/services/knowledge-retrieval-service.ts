@@ -278,7 +278,7 @@ export class KnowledgeRetrievalService {
     latencyMs: number,
   ): Promise<void> {
     const actorId = await this.auditActorId(subject);
-    await this.repository.createAuditLog({
+    await writeAuditLog(this.repository, {
       id: createId("audit"),
       orgId: subject.orgId,
       actorId,
@@ -324,7 +324,7 @@ export class KnowledgeRetrievalService {
     subject: AuthSubject,
     report: KnowledgeRetrievalReplayReport,
   ): Promise<void> {
-    await this.repository.createAuditLog({
+    await writeAuditLog(this.repository, {
       id: createId("audit"),
       orgId: subject.orgId,
       actorId: await this.auditActorId(subject),
@@ -341,7 +341,7 @@ export class KnowledgeRetrievalService {
     subject: AuthSubject,
     report: KnowledgeRetrievalReplayComparisonReport,
   ): Promise<void> {
-    await this.repository.createAuditLog({
+    await writeAuditLog(this.repository, {
       id: createId("audit"),
       orgId: subject.orgId,
       actorId: await this.auditActorId(subject),
@@ -374,3 +374,4 @@ export class KnowledgeRetrievalService {
         ).id;
   }
 }
+import { writeAuditLog } from "./audit-log";

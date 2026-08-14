@@ -1,14 +1,18 @@
 import { Input, Button } from "@romeo/ui";
 import Archive from "lucide-react/dist/esm/icons/archive.mjs";
 import Download from "lucide-react/dist/esm/icons/download.mjs";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { archiveWorkspace, exportWorkspace } from "../features";
+import {
+  archiveWorkspaceMutationOptions,
+  exportWorkspaceMutationOptions,
+} from "../features/tenancy";
 import type { Workspace } from "../features/types";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import { downloadText } from "../lib/download";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 export function WorkspaceLifecyclePanel({
   workspace,
@@ -18,11 +22,10 @@ export function WorkspaceLifecyclePanel({
   onWorkspaceArchived: (workspaceId: string) => Promise<void>;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const [confirmSlug, setConfirmSlug] = useState("");
   const [notice, setNotice] = useState<string>();
-  const archiveMutation = useMutation({ mutationFn: archiveWorkspace });
-  const exportMutation = useMutation({ mutationFn: exportWorkspace });
+  const archiveMutation = useMutation(archiveWorkspaceMutationOptions());
+  const exportMutation = useMutation(exportWorkspaceMutationOptions());
   const canArchive =
     workspace !== undefined &&
     confirmSlug === workspace.slug &&
@@ -35,16 +38,15 @@ export function WorkspaceLifecyclePanel({
     try {
       const document = await exportMutation.mutateAsync(workspace.id);
       downloadJson(`romeo-workspace-${workspace.slug}.json`, document);
-      await queryClient.invalidateQueries({ queryKey: ["auditLogs"] });
       setNotice(t("lifecycleWorkspaceExportReady"));
       toast(t("lifecycleWorkspaceExported"), "success");
     } catch (caught) {
       setNotice(
-        caught instanceof Error
-          ? caught.message
-          : t("lifecycleUnableExportWorkspace"),
+        safeUserErrorMessage(caught, t("lifecycleUnableExportWorkspace")),
       );
       toast(t("lifecycleExportFailed"), "error");
+    } finally {
+      exportMutation.reset();
     }
   }
 
@@ -59,9 +61,7 @@ export function WorkspaceLifecyclePanel({
       toast(t("lifecycleWorkspaceArchived"), "success");
     } catch (caught) {
       setNotice(
-        caught instanceof Error
-          ? caught.message
-          : t("lifecycleUnableArchiveWorkspace"),
+        safeUserErrorMessage(caught, t("lifecycleUnableArchiveWorkspace")),
       );
       toast(t("lifecycleWorkspaceArchiveFailed"), "error");
     }
@@ -97,7 +97,11 @@ export function WorkspaceLifecyclePanel({
         <Archive aria-hidden="true" size={16} />
         {t("lifecycleArchiveWorkspace")}
       </Button>
-      {notice ? <div className="text-xs text-muted">{notice}</div> : null}
+      {notice ? (
+        <div className="text-xs text-muted" role="status">
+          {notice}
+        </div>
+      ) : null}
     </div>
   );
 }

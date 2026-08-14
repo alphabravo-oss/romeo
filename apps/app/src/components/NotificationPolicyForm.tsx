@@ -1,12 +1,12 @@
 import { Button, Input, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 import {
-  getNotificationPolicy,
+  notificationPolicyQueryOptions,
   notificationChannelTypes,
   notificationTypes,
-  updateNotificationPolicy,
+  updateNotificationPolicyMutationOptions,
 } from "../features/notifications";
 import type {
   NotificationPolicyReport,
@@ -40,11 +40,7 @@ function notificationTypeLabel(type: NotificationType): string {
 
 export function NotificationPolicyForm() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const policyQuery = useQuery({
-    queryKey: ["notificationPolicy"],
-    queryFn: getNotificationPolicy,
-  });
+  const policyQuery = useQuery(notificationPolicyQueryOptions());
 
   return (
     <div className="grid gap-2">
@@ -57,19 +53,16 @@ export function NotificationPolicyForm() {
         />
       </div>
       <PanelState query={policyQuery} empty={t("noPolicyLoaded")}>
-        {(report) => <PolicyEditor report={report} queryClient={queryClient} />}
+        {(report) => <PolicyEditor report={report} />}
       </PanelState>
     </div>
   );
 }
 
-function PolicyEditor(props: {
-  report: NotificationPolicyReport;
-  queryClient: ReturnType<typeof useQueryClient>;
-}) {
+function PolicyEditor(props: { report: NotificationPolicyReport }) {
   const { t } = useLocale();
-  const { report, queryClient } = props;
-  const updateMutation = useMutation({ mutationFn: updateNotificationPolicy });
+  const { report } = props;
+  const updateMutation = useMutation(updateNotificationPolicyMutationOptions());
 
   const form = useForm({
     defaultValues: {
@@ -93,10 +86,6 @@ function PolicyEditor(props: {
           suppressedNotificationTypes: value.suppressedNotificationTypes,
         };
         await updateMutation.mutateAsync(input);
-        // Server normalizes (dedupe/sort/drop) — re-render from the fresh report.
-        await queryClient.invalidateQueries({
-          queryKey: ["notificationPolicy"],
-        });
         toast(t("notificationPolicyUpdated"), "success");
       } catch (caught) {
         toast(t("couldNotUpdatePolicy"), "error");
@@ -366,7 +355,8 @@ function PolicyEditor(props: {
               </Button>
               {report.updatedAt ? (
                 <span className="text-xs text-muted">
-                  {t("updated")} <LocalizedDateTime value={report.updatedAt} />
+                  {t("notificationUpdated")}{" "}
+                  <LocalizedDateTime value={report.updatedAt} />
                   {report.updatedBy
                     ? ` ${t("updatedBy")} ${report.updatedBy}`
                     : ""}

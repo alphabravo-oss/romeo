@@ -413,18 +413,18 @@ export class SupportSessionService {
     return request;
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
     options: {
       repository?: RomeoRepository;
       resourceType?: string;
       createdAt?: string;
     } = {},
   ): Promise<void> {
-    await (options.repository ?? this.repository).createAuditLog({
+    await writeAuditLog(options.repository ?? this.repository, {
       id: createId("audit"),
       orgId: subject.orgId,
       actorId: subject.id,
@@ -463,3 +463,8 @@ export class SupportSessionService {
     });
   }
 }
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";

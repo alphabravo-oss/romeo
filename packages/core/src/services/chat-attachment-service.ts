@@ -138,7 +138,7 @@ export class ChatAttachmentService {
       return {
         id: updated.id,
         messageId: updated.messageId,
-        retainedInContext: updated.metadata.retainedInContext !== false,
+        retainedInContext: input.retainedInContext,
       };
     });
   }

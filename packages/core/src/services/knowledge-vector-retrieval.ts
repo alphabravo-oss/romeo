@@ -15,6 +15,7 @@ import type {
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
+import { providerApiError } from "./provider-api-error";
 import { mergeHybridRetrievalHits } from "./knowledge-hybrid-retrieval";
 import {
   retrievalHitFromIndexedChunk,
@@ -94,13 +95,21 @@ export async function retrievePersistedVectorHitsWithRoute(
     model: selection.model,
     texts: [input.query],
   };
-  const result = await (
-    input.adapter ?? getEmbeddingAdapter(selection.provider.type)
-  ).embedTexts(
-    input.fetchImpl === undefined
-      ? embedRequest
-      : { ...embedRequest, fetchImpl: input.fetchImpl },
-  );
+  let result;
+  try {
+    result = await (
+      input.adapter ?? getEmbeddingAdapter(selection.provider.type)
+    ).embedTexts(
+      input.fetchImpl === undefined
+        ? embedRequest
+        : { ...embedRequest, fetchImpl: input.fetchImpl },
+    );
+  } catch (error) {
+    throw providerApiError(error, {
+      kind: selection.provider.type,
+      operation: "embeddings",
+    });
+  }
   assertEmbeddingProviderModelAllowed(
     selection.policy,
     selection.provider.id,

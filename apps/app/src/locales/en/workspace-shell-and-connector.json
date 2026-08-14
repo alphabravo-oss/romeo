@@ -1,17 +1,6 @@
 {
   "shellActions": "Actions",
-  "shellSwitchAgent": "Switch custom model",
   "shellSkipToChat": "Skip to chat",
-  "shellRomeoAssistant": "Custom model",
-  "assistantSearch": "Search custom models",
-  "assistantSearchPlaceholder": "Search custom models…",
-  "assistantFavorites": "Favorites",
-  "assistantAll": "All custom models",
-  "assistantAvailable": "Available custom models",
-  "assistantNoMatches": "No custom models match this search.",
-  "assistantAddFavorite": "Add custom model to favorites",
-  "assistantRemoveFavorite": "Remove custom model from favorites",
-  "assistantFavoriteFailed": "Could not update custom model favorite",
   "confirm": "Confirm",
   "ragQueryPlaceholder": "What is our refund policy?",
   "workspaceSelectVoiceFirst": "Select a voice before generating speech.",
@@ -107,6 +96,5 @@
   "connectorGithubName": "GitHub repository",
   "connectorGithubDescription": "Repository content imported through a bounded provider integration.",
   "connectorS3Name": "S3-compatible object prefix",
-  "connectorS3Description": "Objects imported from a configured S3-compatible prefix.",
-  "shellCustomModel": "Custom model"
+  "connectorS3Description": "Objects imported from a configured S3-compatible prefix."
 }

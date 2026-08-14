@@ -32,6 +32,12 @@ function preview(overrides: {
     knowledge: [],
     memories: [],
     messages: [],
+    routing: {
+      candidateCount: 1,
+      mode: "selected",
+      requestedModelId: "model_1",
+      selectedModelId: "model_1",
+    },
     model: {
       contextWindow: overrides.contextWindow ?? 128_000,
       id: "model_1",

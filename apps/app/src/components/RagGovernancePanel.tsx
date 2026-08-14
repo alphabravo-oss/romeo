@@ -1,13 +1,20 @@
-import { Button, Field, NativeSelect, Select, Textarea } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Button,
+  EmptyState,
+  Field,
+  NativeSelect,
+  Select,
+  Textarea,
+} from "@romeo/ui";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Database from "lucide-react/dist/esm/icons/database.mjs";
 import { useState } from "react";
 
 import {
-  approveRagPolicyChangeRequest,
-  createRagPolicyChangeRequest,
-  getRagPolicyChangeRequest,
-  rejectRagPolicyChangeRequest,
+  approveRagPolicyChangeRequestMutationOptions,
+  createRagPolicyChangeRequestMutationOptions,
+  ragPolicyChangeRequestQueryOptions,
+  rejectRagPolicyChangeRequestMutationOptions,
   ragPolicyChangeJustificationCodes,
   ragPolicyChangeRejectReasonCodes,
   type CreateRagPolicyChangeRequestInput,
@@ -80,11 +87,7 @@ export function RagGovernancePanel() {
 
 function ChangeRequestTab() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const changeRequestQuery = useQuery({
-    queryKey: ["ragPolicyChangeRequest"],
-    queryFn: getRagPolicyChangeRequest,
-  });
+  const changeRequestQuery = useQuery(ragPolicyChangeRequestQueryOptions());
   const { ask, dialog } = useConfirm();
   const [justificationCode, setJustificationCode] =
     useState<RagPolicyChangeJustificationCode>(
@@ -95,24 +98,15 @@ function ChangeRequestTab() {
   );
   const [createError, setCreateError] = useState<MessageKey>();
 
-  const createMutation = useMutation({
-    mutationFn: (input: CreateRagPolicyChangeRequestInput) =>
-      createRagPolicyChangeRequest(input),
-  });
-  const approveMutation = useMutation({
-    mutationFn: (requestId: string) =>
-      approveRagPolicyChangeRequest(requestId, { confirmRequestId: requestId }),
-  });
-  const rejectMutation = useMutation({
-    mutationFn: (input: {
-      requestId: string;
-      reasonCode: RagPolicyChangeRejectReasonCode;
-    }) =>
-      rejectRagPolicyChangeRequest(input.requestId, {
-        confirmRequestId: input.requestId,
-        reasonCode: input.reasonCode,
-      }),
-  });
+  const createMutation = useMutation(
+    createRagPolicyChangeRequestMutationOptions(),
+  );
+  const approveMutation = useMutation(
+    approveRagPolicyChangeRequestMutationOptions(),
+  );
+  const rejectMutation = useMutation(
+    rejectRagPolicyChangeRequestMutationOptions(),
+  );
 
   async function handleCreate() {
     const parsed = parseRagPolicyPatch(policyPatch);
@@ -127,9 +121,6 @@ function ChangeRequestTab() {
     };
     try {
       await createMutation.mutateAsync(input);
-      await queryClient.invalidateQueries({
-        queryKey: ["ragPolicyChangeRequest"],
-      });
       toast(t("changeRequestCreated"), "success");
     } catch {
       toast(t("couldNotCreateChangeRequest"), "error");
@@ -145,11 +136,6 @@ function ChangeRequestTab() {
     if (!confirmed) return;
     try {
       await approveMutation.mutateAsync(request.requestId);
-      await queryClient.invalidateQueries({
-        queryKey: ["ragPolicyChangeRequest"],
-      });
-      await queryClient.invalidateQueries({ queryKey: ["ragPolicy"] });
-      await queryClient.invalidateQueries({ queryKey: ["ragPosture"] });
       toast(t("changeRequestApproved"), "success");
     } catch {
       toast(t("couldNotApproveChangeRequest"), "error");
@@ -171,9 +157,6 @@ function ChangeRequestTab() {
       await rejectMutation.mutateAsync({
         requestId: request.requestId,
         reasonCode,
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["ragPolicyChangeRequest"],
       });
       toast(t("changeRequestRejected"), "success");
     } catch {
@@ -257,7 +240,7 @@ function ChangeRequestTab() {
       >
         {(request) =>
           request === null ? (
-            <div className="rm-empty">{t("noChangeRequest")}</div>
+            <EmptyState title={t("noChangeRequest")} />
           ) : (
             <ChangeRequestView
               request={request}

@@ -7,6 +7,7 @@ import {
   collaborationListFavorites,
   collaborationListFileShares,
   collaborationListFolderItems,
+  collaborationListFolderItemsBatch,
   collaborationListFolders,
   collaborationListFolderShares,
   collaborationListKnowledgeBaseShares,
@@ -22,6 +23,7 @@ import type {
   ShareTarget,
   WorkspaceFolder,
   WorkspaceFolderItem,
+  WorkspaceFolderItemsBatchGroup,
 } from "./types";
 
 export async function listShareTargets(query = ""): Promise<ShareTarget[]> {
@@ -108,10 +110,29 @@ export async function listFolderShares(
 
 export async function listFolderItems(
   folderId: string,
+  signal?: AbortSignal,
 ): Promise<WorkspaceFolderItem[]> {
   configureBrowserApiClients();
   const response = await collaborationListFolderItems({
     path: { folderId },
+    ...(signal === undefined ? {} : { signal }),
+    throwOnError: true,
+  });
+  return response.data.data;
+}
+
+export async function listFolderItemsBatch(
+  input: {
+    folderIds: string[];
+    limitPerFolder: number;
+    workspaceId: string;
+  },
+  signal?: AbortSignal,
+): Promise<WorkspaceFolderItemsBatchGroup[]> {
+  configureBrowserApiClients();
+  const response = await collaborationListFolderItemsBatch({
+    body: input,
+    ...(signal === undefined ? {} : { signal }),
     throwOnError: true,
   });
   return response.data.data;

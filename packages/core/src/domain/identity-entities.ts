@@ -108,3 +108,23 @@ export interface LocalMfaFactor {
   disabledAt?: string;
   lastUsedAt?: string;
 }
+
+export interface SamlAuthRequest {
+  id: string;
+  orgId: string;
+  providerId: "saml";
+  relayStateHash: string;
+  requestInstant: string;
+  expiresAt: string;
+  consumedAt?: string;
+  createdAt: string;
+}
+
+export interface LocalMfaChallenge {
+  id: string;
+  orgId: string;
+  userId: string;
+  expiresAt: string;
+  consumedAt?: string;
+  createdAt: string;
+}

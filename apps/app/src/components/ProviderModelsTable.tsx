@@ -9,6 +9,7 @@ import type { BaseModel, Provider } from "../features/providers/types";
 import { useLocale } from "../lib/i18n";
 import { LocalizedTokens } from "../lib/locale-format";
 import { createColumnHelper, DataTable } from "./DataTable";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const modelColumn = createColumnHelper<BaseModel>();
 
@@ -30,6 +31,7 @@ export function ProviderModelsTable({
   provider: Provider;
 }) {
   const { t } = useLocale();
+  const inventoriedTable = useInventoriedServerTable<any>("provider_models");
   const columns = useMemo(
     () => [
       modelColumn.accessor("displayName", {
@@ -163,8 +165,9 @@ export function ProviderModelsTable({
 
   return (
     <DataTable
+      serverState={inventoriedTable.serverState}
       columns={columns}
-      data={models}
+      data={inventoriedTable.rows}
       getRowId={(model) => model.id}
       minTableWidth={920}
       preferenceKey={`provider-models-${provider.id}`}

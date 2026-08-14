@@ -415,7 +415,7 @@ export class BrowserAutomationWorkerService {
     repository: RomeoRepository,
     subject: AuthSubject,
     job: BackgroundJob,
-    action: string,
+    action: BrowserWorkerAuditSuffix,
     outcome: "failure" | "success",
     metadata: Record<string, unknown>,
   ): Promise<void> {
@@ -438,6 +438,15 @@ export class BrowserAutomationWorkerService {
     });
   }
 }
+
+type BrowserWorkerAuditSuffix =
+  | "artifact.register"
+  | "worker.claim"
+  | "worker.complete"
+  | "worker.dead_letter"
+  | "worker.expire"
+  | "worker.fail"
+  | "worker.renew_lease";
 
 interface BrowserAutomationExpirationCandidate {
   ageSeconds: number;

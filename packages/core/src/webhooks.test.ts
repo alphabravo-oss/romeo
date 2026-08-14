@@ -1,5 +1,5 @@
 import { seededSubject } from "@romeo/auth";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { describe, expect, it } from "vitest";
 
 import { createRomeoApi } from "./api";
@@ -13,7 +13,7 @@ interface FetchCall {
   init?: RequestInit;
 }
 
-const env = readEnv({ WEBHOOK_SIGNING_KEY: "test-webhook-signing-key" });
+const env = testEnv({ WEBHOOK_SIGNING_KEY: "test-webhook-signing-key" });
 
 describe("webhook API", () => {
   it("rejects unsafe webhook targets", async () => {
@@ -37,6 +37,125 @@ describe("webhook API", () => {
 
     expect(httpResponse.status).toBe(400);
     expect(privateIpResponse.status).toBe(400);
+  });
+
+  it("blocks private DNS answers and redirect targets before webhook delivery", async () => {
+    const privateRepository = new InMemoryRomeoRepository();
+    let privateFetchCalls = 0;
+    const privateService = new WebhookService(privateRepository, {
+      signingKey: env.WEBHOOK_SIGNING_KEY,
+      hostLookup: async () => [{ address: "169.254.169.254", family: 4 }],
+      fetchImpl: async () => {
+        privateFetchCalls += 1;
+        return new Response(null, { status: 204 });
+      },
+    });
+    const privateSubscription = await privateService.create({
+      subject: seededSubject,
+      url: "https://rebind.example/hook",
+      eventTypes: ["webhook.test"],
+    });
+    const privateDelivery = await privateService.sendTest({
+      subject: seededSubject,
+      subscriptionId: privateSubscription.subscription.id,
+    });
+
+    const redirectRepository = new InMemoryRomeoRepository();
+    let redirectFetchCalls = 0;
+    const redirectService = new WebhookService(redirectRepository, {
+      signingKey: env.WEBHOOK_SIGNING_KEY,
+      hostLookup: async () => [{ address: "93.184.216.34", family: 4 }],
+      fetchImpl: async () => {
+        redirectFetchCalls += 1;
+        return new Response(null, {
+          status: 307,
+          headers: { location: "https://127.0.0.1/internal" },
+        });
+      },
+    });
+    const redirectSubscription = await redirectService.create({
+      subject: seededSubject,
+      url: "https://hooks.example/start",
+      eventTypes: ["webhook.test"],
+    });
+    const redirectDelivery = await redirectService.sendTest({
+      subject: seededSubject,
+      subscriptionId: redirectSubscription.subscription.id,
+    });
+
+    expect(privateFetchCalls).toBe(0);
+    expect(privateDelivery).toMatchObject({
+      status: "failed",
+      errorCode: "network_error",
+    });
+    expect(redirectFetchCalls).toBe(1);
+    expect(redirectDelivery).toMatchObject({
+      status: "failed",
+      errorCode: "network_error",
+    });
+  });
+
+  it("pins webhook connections to the addresses approved by DNS policy", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const pinnedAddresses: string[][] = [];
+    const service = new WebhookService(repository, {
+      signingKey: env.WEBHOOK_SIGNING_KEY,
+      hostLookup: async () => [
+        { address: "93.184.216.34", family: 4 },
+        { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
+      ],
+      pinnedFetchImpl: async (_url, _init, addresses) => {
+        pinnedAddresses.push(addresses.map((address) => address.address));
+        return new Response(null, { status: 204 });
+      },
+    });
+    const subscription = await service.create({
+      subject: seededSubject,
+      url: "https://hooks.example/pinned",
+      eventTypes: ["webhook.test"],
+    });
+
+    const delivery = await service.sendTest({
+      subject: seededSubject,
+      subscriptionId: subscription.subscription.id,
+    });
+
+    expect(delivery.status).toBe("delivered");
+    expect(pinnedAddresses).toEqual([
+      ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"],
+    ]);
+  });
+
+  it("times out a webhook endpoint that does not respond", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const service = new WebhookService(repository, {
+      signingKey: env.WEBHOOK_SIGNING_KEY,
+      hostLookup: async () => [{ address: "93.184.216.34", family: 4 }],
+      timeoutMs: 5,
+      fetchImpl: async (_input, init) =>
+        await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    });
+    const subscription = await service.create({
+      subject: seededSubject,
+      url: "https://hooks.example/slow",
+      eventTypes: ["webhook.test"],
+    });
+
+    const delivery = await service.sendTest({
+      subject: seededSubject,
+      subscriptionId: subscription.subscription.id,
+    });
+
+    expect(delivery).toMatchObject({
+      status: "failed",
+      errorCode: "network_error",
+    });
   });
 
   it("creates subscriptions, signs test deliveries, and stores delivery logs", async () => {
@@ -333,6 +452,177 @@ describe("webhook API", () => {
     expect(stored).toHaveLength(1);
     expect(replay[0]?.id).toBe(first[0]?.id);
     expect(first[0]?.id).toMatch(/^webhook_delivery_[a-f0-9]{32}$/u);
+  });
+
+  it("lets only one worker send a stable delivery lease", async () => {
+    const repository = new InMemoryRomeoRepository();
+    let calls = 0;
+    let releaseFetch!: () => void;
+    const fetchGate = new Promise<void>((resolve) => {
+      releaseFetch = resolve;
+    });
+    const fetchImpl = async () => {
+      calls += 1;
+      await fetchGate;
+      return new Response(null, { status: 204 });
+    };
+    const firstWorker = new WebhookService(repository, {
+      signingKey: env.WEBHOOK_SIGNING_KEY,
+      fetchImpl,
+    });
+    const secondWorker = new WebhookService(repository, {
+      signingKey: env.WEBHOOK_SIGNING_KEY,
+      fetchImpl,
+    });
+    await firstWorker.create({
+      subject: seededSubject,
+      url: "https://hooks.example/concurrent-stable",
+      eventTypes: ["run.completed"],
+    });
+    const event = {
+      orgId: "org_default",
+      eventType: "run.completed" as const,
+      idempotencyKey: "run_terminal_concurrent_stable",
+      payload: { runId: "run_concurrent", status: "completed" },
+    };
+
+    const first = firstWorker.emit(event);
+    await Promise.resolve();
+    const second = secondWorker.emit(event);
+    await Promise.resolve();
+    releaseFetch();
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(calls).toBe(1);
+    expect(firstResult[0]?.id).toBe(secondResult[0]?.id);
+    expect(await repository.listWebhookDeliveries("org_default")).toHaveLength(
+      1,
+    );
+  });
+
+  it("pages deliveries by a deterministic created-at and id keyset", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const service = new WebhookService(repository, {
+      signingKey: env.WEBHOOK_SIGNING_KEY,
+      fetchImpl: async () => new Response(null, { status: 204 }),
+    });
+    const subscription = await service.create({
+      subject: seededSubject,
+      url: "https://hooks.example/page-test",
+      eventTypes: ["webhook.test"],
+    });
+    const createdAt = "2026-08-13T12:00:00.000Z";
+    for (const id of ["delivery_a", "delivery_b", "delivery_c", "delivery_d"])
+      await repository.createWebhookDelivery({
+        id,
+        orgId: seededSubject.orgId,
+        subscriptionId: subscription.subscription.id,
+        eventType: "webhook.test",
+        payload: {},
+        status: "delivered",
+        attemptCount: 1,
+        createdAt,
+        updatedAt: createdAt,
+      });
+
+    const first = await service.deliveriesPage(seededSubject, {
+      subscriptionId: subscription.subscription.id,
+      limit: 2,
+    });
+    if (first.nextCursor === undefined)
+      throw new Error("Expected next cursor.");
+    const second = await service.deliveriesPage(seededSubject, {
+      limit: 2,
+      subscriptionId: subscription.subscription.id,
+      cursor: first.nextCursor,
+    });
+
+    expect(first.data.map((delivery) => delivery.id)).toEqual([
+      "delivery_a",
+      "delivery_b",
+    ]);
+    expect(second.data.map((delivery) => delivery.id)).toEqual([
+      "delivery_c",
+      "delivery_d",
+    ]);
+    expect(second.nextCursor).toBeUndefined();
+    const otherSubscription = await service.create({
+      subject: seededSubject,
+      url: "https://hooks.example/other-page-test",
+      eventTypes: ["webhook.test"],
+    });
+    await expect(
+      service.deliveriesPage(seededSubject, {
+        subscriptionId: otherSubscription.subscription.id,
+        cursor: first.nextCursor,
+      }),
+    ).rejects.toMatchObject({ code: "invalid_webhook_delivery_cursor" });
+    await expect(
+      service.deliveriesPage(seededSubject, {
+        subscriptionId: subscription.subscription.id,
+        cursor: "not-a-cursor",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_webhook_delivery_cursor" });
+  });
+
+  it("bounds retry transport concurrency", async () => {
+    const repository = new InMemoryRomeoRepository();
+    let active = 0;
+    let calls = 0;
+    let maximumActive = 0;
+    let releaseInitial!: () => void;
+    let signalInitial!: () => void;
+    const initialGate = new Promise<void>((resolve) => {
+      releaseInitial = resolve;
+    });
+    const initialStarted = new Promise<void>((resolve) => {
+      signalInitial = resolve;
+    });
+    const service = new WebhookService(repository, {
+      signingKey: env.WEBHOOK_SIGNING_KEY,
+      retryConcurrency: 2,
+      hostLookup: async () => [{ address: "93.184.216.34", family: 4 }],
+      fetchImpl: async () => {
+        calls += 1;
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        if (calls === 2) signalInitial();
+        if (calls <= 2) await initialGate;
+        active -= 1;
+        return new Response(null, { status: 204 });
+      },
+    });
+    const subscription = await service.create({
+      subject: seededSubject,
+      url: "https://hooks.example/bounded-retries",
+      eventTypes: ["webhook.test"],
+    });
+    for (let index = 0; index < 5; index += 1)
+      await repository.createWebhookDelivery({
+        id: `webhook_retry_bounded_${index}`,
+        orgId: seededSubject.orgId,
+        subscriptionId: subscription.subscription.id,
+        eventType: "webhook.test",
+        payload: {},
+        status: "failed",
+        attemptCount: 1,
+        nextAttemptAt: "2020-01-01T00:00:00.000Z",
+        createdAt: `2026-08-13T12:00:0${index}.000Z`,
+        updatedAt: `2026-08-13T12:00:0${index}.000Z`,
+      });
+
+    const retry = service.retryDueDeliveries(seededSubject);
+    await initialStarted;
+    expect(active).toBe(2);
+    releaseInitial();
+    const result = await retry;
+
+    expect(calls).toBe(5);
+    expect(maximumActive).toBe(2);
+    expect(result.deliveries).toHaveLength(5);
+    expect(
+      result.deliveries.every((delivery) => delivery.status === "delivered"),
+    ).toBe(true);
   });
 
   it("emits run completion events to subscribed webhooks", async () => {

@@ -6,6 +6,7 @@
 {{- fail "evidenceMount.enabled requires configMapName or secretName" }}
 {{- end }}
 {{- end }}
+{{- include "romeo.validateProduction" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -80,12 +81,34 @@ spec:
           {{- end }}
           {{- if .Values.probes.readiness.enabled }}
           readinessProbe:
+            {{- if .Values.probes.readiness.dependencyCheck.enabled }}
+            exec:
+              command:
+                - node
+                - -e
+                - |
+                  const net = require("node:net");
+                  const defaults = { "postgres:": 5432, "postgresql:": 5432, "redis:": 6379, "rediss:": 6379 };
+                  const connect = (raw) => new Promise((resolve, reject) => {
+                    const target = new URL(raw);
+                    const socket = net.connect({ host: target.hostname, port: Number(target.port || defaults[target.protocol]) }, () => { socket.destroy(); resolve(); });
+                    socket.setTimeout(1500, () => socket.destroy(new Error("timeout")));
+                    socket.once("error", reject);
+                  });
+                  Promise.all([
+                    fetch("http://127.0.0.1:{{ .Values.service.port }}/api/v1/health").then((response) => { if (!response.ok) throw new Error("unhealthy"); }),
+                    connect(process.env.DATABASE_URL),
+                    connect(process.env.VALKEY_URL),
+                  ]).then(() => process.exit(0), () => process.exit(1));
+            {{- else }}
             httpGet:
               path: /api/v1/health
               port: http
+            {{- end }}
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
             failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
           {{- end }}
           {{- if .Values.probes.liveness.enabled }}
           livenessProbe:
@@ -103,9 +126,17 @@ spec:
             - name: {{ .Values.evidenceMount.name | quote }}
               mountPath: {{ .Values.evidenceMount.mountPath | quote }}
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          {{- else }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           {{- end }}
       {{- if .Values.evidenceMount.enabled }}
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: {{ .Values.evidenceMount.name | quote }}
           {{- if .Values.evidenceMount.configMapName }}
           configMap:
@@ -114,6 +145,11 @@ spec:
           secret:
             secretName: {{ .Values.evidenceMount.secretName | quote }}
           {{- end }}
+      {{- end }}
+      {{- if not .Values.evidenceMount.enabled }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

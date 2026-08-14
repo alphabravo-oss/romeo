@@ -1,9 +1,9 @@
 import { Section } from "./console";
 import { Input, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 
-import { updateMyProfile } from "../features/identity";
+import { updateMyProfileMutationOptions } from "../features/identity/mutation-options";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 
@@ -16,9 +16,8 @@ export function ProfileEditPanel({
   currentName?: string | undefined;
   currentEmail?: string | undefined;
 }) {
-  const queryClient = useQueryClient();
   const { t } = useLocale();
-  const mutation = useMutation({ mutationFn: updateMyProfile });
+  const mutation = useMutation(updateMyProfileMutationOptions());
 
   const form = useForm({
     defaultValues: { name: currentName ?? "", email: currentEmail ?? "" },
@@ -32,7 +31,6 @@ export function ProfileEditPanel({
       }
       try {
         await mutation.mutateAsync(input);
-        await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
         toast(t("profileUpdated"), "success");
         form.reset();
       } catch {

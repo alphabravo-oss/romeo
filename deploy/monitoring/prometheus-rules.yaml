@@ -81,6 +81,51 @@ spec:
             summary: Romeo streaming disconnects are elevated
             description: Multiple run streams disconnected before a terminal event during the operational lookback window.
 
+        - alert: RomeoSseNotifierUnavailable
+          expr: romeo_sse_notifier_unavailable_count{scope="process"} >= 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo run-event notifier is unavailable
+            description: One or more run streams entered bounded cursor-polling fallback because the notification transport was unavailable.
+
+        - alert: RomeoSseNotifierLagHigh
+          expr: romeo_sse_notifier_lag_milliseconds{scope="process",statistic="p95"} >= 1000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo run-event notification lag is high
+            description: The process-local p95 delay from persisted run event to notified cursor delivery exceeded one second.
+
+        - alert: RomeoSseSlowConsumers
+          expr: romeo_sse_slow_consumer_drops{scope="process"} >= 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo SSE clients are exceeding backpressure limits
+            description: At least one run stream was dropped after sustained bounded-buffer backpressure.
+
+        - alert: RomeoSseHeartbeatFailures
+          expr: romeo_sse_heartbeat_failures{scope="process"} >= 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo SSE heartbeats are failing
+            description: At least one run-stream heartbeat could not be enqueued during the process observation window.
+
+        - alert: RomeoSseTerminalCloseSlow
+          expr: romeo_sse_terminal_close_latency_milliseconds{scope="process",statistic="p95"} >= 1000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Romeo SSE terminal close is slow
+            description: The process-local p95 time from terminal-event enqueue to stream close exceeded one second.
+
         - alert: RomeoRunQueueWaitHigh
           expr: romeo_run_queue_wait_milliseconds{statistic="p95"} >= 30000
           for: 10m

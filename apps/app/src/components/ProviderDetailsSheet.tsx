@@ -16,6 +16,8 @@ import type {
 import type { Agent } from "../features/managed-models/types";
 import { useLocale } from "../lib/i18n";
 import { ProviderCatalogStatus } from "./ProviderCatalogStatus";
+import { ProviderCapabilityEvidencePanel } from "./ProviderCapabilityEvidence";
+import { ProviderDialectSummary } from "./ProviderDialectSummary";
 import { ProviderModelsTable } from "./ProviderModelsTable";
 
 export function ProviderDetailsPage({
@@ -30,6 +32,7 @@ export function ProviderDetailsPage({
   onRefresh,
   onToggle,
   onToggleModel,
+  onCancelVerify,
   onVerify,
   provider,
   pullName,
@@ -50,6 +53,7 @@ export function ProviderDetailsPage({
   onRefresh: () => void;
   onToggle: (enabled: boolean) => void;
   onToggleModel: (model: BaseModel, enabled: boolean) => Promise<void>;
+  onCancelVerify?: () => void;
   onVerify: () => void;
   provider: Provider | undefined;
   pullName: string;
@@ -71,7 +75,7 @@ export function ProviderDetailsPage({
         <ArrowLeft aria-hidden="true" size={16} />
         {t("backToProviders")}
       </Button>
-      <section className="rm-panel p-4">
+      <section>
         <div className="rm-card-header">
           <div>
             <h2 className="rm-card-title">{provider.name}</h2>
@@ -106,6 +110,8 @@ export function ProviderDetailsPage({
               {dependentAgents.length}
             </span>
           </div>
+          <ProviderDialectSummary dialect={provider.dialect} />
+          <ProviderCapabilityEvidencePanel providerId={provider.id} />
           {dependentAgents.length > 0 ? (
             <div className="rounded-md border border-border p-3 text-sm">
               <strong>{t("dependencyImpact")}</strong>
@@ -132,6 +138,16 @@ export function ProviderDetailsPage({
             <Button disabled={verifying} onClick={onVerify} pending={verifying}>
               <PlugZap aria-hidden size={14} /> {t("verify")}
             </Button>
+            {verifying && onCancelVerify !== undefined ? (
+              <Button onClick={onCancelVerify} variant="outline">
+                {t("cancel")}
+              </Button>
+            ) : null}
+            <Button asChild variant="ghost">
+              <Link search={{ auditCategory: "admin", section: "audit" }} to="/admin">
+                {t("catalogViewAudit")}
+              </Link>
+            </Button>
             <Button disabled={syncing} onClick={onRefresh} pending={syncing}>
               <RefreshCw aria-hidden size={14} /> {t("syncNow")}
             </Button>
@@ -146,14 +162,18 @@ export function ProviderDetailsPage({
           {verification ? (
             <div
               className={`rm-connection-result ${verification.ok ? "success" : "error"}`}
-              role="status"
+              role={verification.ok ? "status" : "alert"}
             >
               {verification.ok ? (
                 <CheckCircle2 aria-hidden size={14} />
               ) : (
                 <CircleAlert aria-hidden size={14} />
               )}
-              <span>{verification.message}</span>
+              <span>
+                {verification.ok
+                  ? t("connectionVerified")
+                  : t("couldNotVerifyConnection")}
+              </span>
               <small>{verification.latencyMs} ms</small>
             </div>
           ) : null}

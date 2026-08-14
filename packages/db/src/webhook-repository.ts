@@ -1,4 +1,15 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+} from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import { webhookDeliveries, webhookSubscriptions } from "./schema";
@@ -44,6 +55,18 @@ export interface WebhookDeliveryRecord {
   nextAttemptAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WebhookDeliveryCursorRecord {
+  createdAt: string;
+  id: string;
+}
+
+export interface ClaimedWebhookDeliveryRecord {
+  delivery: WebhookDeliveryRecord;
+  leaseExpiresAt: string;
+  leaseOwner: string;
+  leaseToken: string;
 }
 
 export class PgWebhookRepository {
@@ -119,6 +142,152 @@ export class PgWebhookRepository {
     return rows.map(toWebhookDeliveryRecord);
   }
 
+  async listWebhookDeliveriesPage(input: {
+    cursor?: WebhookDeliveryCursorRecord;
+    limit: number;
+    orgId: string;
+    subscriptionId?: string;
+  }): Promise<WebhookDeliveryRecord[]> {
+    const cursorWhere =
+      input.cursor === undefined
+        ? undefined
+        : or(
+            lt(webhookDeliveries.createdAt, new Date(input.cursor.createdAt)),
+            and(
+              eq(webhookDeliveries.createdAt, new Date(input.cursor.createdAt)),
+              gt(webhookDeliveries.id, input.cursor.id),
+            ),
+          );
+    const rows = await this.db
+      .select()
+      .from(webhookDeliveries)
+      .where(
+        and(
+          eq(webhookDeliveries.orgId, input.orgId),
+          input.subscriptionId === undefined
+            ? undefined
+            : eq(webhookDeliveries.subscriptionId, input.subscriptionId),
+          cursorWhere,
+        ),
+      )
+      .orderBy(desc(webhookDeliveries.createdAt), asc(webhookDeliveries.id))
+      .limit(input.limit);
+    return rows.map(toWebhookDeliveryRecord);
+  }
+
+  async claimWebhookDelivery(input: {
+    deliveryId: string;
+    leaseExpiresAt: string;
+    leaseOwner: string;
+    leaseToken: string;
+    now: string;
+    orgId: string;
+  }): Promise<ClaimedWebhookDeliveryRecord | undefined> {
+    return this.db.transaction(async (transaction) => {
+      const [candidate] = await transaction
+        .select()
+        .from(webhookDeliveries)
+        .where(
+          and(
+            eq(webhookDeliveries.id, input.deliveryId),
+            eq(webhookDeliveries.orgId, input.orgId),
+            eq(webhookDeliveries.status, "pending"),
+            leaseAvailableAt(input.now),
+          ),
+        )
+        .limit(1)
+        .for("update", { skipLocked: true });
+      if (candidate === undefined) return undefined;
+      const [claimed] = await transaction
+        .update(webhookDeliveries)
+        .set({
+          leaseOwner: input.leaseOwner,
+          leaseToken: input.leaseToken,
+          leaseExpiresAt: new Date(input.leaseExpiresAt),
+        })
+        .where(eq(webhookDeliveries.id, candidate.id))
+        .returning();
+      return claimed === undefined
+        ? undefined
+        : claimedDelivery(claimed, input);
+    });
+  }
+
+  async claimDueWebhookDeliveries(input: {
+    leaseExpiresAt: string;
+    leaseOwner: string;
+    leaseToken: string;
+    limit: number;
+    maxAttempts: number;
+    now: string;
+    orgId: string;
+  }): Promise<ClaimedWebhookDeliveryRecord[]> {
+    return this.db.transaction(async (transaction) => {
+      const candidates = await transaction
+        .select({ id: webhookDeliveries.id })
+        .from(webhookDeliveries)
+        .where(
+          and(
+            eq(webhookDeliveries.orgId, input.orgId),
+            eq(webhookDeliveries.status, "failed"),
+            lte(webhookDeliveries.nextAttemptAt, new Date(input.now)),
+            lt(webhookDeliveries.attemptCount, input.maxAttempts),
+            leaseAvailableAt(input.now),
+          ),
+        )
+        .orderBy(
+          asc(webhookDeliveries.nextAttemptAt),
+          asc(webhookDeliveries.createdAt),
+          asc(webhookDeliveries.id),
+        )
+        .limit(input.limit)
+        .for("update", { skipLocked: true });
+      if (candidates.length === 0) return [];
+      const rows = await transaction
+        .update(webhookDeliveries)
+        .set({
+          leaseOwner: input.leaseOwner,
+          leaseToken: input.leaseToken,
+          leaseExpiresAt: new Date(input.leaseExpiresAt),
+        })
+        .where(
+          inArray(
+            webhookDeliveries.id,
+            candidates.map((candidate) => candidate.id),
+          ),
+        )
+        .returning();
+      return rows.map((row) => claimedDelivery(row, input));
+    });
+  }
+
+  async completeWebhookDeliveryAttempt(input: {
+    delivery: WebhookDeliveryRecord;
+    leaseOwner: string;
+    leaseToken: string;
+    now: string;
+  }): Promise<WebhookDeliveryRecord | undefined> {
+    const [row] = await this.db
+      .update(webhookDeliveries)
+      .set({
+        ...toWebhookDeliveryUpdate(input.delivery),
+        leaseOwner: null,
+        leaseToken: null,
+        leaseExpiresAt: null,
+      })
+      .where(
+        and(
+          eq(webhookDeliveries.id, input.delivery.id),
+          eq(webhookDeliveries.orgId, input.delivery.orgId),
+          eq(webhookDeliveries.leaseOwner, input.leaseOwner),
+          eq(webhookDeliveries.leaseToken, input.leaseToken),
+          gt(webhookDeliveries.leaseExpiresAt, new Date(input.now)),
+        ),
+      )
+      .returning();
+    return row === undefined ? undefined : toWebhookDeliveryRecord(row);
+  }
+
   async createWebhookDelivery(
     delivery: WebhookDeliveryRecord,
   ): Promise<WebhookDeliveryRecord> {
@@ -143,20 +312,43 @@ export class PgWebhookRepository {
   ): Promise<WebhookDeliveryRecord> {
     const [row] = await this.db
       .update(webhookDeliveries)
-      .set({
-        attemptCount: delivery.attemptCount,
-        errorCode: delivery.errorCode ?? null,
-        eventType: delivery.eventType,
-        nextAttemptAt: optionalDate(delivery.nextAttemptAt),
-        payload: delivery.payload,
-        responseStatus: delivery.responseStatus ?? null,
-        status: delivery.status,
-        updatedAt: new Date(delivery.updatedAt),
-      })
+      .set(toWebhookDeliveryUpdate(delivery))
       .where(eq(webhookDeliveries.id, delivery.id))
       .returning();
     return row === undefined ? delivery : toWebhookDeliveryRecord(row);
   }
+}
+
+function leaseAvailableAt(now: string) {
+  return or(
+    isNull(webhookDeliveries.leaseExpiresAt),
+    lte(webhookDeliveries.leaseExpiresAt, new Date(now)),
+  );
+}
+
+function claimedDelivery(
+  row: typeof webhookDeliveries.$inferSelect,
+  lease: { leaseExpiresAt: string; leaseOwner: string; leaseToken: string },
+): ClaimedWebhookDeliveryRecord {
+  return {
+    delivery: toWebhookDeliveryRecord(row),
+    leaseExpiresAt: lease.leaseExpiresAt,
+    leaseOwner: lease.leaseOwner,
+    leaseToken: lease.leaseToken,
+  };
+}
+
+function toWebhookDeliveryUpdate(record: WebhookDeliveryRecord) {
+  return {
+    attemptCount: record.attemptCount,
+    errorCode: record.errorCode ?? null,
+    eventType: record.eventType,
+    nextAttemptAt: optionalDate(record.nextAttemptAt),
+    payload: record.payload,
+    responseStatus: record.responseStatus ?? null,
+    status: record.status,
+    updatedAt: new Date(record.updatedAt),
+  };
 }
 
 export function toWebhookSubscriptionRecord(
@@ -177,7 +369,16 @@ export function toWebhookSubscriptionRecord(
 }
 
 export function toWebhookDeliveryRecord(
-  row: typeof webhookDeliveries.$inferSelect,
+  row: Omit<
+    typeof webhookDeliveries.$inferSelect,
+    "leaseExpiresAt" | "leaseOwner" | "leaseToken"
+  > &
+    Partial<
+      Pick<
+        typeof webhookDeliveries.$inferSelect,
+        "leaseExpiresAt" | "leaseOwner" | "leaseToken"
+      >
+    >,
 ): WebhookDeliveryRecord {
   const delivery: WebhookDeliveryRecord = {
     id: row.id,

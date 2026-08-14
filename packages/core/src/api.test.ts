@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createSessionToken, hashApiKey, scopeValues } from "@romeo/auth";
 import { MemoryObjectStore } from "@romeo/storage";
 import { DevVoiceProvider } from "@romeo/voices";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { generate } from "otplib";
 
 import { createRomeoApi } from "./api";
@@ -32,7 +32,7 @@ import type {
 } from "./services/saml-client";
 
 function openWebUiBridgeEnv(overrides: Record<string, string> = {}) {
-  return readEnv({
+  return testEnv({
     OPENWEBUI_COMPATIBILITY_ENABLED: "true",
     ...overrides,
   });
@@ -370,9 +370,11 @@ describe("Open WebUI-class governed chat extensions", () => {
         scope: "personal",
       }),
     ]);
-    expect(preview.data.messages[0].content).toContain(
-      "Prefer concise release notes.",
-    );
+    expect(
+      preview.data.messages.every(
+        (message: { content: string }) => message.content === "",
+      ),
+    ).toBe(true);
     expect(disabledResponse.status).toBe(200);
     expect(listed.data[0].enabled).toBe(false);
   });
@@ -535,7 +537,7 @@ describe("Open WebUI-class governed chat extensions", () => {
     expect(usage).toContainEqual(
       expect.objectContaining({
         sourceId: body.data[0].file.id,
-        metric: "image.cost.estimated",
+        metric: "image.cost.micro_usd",
         quantity: 40000,
         unit: "micro_usd",
       }),
@@ -544,7 +546,17 @@ describe("Open WebUI-class governed chat extensions", () => {
       usageSummary.data.totals.find(
         (metric: { metric: string }) => metric.metric === "image.generated",
       ),
-    ).toMatchObject({ estimatedCostUsd: 0.04, quantity: 1, unit: "image" });
+    ).toMatchObject({ estimatedCostUsd: 0, quantity: 1, unit: "image" });
+    expect(
+      usageSummary.data.totals.find(
+        (metric: { metric: string }) =>
+          metric.metric === "image.cost.micro_usd",
+      ),
+    ).toMatchObject({
+      estimatedCostUsd: 0.04,
+      quantity: 40_000,
+      unit: "micro_usd",
+    });
   });
 
   it("enforces independent image count and estimated-cost quotas before provider dispatch", async () => {
@@ -785,6 +797,36 @@ describe("Open WebUI-class governed chat extensions", () => {
       }),
     });
     const imported = await importResponse.json();
+    const exportSummarySentinel = "summary-events-are-not-portable-secret";
+    await repository.createRun({
+      id: "run_chat_export_summary_exclusion",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      chatId: imported.data.id,
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      modelId: "model_ollama_default",
+      providerId: "provider_ollama",
+      status: "completed",
+      createdBy: "user_dev_admin",
+      createdAt: "2026-08-14T00:00:00.000Z",
+      completedAt: "2026-08-14T00:00:01.000Z",
+    });
+    await repository.appendRunEvents([
+      {
+        id: "evt_chat_export_summary_exclusion",
+        runId: "run_chat_export_summary_exclusion",
+        sequence: 1,
+        schemaVersion: 1,
+        type: "reasoning.summary.delta",
+        data: {
+          classification: "provider_safe_summary",
+          contentPolicyApplied: true,
+          text: exportSummarySentinel,
+        },
+        createdAt: "2026-08-14T00:00:00.500Z",
+      },
+    ]);
     const searchResponse = await api.request(
       "/api/v1/chats/query?workspaceId=workspace_default&q=audit%20sentinel",
     );
@@ -809,6 +851,7 @@ describe("Open WebUI-class governed chat extensions", () => {
     expect(exported.data.schema).toBe("romeo.chat-export.v1");
     expect(exported.data.chat.modelId).toBe("model_ollama_default");
     expect(exported.data.messages).toHaveLength(2);
+    expect(JSON.stringify(exported)).not.toContain(exportSummarySentinel);
 
     await repository.updateChat({
       ...temporary.data,
@@ -897,6 +940,239 @@ describe("Open WebUI-class governed chat extensions", () => {
     ).toBe(text);
   });
 
+  it("round-trips authorized typed file references without copying file bytes", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const file = await repository.createFileObject({
+      id: "file_transfer_reference",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      ownerType: "user",
+      ownerId: "user_dev_admin",
+      fileName: "reference.txt",
+      mimeType: "text/plain",
+      sizeBytes: 18,
+      sha256: "b".repeat(64),
+      objectKey: "files/org_default/workspace_default/reference.txt",
+      purpose: "general",
+      status: "ready",
+      lifecycleVersion: 1,
+      lifecycleAttempts: 1,
+      metadata: {},
+      createdAt: "2026-08-14T12:00:00.000Z",
+      updatedAt: "2026-08-14T12:00:00.000Z",
+    });
+    const api = createRomeoApi(repository);
+    const sourceResponse = await api.request("/api/v1/chats/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Reference source",
+        messages: [
+          {
+            role: "user",
+            content: "Review this file",
+            parts: [
+              {
+                schemaVersion: 1,
+                type: "text",
+                text: "Review this file",
+              },
+              {
+                schemaVersion: 1,
+                type: "document_ref",
+                fileId: file.id,
+                fileName: file.fileName,
+                mediaType: "text/plain",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const source = await sourceResponse.json();
+    const exported = await (
+      await api.request(`/api/v1/chats/${source.data.id}/export`)
+    ).json();
+    const importedResponse = await api.request("/api/v1/chats/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Reference copy",
+        messages: exported.data.messages,
+      }),
+    });
+    const imported = await importedResponse.json();
+    const importedMessages = await repository.listMessages(imported.data.id);
+    const importedParts = await repository.listMessageParts(
+      importedMessages[0]!.id,
+    );
+
+    expect(sourceResponse.status).toBe(201);
+    expect(importedResponse.status).toBe(201);
+    expect(exported.data.messages[0]).not.toHaveProperty("attachments");
+    expect(exported.data.messages[0].parts).toEqual([
+      {
+        schemaVersion: 1,
+        type: "text",
+        text: "Review this file",
+      },
+      expect.objectContaining({
+        schemaVersion: 1,
+        type: "document_ref",
+        fileId: file.id,
+        fileName: file.fileName,
+        mediaType: "text/plain",
+      }),
+    ]);
+    expect(importedParts.filter((part) => part.type === "text")).toHaveLength(
+      1,
+    );
+    expect(importedParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "document_ref", fileId: file.id }),
+      ]),
+    );
+    expect(await repository.countMessageFileReferences(file.id)).toBe(2);
+    expect(await repository.getFileObject(file.id)).toMatchObject({
+      status: "attached",
+    });
+  });
+
+  it("fails closed on mismatched or unsupported imported typed parts", async () => {
+    const repository = new InMemoryRomeoRepository();
+    await repository.createWorkspace({
+      id: "workspace_transfer_other",
+      orgId: "org_default",
+      name: "Transfer other",
+      slug: "transfer-other",
+    });
+    const fileBase = {
+      ownerType: "user" as const,
+      ownerId: "user_dev_admin",
+      fileName: "reference.txt",
+      mimeType: "text/plain",
+      sizeBytes: 9,
+      sha256: "c".repeat(64),
+      purpose: "general" as const,
+      lifecycleVersion: 1,
+      lifecycleAttempts: 1,
+      metadata: {},
+      createdAt: "2026-08-14T12:00:00.000Z",
+      updatedAt: "2026-08-14T12:00:00.000Z",
+    };
+    await repository.createFileObject({
+      ...fileBase,
+      id: "file_transfer_wrong_workspace",
+      orgId: "org_default",
+      workspaceId: "workspace_transfer_other",
+      objectKey: "files/org_default/workspace_transfer_other/reference.txt",
+      status: "ready",
+    });
+    await repository.createFileObject({
+      ...fileBase,
+      id: "file_transfer_not_ready",
+      orgId: "org_default",
+      workspaceId: "workspace_default",
+      objectKey: "files/org_default/workspace_default/not-ready.txt",
+      status: "failed",
+    });
+    const api = createRomeoApi(repository);
+    const mismatched = await api.request("/api/v1/chats/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        messages: [
+          {
+            role: "user",
+            content: "canonical",
+            parts: [{ schemaVersion: 1, type: "text", text: "different" }],
+          },
+        ],
+      }),
+    });
+    const unsupported = await api.request("/api/v1/chats/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        messages: [
+          {
+            role: "user",
+            content: "audio",
+            parts: [
+              {
+                schemaVersion: 1,
+                type: "audio_ref",
+                fileId: "file_unavailable",
+                mediaType: "audio/mpeg",
+                durationMs: 1000,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const mismatchedBody = await mismatched.json();
+    const unsupportedBody = await unsupported.json();
+    const unavailableStatuses = await Promise.all(
+      ["file_transfer_wrong_workspace", "file_transfer_not_ready"].map(
+        async (fileId) => {
+          const response = await api.request("/api/v1/chats/import", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              workspaceId: "workspace_default",
+              messages: [
+                {
+                  role: "user",
+                  content: "reference",
+                  parts: [
+                    {
+                      schemaVersion: 1,
+                      type: "document_ref",
+                      fileId,
+                      fileName: "reference.txt",
+                      mediaType: "text/plain",
+                    },
+                  ],
+                },
+              ],
+            }),
+          });
+          return {
+            status: response.status,
+            body: await response.json(),
+          };
+        },
+      ),
+    );
+
+    expect(mismatched.status).toBe(400);
+    expect(mismatchedBody.error.code).toBe("invalid_request");
+    expect(unsupported.status).toBe(415);
+    expect(unsupportedBody.error.code).toBe(
+      "unsupported_message_attachment_type",
+    );
+    expect(unavailableStatuses).toEqual([
+      expect.objectContaining({
+        status: 404,
+        body: expect.objectContaining({
+          error: expect.objectContaining({ code: "not_found" }),
+        }),
+      }),
+      expect.objectContaining({
+        status: 404,
+        body: expect.objectContaining({
+          error: expect.objectContaining({ code: "not_found" }),
+        }),
+      }),
+    ]);
+    expect((await repository.listChats("workspace_default")).length).toBe(1);
+  });
+
   it("syncs interface preferences and supports revoking chat shares", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository());
     const preferencesResponse = await api.request(
@@ -982,7 +1258,16 @@ describe("Open WebUI-class governed chat extensions", () => {
   });
 
   it("persists and drains queued turns on the server", async () => {
-    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository);
+    const selectedParentId = "msg_queue_selected_parent";
+    await repository.createMessage({
+      chatId: "chat_welcome",
+      content: "Pinned branch parent",
+      createdAt: "2026-08-14T00:00:00.000Z",
+      id: selectedParentId,
+      role: "assistant",
+    });
     const queuedResponse = await api.request(
       "/api/v1/chats/chat_welcome/queue",
       {
@@ -991,6 +1276,7 @@ describe("Open WebUI-class governed chat extensions", () => {
         body: JSON.stringify({
           agentId: "agent_default",
           content: "Server queue sentinel",
+          parentMessageId: selectedParentId,
         }),
       },
     );
@@ -1002,11 +1288,13 @@ describe("Open WebUI-class governed chat extensions", () => {
 
     expect(queuedResponse.status).toBe(202);
     expect(queued.data.content).toBe("Server queue sentinel");
+    expect(queued.data.parentMessageId).toBe(selectedParentId);
     expect(
       messages.data.some(
-        (message: { role: string; content: string }) =>
+        (message: { role: string; content: string; parentId?: string }) =>
           message.role === "user" &&
-          message.content === "Server queue sentinel",
+          message.content === "Server queue sentinel" &&
+          message.parentId === selectedParentId,
       ),
     ).toBe(true);
   });
@@ -1043,6 +1331,118 @@ describe("Open WebUI-class governed chat extensions", () => {
         (turn) => turn.idempotencyKey === "queue-request-1",
       ),
     ).toHaveLength(1);
+  });
+
+  it("preserves queued reasoning policy, rejects policy conflicts, and fails summary closed", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const provider = await repository.getProvider("provider_openai_compatible");
+    const model = await repository.getModel("model_openai_compatible_default");
+    if (provider === undefined || model === undefined)
+      throw new Error("Expected seeded provider target");
+    provider.baseUrl = "https://api.example.test/v1";
+    provider.credentialRef = "env://ROMEO_PROVIDER_API_KEY";
+    provider.capabilities = { ...provider.capabilities, reasoning: true };
+    model.capabilities = { ...model.capabilities, reasoning: true };
+    const providerBodies: Array<Record<string, unknown>> = [];
+    const api = createRomeoApi(repository, {
+      providerFetch: async (_input, init) => {
+        providerBodies.push(JSON.parse(String(init?.body)));
+        return new Response(
+          providerSse([
+            { choices: [{ delta: { content: "Queued reasoned." } }] },
+          ]),
+          { status: 200 },
+        );
+      },
+      secretResolver: new EnvironmentSecretResolver({
+        ROMEO_PROVIDER_API_KEY: "provider-api-key",
+      }),
+    });
+    const request = (effort: "high" | "low") => ({
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agentId: "agent_default",
+        content: "Queued automatic reasoning.",
+        idempotencyKey: "queue-reasoning-policy",
+        reasoningPolicy: { schemaVersion: 1, mode: "auto", effort },
+      }),
+    });
+    const automaticResponse = await api.request(
+      "/api/v1/chats/chat_welcome/queue",
+      request("high"),
+    );
+    const automatic = await automaticResponse.json();
+    const replayResponse = await api.request(
+      "/api/v1/chats/chat_welcome/queue",
+      request("high"),
+    );
+    const replay = await replayResponse.json();
+    const conflictResponse = await api.request(
+      "/api/v1/chats/chat_welcome/queue",
+      request("low"),
+    );
+    const conflict = await conflictResponse.json();
+    await waitForAssistantMessage(api, "chat_welcome", "Queued reasoned.");
+
+    expect(automaticResponse.status).toBe(202);
+    expect(automatic.data.reasoningPolicy).toEqual({
+      schemaVersion: 1,
+      mode: "auto",
+      effort: "high",
+    });
+    expect(replay.data.id).toBe(automatic.data.id);
+    expect(conflictResponse.status).toBe(409);
+    expect(conflict.error.code).toBe("idempotency_key_conflict");
+    expect(providerBodies).toHaveLength(1);
+    expect(providerBodies[0]).toMatchObject({ reasoning_effort: "high" });
+
+    const summaryChatResponse = await api.request("/api/v1/chats", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        title: "Queued summary rejection",
+      }),
+    });
+    const summaryChat = await summaryChatResponse.json();
+    const summarySentinel = "queued-summary-private-secret";
+    const summaryResponse = await api.request(
+      `/api/v1/chats/${summaryChat.data.id}/queue`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agentId: "agent_default",
+          content: summarySentinel,
+          reasoningPolicy: {
+            schemaVersion: 1,
+            mode: "summary",
+            retainSummary: true,
+          },
+        }),
+      },
+    );
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const [summaryRun] = await repository.listRuns(summaryChat.data.id);
+      if (summaryRun?.status === "failed") break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    const [summaryRun] = await repository.listRuns(summaryChat.data.id);
+    const summaryEvents =
+      summaryRun === undefined
+        ? ""
+        : await (
+            await api.request(`/api/v1/runs/${summaryRun.id}/events`)
+          ).text();
+
+    expect(summaryResponse.status).toBe(202);
+    expect(summaryRun?.status).toBe("failed");
+    expect(providerBodies).toHaveLength(1);
+    expect(summaryEvents).toContain(
+      '"errorCode":"provider_invalid_request_or_capability"',
+    );
+    expect(summaryEvents).not.toContain(summarySentinel);
   });
 
   it("lists queued turns in stable order and makes lease/cancellation races explicit", async () => {
@@ -1249,6 +1649,11 @@ describe("Open WebUI-class governed chat extensions", () => {
   it("retries a leased run checkpoint when provider output has not started", async () => {
     const repository = new InMemoryRomeoRepository();
     const objectStore = new MemoryObjectStore();
+    const provider = await repository.getProvider("provider_openai_compatible");
+    if (provider === undefined) throw new Error("Expected seeded provider");
+    provider.baseUrl = "https://api.example/v1";
+    provider.credentialRef = "env://ROMEO_PROVIDER_API_KEY";
+    const providerBodies: Array<Record<string, unknown>> = [];
     const checkpointKey =
       "run-execution-checkpoints/org_default/workspace_default/run_retryable_checkpoint.json";
     await repository.createRun({
@@ -1294,10 +1699,25 @@ describe("Open WebUI-class governed chat extensions", () => {
           scopeSnapshot: scopeValues,
           assistantContent: "",
           emitRunStarted: false,
+          sampling: { temperature: 0.31, topP: 0.81, maxTokens: 321 },
+          reasoning: { effort: "high" },
+          structuredOutput: { type: "json_object" },
         }),
       ),
     });
-    const api = createRomeoApi(repository, { objectStore });
+    const api = createRomeoApi(repository, {
+      objectStore,
+      providerFetch: async (_input, init) => {
+        providerBodies.push(JSON.parse(String(init?.body)));
+        return new Response(
+          providerSse([{ choices: [{ delta: { content: "Recovered." } }] }]),
+          { status: 200 },
+        );
+      },
+      secretResolver: new EnvironmentSecretResolver({
+        ROMEO_PROVIDER_API_KEY: "provider-api-key",
+      }),
+    });
     const beforeUserMessages = (
       await repository.listMessages("chat_welcome")
     ).filter((message) => message.role === "user").length;
@@ -1331,6 +1751,14 @@ describe("Open WebUI-class governed chat extensions", () => {
       }),
     );
     expect(await objectStore.getObject(checkpointKey)).toBeUndefined();
+    expect(providerBodies).toHaveLength(1);
+    expect(providerBodies[0]).toMatchObject({
+      temperature: 0.31,
+      top_p: 0.81,
+      max_tokens: 321,
+      response_format: { type: "json_object" },
+    });
+    expect(providerBodies[0]).not.toHaveProperty("reasoning_effort");
   });
 
   it("lets only one service instance recover a shared retryable run", async () => {
@@ -2013,6 +2441,9 @@ describe("Romeo API thin slice", () => {
     );
     expect(spec.components.schemas.EvalReleaseCandidateEvidence).toBeDefined();
     expect(Object.keys(spec.paths)).toContain("/eval-suites/{suiteId}/runs");
+    expect(Object.keys(spec.paths)).toContain(
+      "/eval-suites/{suiteId}/reasoning-comparison",
+    );
     expect(Object.keys(spec.paths)).not.toContain(
       "/eval-suites/{suiteId}/model-comparisons",
     );
@@ -2243,8 +2674,17 @@ describe("Romeo API thin slice", () => {
     ).toEqual(["tool_call", "operation_dispatch"]);
     expect(spec.components.schemas.ToolApprovalDecision).toBeDefined();
     expect(spec.components.schemas.RunEvent).toBeDefined();
-    expect(spec.components.schemas.RunEvent.properties.type.enum).toContain(
-      "run.continuing",
+    expect(
+      spec.components.schemas.RunEvent.oneOf.flatMap(
+        (eventSchema: { properties?: { type?: { enum?: string[] } } }) =>
+          eventSchema.properties?.type?.enum ?? [],
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "run.continuing",
+        "reasoning.summary.delta",
+        "reasoning.summary.completed",
+      ]),
     );
     expect(spec.components.schemas.RunContinuingEventData).toBeDefined();
     expect(spec.components.schemas.Chat).toBeDefined();
@@ -2288,7 +2728,7 @@ describe("Romeo API thin slice", () => {
     expect(
       spec.paths["/runs"].post.responses[202].content["application/json"].schema
         .properties.data.$ref,
-    ).toBe("#/components/schemas/RunRecord");
+    ).toBe("#/components/schemas/StartedRunRecord");
     expect(
       spec.paths["/access-review/report"].get.responses[200].content[
         "application/json"
@@ -2804,7 +3244,7 @@ describe("Romeo API thin slice", () => {
       "utf8",
     );
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         APP_ORIGIN: "https://romeo.example.com",
         EDGE_TLS_TERMINATION: "ingress",
         EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
@@ -2991,7 +3431,7 @@ describe("Romeo API thin slice", () => {
       const evidencePath = join(directory, `live-edge-${index}.json`);
       writeFileSync(evidencePath, JSON.stringify(testCase.evidence), "utf8");
       const api = createRomeoApi(new InMemoryRomeoRepository(), {
-        env: readEnv({
+        env: testEnv({
           APP_ORIGIN: "https://romeo.example.com",
           EDGE_TLS_TERMINATION: "ingress",
           EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
@@ -3022,7 +3462,7 @@ describe("Romeo API thin slice", () => {
 
   it("fails closed with 503 when the valkey rate limiter is unavailable", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         HTTP_RATE_LIMIT_DRIVER: "valkey",
         // Port 1 is reserved and never listening: guarantees connection refusal
         // without depending on whether a real valkey happens to run locally.
@@ -3058,7 +3498,7 @@ describe("Romeo API thin slice", () => {
       ),
     );
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH: evidencePath,
         BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED: "true",
         BROWSER_AUTOMATION_RUNNER_URL: rawRunnerUrl,
@@ -3160,7 +3600,7 @@ describe("Romeo API thin slice", () => {
       const evidencePath = join(directory, `${item.name}.json`);
       writeFileSync(evidencePath, JSON.stringify(item.evidence));
       const api = createRomeoApi(new InMemoryRomeoRepository(), {
-        env: readEnv({
+        env: testEnv({
           BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH: evidencePath,
           BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED: "true",
           BROWSER_AUTOMATION_RUNNER_URL:
@@ -3207,7 +3647,7 @@ describe("Romeo API thin slice", () => {
       ),
     );
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         DATA_CONNECTOR_EXECUTION_DRIVER: "managed-fetch",
         DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
         DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: "confluence.secret.example",
@@ -3309,7 +3749,7 @@ describe("Romeo API thin slice", () => {
       const evidencePath = join(directory, `${item.name}.json`);
       writeFileSync(evidencePath, JSON.stringify(item.evidence));
       const api = createRomeoApi(new InMemoryRomeoRepository(), {
-        env: readEnv({
+        env: testEnv({
           DATA_CONNECTOR_EXECUTION_DRIVER: "managed-fetch",
           DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
           DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: "confluence.secret.example",
@@ -3338,7 +3778,7 @@ describe("Romeo API thin slice", () => {
 
   it("does not report browser automation ready for a non-HTTPS runner URL", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED: "true",
         BROWSER_AUTOMATION_RUNNER_URL: "http://runner.internal.example/tasks",
         BROWSER_AUTOMATION_WORKER_ENABLED: "true",
@@ -3363,7 +3803,7 @@ describe("Romeo API thin slice", () => {
 
   it("reports sanitized Postgres operational posture without leaking connection details", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         REPOSITORY_DRIVER: "postgres",
         DATABASE_URL: "postgres://romeo:super-secret@db.internal/romeo",
         POSTGRES_POOL_MAX: "17",
@@ -3500,7 +3940,7 @@ describe("Romeo API thin slice", () => {
       "utf8",
     );
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         POSTGRES_QUERY_PLAN_EVIDENCE_PATH: queryPlanPath,
         POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH: slowQueryPath,
         POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH: lockPath,
@@ -3595,7 +4035,7 @@ describe("Romeo API thin slice", () => {
       "utf8",
     );
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH: slowQueryPath,
         POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH: lockPath,
         POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH: archivalPath,
@@ -4119,7 +4559,7 @@ describe("Romeo API thin slice", () => {
       "utf8",
     );
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         GA_CHECKLIST_PATH: checklistPath,
         GA_TARGET_PREFLIGHT_PATH: preflightPath,
         GA_TARGET_PLAN_PATH: planPath,
@@ -4421,7 +4861,7 @@ describe("Romeo API thin slice", () => {
 
   it("rejects request bodies larger than the configured API ingress limit", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         REQUEST_BODY_MAX_BYTES: "96",
       }),
     });
@@ -4457,7 +4897,7 @@ describe("Romeo API thin slice", () => {
 
   it("does not read the body of a request that declares no body framing", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ REQUEST_BODY_MAX_BYTES: "96" }),
+      env: testEnv({ REQUEST_BODY_MAX_BYTES: "96" }),
     });
 
     // Reproduce the precondition the Node adapter (srvx) creates: it decides
@@ -4536,7 +4976,7 @@ describe("Romeo API thin slice", () => {
     });
     const apiKey = await apiKeyResponse.json();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         HTTP_RATE_LIMIT_DRIVER: "memory",
         HTTP_RATE_LIMIT_AUTHENTICATED_MAX: "2",
@@ -4576,8 +5016,9 @@ describe("Romeo API thin slice", () => {
     });
     const apiKey = await apiKeyResponse.json();
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
+        EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
       }),
@@ -4628,6 +5069,9 @@ describe("Romeo API thin slice", () => {
     expect(openApiResponse.status).toBe(200);
     expect(unauthenticatedResponse.status).toBe(401);
     expect(unauthenticated.error.code).toBe("unauthorized");
+    expect(unauthenticatedResponse.headers.get("www-authenticate")).toBe(
+      'Bearer realm="romeo"',
+    );
     expect(authenticatedResponse.status).toBe(200);
     expect(authenticated.subject.id).toBe("user_dev_admin");
     expect(authenticated.deployment.tenancyMode).toBe("single");
@@ -4646,7 +5090,7 @@ describe("Romeo API thin slice", () => {
     expect(revokeSessionResponse.headers.get("set-cookie")).toContain(
       "Max-Age=0",
     );
-    expect(revokedSessionMeResponse.status).toBe(403);
+    expect(revokedSessionMeResponse.status).toBe(401);
   });
 
   it("rejects cross-site browser mutations while allowing configured browser origins", async () => {
@@ -4662,7 +5106,7 @@ describe("Romeo API thin slice", () => {
     });
     const apiKey = await apiKeyResponse.json();
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         APP_ORIGIN: "https://romeo.example.com",
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
@@ -4710,9 +5154,46 @@ describe("Romeo API thin slice", () => {
     expect(allowedResponse.status).toBe(200);
   });
 
+  it("honors forwarded protocol for cookies only in trusted-proxy mode", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const bootstrap = createRomeoApi(repository);
+    const keyResponse = await bootstrap.request("/api/v1/api-keys", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Cookie trust", scopes: ["me:read"] }),
+    });
+    const key = await keyResponse.json();
+    const createSession = (mode: "direct" | "trusted_proxy") =>
+      createRomeoApi(repository, {
+        env: testEnv({
+          APP_ORIGIN: "http://localhost:3000",
+          DEV_SEEDED_LOGIN: "false",
+          EDGE_TRUSTED_PROXY_MODE: mode,
+          SESSION_SECRET: "prod-session-secret-32-bytes-long",
+          WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
+        }),
+      }).request("/api/v1/sessions", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${key.data.token}`,
+          "content-type": "application/json",
+          "x-forwarded-proto": "https",
+        },
+        body: JSON.stringify({ name: mode, ttlHours: 1 }),
+      });
+
+    const direct = await createSession("direct");
+    const trusted = await createSession("trusted_proxy");
+
+    expect(direct.status).toBe(201);
+    expect(direct.headers.get("set-cookie")).not.toContain("; Secure");
+    expect(trusted.status).toBe(201);
+    expect(trusted.headers.get("set-cookie")).toContain("; Secure");
+  });
+
   it("exposes the deployment tenancy mode on the bootstrap response", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TENANCY_MODE: "multi" }),
+      env: testEnv({ TENANCY_MODE: "multi" }),
     });
 
     const response = await api.request("/api/v1/me");
@@ -4724,7 +5205,7 @@ describe("Romeo API thin slice", () => {
 
   it("serves optional SCIM v2 users and groups with deactivation safeguards", async () => {
     const disabledApi = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ SCIM_ENABLED: "false" }),
+      env: testEnv({ SCIM_ENABLED: "false" }),
     });
     const disabledResponse = await disabledApi.request(
       "/api/v1/scim/v2/ServiceProviderConfig",
@@ -4738,7 +5219,7 @@ describe("Romeo API thin slice", () => {
 
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
-      env: readEnv({ SCIM_ENABLED: "true" }),
+      env: testEnv({ SCIM_ENABLED: "true" }),
     });
     const policyResponse = await api.request(
       "/api/v1/governance/identity-lifecycle-policy",
@@ -4940,10 +5421,10 @@ describe("Romeo API thin slice", () => {
       WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
     };
     const setupApi = createRomeoApi(repository, {
-      env: readEnv({ ...sharedSecrets, DEV_SEEDED_LOGIN: "true" }),
+      env: testEnv({ ...sharedSecrets, DEV_SEEDED_LOGIN: "true" }),
     });
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({ ...sharedSecrets, DEV_SEEDED_LOGIN: "false" }),
+      env: testEnv({ ...sharedSecrets, DEV_SEEDED_LOGIN: "false" }),
     });
     await repository.createUser({
       id: "user_profile_conflict",
@@ -5044,10 +5525,10 @@ describe("Romeo API thin slice", () => {
       WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
     };
     const setupApi = createRomeoApi(repository, {
-      env: readEnv({ ...sharedSecrets, DEV_SEEDED_LOGIN: "true" }),
+      env: testEnv({ ...sharedSecrets, DEV_SEEDED_LOGIN: "true" }),
     });
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({ ...sharedSecrets, DEV_SEEDED_LOGIN: "false" }),
+      env: testEnv({ ...sharedSecrets, DEV_SEEDED_LOGIN: "false" }),
     });
     await repository.createUser({
       id: "user_ops",
@@ -5267,6 +5748,17 @@ describe("Romeo API thin slice", () => {
       },
     );
     const mfaVerify = await mfaVerifyResponse.json();
+    const replayedMfaVerifyResponse = await secureApi.request(
+      "/api/v1/auth/local/mfa/verify",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          challengeToken: mfaLogin.data.challengeToken,
+          code: totpCode,
+        }),
+      },
+    );
     const mfaCookie = cookiePair(
       mfaVerifyResponse.headers.get("set-cookie") ?? "",
       "romeo_session",
@@ -5548,6 +6040,7 @@ describe("Romeo API thin slice", () => {
     expect(failedMfaVerify.error.code).toBe("local_mfa_code_invalid");
     expect(mfaVerifyResponse.status).toBe(200);
     expect(mfaVerify.data.status).toBe("authenticated");
+    expect(replayedMfaVerifyResponse.status).toBe(401);
     expect(recoveryCodesResponse.status).toBe(201);
     expect(recoveryCodes.data.codes).toHaveLength(10);
     expect(recoveryCodes.data.codes).toEqual(
@@ -5725,7 +6218,7 @@ describe("Romeo API thin slice", () => {
   it("stores managed auth-provider secrets as encrypted refs without raw readback", async () => {
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         MANAGED_SECRET_ENCRYPTION_KEY: "prod-managed-secret-key-32-bytes",
       }),
     });
@@ -5816,13 +6309,18 @@ describe("Romeo API thin slice", () => {
       type: "totp",
       name: "Primary authenticator",
       status: "active",
-      secretEncrypted: oldMfaVault.encrypt(rawTotpSecret),
+      secretEncrypted: oldMfaVault.encrypt(rawTotpSecret, {
+        factorId: "mfa_factor_rotation",
+        factorType: "totp",
+        orgId: "org_default",
+        userId: "user_dev_admin",
+      }),
       createdAt: "2026-07-02T10:00:00.000Z",
       updatedAt: "2026-07-02T10:00:00.000Z",
       confirmedAt: "2026-07-02T10:00:00.000Z",
     });
     const oldApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         MANAGED_SECRET_ENCRYPTION_KEY: oldManagedSecretKey,
       }),
     });
@@ -5837,7 +6335,7 @@ describe("Romeo API thin slice", () => {
     });
     const secret = await secretResponse.json();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         LOCAL_AUTH_SECRET_ENCRYPTION_KEY: newLocalMfaKey,
         LOCAL_AUTH_SECRET_ENCRYPTION_KEY_PREVIOUS: oldLocalMfaKey,
         MANAGED_SECRET_ENCRYPTION_KEY: newManagedSecretKey,
@@ -5870,14 +6368,14 @@ describe("Romeo API thin slice", () => {
     );
     const managedSecretResolver = new ManagedSecretService(
       repository,
-      readEnv({ MANAGED_SECRET_ENCRYPTION_KEY: newManagedSecretKey }),
+      testEnv({ MANAGED_SECRET_ENCRYPTION_KEY: newManagedSecretKey }),
     );
     const resolved = await managedSecretResolver.resolveValue(
       secret.data.secretRef,
     );
     const oldManagedSecretResolver = new ManagedSecretService(
       repository,
-      readEnv({ MANAGED_SECRET_ENCRYPTION_KEY: oldManagedSecretKey }),
+      testEnv({ MANAGED_SECRET_ENCRYPTION_KEY: oldManagedSecretKey }),
     );
     const staleResolved = await oldManagedSecretResolver.resolveValue(
       secret.data.secretRef,
@@ -5929,11 +6427,22 @@ describe("Romeo API thin slice", () => {
     expect(
       new LocalMfaSecretVault(newLocalMfaKey).decrypt(
         updatedFactor!.secretEncrypted,
+        {
+          factorId: "mfa_factor_rotation",
+          factorType: "totp",
+          orgId: "org_default",
+          userId: "user_dev_admin",
+        },
       ),
     ).toBe(rawTotpSecret);
-    expect(() => oldMfaVault.decrypt(updatedFactor!.secretEncrypted)).toThrow(
-      /authenticat/iu,
-    );
+    expect(() =>
+      oldMfaVault.decrypt(updatedFactor!.secretEncrypted, {
+        factorId: "mfa_factor_rotation",
+        factorType: "totp",
+        orgId: "org_default",
+        userId: "user_dev_admin",
+      }),
+    ).toThrow(/authenticat/iu);
     expect(resolved).toMatchObject({
       available: true,
       value: rawManagedSecret,
@@ -6044,7 +6553,7 @@ describe("Romeo API thin slice", () => {
     const adminCookie =
       adminSessionResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -6236,7 +6745,7 @@ describe("Romeo API thin slice", () => {
         revokedAt: expect.any(String),
       },
     });
-    expect(supportMeAfterRevokeResponse.status).toBe(403);
+    expect(supportMeAfterRevokeResponse.status).toBe(401);
     expect(revokedReportResponse.status).toBe(200);
     expect(revokedReport.data[0].status).toBe("revoked");
     expect(revokedReport.data[0].session.revokedAt).toEqual(expect.any(String));
@@ -6316,7 +6825,7 @@ describe("Romeo API thin slice", () => {
     const approverCookie = `romeo_session=${approverToken}`;
     const disabledRequesterCookie = `romeo_session=${disabledRequesterToken}`;
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -6596,7 +7105,7 @@ describe("Romeo API thin slice", () => {
     );
     const selfDisable = await selfDisableResponse.json();
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -6644,9 +7153,9 @@ describe("Romeo API thin slice", () => {
     expect(disabled.data.disabledAt).toEqual(expect.any(String));
     expect(selfDisableResponse.status).toBe(403);
     expect(selfDisable.error.code).toBe("user_self_disable_forbidden");
-    expect(apiKeyResponse.status).toBe(403);
-    expect(sessionResponse.status).toBe(403);
-    expect(ownedSupportSessionResponse.status).toBe(403);
+    expect(apiKeyResponse.status).toBe(401);
+    expect(sessionResponse.status).toBe(401);
+    expect(ownedSupportSessionResponse.status).toBe(401);
     expect(revokedApiKey?.revokedAt).toEqual(expect.any(String));
     expect(revokedSession?.revokedAt).toEqual(expect.any(String));
     expect(revokedOwnedSupportSession?.revokedAt).toEqual(expect.any(String));
@@ -6716,7 +7225,7 @@ describe("Romeo API thin slice", () => {
       });
     }
     const api = createRomeoApi(repository, {
-      env: readEnv(),
+      env: testEnv(),
     });
     const requestBody = {
       source: "scim",
@@ -6877,7 +7386,7 @@ describe("Romeo API thin slice", () => {
       expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       createdAt: new Date().toISOString(),
     });
-    const env = readEnv({
+    const env = testEnv({
       OIDC_ISSUER_URL: issuer,
       OIDC_CLIENT_ID: "romeo",
     });
@@ -6906,7 +7415,7 @@ describe("Romeo API thin slice", () => {
     });
     const deprovision = await response.json();
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         OIDC_ISSUER_URL: issuer,
         OIDC_CLIENT_ID: "romeo",
@@ -6937,8 +7446,8 @@ describe("Romeo API thin slice", () => {
       id: targetUserId,
       disabledAt: expect.any(String),
     });
-    expect(apiKeyResponse.status).toBe(403);
-    expect(sessionResponse.status).toBe(403);
+    expect(apiKeyResponse.status).toBe(401);
+    expect(sessionResponse.status).toBe(401);
     expect(deprovisionAudit?.metadata).toMatchObject({
       credentialRevocation: "user_api_keys_and_sessions",
       issuerHost: "idp.example.com",
@@ -6954,7 +7463,7 @@ describe("Romeo API thin slice", () => {
     const issuer = "https://idp.example.com/realms/romeo";
     const discoveryUrl = `${issuer}/.well-known/openid-configuration`;
     const jwksUri = `${issuer}/protocol/openid-connect/certs`;
-    const env = readEnv({
+    const env = testEnv({
       DEV_SEEDED_LOGIN: "false",
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
       WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -7048,7 +7557,7 @@ describe("Romeo API thin slice", () => {
     const issuer = "https://idp.example.com/realms/romeo";
     const discoveryUrl = `${issuer}/.well-known/openid-configuration`;
     const jwksUri = `${issuer}/protocol/openid-connect/certs`;
-    const env = readEnv({
+    const env = testEnv({
       DEV_SEEDED_LOGIN: "false",
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
       WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -7104,7 +7613,7 @@ describe("Romeo API thin slice", () => {
     const issuer = "https://idp.example.com/realms/romeo";
     const discoveryUrl = `${issuer}/.well-known/openid-configuration`;
     const jwksUri = `${issuer}/protocol/openid-connect/certs`;
-    const env = readEnv({
+    const env = testEnv({
       DEV_SEEDED_LOGIN: "false",
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
       WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -7221,7 +7730,7 @@ describe("Romeo API thin slice", () => {
     const authorizationEndpoint = `${issuer}/v1/authorize`;
     const tokenEndpoint = `${issuer}/v1/token`;
     const jwksUri = `${issuer}/v1/keys`;
-    const env = readEnv({
+    const env = testEnv({
       APP_ORIGIN: "https://romeo.example",
       DEV_SEEDED_LOGIN: "false",
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
@@ -7391,7 +7900,7 @@ describe("Romeo API thin slice", () => {
     const authorizationEndpoint = `${issuer}/v1/authorize`;
     const tokenEndpoint = `${issuer}/v1/token`;
     const jwksUri = `${issuer}/v1/keys`;
-    const env = readEnv({
+    const env = testEnv({
       APP_ORIGIN: "https://romeo.example",
       DEV_SEEDED_LOGIN: "false",
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
@@ -7424,6 +7933,7 @@ describe("Romeo API thin slice", () => {
             ...validOidcClaims(),
             aud: ["romeo-enterprise-okta", "account"],
             azp: "romeo-enterprise-okta",
+            groups: ["/romeo/users", "workspace:workspace_enterprise"],
             iss: issuer,
             nonce: authorizationNonce,
           },
@@ -7465,6 +7975,7 @@ describe("Romeo API thin slice", () => {
                 oidc: {
                   issuerUrl: issuer,
                   clientId: "romeo-enterprise-okta",
+                  workspaceGroupPrefix: "workspace:",
                 },
               },
             ],
@@ -7524,7 +8035,7 @@ describe("Romeo API thin slice", () => {
   });
 
   it("completes browser GitHub OAuth2 PKCE login with provider settings and managed secret refs", async () => {
-    const env = readEnv({
+    const env = testEnv({
       APP_ORIGIN: "https://romeo.example",
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
       WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -8024,6 +8535,7 @@ describe("Romeo API thin slice", () => {
       createdAt: new Date().toISOString(),
     });
     const api = createRomeoApi(repository, {
+      env: testEnv({ EDGE_TRUSTED_PROXY_MODE: "trusted_proxy" }),
       samlClientFactory,
       secretResolver: new EnvironmentSecretResolver({
         SAML_IDP_CERT: rawCert,
@@ -8175,6 +8687,8 @@ describe("Romeo API thin slice", () => {
     expect(startUrl.searchParams.get("SAMLRequest")).toBe("fake-saml-request");
     expect(relayState).toHaveLength(32);
     expect(stateCookie).toMatch(/^romeo_saml_state=/);
+    expect(startResponse.headers.get("set-cookie")).toContain("SameSite=None");
+    expect(startResponse.headers.get("set-cookie")).toContain("Secure");
     expect(callbackResponse.status).toBe(302);
     expect(callbackResponse.headers.get("location")).toBe("/app");
     expect(callbackSetCookie).toContain("romeo_session=rms_");
@@ -8257,7 +8771,7 @@ describe("Romeo API thin slice", () => {
     };
     const repository = new InMemoryRomeoRepository();
     const oldApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         APP_ORIGIN: "https://romeo.example",
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: oldSecret,
@@ -8281,7 +8795,7 @@ describe("Romeo API thin slice", () => {
     );
 
     const rotatedApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         APP_ORIGIN: "https://romeo.example",
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: newSecret,
@@ -8459,15 +8973,14 @@ describe("Romeo API thin slice", () => {
     });
     const preview = await previewResponse.json();
     expect(previewResponse.status).toBe(200);
-    expect(preview.data.messages[0].content).toContain(
-      "Communication style: concise.",
-    );
-    expect(preview.data.messages[0].content).toContain(
-      "User custom instructions: Use direct recommendations.",
-    );
+    expect(
+      preview.data.messages.every(
+        (message: { content: string }) => message.content === "",
+      ),
+    ).toBe(true);
   });
 
-  it("sends the exact message context shown by the context inspector", async () => {
+  it("withholds provider-ready context while the run still receives it", async () => {
     const repository = new InMemoryRomeoRepository();
     const provider = await repository.getProvider("provider_openai_compatible");
     if (!provider) throw new Error("Expected seeded provider");
@@ -8511,6 +9024,7 @@ describe("Romeo API thin slice", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
     });
+    const started = await runResponse.json();
     await waitForAssistantMessage(api, chat.data.id);
     const sentMessages = providerBodies[0]?.messages as Array<{
       content: string;
@@ -8519,13 +9033,16 @@ describe("Romeo API thin slice", () => {
 
     expect(previewResponse.status).toBe(200);
     expect(runResponse.status).toBe(202);
-    expect(sentMessages).toEqual(
-      preview.data.messages.map(
-        (message: { content: string; role: string }) => ({
-          content: message.content,
-          role: message.role,
-        }),
-      ),
+    expect(started.data.inputMessageId).toMatch(/^msg_/u);
+    expect(
+      sentMessages.some((message) => message.content.includes(input.content)),
+    ).toBe(true);
+    expect(preview.data.messages).toEqual(
+      sentMessages.map((message) => ({
+        content: "",
+        imageCount: 0,
+        role: message.role,
+      })),
     );
   });
 
@@ -9234,6 +9751,44 @@ describe("Romeo API thin slice", () => {
     expect(created.data.name).toBe("Lab OpenAI");
     expect(created.data.credentialConfigured).toBe(true);
     expect(created.data.credentialRefScheme).toBe("env");
+    expect(created.data.dialect).toEqual({
+      contractVersion: "1",
+      version: "openai-chat-completions.v1",
+      operations: {
+        audio: false,
+        batches: false,
+        capabilityProbing: false,
+        chat: true,
+        discovery: true,
+        embeddings: true,
+        errorNormalization: true,
+        files: false,
+        imageGeneration: true,
+        tokenCounting: false,
+        usageParsing: true,
+      },
+    });
+    expect(
+      providers.data.find(
+        (provider: { type: string }) => provider.type === "ollama",
+      ).dialect,
+    ).toEqual({
+      contractVersion: "1",
+      version: "ollama-native.v1",
+      operations: {
+        audio: false,
+        batches: false,
+        capabilityProbing: false,
+        chat: true,
+        discovery: true,
+        embeddings: true,
+        errorNormalization: true,
+        files: false,
+        imageGeneration: false,
+        tokenCounting: false,
+        usageParsing: true,
+      },
+    });
     expect(JSON.stringify(created.data)).not.toContain("LAB_PROVIDER_KEY");
     expect(JSON.stringify(providers.data)).not.toContain("LAB_PROVIDER_KEY");
     expect(providers.data).toHaveLength(3);
@@ -9439,7 +9994,7 @@ describe("Romeo API thin slice", () => {
       createdAt: new Date().toISOString(),
     });
     const api = createRomeoApi(repository, {
-      env: readEnv({ DEV_SEEDED_LOGIN: "false" }),
+      env: testEnv({ DEV_SEEDED_LOGIN: "false" }),
     });
     const headers = { authorization: `Bearer ${token}` };
 
@@ -9639,6 +10194,14 @@ describe("Romeo API thin slice", () => {
       orgId: "org_default",
       email: "channel-user@romeo.local",
       name: "Channel User",
+    });
+    await repository.createResourceGrant({
+      id: "grant_openwebui_channel_member_workspace_read",
+      resourceType: "workspace",
+      resourceId: "workspace_default",
+      principalType: "user",
+      principalId: "user_openwebui_channel_api",
+      permission: "read",
     });
     const channelUserToken = "rmk_openwebui_channel_member";
     await repository.createApiKey({
@@ -10366,6 +10929,8 @@ describe("Romeo API thin slice", () => {
                 prompt_tokens: 7,
                 completion_tokens: 3,
                 total_tokens: 10,
+                prompt_tokens_details: { cached_tokens: 4 },
+                completion_tokens_details: { reasoning_tokens: 2 },
               },
             },
           ]),
@@ -10383,6 +10948,18 @@ describe("Romeo API thin slice", () => {
       body: JSON.stringify({
         model: "gpt-compatible",
         messages: [{ role: "user", content: "Say hello." }],
+        temperature: 0.4,
+        top_p: 0.8,
+        max_tokens: 512,
+        reasoning_effort: "high",
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "answer",
+            schema: { type: "object" },
+            strict: true,
+          },
+        },
       }),
     });
     const body = await response.json();
@@ -10399,6 +10976,8 @@ describe("Romeo API thin slice", () => {
       prompt_tokens: 7,
       completion_tokens: 3,
       total_tokens: 10,
+      prompt_tokens_details: { cached_tokens: 4 },
+      completion_tokens_details: { reasoning_tokens: 2 },
     });
     expect(providerRequests).toHaveLength(1);
     expect(providerRequests[0]?.url).toBe(
@@ -10409,9 +10988,247 @@ describe("Romeo API thin slice", () => {
       model: "gpt-compatible",
       stream: true,
       stream_options: { include_usage: true },
+      temperature: 0.4,
+      top_p: 0.8,
+      max_tokens: 512,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "answer", strict: true },
+      },
     });
+    expect(providerRequests[0]?.body).not.toHaveProperty("reasoning_effort");
+
+    const streamed = await api.request("/api/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-compatible",
+        stream: true,
+        messages: [{ role: "user", content: "Stream safely." }],
+        temperature: 0.3,
+        response_format: { type: "json_object" },
+      }),
+    });
+    await streamed.text();
+    expect(providerRequests[1]?.body).toMatchObject({
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+    });
+    const invalidToolResponse = await api.request("/api/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-compatible",
+        messages: [{ role: "user", content: "Do not dispatch this." }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "invalid.tool",
+              description: "Must fail before provider dispatch.",
+              parameters: { type: "object" },
+            },
+          },
+        ],
+      }),
+    });
+    const invalidToolBody = await invalidToolResponse.json();
+    expect(invalidToolResponse.status).toBe(400);
+    expect(invalidToolBody.error.code).toBe(
+      "provider_invalid_request_or_capability",
+    );
+    expect(providerRequests).toHaveLength(2);
+    expect(JSON.stringify(invalidToolBody)).not.toContain("invalid.tool");
+    expect(JSON.stringify(invalidToolBody)).not.toContain(
+      "Do not dispatch this.",
+    );
     expect(JSON.stringify(body)).not.toContain("provider-api-key");
     expect(JSON.stringify(body)).not.toContain("ROMEO_PROVIDER_API_KEY");
+  });
+
+  it("applies per-run automatic reasoning and rejects unsupported summary before provider dispatch", async () => {
+    const rawProviderReasoningSentinel =
+      "raw-provider-reasoning sk-private-trace";
+    const repository = new InMemoryRomeoRepository();
+    const provider = await repository.getProvider("provider_openai_compatible");
+    const model = await repository.getModel("model_openai_compatible_default");
+    if (provider === undefined || model === undefined)
+      throw new Error("Expected seeded provider target");
+    provider.baseUrl = "https://api.example.test/v1";
+    provider.credentialRef = "env://ROMEO_PROVIDER_API_KEY";
+    provider.capabilities = { ...provider.capabilities, reasoning: true };
+    model.capabilities = { ...model.capabilities, reasoning: true };
+    const providerBodies: Array<Record<string, unknown>> = [];
+    const api = createRomeoApi(repository, {
+      providerFetch: async (_input, init) => {
+        providerBodies.push(JSON.parse(String(init?.body)));
+        return new Response(
+          providerSse([
+            {
+              choices: [
+                {
+                  delta: { reasoning_content: rawProviderReasoningSentinel },
+                },
+              ],
+            },
+            { choices: [{ delta: { content: "Reasoned." } }] },
+          ]),
+          { status: 200 },
+        );
+      },
+      secretResolver: new EnvironmentSecretResolver({
+        ROMEO_PROVIDER_API_KEY: "provider-api-key",
+      }),
+    });
+    const createChat = async (title: string) =>
+      (
+        await api.request("/api/v1/chats", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ workspaceId: "workspace_default", title }),
+        })
+      ).json();
+    const automaticChat = await createChat("Automatic reasoning policy");
+    const previewResponse = await api.request("/api/v1/runs/context-preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: automaticChat.data.id,
+        agentId: "agent_default",
+        content: "private-preview-content",
+        reasoningPolicy: {
+          schemaVersion: 1,
+          mode: "auto",
+          effort: "high",
+        },
+      }),
+    });
+    const preview = await previewResponse.json();
+    expect(previewResponse.status).toBe(200);
+    expect(preview.data.reasoningPolicy).toMatchObject({
+      requested: { mode: "auto", effort: "high" },
+      effective: { mode: "auto", effort: "high" },
+      source: "run_request",
+      rejected: false,
+      adjustments: [],
+    });
+    expect(JSON.stringify(preview)).not.toContain("private-preview-content");
+    expect(providerBodies).toHaveLength(0);
+    const automaticResponse = await api.request("/api/v1/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: automaticChat.data.id,
+        agentId: "agent_default",
+        content: "Use bounded automatic reasoning.",
+        reasoningPolicy: {
+          schemaVersion: 1,
+          mode: "auto",
+          effort: "high",
+        },
+      }),
+    });
+    const automaticRun = await automaticResponse.json();
+    await waitForAssistantMessage(api, automaticChat.data.id, "Reasoned.");
+    const automaticEvents = await (
+      await api.request(`/api/v1/runs/${automaticRun.data.id}/events`)
+    ).text();
+
+    expect(automaticResponse.status).toBe(202);
+    expect(providerBodies).toHaveLength(1);
+    expect(providerBodies[0]).toMatchObject({ reasoning_effort: "high" });
+    expect(automaticEvents).toContain('"source":"run_request"');
+    expect(automaticEvents).toContain('"mode":"auto"');
+    const persistedEvents = await repository.listRunEvents(
+      automaticRun.data.id,
+    );
+    const contextInspection = await (
+      await api.request(
+        `/api/v1/chats/${automaticChat.data.id}/context-inspection?runId=${automaticRun.data.id}`,
+      )
+    ).json();
+    const audits = await repository.listAuditLogs("org_default");
+    expect(
+      JSON.stringify({
+        automaticEvents,
+        audits,
+        contextInspection,
+        persistedEvents,
+      }),
+    ).not.toContain(rawProviderReasoningSentinel);
+
+    const summaryPrompt = "private-summary-request-sentinel";
+    const summaryChat = await createChat("Rejected summary policy");
+    const summaryPreviewResponse = await api.request(
+      "/api/v1/runs/context-preview",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chatId: summaryChat.data.id,
+          agentId: "agent_default",
+          content: summaryPrompt,
+          reasoningPolicy: {
+            schemaVersion: 1,
+            mode: "summary",
+            effort: "high",
+            summaryDetail: "detailed",
+            retainSummary: true,
+          },
+        }),
+      },
+    );
+    const summaryPreview = await summaryPreviewResponse.json();
+    expect(summaryPreviewResponse.status).toBe(200);
+    expect(summaryPreview.data.reasoningPolicy).toMatchObject({
+      effective: { mode: "off" },
+      source: "run_request",
+      rejected: true,
+      adjustments: [
+        {
+          parameter: "mode",
+          reason: "unsupported_by_dialect",
+        },
+      ],
+    });
+    expect(JSON.stringify(summaryPreview)).not.toContain(summaryPrompt);
+    expect(providerBodies).toHaveLength(1);
+    const summaryResponse = await api.request("/api/v1/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chatId: summaryChat.data.id,
+        agentId: "agent_default",
+        content: summaryPrompt,
+        reasoningPolicy: {
+          schemaVersion: 1,
+          mode: "summary",
+          effort: "high",
+          summaryDetail: "detailed",
+          retainSummary: true,
+        },
+      }),
+    });
+    const summaryRun = await summaryResponse.json();
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if ((await repository.getRun(summaryRun.data.id))?.status === "failed")
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    const summaryEvents = await (
+      await api.request(`/api/v1/runs/${summaryRun.data.id}/events`)
+    ).text();
+
+    expect(summaryResponse.status).toBe(202);
+    expect((await repository.getRun(summaryRun.data.id))?.status).toBe(
+      "failed",
+    );
+    expect(providerBodies).toHaveLength(1);
+    expect(summaryEvents).toContain(
+      '"errorCode":"provider_invalid_request_or_capability"',
+    );
+    expect(summaryEvents).not.toContain(summaryPrompt);
+    expect(summaryEvents).not.toContain("Reasoned.");
   });
 
   it("serves OpenAI-compatible chat completion SSE streams and the legacy alias", async () => {
@@ -10604,7 +11421,7 @@ describe("Romeo API thin slice", () => {
 
   it("returns provider operational summary without endpoint details", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         MODEL_PROVIDER_DISABLED_IDS: "provider_openai_compatible",
         MODEL_PROVIDER_FALLBACK_MODEL_ID: "model_ollama_default",
       }),
@@ -10675,8 +11492,8 @@ describe("Romeo API thin slice", () => {
     expect(me.subject.scopes).toEqual(["me:read"]);
     expect(toolsResponse.status).toBe(403);
     expect(revokeResponse.status).toBe(200);
-    expect(revokedMeResponse.status).toBe(403);
-    expect(revokedMe.error.code).toBe("forbidden");
+    expect(revokedMeResponse.status).toBe(401);
+    expect(revokedMe.error.code).toBe("unauthorized");
   });
 
   it("creates service accounts and authenticates their scoped API keys", async () => {
@@ -10763,8 +11580,8 @@ describe("Romeo API thin slice", () => {
     expect(adminResponse.status).toBe(403);
     expect(disableResponse.status).toBe(200);
     expect(disabled.data.disabledAt).toBeDefined();
-    expect(disabledMeResponse.status).toBe(403);
-    expect(disabledMe.error.code).toBe("forbidden");
+    expect(disabledMeResponse.status).toBe(401);
+    expect(disabledMe.error.code).toBe("unauthorized");
     expect(disabledKeyResponse.status).toBe(409);
     expect(disabledKey.error.code).toBe("service_account_disabled");
     expect(
@@ -11176,6 +11993,7 @@ describe("Romeo API thin slice", () => {
     const objectStore = new MemoryObjectStore();
     let shouldFail = true;
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      env: testEnv({ FILE_OCR_DRIVER: "disabled" }),
       objectStore,
       knowledgeExtractor: {
         extract: async () => {
@@ -11203,7 +12021,7 @@ describe("Romeo API thin slice", () => {
     const uploaded = await uploadResponse.json();
 
     expect(uploadResponse.status).toBe(201);
-    expect(uploaded.data.status).toBe("available");
+    expect(uploaded.data.status).toBe("ready");
     expect(uploaded.data.extraction).toMatchObject({
       status: "failed",
       quality: "unknown",
@@ -11357,7 +12175,7 @@ describe("Romeo API thin slice", () => {
     const objectStore = new MemoryObjectStore();
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
-      env: readEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
+      env: testEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
       objectStore,
     });
     const bytes = new TextEncoder().encode("unscanned content sentinel");
@@ -11378,9 +12196,26 @@ describe("Romeo API thin slice", () => {
     expect(response.status).toBe(503);
     expect(body.error.code).toBe("file_malware_scan_unavailable");
     expect(JSON.stringify(body)).not.toContain("unscanned content sentinel");
-    expect(
-      await repository.listFileObjects("org_default", "workspace_default"),
-    ).toEqual([]);
+    const [failed] = await repository.listFileObjects(
+      "org_default",
+      "workspace_default",
+    );
+    expect(failed).toMatchObject({
+      status: "failed",
+      lifecycleFailureCode: "file_malware_scan_unavailable",
+      lifecycleAttempts: 1,
+    });
+    expect(JSON.stringify(failed)).not.toContain("unscanned content sentinel");
+    const retryResponse = await api.request(
+      `/api/v1/files/${failed!.id}/lifecycle/retry`,
+      { method: "POST" },
+    );
+    const retryBody = await retryResponse.json();
+    expect(retryResponse.status).toBe(200);
+    expect(retryBody.data).toMatchObject({
+      status: "quarantined",
+      lifecycle: { attempts: 1, failureCode: null },
+    });
   });
 
   it("rejects malicious inline files before governed object persistence", async () => {
@@ -11388,7 +12223,7 @@ describe("Romeo API thin slice", () => {
     const repository = new InMemoryRomeoRepository();
     const scan = vi.fn(async () => ({ verdict: "malicious" as const }));
     const api = createRomeoApi(repository, {
-      env: readEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
+      env: testEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
       fileMalwareScanner: { scan },
       objectStore,
     });
@@ -11410,9 +12245,21 @@ describe("Romeo API thin slice", () => {
     expect(response.status).toBe(422);
     expect(body.error.code).toBe("file_malware_detected");
     expect(scan).toHaveBeenCalledOnce();
+    const [deleted] = await repository.listFileObjects(
+      "org_default",
+      "workspace_default",
+    );
+    expect(deleted).toMatchObject({
+      status: "deleted",
+      fileName: "deleted",
+      metadata: { contentPurged: true },
+    });
+    expect(JSON.stringify(deleted)).not.toContain("malicious.txt");
     expect(
-      await repository.listFileObjects("org_default", "workspace_default"),
-    ).toEqual([]);
+      await objectStore.getObject(
+        `files/org_default/workspace_default/${deleted!.id}/malicious.txt`,
+      ),
+    ).toBeUndefined();
   });
 
   it("marks same-owner reusable files with duplicate content provenance", async () => {
@@ -11452,7 +12299,7 @@ describe("Romeo API thin slice", () => {
   it("enforces configured native file upload size limits", async () => {
     const objectStore = new MemoryObjectStore();
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         FILE_DIRECT_UPLOAD_MAX_BYTES: "4",
         FILE_INLINE_MAX_BYTES: "4",
       }),
@@ -11569,7 +12416,7 @@ describe("Romeo API thin slice", () => {
     expect(refreshResponse.status).toBe(200);
     expect(beforeCompleteContentResponse.status).toBe(409);
     expect(completeResponse.status).toBe(200);
-    expect(completed.data.status).toBe("available");
+    expect(completed.data.status).toBe("ready");
     expect(completed.data.extraction).toMatchObject({
       status: "succeeded",
       method: "utf8-text",
@@ -11589,7 +12436,7 @@ describe("Romeo API thin slice", () => {
     const objectStore = new MemoryObjectStore();
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
-      env: readEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
+      env: testEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
       fileMalwareScanner: {
         scan: async () => ({ verdict: "malicious" }),
       },
@@ -11632,11 +12479,49 @@ describe("Romeo API thin slice", () => {
     });
   });
 
+  it("deletes an oversized direct-upload object before reading its body", async () => {
+    const objectStore = new MemoryObjectStore();
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      objectStore,
+      env: testEnv({ FILE_DIRECT_UPLOAD_MAX_BYTES: "32" }),
+    });
+    const declared = new TextEncoder().encode("small");
+    const sha256 = createHash("sha256").update(declared).digest("hex");
+    const createResponse = await api.request("/api/v1/files/uploads", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: "workspace_default",
+        fileName: "oversized.txt",
+        mimeType: "text/plain",
+        sizeBytes: declared.byteLength,
+        sha256,
+      }),
+    });
+    const created = await createResponse.json();
+    const objectKey = `files/org_default/workspace_default/${created.data.file.id}/oversized.txt`;
+    await objectStore.putObject({
+      key: objectKey,
+      body: new Uint8Array(64).fill(65),
+      contentType: "text/plain",
+    });
+
+    const completeResponse = await api.request(
+      `/api/v1/files/uploads/${created.data.file.id}/complete`,
+      { method: "POST" },
+    );
+    const complete = await completeResponse.json();
+
+    expect(completeResponse.status).toBe(400);
+    expect(complete.error.code).toBe("file_size_mismatch");
+    expect(await objectStore.headObject(objectKey)).toBeUndefined();
+  });
+
   it("creates, refreshes, completes, and cancels resumable file upload sessions", async () => {
     const objectStore = new MemoryObjectStore();
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       objectStore,
-      env: readEnv({
+      env: testEnv({
         FILE_DIRECT_UPLOAD_MAX_BYTES: "8",
         FILE_RESUMABLE_UPLOAD_MAX_BYTES: "64",
       }),
@@ -11739,7 +12624,7 @@ describe("Romeo API thin slice", () => {
     expect(refreshResponse.status).toBe(200);
     expect(refreshed.data.upload.parts).toHaveLength(4);
     expect(completeResponse.status).toBe(200);
-    expect(completed.data.status).toBe("available");
+    expect(completed.data.status).toBe("ready");
     expect(completed.data.extraction).toMatchObject({
       status: "succeeded",
       method: "utf8-text",
@@ -11800,6 +12685,7 @@ describe("Romeo API thin slice", () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       objectStore,
     });
+    const content = "Direct upload completion indexes Romeo storage callbacks.";
     const uploadResponse = await api.request(
       "/api/v1/knowledge-bases/kb_default/uploads",
       {
@@ -11808,12 +12694,11 @@ describe("Romeo API thin slice", () => {
         body: JSON.stringify({
           fileName: "direct-upload.md",
           mimeType: "text/markdown",
-          sizeBytes: 64,
+          sizeBytes: new TextEncoder().encode(content).byteLength,
         }),
       },
     );
     const upload = await uploadResponse.json();
-    const content = "Direct upload completion indexes Romeo storage callbacks.";
     await objectStore.putObject({
       key: upload.data.source.objectKey,
       body: new TextEncoder().encode(content),
@@ -11973,6 +12858,12 @@ describe("Romeo API thin slice", () => {
 
     const usageResponse = await api.request("/api/v1/usage/events");
     const usage = await usageResponse.json();
+    const previewUsage = usage.data.find(
+      (event: { metric: string }) => event.metric === "voice.preview.generated",
+    );
+    const previewAudioUsage = usage.data.find(
+      (event: { metric: string }) => event.metric === "audio.output_second",
+    );
 
     expect(previewResponse.status).toBe(200);
     const artifactResponse = await api.request(preview.data.playbackUrl);
@@ -11988,18 +12879,28 @@ describe("Romeo API thin slice", () => {
     expect(artifactResponse.status).toBe(200);
     expect(artifactResponse.headers.get("content-type")).toBe("audio/wav");
     expect(new TextDecoder().decode(artifactBytes.slice(0, 4))).toBe("RIFF");
-    expect(usage.data[0]).toMatchObject({
+    expect(previewUsage).toMatchObject({
       sourceType: "voice",
       sourceId: "voice_default",
       metric: "voice.preview.generated",
+      quantity: 1,
+      unit: "event",
     });
-    expect(usage.data[0].metadata.storageKey).toBeUndefined();
-    expect(usage.data[0].metadata.storageKeyHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(usage.data[0].metadata.rawStorageKeyReturned).toBe(false);
-    expect(JSON.stringify(usage.data[0].metadata)).not.toContain(
+    expect(previewAudioUsage).toMatchObject({
+      sourceType: "voice",
+      sourceId: "voice_default",
+      metric: "audio.output_second",
+      unit: "second",
+    });
+    expect(previewAudioUsage.quantity).toBeGreaterThan(0);
+    expect(previewAudioUsage.metadata.storageKey).toBeUndefined();
+    expect(previewUsage.metadata.storageKey).toBeUndefined();
+    expect(previewUsage.metadata.storageKeyHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(previewUsage.metadata.rawStorageKeyReturned).toBe(false);
+    expect(JSON.stringify(previewUsage.metadata)).not.toContain(
       "Preview Romeo voice",
     );
-    expect(JSON.stringify(usage.data[0].metadata)).not.toContain(
+    expect(JSON.stringify(previewUsage.metadata)).not.toContain(
       "voice/org_default",
     );
   });
@@ -12102,6 +13003,9 @@ describe("Romeo API thin slice", () => {
       (event: { metric: string }) =>
         event.metric === "voice.transcription.generated",
     );
+    const audioInputUsage = usage.data.find(
+      (event: { metric: string }) => event.metric === "audio.input_byte",
+    );
 
     expect(response.status).toBe(200);
     expect(transcription.data).toEqual({
@@ -12114,6 +13018,8 @@ describe("Romeo API thin slice", () => {
       sourceType: "voice",
       sourceId: "voice_transcription",
       metric: "voice.transcription.generated",
+      quantity: 1,
+      unit: "event",
       metadata: {
         audioBytes: 4,
         contentType: "audio/wav",
@@ -12121,6 +13027,13 @@ describe("Romeo API thin slice", () => {
         promptProvided: true,
         textLength: transcription.data.text.length,
       },
+    });
+    expect(audioInputUsage).toMatchObject({
+      sourceType: "voice",
+      sourceId: "voice_transcription",
+      metric: "audio.input_byte",
+      quantity: 4,
+      unit: "byte",
     });
     expect(JSON.stringify(transcriptionUsage.metadata)).not.toContain(
       "Private vocabulary hint",
@@ -12181,6 +13094,9 @@ describe("Romeo API thin slice", () => {
     const messageSpeechUsage = usage.data.find(
       (event: { metric: string }) => event.metric === "voice.message.generated",
     );
+    const messageAudioUsage = usage.data.find(
+      (event: { metric: string }) => event.metric === "audio.output_second",
+    );
 
     expect(speechResponse.status).toBe(200);
     const artifactResponse = await api.request(speech.data.playbackUrl);
@@ -12204,6 +13120,14 @@ describe("Romeo API thin slice", () => {
       sourceType: "voice",
       sourceId: "voice_default",
       metric: "voice.message.generated",
+      quantity: 1,
+      unit: "event",
+    });
+    expect(messageAudioUsage).toMatchObject({
+      sourceType: "voice",
+      sourceId: "voice_default",
+      metric: "audio.output_second",
+      unit: "second",
     });
     expect(messageSpeechUsage.metadata.messageId).toBe(assistant!.id);
     expect(messageSpeechUsage.metadata.storageKey).toBeUndefined();
@@ -12717,7 +13641,7 @@ describe("Romeo API thin slice", () => {
 
   it("creates webhook tool connectors through the external worker boundary", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
     });
     const response = await api.request("/api/v1/tools/webhook", {
       method: "POST",
@@ -12853,7 +13777,7 @@ describe("Romeo API thin slice", () => {
       init: RequestInit | undefined;
     }> = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
       toolOperationFetch: async (input, init) => {
         fetchCalls.push({ input, init });
         return new Response(JSON.stringify({ content: [] }), {
@@ -13295,7 +14219,7 @@ describe("Romeo API thin slice", () => {
   it("marks OpenAPI operations worker-ready only after activation gates and execution driver are enabled", async () => {
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch",
       }),
     });
@@ -13412,7 +14336,7 @@ describe("Romeo API thin slice", () => {
       url: string;
     }> = [];
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         SECRET_RESOLVER_DRIVER: "env",
         TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch",
         TOOL_OPERATION_FETCH_MAX_BYTES: "12",
@@ -13528,7 +14452,7 @@ describe("Romeo API thin slice", () => {
     const repository = new InMemoryRomeoRepository();
     const fetchCalls: unknown[] = [];
     const api = createRomeoApi(repository, {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
       toolOperationFetch: async () => {
         fetchCalls.push("called");
         throw new Error("queued dispatch should not perform network execution");
@@ -13615,7 +14539,7 @@ describe("Romeo API thin slice", () => {
   it("queues imported OpenAPI operation dispatch requests with managed encrypted payload storage", async () => {
     const objectStore = new MemoryObjectStore();
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch",
         TOOL_DISPATCH_PAYLOAD_STORE_DRIVER: "object-store",
         TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY:
@@ -13742,10 +14666,10 @@ describe("Romeo API thin slice", () => {
     const repository = new InMemoryRomeoRepository();
     const objectStore = new MemoryObjectStore();
     const externalApi = createRomeoApi(repository, {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
     });
     const managedApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch",
         TOOL_DISPATCH_PAYLOAD_STORE_DRIVER: "object-store",
         TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY:
@@ -13792,7 +14716,7 @@ describe("Romeo API thin slice", () => {
       "Payload worker B",
     );
     const secureApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -13857,7 +14781,7 @@ describe("Romeo API thin slice", () => {
 
   it("replays idempotent dispatch request enqueue without exposing the raw key", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
     });
     const imported = await importReadOnlyIssueConnector(api);
     await enableImportedIssueOperation(
@@ -13954,7 +14878,7 @@ describe("Romeo API thin slice", () => {
 
   it("claims queued OpenAPI dispatch requests with sanitized response validation metadata", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
     });
     const imported = await importResponseSchemaIssueConnector(api);
     await enableImportedIssueOperation(
@@ -14015,7 +14939,7 @@ describe("Romeo API thin slice", () => {
 
   it("records sanitized external worker readback for queued OpenAPI dispatch requests", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
       toolOperationFetch: async () => {
         throw new Error(
           "queued dispatch readback should not perform network execution",
@@ -14566,7 +15490,7 @@ describe("Romeo API thin slice", () => {
   it("uses imported OpenAPI apiKey query auth hints during bounded dispatch", async () => {
     const fetchCalls: Array<{ apiKeyHeader: string | null; url: string }> = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         SECRET_RESOLVER_DRIVER: "env",
         TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch",
       }),
@@ -14648,7 +15572,7 @@ describe("Romeo API thin slice", () => {
       url: string;
     }> = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         SECRET_RESOLVER_DRIVER: "env",
         TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch",
       }),
@@ -14760,7 +15684,7 @@ describe("Romeo API thin slice", () => {
 
   it("claims queued OAuth OpenAPI dispatch requests with sanitized auth policy", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
     });
     const imported = await importOAuthIssueConnector(api);
     const authResponse = await api.request(
@@ -14822,7 +15746,7 @@ describe("Romeo API thin slice", () => {
 
   it("reports imported OpenAPI response schema validation without returning response bodies", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
       toolOperationFetch: async () =>
         new Response(JSON.stringify({ secret: "body-value" }), {
           status: 200,
@@ -14905,7 +15829,7 @@ describe("Romeo API thin slice", () => {
     const fetchCalls: Array<{ body?: string; method?: string; url: string }> =
       [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
       toolOperationFetch: async (input, init) => {
         const call: { body?: string; method?: string; url: string } = {
           url: String(input),
@@ -15027,7 +15951,7 @@ describe("Romeo API thin slice", () => {
   it("lists and rejects imported OpenAPI operation approval requests", async () => {
     const fetchCalls: unknown[] = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
       toolOperationFetch: async () => {
         fetchCalls.push("called");
         throw new Error("rejected dispatch should not perform network IO");
@@ -15190,7 +16114,7 @@ describe("Romeo API thin slice", () => {
   it("requires approval before queueing imported OpenAPI operation dispatch requests", async () => {
     const fetchCalls: unknown[] = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
       toolOperationFetch: async () => {
         fetchCalls.push("called");
         throw new Error("queued dispatch should not perform network execution");
@@ -15671,6 +16595,24 @@ describe("Romeo API thin slice", () => {
       email: "channel-outsider@romeo.local",
       name: "Channel Outsider",
     });
+    await Promise.all([
+      repository.createResourceGrant({
+        id: "grant_native_channel_member_workspace_read",
+        resourceType: "workspace",
+        resourceId: "workspace_default",
+        principalType: "user",
+        principalId: "user_channel_member",
+        permission: "read",
+      }),
+      repository.createResourceGrant({
+        id: "grant_native_channel_outsider_workspace_read",
+        resourceType: "workspace",
+        resourceId: "workspace_default",
+        principalType: "user",
+        principalId: "user_channel_outsider",
+        permission: "read",
+      }),
+    ]);
     const memberToken = "rmk_native_channel_member";
     const outsiderToken = "rmk_native_channel_outsider";
     await repository.createApiKey({
@@ -16521,6 +17463,7 @@ describe("Romeo API thin slice", () => {
 
     expect(runResponse.status).toBe(202);
     expect(providerBodies).toHaveLength(2);
+    expect(providerBodies.every((body) => body.temperature === 0.2)).toBe(true);
     expect(JSON.stringify(providerBodies[0])).toContain("tool_calculator");
     expect(JSON.stringify(providerBodies[1])).toContain("tool_calls");
     expect(JSON.stringify(providerBodies[1])).toContain("call_provider_calc_1");
@@ -16549,7 +17492,7 @@ describe("Romeo API thin slice", () => {
 
     const providerBodies: Array<Record<string, unknown>> = [];
     const api = createRomeoApi(repository, {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
       providerFetch: async (_input, init) => {
         providerBodies.push(JSON.parse(String(init?.body)));
         if (providerBodies.length === 1) {
@@ -16684,7 +17627,11 @@ describe("Romeo API thin slice", () => {
       },
     );
     const complete = await completeResponse.json();
-    const messages = await waitForAssistantMessage(api, chat.data.id);
+    const messages = await waitForAssistantMessage(
+      api,
+      chat.data.id,
+      "The issue lookup completed.",
+    );
     const completedRun = await (
       await api.request(`/api/v1/runs/${run.data.id}`)
     ).json();
@@ -16715,6 +17662,7 @@ describe("Romeo API thin slice", () => {
     expect(complete.data.outcome).toBe("completed");
     expect(completedRun.data.status).toBe("completed");
     expect(providerBodies).toHaveLength(2);
+    expect(providerBodies.every((body) => body.temperature === 0.2)).toBe(true);
     expect(JSON.stringify(providerBodies[0])).toContain(operation.id);
     expect(dispatchPayload).toMatchObject({
       dispatch: "completed",
@@ -16783,7 +17731,7 @@ describe("Romeo API thin slice", () => {
     const objectStore = new MemoryObjectStore();
     const providerBodies: Array<Record<string, unknown>> = [];
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch",
         TOOL_DISPATCH_PAYLOAD_STORE_DRIVER: "object-store",
         TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY:
@@ -16932,7 +17880,7 @@ describe("Romeo API thin slice", () => {
     const objectStore = new MemoryObjectStore();
     const providerBodies: Array<Record<string, unknown>> = [];
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch",
         TOOL_DISPATCH_PAYLOAD_STORE_DRIVER: "object-store",
         TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY:
@@ -17082,7 +18030,7 @@ describe("Romeo API thin slice", () => {
 
     const providerBodies: Array<Record<string, unknown>> = [];
     const api = createRomeoApi(repository, {
-      env: readEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
       providerFetch: async (_input, init) => {
         providerBodies.push(JSON.parse(String(init?.body)));
         if (providerBodies.length === 1) {
@@ -17246,7 +18194,11 @@ describe("Romeo API thin slice", () => {
       },
     );
     const complete = await completeResponse.json();
-    const messages = await waitForAssistantMessage(api, chat.data.id);
+    const messages = await waitForAssistantMessage(
+      api,
+      chat.data.id,
+      "The approved issue creation completed.",
+    );
     const completedRun = await (
       await api.request(`/api/v1/runs/${run.data.id}`)
     ).json();
@@ -17285,6 +18237,7 @@ describe("Romeo API thin slice", () => {
     expect(completeResponse.status).toBe(200);
     expect(complete.data.outcome).toBe("completed");
     expect(providerBodies).toHaveLength(2);
+    expect(providerBodies.every((body) => body.temperature === 0.2)).toBe(true);
     expect(JSON.stringify(providerBodies[1])).toContain(dispatchJobId);
     expect(JSON.stringify(providerBodies[1])).not.toContain(
       "call_provider_create_issue_secret",
@@ -17411,7 +18364,11 @@ describe("Romeo API thin slice", () => {
       },
     );
     const approval = await approvalResponse.json();
-    const messages = await waitForAssistantMessage(api, chat.data.id);
+    const messages = await waitForAssistantMessage(
+      api,
+      chat.data.id,
+      "The approved time lookup completed.",
+    );
     const completedRunResponse = await api.request(
       `/api/v1/runs/${run.data.id}`,
     );
@@ -17443,6 +18400,7 @@ describe("Romeo API thin slice", () => {
     expect(approvalResponse.status).toBe(200);
     expect(approval.data.iso).toBeDefined();
     expect(providerBodies).toHaveLength(2);
+    expect(providerBodies.every((body) => body.temperature === 0.2)).toBe(true);
     expect(JSON.stringify(providerBodies[1])).toContain(approvalRequestId);
     expect(JSON.stringify(providerBodies[1])).not.toContain(
       "call_provider_datetime_approval",
@@ -17707,7 +18665,8 @@ describe("Romeo API thin slice", () => {
 
   it("stores bounded image attachments with user run messages", async () => {
     const objectStore = new MemoryObjectStore();
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, {
       objectStore,
     });
     const chatResponse = await api.request("/api/v1/chats", {
@@ -17758,6 +18717,9 @@ describe("Romeo API thin slice", () => {
         ? new Uint8Array()
         : new Uint8Array(await attachmentResponse.arrayBuffer());
     const serializedMessages = JSON.stringify(messages);
+    const imageInputUsage = (
+      await repository.listUsageEvents("org_default")
+    ).find((event) => event.metric === "image.input");
 
     expect(chatResponse.status).toBe(201);
     expect(runResponse.status).toBe(202);
@@ -17771,6 +18733,13 @@ describe("Romeo API thin slice", () => {
       "nosniff",
     );
     expect([...attachmentBytes]).toEqual([...bytes]);
+    expect(imageInputUsage).toMatchObject({
+      sourceType: "run",
+      sourceId: expect.stringMatching(/^run_/),
+      metric: "image.input",
+      quantity: 1,
+      unit: "image",
+    });
     expect(serializedMessages).not.toContain(dataBase64);
     expect(serializedMessages).not.toContain("chat-attachments/");
   });
@@ -17888,7 +18857,7 @@ describe("Romeo API thin slice", () => {
     const repository = new InMemoryRomeoRepository();
     const scan = vi.fn(async () => ({ verdict: "malicious" as const }));
     const api = createRomeoApi(repository, {
-      env: readEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
+      env: testEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
       fileMalwareScanner: { scan },
       objectStore,
     });
@@ -17939,7 +18908,7 @@ describe("Romeo API thin slice", () => {
   it("enforces configured chat image attachment size limits", async () => {
     const objectStore = new MemoryObjectStore();
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ MESSAGE_ATTACHMENT_MAX_BYTES: "4" }),
+      env: testEnv({ MESSAGE_ATTACHMENT_MAX_BYTES: "4" }),
       objectStore,
     });
     const chatResponse = await api.request("/api/v1/chats", {
@@ -17981,9 +18950,10 @@ describe("Romeo API thin slice", () => {
     expect(serialized).not.toContain("iVBORw0");
   });
 
-  it("uses governed text files as run context and persists document attachments", async () => {
+  it("uses governed text files as run context and persists reference parts without copying bytes", async () => {
     const objectStore = new MemoryObjectStore();
-    const api = createRomeoApi(new InMemoryRomeoRepository(), { objectStore });
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, { objectStore });
     const text = "Release approval requires security and quota review.";
     const fileResponse = await api.request("/api/v1/files", {
       method: "POST",
@@ -18021,24 +18991,38 @@ describe("Romeo API thin slice", () => {
     const user = messages.find((message) => message.role === "user") as
       | {
           id: string;
-          attachments?: Array<{
-            id: string;
+          parts?: Array<{
+            type: string;
+            fileId?: string;
             fileName: string;
-            kind: string;
-            mimeType: string;
-            retainedInContext: boolean;
+            mediaType: string;
           }>;
         }
       | undefined;
 
     expect(fileResponse.status).toBe(201);
     expect(runResponse.status).toBe(202);
-    expect(user?.attachments?.[0]).toMatchObject({
+    expect(
+      user?.parts?.find((part) => part.type === "document_ref"),
+    ).toMatchObject({
+      fileId: file.data.id,
       fileName: "release-policy.txt",
-      kind: "document",
-      mimeType: "text/plain",
-      retainedInContext: true,
+      mediaType: "text/plain",
     });
+    expect(await repository.getFileObject(file.data.id)).toMatchObject({
+      status: "attached",
+    });
+    expect(await repository.countMessageFileReferences(file.data.id)).toBe(1);
+    expect(
+      (await repository.listMessageParts(user!.id)).some(
+        (part) => "schemaVersion" in part && part.type === "document_ref",
+      ),
+    ).toBe(true);
+    expect(
+      (await repository.listMessageParts(user!.id)).some(
+        (part) => !("schemaVersion" in part) && part.type === "attachment",
+      ),
+    ).toBe(false);
 
     const previewResponse = await api.request("/api/v1/runs/context-preview", {
       method: "POST",
@@ -18055,33 +19039,10 @@ describe("Romeo API thin slice", () => {
       "release-policy.txt",
     );
     expect(
-      preview.data.messages.some((message: { content: string }) =>
-        message.content.includes(text),
+      preview.data.messages.every(
+        (message: { content: string }) => message.content === "",
       ),
     ).toBe(true);
-
-    const attachment = user?.attachments?.[0];
-    const retentionResponse = await api.request(
-      `/api/v1/chats/${chat.data.id}/messages/${user?.id}/attachments/${attachment?.id}`,
-      {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ retainedInContext: false }),
-      },
-    );
-    expect(retentionResponse.status).toBe(200);
-    const secondPreview = await api.request("/api/v1/runs/context-preview", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chatId: chat.data.id,
-        agentId: "agent_default",
-        content: "What remains?",
-      }),
-    });
-    expect(
-      (await secondPreview.json()).data.attachments.retainedDocuments,
-    ).toEqual([]);
   });
 
   it("retrieves enabled agent knowledge during runs and persists citations", async () => {
@@ -18246,6 +19207,28 @@ describe("Romeo API thin slice", () => {
     );
     expect(body.error.code).toBe("invalid_request");
     expect(body.error.request_id).toBe("req_validation_test");
+  });
+
+  it("replaces invalid or oversized request ids with a bounded server id", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository());
+    for (const requestId of ["not valid", "x".repeat(500)]) {
+      const response = await api.request("/api/v1/chats", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-request-id": requestId,
+        },
+        body: JSON.stringify({ workspaceId: "", title: "" }),
+      });
+      const body = await response.json();
+      const normalized = response.headers.get("x-request-id") ?? "";
+
+      expect(normalized).not.toBe(requestId);
+      expect(normalized).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+      );
+      expect(body.error.request_id).toBe(normalized);
+    }
   });
 });
 
@@ -18441,9 +19424,7 @@ describe("Romeo chat history", () => {
     expect(second?.content).not.toContain("Romeo chat memory:");
     expect(second?.content).not.toContain("Knowledge context:");
     // Retrieved context rides the current user turn instead.
-    expect(bodies[1]?.messages.at(-1)?.content).toContain(
-      "Knowledge context:",
-    );
+    expect(bodies[1]?.messages.at(-1)?.content).toContain("Knowledge context:");
   });
 
   it("drops a persisted system message instead of replaying it to the model", async () => {
@@ -19006,13 +19987,21 @@ describe("Romeo chat history", () => {
 async function waitForAssistantMessage(
   api: ReturnType<typeof createRomeoApi>,
   chatId: string,
+  contentIncludes?: string,
 ) {
   let messages: Array<{ id: string; role: string; content: string }> = [];
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const response = await api.request(`/api/v1/chats/${chatId}/messages`);
     const body = await response.json();
     messages = body.data;
-    if (messages.some((message) => message.role === "assistant"))
+    if (
+      messages.some(
+        (message) =>
+          message.role === "assistant" &&
+          (contentIncludes === undefined ||
+            message.content.includes(contentIncludes)),
+      )
+    )
       return messages;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }

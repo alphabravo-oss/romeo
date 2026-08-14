@@ -1,4 +1,4 @@
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { describe, expect, it } from "vitest";
 
 import { createRomeoApi } from "./api";
@@ -8,7 +8,7 @@ describe("redaction sentinel evidence", () => {
   it("keeps raw content and one-time secrets out of operational ledgers and exports", async () => {
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
-      env: readEnv({ WEBHOOK_SIGNING_KEY: "redaction-sentinel-webhook-key" }),
+      env: testEnv({ WEBHOOK_SIGNING_KEY: "redaction-sentinel-webhook-key" }),
       webhookFetch: async () => new Response(null, { status: 204 }),
     });
 

@@ -1,0 +1,15 @@
+{
+  "intents.authenticate": "Reconnectez-vous, puis réessayez.",
+  "intents.contact_support": "Une erreur s’est produite. Contactez l’assistance avec l’identifiant de la requête.",
+  "intents.correct_content": "Vérifiez le contenu envoyé, puis réessayez.",
+  "intents.correct_request": "Vérifiez la requête, puis réessayez.",
+  "intents.reduce_payload": "Réduisez la taille de la requête, puis réessayez.",
+  "intents.request_access": "Vous n’avez pas accès à cette action. Demandez l’accès à un administrateur si nécessaire.",
+  "intents.resolve_conflict": "La ressource a changé. Actualisez-la, puis réessayez.",
+  "intents.resource_missing": "La ressource demandée est introuvable.",
+  "intents.retry_later": "Trop de requêtes ont été reçues. Patientez, puis réessayez.",
+  "intents.temporarily_unavailable": "Le service est temporairement indisponible. Réessayez plus tard.",
+  "intents.upstream_failure": "Un service dépendant n’a pas pu traiter la requête. Réessayez plus tard.",
+  "intents.upstream_timeout": "Un service dépendant a dépassé le délai d’attente. Réessayez plus tard.",
+  "intents.use_supported_media": "Utilisez un format de fichier ou de média pris en charge, puis réessayez."
+}

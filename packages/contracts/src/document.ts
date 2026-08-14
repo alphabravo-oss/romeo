@@ -9,11 +9,20 @@ import { browserAutomationRoutes } from "./browser-automation";
 import { chatRoutes } from "./chats";
 import { chatExperienceRoutes } from "./chat-experience";
 import { channelRoutes } from "./channels";
+import { capabilityRoutes } from "./capabilities";
+import { capabilityPublicationRoutes } from "./capabilities-publication";
+import { capabilityFlagRoutes } from "./capability-flags";
 import { collaborationRoutes } from "./collaboration-routes";
+import { contentPolicyRoutes } from "./content-policy";
+import { contentPolicyLifecycleRoutes } from "./content-policy-lifecycle";
 import { dataConnectorRoutes } from "./data-connectors";
 import { delegatedOAuthRoutes } from "./delegated-oauth";
 import { deviceAuthorizationRoutes } from "./device-authorizations";
 import { edgeSecurityRoutes } from "./edge-security";
+import { enterpriseSurfaceRoutes } from "./enterprise-surfaces";
+import { enterpriseLifecycleSurfaceRoutes } from "./enterprise-lifecycle-surfaces";
+import { computeArtifactSurfaceRoutes } from "./compute-artifact-surfaces";
+import { tableSurfaceRoutes } from "./table-surfaces";
 import { evalRoutes } from "./evals";
 import { fileRoutes } from "./files";
 import { governanceRoutes } from "./governance";
@@ -62,7 +71,10 @@ import { openWebUiChannelRoutes } from "./openwebui-channels";
 import { openWebUiSystemRoutes } from "./openwebui-system";
 import { operationalGovernanceRoutes } from "./operational-governance";
 import { operationalPostureRoutes } from "./operational-posture";
+import { providerCapabilityReportRoutes } from "./provider-capability-reports";
+import { providerKindCatalogRoutes } from "./provider-kind-catalog";
 import { providerRoutes } from "./providers";
+import { modelCapabilityProbeRoutes } from "./model-capability-probe";
 import { promptRoutes } from "./prompts";
 import { ragGovernanceRoutes } from "./rag-governance";
 import { readinessRoutes } from "./readiness";
@@ -74,6 +86,8 @@ import { webhookRoutes } from "./webhooks";
 import { voiceRoutes } from "./voices";
 import { workflowRoutes } from "./workflows";
 import { workspaceContentRoutes } from "./workspace-content";
+import { ROMEO_PRODUCT_VERSION } from "./version";
+import { applyApiDeprecationsToOpenApiDocument } from "./api-deprecations";
 
 export const contractRoutes = [
   ...administrationRoutes,
@@ -108,7 +122,10 @@ export const contractRoutes = [
   ...openApiRoutes,
   ...operationalGovernanceRoutes,
   ...operationalPostureRoutes,
+  ...providerCapabilityReportRoutes,
+  ...providerKindCatalogRoutes,
   ...providerRoutes,
+  ...modelCapabilityProbeRoutes,
   ...promptRoutes,
   ...ragGovernanceRoutes,
   ...readinessRoutes,
@@ -118,11 +135,20 @@ export const contractRoutes = [
   ...chatRoutes,
   ...chatExperienceRoutes,
   ...channelRoutes,
+  ...capabilityRoutes,
+  ...capabilityPublicationRoutes,
+  ...capabilityFlagRoutes,
   ...collaborationRoutes,
+  ...contentPolicyRoutes,
+  ...contentPolicyLifecycleRoutes,
   ...dataConnectorRoutes,
   ...delegatedOAuthRoutes,
   ...deviceAuthorizationRoutes,
   ...edgeSecurityRoutes,
+  ...enterpriseSurfaceRoutes,
+  ...enterpriseLifecycleSurfaceRoutes,
+  ...computeArtifactSurfaceRoutes,
+  ...tableSurfaceRoutes,
   ...evalRoutes,
   ...fileRoutes,
   ...governanceRoutes,
@@ -174,11 +200,15 @@ export function contractOpenApiDocument(
       registerRoute(route as RouteConfig);
     }
   }
-  return registry.getOpenAPI31Document({
+  const document = registry.getOpenAPI31Document({
     openapi: "3.1.0",
     info: {
       title: "Romeo API Contracts",
-      version: "0.1.0",
+      version: ROMEO_PRODUCT_VERSION,
     },
   });
+  applyApiDeprecationsToOpenApiDocument(
+    document as unknown as Record<string, unknown>,
+  );
+  return document;
 }

@@ -2,22 +2,25 @@ import { Button } from "@romeo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { getBootstrap } from "../features";
 import {
-  listSessions,
-  revokeOtherSessions,
-  revokeSession,
+  revokeOtherSessionsMutationOptions,
+  revokeSessionMutationOptions,
   type Session,
 } from "../features/sessions";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
+import { purgeBrowserWorkspaceDrafts } from "../lib/draft-storage";
 import { Section } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PageActions } from "./PageActions";
 import { decorateSessions } from "./session-rows";
+import { bootstrapQueryOptions } from "../lib/api-query-options";
+import { useRouterApiClient } from "../lib/router-context";
+import { clearRouteDataForLogout } from "../lib/route-intent";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 type SessionRow = Session & { current: boolean };
 
@@ -30,21 +33,16 @@ function sessionStatus(session: Session): "active" | "expired" | "revoked" {
 }
 
 export function SessionsPanel() {
+  const apiClient = useRouterApiClient();
   const queryClient = useQueryClient();
   const { t } = useLocale();
   const { ask, dialog } = useConfirm();
-  const bootstrapQuery = useQuery({
-    queryKey: ["bootstrap"],
-    queryFn: getBootstrap,
-  });
-  const sessionsQuery = useQuery({
-    queryKey: ["sessions"],
-    queryFn: listSessions,
-  });
-  const revokeMutation = useMutation({
-    mutationFn: (sessionId: string) => revokeSession(sessionId),
-  });
-  const revokeOthersMutation = useMutation({ mutationFn: revokeOtherSessions });
+  const bootstrapQuery = useQuery(bootstrapQueryOptions(apiClient));
+  const table = useInventoriedServerTable<Session>("user_sessions");
+  const revokeMutation = useMutation(revokeSessionMutationOptions());
+  const revokeOthersMutation = useMutation(
+    revokeOtherSessionsMutationOptions(),
+  );
 
   async function handleRevoke(session: SessionRow) {
     if (
@@ -61,8 +59,16 @@ export function SessionsPanel() {
     )
       return;
     try {
-      await revokeMutation.mutateAsync(session.id);
-      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      await revokeMutation.mutateAsync({
+        current: session.current,
+        sessionId: session.id,
+      });
+      if (session.current) {
+        purgeBrowserWorkspaceDrafts();
+        await clearRouteDataForLogout(queryClient);
+        window.location.href = "/login";
+        return;
+      }
       toast(t("sessionRevoked"), "success");
     } catch {
       toast(t("revokeSessionFailed"), "error");
@@ -80,8 +86,9 @@ export function SessionsPanel() {
     )
       return;
     try {
-      const revoked = await revokeOthersMutation.mutateAsync();
-      await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      const revoked = await revokeOthersMutation.mutateAsync({
+        currentSessionId: bootstrapQuery.data?.subject.sessionId,
+      });
       toast(`${t("revokedStatus")}: ${revoked.length}`, "success");
     } catch {
       toast(t("revokeOthersFailed"), "error");
@@ -178,20 +185,29 @@ export function SessionsPanel() {
               : t("signOutEverywhereElse")}
           </Button>
           <PageActions
-            onRefresh={() => void sessionsQuery.refetch()}
+            onRefresh={() => void table.query.refetch()}
             refreshLabel={t("refresh")}
-            refreshing={sessionsQuery.isFetching}
+            refreshing={table.query.isFetching}
           />
         </div>
       }
       title={t("activeSessions")}
     >
-      <PanelState query={sessionsQuery} empty={t("noActiveSessions")}>
-        {(rows) => (
+      <PanelState
+        empty={t("noActiveSessions")}
+        isEmpty={(page) =>
+          page.items.length === 0 &&
+          table.isFirstPage &&
+          table.search.trim() === ""
+        }
+        query={table.query}
+      >
+        {() => (
           <DataTable
+            serverState={table.serverState}
             columns={columns}
             data={decorateSessions(
-              rows,
+              table.rows,
               bootstrapQuery.data?.subject.sessionId,
             )}
             empty={t("noActiveSessions")}

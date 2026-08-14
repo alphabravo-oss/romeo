@@ -12,6 +12,17 @@ import type { RomeoRepository } from "../domain/repository";
 import type { UsageEvent } from "../domain/entities";
 import type { RunServiceOptions } from "./run-service";
 import type { ProviderRoutingPolicy } from "./provider-routing";
+import type { RunSseOperationalSnapshot } from "./run-sse-observability";
+import { apiDeprecationUsageStore } from "./api-deprecation-observability";
+import {
+  governanceRuntimeUsageSnapshot,
+  type GovernanceRuntimeUsageSnapshot,
+} from "./governance-runtime-observability";
+import {
+  compareProviderAlerts,
+  providerAlertIdPart,
+  severityForProviderReason,
+} from "./provider-operational-alert-ordering";
 
 export type ProviderOperationalStatus = "critical" | "degraded" | "healthy";
 export type ProviderOperationalProviderStatus =
@@ -49,6 +60,11 @@ export interface ProviderOperationalAlert {
     | "provider_errors_recent"
     | "queue_wait_high"
     | "sse_disconnects_recent"
+    | "sse_heartbeat_failures_recent"
+    | "sse_notifier_lag_high"
+    | "sse_notifier_unavailable_recent"
+    | "sse_slow_consumers_recent"
+    | "sse_terminal_close_slow"
     | "time_to_first_token_high";
   id: string;
   modelId?: string;
@@ -78,7 +94,7 @@ export interface ProviderOperationalSummary {
   status: ProviderOperationalStatus;
 }
 
-export interface ProviderRuntimeOperationalSummary {
+export interface ProviderRuntimeOperationalSummary extends GovernanceRuntimeUsageSnapshot {
   contextInputTokensAverage: number;
   lookbackSeconds: number;
   objectStoreFailureCount: number;
@@ -87,6 +103,7 @@ export interface ProviderRuntimeOperationalSummary {
   recoveryCount: number;
   sseDisconnectCount: number;
   sseReconnectCount: number;
+  sse?: RunSseOperationalSnapshot;
   timeToFirstTokenAverageMs: number;
   timeToFirstTokenP95Ms: number;
   uploadPipelineAverageMs: number;
@@ -95,12 +112,14 @@ export interface ProviderRuntimeOperationalSummary {
 }
 
 export async function summarizeProviderOperations(input: {
+  apiDeprecations?: ReturnType<typeof apiDeprecationUsageStore.snapshot>;
   circuitBreaker: ProviderCircuitBreaker;
   now?: string;
   options: RunServiceOptions;
   orgId: string;
   repository: RomeoRepository;
   routingPolicy: ProviderRoutingPolicy;
+  sse?: RunSseOperationalSnapshot;
 }): Promise<ProviderOperationalSummary> {
   const generatedAt = input.now ?? new Date().toISOString();
   const [providerRows, models, usageEvents] = await Promise.all([
@@ -114,7 +133,12 @@ export async function summarizeProviderOperations(input: {
   const modelsByProvider = groupModelsByProvider(models);
   const fallback = fallbackState(models, providers, input.routingPolicy);
   const policy = policySummary(input.routingPolicy, input.options);
-  const runtime = runtimeSummary(usageEvents, generatedAt);
+  const runtime = runtimeSummary(
+    usageEvents,
+    generatedAt,
+    input.sse,
+    input.apiDeprecations ?? apiDeprecationUsageStore.snapshot(),
+  );
 
   const providerSummaries = providers.map((provider) => {
     const providerModels = modelsByProvider.get(provider.id) ?? [];
@@ -182,6 +206,8 @@ export async function summarizeProviderOperations(input: {
 function runtimeSummary(
   events: UsageEvent[],
   generatedAt: string,
+  sse: RunSseOperationalSnapshot | undefined,
+  apiDeprecations: ReturnType<typeof apiDeprecationUsageStore.snapshot>,
 ): ProviderRuntimeOperationalSummary {
   const lookbackSeconds = 15 * 60;
   const cutoff = Date.parse(generatedAt) - lookbackSeconds * 1000;
@@ -209,6 +235,7 @@ function runtimeSummary(
       event.metadata.outcome === "failure",
   ).length;
   return {
+    ...governanceRuntimeUsageSnapshot(apiDeprecations),
     contextInputTokensAverage: average(quantities("llm.input_token.estimated")),
     lookbackSeconds,
     objectStoreFailureCount,
@@ -217,6 +244,7 @@ function runtimeSummary(
     recoveryCount: sum(quantities("run.recovery")),
     sseDisconnectCount: sum(quantities("sse.disconnect")),
     sseReconnectCount: sum(quantities("sse.reconnect")),
+    ...(sse === undefined ? {} : { sse }),
     timeToFirstTokenAverageMs: average(ttft),
     timeToFirstTokenP95Ms: percentile(ttft, 0.95),
     uploadPipelineAverageMs: average(
@@ -250,6 +278,36 @@ function runtimeAlerts(
     alerts.push({
       code: "sse_disconnects_recent",
       id: "runtime_sse_disconnects_recent",
+      severity: "warning",
+    });
+  if ((runtime.sse?.heartbeatFailureCount ?? 0) >= 1)
+    alerts.push({
+      code: "sse_heartbeat_failures_recent",
+      id: "runtime_sse_heartbeat_failures_recent",
+      severity: "warning",
+    });
+  if ((runtime.sse?.notifierLagP95Ms ?? 0) >= 1_000)
+    alerts.push({
+      code: "sse_notifier_lag_high",
+      id: "runtime_sse_notifier_lag_high",
+      severity: "warning",
+    });
+  if ((runtime.sse?.notifierUnavailableCount ?? 0) >= 1)
+    alerts.push({
+      code: "sse_notifier_unavailable_recent",
+      id: "runtime_sse_notifier_unavailable_recent",
+      severity: "warning",
+    });
+  if ((runtime.sse?.slowConsumerDropCount ?? 0) >= 1)
+    alerts.push({
+      code: "sse_slow_consumers_recent",
+      id: "runtime_sse_slow_consumers_recent",
+      severity: "warning",
+    });
+  if ((runtime.sse?.terminalCloseLatencyP95Ms ?? 0) >= 1_000)
+    alerts.push({
+      code: "sse_terminal_close_slow",
+      id: "runtime_sse_terminal_close_slow",
       severity: "warning",
     });
   if (runtime.queueWaitP95Ms >= 30_000)
@@ -428,35 +486,8 @@ function providerAlerts(
     .filter((reason) => reason !== "provider_circuit_probe")
     .map((reason) => ({
       code: reason as ProviderOperationalAlert["code"],
-      id: `provider_${alertIdPart(reason)}_${alertIdPart(summary.providerId)}`,
+      id: `provider_${providerAlertIdPart(reason)}_${providerAlertIdPart(summary.providerId)}`,
       providerId: summary.providerId,
-      severity: severityForReason(reason, fallback),
+      severity: severityForProviderReason(reason, fallback.available),
     }));
-}
-
-function severityForReason(
-  reason: string,
-  fallback: ProviderFallbackOperationalState,
-): ProviderOperationalAlert["severity"] {
-  if (reason === "provider_kill_switch" || reason === "provider_circuit_open") {
-    return fallback.available ? "warning" : "critical";
-  }
-  return reason === "provider_disabled" ? "warning" : "critical";
-}
-
-function compareProviderAlerts(
-  left: ProviderOperationalAlert,
-  right: ProviderOperationalAlert,
-): number {
-  const severity = severityRank(right.severity) - severityRank(left.severity);
-  if (severity !== 0) return severity;
-  return left.id.localeCompare(right.id);
-}
-
-function severityRank(value: ProviderOperationalAlert["severity"]): number {
-  return value === "critical" ? 2 : 1;
-}
-
-function alertIdPart(value: string): string {
-  return value.replace(/[^A-Za-z0-9]+/gu, "_");
 }

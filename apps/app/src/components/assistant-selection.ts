@@ -53,9 +53,6 @@ export function resolveActiveAssistant(input: {
 export function resolveChatAuthorNames(input: {
   /** Custom model (managed) name, if one is selected. */
   agentName: string | undefined;
-  /** Kept for call-site compatibility; dual mode is retired. */
-  assistantsEnabled: boolean | undefined;
-  fallbackName: string;
   /** Base model display name for the next turn. */
   modelDisplayName: string | undefined;
 }): { nextTurn: string | undefined; transcript: string | undefined } {
@@ -81,8 +78,5 @@ export function resolveChatAuthorNames(input: {
     return { nextTurn: model, transcript: undefined };
   }
   // No model/custom model resolved yet — stay quiet rather than invent a brand.
-  if (input.assistantsEnabled === undefined) {
-    return { nextTurn: undefined, transcript: undefined };
-  }
   return { nextTurn: undefined, transcript: undefined };
 }

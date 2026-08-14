@@ -2,9 +2,9 @@ import { Button } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 
-import { listFilesPage, type FileObject } from "../features/files";
-import { listKnowledgeBases } from "../features/knowledge";
-import { listPromptTemplatesPage } from "../features/prompts";
+import { mentionFilesQueryOptions, type FileObject } from "../features/files";
+import { knowledgeBasesQueryOptions } from "../features/knowledge";
+import { commandPromptTemplatesQueryOptions } from "../features/prompts";
 import { useLocale } from "../lib/i18n";
 import {
   activeComposerTrigger,
@@ -71,34 +71,27 @@ export function useComposerMenu({
   const mention = trigger?.kind === "mention" ? trigger : undefined;
   const mentionQuery = mention?.query.trim().toLowerCase() ?? "";
 
-  const commandPromptsQuery = useQuery({
-    queryKey: ["promptTemplates", workspaceId, "command", commandQuery],
-    queryFn: () =>
-      listPromptTemplatesPage({
-        workspaceId: workspaceId!,
-        limit: menuLimit,
-        offset: 0,
-        ...(commandQuery === "" ? {} : { query: commandQuery }),
-      }),
-    enabled: workspaceId !== undefined && isCommand,
-  });
-  const mentionFilesQuery = useQuery({
-    queryKey: ["files", workspaceId, "mention", mentionQuery],
-    queryFn: () =>
-      listFilesPage(workspaceId!, {
-        limit: mentionFileLimit,
-        offset: 0,
-        query: mentionQuery,
-      }),
-    enabled: workspaceId !== undefined && mention !== undefined,
-  });
+  const commandPromptsQuery = useQuery(
+    commandPromptTemplatesQueryOptions({
+      enabled: isCommand,
+      limit: menuLimit,
+      query: commandQuery,
+      workspaceId,
+    }),
+  );
+  const mentionFilesQuery = useQuery(
+    mentionFilesQueryOptions({
+      enabled: mention !== undefined,
+      limit: mentionFileLimit,
+      query: mentionQuery,
+      workspaceId,
+    }),
+  );
   // Shares the cache key every other knowledge screen uses. The endpoint takes
   // no query, so the filter below is client-side — same as the "/" menu's.
-  const knowledgeBasesQuery = useQuery({
-    queryKey: ["knowledgeBases", workspaceId],
-    queryFn: () => listKnowledgeBases(workspaceId!),
-    enabled: workspaceId !== undefined && mention !== undefined,
-  });
+  const knowledgeBasesQuery = useQuery(
+    knowledgeBasesQueryOptions(workspaceId, mention !== undefined),
+  );
 
   const mentionFiles = mentionFilesQuery.data?.items;
   function buildOptions(): ComposerMenuOption[] {

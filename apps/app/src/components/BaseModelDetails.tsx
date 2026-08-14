@@ -6,14 +6,12 @@ import type { BaseModel, Provider } from "../features/providers/types";
 import type { Agent } from "../features/managed-models/types";
 import { LocalizedTokens } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
-import {
-  listModelShares,
-  revokeModelShare,
-  shareModel,
-} from "../features/access/api";
+import { revokeModelShare, shareModel } from "../features/access/api";
+import { modelSharesQueryOptions } from "../features/access/query-options";
 import { toast } from "../lib/toast";
 import { modelConfigIssues } from "../lib/model-config-attention";
 import { ResourceGrantEditor } from "./ResourceGrantEditor";
+import { ProviderModelCapabilityEvidencePanel } from "./ProviderCapabilityEvidence";
 import type { MessageKey } from "../lib/i18n";
 
 const perMillion = 1_000_000;
@@ -54,10 +52,7 @@ export function BaseModelDetails({
   onUpdatePricing,
 }: BaseModelDetailsProps) {
   const { t } = useLocale();
-  const sharesQuery = useQuery({
-    queryKey: ["modelShares", model.id],
-    queryFn: () => listModelShares(model.id),
-  });
+  const sharesQuery = useQuery(modelSharesQueryOptions(model.id));
   const [capabilities, setCapabilities] = useState(model.capabilities);
   const [contextWindow, setContextWindow] = useState(
     String(model.contextWindow),
@@ -194,6 +189,7 @@ export function BaseModelDetails({
           {dependentAgents.length}
         </span>
       </div>
+      <ProviderModelCapabilityEvidencePanel modelId={model.id} />
       {dependentAgents.length > 0 ? (
         <div className="rounded-md border border-border p-3 text-sm">
           <strong>{t("dependencyImpact")}</strong>

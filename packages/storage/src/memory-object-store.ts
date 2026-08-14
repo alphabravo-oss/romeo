@@ -1,8 +1,9 @@
-import type {
-  ObjectStore,
-  PresignedUpload,
-  PutObjectInput,
-  StoredObject,
+import {
+  ObjectSizeLimitError,
+  type ObjectStore,
+  type PresignedUpload,
+  type PutObjectInput,
+  type StoredObject,
 } from "./types";
 
 interface MemoryObject {
@@ -29,9 +30,24 @@ export class MemoryObjectStore implements ObjectStore {
     return metadata;
   }
 
-  async getObject(key: string): Promise<Uint8Array | undefined> {
+  async getObject(
+    key: string,
+    options: { maxBytes?: number } = {},
+  ): Promise<Uint8Array | undefined> {
     const object = this.objects.get(key);
+    if (
+      object !== undefined &&
+      options.maxBytes !== undefined &&
+      object.bytes.byteLength > options.maxBytes
+    ) {
+      throw new ObjectSizeLimitError(options.maxBytes);
+    }
     return object ? new Uint8Array(object.bytes) : undefined;
+  }
+
+  async headObject(key: string): Promise<StoredObject | undefined> {
+    const object = this.objects.get(key);
+    return object === undefined ? undefined : { ...object.metadata };
   }
 
   async deleteObject(key: string): Promise<void> {
@@ -42,6 +58,8 @@ export class MemoryObjectStore implements ObjectStore {
     key: string;
     contentType: string;
     expiresInSeconds: number;
+    sha256?: string;
+    sizeBytes?: number;
   }): Promise<PresignedUpload> {
     return {
       key: input.key,

@@ -6,14 +6,17 @@ import {
   evaluateKnowledgeIngestReadiness,
 } from "./knowledge-ingest-readiness";
 
-function policy(
-  overrides: Partial<RagPolicyReport> = {},
-): RagPolicyReport {
+function policy(overrides: Partial<RagPolicyReport> = {}): RagPolicyReport {
   return {
     orgId: "org_1",
     source: "org",
     enabledTiers: ["workspace"],
-    defaultMaxResultsPerTier: { user_private: 4, workspace: 4, org: 4, shared: 4 },
+    defaultMaxResultsPerTier: {
+      user_private: 4,
+      workspace: 4,
+      org: 4,
+      shared: 4,
+    },
     maxResultsPerTier: { user_private: 8, workspace: 8, org: 8, shared: 8 },
     allowedEmbeddingProviderModels: [
       { providerId: "provider_1", model: "embed-1" },
@@ -100,7 +103,9 @@ describe("knowledge ingest readiness", () => {
 
   it("throws a 409 when ingest is not configured", () => {
     expect(() =>
-      assertKnowledgeIngestReady(policy({ allowedEmbeddingProviderModels: [] })),
+      assertKnowledgeIngestReady(
+        policy({ allowedEmbeddingProviderModels: [] }),
+      ),
     ).toThrow(/embedding model and RAG policy/);
   });
 });

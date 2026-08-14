@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { openAiCompatibleCapabilities } from "./capabilities";
+import {
+  openAiCompatibleCapabilities,
+  openAiResponsesCompatibleCapabilities,
+} from "./capabilities";
 import { profileDiscoveredModel } from "./model-discovery";
 
 describe("discovered model profiles", () => {
@@ -58,5 +61,15 @@ describe("discovered model profiles", () => {
       name: "deepseek-v4-flash-0731",
     });
     expect(profile.capabilities.imageGeneration).toBe(false);
+  });
+
+  it("preserves provider reasoning support when a model name has no reasoning hint", () => {
+    const profile = profileDiscoveredModel({
+      base: openAiResponsesCompatibleCapabilities,
+      fallbackContextWindow: 128000,
+      name: "gpt-compatible",
+    });
+
+    expect(profile.capabilities.reasoning).toBe(true);
   });
 });

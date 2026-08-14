@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApiKeyToken, hashApiKey } from "@romeo/auth";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { MemoryObjectStore } from "@romeo/storage";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -90,7 +90,7 @@ describe("Romeo knowledge ingestion", () => {
       createdAt: new Date().toISOString(),
     });
     const api = createRomeoApi(repository, {
-      env: readEnv({ DEV_SEEDED_LOGIN: "false" }),
+      env: testEnv({ DEV_SEEDED_LOGIN: "false" }),
     });
 
     const response = await api.request("/api/v1/knowledge-bases", {
@@ -372,7 +372,7 @@ describe("Romeo knowledge ingestion", () => {
     );
 
     const api = createRomeoApi(repository, {
-      env: readEnv({ DEV_SEEDED_LOGIN: "false" }),
+      env: testEnv({ DEV_SEEDED_LOGIN: "false" }),
     });
     const authHeaders = {
       authorization: `Bearer ${token}`,
@@ -812,7 +812,7 @@ describe("Romeo knowledge ingestion", () => {
       updatedAt: now,
     });
     const api = createRomeoApi(repository, {
-      env: readEnv({ DEV_SEEDED_LOGIN: "false" }),
+      env: testEnv({ DEV_SEEDED_LOGIN: "false" }),
     });
 
     const response = await api.request("/api/v1/knowledge-bases/query", {
@@ -940,7 +940,7 @@ describe("Romeo knowledge ingestion", () => {
 
   it("reports Qdrant deployment posture without exposing endpoint or secret refs", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.example.com",
         QDRANT_COLLECTION: "romeo-prod",
@@ -1011,7 +1011,7 @@ describe("Romeo knowledge ingestion", () => {
       partitioningPolicy: "workspace",
     });
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.example.com",
         QDRANT_COLLECTION: "romeo-prod",
@@ -1310,7 +1310,7 @@ describe("Romeo knowledge ingestion", () => {
     });
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         VECTOR_ISOLATION_MODE: "pgvector_partitioned_by_org",
         PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH: evidencePath,
       }),
@@ -1623,7 +1623,7 @@ describe("Romeo knowledge ingestion", () => {
     let embeddingFetchCalls = 0;
     let qdrantFetchCalls = 0;
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.allowlist.example",
         QDRANT_COLLECTION: "romeo-allowlist",
@@ -1750,6 +1750,8 @@ describe("Romeo knowledge ingestion", () => {
   it("completes uploaded HTML sources through the extraction boundary", async () => {
     const objectStore = new MemoryObjectStore();
     const api = createRomeoApi(new InMemoryRomeoRepository(), { objectStore });
+    const html =
+      "<main><h1>Privacy Controls</h1><script>leak()</script><p>Romeo retention evidence.</p></main>";
     const uploadResponse = await api.request(
       "/api/v1/knowledge-bases/kb_default/uploads",
       {
@@ -1758,7 +1760,7 @@ describe("Romeo knowledge ingestion", () => {
         body: JSON.stringify({
           fileName: "portal.html",
           mimeType: "text/html",
-          sizeBytes: 96,
+          sizeBytes: new TextEncoder().encode(html).byteLength,
         }),
       },
     );
@@ -1766,9 +1768,7 @@ describe("Romeo knowledge ingestion", () => {
     expect(uploadResponse.status).toBe(202);
     await objectStore.putObject({
       key: upload.data.source.objectKey,
-      body: new TextEncoder().encode(
-        "<main><h1>Privacy Controls</h1><script>leak()</script><p>Romeo retention evidence.</p></main>",
-      ),
+      body: new TextEncoder().encode(html),
       contentType: "text/html",
     });
 
@@ -1798,6 +1798,7 @@ describe("Romeo knowledge ingestion", () => {
 
   it("runs deferred extraction jobs for uploaded binary knowledge sources", async () => {
     const objectStore = new MemoryObjectStore();
+    const pdfFixture = "retention appendix";
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       objectStore,
       knowledgeExtractor: {
@@ -1821,14 +1822,14 @@ describe("Romeo knowledge ingestion", () => {
         body: JSON.stringify({
           fileName: "policy.pdf",
           mimeType: "application/pdf",
-          sizeBytes: 64,
+          sizeBytes: new TextEncoder().encode(pdfFixture).byteLength,
         }),
       },
     );
     const upload = await uploadResponse.json();
     await objectStore.putObject({
       key: upload.data.source.objectKey,
-      body: new TextEncoder().encode("retention appendix"),
+      body: new TextEncoder().encode(pdfFixture),
       contentType: "application/pdf",
     });
 
@@ -2075,7 +2076,7 @@ describe("Romeo knowledge ingestion", () => {
     let qdrantPayload: Record<string, unknown> | undefined;
 
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.internal.example",
         QDRANT_COLLECTION: "romeo-prod",
@@ -2373,7 +2374,7 @@ describe("Romeo knowledge ingestion", () => {
     const embedInputs: string[][] = [];
     const qdrantCalls: Array<{ method: string; url: string }> = [];
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.allowlist.example",
         QDRANT_COLLECTION: "romeo-allowlist",

@@ -45,6 +45,26 @@ export interface EvalRunRecord {
   createdBy: string;
   createdAt: string;
   completedAt: string;
+  reasoningPolicy?: EvalReasoningPolicyEvidenceRecord;
+  metrics?: EvalRunMetricsRecord;
+}
+
+export interface EvalReasoningPolicyEvidenceRecord {
+  requested: ProviderReasoningPolicy;
+  effective: ProviderReasoningPolicy;
+}
+
+export interface EvalRunMetricsRecord {
+  latencyMs: number;
+  usage: {
+    coverage: "complete" | "partial" | "none";
+    inputTokens?: number;
+    outputTokens?: number;
+    reasoningTokens?: number;
+    source?: ProviderKind;
+  };
+  costBasis: "reported_tokens" | "unavailable";
+  estimatedCostUsd?: number;
 }
 
 export interface EvalRunResultRecord {
@@ -72,3 +92,4 @@ export interface EvalResultHumanRatingRecord {
   createdAt: string;
   updatedAt: string;
 }
+import type { ProviderKind, ProviderReasoningPolicy } from "@romeo/providers";

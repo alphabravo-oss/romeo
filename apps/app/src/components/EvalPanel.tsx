@@ -1,28 +1,34 @@
-import { Input, Textarea, Button } from "@romeo/ui";
+import { Input, NativeSelect, Textarea, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import {
-  createEvalSuite,
-  getEvalDashboard,
-  listEvalRatings,
-  listEvalResults,
-  listEvalRuns,
-  listEvalSuites,
-  rateEvalResult,
-  runEvalSuite,
+  createEvalSuiteMutationOptions,
+  evalDashboardQueryOptions,
+  evalRatingsQueryOptions,
+  evalReasoningComparisonQueryOptions,
+  evalResultsQueryOptions,
+  evalRunsQueryOptions,
+  evalSuitesQueryOptions,
+  rateEvalResultMutationOptions,
+  runEvalSuiteMutationOptions,
 } from "../features";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
-import type { Agent, EvalResultHumanRatingValue } from "../features/types";
+import type {
+  Agent,
+  EvalResultHumanRatingValue,
+  RunEvalSuiteRequest,
+} from "../features/types";
 import { PanelState } from "../lib/panel-state";
 import { AddButton } from "./AddButton";
 import { PanelStats } from "./PanelStats";
 import { EvalDashboardSummary } from "./EvalDashboardSummary";
+import { EvalReasoningComparisonPanel } from "./EvalReasoningComparisonPanel";
 import { FormDialog } from "./FormDialog";
 import { ResourceRow } from "./ResourceRow";
-import { SettingsSection } from "./SettingsSection";
+import { Section } from "./console";
 import { resolveActiveSuite } from "./eval-selection";
 import { evalRatingKey, rubricFromInput } from "./eval-form-utils";
 import {
@@ -33,48 +39,31 @@ import {
 
 export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const agentId = activeAgent?.id;
   const [ratingComment, setRatingComment] = useState("");
   const [suiteDialogOpen, setSuiteDialogOpen] = useState(false);
   const [selectedSuiteId, setSelectedSuiteId] = useState<string>();
   const [selectedRunId, setSelectedRunId] = useState<string>();
   const [selectedResultId, setSelectedResultId] = useState<string>();
-  const suitesQuery = useQuery({
-    queryKey: ["evalSuites", agentId],
-    queryFn: () => listEvalSuites(agentId!),
-    enabled: agentId !== undefined,
-  });
-  const runsQuery = useQuery({
-    queryKey: ["evalRuns", agentId],
-    queryFn: () => listEvalRuns(agentId!),
-    enabled: agentId !== undefined,
-  });
-  const dashboardQuery = useQuery({
-    queryKey: ["evalDashboard", agentId],
-    queryFn: () => getEvalDashboard(agentId!),
-    enabled: agentId !== undefined,
-  });
+  const [reasoningVariant, setReasoningVariant] = useState("off");
+  const suitesQuery = useQuery(evalSuitesQueryOptions(agentId));
+  const runsQuery = useQuery(evalRunsQueryOptions(agentId));
+  const dashboardQuery = useQuery(evalDashboardQueryOptions(agentId));
   const activeRun = useMemo(
     () => resolveActiveSuite(runsQuery.data ?? [], selectedRunId),
     [runsQuery.data, selectedRunId],
   );
-  const resultsQuery = useQuery({
-    queryKey: ["evalResults", activeRun?.id],
-    queryFn: () => listEvalResults(activeRun!.id),
-    enabled: activeRun !== undefined,
-  });
-  const ratingsQuery = useQuery({
-    queryKey: ["evalRatings", activeRun?.id],
-    queryFn: () => listEvalRatings(activeRun!.id),
-    enabled: activeRun !== undefined,
-  });
-  const createMutation = useMutation({ mutationFn: createEvalSuite });
-  const runMutation = useMutation({ mutationFn: runEvalSuite });
-  const rateMutation = useMutation({ mutationFn: rateEvalResult });
+  const resultsQuery = useQuery(evalResultsQueryOptions(activeRun?.id));
+  const ratingsQuery = useQuery(evalRatingsQueryOptions(activeRun?.id));
+  const createMutation = useMutation(createEvalSuiteMutationOptions());
+  const runMutation = useMutation(runEvalSuiteMutationOptions(agentId));
+  const rateMutation = useMutation(rateEvalResultMutationOptions());
   const activeSuite = useMemo(
     () => resolveActiveSuite(suitesQuery.data ?? [], selectedSuiteId),
     [selectedSuiteId, suitesQuery.data],
+  );
+  const comparisonQuery = useQuery(
+    evalReasoningComparisonQueryOptions(activeSuite?.id),
   );
   const activeResult = useMemo(
     () => resolveActiveSuite(resultsQuery.data ?? [], selectedResultId),
@@ -110,12 +99,6 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
             },
           ],
         });
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["evalSuites", agentId] }),
-          queryClient.invalidateQueries({
-            queryKey: ["evalDashboard", agentId],
-          }),
-        ]);
         toast(t("evalSuiteCreated"), "success");
         setSuiteDialogOpen(false);
       } catch {
@@ -127,11 +110,10 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
   async function handleRun() {
     if (!activeSuite || !agentId) return;
     try {
-      await runMutation.mutateAsync(activeSuite.id);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["evalRuns", agentId] }),
-        queryClient.invalidateQueries({ queryKey: ["evalDashboard", agentId] }),
-      ]);
+      await runMutation.mutateAsync({
+        suiteId: activeSuite.id,
+        reasoningPolicy: policyForVariant(reasoningVariant),
+      });
       toast(t("evalRunStarted"), "success");
     } catch {
       toast(t("evalCouldNotRunSuite"), "error");
@@ -143,13 +125,11 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
     try {
       await rateMutation.mutateAsync({
         resultId: activeResult.id,
+        runId: activeRun.id,
         rating,
         ...(ratingComment.trim().length === 0
           ? {}
           : { comment: ratingComment.trim() }),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["evalRatings", activeRun.id],
       });
       toast(t("evalRatingSaved"), "success");
     } catch {
@@ -159,9 +139,9 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
 
   if (activeAgent === undefined) {
     return (
-      <SettingsSection description={t("evalSelectAgent")} title={t("evals")}>
+      <Section description={t("evalSelectAgent")} title={t("evalSuites")}>
         <p className="rm-list-empty">{t("evalSelectAgent")}</p>
-      </SettingsSection>
+      </Section>
     );
   }
 
@@ -176,6 +156,17 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
           >
             {t("evalNewSuite")}
           </Button>
+          <NativeSelect
+            aria-label={t("evalReasoningPolicy")}
+            onChange={(event) => setReasoningVariant(event.currentTarget.value)}
+            value={reasoningVariant}
+          >
+            <option value="off">{t("evalReasoningOff")}</option>
+            <option value="auto">{t("evalReasoningAuto")}</option>
+            <option value="low">{t("evalReasoningLow")}</option>
+            <option value="medium">{t("evalReasoningMedium")}</option>
+            <option value="high">{t("evalReasoningHigh")}</option>
+          </NativeSelect>
           <Button
             disabled={!activeSuite || runMutation.isPending}
             onClick={() => void handleRun()}
@@ -381,6 +372,17 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
             />
           )}
         </PanelState>
+        {activeSuite === undefined ? null : (
+          <PanelState
+            query={comparisonQuery}
+            empty={t("evalNoReasoningComparisons")}
+            isEmpty={() => false}
+          >
+            {(comparison) => (
+              <EvalReasoningComparisonPanel comparison={comparison} />
+            )}
+          </PanelState>
+        )}
         {activeRun === undefined ? null : (
           <PanelState query={resultsQuery} empty={t("evalNoResults")}>
             {(results) => (
@@ -436,4 +438,13 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
       </div>
     </div>
   );
+}
+
+function policyForVariant(
+  variant: string,
+): NonNullable<RunEvalSuiteRequest["reasoningPolicy"]> {
+  if (variant === "off") return { schemaVersion: 1, mode: "off" };
+  if (variant === "low" || variant === "medium" || variant === "high")
+    return { schemaVersion: 1, mode: "auto", effort: variant };
+  return { schemaVersion: 1, mode: "auto" };
 }

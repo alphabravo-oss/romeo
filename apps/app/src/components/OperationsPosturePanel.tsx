@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 
 import {
-  getGaEvidencePosture,
-  getPostgresOperationalPosture,
+  gaEvidencePostureQueryOptions,
+  postgresOperationalPostureQueryOptions,
 } from "../features/operational-posture";
 import {
-  getJobsOperationalSummary,
+  jobsOperationalSummaryQueryOptions,
   type BackgroundJobTypeSummary,
   type JobOperationalAlert,
 } from "../features/jobs";
-import { getQuotasDistributedStatus } from "../features/operational-governance";
+import { quotasDistributedStatusQueryOptions } from "../features/operational-governance";
 import type {
   GaEvidencePostureGate,
   PostgresOperationalWarningCode,
@@ -42,7 +42,6 @@ export function OperationsPosturePanel(): React.ReactNode {
   const { t } = useLocale();
   return (
     <Section>
-      <div className="mb-3 text-sm text-muted">{t("opSystemPosture")}</div>
       <Tabs
         tabs={[
           {
@@ -114,10 +113,7 @@ function gaGateColumns(t: Translate): ColumnDef<GaEvidencePostureGate, any>[] {
 
 function GaEvidenceSection(): React.ReactNode {
   const { t } = useLocale();
-  const query = useQuery({
-    queryKey: ["postureGaEvidence"],
-    queryFn: getGaEvidencePosture,
-  });
+  const query = useQuery(gaEvidencePostureQueryOptions());
 
   return (
     <PanelState query={query} isEmpty={() => false}>
@@ -203,10 +199,7 @@ function pgWarnColumns(t: Translate): ColumnDef<PostgresWarningRow, any>[] {
 
 function PostgresSection(): React.ReactNode {
   const { t } = useLocale();
-  const query = useQuery({
-    queryKey: ["postgresOperationalPosture"],
-    queryFn: getPostgresOperationalPosture,
-  });
+  const query = useQuery(postgresOperationalPostureQueryOptions());
 
   return (
     <PanelState query={query} isEmpty={() => false}>
@@ -368,10 +361,7 @@ function humanizeOperationalType(type: string): string {
 
 function JobsSection(): React.ReactNode {
   const { t } = useLocale();
-  const query = useQuery({
-    queryKey: ["jobsOperationalSummary"],
-    queryFn: getJobsOperationalSummary,
-  });
+  const query = useQuery(jobsOperationalSummaryQueryOptions());
 
   return (
     <PanelState query={query} isEmpty={() => false}>
@@ -435,10 +425,7 @@ function JobsSection(): React.ReactNode {
 
 function QuotasSection(): React.ReactNode {
   const { t } = useLocale();
-  const query = useQuery({
-    queryKey: ["quotasDistributedStatus"],
-    queryFn: getQuotasDistributedStatus,
-  });
+  const query = useQuery(quotasDistributedStatusQueryOptions());
 
   return (
     <PanelState query={query} isEmpty={() => false}>

@@ -28,11 +28,15 @@ import type {
 } from "./entities";
 import type {
   AuthorizedChatCatalogQuery,
+  AuthorizedChatMessageSearchQuery,
   AuthorizedFileCatalogQuery,
+  AuthorizedMessagePageQuery,
   CancelQueuedChatTurnInput,
   ClaimQueuedChatTurnInput,
   FinishQueuedChatTurnLeaseInput,
   RenewQueuedChatTurnLeaseInput,
+  MessagePageQueryResult,
+  ChatMessageSearchQueryResult,
   RomeoRepository,
 } from "./repository";
 
@@ -46,6 +50,9 @@ export interface RepositoryContentCapability {
     workspaceId: string,
     query: string,
   ): Promise<Array<{ chatId: string; messageId?: string; snippet: string }>>;
+  searchAuthorizedChatMessages(
+    input: AuthorizedChatMessageSearchQuery,
+  ): Promise<ChatMessageSearchQueryResult>;
   createChat(chat: Chat): Promise<Chat>;
   updateChat(chat: Chat): Promise<Chat>;
   getChat(chatId: string): Promise<Chat | undefined>;
@@ -71,13 +78,25 @@ export interface RepositoryContentCapability {
   ): Promise<QueuedChatTurn | undefined>;
   updateQueuedChatTurn(turn: QueuedChatTurn): Promise<QueuedChatTurn>;
   listMessages(chatId: string): Promise<Message[]>;
+  queryAuthorizedMessagesPage(
+    input: AuthorizedMessagePageQuery,
+  ): Promise<MessagePageQueryResult>;
   getMessage(messageId: string): Promise<Message | undefined>;
   createMessage(message: Message): Promise<Message>;
+  backfillLegacyMessageTextParts(
+    input: MessagePartBackfillBatchInput,
+  ): Promise<MessagePartBackfillBatchResult>;
   deleteMessage(messageId: string): Promise<void>;
   listMessageParts(messageId: string): Promise<MessagePart[]>;
+  listMessagePartsForMessages(messageIds: string[]): Promise<MessagePart[]>;
   getMessagePart(messagePartId: string): Promise<MessagePart | undefined>;
   createMessageParts(parts: MessagePart[]): Promise<MessagePart[]>;
   updateMessagePart(part: MessagePart): Promise<MessagePart>;
+  countMessageFileReferences(fileId: string): Promise<number>;
+  reconcileChatFileReferences(
+    chatId: string,
+    now: string,
+  ): Promise<FileObject[]>;
   listChatComments(chatId: string): Promise<ChatComment[]>;
   createChatComment(comment: ChatComment): Promise<ChatComment>;
   listFileObjects(orgId: string, workspaceId?: string): Promise<FileObject[]>;
@@ -88,6 +107,18 @@ export interface RepositoryContentCapability {
   getFileObject(fileId: string): Promise<FileObject | undefined>;
   createFileObject(file: FileObject): Promise<FileObject>;
   updateFileObject(file: FileObject): Promise<FileObject>;
+  claimNextFileLifecycle(
+    input: ClaimFileLifecycleInput,
+  ): Promise<FileObject | undefined>;
+  advanceFileLifecycleLease(
+    input: FinishFileLifecycleLeaseInput,
+  ): Promise<FileObject | undefined>;
+  renewFileLifecycleLease(
+    input: RenewFileLifecycleLeaseInput,
+  ): Promise<FileObject | undefined>;
+  finishFileLifecycleLease(
+    input: FinishFileLifecycleLeaseInput,
+  ): Promise<FileObject | undefined>;
   listChatTags(orgId: string, userId: string): Promise<ChatTag[]>;
   listChatTagsForChat(
     orgId: string,
@@ -252,4 +283,35 @@ export interface RepositoryContentCapability {
   listVoiceProfiles(orgId: string): Promise<VoiceProfile[]>;
   getVoiceProfile(voiceProfileId: string): Promise<VoiceProfile | undefined>;
   createVoiceProfile(voiceProfile: VoiceProfile): Promise<VoiceProfile>;
+}
+
+export interface ClaimFileLifecycleInput {
+  leaseOwner: string;
+  leaseToken: string;
+  leaseExpiresAt: string;
+  now: string;
+}
+
+export interface RenewFileLifecycleLeaseInput extends ClaimFileLifecycleInput {
+  fileId: string;
+}
+
+export interface FinishFileLifecycleLeaseInput {
+  file: FileObject;
+  leaseOwner: string;
+  leaseToken: string;
+  now: string;
+}
+
+export interface MessagePartBackfillBatchInput {
+  maxMessages: number;
+  maxPartRows: number;
+}
+
+export interface MessagePartBackfillBatchResult {
+  messagesCompleted: number;
+  partsReindexed: number;
+  remainingMessages: number;
+  textPartsCreated: number;
+  blockedMessages: number;
 }

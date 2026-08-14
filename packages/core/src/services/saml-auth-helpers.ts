@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import type { AuthProviderId } from "../domain/auth-providers";
 import { ApiError } from "../errors";
+import { requirePublicApiErrorCode } from "../public-api-error-registry";
 import type { SamlProviderLoginConfig } from "./auth-provider-settings-service";
 import type { SamlValidatedProfile } from "./saml-client";
 import type {
@@ -279,7 +280,11 @@ export function isSamlStateCookie(value: unknown): value is SamlStateCookie {
 }
 
 export function invalidSamlLogin(code = "saml_login_invalid"): ApiError {
-  return new ApiError(code, "SAML login failed.", 401);
+  return new ApiError(
+    requirePublicApiErrorCode(code),
+    "SAML login failed.",
+    401,
+  );
 }
 
 export function samlLoginDenied(): ApiError {

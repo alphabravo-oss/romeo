@@ -3,7 +3,6 @@ import type {
   DelegatedOAuthConnectionPostureCounts,
   DelegatedOAuthConnectionSummary,
 } from "../domain/delegated-oauth";
-import { createId } from "../ids";
 import type {
   DelegatedOAuthProviderRefreshedToken,
   DelegatedOAuthProviderToken,
@@ -14,13 +13,14 @@ import { stableHash } from "./delegated-oauth-support";
 
 export function connectionRecord(input: {
   existing: DelegatedOAuthConnection | undefined;
+  id: string;
   now: string;
   providerToken: DelegatedOAuthProviderToken;
   state: DelegatedOAuthState;
   token: DelegatedOAuthConnection["token"];
 }): DelegatedOAuthConnection {
   const connection: DelegatedOAuthConnection = {
-    id: input.existing?.id ?? createId("delegated_oauth_connection"),
+    id: input.id,
     orgId: input.state.orgId,
     workspaceId: input.state.workspaceId,
     userId: input.state.userId,

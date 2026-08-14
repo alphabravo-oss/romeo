@@ -10,6 +10,7 @@ import {
   chatsSearch,
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
+import type { GeneratedQueryClient } from "@romeo/api-client/runtime/generated-query-client";
 
 import type {
   Chat,
@@ -40,11 +41,14 @@ export async function listChatsPage(
     limit?: number;
     offset?: number;
   } = {},
+  client?: GeneratedQueryClient,
+  signal?: AbortSignal,
 ): Promise<ChatPage> {
-  configureBrowserApiClients();
+  if (client === undefined) configureBrowserApiClients();
   const limit = options.limit ?? 50;
   const offset = options.offset ?? 0;
   const response = await chatsList({
+    ...(client === undefined ? {} : { client }),
     query: {
       workspaceId,
       limit,
@@ -53,6 +57,7 @@ export async function listChatsPage(
         ? {}
         : { archived: options.archived }),
     },
+    ...(signal === undefined ? {} : { signal }),
     throwOnError: true,
   });
   const meta = response.data.meta;
@@ -76,9 +81,18 @@ export async function searchChats(
   return response.data.data;
 }
 
-export async function getChat(chatId: string): Promise<Chat> {
-  configureBrowserApiClients();
-  const response = await chatsGet({ path: { chatId }, throwOnError: true });
+export async function getChat(
+  chatId: string,
+  client?: GeneratedQueryClient,
+  signal?: AbortSignal,
+): Promise<Chat> {
+  if (client === undefined) configureBrowserApiClients();
+  const response = await chatsGet({
+    ...(client === undefined ? {} : { client }),
+    path: { chatId },
+    ...(signal === undefined ? {} : { signal }),
+    throwOnError: true,
+  });
   return response.data.data;
 }
 

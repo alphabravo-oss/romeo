@@ -1,11 +1,15 @@
 import { Button, Field, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import BarChart3 from "lucide-react/dist/esm/icons/chart-bar.mjs";
 import { useMemo, useState } from "react";
 
-import { createQuotaBucket, deleteQuotaBucket, listQuotas } from "../features";
-import type { QuotaBucket } from "../features/types";
+import {
+  createQuotaBucketMutationOptions,
+  deleteQuotaBucketMutationOptions,
+  quotasQueryOptions,
+} from "../features";
+import type { CreateQuotaBucketRequest, QuotaBucket } from "../features/types";
 import { PanelState } from "../lib/panel-state";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { toast } from "../lib/toast";
@@ -40,12 +44,11 @@ const quotaScopeTypes: QuotaBucket["scopeType"][] = [
 
 export function QuotaPanel() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { workspaceId } = useWorkspace();
   const { ask, dialog } = useConfirm();
-  const quotasQuery = useQuery({ queryKey: ["quotas"], queryFn: listQuotas });
-  const createMutation = useMutation({ mutationFn: createQuotaBucket });
-  const deleteMutation = useMutation({ mutationFn: deleteQuotaBucket });
+  const quotasQuery = useQuery(quotasQueryOptions());
+  const createMutation = useMutation(createQuotaBucketMutationOptions());
+  const deleteMutation = useMutation(deleteQuotaBucketMutationOptions());
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<QuotaBucket | null>(null);
 
@@ -59,7 +62,7 @@ export function QuotaPanel() {
     },
     onSubmit: async ({ value }) => {
       try {
-        const input: Parameters<typeof createQuotaBucket>[0] = {
+        const input: CreateQuotaBucketRequest = {
           scopeType: value.scopeType,
           metric: value.metric,
           limit: value.limit,
@@ -72,10 +75,6 @@ export function QuotaPanel() {
               : value.scopeId;
         }
         await createMutation.mutateAsync(input);
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-          queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-        ]);
         toast(t("quotaSaved"), "success");
         setAddOpen(false);
       } catch (caught) {
@@ -156,10 +155,6 @@ export function QuotaPanel() {
       return;
     try {
       await deleteMutation.mutateAsync(quotaBucketId);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-        queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-      ]);
       toast(t("quotaRemoved"), "success");
     } catch {
       toast(t("couldNotRemoveQuota"), "error");
@@ -242,7 +237,7 @@ export function QuotaPanel() {
                         value={field.state.value}
                       />
                       {field.state.meta.errors.length ? (
-                        <div className="rm-composer-error">
+                        <div className="rm-composer-error" role="alert">
                           {field.state.meta.errors.join(", ")}
                         </div>
                       ) : null}
@@ -329,8 +324,7 @@ export function QuotaPanel() {
           key={editing.id}
           quota={editing}
           onClose={() => setEditing(null)}
-          onSaved={async () => {
-            await queryClient.invalidateQueries({ queryKey: ["quotas"] });
+          onSaved={() => {
             setEditing(null);
           }}
         />

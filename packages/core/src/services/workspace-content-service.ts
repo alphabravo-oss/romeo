@@ -12,6 +12,7 @@ import type { FileObject } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { writeAuditLog } from "./audit-log";
+import { isFileReadyForUse } from "./file-lifecycle";
 import type { FileService } from "./file-service";
 
 export type WorkspaceContentKind = "memory" | "note";
@@ -72,7 +73,7 @@ export class WorkspaceContentService {
     const files = (
       await this.repository.listFileObjects(subject.orgId, workspaceId)
     )
-      .filter((file) => file.status === "available" && file.purpose === kind)
+      .filter((file) => isFileReadyForUse(file) && file.purpose === kind)
       .filter((file) => this.canRead(subject, file))
       .slice(0, maxVisibleItems);
     return (
@@ -140,7 +141,12 @@ export class WorkspaceContentService {
     const stored = await this.repository.getFileObject(file.id);
     if (stored === undefined)
       throw notFound(kind === "memory" ? "Memory" : "Note");
-    await this.audit(subject, `${kind}.create`, stored, input.scope);
+    await this.audit(
+      subject,
+      kind === "memory" ? "memory.create" : "note.create",
+      stored,
+      input.scope,
+    );
     return this.toItem(stored, kind, body);
   }
 
@@ -187,7 +193,12 @@ export class WorkspaceContentService {
       metadata,
       updatedAt: now,
     });
-    await this.audit(subject, `${kind}.update`, updated, scope);
+    await this.audit(
+      subject,
+      kind === "memory" ? "memory.update" : "note.update",
+      updated,
+      scope,
+    );
     return this.toItem(updated, kind, body);
   }
 
@@ -200,7 +211,12 @@ export class WorkspaceContentService {
     const file = await this.authorizedItem(subject, kind, id, true);
     const item = await this.toItem(file, kind);
     await this.files.delete(subject, file.id);
-    await this.audit(subject, `${kind}.delete`, file, item.scope);
+    await this.audit(
+      subject,
+      kind === "memory" ? "memory.delete" : "note.delete",
+      file,
+      item.scope,
+    );
     return item;
   }
 
@@ -214,7 +230,7 @@ export class WorkspaceContentService {
     if (
       file === undefined ||
       file.orgId !== subject.orgId ||
-      file.status !== "available" ||
+      !isFileReadyForUse(file) ||
       file.purpose !== kind
     ) {
       throw notFound(kind === "memory" ? "Memory" : "Note");
@@ -296,7 +312,13 @@ export class WorkspaceContentService {
 
   private audit(
     subject: AuthSubject,
-    action: string,
+    action:
+      | "memory.create"
+      | "memory.delete"
+      | "memory.update"
+      | "note.create"
+      | "note.delete"
+      | "note.update",
     file: FileObject,
     scope: WorkspaceContentScope,
   ): Promise<void> {
@@ -327,7 +349,7 @@ export async function resolveRunMemories(input: {
       input.workspaceId,
     )
   )
-    .filter((file) => file.status === "available" && file.purpose === "memory")
+    .filter((file) => isFileReadyForUse(file) && file.purpose === "memory")
     .filter((file) => {
       const scope = contentScope(file.metadata.scope);
       return (

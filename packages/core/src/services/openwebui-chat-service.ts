@@ -16,6 +16,7 @@ import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { getAuthorizedChat } from "./chat-access";
+import { enforceContentPolicyStrings } from "./content-policy-service";
 import {
   canAccessFolder,
   createImportedChatTags,
@@ -308,6 +309,15 @@ export class OpenWebUiChatService {
     });
     const title = titleFromOpenWebUiChat(input.chat);
     const importedMessages = messagesFromOpenWebUiChat(input.chat);
+    const governed = await enforceContentPolicyStrings(
+      this.repository,
+      subject,
+      importedMessages.map((message) => message.content),
+    );
+    const governedMessages = importedMessages.map((message, index) => ({
+      ...message,
+      content: governed.contents[index]!,
+    }));
     const folderId = input.folder_id ?? null;
     if (folderId !== null) {
       const folder = await this.repository.getWorkspaceFolder(folderId);
@@ -342,7 +352,7 @@ export class OpenWebUiChatService {
           }),
         ),
       );
-      await createImportedMessages(repository, chat.id, importedMessages, now);
+      await createImportedMessages(repository, chat.id, governedMessages, now);
       if (folderId !== null) {
         await repository.createWorkspaceFolderItem({
           id: createId("folder_item"),

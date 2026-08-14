@@ -142,6 +142,13 @@ export const workspaceFolderItems = pgTable(
       table.orgId,
       table.folderId,
     ),
+    workspaceFolderItemBatchIdx: index("workspace_folder_item_batch_idx").on(
+      table.orgId,
+      table.workspaceId,
+      table.folderId,
+      table.createdAt,
+      table.id,
+    ),
     workspaceFolderItemResourceIdx: index(
       "workspace_folder_item_resource_idx",
     ).on(table.orgId, table.resourceType, table.resourceId),

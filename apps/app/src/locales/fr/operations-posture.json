@@ -51,7 +51,6 @@
   "opSlowQueryTelemetry": "Télémétrie des requêtes lentes",
   "opStatus": "État",
   "opStatusCode": "Code d’état",
-  "opSystemPosture": "État du système",
   "opTotal": "Total",
   "opTotalJobs": "Total des tâches",
   "opType": "Type",

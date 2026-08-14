@@ -11,7 +11,7 @@ import type {
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
-import { writeAuditLog } from "./audit-log";
+import { type AuditMetadata, writeAuditLog } from "./audit-log";
 import { disabledSecretResolver } from "./secret-resolver";
 import { recordToolCall } from "./tool-call-records";
 import { enqueueToolOperationDispatch } from "./tool-operation-dispatch";
@@ -196,7 +196,7 @@ export class ToolExecutionSupport {
     subject: AuthSubject,
     toolId: string,
     outcome: "success" | "failure",
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<"tool.execute">,
   ): Promise<void> {
     await writeAuditLog(this.repository, {
       subject,

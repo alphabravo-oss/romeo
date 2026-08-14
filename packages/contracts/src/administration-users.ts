@@ -1,5 +1,10 @@
 import { z } from "@hono/zod-openapi";
 
+import {
+  createServerTablePageSchema,
+  createServerTableQuerySchema,
+} from "./server-table";
+
 export const administrationIdentifierSchema = z.string().trim().min(1).max(300);
 export const adminUserRoleSchema = z.enum([
   "user",
@@ -33,6 +38,38 @@ export const AdminUserPageSchema = z
     }),
   })
   .openapi("AdminUserPage");
+
+export const AdminUserTableQuerySchema = createServerTableQuerySchema({
+  sortFields: ["name", "email"],
+  filters: {
+    role: {
+      eq: adminUserRoleSchema,
+      in: z.array(adminUserRoleSchema).min(1).max(3),
+    },
+    status: { eq: z.enum(["active", "disabled"]) },
+  },
+  defaultSort: [{ field: "name", direction: "asc" }],
+  maxFilters: 2,
+  maxLimit: 100,
+  maxSorts: 1,
+  search: { minLength: 3, maxLength: 200 },
+}).openapi("AdminUserTableQuery");
+
+const AdminUserTablePageBaseSchema =
+  createServerTablePageSchema(AdminUserSchema);
+
+export const AdminUserTablePageSchema = z
+  .strictObject({
+    data: AdminUserTablePageBaseSchema.shape.data.extend({
+      summary: z.strictObject({
+        activeGlobalAdminTotal: z.number().int().nonnegative(),
+        adminTotal: z.number().int().nonnegative(),
+        disabledTotal: z.number().int().nonnegative(),
+        userTotal: z.number().int().nonnegative(),
+      }),
+    }),
+  })
+  .openapi("AdminUserTablePage");
 
 export const AdminUserListQuerySchema = z.strictObject({
   direction: z.enum(["asc", "desc"]).optional(),

@@ -21,6 +21,15 @@ export abstract class InMemoryRepositoryBase {
     Promise<void>
   >();
   protected readonly runEvents = new Map<string, RunEvent[]>();
+  protected readonly runEventSequences = new Map<string, number>();
+  protected readonly webhookDeliveryLeases = new Map<
+    string,
+    {
+      leaseExpiresAt: string;
+      leaseOwner: string;
+      leaseToken: string;
+    }
+  >();
 
   constructor(seed: SeedData = createSeedData()) {
     this.data = seed;
@@ -36,6 +45,8 @@ export abstract class InMemoryRepositoryBase {
         structuredClone(events),
       ]),
     );
+    const runEventSequencesSnapshot = new Map(this.runEventSequences);
+    const webhookDeliveryLeasesSnapshot = new Map(this.webhookDeliveryLeases);
     try {
       return await work(this as unknown as RomeoRepository);
     } catch (error) {
@@ -43,6 +54,12 @@ export abstract class InMemoryRepositoryBase {
       this.runEvents.clear();
       for (const [runId, events] of runEventsSnapshot)
         this.runEvents.set(runId, events);
+      this.runEventSequences.clear();
+      for (const [runId, sequence] of runEventSequencesSnapshot)
+        this.runEventSequences.set(runId, sequence);
+      this.webhookDeliveryLeases.clear();
+      for (const [deliveryId, lease] of webhookDeliveryLeasesSnapshot)
+        this.webhookDeliveryLeases.set(deliveryId, lease);
       throw error;
     }
   }

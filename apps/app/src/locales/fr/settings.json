@@ -26,7 +26,6 @@
   "languageDescription": "Modifie immédiatement la navigation et les libellés de discussion pris en charge.",
   "large": "Grande",
   "light": "Clair",
-  "loading": "Chargement…",
   "interfaceDensityMedium": "Moyenne",
   "member": "Membre",
   "memory": "Mémoire",
@@ -88,7 +87,7 @@
   "textSize": "Taille du texte",
   "theme": "Thème",
   "themeDescription": "Système suit le mode clair ou sombre de votre appareil.",
-  "updated": "mise à jour",
+  "contentUpdated": "mise à jour",
   "user": "Utilisateur",
   "visibility": "Visibilité"
 }

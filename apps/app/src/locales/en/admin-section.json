@@ -8,13 +8,10 @@
   "adminChatExperienceDescription": "Configure the new-chat experience, starter prompts, and automatic conversation titles.",
   "chatExperienceSettings": "Chat experience settings",
   "chatExperienceSettingsDescription": "These organization-wide settings apply to every member's new-chat page.",
-  "chatAssistantsLabel": "Custom models",
-  "chatAssistantsDescription": "Chat uses base models from providers, optionally wrapped by a custom model (system prompt, knowledge, tools).",
   "chatAutoTitleLabel": "Generate conversation titles automatically",
   "chatAutoTitleDescription": "After the first response, use the selected governed model to create a concise title. Title generation is non-blocking if the model is unavailable.",
   "chatStarterPrompts": "Starter prompts",
   "chatStarterPromptsDescription": "Show up to eight concise, one-line suggestions on the new-chat page. The full prompt is inserted when selected.",
-  "chatStarterUntitled": "Untitled starter",
   "chatAddStarter": "Add starter",
   "chatNoStarters": "No starter prompts are configured. The new-chat page will show only the composer.",
   "chatStarterPrompt": "Starter prompt",
@@ -42,5 +39,7 @@
   "adminNotificationsDescription": "Delivery channels and notification history.",
   "adminDeviceTokensDescription": "Long-lived device credentials and their scopes.",
   "adminAuthenticationDescription": "Enable and configure single sign-on providers.",
-  "adminConnectedAppsDescription": "Delegated OAuth providers and active connections."
+  "adminConnectedAppsDescription": "Delegated OAuth providers and active connections.",
+  "adminCapabilitiesDescription": "Layered organization and workspace controls for governed product capabilities.",
+  "adminComputeTrustDescription": "Preview sandbox, signed runtime, artifact provenance, and trust-plane decisions without starting a job."
 }

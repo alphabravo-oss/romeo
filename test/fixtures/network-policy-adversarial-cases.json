@@ -1,0 +1,71 @@
+{
+  "addressCases": [
+    { "label": "public IPv4", "address": "8.8.8.8", "blocked": false },
+    { "label": "RFC1918 IPv4", "address": "10.1.2.3", "blocked": true },
+    {
+      "label": "link-local metadata IPv4",
+      "address": "169.254.169.254",
+      "blocked": true
+    },
+    {
+      "label": "carrier-grade NAT IPv4",
+      "address": "100.64.0.1",
+      "blocked": true
+    },
+    { "label": "benchmark IPv4", "address": "198.18.0.1", "blocked": true },
+    {
+      "label": "documentation IPv4",
+      "address": "203.0.113.10",
+      "blocked": true
+    },
+    {
+      "label": "public IPv6",
+      "address": "2606:4700:4700::1111",
+      "blocked": false
+    },
+    { "label": "IPv6 unique-local", "address": "fd00::1", "blocked": true },
+    { "label": "IPv6 link-local", "address": "fe80::1", "blocked": true },
+    {
+      "label": "IPv4-mapped IPv6 private",
+      "address": "::ffff:10.1.2.3",
+      "blocked": true
+    },
+    {
+      "label": "IPv4-compatible IPv6 link-local",
+      "address": "::169.254.169.254",
+      "blocked": true
+    },
+    {
+      "label": "NAT64 embedded private IPv4",
+      "address": "64:ff9b::a01:203",
+      "blocked": true
+    },
+    {
+      "label": "IPv6 documentation",
+      "address": "2001:db8::1",
+      "blocked": true
+    },
+    { "label": "IPv6 multicast", "address": "ff02::1", "blocked": true }
+  ],
+  "dnsCases": [
+    {
+      "label": "all-public DNS",
+      "addresses": ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"],
+      "blocked": false
+    },
+    {
+      "label": "mixed public and private DNS",
+      "addresses": ["93.184.216.34", "169.254.169.254"],
+      "blocked": true
+    },
+    {
+      "label": "mixed public and ULA DNS",
+      "addresses": ["93.184.216.34", "fd00::1"],
+      "blocked": true
+    }
+  ],
+  "rebinding": {
+    "approved": ["93.184.216.34"],
+    "laterResolution": ["169.254.169.254"]
+  }
+}

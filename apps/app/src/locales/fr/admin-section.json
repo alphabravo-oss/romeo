@@ -8,13 +8,10 @@
   "adminChatExperienceDescription": "Configurez l'accueil d'une nouvelle discussion, les suggestions et les titres automatiques.",
   "chatExperienceSettings": "Paramètres de l'expérience de discussion",
   "chatExperienceSettingsDescription": "Ces paramètres globaux s'appliquent à la page de nouvelle discussion de chaque membre.",
-  "chatAssistantsLabel": "Modèles personnalisés",
-  "chatAssistantsDescription": "Le chat utilise des modèles de base des fournisseurs, éventuellement encapsulés par un modèle personnalisé (invite système, connaissances, outils).",
   "chatAutoTitleLabel": "Générer automatiquement les titres",
   "chatAutoTitleDescription": "Après la première réponse, le modèle sélectionné crée un titre concis. La discussion continue si le modèle est indisponible.",
   "chatStarterPrompts": "Suggestions de départ",
   "chatStarterPromptsDescription": "Affichez jusqu'à huit suggestions concises sur une ligne. Le contenu complet est inséré lors de la sélection.",
-  "chatStarterUntitled": "Suggestion sans titre",
   "chatAddStarter": "Ajouter une suggestion",
   "chatNoStarters": "Aucune suggestion n'est configurée. La page affichera uniquement la zone de saisie.",
   "chatStarterPrompt": "Suggestion de départ",
@@ -42,5 +39,7 @@
   "adminNotificationsDescription": "Canaux de livraison et historique des notifications.",
   "adminDeviceTokensDescription": "Identifiants d’appareil de longue durée et leurs portées.",
   "adminAuthenticationDescription": "Activez et configurez les fournisseurs d’authentification unique.",
-  "adminConnectedAppsDescription": "Fournisseurs OAuth délégués et connexions actives."
+  "adminConnectedAppsDescription": "Fournisseurs OAuth délégués et connexions actives.",
+  "adminCapabilitiesDescription": "Contrôles en couches par organisation et espace de travail pour les fonctionnalités gouvernées.",
+  "adminComputeTrustDescription": "Prévisualisez le bac à sable, le runtime signé, la provenance des artefacts et les décisions de confiance sans lancer un travail."
 }

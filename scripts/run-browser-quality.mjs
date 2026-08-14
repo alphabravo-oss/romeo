@@ -33,6 +33,10 @@ try {
     ROMEO_BROWSER_ENGINES:
       process.env.ROMEO_BROWSER_ENGINES ?? "chromium,firefox,webkit",
   });
+  await runBrowserScript("scripts/run-sse-browser-acceptance.mjs", baseUrl, {
+    ROMEO_BROWSER_ENGINES:
+      process.env.ROMEO_BROWSER_ENGINES ?? "chromium,firefox,webkit",
+  });
   await runBrowserScript("scripts/admin-console-audit.mjs", baseUrl);
   await runBrowserScript("scripts/browser-visual-baselines.mjs", baseUrl);
 } finally {

@@ -91,7 +91,7 @@ export class ChatCommentService {
     chatId: string,
     mentionedUserIds: string[],
   ): Promise<void> {
-    await repository.createAuditLog({
+    await writeAuditLog(repository, {
       id: createId("audit"),
       orgId: subject.orgId,
       actorId: subject.id,
@@ -169,3 +169,4 @@ function hasDirectChatReadGrant(
       (grant.permission === "read" || grant.permission === "write"),
   );
 }
+import { writeAuditLog } from "./audit-log";

@@ -8,14 +8,16 @@ import {
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
-import type { ContentKind, WorkspaceContentItem } from "./types";
-
-type CreateInput = Parameters<typeof workspaceContentCreateMemory>[0]["body"];
-type UpdateInput = Parameters<typeof workspaceContentUpdateMemory>[0]["body"];
+import type {
+  ContentKind,
+  CreateWorkspaceContentRequest,
+  UpdateWorkspaceContentRequest,
+  WorkspaceContentItem,
+} from "./types";
 
 export async function createWorkspaceContent(
   kind: ContentKind,
-  input: CreateInput,
+  input: CreateWorkspaceContentRequest,
 ): Promise<WorkspaceContentItem> {
   configureBrowserApiClients();
   const response = await (kind === "memories"
@@ -27,7 +29,7 @@ export async function createWorkspaceContent(
 export async function updateWorkspaceContent(
   kind: ContentKind,
   id: string,
-  input: UpdateInput,
+  input: UpdateWorkspaceContentRequest,
 ): Promise<WorkspaceContentItem> {
   configureBrowserApiClients();
   const options = {

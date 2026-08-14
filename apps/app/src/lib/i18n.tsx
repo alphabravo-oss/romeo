@@ -67,15 +67,178 @@ export const localeNamespaceGroups = {
   ],
 } as const satisfies Record<string, readonly LocaleNamespace[]>;
 
+const adminCommonNamespaces = [
+  "admin-navigation",
+  "admin-section",
+  "shared-control",
+  "workspace-capability",
+  "workspace-shell-and-connector",
+] as const satisfies readonly LocaleNamespace[];
+
+const adminSectionNamespaces: Record<string, readonly LocaleNamespace[]> = {
+  abuse: withNamespaces(adminCommonNamespaces, "abuse-control"),
+  access: withNamespaces(adminCommonNamespaces, "access-credential"),
+  analytics: withNamespaces(adminCommonNamespaces, "admin-operations"),
+  audit: withNamespaces(adminCommonNamespaces, "admin-operations"),
+  "auth-providers": withNamespaces(
+    adminCommonNamespaces,
+    "auth-provider-admin",
+  ),
+  billing: withNamespaces(adminCommonNamespaces, "billing-admin"),
+  capabilities: withNamespaces(adminCommonNamespaces, "capability-admin"),
+  compute: withNamespaces(adminCommonNamespaces, "trust-compute"),
+  "chat-experience": withNamespaces(
+    adminCommonNamespaces,
+    "prompt-template-admin",
+  ),
+  connections: withNamespaces(
+    adminCommonNamespaces,
+    "integration-automation",
+    "tool-connector-admin",
+  ),
+  "connected-apps": withNamespaces(
+    adminCommonNamespaces,
+    "integration-automation",
+  ),
+  governance: withNamespaces(adminCommonNamespaces, "governance"),
+  groups: withNamespaces(adminCommonNamespaces, "group-organization"),
+  impersonation: withNamespaces(adminCommonNamespaces, "device-impersonation"),
+  "notification-channels": withNamespaces(
+    adminCommonNamespaces,
+    "notification-admin",
+  ),
+  operations: withNamespaces(adminCommonNamespaces, "admin-operations"),
+  organizations: withNamespaces(adminCommonNamespaces, "group-organization"),
+  overview: withNamespaces(adminCommonNamespaces, "admin-overview"),
+  posture: withNamespaces(adminCommonNamespaces, "operations-posture"),
+  "prompt-templates": withNamespaces(
+    adminCommonNamespaces,
+    "prompt-template-admin",
+  ),
+  providers: withNamespaces(
+    adminCommonNamespaces,
+    "agent-studio",
+    "group-organization",
+    "knowledge-workspace",
+    "lifecycle-tool-voice",
+    "model-admin",
+    "provider",
+  ),
+  rag: withNamespaces(adminCommonNamespaces, "rag-governance"),
+  usage: withNamespaces(
+    adminCommonNamespaces,
+    "admin-operations",
+    "billing-admin",
+  ),
+  users: withNamespaces(adminCommonNamespaces, "user-admin"),
+  "web-search": withNamespaces(adminCommonNamespaces, "web-search-admin"),
+  webhooks: withNamespaces(adminCommonNamespaces, "integration-automation"),
+  workflows: withNamespaces(adminCommonNamespaces, "workflow-admin"),
+  "workspace-members": withNamespaces(
+    adminCommonNamespaces,
+    "group-organization",
+  ),
+};
+
+const settingsCommonNamespaces = [
+  "admin-navigation",
+  "admin-section",
+  "settings",
+  "shared-control",
+  "workspace-shell-and-connector",
+] as const satisfies readonly LocaleNamespace[];
+
+const settingsSectionNamespaces: Record<string, readonly LocaleNamespace[]> = {
+  account: settingsCommonNamespaces,
+  "device-tokens": withNamespaces(
+    settingsCommonNamespaces,
+    "device-impersonation",
+  ),
+  interface: settingsCommonNamespaces,
+  memories: settingsCommonNamespaces,
+  notes: settingsCommonNamespaces,
+  notifications: withNamespaces(settingsCommonNamespaces, "notification-admin"),
+  security: withNamespaces(
+    settingsCommonNamespaces,
+    "access-credential",
+    "security",
+  ),
+};
+
+const workspaceCommonNamespaces = [
+  "admin-navigation",
+  "admin-section",
+  "eval-workspace",
+  "shared-control",
+  "workspace-capability",
+  "workspace-shell-and-connector",
+] as const satisfies readonly LocaleNamespace[];
+
+const workspaceSectionNamespaces: Record<string, readonly LocaleNamespace[]> = {
+  agents: withNamespaces(
+    workspaceCommonNamespaces,
+    "agent-studio",
+    "group-organization",
+    "knowledge-workspace",
+    "lifecycle-tool-voice",
+    "model-admin",
+    "provider",
+  ),
+  collaboration: withNamespaces(
+    workspaceCommonNamespaces,
+    "group-organization",
+    "integration-automation",
+  ),
+  evals: withNamespaces(workspaceCommonNamespaces, "eval-workspace"),
+  knowledge: withNamespaces(workspaceCommonNamespaces, "knowledge-workspace"),
+  tools: withNamespaces(
+    workspaceCommonNamespaces,
+    "lifecycle-tool-voice",
+    "tool-connector-admin",
+  ),
+  voice: withNamespaces(workspaceCommonNamespaces, "lifecycle-tool-voice"),
+};
+
+export function localeNamespacesForAdminSection(
+  section: string,
+): readonly LocaleNamespace[] {
+  return adminSectionNamespaces[section] ?? adminCommonNamespaces;
+}
+
+export function localeNamespacesForSettingsSection(
+  section: string,
+): readonly LocaleNamespace[] {
+  return settingsSectionNamespaces[section] ?? settingsCommonNamespaces;
+}
+
+export function localeNamespacesForWorkspaceSection(
+  section: string,
+): readonly LocaleNamespace[] {
+  return workspaceSectionNamespaces[section] ?? workspaceCommonNamespaces;
+}
+
+function withNamespaces(
+  common: readonly LocaleNamespace[],
+  ...section: LocaleNamespace[]
+): readonly LocaleNamespace[] {
+  return [...new Set([...common, ...section])];
+}
+
 const LocaleControlContext = createContext((_locale: Locale) => {});
 
-export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [instance] = useState(createRomeoI18n);
+export function LocaleProvider({
+  children,
+  initialLocale = "en",
+}: {
+  children: ReactNode;
+  initialLocale?: Locale;
+}) {
+  const [instance] = useState(() => createRomeoI18n(initialLocale));
   useEffect(() => {
-    const stored = storedLocale();
+    const stored = storedLocale(initialLocale);
     document.documentElement.lang = stored;
     void instance.changeLanguage(stored);
-  }, [instance]);
+  }, [initialLocale, instance]);
   const setLocale = useCallback(
     (next: Locale) => {
       localStorage.setItem("romeo:locale", next);
@@ -112,17 +275,40 @@ export function useLocale() {
 }
 
 export function useLocaleNamespaces(namespaces: readonly LocaleNamespace[]) {
-  const { i18n } = useTranslation([...namespaces]);
-  // Components intentionally use one global MessageKey union. Limit that
-  // global lookup to the namespaces declared by the active route instead of
-  // silently searching every catalog in the product.
-  i18n.options.fallbackNS = [
+  // Always bind the same hook arity. Spreading a section-sized list into
+  // useTranslation() changes useMemo dep length when the console section
+  // changes, which React rejects and which left chrome labels on stale
+  // catalogs.
+  const { i18n } = useTranslation("core");
+  const [, setRevision] = useState(0);
+  const signature = namespaces.join("\0");
+  const fallback = [
     "core",
     ...namespaces.filter((namespace) => namespace !== "core"),
   ];
+  if (!sameFallbackNamespaces(i18n.options.fallbackNS, fallback)) {
+    i18n.options.fallbackNS = fallback;
+  }
+  useEffect(() => {
+    let cancelled = false;
+    void i18n.loadNamespaces([...namespaces]).then(() => {
+      if (!cancelled) setRevision((value) => value + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [i18n, signature]);
 }
 
-function createRomeoI18n() {
+function sameFallbackNamespaces(
+  current: unknown,
+  next: readonly string[],
+): boolean {
+  if (!Array.isArray(current) || current.length !== next.length) return false;
+  return current.every((namespace, index) => namespace === next[index]);
+}
+
+function createRomeoI18n(initialLocale: Locale) {
   const instance = createInstance().use(
     resourcesToBackend(loadLocaleNamespace),
   );
@@ -132,7 +318,7 @@ function createRomeoI18n() {
     fallbackNS: ["core"],
     initImmediate: false,
     interpolation: { escapeValue: false },
-    lng: "en",
+    lng: initialLocale,
     ns: ["core"],
     partialBundledLanguages: true,
     resources: coreLocaleResources,
@@ -141,12 +327,12 @@ function createRomeoI18n() {
   return instance;
 }
 
-function storedLocale(): Locale {
+function storedLocale(fallback: Locale): Locale {
   const value =
     typeof localStorage === "undefined"
-      ? "en"
+      ? fallback
       : localStorage.getItem("romeo:locale");
-  return normalizeLocale(value ?? undefined);
+  return normalizeLocale(value ?? fallback);
 }
 
 function normalizeLocale(value: string | undefined): Locale {

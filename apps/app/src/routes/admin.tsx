@@ -1,36 +1,37 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Suspense, useCallback } from "react";
+import { lazy, Suspense, useCallback } from "react";
 import { Button } from "@romeo/ui";
 
 import { ConsoleLayout } from "../components/ConsoleLayout";
-import { AdminViewNav } from "../components/AdminViewNav";
 import { Page } from "../components/console";
 import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
 import { AdminUsersRoutePanel } from "../components/AdminUsersRoutePanel";
+import { AdminAuditRoutePanel } from "../components/AdminAuditRoutePanel";
 import {
   ADMIN_GROUPS,
   ADMIN_META,
 } from "../components/admin-console-navigation";
 import { useAdminController } from "../components/useAdminController";
 import {
-  localeNamespaceGroups,
+  localeNamespacesForAdminSection,
   useLocale,
   useLocaleNamespaces,
 } from "../lib/i18n";
 import { resolveSectionKey } from "../lib/section-routing";
+import { prefetchPrimaryRouteData } from "../lib/route-data";
 import {
   resolveAgentStudioTab,
   type AgentStudioTab,
-} from "../components/AgentStudioPanel";
+} from "../components/agent-studio-model";
 import { modelAvailabilityFilter } from "../components/model-catalog-navigation";
 import {
   AbuseControlsPanel,
   AdminOverview,
   AnalyticsPanel,
   ApiKeyPanel,
-  AuditPanel,
   AuthProvidersPanel,
   BillingPanel,
+  CapabilityAdminPanel,
   ChatExperiencePanel,
   ConnectedAppsPanel,
   DataConnectorPanel,
@@ -49,6 +50,7 @@ import {
   RagGovernancePanel,
   ServiceAccountPanel,
   ToolConnectorPanel,
+  TrustComputePanel,
   UsagePanel,
   WebhooksPanel,
   WebSearchPanel,
@@ -56,69 +58,36 @@ import {
   WorkspaceMembersPanel,
 } from "../components/admin-lazy-panels";
 import adminCss from "../styles/admin.css?url";
+import { validateAdminSearch } from "./-admin-route-search";
 
-interface AdminSearch {
-  availability?: string;
-  connection?: string;
-  direction?: string;
-  managedModel?: string;
-  managedModelTab?: string;
-  model?: string;
-  page?: number;
-  provider?: string;
-  query?: string;
-  section?: string;
-  sort?: string;
-  toolConnector?: string;
-  view?: string;
-}
+const AdminViewNav = lazy(async () => ({
+  default: (await import("../components/AdminViewNav")).AdminViewNav,
+}));
 
 export const Route = createFileRoute("/admin")({
+  loaderDeps: ({ search }) => ({ workspaceId: search.workspace }),
+  loader: ({ cause, context, deps }) =>
+    prefetchPrimaryRouteData(
+      "admin",
+      context,
+      cause === "preload" ? "intent" : "navigation",
+      deps,
+    ),
   head: () => ({
     links: [{ rel: "stylesheet", href: adminCss }],
   }),
-  validateSearch: (search: Record<string, unknown>): AdminSearch => ({
-    ...(typeof search.section === "string" ? { section: search.section } : {}),
-    ...(typeof search.view === "string" ? { view: search.view } : {}),
-    ...(typeof search.query === "string" ? { query: search.query } : {}),
-    ...(typeof search.provider === "string"
-      ? { provider: search.provider }
-      : {}),
-    ...(typeof search.availability === "string"
-      ? { availability: search.availability }
-      : {}),
-    ...(typeof search.connection === "string"
-      ? { connection: search.connection }
-      : {}),
-    ...(typeof search.direction === "string"
-      ? { direction: search.direction }
-      : {}),
-    ...(typeof search.managedModel === "string"
-      ? { managedModel: search.managedModel }
-      : {}),
-    ...(typeof search.managedModelTab === "string"
-      ? { managedModelTab: search.managedModelTab }
-      : {}),
-    ...(typeof search.model === "string" ? { model: search.model } : {}),
-    ...(typeof search.sort === "string" ? { sort: search.sort } : {}),
-    ...(typeof search.toolConnector === "string"
-      ? { toolConnector: search.toolConnector }
-      : {}),
-    ...(typeof search.page === "number" && Number.isInteger(search.page)
-      ? { page: Math.max(0, search.page) }
-      : {}),
-  }),
+  validateSearch: validateAdminSearch,
   component: AdminPage,
 });
 
 function AdminPage() {
-  useLocaleNamespaces(localeNamespaceGroups.admin);
   const { t } = useLocale();
   const admin = useAdminController();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const { section: sectionParam } = search;
   const section = resolveSectionKey(sectionParam, ADMIN_META, "overview");
+  useLocaleNamespaces(localeNamespacesForAdminSection(section));
   const providerView =
     search.view === "models"
       ? "base-models"
@@ -234,7 +203,7 @@ function AdminPage() {
   // Client-side gate is UX only — the API enforces real authz on every
   // admin endpoint. ponytail: no beforeLoad/router-context plumbing needed.
   if (admin.subject === undefined) {
-    return <div className="rm-empty">{t("loading")}</div>;
+    return <div className="rm-loading">{t("loading")}</div>;
   }
   if (admin.subject.isAdmin !== true) {
     return (
@@ -242,7 +211,9 @@ function AdminPage() {
         <h1>{t("adminsOnly")}</h1>
         <p>{t("adminAccessDenied")}</p>
         <Button asChild>
-          <Link to="/">{t("backToWorkspace")}</Link>
+          <Link preload="intent" to="/">
+            {t("backToWorkspace")}
+          </Link>
         </Button>
       </div>
     );
@@ -282,12 +253,14 @@ function AdminPage() {
         title={t(ADMIN_META[section]!.titleKey)}
       >
         {admin.error ? (
-          <div className="rm-composer-error">{admin.error}</div>
+          <div className="rm-composer-error" role="alert">
+            {admin.error}
+          </div>
         ) : null}
 
         <Suspense
           fallback={
-            <div className="rm-empty" role="status">
+            <div className="rm-loading" role="status">
               {t("loadingSection")}
             </div>
           }
@@ -317,7 +290,7 @@ function AdminPage() {
 
           {section === "analytics" ? <AnalyticsPanel /> : null}
 
-          {section === "audit" ? <AuditPanel /> : null}
+          {section === "audit" ? <AdminAuditRoutePanel /> : null}
 
           {section === "posture" ? <OperationsPosturePanel /> : null}
 
@@ -456,13 +429,18 @@ function AdminPage() {
             />
           ) : null}
 
+          {section === "capabilities" ? <CapabilityAdminPanel /> : null}
+          {section === "compute" ? <TrustComputePanel /> : null}
+
           {section === "access" ? (
             <div className="grid gap-4">
               <AdminViewNav
                 active={accessView}
                 ariaLabel={t("navAccessKeys")}
+                // "API keys", not the page's own name: a tab that repeats the
+                // page title tells you nothing about what the tab contains.
                 items={[
-                  ["keys", t("navAccessKeys")],
+                  ["keys", t("apiKeys")],
                   ["service-accounts", t("serviceAccounts")],
                 ]}
                 section="access"

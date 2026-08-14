@@ -5,9 +5,11 @@ import type {
   DataExportCounts,
   DataExportDocument,
   DataExportResolvedRequest,
+  MessagePart,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { readRagPolicy } from "./rag-policy-service";
+import { isMessagePartV1 } from "./message-part-v1";
 import { publicUsageEvent } from "./voice-artifact-metadata";
 import {
   emptyCounts,
@@ -185,12 +187,9 @@ export async function collectDataExport(input: {
             sizeBytes: attachment.sizeBytes,
             kind: attachment.kind,
           })),
-          parts: parts.map((part) => ({
-            id: part.id,
-            type: part.type,
-            content: maybeContent(part.content, false),
-            metadata: safeObject(part.metadata),
-          })),
+          parts: parts.map((part) =>
+            exportMessagePart(part, input.request.includeContent),
+          ),
           createdAt: message.createdAt,
         });
       }
@@ -423,4 +422,21 @@ export async function collectDataExport(input: {
   }
 
   return { counts, data };
+}
+
+function exportMessagePart(
+  part: MessagePart,
+  includeContent: boolean,
+): Record<string, unknown> {
+  if (!isMessagePartV1(part))
+    return {
+      id: part.id,
+      type: part.type,
+      content: maybeContent(part.content, false),
+      metadata: safeObject(part.metadata),
+    };
+  const exported: Record<string, unknown> = { ...part };
+  if (part.type === "text")
+    exported.text = maybeContent(part.text, includeContent);
+  return exported;
 }

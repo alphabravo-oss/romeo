@@ -54,6 +54,58 @@ export abstract class InMemoryIdentityRepository extends InMemoryRepositoryBase 
     };
   }
 
+  async queryUsers(
+    orgId: string,
+    input: R.QueryUsersInput,
+  ): Promise<R.UserTableQueryResult> {
+    const all = this.data.users.filter((user) => user.orgId === orgId);
+    const search = input.search?.trim().toLocaleLowerCase();
+    const filtered = all.filter((user) => {
+      if (
+        input.filter.roles !== undefined &&
+        !input.filter.roles.includes(user.role ?? "user")
+      )
+        return false;
+      if (input.filter.status === "active" && user.disabledAt !== undefined)
+        return false;
+      if (input.filter.status === "disabled" && user.disabledAt === undefined)
+        return false;
+      return (
+        search === undefined ||
+        search === "" ||
+        `${user.name}\u001f${user.email}`.toLocaleLowerCase().includes(search)
+      );
+    });
+    const value = (user: E.User) =>
+      input.sort === "email" ? user.email : user.name;
+    const direction = input.direction === "asc" ? 1 : -1;
+    filtered.sort((left, right) => {
+      const primary = lexicalCompare(value(left), value(right));
+      return direction * (primary || lexicalCompare(left.id, right.id));
+    });
+    const positioned =
+      input.position === undefined
+        ? filtered
+        : filtered.filter((user) => {
+            const primary = lexicalCompare(value(user), input.position!.value);
+            const comparison =
+              primary || lexicalCompare(user.id, input.position!.id);
+            return direction * comparison > 0;
+          });
+    const items = positioned.slice(0, input.limit + 1);
+    return {
+      activeGlobalAdminTotal: all.filter(
+        (user) => user.role === "global_admin" && user.disabledAt === undefined,
+      ).length,
+      adminTotal: all.filter((user) => (user.role ?? "user") !== "user").length,
+      disabledTotal: all.filter((user) => user.disabledAt !== undefined).length,
+      hasMore: items.length > input.limit,
+      items: items.slice(0, input.limit),
+      total: filtered.length,
+      userTotal: all.length,
+    };
+  }
+
   async createUser(user: E.User): Promise<E.User> {
     return append(this.data.users, user);
   }
@@ -224,4 +276,8 @@ export abstract class InMemoryIdentityRepository extends InMemoryRepositoryBase 
   async purgeTenantData(orgId: string): Promise<R.TenantDataPurgeResult> {
     return purgeTenantData(this.data, this.runEvents, orgId);
   }
+}
+
+function lexicalCompare(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }

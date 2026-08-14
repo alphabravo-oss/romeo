@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -12,10 +13,11 @@ export interface S3PresignInput {
   accessKeyId: string;
   bucket: string;
   contentType?: string;
+  contentLength?: number;
   endpoint: string;
   expiresInSeconds: number;
   key: string;
-  method: "DELETE" | "GET" | "PUT";
+  method: "DELETE" | "GET" | "HEAD" | "PUT";
   now?: Date;
   query?: Record<string, string | undefined>;
   region: string;
@@ -84,6 +86,9 @@ async function presignedUrl(
       new PutObjectCommand({
         Bucket: input.bucket,
         Key: input.key,
+        ...(input.contentLength === undefined
+          ? {}
+          : { ContentLength: input.contentLength }),
         ...(input.contentType === undefined
           ? {}
           : { ContentType: input.contentType }),
@@ -96,6 +101,14 @@ async function presignedUrl(
     return getSignedUrl(
       client,
       new DeleteObjectCommand({ Bucket: input.bucket, Key: input.key }),
+      presignOptions(input, now),
+    );
+  }
+  if (input.method === "HEAD") {
+    assertNoQuery(input.query);
+    return getSignedUrl(
+      client,
+      new HeadObjectCommand({ Bucket: input.bucket, Key: input.key }),
       presignOptions(input, now),
     );
   }

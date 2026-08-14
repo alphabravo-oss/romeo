@@ -1,70 +1,45 @@
-import { Button, Input, NativeSelect, Popover } from "@romeo/ui";
-import {
-  useMutation,
-  useQueries,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import Bot from "lucide-react/dist/esm/icons/bot.mjs";
-import Folder from "lucide-react/dist/esm/icons/folder.mjs";
-import FolderOpen from "lucide-react/dist/esm/icons/folder-open.mjs";
-import FolderPlus from "lucide-react/dist/esm/icons/folder-plus.mjs";
-import ListFilter from "lucide-react/dist/esm/icons/list-filter.mjs";
-import MessageSquare from "lucide-react/dist/esm/icons/message-square.mjs";
-import Search from "lucide-react/dist/esm/icons/search.mjs";
-import Shield from "lucide-react/dist/esm/icons/shield.mjs";
-import SquarePen from "lucide-react/dist/esm/icons/square-pen.mjs";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
-import appPackage from "../../package.json";
 import {
-  addFolderItem,
-  deleteFavorite,
-  deleteFolder,
-  deleteFolderItem,
-  favoriteResource,
-  importChat,
-  listChatTags,
-  listChatsForTag,
-  listFavorites,
-  listFolderItems,
-  listFolders,
-  searchChats,
+  collaborationListFolderItemsBatchOptions,
+  folderItemGroupsById,
+  chatSearchQueryOptions,
+  chatTagsQueryOptions,
+  chatsByTagQueryOptions,
+  favoritesQueryOptions,
+  folderItemsQueryOptions,
+  foldersQueryOptions,
+  shouldLoadFolderItemsOverflow,
 } from "../features";
+import {
+  addFolderItemMutationOptions,
+  deleteFavoriteMutationOptions,
+  deleteFolderItemMutationOptions,
+  deleteFolderMutationOptions,
+  favoriteResourceMutationOptions,
+} from "../features/collaboration/mutation-options";
+import { importWorkspaceChatMutationOptions } from "../features/chats/mutation-options";
 import type { Chat } from "../features/types";
 import { catalogPage } from "../lib/catalog-page";
 import { useDebouncedValue } from "../lib/debounce";
-import { useLocale, type MessageKey } from "../lib/i18n";
+import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
-import { CatalogPager } from "./CatalogPager";
-import {
-  groupChatsForSidebar,
-  type ChatListSectionKey,
-} from "./chat-list-sections";
+import { groupChatsForSidebar } from "./chat-list-sections";
 import { useConfirm } from "./ConfirmDialog";
-import { OverflowMenu } from "./OverflowMenu";
 import { SidebarBrand, SidebarFrame } from "./SidebarFrame";
-import { useSidebarResize } from "./useSidebarResize";
-import {
-  WorkspaceNavDialogs,
-  type WorkspaceNavDialog,
-} from "./WorkspaceNavDialogs";
-import { CHAT_DRAG_MIME, WorkspaceChatNavItem } from "./WorkspaceChatNavItem";
-import {
-  downloadChatMarkdown,
-  parsePortableChat,
-  PortableChatImportError,
-} from "./workspace-nav-portability";
+import { SidebarResizer } from "./SidebarResizer";
+import type { WorkspaceNavDialog } from "./WorkspaceNavDialogs";
+import { LazyWorkspaceNavDialogs } from "./workspace-lazy-components";
+import { parsePortableChat } from "./workspace-nav-portability";
 import { resolveSidebarQueryState } from "./sidebar-query-state";
-
-const SECTION_LABEL_KEYS = {
-  pinned: "chatSectionPinned",
-  today: "chatSectionToday",
-  yesterday: "chatSectionYesterday",
-  previous7Days: "chatSectionPrevious7Days",
-  older: "chatSectionOlder",
-} as const satisfies Record<ChatListSectionKey, MessageKey>;
+import {
+  WorkspaceNavChatList,
+  WorkspaceNavCreateControls,
+  WorkspaceNavFilters,
+  WorkspaceNavFolderList,
+  WorkspaceNavFooter,
+} from "./WorkspaceNavViews";
 
 export interface WorkspaceNavProps {
   activeChatId: string | undefined;
@@ -93,50 +68,54 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
   const [importError, setImportError] = useState("");
   const importInputRef = useRef<HTMLInputElement>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
-  const queryClient = useQueryClient();
-  const resizeSidebar = useSidebarResize();
-  const addFolderItemMutation = useMutation({ mutationFn: addFolderItem });
-  const deleteFolderMutation = useMutation({ mutationFn: deleteFolder });
-  const deleteFolderItemMutation = useMutation({
-    mutationFn: deleteFolderItem,
-  });
+  const addFolderItemMutation = useMutation(addFolderItemMutationOptions());
+  const deleteFolderMutation = useMutation(deleteFolderMutationOptions());
+  const deleteFolderItemMutation = useMutation(
+    deleteFolderItemMutationOptions(),
+  );
   const normalizedInput = search.trim();
   const debouncedSearch = useDebouncedValue(normalizedInput, 250);
   const committedSearch =
     normalizedInput.length < 2 ? "" : debouncedSearch.trim();
   const searchPending =
     normalizedInput.length >= 2 && normalizedInput !== committedSearch;
-  const favoritesQuery = useQuery({
-    queryKey: ["favorites"],
-    queryFn: listFavorites,
-  });
-  const favoriteMutation = useMutation({ mutationFn: favoriteResource });
-  const deleteFavoriteMutation = useMutation({ mutationFn: deleteFavorite });
-  const tagsQuery = useQuery({ queryKey: ["chatTags"], queryFn: listChatTags });
-  const taggedChatsQuery = useQuery({
-    queryKey: ["chatsByTag", selectedTag],
-    queryFn: () => listChatsForTag(selectedTag),
-    enabled: selectedTag.length > 0,
-  });
-  const searchQuery = useQuery({
-    queryKey: ["chatSearch", props.workspaceId, committedSearch],
-    queryFn: () => searchChats(props.workspaceId!, committedSearch),
-    enabled: props.workspaceId !== undefined && committedSearch.length >= 2,
-  });
-  const foldersQuery = useQuery({
-    queryKey: ["folders", props.workspaceId],
-    queryFn: () => listFolders(props.workspaceId!),
-    enabled: props.workspaceId !== undefined,
-  });
-  const folders = foldersQuery.data ?? [];
-  const folderItemsQueries = useQueries({
-    queries: folders.map((folder) => ({
-      queryKey: ["folderItems", folder.id] as const,
-      queryFn: () => listFolderItems(folder.id),
-      enabled: folders.length > 0,
-    })),
-  });
-  const folderItemsData = folderItemsQueries.map((query) => query.data);
+  const favoritesQuery = useQuery(favoritesQueryOptions());
+  const favoriteMutation = useMutation(favoriteResourceMutationOptions());
+  const deleteFavoriteMutation = useMutation(deleteFavoriteMutationOptions());
+  const importChatMutation = useMutation(importWorkspaceChatMutationOptions());
+  const tagsQuery = useQuery(chatTagsQueryOptions());
+  const taggedChatsQuery = useQuery(chatsByTagQueryOptions(selectedTag));
+  const searchQuery = useQuery(
+    chatSearchQueryOptions(props.workspaceId, committedSearch),
+  );
+  const foldersQuery = useQuery(foldersQueryOptions(props.workspaceId));
+  const folders = useMemo(() => foldersQuery.data ?? [], [foldersQuery.data]);
+  const folderIds = useMemo(
+    () => folders.map((folder) => folder.id),
+    [folders],
+  );
+  const folderItemsBatchQuery = useQuery(
+    collaborationListFolderItemsBatchOptions(
+      props.workspaceId ?? "",
+      folderIds,
+      props.workspaceId !== undefined && folderIds.length > 0,
+    ),
+  );
+  const folderGroups = useMemo(
+    () => folderItemGroupsById(folderItemsBatchQuery.data ?? []),
+    [folderItemsBatchQuery.data],
+  );
+  const selectedFolderGroup = folderGroups.get(selectedFolder);
+  const shouldLoadSelectedFolderOverflow = shouldLoadFolderItemsOverflow(
+    selectedFolder,
+    selectedFolderGroup,
+  );
+  const selectedFolderItemsQuery = useQuery(
+    folderItemsQueryOptions(
+      selectedFolder || undefined,
+      shouldLoadSelectedFolderOverflow,
+    ),
+  );
 
   const chatFavorites = useMemo(
     () =>
@@ -152,8 +131,13 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
       string,
       Array<{ folderId: string; itemId: string; folderName: string }>
     >();
-    for (const [index, folder] of folders.entries()) {
-      const items = folderItemsData[index] ?? [];
+    for (const folder of folders) {
+      const group = folderGroups.get(folder.id);
+      const items =
+        folder.id === selectedFolder &&
+        selectedFolderItemsQuery.data !== undefined
+          ? selectedFolderItemsQuery.data
+          : (group?.items ?? []);
       for (const item of items) {
         if (item.resourceType !== "chat") continue;
         const list = map.get(item.resourceId) ?? [];
@@ -166,7 +150,7 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
       }
     }
     return map;
-  }, [folderItemsData, folders]);
+  }, [folderGroups, folders, selectedFolder, selectedFolderItemsQuery.data]);
   const folderChatIds = useMemo(() => {
     if (selectedFolder.length === 0) return new Set<string>();
     const ids = new Set<string>();
@@ -244,20 +228,15 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
     }
   }, [foldersQuery.data, selectedFolder]);
 
-  const selectedFolderIndex = folders.findIndex(
-    (folder) => folder.id === selectedFolder,
-  );
-  const selectedFolderItemsQuery =
-    selectedFolderIndex >= 0
-      ? folderItemsQueries[selectedFolderIndex]
-      : undefined;
   const sourceQuery =
     committedSearch.length >= 2
       ? searchQuery
       : selectedTag
         ? taggedChatsQuery
         : selectedFolder.length > 0
-          ? selectedFolderItemsQuery
+          ? shouldLoadSelectedFolderOverflow
+            ? selectedFolderItemsQuery
+            : folderItemsBatchQuery
           : undefined;
   const sourceState =
     sourceQuery === undefined
@@ -270,7 +249,8 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
         });
   const filterMetadataUnavailable =
     (tagsQuery.isError && tagsQuery.data === undefined) ||
-    (foldersQuery.isError && foldersQuery.data === undefined);
+    (foldersQuery.isError && foldersQuery.data === undefined) ||
+    (folderItemsBatchQuery.isError && folderItemsBatchQuery.data === undefined);
 
   async function retrySidebarSource() {
     await sourceQuery?.refetch();
@@ -287,14 +267,15 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
   }
 
   async function dropChatOnFolder(folderId: string, chatId: string) {
-    if (chatId.length === 0) return;
+    if (chatId.length === 0 || props.workspaceId === undefined) return;
     try {
       await addFolderItemMutation.mutateAsync({
         folderId,
+        folderIds,
         resourceType: "chat",
         resourceId: chatId,
+        workspaceId: props.workspaceId,
       });
-      await queryClient.invalidateQueries({ queryKey: ["folderItems"] });
       toast(t("chatAddedToFolder"), "success");
       setSelectedFolder(folderId);
     } catch {
@@ -303,6 +284,8 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
   }
 
   async function removeChatFromFolder(chatId: string) {
+    if (props.workspaceId === undefined) return;
+    const workspaceId = props.workspaceId;
     const memberships = chatFolderMembership.get(chatId) ?? [];
     const targets =
       selectedFolder.length > 0
@@ -314,11 +297,12 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
         targets.map((entry) =>
           deleteFolderItemMutation.mutateAsync({
             folderId: entry.folderId,
+            folderIds,
             itemId: entry.itemId,
+            workspaceId,
           }),
         ),
       );
-      await queryClient.invalidateQueries({ queryKey: ["folderItems"] });
       toast(t("chatRemovedFromFolder"), "success");
     } catch {
       toast(t("chatRemoveFromFolderFailed"), "error");
@@ -334,14 +318,13 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
     });
     if (!confirmed) return;
     try {
-      await deleteFolderMutation.mutateAsync(folder.id);
+      if (props.workspaceId === undefined) return;
+      await deleteFolderMutation.mutateAsync({
+        folderId: folder.id,
+        folderIds,
+        workspaceId: props.workspaceId,
+      });
       if (selectedFolder === folder.id) setSelectedFolder("");
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["folders", props.workspaceId],
-        }),
-        queryClient.invalidateQueries({ queryKey: ["folderItems"] }),
-      ]);
       toast(t("folderDeleted"), "success");
     } catch {
       toast(t("folderDeleteFailed"), "error");
@@ -349,27 +332,28 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
   }
 
   async function toggleChatPin(chatId: string) {
+    if (props.workspaceId === undefined) return;
     const favorite = chatFavorites.get(chatId);
     if (favorite === undefined) {
       await favoriteMutation.mutateAsync({
         resourceType: "chat",
         resourceId: chatId,
+        workspaceId: props.workspaceId,
       });
     } else {
-      await deleteFavoriteMutation.mutateAsync(favorite.id);
+      await deleteFavoriteMutation.mutateAsync({
+        favoriteId: favorite.id,
+        workspaceId: props.workspaceId,
+      });
     }
-    await queryClient.invalidateQueries({ queryKey: ["favorites"] });
   }
 
   async function importConversation(file: File) {
     if (props.workspaceId === undefined) return;
     const payload = await parsePortableChat(file);
-    const chat = await importChat({
+    const chat = await importChatMutation.mutateAsync({
       workspaceId: props.workspaceId,
       ...payload,
-    });
-    await queryClient.invalidateQueries({
-      queryKey: ["chats", props.workspaceId],
     });
     props.onSelectChat(chat.id);
   }
@@ -377,378 +361,99 @@ export function WorkspaceNav(props: WorkspaceNavProps) {
   return (
     <SidebarFrame className="rm-sidebar">
       <SidebarBrand />
-      <div className="rm-chat-create-row">
-        <Button
-          aria-label={t("newChat")}
-          className="rm-new-chat-button"
-          onClick={props.onNewChat}
-          type="button"
-        >
-          <SquarePen aria-hidden="true" size={18} strokeWidth={2} />
-          <span>{t("newChat")}</span>
-        </Button>
-        <OverflowMenu
-          items={[
-            {
-              label: t("temporaryChat"),
-              description: t("temporaryChatDescription"),
-              onClick: props.onNewTemporaryChat,
-            },
-            {
-              label: t("importChat"),
-              description: t("importChatDescription"),
-              onClick: () => importInputRef.current?.click(),
-            },
-          ]}
-          label={t("moreChatActions")}
-        />
-        <Input
-          accept="application/json,.json"
-          hidden
-          id="import-chat-file"
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            event.currentTarget.value = "";
-            setImportError("");
-            if (file) {
-              void importConversation(file).catch((error: unknown) => {
-                const key =
-                  error instanceof PortableChatImportError
-                    ? error.code === "file_too_large" ||
-                      error.code === "attachment_budget_exceeded"
-                      ? "importTooLarge"
-                      : error.code === "no_messages"
-                        ? "importNoMessages"
-                        : "importFailed"
-                    : "importFailed";
-                setImportError(t(key));
-              });
-            }
-          }}
-          ref={importInputRef}
-          type="file"
-        />
-      </div>
-      {importError ? (
-        <p className="px-3 text-xs text-danger" role="alert">
-          {importError}
-        </p>
-      ) : null}
+      <WorkspaceNavCreateControls
+        importError={importError}
+        importInputRef={importInputRef}
+        onImport={importConversation}
+        onImportError={setImportError}
+        onNewChat={props.onNewChat}
+        onNewTemporaryChat={props.onNewTemporaryChat}
+      />
 
       <section className="rm-sidebar-section">
-        <div className="rm-sidebar-label">
-          <MessageSquare aria-hidden="true" size={13} />
-          <span>{t("chats")}</span>
-          <Button
-            aria-label={t("createFolder")}
-            className="rm-sidebar-label-action"
-            onClick={() => setDialog({ kind: "create-folder" })}
-            title={t("createFolder")}
-            type="button"
-          >
-            <FolderPlus aria-hidden="true" size={13} />
-          </Button>
-        </div>
-        <div className="rm-sidebar-search-row">
-          <label
-            aria-busy={searchPending || searchQuery.isFetching}
-            className="rm-sidebar-search"
-          >
-            <Search aria-hidden="true" size={13} />
-            <Input
-              aria-label={t("searchChats")}
-              onChange={(event) => setSearch(event.currentTarget.value)}
-              placeholder={t("searchChats")}
-              value={search}
-            />
-            {searchPending ? (
-              <span className="rm-sidebar-search-pending" role="status">
-                <span className="sr-only">{t("chatSearchPending")}</span>
-              </span>
-            ) : null}
-          </label>
-          <Popover
-            align="end"
-            className="rm-sidebar-filter-menu"
-            trigger={
-              <Button
-                aria-label={`${t("filterByTag")} / ${t("filterByFolder")}`}
-                className={`rm-sidebar-filter-trigger${selectedTag || selectedFolder ? " active" : ""}`}
-                title={`${t("filterByTag")} / ${t("filterByFolder")}`}
-                type="button"
-              >
-                <ListFilter aria-hidden="true" size={14} />
-                {selectedTag || selectedFolder ? (
-                  <span className="rm-sidebar-filter-count">
-                    {Number(Boolean(selectedTag)) +
-                      Number(Boolean(selectedFolder))}
-                  </span>
-                ) : null}
-              </Button>
-            }
-          >
-            <NativeSelect
-              aria-label={t("filterByTag")}
-              className="rm-sidebar-filter"
-              disabled={
-                (tagsQuery.isPending || tagsQuery.isError) &&
-                tagsQuery.data === undefined
-              }
-              onChange={(event) => setSelectedTag(event.currentTarget.value)}
-              value={selectedTag}
-            >
-              <option value="">{t("allTags")}</option>
-              {(tagsQuery.data ?? []).map((tag) => (
-                <option key={tag.id} value={tag.slug}>
-                  {tag.name}
-                </option>
-              ))}
-            </NativeSelect>
-            <NativeSelect
-              aria-label={t("filterByFolder")}
-              className="rm-sidebar-filter"
-              disabled={
-                (foldersQuery.isPending || foldersQuery.isError) &&
-                foldersQuery.data === undefined
-              }
-              onChange={(event) => setSelectedFolder(event.currentTarget.value)}
-              value={selectedFolder}
-            >
-              <option value="">{t("allFolders")}</option>
-              {(foldersQuery.data ?? []).map((folder) => (
-                <option key={folder.id} value={folder.id}>
-                  {folder.name}
-                </option>
-              ))}
-            </NativeSelect>
-          </Popover>
-        </div>
-        {filterMetadataUnavailable ? (
-          <div className="rm-sidebar-query-warning" role="status">
-            {t("chatFiltersUnavailable")}
-            <Button
-              onClick={() =>
-                void Promise.all([tagsQuery.refetch(), foldersQuery.refetch()])
-              }
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              {t("tryAgain")}
-            </Button>
-          </div>
-        ) : null}
-        {(foldersQuery.data ?? []).length > 0 ? (
-          <div
-            className="rm-sidebar-folders"
-            role="list"
-            aria-label={t("folders")}
-          >
-            {(foldersQuery.data ?? []).map((folder) => {
-              const active = selectedFolder === folder.id;
-              const dropActive = dropTargetFolder === folder.id;
-              return (
-                <div
-                  className={`rm-sidebar-folder${active ? " active" : ""}${dropActive ? " drop-target" : ""}`}
-                  key={folder.id}
-                  onDragEnter={(event) => {
-                    event.preventDefault();
-                    setDropTargetFolder(folder.id);
-                  }}
-                  onDragLeave={(event) => {
-                    if (
-                      event.currentTarget.contains(
-                        event.relatedTarget as Node | null,
-                      )
-                    ) {
-                      return;
-                    }
-                    setDropTargetFolder((current) =>
-                      current === folder.id ? "" : current,
-                    );
-                  }}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
-                    setDropTargetFolder(folder.id);
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    setDropTargetFolder("");
-                    const chatId = event.dataTransfer.getData(CHAT_DRAG_MIME);
-                    if (chatId.length > 0) {
-                      void dropChatOnFolder(folder.id, chatId);
-                    }
-                  }}
-                  role="listitem"
-                >
-                  <button
-                    aria-pressed={active}
-                    className="rm-sidebar-folder-select"
-                    onClick={() =>
-                      setSelectedFolder((current) =>
-                        current === folder.id ? "" : folder.id,
-                      )
-                    }
-                    title={t("dropChatOnFolder")}
-                    type="button"
-                  >
-                    {active ? (
-                      <FolderOpen aria-hidden="true" size={13} />
-                    ) : (
-                      <Folder aria-hidden="true" size={13} />
-                    )}
-                    <span className="truncate">{folder.name}</span>
-                  </button>
-                  <div className="rm-sidebar-folder-menu">
-                    <OverflowMenu
-                      items={[
-                        {
-                          label: t("rename"),
-                          onClick: () =>
-                            setDialog({
-                              kind: "rename-folder",
-                              folder: {
-                                id: folder.id,
-                                name: folder.name,
-                              },
-                            }),
-                        },
-                        {
-                          label: t("delete"),
-                          onClick: () => void confirmDeleteFolder(folder),
-                          tone: "danger",
-                        },
-                      ]}
-                      label={`${t("folderActionsFor")} ${folder.name}`}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
-        <div className="rm-sidebar-list">
-          {sourceState === "error" ? (
-            <div className="rm-sidebar-query-error" role="alert">
-              <span>{t("chatSearchUnavailable")}</span>
-              <Button
-                onClick={() => void retrySidebarSource()}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                {t("tryAgain")}
-              </Button>
-            </div>
-          ) : chatCatalog.total === 0 ? (
-            <div className="rm-sidebar-empty">
-              {selectedFolder
-                ? t("folderEmpty")
-                : committedSearch
-                  ? t("noMatchingChats")
-                  : t("noChats")}
-            </div>
-          ) : (
-            chatSections.map((section) => (
-              <div className="rm-sidebar-chat-section" key={section.key}>
-                {groupByDate ? (
-                  <div className="rm-sidebar-time-label">
-                    {t(SECTION_LABEL_KEYS[section.key])}
-                  </div>
-                ) : null}
-                {section.chats.map((chat) => {
-                  const memberships = chatFolderMembership.get(chat.id) ?? [];
-                  const inFolder =
-                    selectedFolder.length > 0
-                      ? memberships.some(
-                          (entry) => entry.folderId === selectedFolder,
-                        )
-                      : memberships.length > 0;
-                  return (
-                    <WorkspaceChatNavItem
-                      active={chat.id === props.activeChatId}
-                      chat={chat}
-                      folders={folders}
-                      inFolder={inFolder}
-                      key={chat.id}
-                      onDelete={() => void confirmDeleteChat(chat)}
-                      onDialog={setDialog}
-                      onExportMarkdown={() => void downloadChatMarkdown(chat)}
-                      onRemoveFromFolder={
-                        inFolder
-                          ? () => void removeChatFromFolder(chat.id)
-                          : undefined
-                      }
-                      onSelect={() => props.onSelectChat(chat.id)}
-                      onTogglePin={() => void toggleChatPin(chat.id)}
-                      pinned={chatFavorites.has(chat.id)}
-                    />
-                  );
-                })}
-              </div>
-            ))
-          )}
-          <CatalogPager
-            onPageChange={setChatPage}
-            page={chatCatalog.page}
-            pageSize={50}
-            total={chatCatalog.total}
-          />
-          {props.hasMoreChats &&
-          committedSearch.length < 2 &&
-          !selectedTag &&
-          !selectedFolder ? (
-            <Button
-              className="m-2"
-              disabled={props.isLoadingMoreChats}
-              onClick={props.onLoadMoreChats}
-              type="button"
-            >
-              {props.isLoadingMoreChats
-                ? t("loadingMoreChats")
-                : `${t("loadMoreChats")} (${props.chats.length} of ${props.chatsTotal})`}
-            </Button>
-          ) : null}
-        </div>
+        <WorkspaceNavFilters
+          filterMetadataUnavailable={filterMetadataUnavailable}
+          folders={foldersQuery.data ?? []}
+          foldersUnavailable={
+            (foldersQuery.isPending || foldersQuery.isError) &&
+            foldersQuery.data === undefined
+          }
+          onCreateFolder={() => setDialog({ kind: "create-folder" })}
+          onRetry={() =>
+            void Promise.all([
+              tagsQuery.refetch(),
+              foldersQuery.refetch(),
+              folderItemsBatchQuery.refetch(),
+            ])
+          }
+          search={search}
+          searchBusy={searchPending || searchQuery.isFetching}
+          searchPending={searchPending}
+          selectedFolder={selectedFolder}
+          selectedTag={selectedTag}
+          setSearch={setSearch}
+          setSelectedFolder={setSelectedFolder}
+          setSelectedTag={setSelectedTag}
+          tags={tagsQuery.data ?? []}
+          tagsUnavailable={
+            (tagsQuery.isPending || tagsQuery.isError) &&
+            tagsQuery.data === undefined
+          }
+        />
+        <WorkspaceNavFolderList
+          dropTargetFolder={dropTargetFolder}
+          folders={foldersQuery.data ?? []}
+          onDelete={(folder) => void confirmDeleteFolder(folder)}
+          onDialog={setDialog}
+          onDropChat={(folderId, chatId) =>
+            void dropChatOnFolder(folderId, chatId)
+          }
+          selectedFolder={selectedFolder}
+          setDropTargetFolder={setDropTargetFolder}
+          setSelectedFolder={setSelectedFolder}
+        />
+        <WorkspaceNavChatList
+          activeChatId={props.activeChatId}
+          chatCatalog={chatCatalog}
+          chatFavorites={chatFavorites}
+          chatFolderMembership={chatFolderMembership}
+          chatSections={chatSections}
+          chatsLoaded={props.chats.length}
+          chatsTotal={props.chatsTotal}
+          committedSearch={committedSearch}
+          folders={folders}
+          groupByDate={groupByDate}
+          hasMoreChats={props.hasMoreChats}
+          isLoadingMoreChats={props.isLoadingMoreChats}
+          onDelete={(chat) => void confirmDeleteChat(chat)}
+          onDialog={setDialog}
+          onLoadMore={props.onLoadMoreChats}
+          onPageChange={setChatPage}
+          onRemoveFromFolder={(chatId) => void removeChatFromFolder(chatId)}
+          onRetry={() => void retrySidebarSource()}
+          onSelect={props.onSelectChat}
+          onTogglePin={(chatId) => void toggleChatPin(chatId)}
+          selectedFolder={selectedFolder}
+          selectedTag={selectedTag}
+          sourceState={sourceState}
+        />
       </section>
 
-      <div className="rm-sidebar-footer-stack">
-        <Link className="rm-sidebar-footer" to="/workspace">
-          <Bot aria-hidden="true" size={16} />
-          <span>{t("workspace")}</span>
-        </Link>
-        {props.isAdmin ? (
-          <Link className="rm-sidebar-footer" to="/admin">
-            <Shield aria-hidden="true" size={16} />
-            <span>{t("admin")}</span>
-          </Link>
-        ) : null}
-        <div className="rm-sidebar-meta">
-          <div className="rm-sidebar-version">Romeo v{appPackage.version}</div>
-          <div className="rm-built-by">
-            Built by{" "}
-            <a href="https://alphabravo.io" rel="noreferrer" target="_blank">
-              AlphaBravo
-            </a>
-          </div>
-        </div>
-      </div>
-      <Button
-        aria-label={t("resizeSidebar")}
-        className="rm-sidebar-resizer"
-        onMouseDown={resizeSidebar}
-        type="button"
-      />
-      <WorkspaceNavDialogs
-        dialog={dialog}
-        folders={foldersQuery.data ?? []}
-        onClose={() => setDialog(null)}
-        onFolderCreated={(folderId) => setSelectedFolder(folderId)}
-        onRenameChat={props.onRenameChat}
-        tags={tagsQuery.data ?? []}
-        workspaceId={props.workspaceId}
-      />
+      <WorkspaceNavFooter isAdmin={props.isAdmin} />
+      <SidebarResizer label={t("resizeSidebar")} />
+      {dialog === null ? null : (
+        <Suspense fallback={null}>
+          <LazyWorkspaceNavDialogs
+            dialog={dialog}
+            folders={foldersQuery.data ?? []}
+            onClose={() => setDialog(null)}
+            onFolderCreated={(folderId) => setSelectedFolder(folderId)}
+            onRenameChat={props.onRenameChat}
+            tags={tagsQuery.data ?? []}
+            workspaceId={props.workspaceId}
+          />
+        </Suspense>
+      )}
       {confirmDialog}
     </SidebarFrame>
   );

@@ -1,7 +1,12 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
-import { billingPlans, quotaBuckets, retentionPolicies } from "./schema";
+import {
+  billingEventReceipts,
+  billingPlans,
+  quotaBuckets,
+  retentionPolicies,
+} from "./schema";
 import {
   optionalDate,
   optionalIsoString,
@@ -34,6 +39,7 @@ export type BillingPlanSourceRecord = "external" | "manual";
 export interface RetentionPolicyRecord {
   orgId: string;
   auditLogRetentionDays: number;
+  runEventRetentionDays: number;
   fileRetentionDays: number | null;
   workspaceFileRetentionDays: Record<string, number | null>;
   userFileRetentionDays: Record<string, number | null>;
@@ -60,6 +66,20 @@ export interface BillingPlanRecord {
   externalSubscriptionId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BillingEventReceiptRecord {
+  id: string;
+  orgId: string;
+  provider: string;
+  eventId: string;
+  eventType: string;
+  occurredAt: string;
+  result: {
+    plan: BillingPlanRecord;
+    quotas: QuotaBucketRecord[];
+  };
+  createdAt: string;
 }
 
 export interface QuotaBucketRecord {
@@ -100,6 +120,7 @@ export class PgGovernanceBillingRepository {
         target: retentionPolicies.orgId,
         set: {
           auditLogRetentionDays: policy.auditLogRetentionDays,
+          runEventRetentionDays: policy.runEventRetentionDays,
           fileRetentionDays: policy.fileRetentionDays,
           workspaceFileRetentionDays: policy.workspaceFileRetentionDays,
           userFileRetentionDays: policy.userFileRetentionDays,
@@ -178,6 +199,65 @@ export class PgGovernanceBillingRepository {
     return row === undefined ? undefined : toBillingPlanRecord(row);
   }
 
+  async acquireBillingSyncLock(orgId: string): Promise<void> {
+    await this.db.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${`romeo:billing:${orgId}`}))`,
+    );
+  }
+
+  async getBillingEventReceipt(
+    orgId: string,
+    provider: string,
+    eventId: string,
+  ): Promise<BillingEventReceiptRecord | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(billingEventReceipts)
+      .where(
+        and(
+          eq(billingEventReceipts.orgId, orgId),
+          eq(billingEventReceipts.provider, provider),
+          eq(billingEventReceipts.eventId, eventId),
+        ),
+      )
+      .limit(1);
+    return row === undefined ? undefined : toBillingEventReceiptRecord(row);
+  }
+
+  async createBillingEventReceipt(
+    receipt: BillingEventReceiptRecord,
+  ): Promise<BillingEventReceiptRecord> {
+    const [row] = await this.db
+      .insert(billingEventReceipts)
+      .values({
+        id: receipt.id,
+        orgId: receipt.orgId,
+        provider: receipt.provider,
+        eventId: receipt.eventId,
+        eventType: receipt.eventType,
+        occurredAt: new Date(receipt.occurredAt),
+        result: receipt.result,
+        createdAt: new Date(receipt.createdAt),
+      })
+      .onConflictDoNothing({
+        target: [
+          billingEventReceipts.orgId,
+          billingEventReceipts.provider,
+          billingEventReceipts.eventId,
+        ],
+      })
+      .returning();
+    if (row !== undefined) return toBillingEventReceiptRecord(row);
+    const existing = await this.getBillingEventReceipt(
+      receipt.orgId,
+      receipt.provider,
+      receipt.eventId,
+    );
+    if (existing === undefined)
+      throw new Error("Billing event receipt conflict was not readable.");
+    return existing;
+  }
+
   async upsertBillingPlan(plan: BillingPlanRecord): Promise<BillingPlanRecord> {
     const [row] = await this.db
       .insert(billingPlans)
@@ -207,6 +287,7 @@ export function toRetentionPolicyRecord(
   return {
     orgId: row.orgId,
     auditLogRetentionDays: row.auditLogRetentionDays,
+    runEventRetentionDays: row.runEventRetentionDays,
     fileRetentionDays: row.fileRetentionDays,
     workspaceFileRetentionDays: retentionOverrideMap(
       row.workspaceFileRetentionDays,
@@ -261,12 +342,28 @@ export function toBillingPlanRecord(
   return plan;
 }
 
+export function toBillingEventReceiptRecord(
+  row: typeof billingEventReceipts.$inferSelect,
+): BillingEventReceiptRecord {
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    provider: row.provider,
+    eventId: row.eventId,
+    eventType: row.eventType,
+    occurredAt: toIsoString(row.occurredAt),
+    result: row.result as BillingEventReceiptRecord["result"],
+    createdAt: toIsoString(row.createdAt),
+  };
+}
+
 function toRetentionPolicyInsert(
   record: RetentionPolicyRecord,
 ): typeof retentionPolicies.$inferInsert {
   return {
     orgId: record.orgId,
     auditLogRetentionDays: record.auditLogRetentionDays,
+    runEventRetentionDays: record.runEventRetentionDays,
     fileRetentionDays: record.fileRetentionDays,
     workspaceFileRetentionDays: record.workspaceFileRetentionDays,
     userFileRetentionDays: record.userFileRetentionDays,

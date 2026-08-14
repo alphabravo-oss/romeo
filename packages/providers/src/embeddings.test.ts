@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getEmbeddingAdapter } from "./embedding-registry";
+import { getEmbeddingAdapter } from "./registry";
 import { defaultProviderCapabilities } from "./capabilities";
 import type { ProviderInstance } from "./types";
 
@@ -77,6 +77,10 @@ describe("provider embedding adapters", () => {
             status: 200,
           }),
       }),
-    ).rejects.toThrow("unexpected embedding count");
+    ).rejects.toMatchObject({
+      category: "unexpected",
+      errorCode: "provider_unexpected_failure",
+      operation: "embeddings",
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
@@ -12,7 +12,7 @@ const slackSecretRef = "env://SLACK_CONNECTOR_SECRET";
 const slackToken = "xoxb-secret-slack-token";
 
 function slackEnv(overrides: Record<string, string> = {}) {
-  return readEnv({
+  return testEnv({
     DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
     DATA_CONNECTOR_EXECUTION_DRIVER: "slack-fetch",
     DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: slackHost,

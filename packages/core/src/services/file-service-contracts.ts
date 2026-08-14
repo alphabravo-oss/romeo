@@ -1,4 +1,4 @@
-import type { FileObjectPurpose } from "../domain/entities";
+import type { FileObjectPurpose, FileObjectStatus } from "../domain/entities";
 import { ApiError } from "../errors";
 
 export interface FileObjectResponse {
@@ -11,7 +11,19 @@ export interface FileObjectResponse {
   sizeBytes: number;
   sha256: string;
   purpose: FileObjectPurpose;
-  status: "available" | "deleted" | "uploading";
+  status: FileObjectStatus;
+  lifecycle: {
+    schemaVersion: 1;
+    state: FileObjectStatus;
+    version: number;
+    attempts: number;
+    retryable: boolean;
+    failureCode: string | null;
+    nextAttemptAt: string | null;
+    leaseExpiresAt: string | null;
+    attachedAt: string | null;
+    retainedAt: string | null;
+  };
   metadata: Record<string, unknown>;
   extraction: FileExtractionState;
   contentUrl: string | null;

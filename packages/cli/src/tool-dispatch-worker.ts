@@ -7,6 +7,7 @@ import type {
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
 import type { SecretValueResolver } from "./secret-resolver";
+import type { ToolDispatchPinnedFetch } from "./dns-pinned-fetch";
 import { executeToolDispatchHttpRequest } from "./tool-dispatch-http";
 import { workerSignalAborted } from "./worker-control";
 
@@ -76,6 +77,7 @@ export interface RunToolDispatchWorkerInput {
   maxIterations?: number;
   maxJobsPerIteration?: number;
   payloads?: Record<string, ToolDispatchPayload>;
+  pinnedFetchImpl?: ToolDispatchPinnedFetch;
   secretResolver?: SecretValueResolver;
   signal?: AbortSignal;
   sleep?: (ms: number) => Promise<void>;

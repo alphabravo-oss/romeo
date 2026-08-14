@@ -11,11 +11,13 @@ import type { WorkspaceFolder, WorkspaceFolderItem } from "../domain/entities";
 import type { FolderItemResourceType } from "../domain/collaboration";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
-import { getAuthorizedChat } from "./chat-access";
 import { CollaborationFavoriteService } from "./collaboration-favorite-service";
 import { canAccessFolder } from "./collaboration-folder-access";
+import {
+  canReadFolderItem,
+  listAuthorizedFolderItemsBatch,
+} from "./collaboration-folder-item-access";
 import type { ShareInput } from "./collaboration-share-service";
-import { getAuthorizedKnowledgeBase } from "./knowledge-access";
 import { assertWorkspaceActive } from "./workspace-guard";
 
 export class CollaborationFolderService extends CollaborationFavoriteService {
@@ -296,12 +298,25 @@ export class CollaborationFolderService extends CollaborationFavoriteService {
     const items = await this.repository.listWorkspaceFolderItems(folder.id);
     const visible = await Promise.all(
       items.map(async (item) =>
-        (await this.canReadFolderItem(subject, item)) ? item : undefined,
+        (await canReadFolderItem(this.repository, subject, item))
+          ? item
+          : undefined,
       ),
     );
     return visible.filter(
       (item): item is WorkspaceFolderItem => item !== undefined,
     );
+  }
+
+  async folderItemsBatch(
+    subject: AuthSubject,
+    input: {
+      folderIds: string[];
+      limitPerFolder: number;
+      workspaceId: string;
+    },
+  ) {
+    return listAuthorizedFolderItemsBatch(this.repository, subject, input);
   }
 
   async addFolderItem(input: {
@@ -316,7 +331,7 @@ export class CollaborationFolderService extends CollaborationFavoriteService {
       "write",
     );
     if (
-      !(await this.canReadFolderItem(input.subject, {
+      !(await canReadFolderItem(this.repository, input.subject, {
         resourceType: input.resourceType,
         resourceId: input.resourceId,
       }))
@@ -462,36 +477,6 @@ export class CollaborationFolderService extends CollaborationFavoriteService {
       if (cursor.parentId === undefined) break;
       seen.add(cursor.id);
       cursor = byId.get(cursor.parentId);
-    }
-  }
-
-  protected async canReadFolderItem(
-    subject: AuthSubject,
-    item: Pick<WorkspaceFolderItem, "resourceId" | "resourceType">,
-  ): Promise<boolean> {
-    try {
-      if (item.resourceType === "agent") {
-        await this.assertCanFavorite(subject, "agent", item.resourceId);
-        return true;
-      }
-      if (item.resourceType === "chat") {
-        await getAuthorizedChat(this.repository, {
-          chatId: item.resourceId,
-          subject,
-          scope: "chats:read",
-          permission: "read",
-        });
-        return true;
-      }
-      await getAuthorizedKnowledgeBase(this.repository, {
-        knowledgeBaseId: item.resourceId,
-        subject,
-        scope: "knowledge:read",
-        permission: "read",
-      });
-      return true;
-    } catch {
-      return false;
     }
   }
 }

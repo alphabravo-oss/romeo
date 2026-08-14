@@ -1,7 +1,8 @@
 import { Button, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
+import { useMutation } from "@tanstack/react-query";
 
-import { updateQuotaBucket } from "../features";
+import { updateQuotaBucketMutationOptions } from "../features";
 import type { QuotaBucket } from "../features/types";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
@@ -14,9 +15,10 @@ export function QuotaEditDialog({
 }: {
   quota: QuotaBucket;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: () => void;
 }) {
   const { t } = useLocale();
+  const updateMutation = useMutation(updateQuotaBucketMutationOptions());
   const editForm = useForm({
     defaultValues: {
       limit: quota.limit,
@@ -24,12 +26,15 @@ export function QuotaEditDialog({
     },
     onSubmit: async ({ value }) => {
       try {
-        await updateQuotaBucket(quota.id, {
-          limit: value.limit,
-          resetInterval: value.resetInterval,
+        await updateMutation.mutateAsync({
+          quotaBucketId: quota.id,
+          input: {
+            limit: value.limit,
+            resetInterval: value.resetInterval,
+          },
         });
         toast(t("quotaUpdated"), "success");
-        await onSaved();
+        onSaved();
       } catch (caught) {
         toast(t("couldNotUpdateQuota"), "error");
         throw caught;

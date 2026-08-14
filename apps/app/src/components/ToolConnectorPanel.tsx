@@ -1,26 +1,35 @@
-import { Button, Input, StatusBadge, Textarea } from "@romeo/ui";
+import {
+  Button,
+  EmptyState,
+  InlineError,
+  Input,
+  StatusBadge,
+  Textarea,
+} from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Plug from "lucide-react/dist/esm/icons/plug.mjs";
 import Upload from "lucide-react/dist/esm/icons/upload.mjs";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left.mjs";
 import { useMemo, useState } from "react";
 
 import {
-  checkToolConnectorAuth,
-  importOpenApiTool,
-  listToolConnectors,
-  updateToolConnector,
+  checkToolConnectorAuthMutationOptions,
+  importOpenApiToolMutationOptions,
+  toolConnectorsQueryOptions,
+  updateToolConnectorMutationOptions,
 } from "../features/tool-connectors";
 import type { ToolConnector, ToolConnectorAuthCheck } from "../features/types";
 import { PanelState } from "../lib/panel-state";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { AddButton, Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { useConfirm } from "./ConfirmDialog";
 import { ToolConnectorDetailsPage } from "./ToolConnectorDetailsPage";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 export function ToolConnectorPanel({
   onSelectionChange,
@@ -30,15 +39,14 @@ export function ToolConnectorPanel({
   selectedConnectorId: string | undefined;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
+  const inventoriedTable = useInventoriedServerTable<any>("tool_connectors");
   const { ask, dialog } = useConfirm();
-  const connectorsQuery = useQuery({
-    queryKey: ["toolConnectors"],
-    queryFn: listToolConnectors,
-  });
-  const authCheckMutation = useMutation({ mutationFn: checkToolConnectorAuth });
-  const importMutation = useMutation({ mutationFn: importOpenApiTool });
-  const connectorMutation = useMutation({ mutationFn: updateToolConnector });
+  const connectorsQuery = useQuery(toolConnectorsQueryOptions());
+  const authCheckMutation = useMutation(
+    checkToolConnectorAuthMutationOptions(),
+  );
+  const importMutation = useMutation(importOpenApiToolMutationOptions());
+  const connectorMutation = useMutation(updateToolConnectorMutationOptions());
   const [error, setError] = useState<string>();
   const [addOpen, setAddOpen] = useState(false);
   const [authChecks, setAuthChecks] = useState<
@@ -52,13 +60,10 @@ export function ToolConnectorPanel({
       try {
         const spec = JSON.parse(value.specText) as Record<string, unknown>;
         await importMutation.mutateAsync({ name: value.name, spec });
-        await queryClient.invalidateQueries({ queryKey: ["toolConnectors"] });
         toast(t("toolImported"), "success");
         setAddOpen(false);
       } catch (caught) {
-        setError(
-          caught instanceof Error ? caught.message : t("toolUnableImport"),
-        );
+        setError(safeUserErrorMessage(caught, t("toolUnableImport")));
         toast(t("toolCouldNotImport"), "error");
       }
     },
@@ -84,15 +89,12 @@ export function ToolConnectorPanel({
     setError(undefined);
     try {
       await connectorMutation.mutateAsync({ connectorId, enabled });
-      await queryClient.invalidateQueries({ queryKey: ["toolConnectors"] });
       toast(
         t(enabled ? "toolConnectorEnabled" : "toolConnectorDisabled"),
         "success",
       );
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : t("toolUnableUpdate"),
-      );
+      setError(safeUserErrorMessage(caught, t("toolUnableUpdate")));
       toast(t("toolCouldNotUpdate"), "error");
     }
   }
@@ -104,9 +106,7 @@ export function ToolConnectorPanel({
       setAuthChecks((current) => ({ ...current, [connectorId]: check }));
       toast(t("toolAuthChecked"), "success");
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : t("toolUnableCheckAuth"),
-      );
+      setError(safeUserErrorMessage(caught, t("toolUnableCheckAuth")));
       toast(t("toolCouldNotCheckAuth"), "error");
     }
   }
@@ -199,7 +199,7 @@ export function ToolConnectorPanel({
         </Button>
         <Section>
           {connectorsQuery.isLoading ? (
-            <div className="rm-empty" role="status">
+            <div className="rm-loading" role="status">
               {t("loading")}
             </div>
           ) : selectedConnector ? (
@@ -212,11 +212,9 @@ export function ToolConnectorPanel({
               updating={connectorMutation.isPending}
             />
           ) : (
-            <div className="rm-empty">{t("toolConnectorNotFound")}</div>
+            <EmptyState title={t("toolConnectorNotFound")} />
           )}
-          {error ? (
-            <div className="mt-3 text-sm text-red-600">{error}</div>
-          ) : null}
+          {error ? <InlineError>{error}</InlineError> : null}
         </Section>
         {dialog}
       </div>
@@ -224,7 +222,7 @@ export function ToolConnectorPanel({
   }
 
   return (
-    <section className="rm-panel p-4">
+    <section>
       <div className="rm-card-header">
         <div className="rm-card-title">{t("toolConnectors")}</div>
         {connectors.length > 0 ? (
@@ -332,7 +330,7 @@ export function ToolConnectorPanel({
           </importForm.Subscribe>
         </form>
       </FormDialog>
-      {error ? <div className="mt-3 text-sm text-red-600">{error}</div> : null}
+      {error ? <InlineError>{error}</InlineError> : null}
       <div className="mt-4 grid gap-2 text-sm">
         <PanelState
           empty={t("toolNoConnectors")}
@@ -343,23 +341,33 @@ export function ToolConnectorPanel({
           }
           emptyDescription={t("toolNoConnectorsDescription")}
           emptyIcon={<Plug aria-hidden size={24} />}
-          query={connectorsQuery}
+          query={inventoriedTable.query}
+          isEmpty={() =>
+            inventoriedTable.rows.length === 0 &&
+            inventoriedTable.isFirstPage &&
+            inventoriedTable.search.trim() === ""
+          }
         >
-          {(connectors) => (
+          {() => (
             <div className="grid gap-4">
               <StatRow
                 items={[
-                  { label: t("toolTotalConnectors"), value: connectors.length },
+                  {
+                    label: t("toolTotalConnectors"),
+                    value: inventoriedTable.estimatedTotal,
+                  },
                   {
                     label: t("toolEnabled"),
-                    value: connectors.filter((connector) => connector.enabled)
-                      .length,
+                    value: inventoriedTable.rows.filter(
+                      (connector) => connector.enabled,
+                    ).length,
                   },
                 ]}
               />
               <DataTable
+                serverState={inventoriedTable.serverState}
                 columns={columns}
-                data={connectors}
+                data={inventoriedTable.rows}
                 empty={t("toolNoConnectors")}
                 getRowId={(connector) => connector.id}
                 minTableWidth={760}

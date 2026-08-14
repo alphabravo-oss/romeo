@@ -46,14 +46,17 @@ export const ollamaCapabilities: ProviderCapabilities = {
   },
 };
 
+const defaultCapabilitiesByProvider = {
+  anthropic: anthropicCapabilities,
+  "openai-compatible": openAiCompatibleCapabilities,
+  "openai-responses-compatible": openAiResponsesCompatibleCapabilities,
+  ollama: ollamaCapabilities,
+} satisfies Record<ProviderKind, ProviderCapabilities>;
+
 export function defaultProviderCapabilities(
   kind: ProviderKind,
 ): ProviderCapabilities {
-  if (kind === "anthropic") return anthropicCapabilities;
-  if (kind === "openai-compatible") return openAiCompatibleCapabilities;
-  if (kind === "openai-responses-compatible")
-    return openAiResponsesCompatibleCapabilities;
-  return ollamaCapabilities;
+  return defaultCapabilitiesByProvider[kind];
 }
 
 export { looksLikeImageGenerationModel as detectsImageGenerationModel } from "./model-discovery";

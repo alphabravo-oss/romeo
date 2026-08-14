@@ -1,8 +1,11 @@
 import { Button, Input, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { listDataConnectorSyncs, syncLocalDataConnector } from "../features";
+import {
+  dataConnectorSyncsQueryOptions,
+  syncLocalDataConnectorMutationOptions,
+} from "../features";
 import type { DataConnector } from "../features/types";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
@@ -15,13 +18,8 @@ export function DataConnectorImportsTab({
   connector: DataConnector | undefined;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const syncsQuery = useQuery({
-    queryKey: ["dataConnectorSyncs", connector?.id],
-    queryFn: () => listDataConnectorSyncs(connector!.id),
-    enabled: connector !== undefined,
-  });
-  const syncMutation = useMutation({ mutationFn: syncLocalDataConnector });
+  const syncsQuery = useQuery(dataConnectorSyncsQueryOptions(connector?.id));
+  const syncMutation = useMutation(syncLocalDataConnectorMutationOptions());
   const syncForm = useForm({
     defaultValues: {
       fileName: "",
@@ -36,21 +34,12 @@ export function DataConnectorImportsTab({
           mimeType: mimeTypeFor(value.fileName),
           content: value.content,
         });
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: ["dataConnectorSyncs", connector.id],
-          }),
-          queryClient.invalidateQueries({
-            queryKey: ["knowledgeSources", connector.knowledgeBaseId],
-          }),
-          queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
-          queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-          queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-        ]);
         toast(t("connectorSynced"), "success");
       } catch (caught) {
         toast(t("connectorSyncFailed"), "error");
         throw caught;
+      } finally {
+        syncMutation.reset();
       }
     },
   });

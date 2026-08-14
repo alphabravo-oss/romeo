@@ -2060,6 +2060,27 @@ function validEvidence() {
     "dist/ci/openapi-route-coverage.json": validOpenApiRouteCoverage(false),
     "dist/ci/openapi-route-coverage-openwebui.json":
       validOpenApiRouteCoverage(true),
+    "dist/ci/browser-engine-matrix.json": {
+      schemaVersion: 1,
+      generatedAt: "2026-06-30T00:00:00.000Z",
+      results: ["chromium", "firefox", "webkit"].map((engine) => ({
+        engine,
+        status: "passed",
+        routes: [
+          { name: "chat", path: "/", axeViolations: 0 },
+          {
+            name: "settings-interface",
+            path: "/settings?section=interface",
+            axeViolations: 0,
+          },
+          {
+            name: "admin-providers",
+            path: "/admin?section=providers",
+            axeViolations: 0,
+          },
+        ],
+      })),
+    },
     "dist/ci/branch-protection-plan.json": validBranchProtectionPlan(),
     "dist/ci/hosted-ci-run-verification.json": validHostedCiRunVerification(),
     "dist/ci/branch-protection-verification.json":

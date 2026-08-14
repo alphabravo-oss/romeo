@@ -1,5 +1,12 @@
 import type { AuthSubject } from "@romeo/auth";
-import type { ChatMessage, ProviderToolDefinition } from "@romeo/providers";
+import type {
+  ChatMessage,
+  ProviderReasoningParameters,
+  ProviderReasoningPolicyLayers,
+  ProviderSampling,
+  ProviderStructuredOutput,
+  ProviderToolDefinition,
+} from "@romeo/providers";
 import type { ObjectStore } from "@romeo/storage";
 import type { RunEvent } from "@romeo/ai-runtime";
 
@@ -37,6 +44,10 @@ export class RunExecutionStateService {
     subject: AuthSubject;
     assistantContentPrefix?: string;
     emitRunStarted?: boolean;
+    reasoning?: ProviderReasoningParameters;
+    reasoningPolicy?: ProviderReasoningPolicyLayers;
+    sampling?: ProviderSampling;
+    structuredOutput?: ProviderStructuredOutput;
   }): Promise<
     { job: BackgroundJob; checkpoint: RunExecutionCheckpoint } | undefined
   > {
@@ -59,6 +70,16 @@ export class RunExecutionStateService {
         scopeSnapshot: input.subject.scopes,
         assistantContent: input.assistantContentPrefix ?? "",
         emitRunStarted: input.emitRunStarted !== false,
+        ...(input.sampling === undefined ? {} : { sampling: input.sampling }),
+        ...(input.reasoning === undefined
+          ? {}
+          : { reasoning: input.reasoning }),
+        ...(input.reasoningPolicy === undefined
+          ? {}
+          : { reasoningPolicy: input.reasoningPolicy }),
+        ...(input.structuredOutput === undefined
+          ? {}
+          : { structuredOutput: input.structuredOutput }),
       };
       await this.writeCheckpoint(checkpointKey, checkpoint);
       job = await this.repository.createBackgroundJob({
@@ -188,7 +209,7 @@ export class RunExecutionStateService {
     return this.repository.updateRun(runWithStatus(run, "queued"));
   }
 
-  markContinuing(
+  async markContinuing(
     run: RunRecord,
     data: {
       reason: "tool_approval" | "tool_dispatch";
@@ -199,7 +220,7 @@ export class RunExecutionStateService {
       outcome?: "completed" | "failed";
     },
   ): Promise<RunRecord> {
-    return this.repository.transaction(async (repository) => {
+    const result = await this.repository.transaction(async (repository) => {
       const runningRun = await repository.updateRun(
         runWithStatus(run, "running"),
       );
@@ -208,9 +229,11 @@ export class RunExecutionStateService {
         type: "run.continuing",
         data,
       });
-      await repository.appendRunEvents([event]);
-      return runningRun;
+      await this.sequencer.persist(repository, [event]);
+      return { event, runningRun };
     });
+    await this.sequencer.notify([result.event]);
+    return result.runningRun;
   }
 
   private async writeCheckpoint(

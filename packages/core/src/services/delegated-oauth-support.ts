@@ -15,15 +15,35 @@ export { normalizeAppOrigin };
 
 const callbackStateJobType = "delegated_oauth.callback_state";
 
-export async function auditDelegatedOAuth(
+export async function consumeDelegatedOAuthCallbackState(
+  repository: RomeoRepository,
+  state: DelegatedOAuthState,
+): Promise<void> {
+  const job = callbackStateJob(state, new Date().toISOString());
+  try {
+    await repository.transaction(async (transaction) => {
+      const existing = (await transaction.listBackgroundJobs(state.orgId)).find(
+        (item) => item.id === job.id,
+      );
+      if (existing !== undefined) throw callbackStateReplayError();
+      await transaction.createBackgroundJob(job);
+    });
+  } catch (error) {
+    if (isCallbackStateReplayError(error)) throw error;
+    if (isUniqueConstraintError(error)) throw callbackStateReplayError();
+    throw error;
+  }
+}
+
+export async function auditDelegatedOAuth<A extends AuditAction>(
   repository: RomeoRepository,
   subject: AuthSubject,
-  action: string,
+  action: A,
   resourceId: string,
   outcome: "success" | "failure",
-  metadata: Record<string, unknown>,
+  metadata: AuditMetadata<A>,
 ): Promise<void> {
-  await repository.createAuditLog({
+  await writeAuditLog(repository, {
     id: createId("audit"),
     orgId: subject.orgId,
     actorId: subject.id,
@@ -215,3 +235,8 @@ export function isConnectorType(value: unknown): value is DataConnectorType {
 export function stableHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 16);
 }
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";

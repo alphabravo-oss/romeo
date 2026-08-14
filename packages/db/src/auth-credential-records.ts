@@ -2,7 +2,9 @@ import {
   apiKeys,
   deviceAuthorizations,
   localMfaFactors,
+  localMfaChallenges,
   localPasswordCredentials,
+  samlAuthRequests,
   serviceAccounts,
   userSessions,
 } from "./schema";
@@ -105,6 +107,26 @@ export interface LocalMfaFactorRecord {
   confirmedAt?: string;
   disabledAt?: string;
   lastUsedAt?: string;
+}
+
+export interface SamlAuthRequestRecord {
+  id: string;
+  orgId: string;
+  providerId: "saml";
+  relayStateHash: string;
+  requestInstant: string;
+  expiresAt: string;
+  consumedAt?: string;
+  createdAt: string;
+}
+
+export interface LocalMfaChallengeRecord {
+  id: string;
+  orgId: string;
+  userId: string;
+  expiresAt: string;
+  consumedAt?: string;
+  createdAt: string;
 }
 
 export interface DeviceAuthorizationRecord {
@@ -258,6 +280,38 @@ export function toLocalMfaFactorRecord(
   if (disabledAt !== undefined) record.disabledAt = disabledAt;
   const lastUsedAt = optionalIsoString(row.lastUsedAt);
   if (lastUsedAt !== undefined) record.lastUsedAt = lastUsedAt;
+  return record;
+}
+
+export function toSamlAuthRequestRecord(
+  row: typeof samlAuthRequests.$inferSelect,
+): SamlAuthRequestRecord {
+  const record: SamlAuthRequestRecord = {
+    id: row.id,
+    orgId: row.orgId,
+    providerId: "saml",
+    relayStateHash: row.relayStateHash,
+    requestInstant: toIsoString(row.requestInstant),
+    expiresAt: toIsoString(row.expiresAt),
+    createdAt: toIsoString(row.createdAt),
+  };
+  const consumedAt = optionalIsoString(row.consumedAt);
+  if (consumedAt !== undefined) record.consumedAt = consumedAt;
+  return record;
+}
+
+export function toLocalMfaChallengeRecord(
+  row: typeof localMfaChallenges.$inferSelect,
+): LocalMfaChallengeRecord {
+  const record: LocalMfaChallengeRecord = {
+    id: row.id,
+    orgId: row.orgId,
+    userId: row.userId,
+    expiresAt: toIsoString(row.expiresAt),
+    createdAt: toIsoString(row.createdAt),
+  };
+  const consumedAt = optionalIsoString(row.consumedAt);
+  if (consumedAt !== undefined) record.consumedAt = consumedAt;
   return record;
 }
 

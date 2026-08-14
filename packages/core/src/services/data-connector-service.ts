@@ -15,13 +15,18 @@ import type {
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
+import { requirePublicApiErrorCode } from "../public-api-error-registry";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import {
   disabledDataConnectorExecutor,
   type DataConnectorExecutor,
 } from "./data-connector-executors";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import {
   disabledCatalogPosture,
   type DataConnectorCatalogReport,
@@ -460,18 +465,18 @@ export class DataConnectorService {
       );
     });
     throw new ApiError(
-      errorCode,
+      requirePublicApiErrorCode(errorCode),
       connectorSyncErrorMessage(errorCode),
       statusCode,
     );
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceId: string,
     outcome: "success" | "failure",
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
     repository: RomeoRepository = this.repository,
   ): Promise<void> {
     await writeAuditLog(repository, {

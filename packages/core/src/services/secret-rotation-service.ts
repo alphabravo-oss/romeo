@@ -237,7 +237,10 @@ export class SecretRotationService {
 
       await repository.updateLocalMfaFactor({
         ...factor,
-        secretEncrypted: currentVault.encrypt(plaintext.value),
+        secretEncrypted: currentVault.encrypt(
+          plaintext.value,
+          localMfaSecretContext(factor),
+        ),
         updatedAt: input.now,
       });
       rewrappedCount += 1;
@@ -301,7 +304,10 @@ function decryptLocalMfaFactor(input: {
   try {
     return {
       source: "current",
-      value: input.currentVault.decrypt(input.factor.secretEncrypted),
+      value: input.currentVault.decrypt(
+        input.factor.secretEncrypted,
+        localMfaSecretContext(input.factor),
+      ),
     };
   } catch {
     if (input.previousVault === undefined) return undefined;
@@ -309,11 +315,23 @@ function decryptLocalMfaFactor(input: {
   try {
     return {
       source: "previous",
-      value: input.previousVault.decrypt(input.factor.secretEncrypted),
+      value: input.previousVault.decrypt(
+        input.factor.secretEncrypted,
+        localMfaSecretContext(input.factor),
+      ),
     };
   } catch {
     return undefined;
   }
+}
+
+function localMfaSecretContext(factor: LocalMfaFactor) {
+  return {
+    factorId: factor.id,
+    factorType: factor.type,
+    orgId: factor.orgId,
+    userId: factor.userId,
+  };
 }
 
 function secretRewrapStatus(

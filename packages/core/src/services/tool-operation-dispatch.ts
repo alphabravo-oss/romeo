@@ -5,6 +5,7 @@ import type {
   ToolOperationDispatchResult,
 } from "../domain/entities";
 import { ApiError } from "../errors";
+import { requirePublicApiErrorCode } from "../public-api-error-registry";
 import {
   assertAbuseControlsAllow,
   type AbuseControlEnforcementInput,
@@ -130,7 +131,11 @@ export async function dispatchToolOperation(
     const failed = await failBackgroundJob(input.repository, job, code);
     await auditDispatchFailure(input, failed, code);
     if (error instanceof ApiError) throw error;
-    throw new ApiError(code, "Tool operation dispatch failed.", 502);
+    throw new ApiError(
+      requirePublicApiErrorCode(code),
+      "Tool operation dispatch failed.",
+      502,
+    );
   }
 }
 

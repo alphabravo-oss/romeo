@@ -1,3 +1,4 @@
+import { Button, Input } from "@romeo/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { useLocale } from "../lib/i18n";
@@ -48,7 +49,7 @@ export function ChatHeaderTitle({
 
   if (editing && canRename && chatId !== undefined) {
     return (
-      <input
+      <Input
         aria-label={t("renameChat")}
         className="rm-topbar-title-input"
         maxLength={TITLE_MAX}
@@ -80,14 +81,15 @@ export function ChatHeaderTitle({
   }
 
   return (
-    <button
+    <Button
       aria-label={t("renameChat")}
       className="rm-topbar-title rm-topbar-title-button"
       onClick={() => setEditing(true)}
       title={display}
       type="button"
+      variant="ghost"
     >
       {display}
-    </button>
+    </Button>
   );
 }

@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { listToolCalls } from "../features/tools";
+import { toolCallsQueryOptions } from "../features/tools";
 import type { ToolCallRecord } from "../features/tools";
 import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PageActions } from "./PageActions";
-import { SettingsSection } from "./SettingsSection";
+import { Section } from "./console";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const col = createColumnHelper<ToolCallRecord>();
 
@@ -16,20 +17,17 @@ export function ToolTracePanel({
   activeAgentId: string | undefined;
 }) {
   const { t } = useLocale();
-  const callsQuery = useQuery({
-    queryKey: ["toolCalls", activeAgentId],
-    queryFn: () => listToolCalls(activeAgentId),
-    enabled: activeAgentId !== undefined,
-  });
+  const inventoriedTable = useInventoriedServerTable<any>("tool_trace_calls");
+  const callsQuery = useQuery(toolCallsQueryOptions(activeAgentId));
 
   if (activeAgentId === undefined) {
     return (
-      <SettingsSection
+      <Section
         description={t("toolTraceSelectAgent")}
         title={t("toolTraceCalls")}
       >
         <p className="rm-list-empty">{t("toolTraceSelectAgent")}</p>
-      </SettingsSection>
+      </Section>
     );
   }
 
@@ -74,7 +72,7 @@ export function ToolTracePanel({
   ];
 
   return (
-    <SettingsSection
+    <Section
       actions={
         <PageActions
           onRefresh={() => void callsQuery.refetch()}
@@ -87,12 +85,13 @@ export function ToolTracePanel({
       <PanelState query={callsQuery} empty={t("toolTraceNone")}>
         {(calls) => (
           <DataTable
+            serverState={inventoriedTable.serverState}
             columns={columns}
-            data={calls}
+            data={inventoriedTable.rows}
             empty={t("toolTraceNone")}
           />
         )}
       </PanelState>
-    </SettingsSection>
+    </Section>
   );
 }

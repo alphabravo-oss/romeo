@@ -2,18 +2,28 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import {
+  createProviderMutationOptions,
+  deleteProviderModelMutationOptions,
+  pullProviderModelMutationOptions,
+  syncProviderModelsMutationOptions,
+  updateModelPricingMutationOptions,
+  updateProviderModelMutationOptions,
+  updateProviderMutationOptions,
+  verifyProviderMutationOptions,
+  type UpdateProviderModelInput,
+} from "../features/providers/mutation-options";
+import type {
   createProvider,
-  deleteOllamaProviderModel,
-  pullOllamaProviderModel,
-  syncProviderModels,
   updateModelPricing,
-  updateModelCapabilities,
-  updateModelEnabled,
   updateProvider,
-  verifyProvider,
 } from "../features/providers/mutations";
 import { createManagedSecret } from "../features/auth-provider-administration";
+import { useLocale } from "../lib/i18n";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
+import * as appQueryKeys from "../lib/app-query-keys";
+import { apiQueryKeys } from "../lib/api-query-options";
 import { useWorkspaceData } from "./useWorkspaceData";
+import { removeChatCache } from "../features/chats/cache-policy";
 
 /**
  * Focused controller for the admin route. Reuses the cached workspace
@@ -23,6 +33,7 @@ import { useWorkspaceData } from "./useWorkspaceData";
  */
 export function useAdminController() {
   const queryClient = useQueryClient();
+  const { t } = useLocale();
   // Drafts included: the admin curated table is where a model is created, and the gallery query
   // lists published models only -- so a model created here was invisible the moment it was made,
   // and the "drafts" tile above the table could only ever read zero.
@@ -32,22 +43,22 @@ export function useAdminController() {
   const [pullingProviderId, setPullingProviderId] = useState<string>();
   const [deletingModelId, setDeletingModelId] = useState<string>();
 
-  const createProviderMutation = useMutation({ mutationFn: createProvider });
-  const updateModelPricingMutation = useMutation({
-    mutationFn: updateModelPricing,
-  });
-  const updateModelMutation = useMutation({
-    mutationFn: async (
-      input:
-        | Parameters<typeof updateModelCapabilities>[0]
-        | Parameters<typeof updateModelEnabled>[0],
-    ) =>
-      "capabilities" in input
-        ? updateModelCapabilities(input)
-        : updateModelEnabled(input),
-  });
-  const updateProviderMutation = useMutation({ mutationFn: updateProvider });
-  const verifyProviderMutation = useMutation({ mutationFn: verifyProvider });
+  const createProviderMutation = useMutation(createProviderMutationOptions());
+  const syncProviderModelsMutation = useMutation(
+    syncProviderModelsMutationOptions(),
+  );
+  const pullProviderModelMutation = useMutation(
+    pullProviderModelMutationOptions(),
+  );
+  const deleteProviderModelMutation = useMutation(
+    deleteProviderModelMutationOptions(),
+  );
+  const updateModelPricingMutation = useMutation(
+    updateModelPricingMutationOptions(),
+  );
+  const updateModelMutation = useMutation(updateProviderModelMutationOptions());
+  const updateProviderMutation = useMutation(updateProviderMutationOptions());
+  const verifyProviderMutation = useMutation(verifyProviderMutationOptions());
 
   async function handleCreateProvider(
     input: Parameters<typeof createProvider>[0],
@@ -73,42 +84,24 @@ export function useAdminController() {
       });
       setSyncingProviderId(provider.id);
       try {
-        await syncProviderModels(provider.id);
+        await syncProviderModelsMutation.mutateAsync(provider.id);
       } catch (caught) {
-        setError(
-          `Connection saved, but model refresh failed: ${caught instanceof Error ? caught.message : "Unable to reach the model endpoint."}`,
-        );
+        setError(safeUserErrorMessage(caught, t("unexpectedAsyncFailure")));
       } finally {
         setSyncingProviderId(undefined);
       }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["providers"] }),
-        queryClient.invalidateQueries({ queryKey: ["models"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["providerOperationalSummary"],
-        }),
-      ]);
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Unable to create provider.",
-      );
+      setError(safeUserErrorMessage(caught, t("unexpectedAsyncFailure")));
       throw caught;
     }
   }
 
-  async function handleUpdateModel(
-    input:
-      | Parameters<typeof updateModelCapabilities>[0]
-      | Parameters<typeof updateModelEnabled>[0],
-  ) {
+  async function handleUpdateModel(input: UpdateProviderModelInput) {
     setError(undefined);
     try {
       await updateModelMutation.mutateAsync(input);
-      await queryClient.invalidateQueries({ queryKey: ["models"] });
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Unable to update model.",
-      );
+      setError(safeUserErrorMessage(caught, t("unexpectedAsyncFailure")));
       throw caught;
     }
   }
@@ -117,20 +110,9 @@ export function useAdminController() {
     setError(undefined);
     setSyncingProviderId(providerId);
     try {
-      await syncProviderModels(providerId);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["providers"] }),
-        queryClient.invalidateQueries({ queryKey: ["models"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["providerOperationalSummary"],
-        }),
-      ]);
+      await syncProviderModelsMutation.mutateAsync(providerId);
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to sync provider models.",
-      );
+      setError(safeUserErrorMessage(caught, t("unexpectedAsyncFailure")));
       throw caught;
     } finally {
       setSyncingProviderId(undefined);
@@ -141,22 +123,13 @@ export function useAdminController() {
     setError(undefined);
     setPullingProviderId(providerId);
     try {
-      const result = await pullOllamaProviderModel({ providerId, model });
-      await syncProviderModels(providerId);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["providers"] }),
-        queryClient.invalidateQueries({ queryKey: ["models"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["providerOperationalSummary"],
-        }),
-      ]);
+      const result = await pullProviderModelMutation.mutateAsync({
+        providerId,
+        model,
+      });
       return result;
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to pull the Ollama model.",
-      );
+      setError(safeUserErrorMessage(caught, t("unexpectedAsyncFailure")));
       throw caught;
     } finally {
       setPullingProviderId(undefined);
@@ -171,21 +144,13 @@ export function useAdminController() {
     setError(undefined);
     setDeletingModelId(modelId);
     try {
-      const result = await deleteOllamaProviderModel({ providerId, model });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["providers"] }),
-        queryClient.invalidateQueries({ queryKey: ["models"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["providerOperationalSummary"],
-        }),
-      ]);
+      const result = await deleteProviderModelMutation.mutateAsync({
+        providerId,
+        model,
+      });
       return result;
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to delete the Ollama model.",
-      );
+      setError(safeUserErrorMessage(caught, t("unexpectedAsyncFailure")));
       throw caught;
     } finally {
       setDeletingModelId(undefined);
@@ -221,35 +186,28 @@ export function useAdminController() {
       if (refreshModels) {
         setSyncingProviderId(input.providerId);
         try {
-          await syncProviderModels(input.providerId);
+          await syncProviderModelsMutation.mutateAsync(input.providerId);
         } catch (caught) {
-          setError(
-            `Connection saved, but model refresh failed: ${caught instanceof Error ? caught.message : "Unable to reach the model endpoint."}`,
-          );
+          setError(safeUserErrorMessage(caught, t("unexpectedAsyncFailure")));
         } finally {
           setSyncingProviderId(undefined);
         }
       }
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["providers"] }),
-        queryClient.invalidateQueries({ queryKey: ["models"] }),
-        queryClient.invalidateQueries({
-          queryKey: ["providerOperationalSummary"],
-        }),
-      ]);
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to update the provider.",
-      );
+      setError(safeUserErrorMessage(caught, t("unexpectedAsyncFailure")));
       throw caught;
     }
   }
 
-  async function handleVerifyProvider(providerId: string) {
+  async function handleVerifyProvider(
+    providerId: string,
+    signal?: AbortSignal,
+  ) {
     setError(undefined);
-    return verifyProviderMutation.mutateAsync(providerId);
+    return verifyProviderMutation.mutateAsync({
+      providerId,
+      ...(signal === undefined ? {} : { signal }),
+    });
   }
 
   async function handleUpdateModelPricing(
@@ -258,30 +216,44 @@ export function useAdminController() {
     setError(undefined);
     try {
       await updateModelPricingMutation.mutateAsync(input);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["models"] }),
-        queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-      ]);
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to update model pricing.",
-      );
+      setError(safeUserErrorMessage(caught, t("unexpectedAsyncFailure")));
       throw caught;
     }
   }
 
   // Governance actions on an admin page have no local chat state — just
   // refresh the affected server data.
-  async function handleChatArchived() {
-    await queryClient.invalidateQueries();
+  async function handleChatArchived(chatId: string) {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: appQueryKeys.chat(chatId),
+      }),
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: appQueryKeys.chats(data.workspace?.id),
+      }),
+    ]);
   }
-  async function handleChatDeleted() {
-    await queryClient.invalidateQueries();
+  async function handleChatDeleted(chatId: string) {
+    removeChatCache(queryClient, chatId);
+    await queryClient.invalidateQueries({
+      exact: true,
+      queryKey: appQueryKeys.chats(data.workspace?.id),
+    });
   }
-  async function handleWorkspaceArchived() {
-    await queryClient.invalidateQueries();
+  async function handleWorkspaceArchived(workspaceId: string) {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: apiQueryKeys.bootstrap(),
+      }),
+      queryClient.invalidateQueries({
+        exact: true,
+        queryKey: appQueryKeys.chats(workspaceId),
+      }),
+    ]);
   }
 
   return {
@@ -296,7 +268,7 @@ export function useAdminController() {
     isUpdatingModelPricing: updateModelPricingMutation.isPending,
     isUpdatingModel: updateModelMutation.isPending,
     isUpdatingProvider: updateProviderMutation.isPending,
-    verifyingProviderId: verifyProviderMutation.variables,
+    verifyingProviderId: verifyProviderMutation.variables?.providerId,
     syncingProviderId,
     pullingProviderId,
     deletingModelId,

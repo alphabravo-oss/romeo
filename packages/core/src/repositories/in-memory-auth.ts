@@ -68,6 +68,18 @@ export abstract class InMemoryAuthRepository extends InMemoryIdentityRepository 
     return replaceById(this.data.deviceAuthorizations, authorization);
   }
 
+  async rotateDeviceAuthorization(input: {
+    authorization: E.DeviceAuthorization;
+    expectedRefreshHash: string;
+  }): Promise<E.DeviceAuthorization | undefined> {
+    const current = this.data.deviceAuthorizations.find(
+      (authorization) => authorization.id === input.authorization.id,
+    );
+    if (current?.hashedRefreshToken !== input.expectedRefreshHash)
+      return undefined;
+    return replaceById(this.data.deviceAuthorizations, input.authorization);
+  }
+
   async listUserSessions(
     orgId: string,
     userId: string,
@@ -132,6 +144,28 @@ export abstract class InMemoryAuthRepository extends InMemoryIdentityRepository 
     return replaceById(this.data.localPasswordCredentials, credential);
   }
 
+  async recordFailedLocalPasswordAttempt(input: {
+    credentialId: string;
+    attemptedAt: string;
+    lockedUntil: string;
+    maxFailedAttempts: number;
+  }): Promise<E.LocalPasswordCredential | undefined> {
+    const current = this.data.localPasswordCredentials.find(
+      (credential) => credential.id === input.credentialId,
+    );
+    if (current === undefined) return undefined;
+    const failedAttemptCount = current.failedAttemptCount + 1;
+    const updated: E.LocalPasswordCredential = {
+      ...current,
+      failedAttemptCount,
+      updatedAt: input.attemptedAt,
+      ...(failedAttemptCount >= input.maxFailedAttempts
+        ? { lockedUntil: input.lockedUntil }
+        : {}),
+    };
+    return replaceById(this.data.localPasswordCredentials, updated);
+  }
+
   async listLocalMfaFactors(
     orgId: string,
     userId: string,
@@ -163,6 +197,84 @@ export abstract class InMemoryAuthRepository extends InMemoryIdentityRepository 
     factor: E.LocalMfaFactor,
   ): Promise<E.LocalMfaFactor> {
     return replaceById(this.data.localMfaFactors, factor);
+  }
+
+  async consumeLocalMfaFactor(input: {
+    factor: E.LocalMfaFactor;
+    expectedSecretEncrypted: string;
+  }): Promise<E.LocalMfaFactor | undefined> {
+    const current = this.data.localMfaFactors.find(
+      (factor) => factor.id === input.factor.id,
+    );
+    if (current?.secretEncrypted !== input.expectedSecretEncrypted)
+      return undefined;
+    return replaceById(this.data.localMfaFactors, input.factor);
+  }
+
+  async createLocalMfaChallenge(
+    challenge: E.LocalMfaChallenge,
+  ): Promise<E.LocalMfaChallenge> {
+    const existing = this.data.localMfaChallenges.find(
+      (item) => item.id === challenge.id,
+    );
+    return existing ?? append(this.data.localMfaChallenges, challenge);
+  }
+
+  async consumeLocalMfaChallenge(input: {
+    id: string;
+    orgId: string;
+    userId: string;
+    consumedAt: string;
+  }): Promise<E.LocalMfaChallenge | undefined> {
+    const challenge = this.data.localMfaChallenges.find(
+      (item) => item.id === input.id,
+    );
+    if (
+      challenge === undefined ||
+      challenge.consumedAt !== undefined ||
+      challenge.orgId !== input.orgId ||
+      challenge.userId !== input.userId ||
+      Date.parse(challenge.expiresAt) <= Date.parse(input.consumedAt)
+    )
+      return undefined;
+    return replaceById(this.data.localMfaChallenges, {
+      ...challenge,
+      consumedAt: input.consumedAt,
+    });
+  }
+
+  async createSamlAuthRequest(
+    request: E.SamlAuthRequest,
+  ): Promise<E.SamlAuthRequest> {
+    const existing = this.data.samlAuthRequests.find(
+      (item) => item.id === request.id,
+    );
+    return existing ?? append(this.data.samlAuthRequests, request);
+  }
+
+  async consumeSamlAuthRequest(input: {
+    id: string;
+    orgId: string;
+    providerId: "saml";
+    relayStateHash: string;
+    consumedAt: string;
+  }): Promise<E.SamlAuthRequest | undefined> {
+    const request = this.data.samlAuthRequests.find(
+      (item) => item.id === input.id,
+    );
+    if (
+      request === undefined ||
+      request.consumedAt !== undefined ||
+      request.orgId !== input.orgId ||
+      request.providerId !== input.providerId ||
+      request.relayStateHash !== input.relayStateHash ||
+      Date.parse(request.expiresAt) <= Date.parse(input.consumedAt)
+    )
+      return undefined;
+    return replaceById(this.data.samlAuthRequests, {
+      ...request,
+      consumedAt: input.consumedAt,
+    });
   }
 
   async listServiceAccounts(orgId: string): Promise<E.ServiceAccount[]> {

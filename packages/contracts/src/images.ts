@@ -3,7 +3,8 @@ import { createRoute, z } from "@hono/zod-openapi";
 import {
   authenticationSecurity,
   dataEnvelope,
-  jsonResponse,
+  idempotentJsonResponse,
+  optionalIdempotencyHeaders,
   standardErrorResponses,
 } from "./common";
 import { FileObjectSchema } from "./files";
@@ -18,6 +19,7 @@ export const GenerateImagesSchema = z
     prompt: z.string().trim().min(1).max(8_000),
     count: z.number().int().min(1).max(4).default(1),
     size: imageSize.default("1024x1024"),
+    idempotencyKey: z.string().trim().min(1).max(200).optional(),
   })
   .openapi("GenerateImagesRequest");
 
@@ -37,13 +39,14 @@ export const generateImagesRoute = createRoute({
   operationId: "images.generate",
   summary: "Generate governed image artifacts",
   request: {
+    headers: optionalIdempotencyHeaders,
     body: {
       required: true,
       content: { "application/json": { schema: GenerateImagesSchema } },
     },
   },
   responses: {
-    201: jsonResponse(
+    201: idempotentJsonResponse(
       "Generated images",
       dataEnvelope(z.array(GeneratedImageArtifactSchema)),
     ),

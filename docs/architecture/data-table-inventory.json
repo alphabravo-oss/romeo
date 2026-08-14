@@ -1,0 +1,841 @@
+{
+  "schemaVersion": 1,
+  "classifications": [
+    "bounded-client",
+    "virtualized-client",
+    "server-driven"
+  ],
+  "components": [
+    {
+      "file": "apps/app/src/components/AgentAccessPanel.tsx",
+      "datasets": [
+        {
+          "id": "agent_access_grants",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/AgentVersionPanel.tsx",
+      "datasets": [
+        {
+          "id": "agent_versions",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/AnalyticsPanel.tsx",
+      "datasets": [
+        {
+          "id": "analytics_attention_models",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "analytics_operational_signals",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "analytics_usage_breakdown",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "analytics_tool_activity",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ApiKeyPanel.tsx",
+      "datasets": [
+        {
+          "id": "api_keys",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/AuditPanel.tsx",
+      "datasets": [
+        {
+          "id": "audit_events",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/audit-logs/query",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "debounced_search_cancellation",
+            "page_size",
+            "estimated_total",
+            "stale_cursor_recovery"
+          ],
+          "residual": [
+            "validated_route_search_state",
+            "server_saved_views",
+            "asynchronous_export_jobs"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/AuthProviderSplitView.tsx",
+      "datasets": [
+        {
+          "id": "authentication_providers",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/BillingGovernanceTabs.tsx",
+      "datasets": [
+        {
+          "id": "billing_reconciliation_quotas",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/BillingPanel.tsx",
+      "datasets": [
+        {
+          "id": "billing_plan_quota_tiers",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ConnectedAppsPanel.tsx",
+      "datasets": [
+        {
+          "id": "connected_apps",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/DataConnectorPanel.tsx",
+      "datasets": [
+        {
+          "id": "data_connectors",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/DataConnectorSyncHistory.tsx",
+      "datasets": [
+        {
+          "id": "data_connector_sync_runs",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/DeviceTokensPanel.tsx",
+      "datasets": [
+        {
+          "id": "device_tokens",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/EdgeSecurityPostureTab.tsx",
+      "datasets": [
+        {
+          "id": "edge_security_posture",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/EvalReasoningComparisonPanel.tsx",
+      "datasets": [
+        {
+          "id": "eval_reasoning_comparison_variants",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/EvalInventoryTables.tsx",
+      "datasets": [
+        {
+          "id": "eval_suites",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        },
+        {
+          "id": "eval_runs",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "eval_results",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/GovernancePanel.tsx",
+      "datasets": [
+        {
+          "id": "governance_export_packages",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/GovernanceReportTabs.tsx",
+      "datasets": [
+        {
+          "id": "governance_storage_classes",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/GovernanceRetentionTab.tsx",
+      "datasets": [
+        {
+          "id": "governance_access_grants",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/GroupsPanel.tsx",
+      "datasets": [
+        {
+          "id": "groups",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        },
+        {
+          "id": "group_members",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ImpersonationPanel.tsx",
+      "datasets": [
+        {
+          "id": "support_access_requests",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        },
+        {
+          "id": "support_sessions",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/JobPanel.tsx",
+      "datasets": [
+        {
+          "id": "background_jobs",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/KnowledgeCatalogPage.tsx",
+      "datasets": [
+        {
+          "id": "knowledge_bases",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/KnowledgeSourceList.tsx",
+      "datasets": [
+        {
+          "id": "knowledge_sources",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ManagedModelAdminPanel.tsx",
+      "datasets": [
+        {
+          "id": "managed_models",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ManagedModelKnowledgePanel.tsx",
+      "datasets": [
+        {
+          "id": "managed_model_knowledge",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ManagedModelToolPanel.tsx",
+      "datasets": [
+        {
+          "id": "managed_model_tools",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ModelCatalogPanel.tsx",
+      "datasets": [
+        {
+          "id": "model_catalog",
+          "classification": "server-driven",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/NotificationChannelPanel.tsx",
+      "datasets": [
+        {
+          "id": "notification_channels",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "notification_deliveries",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/NotificationPanel.tsx",
+      "datasets": [
+        {
+          "id": "notifications",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/OperationsPosturePanel.tsx",
+      "datasets": [
+        {
+          "id": "operations_ga_gates",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "postgres_warnings",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "job_alerts",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "job_type_summary",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/OrganizationsPanel.tsx",
+      "datasets": [
+        {
+          "id": "organizations",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/PersonalContentTable.tsx",
+      "datasets": [
+        {
+          "id": "personal_content",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/PromptTemplatePanel.tsx",
+      "datasets": [
+        {
+          "id": "prompt_templates",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        },
+        {
+          "id": "prompt_template_marketplace",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ProviderModelsTable.tsx",
+      "datasets": [
+        {
+          "id": "provider_models",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ProviderObservabilityPanel.tsx",
+      "datasets": [
+        {
+          "id": "provider_connection_health",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "provider_operational_signals",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ProviderPanel.tsx",
+      "datasets": [
+        {
+          "id": "provider_connections",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/QuotaPanel.tsx",
+      "datasets": [
+        {
+          "id": "quota_policies",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ReadinessPanel.tsx",
+      "datasets": [
+        {
+          "id": "readiness_checks",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ServiceAccountPanel.tsx",
+      "datasets": [
+        {
+          "id": "service_accounts",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/SessionsPanel.tsx",
+      "datasets": [
+        {
+          "id": "user_sessions",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ToolConnectorPanel.tsx",
+      "datasets": [
+        {
+          "id": "tool_connectors",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ToolOperationList.tsx",
+      "datasets": [
+        {
+          "id": "tool_operations",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ToolPanel.tsx",
+      "datasets": [
+        {
+          "id": "agent_tool_selection",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/ToolTracePanel.tsx",
+      "datasets": [
+        {
+          "id": "tool_trace_calls",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/UsageMetricCatalog.tsx",
+      "datasets": [
+        {
+          "id": "usage_metric_catalog",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/UsagePanel.tsx",
+      "datasets": [
+        {
+          "id": "usage_alerts",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "usage_totals",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "usage_events",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/UsersPanel.tsx",
+      "datasets": [
+        {
+          "id": "users",
+          "classification": "server-driven",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/VoicePanel.tsx",
+      "datasets": [
+        {
+          "id": "voice_profiles",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/WebhooksPanel.tsx",
+      "datasets": [
+        {
+          "id": "webhook_endpoints",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "webhook_deliveries",
+          "classification": "server-driven",
+          "status": "implemented"
+        }
+      ]
+    },
+    {
+      "file": "apps/app/src/components/WorkflowsPanel.tsx",
+      "datasets": [
+        {
+          "id": "workflows",
+          "classification": "server-driven",
+          "status": "implemented",
+          "controller": "ServerTableState",
+          "endpoint": "POST /api/v1/admin/table-pages",
+          "capabilities": [
+            "opaque_cursor_history",
+            "created_at_sort",
+            "server_filters",
+            "page_size",
+            "estimated_total"
+          ]
+        },
+        {
+          "id": "workflow_templates",
+          "classification": "bounded-client",
+          "status": "implemented"
+        },
+        {
+          "id": "workflow_runs",
+          "classification": "bounded-client",
+          "status": "implemented"
+        }
+      ]
+    }
+  ]
+}

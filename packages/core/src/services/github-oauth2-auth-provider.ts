@@ -1,6 +1,7 @@
 import { Octokit, RequestError } from "octokit";
 
 import { ApiError } from "../errors";
+import { requirePublicApiErrorCode } from "../public-api-error-registry";
 
 export interface GitHubOAuth2IdentityPolicy {
   adminTeams: string[];
@@ -130,7 +131,7 @@ async function githubRequest<T>(
     if (error instanceof ApiError) throw error;
     if (error instanceof RequestError) {
       throw new ApiError(
-        failureCode,
+        requirePublicApiErrorCode(failureCode),
         "GitHub OAuth provider lookup failed.",
         401,
         { provider: "github", status: error.status },

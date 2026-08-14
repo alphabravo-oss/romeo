@@ -1,10 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Checkbox } from "@romeo/ui";
 
-import {
-  getManagedModelCustomizationPolicy,
-  updateManagedModelCustomizationPolicy,
-} from "../features/managed-models";
+import { managedModelCustomizationPolicyQueryOptions } from "../features/managed-models";
+import { updateManagedModelCustomizationPolicyMutationOptions } from "../features/managed-models/mutation-options";
 import type {
   Agent,
   ManagedModelCustomizationPolicy,
@@ -30,24 +28,12 @@ export function ManagedModelCustomizationPanel({
   activeAgent: Agent | undefined;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const policyQuery = useQuery({
-    queryKey: ["managedModelCustomizationPolicy", activeAgent?.id],
-    queryFn: () => getManagedModelCustomizationPolicy(activeAgent!.id),
-    enabled: activeAgent !== undefined,
-  });
-  const updateMutation = useMutation({
-    mutationFn: updateManagedModelCustomizationPolicy,
-    onSuccess: async (policy) => {
-      queryClient.setQueryData(
-        ["managedModelCustomizationPolicy", activeAgent?.id],
-        policy,
-      );
-      await queryClient.invalidateQueries({
-        queryKey: ["managedModelPreferences", activeAgent?.id],
-      });
-    },
-  });
+  const policyQuery = useQuery(
+    managedModelCustomizationPolicyQueryOptions(activeAgent?.id),
+  );
+  const updateMutation = useMutation(
+    updateManagedModelCustomizationPolicyMutationOptions(),
+  );
 
   return (
     <div className="mt-4 grid gap-3 border-t border-border pt-4">

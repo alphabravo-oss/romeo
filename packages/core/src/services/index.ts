@@ -1,78 +1,30 @@
-import { readEnv, type RomeoEnv } from "@romeo/config";
+import { readEnv } from "@romeo/config";
 import { lookup } from "node:dns/promises";
-import { disabledObjectStore, type ObjectStore } from "@romeo/storage";
-import type { VoiceProvider } from "@romeo/voices";
+import { disabledObjectStore } from "@romeo/storage";
 
 import type { RomeoRepository } from "../domain/repository";
 import { AbuseControlService } from "./abuse-control-service";
-import { AnalyticsService } from "./analytics-service";
-import { AuditService } from "./audit-service";
 import { AuthProviderSettingsService } from "./auth-provider-settings-service";
-import { AgentKnowledgeService } from "./agent-knowledge-service";
-import { AgentService } from "./agent-service";
-import { ApiKeyService } from "./api-key-service";
-import { BillingService } from "./billing-service";
 import { BrowserAutomationService } from "./browser-automation-service";
-import { ChannelService } from "./channel-service";
 import { ChatService } from "./chat-service";
 import { ChatEventService } from "./chat-event-service";
-import type { ChatEventTransport } from "./chat-event-transport";
-import { ChatExperienceService } from "./chat-experience-service";
-import { ChatCommentService } from "./chat-comment-service";
-import { ChatTagService } from "./chat-tag-service";
-import { CollaborationService } from "./collaboration-service";
-import { DataConnectorService } from "./data-connector-service";
+import { CapabilityService } from "./capability-resolver";
+import { capabilityPlatformPolicyFromEnv } from "./capability-platform-policy";
 import { createDataConnectorExecutor } from "./data-connector-executor-factory";
 import { DelegatedOAuthService } from "./delegated-oauth-service";
 import { DirectorySyncService } from "./directory-sync-service";
-import type { DataConnectorExecutor } from "./data-connector-executors";
-import { GroupService } from "./group-service";
-import { DeviceAuthorizationService } from "./device-authorization-service";
 import { KnowledgeService } from "./knowledge-service";
-import type { KnowledgeBinaryExtractor } from "./knowledge-extraction-worker";
-import type { FileOcrProvider } from "./file-ocr";
-import { LocalAuthService } from "./local-auth-service";
-import { LdapAuthService } from "./ldap-auth-service";
-import type { LdapClientFactory } from "./ldap-directory-client";
-import { JobService } from "./job-service";
 import { withTelemetryObjectStore } from "./telemetry-context";
-import { ImageGenerationService } from "./image-generation-service";
-import { InterfacePreferenceService } from "./interface-preference-service";
-import { EvalService } from "./eval-service";
-import { EdgeSecurityService } from "./edge-security-service";
-import { FileService, type FileMalwareScanner } from "./file-service";
-import { GaEvidencePostureService } from "./ga-evidence-posture-service";
-import { GovernanceService } from "./governance-service";
+import { FileService } from "./file-service";
 import { ManagedSecretService } from "./managed-secret-service";
-import type { SecretWriter } from "./secret-writer";
-import {
-  type ResendEmailClientFactory,
-  type SmtpSendMail,
-} from "./notification-delivery";
-import type { FcmMessagingClientFactory } from "./notification-delivery-mobile";
-import { NotificationService } from "./notification-service";
+import { derivePageCursorSecret } from "./page-cursor";
 import { createNotificationDeliverySender } from "./notification-delivery-factory";
-import { OpenAiChatCompletionsService } from "./openai-chat-completions-service";
-import { OpenAiEmbeddingsService } from "./openai-embeddings-service";
-import { OpenAiModelsService } from "./openai-models-service";
 import { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
-import type { OidcAuthenticator } from "./oidc-auth-service";
-import { OidcPkceService } from "./oidc-pkce-service";
-import { OAuth2PkceService } from "./oauth2-pkce-service";
-import { ProviderService } from "./provider-service";
-import { PostgresOperationalPostureService } from "./postgres-operational-posture-service";
-import { PromptTemplateService } from "./prompt-template-service";
+import { OrganizationCapabilityFlagService } from "./organization-capability-flag-service";
 import { createQdrantKnowledgeVectorStore } from "./qdrant-knowledge-vector-store";
-import type { QdrantSdkClientFactory } from "./qdrant-knowledge-vector-store";
-import type { QuotaCoordinator } from "./quota-coordination";
-import { QuotaService } from "./quota-service";
-import { RagPolicyService } from "./rag-policy-service";
-import { RagPostureService } from "./rag-posture-service";
-import { ReadinessService } from "./readiness-service";
 import { RunEventSequencer } from "./run-event-sequencer";
 import { RunService } from "./run-service";
 import { TemporaryChatCleanupWorker } from "./temporary-chat-cleanup-worker";
-import { ServiceAccountService } from "./service-account-service";
 import {
   canResolveExternalVectorStoreSecret,
   createFileOcrProvider,
@@ -81,141 +33,52 @@ import {
   createObjectStore,
   createOidcAuthenticator,
   createQuotaCoordinator,
+  createRunEventTransport,
   createSecretResolver,
   createSecretWriter,
   createToolDispatchPayloadStore,
   createVoiceProvider,
 } from "./service-runtime-factories";
 import { buildServiceRegistry } from "./service-registry-builder";
-import { SecretRotationService } from "./secret-rotation-service";
 import { SessionService } from "./session-service";
-import {
-  SchemeRoutingSecretResolver,
-  type SecretResolver,
-} from "./secret-resolver";
-import { SamlAuthService } from "./saml-auth-service";
-import type { SamlClientFactory } from "./saml-client";
-import { ScimService } from "./scim-service";
-import { SsoSettingsService } from "./sso-settings-service";
-import { TenantAdminService } from "./tenant-admin-service";
+import type {
+  CreateServicesOptions,
+  RomeoServices,
+} from "./service-registry-types";
+export type {
+  CreateServicesOptions,
+  RomeoServices,
+} from "./service-registry-types";
+import { SchemeRoutingSecretResolver } from "./secret-resolver";
 import { ToolConnectorService } from "./tool-connector-service";
 import { ToolService } from "./tool-service";
-import { UsageService } from "./usage-service";
 import { UserLifecycleService } from "./user-lifecycle-service";
-import { VoiceService } from "./voice-service";
 import { WebhookService } from "./webhook-service";
 import { WorkflowService } from "./workflow-service";
-import { WorkspaceService } from "./workspace-service";
-import { WorkspaceContentService } from "./workspace-content-service";
 import { WebSearchService } from "./web-search-service";
 import {
   vectorStoreDeploymentFromEnv,
   withExternalVectorRoutingActive,
 } from "./vector-store-deployment";
 
-export interface RomeoServices {
-  abuseControls: AbuseControlService;
-  analytics: AnalyticsService;
-  agentKnowledge: AgentKnowledgeService;
-  agents: AgentService;
-  apiKeys: ApiKeyService;
-  audit: AuditService;
-  authProviderSettings: AuthProviderSettingsService;
-  billing: BillingService;
-  browserAutomation: BrowserAutomationService;
-  channels: ChannelService;
-  chatEvents: ChatEventService;
-  chatExperience: ChatExperienceService;
-  chats: ChatService;
-  temporaryChatCleanup: TemporaryChatCleanupWorker;
-  chatComments: ChatCommentService;
-  chatTags: ChatTagService;
-  collaboration: CollaborationService;
-  dataConnectors: DataConnectorService;
-  delegatedOAuth: DelegatedOAuthService;
-  deployment: { tenancyMode: RomeoEnv["TENANCY_MODE"] };
-  directorySync: DirectorySyncService;
-  deviceAuthorizations: DeviceAuthorizationService;
-  edgeSecurity: EdgeSecurityService;
-  evals: EvalService;
-  files: FileService;
-  gaEvidencePosture: GaEvidencePostureService;
-  knowledge: KnowledgeService;
-  jobs: JobService;
-  images: ImageGenerationService;
-  interfacePreferences: InterfacePreferenceService;
-  ldapAuth: LdapAuthService;
-  localAuth: LocalAuthService;
-  managedSecrets: ManagedSecretService;
-  governance: GovernanceService;
-  groups: GroupService;
-  notifications: NotificationService;
-  oidc: OidcAuthenticator;
-  oidcPkce: OidcPkceService;
-  oauth2Pkce: OAuth2PkceService;
-  openAiChatCompletions: OpenAiChatCompletionsService;
-  openAiEmbeddings: OpenAiEmbeddingsService;
-  openAiModels: OpenAiModelsService;
-  openWebUiCompatibility: OpenWebUiCompatibilityService;
-  postgresOperationalPosture: PostgresOperationalPostureService;
-  providers: ProviderService;
-  prompts: PromptTemplateService;
-  quotas: QuotaService;
-  ragPolicy: RagPolicyService;
-  ragPosture: RagPostureService;
-  readiness: ReadinessService;
-  runs: RunService;
-  samlAuth: SamlAuthService;
-  scim: ScimService;
-  secretRotation: SecretRotationService;
-  serviceAccounts: ServiceAccountService;
-  sessions: SessionService;
-  ssoSettings: SsoSettingsService;
-  tenantAdmin: TenantAdminService;
-  toolConnectors: ToolConnectorService;
-  tools: ToolService;
-  usage: UsageService;
-  users: UserLifecycleService;
-  voices: VoiceService;
-  webhooks: WebhookService;
-  webSearch: WebSearchService;
-  workflows: WorkflowService;
-  workspace: WorkspaceService;
-  workspaceContent: WorkspaceContentService;
-}
-
-export interface CreateServicesOptions {
-  env?: RomeoEnv;
-  dataConnectorExecutor?: DataConnectorExecutor;
-  knowledgeExtractor?: KnowledgeBinaryExtractor;
-  embeddingFetch?: typeof fetch;
-  fileMalwareScanner?: FileMalwareScanner;
-  fileOcrProvider?: FileOcrProvider;
-  delegatedOAuthFetch?: typeof fetch;
-  ldapClientFactory?: LdapClientFactory;
-  objectStore?: ObjectStore;
-  oidcFetch?: typeof fetch;
-  providerFetch?: typeof fetch;
-  qdrantClientFactory?: QdrantSdkClientFactory;
-  quotaCoordinator?: QuotaCoordinator;
-  chatEventTransport?: ChatEventTransport;
-  samlClientFactory?: SamlClientFactory;
-  secretResolver?: SecretResolver;
-  secretWriter?: SecretWriter;
-  notificationSmtpSendMail?: SmtpSendMail;
-  notificationResendClientFactory?: ResendEmailClientFactory;
-  notificationFcmClientFactory?: FcmMessagingClientFactory;
-  toolOperationFetch?: typeof fetch;
-  voiceProvider?: VoiceProvider;
-  webhookFetch?: typeof fetch;
-}
-
 export function createServices(
   repository: RomeoRepository,
   options: CreateServicesOptions = {},
 ): RomeoServices {
-  const runEventSequencer = new RunEventSequencer();
   const env = options.env ?? readEnv();
+  const platformCapabilityPolicy = capabilityPlatformPolicyFromEnv(env);
+  const capabilityFlags = new OrganizationCapabilityFlagService(
+    repository,
+    platformCapabilityPolicy,
+  );
+  const capabilities = new CapabilityService(
+    repository,
+    platformCapabilityPolicy,
+    capabilityFlags,
+  );
+  const runEventSequencer = new RunEventSequencer(
+    options.runEventTransport ?? createRunEventTransport(env),
+  );
   const baseObjectStore = options.objectStore ?? createObjectStore(env);
   const objectStore =
     baseObjectStore === disabledObjectStore
@@ -269,11 +132,26 @@ export function createServices(
   const oidc = createOidcAuthenticator(repository, env, options.oidcFetch);
   const voiceProvider = options.voiceProvider ?? createVoiceProvider(env);
   const sessions = new SessionService(repository);
-  const webhookOptions: { fetchImpl?: typeof fetch; signingKey: string } = {
+  const webhookOptions: {
+    fetchImpl?: typeof fetch;
+    hostLookup?: (
+      hostname: string,
+    ) => Promise<Array<{ address: string; family: 4 | 6 }>>;
+    signingKey: string;
+  } = {
     signingKey: env.WEBHOOK_SIGNING_KEY,
   };
-  if (options.webhookFetch !== undefined)
+  if (options.webhookFetch !== undefined) {
     webhookOptions.fetchImpl = options.webhookFetch;
+  } else {
+    webhookOptions.hostLookup = async (hostname) =>
+      (await lookup(hostname, { all: true, verbatim: true })).flatMap(
+        (address) =>
+          address.family === 4 || address.family === 6
+            ? [{ address: address.address, family: address.family }]
+            : [],
+      );
+  }
   const webhooks = new WebhookService(repository, webhookOptions);
   const notificationDelivery = createNotificationDeliverySender(env, {
     ...webhookOptions,
@@ -334,6 +212,7 @@ export function createServices(
     quotaCoordinator,
   );
   const webSearch = new WebSearchService(repository, {
+    capabilities,
     secretResolver,
     quotaCoordinator,
     webhooks,
@@ -354,6 +233,7 @@ export function createServices(
     options.embeddingFetch,
     objectStore,
     {
+      capabilityPlatformPolicy: platformCapabilityPolicy,
       providerCircuitCooldownMs: env.MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS,
       providerCircuitFailureThreshold:
         env.MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD,
@@ -395,7 +275,16 @@ export function createServices(
       webRetrieval: (input) => webSearch.retrievalHits(input.subject, input),
     },
   );
-  const users = new UserLifecycleService(repository);
+  const userCursorSecrets: [string, ...string[]] = [
+    derivePageCursorSecret(env.SESSION_SECRET, "admin-users-table"),
+  ];
+  if (env.SESSION_SECRET_PREVIOUS.length > 0)
+    userCursorSecrets.push(
+      derivePageCursorSecret(env.SESSION_SECRET_PREVIOUS, "admin-users-table"),
+    );
+  const users = new UserLifecycleService(repository, {
+    cursorSecrets: userCursorSecrets,
+  });
   const directorySync = new DirectorySyncService(repository, users);
   const openWebUiCompatibility = new OpenWebUiCompatibilityService(repository);
   const authProviderSettings = new AuthProviderSettingsService(
@@ -443,7 +332,26 @@ export function createServices(
     knowledgeExtractor,
     fileOcrProvider,
   );
+  const messagePageCursorSecrets: [string, ...string[]] = [
+    derivePageCursorSecret(env.SESSION_SECRET, "chat-message-page"),
+  ];
+  if (env.SESSION_SECRET_PREVIOUS.length > 0)
+    messagePageCursorSecrets.push(
+      derivePageCursorSecret(env.SESSION_SECRET_PREVIOUS, "chat-message-page"),
+    );
+  const messageSearchCursorSecrets: [string, ...string[]] = [
+    derivePageCursorSecret(env.SESSION_SECRET, "chat-message-search"),
+  ];
+  if (env.SESSION_SECRET_PREVIOUS.length > 0)
+    messageSearchCursorSecrets.push(
+      derivePageCursorSecret(
+        env.SESSION_SECRET_PREVIOUS,
+        "chat-message-search",
+      ),
+    );
   const chats = new ChatService(repository, objectStore, {
+    messagePageCursorSecrets,
+    messageSearchCursorSecrets,
     policy: env.FILE_MALWARE_SCAN_POLICY,
     ...(options.fileMalwareScanner === undefined
       ? {}
@@ -465,6 +373,9 @@ export function createServices(
     activeVectorStoreDeployment,
     authProviderSettings,
     browserAutomation,
+    capabilities,
+    capabilityFlags,
+    capabilityPlatformPolicy: platformCapabilityPolicy,
     chatEvents,
     chats,
     dataConnectorExecutor,

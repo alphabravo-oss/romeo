@@ -1,4 +1,4 @@
-import { Input, Textarea, NativeSelect, Button } from "@romeo/ui";
+import { Button, EmptyState, Input, NativeSelect, Textarea } from "@romeo/ui";
 import type { WorkflowStepType } from "../features/workflows";
 import { STEP_TYPE_OPTIONS, type StepDraft } from "./workflow-step-builder";
 import { useLocale } from "../lib/i18n";
@@ -55,9 +55,7 @@ export function WorkflowStepBuilder({
           + {t("addStep")}
         </Button>
       </div>
-      {drafts.length === 0 ? (
-        <div className="rm-empty">{t("noSteps")}</div>
-      ) : null}
+      {drafts.length === 0 ? <EmptyState title={t("noSteps")} /> : null}
       {drafts.map((draft, index) => (
         <div
           className="grid gap-2 border border-border rounded p-3"

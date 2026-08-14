@@ -55,7 +55,7 @@ export function PersonalContentTable({
         ),
       }),
       contentColumn.accessor("updatedAt", {
-        header: t("updated"),
+        header: t("contentUpdated"),
         cell: ({ getValue }) => <LocalizedDateTime value={getValue()} />,
       }),
       contentColumn.display({

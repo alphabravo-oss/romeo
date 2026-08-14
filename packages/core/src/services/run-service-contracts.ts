@@ -3,7 +3,11 @@ import type {
   BaseModel,
   ChatMessage,
   ProviderInstance,
+  ProviderReasoningParameters,
+  ProviderReasoningPolicy,
+  ProviderReasoningPolicyLayers,
   ProviderSampling,
+  ProviderStructuredOutput,
   ProviderToolDefinition,
 } from "@romeo/providers";
 import type { RetrievalHit } from "@romeo/rag";
@@ -13,6 +17,7 @@ import type { FileMalwareScanner, FileMalwareScanPolicy } from "./file-service";
 import type { KnowledgeVectorStore } from "./knowledge-vector-store";
 import type { ChatAttachmentInput } from "./message-attachments";
 import type { ProviderRoutePlan } from "./provider-routing";
+import type { ModelRoutingDecision, ModelRoutingMode } from "./model-routing";
 import type { QuotaCoordinator } from "./quota-coordination";
 import type {
   RunKnowledgeCitation,
@@ -20,8 +25,10 @@ import type {
 } from "./run-knowledge";
 import type { SecretResolver } from "./secret-resolver";
 import type { ToolDispatchPayloadStore } from "./tool-dispatch-payload-store";
+import type { CapabilityPlatformPolicy } from "./capability-platform-policy";
 
 export interface RunServiceOptions {
+  capabilityPlatformPolicy?: CapabilityPlatformPolicy;
   managedModelPreferenceEncryptionKey?: string;
   managedModelPreferencePreviousEncryptionKey?: string;
   modelToolExecutor?: (input: {
@@ -41,6 +48,8 @@ export interface RunServiceOptions {
   providerStreamTimeoutMs?: number;
   runExecutionLeaseSeconds?: number;
   runRecoveryStaleMs?: number;
+  /** Bounded cadence for revalidating the principal and ACL of an open run stream. */
+  runStreamAuthorizationRecheckMs?: number;
   secretResolver?: SecretResolver;
   dispatchPayloadStore?: ToolDispatchPayloadStore;
   knowledgeVectorStore?: KnowledgeVectorStore;
@@ -53,6 +62,9 @@ export interface RunServiceOptions {
   toolOperationExecutionEnabled?: boolean;
   webRetrieval?: (input: {
     subject: AuthSubject;
+    workspaceId: string;
+    agentId: string;
+    agentVersionId: string;
     query: string;
     search: boolean;
     urls: string[];
@@ -60,8 +72,13 @@ export interface RunServiceOptions {
 }
 
 export interface DeferredRunStart {
+  inputMessageId: string;
   run: RunRecord;
   startExecution(): void;
+}
+
+export interface StartedRunRecord extends RunRecord {
+  inputMessageId: string;
 }
 
 export interface StartRunInput {
@@ -72,6 +89,12 @@ export interface StartRunInput {
   agentId: string;
   content: string;
   modelId?: string;
+  /** Governed, capability-preserving model selection for this turn. */
+  routingMode?: ModelRoutingMode;
+  /** Evidence-first multi-source retrieval and citation instructions. */
+  researchMode?: "standard" | "deep";
+  /** Optional version-one per-run reasoning request, constrained again at dispatch. */
+  reasoningPolicy?: ProviderReasoningPolicy;
   /**
    * User-message boundary excluded from replay. Regeneration uses the message
    * being replaced; ordinary turns omit it to include the full chat history.
@@ -117,8 +140,12 @@ export interface PreparedRunStart {
     provider: ProviderInstance;
   };
   routePlan: ProviderRoutePlan;
+  routingDecision: ModelRoutingDecision;
   run: Omit<RunRecord, "createdBy">;
-  /** Sampling pinned by the agent version, already narrowed to what a provider request accepts. */
+  /** Sampling requested by the agent version; the selected adapter narrows it before dispatch. */
   sampling?: ProviderSampling;
+  reasoning?: ProviderReasoningParameters;
+  reasoningPolicy?: ProviderReasoningPolicyLayers;
+  structuredOutput?: ProviderStructuredOutput;
   userMessage: Message;
 }

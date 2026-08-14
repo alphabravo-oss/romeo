@@ -1,6 +1,18 @@
 import { z } from "@hono/zod-openapi";
 
+import { AVATAR_URL_MAX, isAllowedAvatarUrl } from "./avatar-url";
 import { dataEnvelope } from "./common";
+
+export { AVATAR_URL_MAX } from "./avatar-url";
+
+/** Applied to new writes; response/export schemas remain migration-tolerant. */
+export const ManagedModelAvatarUrlSchema = z.union([
+  z.literal(""),
+  z.url().max(AVATAR_URL_MAX).refine(isAllowedAvatarUrl, {
+    message:
+      "Avatar must be an approved inline image or a public HTTPS URL without credentials.",
+  }),
+]);
 
 export const managedModelIdentifier = z.string().trim().min(1).max(300);
 export const managedModelTimestamp = z.iso.datetime();
@@ -54,7 +66,7 @@ export const ManagedModelSchema = z
     name: z.string().min(1).max(200),
     description: z.string().max(1_000).optional(),
     icon: z.string().max(16).optional(),
-    avatarUrl: z.union([z.literal(""), z.url().max(2_000)]).optional(),
+    avatarUrl: z.union([z.literal(""), z.url().max(AVATAR_URL_MAX)]).optional(),
     createdBy: managedModelIdentifier,
     baseModelId: managedModelIdentifier,
     systemPrompt: z.string(),
@@ -161,7 +173,7 @@ export const CreateManagedModelSchema = z
     name: z.string().trim().min(1).max(200),
     description: z.string().trim().max(1_000).optional(),
     icon: z.string().trim().max(16).optional(),
-    avatarUrl: z.union([z.literal(""), z.url().max(2_000)]).optional(),
+    avatarUrl: ManagedModelAvatarUrlSchema.optional(),
     baseModelId: managedModelIdentifier,
     systemPrompt: z.string().min(1).max(200_000),
     parameters: parameters.optional(),
@@ -191,6 +203,13 @@ export const CloneManagedModelSchema = z
     systemPrompt: z.string().min(1).max(200_000).optional(),
   })
   .openapi("CloneManagedModelRequest");
+
+export const PublishManagedModelSchema = z
+  .strictObject({
+    channel: z.enum(["candidate", "production"]).default("production"),
+  })
+  .default({ channel: "production" })
+  .openapi("PublishManagedModelRequest");
 
 export const UpdateManagedModelCustomizationPolicySchema =
   ManagedModelCustomizationPolicySchema.partial()
@@ -223,7 +242,9 @@ export const ManagedModelExportDocumentSchema = z
       name: z.string().min(1),
       description: z.string().max(1_000).optional(),
       icon: z.string().max(16).optional(),
-      avatarUrl: z.union([z.literal(""), z.url().max(2_000)]).optional(),
+      avatarUrl: z
+        .union([z.literal(""), z.url().max(AVATAR_URL_MAX)])
+        .optional(),
       baseModelId: managedModelIdentifier,
       systemPrompt: z.string().min(1),
       parameters,
@@ -246,6 +267,7 @@ export const ImportManagedModelSchema = z
       schemaVersion: z.literal(1),
       exportedAt: managedModelTimestamp.optional(),
       agent: ManagedModelExportDocumentSchema.shape.agent.extend({
+        avatarUrl: ManagedModelAvatarUrlSchema.optional(),
         parameters: parameters.default({}),
         memoryPolicy: ManagedModelMemoryPolicySchema.default({
           mode: "disabled",

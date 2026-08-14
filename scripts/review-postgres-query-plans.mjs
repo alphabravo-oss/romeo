@@ -341,6 +341,7 @@ function validationRules() {
     observedIndexUseIsAdvisoryUnlessRepresentativeVolume: true,
     representativeVolumeRequiresMinimumRows: true,
     representativeChatSearchRequiresObservedTrigramIndexes: true,
+    representativeAuditSearchRequiresObservedTrigramIndex: true,
     smallTablePlannerChoicesCanUseSequentialScans: true,
   };
 }

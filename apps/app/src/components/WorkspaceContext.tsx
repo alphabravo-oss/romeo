@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import {
   createContext,
@@ -6,24 +7,38 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
-  getBootstrap,
   subscribeToChatEvents,
-  type AuthSubject,
   type ChatChangedEvent,
   type ChatEventStreamStatus,
-} from "../features";
+} from "../features/chats/events";
+import type { AuthSubject } from "../features/identity";
 import type { Workspace } from "../features/tenancy";
+import { reconcileWorkspaceChatEvent } from "../features/chats/cache-policy";
 import { chatSyncFallbackInterval } from "../lib/chat-sync";
 import { useOnlineStatus } from "../lib/connectivity";
+import { bootstrapQueryOptions } from "../lib/api-query-options";
+import { useLocale } from "../lib/i18n";
+import { useRouterApiClient } from "../lib/router-context";
+import { routerSessionQueryOptions } from "../lib/router-runtime-data";
+import * as appQueryKeys from "../lib/app-query-keys";
+import { invalidateCachedResourceExactly } from "../lib/server-mutation-options";
+import { cancelWorkspaceIntentData } from "../lib/route-intent";
 import {
   canSelectWorkspace,
   resolveWorkspaceSelection,
+  switchWorkspaceRouteSearch,
   visibleWorkspaces,
+  withWorkspaceRouteSearch,
 } from "./workspace-selection";
+import {
+  routeWorkspaceSelectionQueryOptions,
+  validatedRouteResourceId,
+} from "../lib/route-workspace-selection";
 
 const STORAGE_KEY = "hm.workspaceId";
 
@@ -77,55 +92,135 @@ function persistWorkspaceId(id: string): void {
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const apiClient = useRouterApiClient();
+  const { locale } = useLocale();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const navigateChat = useNavigate({ from: "/" });
+  const navigateWorkspace = useNavigate({ from: "/workspace" });
+  const navigateAdmin = useNavigate({ from: "/admin" });
+  const navigateSettings = useNavigate({ from: "/settings" });
+  const routeSearch = useSearch({ strict: false }) as Record<string, unknown>;
+  const requestedWorkspaceId = validatedRouteResourceId(routeSearch.workspace);
+  const requestedChatId = validatedRouteResourceId(routeSearch.chat);
   const online = useOnlineStatus();
-  const bootstrapQuery = useQuery({
-    queryKey: ["bootstrap"],
-    queryFn: getBootstrap,
-  });
+  const bootstrapQuery = useQuery(bootstrapQueryOptions(apiClient));
+  const sessionQuery = useQuery(
+    routerSessionQueryOptions(locale, queryClient, apiClient),
+  );
+  const routeSelectionQuery = useQuery(
+    routeWorkspaceSelectionQueryOptions(
+      {
+        ...(requestedChatId === undefined ? {} : { chatId: requestedChatId }),
+        ...(requestedWorkspaceId === undefined
+          ? {}
+          : { workspaceId: requestedWorkspaceId }),
+      },
+      queryClient,
+      apiClient,
+    ),
+  );
 
   const workspaces = useMemo<Workspace[]>(
     () =>
       visibleWorkspaces(
-        bootstrapQuery.data?.workspaces ?? [],
-        bootstrapQuery.data?.subject.workspaceIds,
+        bootstrapQuery.data?.workspaces ?? sessionQuery.data?.workspaces ?? [],
+        bootstrapQuery.data?.subject.workspaceIds ??
+          sessionQuery.data?.subject.workspaceIds,
       ),
     [
       bootstrapQuery.data?.subject.workspaceIds,
       bootstrapQuery.data?.workspaces,
+      sessionQuery.data?.subject.workspaceIds,
+      sessionQuery.data?.workspaces,
     ],
   );
 
-  // Explicit user selection (from click or restored-and-validated storage).
-  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  const [pendingWorkspaceId, setPendingWorkspaceId] = useState<
+    string | undefined
+  >();
   const [chatSyncStatus, setChatSyncStatus] =
     useState<ChatEventStreamStatus>("connecting");
   const [latestChatEvent, setLatestChatEvent] = useState<ChatChangedEvent>();
+  const previousWorkspaceId = useRef<string | undefined>(undefined);
 
-  // Once bootstrap resolves, reconcile the selection: keep a still-valid
-  // selection, otherwise adopt a validated persisted id, otherwise fall back
-  // to the first allowed workspace. Validation guards against a stale/tampered
-  // localStorage id pointing at a workspace the subject can no longer access.
+  const validatedWorkspaceId = routeSelectionQuery.data?.workspaceId;
+
+  const navigateWorkspaceSelection = useCallback(
+    (
+      workspaceId: string,
+      replace: boolean,
+      clearResourceSelection: boolean,
+    ) => {
+      const updateSearch = <T extends Record<string, unknown>>(previous: T) =>
+        clearResourceSelection
+          ? switchWorkspaceRouteSearch(previous, workspaceId)
+          : withWorkspaceRouteSearch(previous, workspaceId);
+      if (pathname === "/admin") {
+        return navigateAdmin({ replace, search: updateSearch });
+      }
+      if (pathname === "/settings") {
+        return navigateSettings({ replace, search: updateSearch });
+      }
+      if (pathname === "/workspace") {
+        return navigateWorkspace({ replace, search: updateSearch });
+      }
+      return navigateChat({ replace, search: updateSearch });
+    },
+    [
+      navigateAdmin,
+      navigateChat,
+      navigateSettings,
+      navigateWorkspace,
+      pathname,
+    ],
+  );
+
+  // Route selection is authoritative for SSR, deep links, and history. Browser
+  // storage is reconciled only after hydration and can request a replacement
+  // navigation only when the URL itself carried no workspace/chat dimension.
   useEffect(() => {
-    if (bootstrapQuery.data?.subject.workspaceIds === undefined) return;
+    if (validatedWorkspaceId === undefined || workspaces.length === 0) return;
+    if (requestedWorkspaceId !== undefined || requestedChatId !== undefined) {
+      persistWorkspaceId(validatedWorkspaceId);
+      if (requestedWorkspaceId !== undefined) return;
+      void navigateWorkspaceSelection(validatedWorkspaceId, true, false);
+      return;
+    }
     const nextId = resolveWorkspaceSelection({
       persistedId: readPersistedWorkspaceId(),
-      selectedId,
+      selectedId: undefined,
       workspaces,
     });
-    if (nextId === selectedId) return;
-    setSelectedId(nextId);
-  }, [bootstrapQuery.data?.subject.workspaceIds, selectedId, workspaces]);
+    if (nextId === undefined) return;
+    persistWorkspaceId(nextId);
+    void navigateWorkspaceSelection(nextId, true, false);
+  }, [
+    navigateWorkspaceSelection,
+    requestedChatId,
+    requestedWorkspaceId,
+    validatedWorkspaceId,
+    workspaces,
+  ]);
 
   const setWorkspaceId = useCallback(
     (id: string) => {
       if (!canSelectWorkspace(id, workspaces)) return;
-      setSelectedId(id);
+      setPendingWorkspaceId(id);
       persistWorkspaceId(id);
+      void navigateWorkspaceSelection(id, false, true).finally(() =>
+        setPendingWorkspaceId(undefined),
+      );
     },
-    [workspaces],
+    [navigateWorkspaceSelection, workspaces],
   );
 
-  const workspaceId = selectedId;
+  const workspaceId = pendingWorkspaceId ?? validatedWorkspaceId;
+  useEffect(() => {
+    const previous = previousWorkspaceId.current;
+    previousWorkspaceId.current = workspaceId;
+    if (previous === undefined || previous === workspaceId) return;
+    void cancelWorkspaceIntentData(queryClient, previous);
+  }, [queryClient, workspaceId]);
   const workspace = useMemo(
     () => workspaces.find((candidate) => candidate.id === workspaceId),
     [workspaces, workspaceId],
@@ -142,23 +237,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       event,
     ) => {
       if (event !== undefined) setLatestChatEvent(event);
-      if (event?.action === "deleted") {
-        queryClient.removeQueries({
-          exact: true,
-          queryKey: ["chat", event.chatId],
-        });
-      } else if (
-        event !== undefined &&
-        ["archived", "unarchived", "updated"].includes(event.action)
-      ) {
-        void queryClient.invalidateQueries({
-          exact: true,
-          queryKey: ["chat", event.chatId],
-        });
-      }
-      void queryClient.invalidateQueries({
-        queryKey: ["chats", workspaceId],
-      });
+      void reconcileWorkspaceChatEvent(queryClient, workspaceId, event);
     };
     return subscribeToChatEvents(workspaceId, reconcileChats, {
       onStatus: setChatSyncStatus,
@@ -169,9 +248,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const interval = chatSyncFallbackInterval(chatSyncStatus, online);
     if (interval === undefined || workspaceId === undefined) return;
     const reconcile = () => {
-      void queryClient.invalidateQueries({
-        queryKey: ["chats", workspaceId],
-      });
+      void invalidateCachedResourceExactly(
+        queryClient,
+        appQueryKeys.chats(workspaceId),
+      );
     };
     reconcile();
     const timer = window.setInterval(reconcile, interval);

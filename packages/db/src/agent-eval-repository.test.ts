@@ -6,6 +6,7 @@ import {
   toManagedModelPolicyRecord,
   toManagedModelPreferenceRecord,
 } from "./agent-repository";
+import { asVersionCapabilityDefaults } from "./agent-record-types";
 import {
   toEvalCaseRecord,
   toEvalResultHumanRatingRecord,
@@ -147,6 +148,14 @@ describe("agent repository mappers", () => {
         { toolId: "tool_1", enabled: true, approvalRequired: true },
         { enabled: true },
       ],
+      capabilityDefaults: [
+        {
+          capabilityId: "web_retrieval",
+          state: "disabled",
+          configuration: { maxSearchResults: 2 },
+          assignmentVersion: 3,
+        },
+      ],
       createdBy: "user_1",
       publishedAt: null,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
@@ -161,7 +170,43 @@ describe("agent repository mappers", () => {
     expect(version.toolBindings).toEqual([
       { toolId: "tool_1", enabled: true, approvalRequired: true },
     ]);
+    expect(version.capabilityDefaults).toEqual([
+      {
+        capabilityId: "web_retrieval",
+        state: "disabled",
+        configuration: { maxSearchResults: 2 },
+        assignmentVersion: 3,
+      },
+    ]);
     expect(version.publishedAt).toBe("2026-06-27T00:00:00.000Z");
+  });
+
+  it("fails closed for corrupted or oversized capability-default snapshots", () => {
+    const valid = {
+      capabilityId: "web_retrieval",
+      state: "disabled",
+      configuration: { maxSearchResults: 2 },
+      assignmentVersion: 3,
+    };
+    expect(() =>
+      asVersionCapabilityDefaults([valid, { ...valid, assignmentVersion: 4 }]),
+    ).toThrow("Invalid stored agent-version capability default");
+    expect(() =>
+      asVersionCapabilityDefaults([
+        { ...valid, capabilityId: "unknown_capability" },
+      ]),
+    ).toThrow("Invalid stored agent-version capability default");
+    expect(() =>
+      asVersionCapabilityDefaults([
+        {
+          ...valid,
+          configuration: {
+            maxSearchResults: 2,
+            padding: "x".repeat(17_000),
+          },
+        },
+      ]),
+    ).toThrow("Invalid stored agent-version capability defaults");
   });
 });
 

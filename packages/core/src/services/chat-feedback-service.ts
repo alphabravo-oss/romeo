@@ -8,9 +8,9 @@ import type {
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
-import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
 import { getAuthorizedChat } from "./chat-access";
+import { recordUsage, updateRecordedUsage } from "./record-usage";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
 
 const messageFeedbackMetric = "chat.message.feedback";
@@ -98,20 +98,22 @@ export class ChatFeedbackService {
     });
     const event =
       existing === undefined
-        ? await this.repository.createUsageEvent({
-            id: createId("usage"),
-            orgId: chat.orgId,
-            workspaceId: chat.workspaceId,
-            actorId,
-            sourceType: "chat",
-            sourceId: message.id,
-            metric: messageFeedbackMetric,
-            quantity: input.rating === "none" ? 0 : 1,
-            unit: "feedback",
-            metadata,
-            createdAt: now,
-          })
-        : await this.repository.updateUsageEvent({
+        ? await recordUsage(
+            this.repository,
+            {
+              orgId: chat.orgId,
+              workspaceId: chat.workspaceId,
+              actorId,
+              sourceType: "chat",
+              sourceId: message.id,
+              metric: messageFeedbackMetric,
+              quantity: input.rating === "none" ? 0 : 1,
+              unit: "feedback",
+              metadata,
+            },
+            { createdAt: now },
+          )
+        : await updateRecordedUsage(this.repository, {
             ...existing,
             quantity: input.rating === "none" ? 0 : 1,
             unit: "feedback",
@@ -185,6 +187,22 @@ export class ChatFeedbackService {
     }
     return events;
   }
+}
+
+/** Metadata-only eligibility check for the feedback-to-eval workflow. */
+export async function hasActiveNegativeMessageFeedback(
+  repository: RomeoRepository,
+  orgId: string,
+  messageId: string,
+): Promise<boolean> {
+  return (await repository.listUsageEvents(orgId)).some(
+    (event) =>
+      event.sourceType === "chat" &&
+      event.sourceId === messageId &&
+      event.metric === messageFeedbackMetric &&
+      event.metadata.configured !== false &&
+      event.metadata.rating === "negative",
+  );
 }
 
 function publicMessageFeedback(

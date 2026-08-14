@@ -1,28 +1,25 @@
-import { Button, Input, StatusBadge } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Button, Input } from "@romeo/ui";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   buildCreateTenantOrganizationBody,
-  createTenantOrganization,
+  createTenantOrganizationMutationOptions,
   isValidTenantReasonCode,
-  listTenantOrganizations,
-  reactivateTenantOrganization,
-  suspendTenantOrganization,
+  tenantOrganizationsQueryOptions,
+  reactivateTenantOrganizationMutationOptions,
+  suspendTenantOrganizationMutationOptions,
   type TenantOrganizationSummary,
-  updateTenantOrganization,
+  updateTenantOrganizationMutationOptions,
 } from "../features/tenant-administration";
 import { useLocale } from "../lib/i18n";
-import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
-import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { DataTable } from "./DataTable";
 import { FormDialog } from "./FormDialog";
-import { OverflowMenu } from "./OverflowMenu";
 import { PageActions } from "./PageActions";
-
-const orgCol = createColumnHelper<TenantOrganizationSummary>();
+import { organizationColumns } from "./organization-columns";
 
 type DialogState =
   | { kind: "create" }
@@ -32,7 +29,6 @@ type DialogState =
 
 export function OrganizationsPanel() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { ask, dialog: confirmDialog } = useConfirm();
   const [dialog, setDialog] = useState<DialogState>(null);
   const [name, setName] = useState("");
@@ -44,19 +40,16 @@ export function OrganizationsPanel() {
   const [reasonCode, setReasonCode] = useState("admin_ui_suspend");
   const [formError, setFormError] = useState("");
 
-  const organizationsQuery = useQuery({
-    queryKey: ["admin-organizations"],
-    queryFn: listTenantOrganizations,
-  });
+  const organizationsQuery = useQuery(tenantOrganizationsQueryOptions());
 
-  const createMutation = useMutation({ mutationFn: createTenantOrganization });
-  const updateMutation = useMutation({ mutationFn: updateTenantOrganization });
-  const suspendMutation = useMutation({
-    mutationFn: suspendTenantOrganization,
-  });
-  const reactivateMutation = useMutation({
-    mutationFn: reactivateTenantOrganization,
-  });
+  const createMutation = useMutation(createTenantOrganizationMutationOptions());
+  const updateMutation = useMutation(updateTenantOrganizationMutationOptions());
+  const suspendMutation = useMutation(
+    suspendTenantOrganizationMutationOptions(),
+  );
+  const reactivateMutation = useMutation(
+    reactivateTenantOrganizationMutationOptions(),
+  );
 
   const rows = organizationsQuery.data ?? [];
   const suspendedCount = rows.filter((row) => row.suspension.suspended).length;
@@ -85,130 +78,35 @@ export function OrganizationsPanel() {
     setDialog({ kind: "suspend", row });
   }
 
-  async function invalidateList() {
-    await queryClient.invalidateQueries({ queryKey: ["admin-organizations"] });
-  }
+  const handleReactivate = useCallback(
+    async (row: TenantOrganizationSummary) => {
+      const confirmed = await ask({
+        title: t("organizationsReactivateTitle"),
+        body: t("organizationsReactivateBody", {
+          name: row.organization.name,
+        }),
+        confirmLabel: t("organizationsReactivate"),
+      });
+      if (!confirmed) return;
+      try {
+        await reactivateMutation.mutateAsync(row.organization.id);
+        toast(t("organizationsReactivated"), "success");
+      } catch {
+        toast(t("organizationsReactivateFailed"), "error");
+      }
+    },
+    [ask, reactivateMutation, t],
+  );
 
-  async function handleReactivate(row: TenantOrganizationSummary) {
-    const confirmed = await ask({
-      title: t("organizationsReactivateTitle"),
-      body: t("organizationsReactivateBody", {
-        name: row.organization.name,
+  const columns = useMemo(
+    () =>
+      organizationColumns({
+        onEdit: openEdit,
+        onReactivate: (row) => void handleReactivate(row),
+        onSuspend: openSuspend,
+        t,
       }),
-      confirmLabel: t("organizationsReactivate"),
-    });
-    if (!confirmed) return;
-    try {
-      await reactivateMutation.mutateAsync(row.organization.id);
-      await invalidateList();
-      toast(t("organizationsReactivated"), "success");
-    } catch {
-      toast(t("organizationsReactivateFailed"), "error");
-    }
-  }
-
-  const columns = useMemo<ColumnDef<TenantOrganizationSummary, any>[]>(
-    () => [
-      orgCol.accessor((row) => row.organization.name, {
-        id: "name",
-        header: t("organizationsName"),
-        cell: (c) => <span className="font-medium">{c.getValue()}</span>,
-      }),
-      orgCol.accessor((row) => row.organization.slug, {
-        id: "slug",
-        header: t("organizationsSlug"),
-        cell: (c) => (
-          <span className="rm-cell-muted rm-mono" translate="no">
-            {c.getValue()}
-          </span>
-        ),
-      }),
-      orgCol.accessor((row) => row.organization.id, {
-        id: "id",
-        header: t("organizationsId"),
-        cell: (c) => (
-          <span className="rm-cell-muted rm-mono" translate="no">
-            {c.getValue()}
-          </span>
-        ),
-      }),
-      orgCol.accessor((row) => row.suspension.suspended, {
-        id: "status",
-        header: t("organizationsStatus"),
-        cell: (c) =>
-          c.getValue() ? (
-            <StatusBadge tone="warning">
-              {t("organizationsSuspended")}
-            </StatusBadge>
-          ) : (
-            <StatusBadge tone="success">{t("organizationsActive")}</StatusBadge>
-          ),
-      }),
-      orgCol.accessor((row) => row.counts.users, {
-        id: "users",
-        header: t("organizationsUsers"),
-        cell: (c) => (
-          <span className="rm-cell-muted">
-            <LocalizedNumber value={c.getValue()} />
-          </span>
-        ),
-      }),
-      orgCol.accessor((row) => row.counts.workspaces, {
-        id: "workspaces",
-        header: t("organizationsWorkspaces"),
-        cell: (c) => (
-          <span className="rm-cell-muted">
-            <LocalizedNumber value={c.getValue()} />
-          </span>
-        ),
-      }),
-      orgCol.accessor((row) => row.suspension.suspendedAt ?? "", {
-        id: "suspendedAt",
-        header: t("organizationsSuspendedAt"),
-        cell: (c) => {
-          const value = c.getValue();
-          return value ? (
-            <span className="rm-cell-muted">
-              <LocalizedDateTime value={value} />
-            </span>
-          ) : (
-            <span className="rm-cell-muted">—</span>
-          );
-        },
-      }),
-      orgCol.display({
-        id: "actions",
-        header: "",
-        cell: (c) => {
-          const row = c.row.original;
-          const suspended = row.suspension.suspended;
-          return (
-            <div className="flex justify-end">
-              <OverflowMenu
-                items={[
-                  {
-                    label: t("organizationsEdit"),
-                    onClick: () => openEdit(row),
-                  },
-                  suspended
-                    ? {
-                        label: t("organizationsReactivate"),
-                        onClick: () => void handleReactivate(row),
-                      }
-                    : {
-                        label: t("organizationsSuspend"),
-                        onClick: () => openSuspend(row),
-                        tone: "danger",
-                      },
-                ]}
-                label={`${t("organizationsActionsFor")} ${row.organization.name}`}
-              />
-            </div>
-          );
-        },
-      }),
-    ],
-    [t],
+    [handleReactivate, t],
   );
 
   return (
@@ -225,7 +123,6 @@ export function OrganizationsPanel() {
           refreshing={organizationsQuery.isFetching}
         />
       }
-      title={t("organizationsTitle")}
     >
       <StatRow
         items={[
@@ -244,7 +141,11 @@ export function OrganizationsPanel() {
         ]}
       />
 
-      <DataTable columns={columns} data={rows} empty={t("organizationsNone")} />
+      <DataTable
+        columns={columns}
+        data={rows}
+        empty={t("organizationsNone")}
+      />
 
       <FormDialog
         className="rm-form-dialog--sm"
@@ -279,8 +180,7 @@ export function OrganizationsPanel() {
             setFormError("");
             void createMutation
               .mutateAsync(body)
-              .then(async () => {
-                await invalidateList();
+              .then(() => {
                 toast(t("organizationsCreated"), "success");
                 setDialog(null);
               })
@@ -294,7 +194,9 @@ export function OrganizationsPanel() {
             <span>{t("organizationsName")}</span>
             <Input
               autoFocus
+              autoComplete="organization"
               id="org-create-name"
+              name="organizationName"
               onChange={(e) => setName(e.currentTarget.value)}
               required
               value={name}
@@ -303,7 +205,9 @@ export function OrganizationsPanel() {
           <label className="rm-form-field" htmlFor="org-create-slug">
             <span>{t("organizationsSlugOptional")}</span>
             <Input
+              autoComplete="off"
               id="org-create-slug"
+              name="organizationSlug"
               onChange={(e) => setSlug(e.currentTarget.value)}
               value={slug}
             />
@@ -311,7 +215,9 @@ export function OrganizationsPanel() {
           <label className="rm-form-field" htmlFor="org-create-ws">
             <span>{t("organizationsDefaultWorkspaceOptional")}</span>
             <Input
+              autoComplete="organization"
               id="org-create-ws"
+              name="defaultWorkspaceName"
               onChange={(e) => setWorkspaceName(e.currentTarget.value)}
               value={workspaceName}
             />
@@ -319,16 +225,21 @@ export function OrganizationsPanel() {
           <label className="rm-form-field" htmlFor="org-create-admin-email">
             <span>{t("organizationsInitialAdminEmailOptional")}</span>
             <Input
+              autoComplete="email"
               id="org-create-admin-email"
+              name="initialAdminEmail"
               onChange={(e) => setAdminEmail(e.currentTarget.value)}
               type="email"
+              spellCheck={false}
               value={adminEmail}
             />
           </label>
           <label className="rm-form-field" htmlFor="org-create-admin-name">
             <span>{t("organizationsInitialAdminNameOptional")}</span>
             <Input
+              autoComplete="name"
               id="org-create-admin-name"
+              name="initialAdminName"
               onChange={(e) => setAdminName(e.currentTarget.value)}
               value={adminName}
             />
@@ -336,7 +247,9 @@ export function OrganizationsPanel() {
           <label className="rm-form-field" htmlFor="org-create-admin-password">
             <span>{t("organizationsInitialAdminPasswordOptional")}</span>
             <Input
+              autoComplete="new-password"
               id="org-create-admin-password"
+              name="initialAdminPassword"
               onChange={(e) => setAdminPassword(e.currentTarget.value)}
               type="password"
               value={adminPassword}
@@ -392,8 +305,7 @@ export function OrganizationsPanel() {
                 orgId: dialog.row.organization.id,
                 body: { name: nextName, slug: nextSlug },
               })
-              .then(async () => {
-                await invalidateList();
+              .then(() => {
                 toast(t("organizationsUpdated"), "success");
                 setDialog(null);
               })
@@ -407,7 +319,9 @@ export function OrganizationsPanel() {
             <span>{t("organizationsName")}</span>
             <Input
               autoFocus
+              autoComplete="organization"
               id="org-edit-name"
+              name="organizationName"
               onChange={(e) => setName(e.currentTarget.value)}
               value={name}
             />
@@ -415,7 +329,9 @@ export function OrganizationsPanel() {
           <label className="rm-form-field" htmlFor="org-edit-slug">
             <span>{t("organizationsSlug")}</span>
             <Input
+              autoComplete="off"
               id="org-edit-slug"
+              name="organizationSlug"
               onChange={(e) => setSlug(e.currentTarget.value)}
               value={slug}
             />
@@ -468,8 +384,7 @@ export function OrganizationsPanel() {
                 orgId: dialog.row.organization.id,
                 reasonCode: reasonCode.trim(),
               })
-              .then(async () => {
-                await invalidateList();
+              .then(() => {
                 toast(t("organizationsSuspendedToast"), "success");
                 setDialog(null);
               })
@@ -490,7 +405,9 @@ export function OrganizationsPanel() {
             <span>{t("organizationsReasonCode")}</span>
             <Input
               autoFocus
+              autoComplete="off"
               id="org-suspend-reason"
+              name="suspensionReasonCode"
               onChange={(e) => setReasonCode(e.currentTarget.value)}
               value={reasonCode}
             />

@@ -12,11 +12,11 @@ export class LocalAuthAudit {
     private readonly env: RomeoEnv,
   ) {}
 
-  async write(
+  async write<A extends AuditAction>(
     input: {
-      action: string;
+      action: A;
       actorId: string;
-      metadata: Record<string, unknown>;
+      metadata: AuditMetadata<A>;
       orgId: string;
       outcome?: "failure" | "success";
       resourceId: string;
@@ -24,7 +24,7 @@ export class LocalAuthAudit {
     },
     repository: RomeoRepository = this.repository,
   ): Promise<void> {
-    await repository.createAuditLog({
+    await writeAuditLog(repository, {
       id: createId("audit"),
       orgId: input.orgId,
       actorId: input.actorId,
@@ -98,3 +98,8 @@ export class LocalAuthAudit {
       .digest("hex");
   }
 }
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";

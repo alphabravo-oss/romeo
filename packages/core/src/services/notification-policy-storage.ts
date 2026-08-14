@@ -10,6 +10,7 @@ import {
   type UpdateNotificationPolicyRequest,
 } from "../domain/notification-policy";
 import type { RomeoRepository } from "../domain/repository";
+import type { AuditMetadata } from "./audit-log";
 
 const policySettingKeyPrefix = "notification_policy.org.v1:";
 
@@ -83,7 +84,7 @@ export function toNotificationPolicyReport(
 export function notificationPolicyAuditMetadata(
   previous: NotificationPolicyReport,
   next: NotificationPolicyReport,
-): Record<string, unknown> {
+): AuditMetadata<"admin.notification_policy.update"> {
   return {
     deliveryEnabledChanged:
       previous.policy.deliveryEnabled !== next.policy.deliveryEnabled,

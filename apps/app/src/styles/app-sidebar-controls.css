@@ -157,7 +157,8 @@ html.dark .rm-sidebar-folder:hover {
   border-color: var(--rm-accent);
   background: color-mix(in srgb, var(--rm-accent) 16%, transparent);
   color: var(--rm-text);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rm-accent) 40%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--rm-accent) 40%, transparent);
 }
 
 .rm-sidebar-folder-select {

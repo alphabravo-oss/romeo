@@ -55,7 +55,9 @@ export class RagPolicyService {
     return { ...policy.agentic };
   }
 
-  async ingestReadiness(subject: AuthSubject): Promise<KnowledgeIngestReadiness> {
+  async ingestReadiness(
+    subject: AuthSubject,
+  ): Promise<KnowledgeIngestReadiness> {
     assertScope(subject, "knowledge:read");
     return evaluateKnowledgeIngestReadiness(
       await readRagPolicy(this.repository, subject.orgId),

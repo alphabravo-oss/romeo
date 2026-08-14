@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isIP } from "node:net";
 
 import type { AuthSubject } from "@romeo/auth";
 import type { RomeoEnv } from "@romeo/config";
@@ -11,6 +12,7 @@ import {
 } from "../services/valkey-glide-client";
 import type { AppBindings } from "./context";
 import { readCookie, sessionCookieName } from "./session-cookie";
+import { normalizedRequestId } from "./request-id";
 
 type RomeoContext = Context<AppBindings>;
 
@@ -256,13 +258,12 @@ class ValkeyRateLimitStore implements RateLimitStore {
         resetAtMs: Date.now() + Math.max(1_000, ttlMs),
       };
     } catch (error) {
-      const reason =
-        error instanceof Error ? error.message : "rate_limit_unavailable";
+      void error;
       throw new ApiError(
         "rate_limit_unavailable",
         "Request rate limiting is unavailable.",
         503,
-        { driver: "valkey", reason },
+        { driver: "valkey" },
       );
     }
   }
@@ -284,16 +285,24 @@ function parseValkeyRateLimitResponse(response: ValkeyValue): {
 }
 
 function clientIdentity(context: RomeoContext, env: RomeoEnv): string {
-  if (env.EDGE_TRUSTED_PROXY_MODE !== "trusted_proxy") return "direct";
-  const forwardedFor = context.req
-    .header("x-forwarded-for")
-    ?.split(",")[0]
-    ?.trim();
-  const candidate =
-    firstNonEmpty(forwardedFor, context.req.header("x-real-ip")) ??
-    context.req.header("cf-connecting-ip") ??
-    "unknown";
-  return `ip:${hashKeyPart(candidate)}`;
+  if (env.EDGE_TRUSTED_PROXY_MODE !== "trusted_proxy") {
+    // Direct mode is development-only. A lightweight browser fingerprint keeps
+    // one local client from exhausting every other client's shared bucket.
+    return `direct:${hashKeyPart(
+      [
+        context.req.header("user-agent") ?? "unknown-agent",
+        context.req.header("accept-language") ?? "unknown-language",
+      ].join("|"),
+    )}`;
+  }
+  const chain = (context.req.header("x-forwarded-for") ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  const candidate = chain.at(-env.EDGE_TRUSTED_PROXY_HOPS);
+  return candidate !== undefined && isIP(candidate) !== 0
+    ? `ip:${hashKeyPart(candidate)}`
+    : "ip:unknown";
 }
 
 function principalIdentity(subject: AuthSubject): string {
@@ -312,12 +321,6 @@ function hasRequestCredential(context: RomeoContext): boolean {
   );
 }
 
-function firstNonEmpty(
-  ...values: Array<string | undefined>
-): string | undefined {
-  return values.find((value) => value !== undefined && value.trim().length > 0);
-}
-
 function setRateLimitHeaders(
   context: RomeoContext,
   input: { limit: number; remaining: number; retryAfterSeconds: number },
@@ -330,7 +333,7 @@ function setRateLimitHeaders(
 function ensureRequestId(context: RomeoContext): void {
   const existing = context.get("requestId") as string | undefined;
   if (existing !== undefined) return;
-  const requestId = context.req.header("x-request-id") ?? crypto.randomUUID();
+  const requestId = normalizedRequestId(context.req.header("x-request-id"));
   context.set("requestId", requestId);
   context.header("x-request-id", requestId);
 }

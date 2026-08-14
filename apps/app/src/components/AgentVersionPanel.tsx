@@ -6,6 +6,7 @@ import { useLocale, type MessageKey } from "../lib/i18n";
 import { formatNumber, LocalizedDateTime } from "../lib/locale-format";
 import { AgentVersionDiffSummary } from "./AgentVersionDiffSummary";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const col = createColumnHelper<AgentVersion>();
 
@@ -39,6 +40,16 @@ export function AgentVersionPanel({
   versions,
 }: AgentVersionPanelProps) {
   const { locale, t } = useLocale();
+  const inventoriedTable = useInventoriedServerTable<AgentVersion>(
+    "agent_versions",
+    {
+      enabled: activeAgent !== undefined,
+      parentId: activeAgent?.id,
+    },
+  );
+  const productionVersion = versions.find(
+    (version) => version.id === activeAgent?.publishedVersionId,
+  );
   const columns = useMemo<ColumnDef<AgentVersion, any>[]>(
     () => [
       col.accessor("version", {
@@ -101,7 +112,10 @@ export function AgentVersionPanel({
           >
             {activeAgent?.publishedVersionId === c.row.original.id
               ? t("agentCurrent")
-              : t("agentRollback")}
+              : productionVersion !== undefined &&
+                  c.row.original.version > productionVersion.version
+                ? t("agentPromoteCandidate")
+                : t("agentRollback")}
           </Button>
         ),
       }),
@@ -112,6 +126,7 @@ export function AgentVersionPanel({
       isRollingBack,
       locale,
       onRollback,
+      productionVersion,
       t,
     ],
   );
@@ -121,8 +136,9 @@ export function AgentVersionPanel({
       <div className="mt-5">
         <div className="mb-2 text-sm text-muted">{t("agentVersions")}</div>
         <DataTable
+          serverState={inventoriedTable.serverState}
           columns={columns}
-          data={versions}
+          data={inventoriedTable.rows}
           empty={t("agentNoPublishedVersions")}
         />
       </div>

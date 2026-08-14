@@ -346,18 +346,32 @@ describe("governed web retrieval", () => {
       unknownPublicationDatePolicy: "exclude",
       health: { status: "healthy", latencyMs: expect.any(Number) },
     });
-    await expect(repository.listUsageEvents(subject.orgId)).resolves.toEqual([
-      expect.objectContaining({
-        sourceType: "retrieval",
-        metric: "web.search.request",
-        quantity: 1,
-        unit: "request",
-        metadata: expect.objectContaining({
-          outcome: "success",
-          resultCount: 1,
+    const usage = await repository.listUsageEvents(subject.orgId);
+    expect(usage).toHaveLength(2);
+    expect(usage).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: "retrieval",
+          metric: "web.search.request",
+          quantity: 1,
+          unit: "request",
+          metadata: expect.objectContaining({
+            outcome: "success",
+            resultCount: 1,
+          }),
         }),
-      }),
-    ]);
+        expect.objectContaining({
+          sourceType: "retrieval",
+          metric: "retrieval.unit",
+          quantity: 1,
+          unit: "retrieval_unit",
+          metadata: {
+            operation: "search_result",
+            provider: "searxng",
+          },
+        }),
+      ]),
+    );
   });
 
   it("enforces search request quotas before provider dispatch", async () => {

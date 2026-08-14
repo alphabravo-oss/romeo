@@ -1,8 +1,6 @@
 import type { Context } from "hono";
+import type { AppBindings } from "./context";
 
-export function shouldSecureCookie(context: Context): boolean {
-  const forwardedProto = context.req.header("x-forwarded-proto");
-  if (forwardedProto !== undefined)
-    return forwardedProto.split(",")[0]?.trim() === "https";
-  return new URL(context.req.url).protocol === "https:";
+export function shouldSecureCookie(context: Context<AppBindings>): boolean {
+  return context.get("secureCookie") === true;
 }

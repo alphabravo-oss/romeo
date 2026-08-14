@@ -7,7 +7,15 @@ fullnameOverride: ""
 image:
   repository: romeo/app
   tag: "0.1.0"
+  # Production installs must set the immutable manifest digest.
+  digest: ""
   pullPolicy: IfNotPresent
+
+imagePolicyException:
+  # Emergency development-only escape hatch. Production policy requires a
+  # non-empty reason when this is enabled.
+  enabled: false
+  reason: ""
 
 imagePullSecrets: []
 
@@ -32,7 +40,7 @@ podSecurityContext:
 
 securityContext:
   allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: false
+  readOnlyRootFilesystem: true
   capabilities:
     drop:
       - ALL
@@ -93,6 +101,9 @@ probes:
     initialDelaySeconds: 5
     periodSeconds: 10
     failureThreshold: 3
+    timeoutSeconds: 3
+    dependencyCheck:
+      enabled: true
   liveness:
     enabled: true
     initialDelaySeconds: 30
@@ -156,6 +167,7 @@ secretEnv:
   QDRANT_API_KEY_REF: ""
 
 env:
+  ROMEO_ENV: production
   APP_ORIGIN: https://romeo.example.com
   REPOSITORY_DRIVER: postgres
   OPENWEBUI_COMPATIBILITY_ENABLED: "false"
@@ -227,7 +239,7 @@ env:
   FILE_INLINE_MAX_BYTES: "25000000"
   FILE_DIRECT_UPLOAD_MAX_BYTES: "100000000"
   FILE_RESUMABLE_UPLOAD_MAX_BYTES: "500000000"
-  FILE_MALWARE_SCAN_POLICY: "off"
+  FILE_MALWARE_SCAN_POLICY: "required"
   FILE_OCR_DRIVER: disabled
   FILE_OCR_TESSERACT_PATH: tesseract
   FILE_OCR_PDFTOPPM_PATH: pdftoppm
@@ -238,7 +250,7 @@ env:
   TEMPORARY_CHAT_CLEANUP_INTERVAL_MS: "60000"
   TEMPORARY_CHAT_CLEANUP_BATCH_SIZE: "100"
   TEMPORARY_CHAT_CLEANUP_LEASE_SECONDS: "300"
-  HTTP_RATE_LIMIT_DRIVER: memory
+  HTTP_RATE_LIMIT_DRIVER: valkey
   HTTP_RATE_LIMIT_KEY_PREFIX: romeo:http-rate-limit:v1
   HTTP_RATE_LIMIT_WINDOW_SECONDS: "60"
   HTTP_RATE_LIMIT_AUTH_MAX: "60"
@@ -257,15 +269,18 @@ env:
   MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD: "5"
   MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS: "60000"
   MODEL_PROVIDER_DISABLED_IDS: ""
+  # Operator-only deployment kill switches; exact comma-separated IDs, with no spaces.
+  CAPABILITY_PLATFORM_DISABLED_IDS: realtime_voice,external_provider_use,secure_compute,image_editing,multi_model_compare,streamed_output_policy
   MODEL_PROVIDER_FALLBACK_MODEL_ID: ""
   REALTIME_EVENT_DRIVER: valkey
   REALTIME_EVENT_KEY_PREFIX: romeo:chat-events:v1
   REALTIME_EVENT_TIMEOUT_MS: "2000"
-  QUOTA_COORDINATION_DRIVER: disabled
+  QUOTA_COORDINATION_DRIVER: valkey
   QUOTA_COORDINATION_KEY_PREFIX: romeo:quota:v1
   QUOTA_COORDINATION_TIMEOUT_MS: "2000"
   EDGE_TLS_TERMINATION: ingress
   EDGE_TRUSTED_PROXY_MODE: trusted_proxy
+  EDGE_TRUSTED_PROXY_HOPS: "1"
   EDGE_WAF_MODE: monitor
   EDGE_ALLOWED_ORIGINS: https://romeo.example.com
   EDGE_HSTS_ENABLED: "true"
@@ -372,6 +387,7 @@ workers:
   image:
     repository: ""
     tag: ""
+    digest: ""
     pullPolicy: ""
   apiKeySecret:
     name: ""
@@ -385,7 +401,7 @@ workers:
       type: RuntimeDefault
   securityContext:
     allowPrivilegeEscalation: false
-    readOnlyRootFilesystem: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
@@ -548,12 +564,9 @@ backup:
       memory: 1Gi
 
 networkPolicy:
-  enabled: false
+  # Production rendering requires this default-deny policy and an explicit
+  # deployment-specific egress allowlist (DNS, Postgres, Valkey, object store,
+  # and enabled external providers as applicable).
+  enabled: true
   ingressFrom: []
   egress: []
-
-serviceMonitor:
-  enabled: false
-
-otel:
-  endpoint: ""

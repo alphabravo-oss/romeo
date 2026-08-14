@@ -697,7 +697,38 @@ describe("worker lifecycle controls", () => {
     const clientSecret = "tool-worker-oauth-client-secret";
     const accessToken = "tool-worker-oauth-access-token";
     const fetches: unknown[] = [];
+    const pinnedRequests: unknown[] = [];
     const calls: unknown[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      const headers = new Headers(init?.headers);
+      if (url === "https://auth.example.com/oauth/token") {
+        fetches.push({
+          kind: "token",
+          url,
+          method: init?.method,
+          redirect: init?.redirect,
+          auth: headers.get("authorization"),
+          body: String(init?.body),
+        });
+        return new Response(
+          JSON.stringify({
+            access_token: accessToken,
+            token_type: "Bearer",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+      fetches.push({
+        kind: "api",
+        url,
+        auth: headers.get("authorization"),
+      });
+      return new Response("{}", { status: 200 });
+    };
 
     const exitCode = await runToolDispatchWorker({
       client: createClaimedToolDispatchClient({
@@ -709,36 +740,8 @@ describe("worker lifecycle controls", () => {
         },
         onComplete: (input) => calls.push(input),
       }),
-      fetchImpl: async (input, init) => {
-        const url = String(input);
-        const headers = new Headers(init?.headers);
-        if (url === "https://auth.example.com/oauth/token") {
-          fetches.push({
-            kind: "token",
-            url,
-            method: init?.method,
-            redirect: init?.redirect,
-            auth: headers.get("authorization"),
-            body: String(init?.body),
-          });
-          return new Response(
-            JSON.stringify({
-              access_token: accessToken,
-              token_type: "Bearer",
-            }),
-            {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            },
-          );
-        }
-        fetches.push({
-          kind: "api",
-          url,
-          auth: headers.get("authorization"),
-        });
-        return new Response("{}", { status: 200 });
-      },
+      dnsLookup: async () => [{ address: "93.184.216.34", family: 4 }],
+      fetchImpl,
       intervalMs: 60_000,
       io,
       leaseSeconds: 300,
@@ -752,6 +755,10 @@ describe("worker lifecycle controls", () => {
           },
           parameters: { issueId: "ISSUE-1" },
         },
+      },
+      pinnedFetchImpl: async (url, init, addresses) => {
+        pinnedRequests.push({ url: url.toString(), addresses });
+        return fetchImpl(url, init);
       },
       secretResolver: new EnvironmentSecretValueResolver({
         TOOL_OAUTH_CLIENT: JSON.stringify({ clientId, clientSecret }),
@@ -774,6 +781,16 @@ describe("worker lifecycle controls", () => {
         kind: "api",
         url: "https://api.example.com/issues/ISSUE-1",
         auth: `Bearer ${accessToken}`,
+      },
+    ]);
+    expect(pinnedRequests).toEqual([
+      {
+        url: "https://auth.example.com/oauth/token",
+        addresses: [{ address: "93.184.216.34", family: 4 }],
+      },
+      {
+        url: "https://api.example.com/issues/ISSUE-1",
+        addresses: [{ address: "93.184.216.34", family: 4 }],
       },
     ]);
     for (const serialized of [output, JSON.stringify(calls)]) {
@@ -1450,6 +1467,10 @@ describe("worker lifecycle controls", () => {
           },
         },
       },
+      dnsLookup: async (host) => {
+        expect(host).toBe("example.com");
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
       fetchImpl: async (input, init) => {
         runnerRequests.push({
           url: String(input),
@@ -1485,6 +1506,13 @@ describe("worker lifecycle controls", () => {
     expect(runnerRequests).toHaveLength(1);
     expect(runnerRequests[0]?.url).toBe("https://browser-runner.example/tasks");
     expect(runnerRequests[0]?.body).toContain(sentinel);
+    expect(JSON.parse(runnerRequests[0]?.body ?? "{}")).toMatchObject({
+      networkPolicy: {
+        approvedAddresses: [{ address: "93.184.216.34", family: 4 }],
+        dnsPinningRequired: true,
+        targetOrigin: "https://example.com",
+      },
+    });
     expect(completedInputs).toEqual([
       {
         jobId: "job_browser_1",

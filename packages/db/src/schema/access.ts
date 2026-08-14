@@ -180,6 +180,63 @@ export const localMfaFactors = pgTable(
   }),
 );
 
+export const samlAuthRequests = pgTable(
+  "saml_auth_requests",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    providerId: text("provider_id").notNull(),
+    relayStateHash: text("relay_state_hash").notNull(),
+    requestInstant: timestamp("request_instant", {
+      withTimezone: true,
+    }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    samlAuthRequestsExpiryIdx: index("saml_auth_requests_expiry_idx").on(
+      table.expiresAt,
+    ),
+    samlAuthRequestsOrgIdx: index("saml_auth_requests_org_idx").on(
+      table.orgId,
+      table.createdAt,
+    ),
+  }),
+);
+
+export const localMfaChallenges = pgTable(
+  "local_mfa_challenges",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    localMfaChallengesExpiryIdx: index("local_mfa_challenges_expiry_idx").on(
+      table.expiresAt,
+    ),
+    localMfaChallengesUserIdx: index("local_mfa_challenges_user_idx").on(
+      table.orgId,
+      table.userId,
+      table.createdAt,
+    ),
+  }),
+);
+
 export const apiKeys = pgTable(
   "api_keys",
   {

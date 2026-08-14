@@ -7,156 +7,83 @@ import {
   Textarea,
 } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
-import { listModels, listProviders } from "../features/providers/queries";
 import {
-  getRagPolicy,
   policyFieldsForVectorBackend,
   ragPolicyTiers,
-  updateRagPolicy,
+  updateRagPolicyMutationOptions,
   vectorBackendPresetFromPolicy,
   type RagPolicyReport,
-  type RagPolicyTier,
-  type RagVectorBackendPreset,
   type UpdateRagPolicyRequest,
 } from "../features/rag-governance";
-import { useLocale, type MessageKey } from "../lib/i18n";
+import { useLocale } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
-import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
+import {
+  modelsQueryOptions,
+  providersQueryOptions,
+} from "../lib/api-query-options";
+import { useRouterApiClient } from "../lib/router-context";
 import { PanelStats } from "./PanelStats";
 import { AdminDisclosure } from "./AdminDisclosure";
-import { PageActions } from "./PageActions";
-
-const TIER_LABEL_KEYS: Record<RagPolicyTier, MessageKey> = {
-  user_private: "ragTierUserPrivate",
-  workspace: "ragTierWorkspace",
-  org: "ragTierOrg",
-  shared: "ragTierShared",
-};
-
-const TIER_HELP_KEYS: Record<RagPolicyTier, MessageKey> = {
-  user_private: "ragTierUserPrivateHelp",
-  workspace: "ragTierWorkspaceHelp",
-  org: "ragTierOrgHelp",
-  shared: "ragTierSharedHelp",
-};
-
-const BACKEND_LABEL_KEYS: Record<RagVectorBackendPreset, MessageKey> = {
-  pgvector: "ragBackendPgvector",
-  qdrant: "ragBackendQdrant",
-};
-
+import { RagPolicyQueryBoundary } from "./RagPolicyQueryBoundary";
+import {
+  embeddingFromKey,
+  parseRagRetrievalNumbers,
+  RAG_BACKEND_LABEL_KEYS as BACKEND_LABEL_KEYS,
+  ragEmbeddingOptions,
+  ragPolicyFormDefaults,
+  RAG_TIER_HELP_KEYS as TIER_HELP_KEYS,
+  RAG_TIER_LABEL_KEYS as TIER_LABEL_KEYS,
+} from "./rag-policy-form-model";
 export function RagPolicyTab() {
-  const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const policyQuery = useQuery({
-    queryKey: ["ragPolicy"],
-    queryFn: getRagPolicy,
-  });
-
   return (
-    <div className="grid gap-2">
-      <div className="rm-card-header">
-        <div>
-          <div className="rm-card-title">{t("ragSetupTitle")}</div>
-          <p className="text-sm text-muted">{t("ragSetupDescription")}</p>
-        </div>
-        <PageActions
-          onRefresh={() => void policyQuery.refetch()}
-          refreshLabel={t("refresh")}
-          refreshing={policyQuery.isFetching}
-        />
-      </div>
-      <PanelState
-        query={policyQuery}
-        empty={t("noRagPolicy")}
-        isEmpty={() => false}
-      >
-        {(report) => <PolicyEditor report={report} queryClient={queryClient} />}
-      </PanelState>
-    </div>
+    <RagPolicyQueryBoundary>
+      {(report) => <PolicyEditor report={report} />}
+    </RagPolicyQueryBoundary>
   );
 }
 
-function PolicyEditor(props: {
-  report: RagPolicyReport;
-  queryClient: ReturnType<typeof useQueryClient>;
-}) {
+function PolicyEditor(props: { report: RagPolicyReport }) {
   const { t } = useLocale();
-  const { report, queryClient } = props;
-  const updateMutation = useMutation({ mutationFn: updateRagPolicy });
-  const providersQuery = useQuery({
-    queryKey: ["providers"],
-    queryFn: listProviders,
-  });
-  const modelsQuery = useQuery({
-    queryKey: ["models"],
-    queryFn: listModels,
-  });
+  const { report } = props;
+  const apiClient = useRouterApiClient();
+  const [formError, setFormError] = useState("");
+  const updateMutation = useMutation(updateRagPolicyMutationOptions());
+  const providersQuery = useQuery(providersQueryOptions(apiClient));
+  const modelsQuery = useQuery(modelsQueryOptions(apiClient));
 
-  const embeddingOptions = useMemo(() => {
-    const providers = new Map(
-      (providersQuery.data ?? []).map((provider) => [provider.id, provider]),
-    );
-    return (modelsQuery.data ?? [])
-      .filter(
-        (model) =>
-          model.enabled && model.capabilities.modalities.includes("embeddings"),
-      )
-      .map((model) => ({
-        providerId: model.providerId,
-        model: model.name,
-        label: `${providers.get(model.providerId)?.name ?? model.providerId} · ${model.displayName || model.name}`,
-      }));
-  }, [modelsQuery.data, providersQuery.data]);
+  const embeddingOptions = useMemo(
+    () =>
+      ragEmbeddingOptions(modelsQuery.data ?? [], providersQuery.data ?? []),
+    [modelsQuery.data, providersQuery.data],
+  );
 
   const form = useForm({
-    defaultValues: {
-      vectorBackend: vectorBackendPresetFromPolicy(report),
-      enabledTiers: report.enabledTiers,
-      embeddingKey: embeddingKeyFromPolicy(report),
-      topK: String(
-        report.retrieval?.topK ?? report.defaultMaxResultsPerTier.workspace,
-      ),
-      similarityThreshold: String(
-        report.retrieval?.similarityThreshold ?? 0.35,
-      ),
-      hybridSearch: report.retrieval?.hybridSearch ?? true,
-      hybridBm25Weight: String(report.retrieval?.hybridBm25Weight ?? 0.35),
-      agenticEnabled: report.agentic?.enabled ?? false,
-      agenticUserMode: report.agentic?.userMode ?? "optional",
-      dataResidencyTags: report.dataResidencyTags.join("\n"),
-    },
+    defaultValues: ragPolicyFormDefaults(report),
     onSubmit: async ({ value }) => {
       if (value.enabledTiers.length === 0) {
-        toast(t("enableAtLeastOneTier"), "error");
+        const message = t("enableAtLeastOneTier");
+        setFormError(message);
+        toast(message, "error");
         return;
       }
-      const topK = Number(value.topK);
-      const similarityThreshold = Number(value.similarityThreshold);
-      const hybridBm25Weight = Number(value.hybridBm25Weight);
-      if (
-        !Number.isInteger(topK) ||
-        topK < 1 ||
-        topK > 20 ||
-        !Number.isFinite(similarityThreshold) ||
-        similarityThreshold < 0 ||
-        similarityThreshold > 1 ||
-        !Number.isFinite(hybridBm25Weight) ||
-        hybridBm25Weight < 0 ||
-        hybridBm25Weight > 1
-      ) {
-        toast(t("ragRetrievalInvalid"), "error");
+      const retrieval = parseRagRetrievalNumbers(value);
+      if (retrieval === undefined) {
+        const message = t("ragRetrievalInvalid");
+        setFormError(message);
+        toast(message, "error");
         return;
       }
+      const { hybridBm25Weight, similarityThreshold, topK } = retrieval;
       const backendFields = policyFieldsForVectorBackend(value.vectorBackend);
       const embedding = embeddingFromKey(value.embeddingKey);
       const defaultMaxResultsPerTier = Object.fromEntries(
         ragPolicyTiers.map((tier) => [tier, topK]),
       ) as UpdateRagPolicyRequest["defaultMaxResultsPerTier"];
+      setFormError("");
       try {
         await updateMutation.mutateAsync({
           enabledTiers: value.enabledTiers,
@@ -179,14 +106,11 @@ function PolicyEditor(props: {
             .filter((tag) => tag.length > 0),
           ...backendFields,
         } as UpdateRagPolicyRequest);
-        await queryClient.invalidateQueries({ queryKey: ["ragPolicy"] });
-        await queryClient.invalidateQueries({ queryKey: ["ragPosture"] });
-        await queryClient.invalidateQueries({
-          queryKey: ["agenticRagSettings"],
-        });
         toast(t("ragPolicyUpdated"), "success");
       } catch {
-        toast(t("couldNotUpdateRagPolicy"), "error");
+        const message = t("couldNotUpdateRagPolicy");
+        setFormError(message);
+        toast(message, "error");
       }
     },
   });
@@ -406,10 +330,12 @@ function PolicyEditor(props: {
                   return (
                     <label
                       className="grid grid-cols-[auto_1fr] items-start gap-2 text-sm"
+                      htmlFor={`rag-tier-${tier}`}
                       key={tier}
                     >
                       <Input
                         checked={checked}
+                        id={`rag-tier-${tier}`}
                         name="enabledTiers"
                         onChange={(event) => {
                           field.handleChange(
@@ -485,12 +411,12 @@ function PolicyEditor(props: {
               </form.Field>
             </section>
             <section className="grid gap-3">
-              <div className="font-medium text-sm">
-                {t("dataResidencyTags")}
-              </div>
               <form.Field name="dataResidencyTags">
                 {(field) => (
-                  <div className="grid gap-1">
+                  <Field
+                    description={t("emptyResidencyTags")}
+                    label={t("dataResidencyTags")}
+                  >
                     <Textarea
                       name="dataResidencyTags"
                       onChange={(event) =>
@@ -500,15 +426,18 @@ function PolicyEditor(props: {
                       rows={2}
                       value={field.state.value}
                     />
-                    <div className="text-xs text-muted">
-                      {t("emptyResidencyTags")}
-                    </div>
-                  </div>
+                  </Field>
                 )}
               </form.Field>
             </section>
           </div>
         </AdminDisclosure>
+
+        {formError ? (
+          <p className="rm-form-error" role="alert">
+            {formError}
+          </p>
+        ) : null}
 
         <form.Subscribe
           selector={(state) => ({
@@ -527,7 +456,8 @@ function PolicyEditor(props: {
               </Button>
               {report.updatedAt ? (
                 <span className="text-xs text-muted">
-                  {t("updated")} <LocalizedDateTime value={report.updatedAt} />
+                  {t("ragPolicyUpdated")}{" "}
+                  <LocalizedDateTime value={report.updatedAt} />
                 </span>
               ) : null}
             </div>
@@ -536,21 +466,4 @@ function PolicyEditor(props: {
       </form>
     </div>
   );
-}
-
-function embeddingKeyFromPolicy(report: RagPolicyReport): string {
-  const first = report.allowedEmbeddingProviderModels[0];
-  return first === undefined ? "" : `${first.providerId}\0${first.model}`;
-}
-
-function embeddingFromKey(
-  key: string,
-): { providerId: string; model: string } | undefined {
-  if (key.length === 0) return undefined;
-  const separator = key.indexOf("\0");
-  if (separator <= 0) return undefined;
-  const providerId = key.slice(0, separator);
-  const model = key.slice(separator + 1);
-  if (providerId.length === 0 || model.length === 0) return undefined;
-  return { providerId, model };
 }

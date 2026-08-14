@@ -193,6 +193,18 @@ export async function purgeTenantData(
       setting.value.orgId === orgId ||
       orgScopedSystemSettingKeys(orgId).has(setting.key),
   );
+  remove<E.CapabilityAssignment>(
+    "capabilityAssignments",
+    (assignment) => assignment.orgId === orgId,
+  );
+  remove<import("../domain/capability-flags").OrganizationCapabilityFlag>(
+    "organizationCapabilityFlags",
+    (flag) => flag.orgId === orgId,
+  );
+  remove<import("../domain/idempotency").IdempotencyReceipt>(
+    "idempotencyReceipts",
+    (receipt) => receipt.orgId === orgId,
+  );
   remove<E.WorkflowRun>(
     "workflowRuns",
     (run) => run.orgId === orgId || workflowDefinitionIds.has(run.workflowId),
@@ -212,6 +224,10 @@ export async function purgeTenantData(
   );
   remove<E.MessagePart>("messageParts", (part) =>
     messageIds.has(part.messageId),
+  );
+  remove<E.MessageFileReference>(
+    "messageFileReferences",
+    (reference) => reference.orgId === orgId,
   );
   remove<E.Message>("messages", (message) => chatIds.has(message.chatId));
   remove<E.QueuedChatTurn>(
@@ -327,10 +343,18 @@ export async function purgeTenantData(
     "localMfaFactors",
     (factor) => factor.orgId === orgId || userIds.has(factor.userId),
   );
+  remove<E.LocalMfaChallenge>(
+    "localMfaChallenges",
+    (challenge) => challenge.orgId === orgId,
+  );
   remove<E.LocalPasswordCredential>(
     "localPasswordCredentials",
     (credential) =>
       credential.orgId === orgId || userIds.has(credential.userId),
+  );
+  remove<E.SamlAuthRequest>(
+    "samlAuthRequests",
+    (request) => request.orgId === orgId,
   );
   remove<E.UserSession>(
     "userSessions",
@@ -429,6 +453,10 @@ export async function purgeTenantData(
   remove<E.VoiceProfile>("voiceProfiles", (profile) => profile.orgId === orgId);
   remove<E.QuotaBucket>("quotaBuckets", (bucket) => bucket.orgId === orgId);
   remove<E.BillingPlan>("billingPlans", (plan) => plan.orgId === orgId);
+  remove<E.BillingEventReceipt>(
+    "billingEventReceipts",
+    (receipt) => receipt.orgId === orgId,
+  );
   remove<E.RetentionPolicy>(
     "retentionPolicies",
     (policy) => policy.orgId === orgId,

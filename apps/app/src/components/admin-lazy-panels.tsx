@@ -36,6 +36,10 @@ export const ChatExperiencePanel = lazyNamed(
   () => import("./ChatExperiencePanel"),
   "ChatExperiencePanel",
 );
+export const CapabilityAdminPanel = lazyNamed(
+  () => import("./CapabilityAdminPanel"),
+  "CapabilityAdminPanel",
+);
 export const DataConnectorPanel = lazyNamed(
   () => import("./DataConnectorPanel"),
   "DataConnectorPanel",
@@ -100,6 +104,10 @@ export const ServiceAccountPanel = lazyNamed(
 export const ToolConnectorPanel = lazyNamed(
   () => import("./ToolConnectorPanel"),
   "ToolConnectorPanel",
+);
+export const TrustComputePanel = lazyNamed(
+  () => import("./TrustComputePanel"),
+  "TrustComputePanel",
 );
 export const UsagePanel = lazyNamed(() => import("./UsagePanel"), "UsagePanel");
 export const UsersPanel = lazyNamed(() => import("./UsersPanel"), "UsersPanel");

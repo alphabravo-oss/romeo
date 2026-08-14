@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import Bot from "lucide-react/dist/esm/icons/bot.mjs";
 import LogOut from "lucide-react/dist/esm/icons/log-out.mjs";
 import Settings from "lucide-react/dist/esm/icons/settings.mjs";
@@ -6,8 +7,12 @@ import Shield from "lucide-react/dist/esm/icons/shield.mjs";
 import User from "lucide-react/dist/esm/icons/user.mjs";
 import { Button, DropdownMenuPrimitive } from "@romeo/ui";
 
-import { logout } from "../features";
+import { logout } from "../features/identity";
 import { useLocale } from "../lib/i18n";
+import { purgeBrowserWorkspaceDrafts } from "../lib/draft-storage";
+import { clearRouteDataForLogout } from "../lib/route-intent";
+import { useWorkspaceIntentPrefetch } from "./useWorkspaceIntentPrefetch";
+import { useWorkspace } from "./WorkspaceContext";
 
 export function WorkspaceUserMenu({
   isAdmin,
@@ -17,6 +22,9 @@ export function WorkspaceUserMenu({
   userLabel: string;
 }) {
   const { t } = useLocale();
+  const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
+  const prefetchWorkspace = useWorkspaceIntentPrefetch();
   const initial = userInitial(userLabel);
   return (
     <DropdownMenuPrimitive.Root>
@@ -45,6 +53,12 @@ export function WorkspaceUserMenu({
           <DropdownMenuPrimitive.Item asChild>
             <Link
               className="rm-ui-menu__item rm-user-menu-item"
+              onFocus={prefetchWorkspace}
+              onMouseEnter={prefetchWorkspace}
+              preload="intent"
+              search={
+                workspaceId === undefined ? {} : { workspace: workspaceId }
+              }
               to="/workspace"
             >
               <Bot aria-hidden="true" size={15} />
@@ -52,7 +66,14 @@ export function WorkspaceUserMenu({
             </Link>
           </DropdownMenuPrimitive.Item>
           <DropdownMenuPrimitive.Item asChild>
-            <Link className="rm-ui-menu__item rm-user-menu-item" to="/settings">
+            <Link
+              className="rm-ui-menu__item rm-user-menu-item"
+              preload="intent"
+              search={
+                workspaceId === undefined ? {} : { workspace: workspaceId }
+              }
+              to="/settings"
+            >
               <Settings aria-hidden="true" size={15} />
               <span>{t("settings")}</span>
             </Link>
@@ -60,7 +81,13 @@ export function WorkspaceUserMenu({
           <DropdownMenuPrimitive.Item asChild>
             <Link
               className="rm-ui-menu__item rm-user-menu-item"
-              search={{ section: "account" }}
+              preload="intent"
+              search={{
+                section: "account",
+                ...(workspaceId === undefined
+                  ? {}
+                  : { workspace: workspaceId }),
+              }}
               to="/settings"
             >
               <User aria-hidden="true" size={15} />
@@ -69,7 +96,14 @@ export function WorkspaceUserMenu({
           </DropdownMenuPrimitive.Item>
           {isAdmin ? (
             <DropdownMenuPrimitive.Item asChild>
-              <Link className="rm-ui-menu__item rm-user-menu-item" to="/admin">
+              <Link
+                className="rm-ui-menu__item rm-user-menu-item"
+                preload={false}
+                search={
+                  workspaceId === undefined ? {} : { workspace: workspaceId }
+                }
+                to="/admin"
+              >
                 <Shield aria-hidden="true" size={15} />
                 <span>{t("adminConsole")}</span>
               </Link>
@@ -79,9 +113,12 @@ export function WorkspaceUserMenu({
           <DropdownMenuPrimitive.Item
             className="rm-ui-menu__item rm-user-menu-item"
             onSelect={() => {
-              void logout().finally(() => {
-                window.location.href = "/login";
-              });
+              purgeBrowserWorkspaceDrafts();
+              void clearRouteDataForLogout(queryClient)
+                .then(() => logout())
+                .finally(() => {
+                  window.location.href = "/login";
+                });
             }}
           >
             <LogOut aria-hidden="true" size={15} />

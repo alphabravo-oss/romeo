@@ -12,11 +12,12 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
+    "db:backfill-message-parts": "tsx src/message-part-backfill-cli.ts",
     "db:push": "drizzle-kit push --config drizzle.config.ts",
     "db:seed": "tsx src/seed-cli.ts",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:postgres-conformance": "vitest run src/romeo-repository.test.ts"
+    "test:postgres-conformance": "vitest run src/romeo-repository.test.ts src/enterprise-ai-fixtures.test.ts"
   },
   "dependencies": {
     "@romeo/config": "workspace:*",

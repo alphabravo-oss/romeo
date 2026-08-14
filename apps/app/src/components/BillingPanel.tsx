@@ -1,12 +1,12 @@
 import { Button, Field, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import {
-  applyBillingPlan,
-  getBillingPlan,
-  syncExternalBillingEvent,
+  applyBillingPlanMutationOptions,
+  billingPlanQueryOptions,
+  syncExternalBillingEventMutationOptions,
 } from "../features/billing";
 import type {
   BillingPlan,
@@ -63,13 +63,9 @@ export function BillingPanel() {
   const { t } = useLocale();
   const required = ({ value }: { value: string }) =>
     !value?.trim() ? t("required") : undefined;
-  const queryClient = useQueryClient();
-  const planQuery = useQuery({
-    queryKey: ["billingPlan"],
-    queryFn: getBillingPlan,
-  });
-  const applyMutation = useMutation({ mutationFn: applyBillingPlan });
-  const syncMutation = useMutation({ mutationFn: syncExternalBillingEvent });
+  const planQuery = useQuery(billingPlanQueryOptions());
+  const applyMutation = useMutation(applyBillingPlanMutationOptions());
+  const syncMutation = useMutation(syncExternalBillingEventMutationOptions());
 
   const plan = planQuery.data ?? null;
 
@@ -81,13 +77,11 @@ export function BillingPanel() {
     onSubmit: async ({ value }) => {
       try {
         await syncMutation.mutateAsync({
+          eventId: `manual_${crypto.randomUUID()}`,
+          occurredAt: new Date().toISOString(),
           provider: value.provider,
           eventType: value.eventType,
         });
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["billingPlan"] }),
-          queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-        ]);
         toast(t("externalEventSynced"), "success");
       } catch (caught) {
         toast(t("couldNotSyncExternalEvent"), "error");
@@ -105,7 +99,6 @@ export function BillingPanel() {
           refreshing={planQuery.isFetching}
         />
       }
-      title={t("billing")}
     >
       <div className="text-sm text-muted mb-2">
         {plan ? (
@@ -131,12 +124,6 @@ export function BillingPanel() {
                 onApply={async (input) => {
                   try {
                     await applyMutation.mutateAsync(input);
-                    await Promise.all([
-                      queryClient.invalidateQueries({
-                        queryKey: ["billingPlan"],
-                      }),
-                      queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-                    ]);
                     toast(t("billingPlanUpdated"), "success");
                   } catch (caught) {
                     toast(t("couldNotUpdateBillingPlan"), "error");

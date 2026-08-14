@@ -13,6 +13,7 @@ import { AddButton } from "./AddButton";
 import { createColumnHelper, DataTable } from "./DataTable";
 import { KnowledgeBaseCreateDialog } from "./KnowledgeBaseCreateDialog";
 import { KnowledgeIngestNotice } from "./KnowledgeIngestNotice";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const knowledgeBaseColumn = createColumnHelper<KnowledgeBase>();
 
@@ -34,6 +35,10 @@ export function KnowledgeCatalogPage({
   workspaceId: string | undefined;
 }) {
   const { locale, t } = useLocale();
+  const inventoriedTable = useInventoriedServerTable<KnowledgeBase>(
+    "knowledge_bases",
+    { enabled: workspaceId !== undefined, workspaceId },
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const columns = useMemo(
     () => [
@@ -100,8 +105,9 @@ export function KnowledgeCatalogPage({
         workspaceId={workspaceId}
       />
       <DataTable
+        serverState={inventoriedTable.serverState}
         columns={columns}
-        data={knowledgeBases}
+        data={inventoriedTable.rows}
         empty={isLoading ? t("loading") : t("knowledgeNoBases")}
         getRowId={(knowledgeBase) => knowledgeBase.id}
         minTableWidth={980}

@@ -9,6 +9,7 @@ export type RepositoryMethodDomain =
   | "agent"
   | "audit"
   | "billing"
+  | "capability"
   | "chat"
   | "collaboration"
   | "connector"
@@ -38,6 +39,7 @@ export type RepositoryMethodOperation =
   | "delete"
   | "get"
   | "list"
+  | "replace"
   | "search"
   | "transaction"
   | "update"
@@ -83,6 +85,9 @@ function domainForMethod(
   method: RomeoRepositoryMethodName,
 ): RepositoryMethodDomain {
   if (method === "transaction") return "transaction";
+  if (includesAny(method, ["CapabilityAssignment", "CapabilityFlag"]))
+    return "capability";
+  if (includesAny(method, ["IdempotencyReceipt"])) return "job";
   if (
     includesAny(method, [
       "AgentKnowledgeBinding",
@@ -100,9 +105,12 @@ function domainForMethod(
       "DeviceAuthorization",
       "Group",
       "LocalMfaFactor",
+      "LocalMfa",
+      "LocalPassword",
       "LocalPasswordCredential",
       "ServiceAccount",
       "SsoOidcSettings",
+      "SamlAuth",
       "UserSession",
       "User",
     ])
@@ -120,7 +128,7 @@ function domainForMethod(
   if (includesAny(method, ["Organization", "Workspace"])) return "tenancy";
   if (includesAny(method, ["Provider", "Model"])) return "provider";
   if (includesAny(method, ["Eval"])) return "eval";
-  if (includesAny(method, ["FileObject"])) return "file";
+  if (includesAny(method, ["FileObject", "FileLifecycle"])) return "file";
   if (includesAny(method, ["Chat", "Message", "CollaborationChannel"]))
     return "chat";
   if (includesAny(method, ["Notification"])) return "notification";
@@ -144,7 +152,8 @@ function domainForMethod(
   if (includesAny(method, ["BackgroundJob"])) return "job";
   if (includesAny(method, ["Webhook"])) return "webhook";
   if (includesAny(method, ["Workflow"])) return "workflow";
-  if (includesAny(method, ["BillingPlan"])) return "billing";
+  if (includesAny(method, ["BillingPlan", "BillingEvent", "BillingSync"]))
+    return "billing";
   if (includesAny(method, ["QuotaBucket"])) return "quota";
   return exhaustiveDomain(method);
 }
@@ -154,11 +163,18 @@ function operationForMethod(
 ): RepositoryMethodOperation {
   if (method === "transaction") return "transaction";
   if (method.startsWith("append")) return "append";
+  if (method.startsWith("advance")) return "update";
+  if (method.startsWith("allocate")) return "update";
+  if (method.startsWith("acquire")) return "update";
   if (method.startsWith("archive")) return "update";
+  if (method.startsWith("backfill")) return "update";
   if (method.startsWith("count")) return "count";
   if (method.startsWith("create")) return "create";
+  if (method.startsWith("consume")) return "update";
+  if (method.startsWith("complete")) return "update";
   if (method.startsWith("delete")) return "delete";
   if (method.startsWith("finish")) return "update";
+  if (method.startsWith("fail")) return "update";
   if (method.startsWith("finalize")) return "update";
   if (method.startsWith("purge")) return "delete";
   if (method.startsWith("get")) return "get";
@@ -166,6 +182,11 @@ function operationForMethod(
   if (method.startsWith("claim")) return "update";
   if (method.startsWith("cancel")) return "update";
   if (method.startsWith("renew")) return "update";
+  if (method.startsWith("record")) return "update";
+  if (method.startsWith("query")) return "search";
+  if (method.startsWith("reconcile")) return "update";
+  if (method.startsWith("replace")) return "replace";
+  if (method.startsWith("rotate")) return "update";
   if (method.startsWith("search")) return "search";
   if (method.startsWith("update")) return "update";
   if (method.startsWith("upsert")) return "upsert";
@@ -177,6 +198,8 @@ function transactionForMethod(
   method: RomeoRepositoryMethodName,
 ): RepositoryTransactionRequirement {
   if (method === "transaction") return "multi_record_lifecycle_write";
+  if (method === "reconcileChatFileReferences")
+    return "multi_record_lifecycle_write";
   const operation = operationForMethod(method);
   if (operation === "transaction") return "multi_record_lifecycle_write";
   if (
@@ -196,6 +219,7 @@ function transactionForMethod(
       "KnowledgeChunks",
       "CollaborationChannelMembers",
       "MessageParts",
+      "MessageTextParts",
       "RunEvents",
       "ToolOperations",
     ])
@@ -203,6 +227,7 @@ function transactionForMethod(
     return "batch_write";
   }
   if (operation === "delete") return "multi_record_lifecycle_write";
+  if (operation === "replace") return "multi_record_lifecycle_write";
   return "single_record_write";
 }
 
@@ -217,7 +242,8 @@ function auditImpactForDomain(
   if (domain === "transaction") return "operational_metadata";
   if (domain === "identity") return "security";
   if (domain === "settings") return "security";
-  if (domain === "audit" || domain === "governance") return "governance";
+  if (domain === "audit" || domain === "capability" || domain === "governance")
+    return "governance";
   if (domain === "billing" || domain === "quota" || domain === "usage")
     return "usage";
   if (

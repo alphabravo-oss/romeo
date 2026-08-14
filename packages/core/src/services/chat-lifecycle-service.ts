@@ -15,7 +15,11 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import { getAuthorizedChat } from "./chat-access";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
 import { assertWorkspaceActive } from "./workspace-guard";
@@ -327,6 +331,7 @@ export class ChatLifecycleService {
         const updated = await repository.updateChat(
           withoutLegalHold({ ...chat, updatedAt }),
         );
+        await repository.reconcileChatFileReferences(updated.id, updatedAt);
         await this.audit(
           input.subject,
           "chat.legal_hold.clear",
@@ -355,6 +360,7 @@ export class ChatLifecycleService {
           : {}),
         updatedAt,
       });
+      await repository.reconcileChatFileReferences(updated.id, updatedAt);
       await this.audit(
         input.subject,
         "chat.legal_hold.update",
@@ -412,11 +418,11 @@ export class ChatLifecycleService {
     }
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     subject: AuthSubject,
-    action: string,
+    action: A,
     chat: Chat,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
     repository: RomeoRepository,
   ) {
     await writeAuditLog(repository, {

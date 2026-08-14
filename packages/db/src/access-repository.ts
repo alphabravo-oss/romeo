@@ -380,6 +380,7 @@ function asResourceType(value: string): ResourceTypeRecord {
     value === "agent" ||
     value === "chat" ||
     value === "data_connector" ||
+    value === "file" ||
     value === "folder" ||
     value === "knowledge_base" ||
     value === "model" ||

@@ -7,6 +7,7 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import { notFound } from "../errors";
 import { createId } from "../ids";
+import { enforceContentPolicyText } from "./content-policy-service";
 import type { OpenWebUiChannelAccess } from "./openwebui-channel-access";
 import type { OpenWebUiChannelEvents } from "./openwebui-channel-events";
 import {
@@ -48,7 +49,13 @@ export class OpenWebUiChannelMessageCommands {
       );
     }
     const now = new Date().toISOString();
-    const content = normalizeChannelMessageContent(input.content);
+    const content = (
+      await enforceContentPolicyText(
+        this.repository,
+        subject,
+        normalizeChannelMessageContent(input.content),
+      )
+    ).content;
     const result = await this.repository.transaction(async (repository) => {
       const chat = await ensureChannelBackingChat(repository, channel, now);
       // Deliberately parentless: a channel's backing chat is a flat message log, never rendered by
@@ -210,10 +217,17 @@ export class OpenWebUiChannelMessageCommands {
         `Missing message mutation permission for channel:${channel.id}`,
       );
     }
+    const content = (
+      await enforceContentPolicyText(
+        this.repository,
+        subject,
+        normalizeChannelMessageContent(input.content),
+      )
+    ).content;
     const metadata: OpenWebUiChannelMessageMetadata = {
       ...record.metadata,
       updatedAt: new Date().toISOString(),
-      content: normalizeChannelMessageContent(input.content),
+      content,
       ...(input.data === undefined ? {} : { data: input.data }),
       ...(input.meta === undefined ? {} : { meta: input.meta }),
     };

@@ -3,6 +3,80 @@ import { describe, expect, it } from "vitest";
 import { readEnv } from "./index";
 
 describe("Romeo config", () => {
+  it("strictly parses the bounded platform capability kill-switch list", () => {
+    const allHighRiskCapabilities = [
+      "realtime_voice",
+      "external_provider_use",
+      "secure_compute",
+      "image_generation",
+      "image_editing",
+      "multi_model_compare",
+      "streamed_output_policy",
+    ];
+    expect(
+      readEnv({
+        CAPABILITY_PLATFORM_DISABLED_IDS: allHighRiskCapabilities.join(","),
+      }).CAPABILITY_PLATFORM_DISABLED_IDS,
+    ).toEqual(allHighRiskCapabilities);
+    expect(readEnv({}).CAPABILITY_PLATFORM_DISABLED_IDS).toEqual(
+      allHighRiskCapabilities.filter((id) => id !== "image_generation"),
+    );
+    expect(
+      readEnv({ CAPABILITY_PLATFORM_DISABLED_IDS: "" })
+        .CAPABILITY_PLATFORM_DISABLED_IDS,
+    ).toEqual([]);
+    expect(() =>
+      readEnv({ CAPABILITY_PLATFORM_DISABLED_IDS: "image_generation, typo" }),
+    ).toThrow(/without empty entries or whitespace/);
+    expect(() =>
+      readEnv({ CAPABILITY_PLATFORM_DISABLED_IDS: "unknown_capability" }),
+    ).toThrow(/unsupported capability IDs/);
+    expect(() =>
+      readEnv({
+        CAPABILITY_PLATFORM_DISABLED_IDS: "image_generation,image_generation",
+      }),
+    ).toThrow(/duplicate capability IDs/);
+  });
+
+  it("keeps OCR opt-in when no deployment override is provided", () => {
+    expect(readEnv({}).FILE_OCR_DRIVER).toBe("disabled");
+  });
+
+  it("fails closed when production uses development infrastructure or secrets", () => {
+    expect(() => readEnv({ ROMEO_ENV: "production" })).toThrow(/APP_ORIGIN/);
+    expect(() =>
+      readEnv({
+        ROMEO_ENV: "production",
+        APP_ORIGIN: "https://romeo.example.com",
+        REPOSITORY_DRIVER: "postgres",
+        HTTP_RATE_LIMIT_DRIVER: "valkey",
+        EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
+        FILE_MALWARE_SCAN_POLICY: "required",
+        DEV_SEEDED_LOGIN: "false",
+      }),
+    ).toThrow(/SESSION_SECRET/);
+  });
+
+  it("accepts an explicitly hardened production environment", () => {
+    const env = readEnv({
+      ROMEO_ENV: "production",
+      APP_ORIGIN: "https://romeo.example.com",
+      REPOSITORY_DRIVER: "postgres",
+      HTTP_RATE_LIMIT_DRIVER: "valkey",
+      EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
+      EDGE_TRUSTED_PROXY_HOPS: "2",
+      FILE_MALWARE_SCAN_POLICY: "required",
+      DEV_SEEDED_LOGIN: "false",
+      SESSION_SECRET: "production-session-secret-32-bytes-minimum",
+      MANAGED_SECRET_ENCRYPTION_KEY:
+        "production-managed-secret-32-bytes-minimum",
+      WEBHOOK_SIGNING_KEY: "production-webhook-secret-32-bytes-minimum",
+    });
+
+    expect(env.ROMEO_ENV).toBe("production");
+    expect(env.EDGE_TRUSTED_PROXY_HOPS).toBe(2);
+  });
+
   it("parses OIDC mapping configuration with safe empty defaults", () => {
     const env = readEnv({
       OIDC_ISSUER_URL: "https://keycloak.example.com/realms/romeo",

@@ -57,12 +57,16 @@ describe("policyErrorCopy", () => {
     expect(copy.nextStep.length).toBeGreaterThan(10);
   });
 
-  it("prefers explicit provider message in body", () => {
+  it("never exposes explicit provider error details", () => {
     const copy = policyErrorCopy({
       code: "provider_run_failed",
-      message: "upstream 502",
+      message: "api_key=super-secret at 10.0.0.8",
     });
-    expect(copy.body).toBe("upstream 502");
+    expect(copy.body).toBe(
+      "The model provider returned an error for this turn.",
+    );
+    expect(JSON.stringify(copy)).not.toContain("super-secret");
+    expect(JSON.stringify(copy)).not.toContain("10.0.0.8");
   });
 });
 
@@ -234,7 +238,9 @@ describe("feedback reason codes", () => {
     expect(normalizeFeedbackReasonCode("negative", "unhelpful")).toBe(
       "unhelpful",
     );
-    expect(normalizeFeedbackReasonCode("positive", "unhelpful")).toBeUndefined();
+    expect(
+      normalizeFeedbackReasonCode("positive", "unhelpful"),
+    ).toBeUndefined();
     expect(normalizeFeedbackReasonCode("negative", "bad")).toBeUndefined();
   });
 });
@@ -326,8 +332,8 @@ describe("streamRecoveryPhase", () => {
         hasTerminalError: false,
       }),
     ).toBe("failed");
-    expect(
-      streamRecoveryLabel("reconnecting").toLowerCase(),
-    ).toContain("reconnect");
+    expect(streamRecoveryLabel("reconnecting").toLowerCase()).toContain(
+      "reconnect",
+    );
   });
 });

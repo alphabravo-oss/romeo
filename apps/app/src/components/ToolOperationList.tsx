@@ -1,5 +1,5 @@
 import { Button } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import CheckCircle from "lucide-react/dist/esm/icons/check-circle.mjs";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical.mjs";
 import Play from "lucide-react/dist/esm/icons/play.mjs";
@@ -8,10 +8,10 @@ import { useMemo, useState } from "react";
 
 import { RomeoApiError } from "@romeo/api-client";
 import {
-  dispatchToolOperation,
-  listToolOperations,
-  testToolOperation,
-  updateToolOperation,
+  dispatchToolOperationMutationOptions,
+  toolOperationsQueryOptions,
+  testToolOperationMutationOptions,
+  updateToolOperationMutationOptions,
 } from "../features/tool-connectors";
 import type {
   ToolOperation,
@@ -22,19 +22,21 @@ import { useLocale, type MessageKey } from "../lib/i18n";
 import { LocalizedBytes } from "../lib/locale-format";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { ToolOperationTestResult } from "./ToolOperationTestResult";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const col = createColumnHelper<ToolOperation>();
 
 export function ToolOperationList({ connectorId }: { connectorId: string }) {
-  const queryClient = useQueryClient();
   const { t } = useLocale();
-  const operationsQuery = useQuery({
-    queryKey: ["toolOperations", connectorId],
-    queryFn: () => listToolOperations(connectorId),
-  });
-  const testMutation = useMutation({ mutationFn: testToolOperation });
-  const operationMutation = useMutation({ mutationFn: updateToolOperation });
-  const dispatchMutation = useMutation({ mutationFn: dispatchToolOperation });
+  const inventoriedTable = useInventoriedServerTable<ToolOperation>(
+    "tool_operations",
+    { parentId: connectorId },
+  );
+  const operationsQuery = useQuery(toolOperationsQueryOptions(connectorId));
+  const testMutation = useMutation(testToolOperationMutationOptions());
+  const operationMutation = useMutation(updateToolOperationMutationOptions());
+  const dispatchMutation = useMutation(dispatchToolOperationMutationOptions());
   const [preview, setPreview] = useState<ToolOperationTestPreview>();
   const [dispatchResults, setDispatchResults] = useState<
     Record<string, ToolOperationDispatchResult>
@@ -56,9 +58,7 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
       );
       setPreview(result);
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : t("toolOperationUnableTest"),
-      );
+      setError(safeUserErrorMessage(caught, t("toolOperationUnableTest")));
     }
   }
 
@@ -70,15 +70,8 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
         operationId: operation.operationId,
         enabled: !operation.enabled,
       });
-      await queryClient.invalidateQueries({
-        queryKey: ["toolOperations", connectorId],
-      });
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : t("toolOperationUnableUpdate"),
-      );
+      setError(safeUserErrorMessage(caught, t("toolOperationUnableUpdate")));
     }
   }
 
@@ -129,11 +122,7 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
           return;
         }
       }
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : t("toolOperationUnableDispatch"),
-      );
+      setError(safeUserErrorMessage(caught, t("toolOperationUnableDispatch")));
     }
   }
 
@@ -242,8 +231,9 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
   return (
     <div className="mt-2 grid gap-2">
       <DataTable
+        serverState={inventoriedTable.serverState}
         columns={columns}
-        data={operations}
+        data={inventoriedTable.rows}
         empty={t("toolOperationNone")}
       />
       {preview !== undefined ? (
@@ -252,7 +242,11 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
       {Object.entries(dispatchResults).map(([operationId, result]) => (
         <ToolOperationDispatchSummary key={operationId} result={result} />
       ))}
-      {error ? <div className="text-xs text-red-600">{error}</div> : null}
+      {error ? (
+        <div className="text-xs text-red-600" role="alert">
+          {error}
+        </div>
+      ) : null}
     </div>
   );
 }

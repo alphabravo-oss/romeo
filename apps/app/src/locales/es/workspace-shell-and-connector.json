@@ -1,17 +1,6 @@
 {
   "shellActions": "Acciones",
-  "shellSwitchAgent": "Cambiar modelo personalizado",
   "shellSkipToChat": "Saltar al chat",
-  "shellRomeoAssistant": "Modelo personalizado",
-  "assistantSearch": "Buscar modelos personalizados",
-  "assistantSearchPlaceholder": "Buscar modelos personalizados…",
-  "assistantFavorites": "Favoritos",
-  "assistantAll": "Todos los modelos personalizados",
-  "assistantAvailable": "Modelos personalizados disponibles",
-  "assistantNoMatches": "Ningún modelo personalizado coincide.",
-  "assistantAddFavorite": "Añadir modelo personalizado a favoritos",
-  "assistantRemoveFavorite": "Quitar modelo personalizado de favoritos",
-  "assistantFavoriteFailed": "No se pudo actualizar el favorito",
   "confirm": "Confirmar",
   "ragQueryPlaceholder": "¿Cuál es nuestra política de reembolsos?",
   "workspaceSelectVoiceFirst": "Selecciona una voz del modelo personalizado antes de generar audio.",
@@ -107,6 +96,5 @@
   "connectorGithubName": "Repositorio de GitHub",
   "connectorGithubDescription": "Contenido del repositorio importado mediante una integración limitada del proveedor.",
   "connectorS3Name": "Prefijo de objetos compatible con S3",
-  "connectorS3Description": "Objetos importados desde un prefijo compatible con S3 configurado.",
-  "shellCustomModel": "Modelo personalizado"
+  "connectorS3Description": "Objetos importados desde un prefijo compatible con S3 configurado."
 }

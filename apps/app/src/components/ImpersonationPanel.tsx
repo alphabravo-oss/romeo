@@ -1,18 +1,16 @@
 import { Button } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import UserCog from "lucide-react/dist/esm/icons/user-cog.mjs";
 import { useMemo } from "react";
 
 import {
-  approveImpersonationRequest,
+  approveImpersonationRequestMutationOptions,
   type ImpersonationRequest,
   type ImpersonationSession,
-  listImpersonationRequests,
-  listImpersonationSessions,
-  rejectImpersonationRequest,
-  revokeImpersonationSession,
+  rejectImpersonationRequestMutationOptions,
+  revokeImpersonationSessionMutationOptions,
 } from "../features/sessions";
-import { listShareTargets } from "../features";
+import { shareTargetsQueryOptions } from "../features/collaboration";
 import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
@@ -21,43 +19,36 @@ import { Section } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { PageActions } from "./PageActions";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const requestCol = createColumnHelper<ImpersonationRequest>();
 const sessionCol = createColumnHelper<ImpersonationSession>();
 
 export function ImpersonationPanel() {
-  const queryClient = useQueryClient();
   const { t } = useLocale();
-  const { ask, dialog } = useConfirm();
-  const requestsQuery = useQuery({
-    queryKey: ["impersonationRequests"],
-    queryFn: listImpersonationRequests,
-  });
-  const sessionsQuery = useQuery({
-    queryKey: ["impersonationSessions"],
-    queryFn: listImpersonationSessions,
-  });
-  const shareTargetsQuery = useQuery({
-    queryKey: ["shareTargets", "impersonation"],
-    queryFn: () => listShareTargets(),
-  });
-  const approveMutation = useMutation({
-    mutationFn: approveImpersonationRequest,
-  });
-  const rejectMutation = useMutation({
-    mutationFn: rejectImpersonationRequest,
-  });
-  const revokeMutation = useMutation({
-    mutationFn: revokeImpersonationSession,
-  });
-
-  const pending = useMemo(
-    () =>
-      (requestsQuery.data ?? []).filter(
-        (request) => request.status === "pending",
-      ),
-    [requestsQuery.data],
+  const requestTable = useInventoriedServerTable<ImpersonationRequest>(
+    "support_access_requests",
+    { filters: [{ field: "status", operator: "eq", value: "pending" }] },
   );
+  const sessionTable = useInventoriedServerTable<
+    ImpersonationSession & { id: string }
+  >("support_sessions", {
+    filters: [{ field: "status", operator: "eq", value: "active" }],
+  });
+  const { ask, dialog } = useConfirm();
+  const shareTargetsQuery = useQuery(
+    shareTargetsQueryOptions({ context: "impersonation" }),
+  );
+  const approveMutation = useMutation(
+    approveImpersonationRequestMutationOptions(),
+  );
+  const rejectMutation = useMutation(
+    rejectImpersonationRequestMutationOptions(),
+  );
+  const revokeMutation = useMutation(
+    revokeImpersonationSessionMutationOptions(),
+  );
+
   const userLabels = useMemo(
     () =>
       new Map(
@@ -66,12 +57,6 @@ export function ImpersonationPanel() {
           .map((target) => [target.principalId, target.label]),
       ),
     [shareTargetsQuery.data],
-  );
-
-  const activeSessions = useMemo(
-    () =>
-      (sessionsQuery.data ?? []).filter((entry) => entry.status === "active"),
-    [sessionsQuery.data],
   );
 
   const columns = useMemo<ColumnDef<ImpersonationRequest, any>[]>(
@@ -218,10 +203,6 @@ export function ImpersonationPanel() {
       return;
     try {
       await approveMutation.mutateAsync(request.id);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["impersonationRequests"] }),
-        queryClient.invalidateQueries({ queryKey: ["impersonationSessions"] }),
-      ]);
       toast(t("impersonationApproved"), "success");
     } catch {
       toast(t("impersonationCouldNotApprove"), "error");
@@ -231,9 +212,6 @@ export function ImpersonationPanel() {
   async function handleReject(requestId: string) {
     try {
       await rejectMutation.mutateAsync(requestId);
-      await queryClient.invalidateQueries({
-        queryKey: ["impersonationRequests"],
-      });
       toast(t("impersonationRejected"), "success");
     } catch {
       toast(t("impersonationCouldNotReject"), "error");
@@ -252,9 +230,6 @@ export function ImpersonationPanel() {
       return;
     try {
       await revokeMutation.mutateAsync(sessionId);
-      await queryClient.invalidateQueries({
-        queryKey: ["impersonationSessions"],
-      });
       toast(t("impersonationSessionRevoked"), "success");
     } catch {
       toast(t("impersonationCouldNotRevoke"), "error");
@@ -265,39 +240,59 @@ export function ImpersonationPanel() {
     <Section
       actions={
         <PageActions
-          onRefresh={() => void requestsQuery.refetch()}
+          onRefresh={() => void requestTable.query.refetch()}
           refreshLabel={t("refresh")}
-          refreshing={requestsQuery.isFetching}
+          refreshing={requestTable.query.isFetching}
         />
       }
       title={t("impersonationRequests")}
     >
       <PanelState
-        query={requestsQuery}
+        query={requestTable.query}
         empty={t("impersonationNoPending")}
         emptyDescription={t("impersonationNoPendingDescription")}
         emptyIcon={<UserCog aria-hidden size={24} />}
-        isEmpty={() => pending.length === 0}
+        isEmpty={() =>
+          requestTable.rows.length === 0 &&
+          requestTable.isFirstPage &&
+          requestTable.search.trim() === ""
+        }
       >
-        {() => <DataTable columns={columns} data={pending} />}
+        {() => (
+          <DataTable
+            serverState={requestTable.serverState}
+            columns={columns}
+            data={requestTable.rows}
+          />
+        )}
       </PanelState>
 
       <div className="rm-card-header mt-6">
         <div className="rm-card-title">{t("impersonationActiveSessions")}</div>
         <PageActions
-          onRefresh={() => void sessionsQuery.refetch()}
+          onRefresh={() => void sessionTable.query.refetch()}
           refreshLabel={t("refresh")}
-          refreshing={sessionsQuery.isFetching}
+          refreshing={sessionTable.query.isFetching}
         />
       </div>
       <PanelState
-        query={sessionsQuery}
+        query={sessionTable.query}
         empty={t("impersonationNoActive")}
         emptyDescription={t("impersonationNoActiveDescription")}
         emptyIcon={<UserCog aria-hidden size={24} />}
-        isEmpty={() => activeSessions.length === 0}
+        isEmpty={() =>
+          sessionTable.rows.length === 0 &&
+          sessionTable.isFirstPage &&
+          sessionTable.search.trim() === ""
+        }
       >
-        {() => <DataTable columns={sessionColumns} data={activeSessions} />}
+        {() => (
+          <DataTable
+            columns={sessionColumns}
+            data={sessionTable.rows}
+            serverState={sessionTable.serverState}
+          />
+        )}
       </PanelState>
       {dialog}
     </Section>

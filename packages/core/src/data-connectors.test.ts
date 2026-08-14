@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createApiKeyToken, hashApiKey } from "@romeo/auth";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 
 import { createRomeoApi } from "./api";
 import { listDataConnectorCatalogEntries } from "./domain/data-connector-catalog";
@@ -11,9 +11,23 @@ import {
   WebsiteDataConnectorExecutor,
 } from "./services/data-connector-executors";
 import { DelegatedOAuthService } from "./services/delegated-oauth-service";
-import { DelegatedOAuthTokenVault } from "./services/delegated-oauth-token-vault";
+import {
+  delegatedOAuthTokenContext,
+  DelegatedOAuthTokenVault,
+} from "./services/delegated-oauth-token-vault";
 import { GitHubDataConnectorExecutor } from "./services/github-data-connector-executor";
 import { EnvironmentSecretResolver } from "./services/secret-resolver";
+
+function delegatedOAuthTestTokenContext(connectionId: string) {
+  return {
+    connectionId,
+    connectorType: "github",
+    orgId: "org_default",
+    providerId: "github",
+    userId: "user_dev_admin",
+    workspaceId: "workspace_default",
+  };
+}
 
 function connectorEnv(
   driver:
@@ -26,7 +40,7 @@ function connectorEnv(
     | "managed-fetch",
   overrides: Record<string, string> = {},
 ) {
-  return readEnv({ DATA_CONNECTOR_EXECUTION_DRIVER: driver, ...overrides });
+  return testEnv({ DATA_CONNECTOR_EXECUTION_DRIVER: driver, ...overrides });
 }
 
 describe("data connector API", () => {
@@ -40,7 +54,7 @@ describe("data connector API", () => {
 
   it("exposes sanitized connector catalog runtime posture", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         DATA_CONNECTOR_EXECUTION_DRIVER: "managed-fetch",
         DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
         DATA_CONNECTOR_FETCH_ALLOWED_HOSTS:
@@ -286,6 +300,14 @@ describe("data connector API", () => {
       permission: "read",
     });
     await repository.createResourceGrant({
+      id: "grant_reader_workspace_read",
+      resourceType: "workspace",
+      resourceId: "workspace_default",
+      principalType: "user",
+      principalId: "user_reader",
+      permission: "read",
+    });
+    await repository.createResourceGrant({
       id: "grant_reader_kb_use",
       resourceType: "knowledge_base",
       resourceId: "kb_default",
@@ -304,7 +326,7 @@ describe("data connector API", () => {
       createdAt: new Date().toISOString(),
     });
     const readerApi = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -808,7 +830,7 @@ describe("data connector API", () => {
 
   it("syncs a GitHub connector with a delegated OAuth connection token", async () => {
     const repository = new InMemoryRomeoRepository();
-    const env = readEnv({
+    const env = testEnv({
       DATA_CONNECTOR_EXECUTION_DRIVER: "github-fetch",
       DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: "delegated-connector-token-key-32",
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
@@ -829,13 +851,16 @@ describe("data connector API", () => {
       status: "active",
       token: new DelegatedOAuthTokenVault(
         env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
-      ).encrypt({
-        accessToken: "delegated-github-token",
-        tokenType: "bearer",
-        scopes: ["repo"],
-        obtainedAt: "2026-07-01T00:00:00.000Z",
-        expiresAt: "2999-01-01T00:00:00.000Z",
-      }),
+      ).encrypt(
+        {
+          accessToken: "delegated-github-token",
+          tokenType: "bearer",
+          scopes: ["repo"],
+          obtainedAt: "2026-07-01T00:00:00.000Z",
+          expiresAt: "2999-01-01T00:00:00.000Z",
+        },
+        delegatedOAuthTestTokenContext("delegated_oauth_connection_sync"),
+      ),
       accessTokenExpiresAt: "2999-01-01T00:00:00.000Z",
       createdAt: "2026-07-01T00:00:00.000Z",
       updatedAt: "2026-07-01T00:00:00.000Z",
@@ -921,7 +946,7 @@ describe("data connector API", () => {
 
   it("refreshes an expired delegated OAuth GitHub connector token before sync", async () => {
     const repository = new InMemoryRomeoRepository();
-    const env = readEnv({
+    const env = testEnv({
       DATA_CONNECTOR_EXECUTION_DRIVER: "github-fetch",
       DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-client-id",
       DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: "github-client-secret",
@@ -962,14 +987,17 @@ describe("data connector API", () => {
       providerAccountId: "12345",
       scopes: ["repo"],
       status: "active",
-      token: vault.encrypt({
-        accessToken: "expired-github-token",
-        refreshToken: "old-refresh-token",
-        tokenType: "bearer",
-        scopes: ["repo"],
-        obtainedAt: "2026-07-01T00:00:00.000Z",
-        expiresAt: "2026-07-01T00:00:01.000Z", // deliberately-expired: 1s token lifetime exercises the GitHub OAuth refresh-before-sync path
-      }),
+      token: vault.encrypt(
+        {
+          accessToken: "expired-github-token",
+          refreshToken: "old-refresh-token",
+          tokenType: "bearer",
+          scopes: ["repo"],
+          obtainedAt: "2026-07-01T00:00:00.000Z",
+          expiresAt: "2026-07-01T00:00:01.000Z", // deliberately-expired: 1s token lifetime exercises the GitHub OAuth refresh-before-sync path
+        },
+        delegatedOAuthTestTokenContext("delegated_oauth_connection_refresh"),
+      ),
       accessTokenExpiresAt: "2026-07-01T00:00:01.000Z",
       createdAt: "2026-07-01T00:00:00.000Z",
       updatedAt: "2026-07-01T00:00:00.000Z",
@@ -1036,7 +1064,12 @@ describe("data connector API", () => {
       "delegated_oauth_connection_refresh",
     );
     const refreshedToken =
-      connection === undefined ? undefined : vault.decrypt(connection.token);
+      connection === undefined
+        ? undefined
+        : vault.decrypt(
+            connection.token,
+            delegatedOAuthTokenContext(connection),
+          );
     const auditResponse = await api.request("/api/v1/audit-logs");
     const audit = await auditResponse.json();
 
@@ -1061,7 +1094,7 @@ describe("data connector API", () => {
 
   it("serializes delegated OAuth connector refresh across service instances", async () => {
     const repository = new InMemoryRomeoRepository();
-    const env = readEnv({
+    const env = testEnv({
       DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-client-id",
       DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: "github-client-secret",
       DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY:
@@ -1107,14 +1140,19 @@ describe("data connector API", () => {
       providerAccountId: "12345",
       scopes: ["repo"],
       status: "active",
-      token: vault.encrypt({
-        accessToken: "expired-cross-pod-github-token",
-        refreshToken: "old-cross-pod-refresh-token",
-        tokenType: "bearer",
-        scopes: ["repo"],
-        obtainedAt: "2026-07-01T00:00:00.000Z",
-        expiresAt: "2026-07-01T00:00:01.000Z", // deliberately-expired: forces both concurrent getConnectorAccessToken calls onto the refresh path, so the test can prove refreshes are serialized to a single call
-      }),
+      token: vault.encrypt(
+        {
+          accessToken: "expired-cross-pod-github-token",
+          refreshToken: "old-cross-pod-refresh-token",
+          tokenType: "bearer",
+          scopes: ["repo"],
+          obtainedAt: "2026-07-01T00:00:00.000Z",
+          expiresAt: "2026-07-01T00:00:01.000Z", // deliberately-expired: forces both concurrent getConnectorAccessToken calls onto the refresh path, so the test can prove refreshes are serialized to a single call
+        },
+        delegatedOAuthTestTokenContext(
+          "delegated_oauth_connection_cross_pod_refresh",
+        ),
+      ),
       accessTokenExpiresAt: "2026-07-01T00:00:01.000Z",
       createdAt: "2026-07-01T00:00:00.000Z",
       updatedAt: "2026-07-01T00:00:00.000Z",
@@ -1153,7 +1191,12 @@ describe("data connector API", () => {
       "delegated_oauth_connection_cross_pod_refresh",
     );
     const refreshedToken =
-      connection === undefined ? undefined : vault.decrypt(connection.token);
+      connection === undefined
+        ? undefined
+        : vault.decrypt(
+            connection.token,
+            delegatedOAuthTokenContext(connection),
+          );
 
     expect(firstToken).toBe("cross-pod-refreshed-github-token");
     expect(secondToken).toBe("cross-pod-refreshed-github-token");
@@ -1166,7 +1209,7 @@ describe("data connector API", () => {
 
   it("fails GitHub connector sync closed when a delegated OAuth connection is revoked", async () => {
     const repository = new InMemoryRomeoRepository();
-    const env = readEnv({
+    const env = testEnv({
       DATA_CONNECTOR_EXECUTION_DRIVER: "github-fetch",
       DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY:
         "delegated-revoked-token-key-32bytes",
@@ -1186,12 +1229,15 @@ describe("data connector API", () => {
       status: "revoked",
       token: new DelegatedOAuthTokenVault(
         env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
-      ).encrypt({
-        accessToken: "revoked-github-token",
-        tokenType: "bearer",
-        scopes: ["repo"],
-        obtainedAt: "2026-07-01T00:00:00.000Z",
-      }),
+      ).encrypt(
+        {
+          accessToken: "revoked-github-token",
+          tokenType: "bearer",
+          scopes: ["repo"],
+          obtainedAt: "2026-07-01T00:00:00.000Z",
+        },
+        delegatedOAuthTestTokenContext("delegated_oauth_connection_revoked"),
+      ),
       revokedAt: "2026-07-01T00:05:00.000Z",
       createdAt: "2026-07-01T00:00:00.000Z",
       updatedAt: "2026-07-01T00:05:00.000Z",

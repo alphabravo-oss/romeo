@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { RunEvent } from "@romeo/ai-runtime";
 import type { AuthSubject } from "@romeo/auth";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { defaultProviderCapabilities, type BaseModel } from "@romeo/providers";
 import { disabledRagProvider } from "@romeo/rag";
 import {
@@ -62,6 +62,7 @@ import { PromptTemplateService } from "./services/prompt-template-service";
 import { ProviderService } from "./services/provider-service";
 import { QuotaService } from "./services/quota-service";
 import { RunEventSequencer } from "./services/run-event-sequencer";
+import type { RunEventTransport } from "./services/run-event-transport";
 import { RunService } from "./services/run-service";
 import { SecretRotationService } from "./services/secret-rotation-service";
 import { EnvironmentSecretResolver } from "./services/secret-resolver";
@@ -345,12 +346,22 @@ describe("durable transaction boundaries", () => {
       providerAccountLogin: "provider-login-rollback",
       scopes: ["repo"],
       status: "active",
-      token: tokenVault.encrypt({
-        accessToken: "gho_revoke_rollback",
-        obtainedAt: now,
-        scopes: ["repo"],
-        tokenType: "bearer",
-      }),
+      token: tokenVault.encrypt(
+        {
+          accessToken: "gho_revoke_rollback",
+          obtainedAt: now,
+          scopes: ["repo"],
+          tokenType: "bearer",
+        },
+        {
+          connectionId: "delegated_oauth_revoke_rollback",
+          connectorType: "github",
+          orgId: "org_default",
+          providerId: "github",
+          userId: "user_dev_admin",
+          workspaceId: "workspace_default",
+        },
+      ),
       createdAt: now,
       updatedAt: now,
     });
@@ -581,9 +592,18 @@ describe("durable transaction boundaries", () => {
     };
     await repository.createRun(run);
 
+    const publishedNotices: Array<{ runId: string; sequence: number }> = [];
+    const transport: RunEventTransport = {
+      async publish(notice) {
+        publishedNotices.push(notice);
+      },
+      async subscribe() {
+        return () => undefined;
+      },
+    };
     const service = new RunService(
       failUsageRepository(repository, "run.completed"),
-      {} as never,
+      new RunEventSequencer(transport),
     );
     const completeRun = (
       service as unknown as {
@@ -628,6 +648,7 @@ describe("durable transaction boundaries", () => {
         (event) => event.sourceId === run.id,
       ),
     ).toBe(false);
+    expect(publishedNotices).toEqual([]);
   });
 
   it("rolls back run start ledger writes when started usage write fails", async () => {
@@ -841,7 +862,7 @@ describe("durable transaction boundaries", () => {
       service.updateLegalHold({
         subject: governanceAdminSubject(),
         chatId: "chat_welcome",
-        legalHoldUntil: "2026-08-01T00:00:00.000Z",
+        legalHoldUntil: "2099-08-01T00:00:00.000Z",
         legalHoldReason: "Do not persist this reason when audit fails.",
       }),
     ).rejects.toThrow("Injected audit failure: chat.legal_hold.update");
@@ -1113,6 +1134,9 @@ describe("durable transaction boundaries", () => {
     const repository = new InMemoryRomeoRepository();
     const objectStore = new MemoryObjectStore();
     const objectKey = "knowledge/kb_default/kb_source_upload_rollback/doc.md";
+    const uploadedBody = new TextEncoder().encode(
+      "Rollback uploaded source completion on usage failure.",
+    );
     const source: KnowledgeSource = {
       id: "kb_source_upload_rollback",
       knowledgeBaseId: "kb_default",
@@ -1120,7 +1144,7 @@ describe("durable transaction boundaries", () => {
       workspaceId: "workspace_default",
       fileName: "uploaded-rollback.md",
       mimeType: "text/markdown",
-      sizeBytes: 58,
+      sizeBytes: uploadedBody.byteLength,
       status: "pending",
       objectKey,
       metadata: {},
@@ -1130,9 +1154,7 @@ describe("durable transaction boundaries", () => {
     await repository.createKnowledgeSource(source);
     await objectStore.putObject({
       key: objectKey,
-      body: new TextEncoder().encode(
-        "Rollback uploaded source completion on usage failure.",
-      ),
+      body: uploadedBody,
       contentType: "text/markdown",
     });
     const service = new KnowledgeService(
@@ -1205,6 +1227,9 @@ describe("durable transaction boundaries", () => {
     const repository = new InMemoryRomeoRepository();
     const objectStore = new MemoryObjectStore();
     const objectKey = "knowledge/kb_default/kb_source_extract_rollback/doc.pdf";
+    const uploadedBody = new TextEncoder().encode(
+      "deferred extraction rollback",
+    );
     const source: KnowledgeSource = {
       id: "kb_source_extract_rollback",
       knowledgeBaseId: "kb_default",
@@ -1212,7 +1237,7 @@ describe("durable transaction boundaries", () => {
       workspaceId: "workspace_default",
       fileName: "extract-rollback.pdf",
       mimeType: "application/pdf",
-      sizeBytes: 64,
+      sizeBytes: uploadedBody.byteLength,
       status: "pending",
       objectKey,
       metadata: {},
@@ -1222,7 +1247,7 @@ describe("durable transaction boundaries", () => {
     await repository.createKnowledgeSource(source);
     await objectStore.putObject({
       key: objectKey,
-      body: new TextEncoder().encode("deferred extraction rollback"),
+      body: uploadedBody,
       contentType: "application/pdf",
     });
     const service = new KnowledgeService(
@@ -2032,12 +2057,17 @@ describe("durable transaction boundaries", () => {
       type: "totp",
       name: "Rotation rollback authenticator",
       status: "active",
-      secretEncrypted: oldMfaVault.encrypt(rawTotpSecret),
+      secretEncrypted: oldMfaVault.encrypt(rawTotpSecret, {
+        factorId: "mfa_factor_rotation_rollback",
+        factorType: "totp",
+        orgId: "org_default",
+        userId: "user_dev_admin",
+      }),
       createdAt: "2026-07-07T12:00:00.000Z",
       updatedAt: "2026-07-07T12:00:00.000Z",
       confirmedAt: "2026-07-07T12:00:00.000Z",
     });
-    const oldSecretEnv = readEnv({
+    const oldSecretEnv = testEnv({
       MANAGED_SECRET_ENCRYPTION_KEY: oldManagedSecretKey,
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
       WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -2061,7 +2091,7 @@ describe("durable transaction boundaries", () => {
     const beforeSecretSettings = (await repository.listSystemSettings()).filter(
       (setting) => setting.key.startsWith("managed_secret.v1:"),
     );
-    const rotationEnv = readEnv({
+    const rotationEnv = testEnv({
       LOCAL_AUTH_SECRET_ENCRYPTION_KEY: newLocalMfaKey,
       LOCAL_AUTH_SECRET_ENCRYPTION_KEY_PREVIOUS: oldLocalMfaKey,
       MANAGED_SECRET_ENCRYPTION_KEY: newManagedSecretKey,
@@ -2097,7 +2127,7 @@ describe("durable transaction boundaries", () => {
     ).resolveValue(managedSecret.secretRef);
     const staleResolved = await new ManagedSecretService(
       repository,
-      readEnv({
+      testEnv({
         MANAGED_SECRET_ENCRYPTION_KEY: newManagedSecretKey,
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -2105,12 +2135,23 @@ describe("durable transaction boundaries", () => {
     ).resolveValue(managedSecret.secretRef);
 
     expect(afterFactor?.secretEncrypted).toBe(beforeFactor?.secretEncrypted);
-    expect(oldMfaVault.decrypt(afterFactor!.secretEncrypted)).toBe(
-      rawTotpSecret,
-    );
+    expect(
+      oldMfaVault.decrypt(afterFactor!.secretEncrypted, {
+        factorId: "mfa_factor_rotation_rollback",
+        factorType: "totp",
+        orgId: "org_default",
+        userId: "user_dev_admin",
+      }),
+    ).toBe(rawTotpSecret);
     expect(() =>
       new LocalMfaSecretVault(newLocalMfaKey).decrypt(
         afterFactor!.secretEncrypted,
+        {
+          factorId: "mfa_factor_rotation_rollback",
+          factorType: "totp",
+          orgId: "org_default",
+          userId: "user_dev_admin",
+        },
       ),
     ).toThrow(/authenticat/iu);
     expect(afterSecretSettings).toEqual(beforeSecretSettings);
@@ -2728,7 +2769,7 @@ describe("durable transaction boundaries", () => {
       sourceId: "voice_default",
       metric: "voice.preview.generated",
       quantity: 1,
-      unit: "ms",
+      unit: "event",
       metadata: {
         artifactId: "voice_artifact_delete_rollback",
         storageKey,
@@ -2801,8 +2842,10 @@ describe("durable transaction boundaries", () => {
       service.syncExternalEvent({
         subject: billingAdminSubject(),
         event: {
+          eventId: "evt_rollback",
           provider: "stripe",
           eventType: "invoice.paid",
+          occurredAt: "2026-08-13T12:00:00.000Z",
           planCode: "team",
           planName: "Team",
           status: "active",
@@ -2989,8 +3032,8 @@ describe("durable transaction boundaries", () => {
     ).rejects.toThrow("Injected audit failure: file.upload_session.complete");
 
     expect(await repository.getFileObject(file.id)).toMatchObject({
-      status: "uploading",
-      updatedAt: file.updatedAt,
+      status: "failed",
+      lifecycleFailureCode: "file_lifecycle_failed",
     });
     expect(await objectStore.getObject(file.objectKey)).toBeDefined();
   });
@@ -3017,7 +3060,7 @@ describe("durable transaction boundaries", () => {
     ).rejects.toThrow("Injected audit failure: file.delete");
 
     const afterDeleteFailure = await repository.getFileObject(file.id);
-    expect(afterDeleteFailure).toMatchObject({ status: "available" });
+    expect(afterDeleteFailure).toMatchObject({ status: "ready" });
     expect(afterDeleteFailure?.deletedAt).toBe(file.deletedAt);
     expect(await objectStore.getObject(file.objectKey)).toBeDefined();
   });
@@ -3081,6 +3124,37 @@ describe("durable transaction boundaries", () => {
         (log) => log.action === "local_auth.password.set",
       ),
     ).toBe(false);
+  });
+
+  it("revokes existing sessions after a self-service password change", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const sessions = new SessionService(repository);
+    const service = new LocalAuthService(repository, sessions, localAuthEnv());
+    const subject = localAuthSubject();
+
+    await service.setOwnPassword({
+      subject,
+      newPassword: "first-local-password-123",
+    });
+    const existingSession = await sessions.create({
+      subject,
+      name: "Browser",
+    });
+    await expect(
+      sessions.authenticate(existingSession.token),
+    ).resolves.toMatchObject({
+      id: subject.id,
+    });
+
+    await service.setOwnPassword({
+      subject,
+      currentPassword: "first-local-password-123",
+      newPassword: "replacement-local-password-456",
+    });
+
+    await expect(sessions.authenticate(existingSession.token)).rejects.toThrow(
+      "invalid or revoked",
+    );
   });
 
   it("rolls back local TOTP enrollment when audit fails", async () => {
@@ -3685,6 +3759,7 @@ describe("durable transaction boundaries", () => {
       service.updateRetentionPolicy({
         subject: governanceAdminSubject(),
         auditLogRetentionDays: 730,
+        runEventRetentionDays: 30,
         fileRetentionDays: null,
         workspaceFileRetentionDays: {},
         userFileRetentionDays: {},
@@ -3706,6 +3781,7 @@ describe("durable transaction boundaries", () => {
     await repository.upsertRetentionPolicy({
       orgId: "org_default",
       auditLogRetentionDays: 30,
+      runEventRetentionDays: 30,
       fileRetentionDays: null,
       workspaceFileRetentionDays: {},
       userFileRetentionDays: {},
@@ -3716,11 +3792,11 @@ describe("durable transaction boundaries", () => {
       id: "audit_retention_old_rollback",
       orgId: "org_default",
       actorId: "user_dev_admin",
-      action: "rollback.retention.old",
+      action: "admin.organization.update",
       resourceType: "organization",
       resourceId: "org_default",
       outcome: "success",
-      metadata: { rollbackFixture: true },
+      metadata: {},
       createdAt: "2020-01-01T00:00:00.000Z",
     });
     const service = new GovernanceService(
@@ -4634,7 +4710,7 @@ async function seedQuotaBucket(
 }
 
 function localAuthEnv() {
-  return readEnv({
+  return testEnv({
     DEV_SEEDED_LOGIN: "false",
     LOCAL_AUTH_SECRET_ENCRYPTION_KEY: "prod-local-auth-key-32-bytes-long",
     SESSION_SECRET: "prod-session-secret-32-bytes-long",
@@ -4643,7 +4719,7 @@ function localAuthEnv() {
 }
 
 function managedSecretEnv() {
-  return readEnv({
+  return testEnv({
     MANAGED_SECRET_ENCRYPTION_KEY: "prod-managed-secret-key-32-bytes",
     SESSION_SECRET: "prod-session-secret-32-bytes-long",
     WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -4651,7 +4727,7 @@ function managedSecretEnv() {
 }
 
 function delegatedOAuthEnv() {
-  return readEnv({
+  return testEnv({
     APP_ORIGIN: "https://romeo.example",
     DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-client-id",
     DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: "github-client-secret",

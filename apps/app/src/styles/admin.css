@@ -1,3 +1,5 @@
+@import "./admin-editor.css";
+
 /* Progressive disclosure + overview launchpad for the admin console. */
 .rm-admin-disclosure {
   border: 0;
@@ -103,8 +105,8 @@
 
 .rm-admin-launch__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
-  gap: 0.25rem 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 8px;
 }
 
 /* No per-item rule. A partly-filled last row drew its border only across the
@@ -112,23 +114,28 @@
    mid-width. The section heading already separates groups; the tiles just need
    air and a hover target. */
 
+/* Launch tiles are cards, matching the design: a bordered surface that lifts
+   its border to the accent on hover, rather than a borderless hover wash. */
+
 .rm-admin-launch__item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.75rem;
+  gap: 3px;
   align-items: flex-start;
   min-width: 0;
-  padding: 0.7rem;
-  margin-inline: -0.7rem;
-  border: 0;
-  border-radius: var(--rm-ui-radius);
-  background: transparent;
+  padding: 12px 14px;
+  border: 1px solid var(--rm-border);
+  border-radius: 10px;
+  background: var(--rm-surface);
   color: inherit;
+  text-align: left;
   text-decoration: none;
-  transition: background-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
 .rm-admin-launch__item:hover {
+  border-color: var(--rm-accent);
   background: var(--rm-hover);
 }
 
@@ -141,14 +148,12 @@
   outline-offset: 2px;
 }
 
+/* The design's launch card is label + description only. The icon duplicated
+   the one already beside the same entry in the rail, so it carried no
+   information the card didn't already have. */
+
 .rm-admin-launch__icon {
-  display: inline-grid;
-  place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 0.4rem;
-  background: var(--rm-ui-soft);
-  color: var(--rm-ui-muted);
+  display: none;
 }
 
 .rm-admin-launch__copy {
@@ -172,82 +177,10 @@
   -webkit-line-clamp: 2;
 }
 
-/* Settings section: a labelled group of related controls. Two-column on wide
-   viewports (label rail + control body), stacked on narrow. */
-.rm-settings-section {
-  display: grid;
-  gap: 1.5rem;
-  padding-block: 1.75rem;
-  border-top: 1px solid var(--rm-ui-border);
-}
-
-.rm-settings-section:first-child {
-  border-top: 0;
-  padding-block-start: 0;
-}
-
-.rm-settings-section__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.rm-settings-section__title {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.rm-settings-section__description {
-  color: var(--rm-ui-muted);
-  font-size: 0.8125rem;
-  margin: 0.25rem 0 0;
-  max-width: 60ch;
-}
-
-.rm-settings-section__body {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.rm-settings-advanced > summary {
-  cursor: pointer;
-  color: var(--rm-ui-muted);
-  font-size: 0.875rem;
-  padding-block: 0.25rem;
-}
-
-.rm-settings-advanced[open] > summary {
-  margin-block-end: 0.5rem;
-}
-
-.rm-settings-advanced[open] {
-  display: grid;
-  gap: 0.5rem;
-}
-
-@media (min-width: 60rem) {
-  .rm-settings-section {
-    grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
-    gap: 2rem;
-  }
-
-  .rm-settings-section__head {
-    display: block;
-  }
-}
-
 /* Linear-style inventory: title + meta, hover actions, no boxed tiles. */
 
 .rm-console-page {
   display: grid;
-}
-
-.rm-console-page > .rm-settings-section:first-child,
-.rm-console-page > .rm-panel:first-child {
-  border-top: 0;
-  padding-block-start: 0;
 }
 
 .rm-console-toolbar {
@@ -262,8 +195,14 @@
   margin-left: auto;
 }
 
+/* Shareable resources are an inventory, so they get bordered card rows and a
+   readable measure. As bare full-bleed rows the action sat ~1200px from the
+   item it acted on. */
+
 .rm-resource-list {
   display: grid;
+  gap: 8px;
+  max-width: 44rem;
 }
 
 .rm-resource-row {
@@ -271,18 +210,16 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 1rem;
   align-items: center;
-  min-height: 2.75rem;
-  padding: 0.65rem 0;
-  border-bottom: 1px solid var(--rm-ui-border);
-}
-
-.rm-resource-row:last-child {
-  border-bottom: 0;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--rm-border);
+  border-radius: 10px;
+  background: var(--rm-surface);
 }
 
 .rm-resource-row:hover,
 .rm-resource-row[data-selected="true"] {
-  background: color-mix(in srgb, var(--rm-hover) 80%, transparent);
+  border-color: color-mix(in srgb, var(--rm-accent) 40%, var(--rm-border));
 }
 
 .rm-resource-row[data-disabled="true"] {
@@ -364,7 +301,13 @@ button.rm-resource-row__main:focus-visible {
   padding: 0.85rem 0 0;
   border-top: 1px solid var(--rm-ui-border);
   color: var(--rm-text);
-  font-family: var(--rm-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(
+    --rm-font-mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace
+  );
   font-size: 0.8125rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -491,7 +434,6 @@ button.rm-resource-row__main:focus-visible {
   box-shadow: var(--rm-ui-shadow);
   backdrop-filter: blur(12px);
 }
-
 
 .rm-save-bar__label,
 .rm-managed-model-savebar__label {
@@ -661,425 +603,4 @@ button.rm-resource-row__main:focus-visible {
   gap: 1rem;
   padding-block-end: 1rem;
   border-bottom: 1px solid var(--rm-ui-border);
-}
-
-/* Editor sections use the same underline tabs as the rest of the console. The
-   previous filled pill bar stretched the full column and read as a toolbar
-   rather than navigation — and it was the only tab style in the product that
-   looked like this. */
-.rm-agent-editor-tabs {
-  display: flex;
-  gap: 0.25rem;
-  max-width: 100%;
-  overflow-x: auto;
-  border: 0;
-  border-bottom: 1px solid var(--rm-ui-border);
-  border-radius: 0;
-  background: transparent;
-  scrollbar-width: none;
-}
-
-.rm-agent-editor-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.rm-agent-editor-tabs .rm-ui-button {
-  flex: 0 0 auto;
-  min-height: 2.25rem;
-  padding: 0 0.15rem 0.6rem;
-  margin-right: 1.25rem;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--rm-ui-muted);
-  font-size: 0.8125rem;
-  white-space: nowrap;
-}
-
-.rm-agent-editor-tabs .rm-ui-button:hover:not(:disabled) {
-  background: transparent;
-  color: var(--rm-ui-fg);
-}
-
-.rm-agent-editor-tabs .rm-ui-button[aria-current="page"] {
-  border-bottom-color: var(--rm-ui-accent);
-  color: var(--rm-ui-fg);
-  font-weight: 600;
-}
-
-.rm-managed-model-section {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
-  min-width: 0;
-  padding: 1.25rem 0;
-  border: 0;
-  border-top: 1px solid var(--rm-ui-border);
-  border-radius: 0;
-  background: transparent;
-}
-
-/* The tab strip already draws the line that opens this pane; a section rule
-   directly beneath it produced two hairlines a few pixels apart. */
-
-.rm-agent-editor-tabs + * .rm-managed-model-section:first-child,
-.rm-agent-editor-tabs + .rm-managed-model-section,
-.rm-managed-model-editor > *:first-child .rm-managed-model-section:first-child {
-  border-top: 0;
-  padding-block-start: 0.5rem;
-}
-
-.rm-managed-model-editor > .rm-panel {
-  display: grid;
-  gap: 1rem;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.rm-managed-model-section__header {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-
-.rm-managed-model-section__header h3 {
-  margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  text-wrap: balance;
-}
-
-.rm-managed-model-section__header p {
-  max-width: 68ch;
-  margin: 0.25rem 0 0;
-  color: var(--rm-ui-muted);
-  font-size: 0.8125rem;
-  text-wrap: pretty;
-}
-
-.rm-managed-model-section__icon {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.5rem;
-  background: var(--rm-ui-soft);
-  color: var(--rm-ui-muted);
-}
-
-.rm-managed-model-identity-form {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 1rem;
-}
-
-.rm-managed-model-identity-form__avatar {
-  position: sticky;
-  top: 1rem;
-}
-
-.rm-managed-model-binding-list {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.rm-managed-model-binding-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  min-width: 0;
-  padding: 0.75rem;
-  border: 1px solid var(--rm-ui-border);
-  border-radius: 0.5rem;
-}
-
-.rm-managed-model-tool-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 1rem;
-  min-width: 0;
-  padding: 0.875rem;
-  border: 1px solid var(--rm-ui-border);
-  border-radius: 0.5rem;
-}
-
-.rm-managed-model-tool-row__identity {
-  display: grid;
-  min-width: 0;
-  gap: 0.25rem;
-}
-
-.rm-managed-model-tool-row__controls {
-  display: grid;
-  min-width: 12rem;
-  gap: 0.625rem;
-}
-
-.rm-managed-model-readiness {
-  display: grid;
-  gap: 0.75rem;
-  margin-block-start: 0.5rem;
-  padding: 0.875rem;
-  border: 1px solid var(--rm-ui-border);
-  border-radius: 0.625rem;
-  background: var(--rm-ui-soft);
-}
-
-.rm-managed-model-readiness.is-ready {
-  border-color: color-mix(in srgb, var(--rm-success) 35%, var(--rm-ui-border));
-}
-
-.rm-managed-model-readiness.is-blocked {
-  border-color: color-mix(in srgb, var(--rm-danger) 35%, var(--rm-ui-border));
-}
-
-.rm-managed-model-readiness__summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.rm-managed-model-readiness__checks {
-  display: grid;
-  gap: 0.375rem;
-}
-
-.rm-managed-model-readiness__check {
-  border-radius: 0.375rem;
-  background: var(--rm-ui-surface);
-}
-
-.rm-managed-model-readiness__check summary {
-  display: grid;
-  grid-template-columns: auto minmax(7rem, auto) minmax(0, 1fr);
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem;
-  cursor: pointer;
-  list-style: none;
-}
-
-.rm-managed-model-readiness__check summary::-webkit-details-marker {
-  display: none;
-}
-
-.rm-managed-model-readiness__check summary small {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--rm-ui-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rm-managed-model-readiness__check.is-ready summary > svg {
-  color: var(--rm-success);
-}
-
-.rm-managed-model-readiness__check.is-blocked summary > svg,
-.rm-managed-model-readiness__check.is-warning summary > svg {
-  color: var(--rm-danger);
-}
-
-.rm-managed-model-readiness__check ul {
-  display: grid;
-  gap: 0.25rem;
-  margin: 0;
-  padding: 0 0.75rem 0.75rem 2.25rem;
-  color: var(--rm-ui-muted);
-  font-size: 0.75rem;
-}
-
-.rm-managed-model-empty {
-  display: grid;
-  gap: 0.25rem;
-  padding: 1rem;
-  border: 1px dashed var(--rm-ui-border);
-  border-radius: 0.5rem;
-  color: var(--rm-ui-muted);
-  font-size: 0.8125rem;
-}
-
-.rm-managed-model-empty strong {
-  color: var(--rm-ui-text);
-  font-size: 0.875rem;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rm-managed-model-card {
-    transition: none;
-  }
-
-  .rm-managed-model-card:hover {
-    transform: none;
-  }
-}
-
-.rm-console-content .rm-ui-tabs__list {
-  gap: 0.15rem;
-}
-
-.rm-console-content .rm-ui-tabs__trigger {
-  padding: 0.55rem 0.15rem 0.65rem;
-  margin-right: 1rem;
-  font-size: 0.8125rem;
-}
-
-.rm-console-content .rm-ui-tabs__content {
-  padding-block-start: 1.25rem;
-}
-
-@media (max-width: 40rem) {
-  .rm-console-content .rm-ui-tabs__list {
-    max-width: 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .rm-console-content .rm-ui-tabs {
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .rm-console-content .rm-ui-tabs__list::-webkit-scrollbar {
-    display: none;
-  }
-
-  .rm-managed-model-list-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .rm-managed-model-list-header .rm-ui-button {
-    width: 100%;
-  }
-
-  .rm-managed-model-list-page .rm-stat-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .rm-managed-model-editor__header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .rm-managed-model-editor__header > .flex {
-    width: 100%;
-  }
-
-  .rm-managed-model-savebar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .rm-managed-model-savebar > .flex {
-    width: 100%;
-  }
-
-  .rm-managed-model-savebar .rm-ui-button {
-    flex: 1 1 0;
-  }
-
-  .rm-managed-model-identity-form {
-    grid-template-columns: 1fr;
-  }
-
-  .rm-managed-model-identity-form__avatar {
-    position: static;
-  }
-
-  .rm-managed-model-binding-row {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .rm-managed-model-tool-row {
-    grid-template-columns: 1fr;
-  }
-
-  .rm-managed-model-tool-row__controls {
-    min-width: 0;
-  }
-
-  .rm-managed-model-readiness__check summary {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .rm-managed-model-readiness__check summary small {
-    grid-column: 2;
-    white-space: normal;
-  }
-}
-
-.rm-connection-model-name {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: hsl(var(--foreground));
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rm-connection-model-status {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.rm-catalog-sync-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(12rem, auto);
-  align-items: start;
-  gap: 1rem;
-  padding: 0.875rem;
-  border: 1px solid var(--rm-border);
-  border-radius: 0.75rem;
-  background: var(--rm-surface-soft);
-}
-
-.rm-catalog-sync-summary p {
-  margin-top: 0.25rem;
-  color: var(--rm-muted);
-  font-size: 0.8125rem;
-}
-
-.rm-managed-model-avatar {
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--rm-accent) 24%, var(--rm-border));
-  border-radius: 28%;
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--rm-accent) 22%, var(--rm-surface)),
-    color-mix(in srgb, var(--rm-accent-2) 18%, var(--rm-surface))
-  );
-  color: var(--rm-text);
-}
-
-.rm-managed-model-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.rm-managed-model-avatar__icon {
-  font-size: 1.25em;
-  line-height: 1;
-}
-
-@media (max-width: 640px) {
-  .rm-catalog-sync-summary {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }

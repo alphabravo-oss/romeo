@@ -1,4 +1,12 @@
 import type { ToolOperationDispatchRequestClaimResult } from "./api-types";
+import type { ToolDispatchPinnedFetch } from "./dns-pinned-fetch";
+import {
+  isBlockedNetworkAddress,
+  isNetworkIpAddress,
+  isPrivateNetworkHost,
+  normalizeNetworkHost,
+  normalizeResolvedNetworkAddress,
+} from "./network-host-policy";
 import type {
   RunToolDispatchWorkerInput,
   ToolDispatchDnsAddress,
@@ -6,12 +14,19 @@ import type {
 } from "./tool-dispatch-worker";
 
 export async function assertResolvedHostAllowed(
-  input: Pick<RunToolDispatchWorkerInput, "allowPrivateNetwork" | "dnsLookup">,
+  input: Pick<
+    RunToolDispatchWorkerInput,
+    "allowPrivateNetwork" | "dnsLookup" | "pinnedFetchImpl"
+  >,
   host: string,
-): Promise<void> {
-  if (input.allowPrivateNetwork === true || input.dnsLookup === undefined)
-    return;
-  if (ipLiteral(host)) return;
+): Promise<ToolDispatchDnsAddress[]> {
+  if (input.allowPrivateNetwork === true) return [];
+  if (isNetworkIpAddress(host)) return [];
+  if (input.dnsLookup === undefined) {
+    if (input.pinnedFetchImpl !== undefined)
+      throw new Error("worker_dns_lookup_failed");
+    return [];
+  }
   let addresses: ToolDispatchDnsAddress[];
   try {
     addresses = await input.dnsLookup(host);
@@ -19,9 +34,19 @@ export async function assertResolvedHostAllowed(
     throw new Error("worker_dns_lookup_failed");
   }
   if (addresses.length === 0) throw new Error("worker_dns_lookup_failed");
-  if (addresses.some((item) => privateAddress(item.address))) {
+  const normalizedAddresses = addresses.map((item) =>
+    normalizeResolvedNetworkAddress(item.address, item.family),
+  );
+  if (normalizedAddresses.some((item) => item === undefined)) {
+    throw new Error("worker_dns_lookup_failed");
+  }
+  const approvedAddresses = normalizedAddresses.filter(
+    (item): item is NonNullable<typeof item> => item !== undefined,
+  );
+  if (approvedAddresses.some((item) => isBlockedNetworkAddress(item.address))) {
     throw new Error("worker_host_denied");
   }
+  return approvedAddresses;
 }
 
 export function buildDispatchUrl(
@@ -64,21 +89,43 @@ export function buildDispatchUrl(
 }
 
 export async function fetchWithTimeout(
-  fetchImpl: typeof fetch,
+  input: Pick<RunToolDispatchWorkerInput, "fetchImpl" | "pinnedFetchImpl">,
   url: URL,
   init: RequestInit,
   timeoutMs: number,
+  approvedAddresses: ToolDispatchDnsAddress[],
 ): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetchImpl(url, { ...init, signal: controller.signal });
+    return await fetchApprovedHost(
+      input,
+      url,
+      { ...init, signal: controller.signal },
+      approvedAddresses,
+    );
   } catch (error) {
     if (controller.signal.aborted) throw new Error("worker_fetch_timeout");
     throw error;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function fetchApprovedHost(
+  input: {
+    fetchImpl: typeof fetch;
+    pinnedFetchImpl?: ToolDispatchPinnedFetch;
+  },
+  url: URL,
+  init: RequestInit,
+  approvedAddresses: ToolDispatchDnsAddress[],
+): Promise<Response> {
+  if (approvedAddresses.length === 0) return await input.fetchImpl(url, init);
+  if (input.pinnedFetchImpl === undefined) {
+    throw new Error("worker_dns_pinning_unavailable");
+  }
+  return await input.pinnedFetchImpl(url, init, approvedAddresses);
 }
 
 export async function readBoundedResponseBody(
@@ -117,76 +164,14 @@ export async function readBoundedResponseBody(
 }
 
 export function safeHost(host: string, allowPrivateNetwork: boolean): boolean {
-  const normalized = host.toLowerCase();
+  const normalized = normalizeNetworkHost(host);
   if (
     normalized.length === 0 ||
     normalized.includes("/") ||
     normalized.includes("@")
   )
     return false;
-  if (allowPrivateNetwork) return true;
-  if (
-    normalized === "localhost" ||
-    normalized.endsWith(".localhost") ||
-    normalized.endsWith(".local") ||
-    normalized === "kubernetes.default" ||
-    normalized.endsWith(".svc") ||
-    normalized.endsWith(".cluster.local") ||
-    normalized === "metadata.google.internal"
-  ) {
-    return false;
-  }
-  return !privateIpv4(normalized) && !privateIpv6(normalized);
-}
-
-function privateAddress(address: string): boolean {
-  const normalized = address.toLowerCase();
-  return privateIpv4(normalized) || privateIpv6(normalized);
-}
-
-function ipLiteral(host: string): boolean {
-  const normalized = host.toLowerCase().replace(/^\[/u, "").replace(/\]$/u, "");
-  return ipv4Octets(normalized) !== undefined || normalized.includes(":");
-}
-
-function privateIpv4(host: string): boolean {
-  const octets = ipv4Octets(host);
-  if (octets === undefined) return false;
-  const [first = 0, second = 0] = octets;
-  return (
-    first === 0 ||
-    first === 10 ||
-    (first === 100 && second >= 64 && second <= 127) ||
-    first === 127 ||
-    (first === 169 && second === 254) ||
-    (first === 172 && second >= 16 && second <= 31) ||
-    (first === 192 && second === 168) ||
-    (first === 198 && (second === 18 || second === 19)) ||
-    first >= 224
-  );
-}
-
-function ipv4Octets(host: string): number[] | undefined {
-  const parts = host.split(".");
-  if (parts.length !== 4) return undefined;
-  const octets = parts.map((part) => Number(part));
-  if (octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255))
-    return undefined;
-  return octets;
-}
-
-function privateIpv6(host: string): boolean {
-  const normalized = host.replace(/^\[/u, "").replace(/\]$/u, "");
-  if (normalized.startsWith("::ffff:"))
-    return privateIpv4(normalized.slice("::ffff:".length));
-  return (
-    normalized === "::" ||
-    normalized === "::1" ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd") ||
-    normalized.startsWith("fe80:") ||
-    normalized.startsWith("ff")
-  );
+  return allowPrivateNetwork || !isPrivateNetworkHost(normalized);
 }
 
 function pathParameterNames(pathTemplate: string): string[] {

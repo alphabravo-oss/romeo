@@ -112,10 +112,7 @@ function CatalogCard(props: {
   const syncReady = entry.runtime.syncEnabled;
 
   return (
-    <div
-      className="rm-panel"
-      style={{ padding: 14, opacity: planned ? 0.75 : 1 }}
-    >
+    <div style={{ padding: 14, opacity: planned ? 0.75 : 1 }}>
       <div className="flex items-start gap-3">
         <div style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
           {dataConnectorIcon(entry.type)}

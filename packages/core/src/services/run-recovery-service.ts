@@ -1,8 +1,16 @@
 import { scopeValues, type Scope } from "@romeo/auth";
-import type { ChatMessage, ProviderToolDefinition } from "@romeo/providers";
+import type {
+  ChatMessage,
+  ProviderReasoningParameters,
+  ProviderReasoningPolicyLayers,
+  ProviderSampling,
+  ProviderStructuredOutput,
+  ProviderToolDefinition,
+} from "@romeo/providers";
 
 import type { BackgroundJob, RunRecord } from "../domain/entities";
 import type { RunKnowledgeCitation } from "./run-knowledge";
+import { reasoningPolicyFromUnknown } from "./run-reasoning-policy";
 
 export interface RunExecutionJobPayload {
   runId: string;
@@ -29,6 +37,10 @@ export interface RunExecutionCheckpoint {
   scopeSnapshot: Scope[];
   assistantContent: string;
   emitRunStarted: boolean;
+  reasoning?: ProviderReasoningParameters;
+  reasoningPolicy?: ProviderReasoningPolicyLayers;
+  sampling?: ProviderSampling;
+  structuredOutput?: ProviderStructuredOutput;
 }
 
 export function runWithStatus(
@@ -109,6 +121,14 @@ export function runExecutionCheckpoint(
     (scope): scope is Scope =>
       typeof scope === "string" && scopeValues.includes(scope as Scope),
   );
+  const sampling = providerSampling(checkpoint.sampling);
+  const reasoning = providerReasoning(checkpoint.reasoning);
+  const reasoningPolicy = providerReasoningPolicyLayers(
+    checkpoint.reasoningPolicy,
+  );
+  const structuredOutput = providerStructuredOutput(
+    checkpoint.structuredOutput,
+  );
   return {
     messages: checkpoint.messages as ChatMessage[],
     citations: checkpoint.citations as RunKnowledgeCitation[],
@@ -118,5 +138,92 @@ export function runExecutionCheckpoint(
     scopeSnapshot,
     assistantContent: checkpoint.assistantContent,
     emitRunStarted: checkpoint.emitRunStarted,
+    ...(sampling === undefined ? {} : { sampling }),
+    ...(reasoning === undefined ? {} : { reasoning }),
+    ...(reasoningPolicy === undefined ? {} : { reasoningPolicy }),
+    ...(structuredOutput === undefined ? {} : { structuredOutput }),
   };
+}
+
+function providerSampling(value: unknown): ProviderSampling | undefined {
+  const record = objectRecord(value);
+  if (record === undefined) return undefined;
+  const sampling: ProviderSampling = {
+    ...(finiteNumber(record.temperature)
+      ? { temperature: record.temperature }
+      : {}),
+    ...(finiteNumber(record.topP) ? { topP: record.topP } : {}),
+    ...(finiteNumber(record.maxTokens) ? { maxTokens: record.maxTokens } : {}),
+  };
+  return Object.keys(sampling).length === 0 ? undefined : sampling;
+}
+
+function providerReasoning(
+  value: unknown,
+): ProviderReasoningParameters | undefined {
+  const record = objectRecord(value);
+  if (record === undefined) return undefined;
+  const reasoning: ProviderReasoningParameters = {
+    ...(record.effort === "low" ||
+    record.effort === "medium" ||
+    record.effort === "high"
+      ? { effort: record.effort }
+      : {}),
+    ...(record.summary === "auto" ||
+    record.summary === "concise" ||
+    record.summary === "detailed"
+      ? { summary: record.summary }
+      : {}),
+  };
+  return Object.keys(reasoning).length === 0 ? undefined : reasoning;
+}
+
+function providerReasoningPolicyLayers(
+  value: unknown,
+): ProviderReasoningPolicyLayers | undefined {
+  const layers = objectRecord(value);
+  if (layers === undefined) return undefined;
+  const organizationMaximum = reasoningPolicyFromUnknown(
+    layers.organizationMaximum,
+  );
+  const agentDefault = reasoningPolicyFromUnknown(layers.agentDefault);
+  const runRequest = reasoningPolicyFromUnknown(layers.runRequest);
+  const parsed: ProviderReasoningPolicyLayers = {
+    ...(organizationMaximum === undefined ? {} : { organizationMaximum }),
+    ...(agentDefault === undefined ? {} : { agentDefault }),
+    ...(runRequest === undefined ? {} : { runRequest }),
+  };
+  return Object.keys(parsed).length === 0 ? undefined : parsed;
+}
+
+function providerStructuredOutput(
+  value: unknown,
+): ProviderStructuredOutput | undefined {
+  const record = objectRecord(value);
+  if (record?.type === "json_object") return { type: "json_object" };
+  const schema = objectRecord(record?.schema);
+  if (
+    record?.type !== "json_schema" ||
+    typeof record.name !== "string" ||
+    schema === undefined ||
+    (record.strict !== undefined && typeof record.strict !== "boolean")
+  ) {
+    return undefined;
+  }
+  return {
+    type: "json_schema",
+    name: record.name,
+    schema,
+    ...(record.strict === undefined ? {} : { strict: record.strict }),
+  };
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function finiteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }

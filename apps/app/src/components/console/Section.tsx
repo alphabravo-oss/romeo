@@ -23,7 +23,9 @@ export function Section({
   /** `danger` fences destructive controls off from routine settings. */
   tone?: "danger" | "default";
 }): ReactNode {
-  const hasHead = title !== undefined || actions !== undefined;
+  // `description` alone is a valid header, and a null action must not emit an
+  // empty header row that still consumes the body gap.
+  const hasHead = title != null || actions != null || description != null;
   return (
     <section
       className={`cs-section${tone === "danger" ? " cs-section--danger" : ""}`}
@@ -32,14 +34,14 @@ export function Section({
       {hasHead ? (
         <header className="cs-section__head">
           <div className="cs-section__copy">
-            {title === undefined ? null : (
+            {title == null ? null : (
               <h3 className="cs-section__title">{title}</h3>
             )}
-            {description === undefined ? null : (
+            {description == null ? null : (
               <p className="cs-section__description">{description}</p>
             )}
           </div>
-          {actions === undefined ? null : (
+          {actions == null ? null : (
             <div className="cs-section__actions">{actions}</div>
           )}
         </header>
@@ -101,7 +103,11 @@ export function Disclosure({
 export function StatRow({
   items,
 }: {
-  items: { label: ReactNode; value: ReactNode; tone?: "danger" | "default" | "success" | "warning" }[];
+  items: {
+    label: ReactNode;
+    value: ReactNode;
+    tone?: "danger" | "default" | "success" | "warning";
+  }[];
 }): ReactNode {
   if (items.length === 0) return null;
   return (

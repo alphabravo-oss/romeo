@@ -3,17 +3,29 @@ import { createFileRoute } from "@tanstack/react-router";
 import { WorkspaceShell } from "../components/WorkspaceShell";
 import { localeNamespaceGroups, useLocaleNamespaces } from "../lib/i18n";
 import modelPickerCss from "../styles/app-model-picker.css?url";
+import {
+  selectBranchSearch,
+  selectChatSearch,
+  validateChatRouteSearch,
+} from "../lib/chat-route-search";
+import { prefetchPrimaryRouteData } from "../lib/route-data";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     links: [{ rel: "stylesheet", href: modelPickerCss }],
   }),
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { agent?: string; chat?: string } => ({
-    ...(typeof search.agent === "string" ? { agent: search.agent } : {}),
-    ...(typeof search.chat === "string" ? { chat: search.chat } : {}),
+  validateSearch: validateChatRouteSearch,
+  loaderDeps: ({ search }) => ({
+    chatId: search.chat,
+    workspaceId: search.workspace,
   }),
+  loader: ({ cause, context, deps }) =>
+    prefetchPrimaryRouteData(
+      "chat",
+      context,
+      cause === "preload" ? "intent" : "navigation",
+      deps,
+    ),
   component: ChatRoute,
 });
 
@@ -38,10 +50,13 @@ function ChatRoute() {
       // both describe the entry the reader is already standing on.
       onChatSelection={(chat, options) =>
         void navigate({
-          search: (previous) => {
-            const { chat: _chat, ...rest } = previous;
-            return { ...rest, ...(chat === undefined ? {} : { chat }) };
-          },
+          search: (previous) => selectChatSearch(previous, chat),
+          replace: options?.replace === true,
+        })
+      }
+      onBranchSelection={(leaf, options) =>
+        void navigate({
+          search: (previous) => selectBranchSearch(previous, leaf),
           replace: options?.replace === true,
         })
       }
@@ -49,6 +64,9 @@ function ChatRoute() {
         ? {}
         : { requestedAgentId: search.agent })}
       {...(search.chat === undefined ? {} : { requestedChatId: search.chat })}
+      {...(search.leaf === undefined
+        ? {}
+        : { requestedLeafMessageId: search.leaf })}
     />
   );
 }

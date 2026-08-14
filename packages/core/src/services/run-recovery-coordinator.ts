@@ -3,6 +3,9 @@ import type {
   BaseModel,
   ChatMessage,
   ProviderInstance,
+  ProviderReasoningParameters,
+  ProviderSampling,
+  ProviderStructuredOutput,
   ProviderToolDefinition,
 } from "@romeo/providers";
 
@@ -34,6 +37,9 @@ export interface RecoverableRunExecutionInput {
   subject: AuthSubject;
   assistantContentPrefix?: string;
   emitRunStarted?: boolean;
+  reasoning?: ProviderReasoningParameters;
+  sampling?: ProviderSampling;
+  structuredOutput?: ProviderStructuredOutput;
 }
 
 interface SubjectSnapshotInput {
@@ -132,6 +138,18 @@ export class RunRecoveryCoordinator {
           subject,
           assistantContentPrefix: checkpoint.assistantContent,
           emitRunStarted: false,
+          ...(checkpoint.sampling === undefined
+            ? {}
+            : { sampling: checkpoint.sampling }),
+          ...(checkpoint.reasoning === undefined
+            ? {}
+            : { reasoning: checkpoint.reasoning }),
+          ...(checkpoint.reasoningPolicy === undefined
+            ? {}
+            : { reasoningPolicy: checkpoint.reasoningPolicy }),
+          ...(checkpoint.structuredOutput === undefined
+            ? {}
+            : { structuredOutput: checkpoint.structuredOutput }),
         });
         return;
       }

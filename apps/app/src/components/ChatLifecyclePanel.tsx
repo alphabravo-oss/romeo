@@ -2,35 +2,31 @@ import { Input, Button } from "@romeo/ui";
 import Archive from "lucide-react/dist/esm/icons/archive.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import ShieldOff from "lucide-react/dist/esm/icons/shield-off.mjs";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { archiveChat, updateChatLegalHold } from "../features";
+import {
+  archiveWorkspaceChatMutationOptions,
+  updateChatLegalHoldMutationOptions,
+} from "../features/chats/mutation-options";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 export function ChatLifecyclePanel({
   activeChatId,
   onChatArchived,
+  workspaceId,
 }: {
   activeChatId: string | undefined;
   onChatArchived: (chatId: string) => Promise<void>;
+  workspaceId: string | undefined;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const [holdDays, setHoldDays] = useState(30);
   const [notice, setNotice] = useState<string>();
-  const archiveMutation = useMutation({ mutationFn: archiveChat });
-  const legalHoldMutation = useMutation({
-    mutationFn: (input: {
-      chatId: string;
-      legalHoldUntil?: string | null;
-      legalHoldReason?: string;
-    }) => {
-      const { chatId, ...body } = input;
-      return updateChatLegalHold(chatId, body);
-    },
-  });
+  const archiveMutation = useMutation(archiveWorkspaceChatMutationOptions());
+  const legalHoldMutation = useMutation(updateChatLegalHoldMutationOptions());
   const hasActiveChat = activeChatId !== undefined;
   const isBusy = archiveMutation.isPending || legalHoldMutation.isPending;
 
@@ -38,16 +34,15 @@ export function ChatLifecyclePanel({
     if (activeChatId === undefined) return;
     setNotice(undefined);
     try {
-      const archived = await archiveMutation.mutateAsync(activeChatId);
+      const archived = await archiveMutation.mutateAsync({
+        chatId: activeChatId,
+        workspaceId,
+      });
       await onChatArchived(archived.id);
       setNotice(t("lifecycleChatArchivedNotice"));
       toast(t("lifecycleChatArchived"), "success");
     } catch (caught) {
-      setNotice(
-        caught instanceof Error
-          ? caught.message
-          : t("lifecycleUnableArchiveChat"),
-      );
+      setNotice(safeUserErrorMessage(caught, t("lifecycleUnableArchiveChat")));
       toast(t("lifecycleArchiveChatFailed"), "error");
     }
   }
@@ -59,17 +54,13 @@ export function ChatLifecyclePanel({
       const legalHoldUntil = futureIsoTimestamp(holdDays);
       await legalHoldMutation.mutateAsync({
         chatId: activeChatId,
-        legalHoldUntil,
+        input: { legalHoldUntil },
+        workspaceId,
       });
-      await refreshLifecycleQueries(queryClient);
       setNotice(t("lifecycleHoldUpdatedNotice"));
       toast(t("lifecycleHoldUpdated"), "success");
     } catch (caught) {
-      setNotice(
-        caught instanceof Error
-          ? caught.message
-          : t("lifecycleUnableUpdateHold"),
-      );
+      setNotice(safeUserErrorMessage(caught, t("lifecycleUnableUpdateHold")));
       toast(t("lifecycleHoldUpdateFailed"), "error");
     }
   }
@@ -80,17 +71,13 @@ export function ChatLifecyclePanel({
     try {
       await legalHoldMutation.mutateAsync({
         chatId: activeChatId,
-        legalHoldUntil: null,
+        input: { legalHoldUntil: null },
+        workspaceId,
       });
-      await refreshLifecycleQueries(queryClient);
       setNotice(t("lifecycleHoldClearedNotice"));
       toast(t("lifecycleHoldCleared"), "success");
     } catch (caught) {
-      setNotice(
-        caught instanceof Error
-          ? caught.message
-          : t("lifecycleUnableClearHold"),
-      );
+      setNotice(safeUserErrorMessage(caught, t("lifecycleUnableClearHold")));
       toast(t("lifecycleClearHoldFailed"), "error");
     }
   }
@@ -139,19 +126,13 @@ export function ChatLifecyclePanel({
           {t("lifecycleClear")}
         </Button>
       </div>
-      {notice ? <div className="text-xs text-muted">{notice}</div> : null}
+      {notice ? (
+        <div className="text-xs text-muted" role="status">
+          {notice}
+        </div>
+      ) : null}
     </div>
   );
-}
-
-async function refreshLifecycleQueries(
-  queryClient: ReturnType<typeof useQueryClient>,
-): Promise<void> {
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ["chats"] }),
-    queryClient.invalidateQueries({ queryKey: ["auditLogs"] }),
-    queryClient.invalidateQueries({ queryKey: ["accessReview"] }),
-  ]);
 }
 
 function futureIsoTimestamp(days: number): string {

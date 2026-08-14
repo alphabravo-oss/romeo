@@ -1,23 +1,27 @@
 import type {
   ChatMessage,
   ProviderToolCallRequest,
-  ProviderTokenUsage,
   StreamChatChunk,
 } from "@romeo/providers";
+import { hasRequestedProviderChatParameters } from "@romeo/providers";
 
 import { createRunEvent, type RunEvent } from "./events";
 import {
-  ProviderStreamAborted,
   ProviderStreamFailure,
   createProviderStreamRuntime,
 } from "./provider-stream-runtime";
 import {
-  isReasoningChunk,
+  countsAgainstProviderHealth,
+  isRetryableProviderFailure,
+  normalizeProviderRetryPolicy,
+  retryDelay,
+} from "./provider-retry-policy";
+import {
   isToolCallChunk,
   isUsageChunk,
   providerApiKeyFor,
   providerToolCallRequestedData,
-  providerToolsForTarget,
+  reasoningChunkEventData,
   sanitizeUsage,
   toolCallsFromChunk,
 } from "./run-executor-chunks";
@@ -26,13 +30,18 @@ import {
   modelToolExecutionFailureData,
   providerFailureData,
 } from "./run-executor-failures";
+import {
+  resolveRunProviderChatParameters,
+  resolveRunProviderChatParametersAtAttempt,
+} from "./run-executor-parameters";
 import type {
   ExecuteRunInput,
   ExecuteRunResult,
   ProviderFallbackSnapshot,
   ProviderFallbackTarget,
-  ProviderRetryPolicy,
 } from "./run-executor-types";
+import { ProviderUsageTracker } from "./provider-usage-tracker";
+import { ReasoningSummaryTracker } from "./reasoning-summary-tracker";
 export * from "./provider-circuit-breaker";
 export * from "./run-executor-types";
 
@@ -47,6 +56,17 @@ export async function* streamRunEvents(
   }
 
   const retryPolicy = normalizeProviderRetryPolicy(input.providerRetryPolicy);
+  let initialParameters: ReturnType<typeof resolveRunProviderChatParameters>;
+  try {
+    initialParameters = await resolveRunProviderChatParametersAtAttempt(input, {
+      adapter: input.adapter,
+      model: input.model,
+      provider: input.provider,
+    });
+  } catch (error) {
+    yield event("run.failed", providerFailureData(error));
+    return;
+  }
   if (input.emitRunStarted !== false) {
     yield event("run.started", {
       modelId: input.model.id,
@@ -57,13 +77,20 @@ export async function* streamRunEvents(
         ? {}
         : { streamTimeoutMs: input.providerTimeoutMs }),
       maxRetries: retryPolicy.maxRetries,
+      ...(hasRequestedProviderChatParameters(initialParameters.summary)
+        ? { parameterResolution: initialParameters.summary }
+        : {}),
     });
   }
   yield event("message.started", { role: "assistant" });
 
   let content = "";
   let currentAssistantMessageContent = "";
-  let usage: ProviderTokenUsage | undefined;
+  const usageTracker = new ProviderUsageTracker();
+  const withUsageEvidence = (data: Record<string, unknown>) => ({
+    ...data,
+    ...usageTracker.evidence(),
+  });
   let emittedContent = false;
   let modelToolCallCount = 0;
   let messages: ChatMessage[] = input.messages;
@@ -84,15 +111,17 @@ export async function* streamRunEvents(
       input.providerDisabled === true &&
       active.provider.id === input.provider.id
     ) {
-      if (tryFallback("provider_disabled")) continue;
+      if (await tryFallback("provider_disabled")) continue;
       yield event(
         "run.failed",
-        providerFailureData(
-          { errorCode: "provider_disabled" },
-          {
-            fallback: providerFallback,
-            retryAttempts,
-          },
+        withUsageEvidence(
+          providerFailureData(
+            { errorCode: "provider_disabled" },
+            {
+              fallback: providerFallback,
+              retryAttempts,
+            },
+          ),
         ),
       );
       return;
@@ -102,25 +131,32 @@ export async function* streamRunEvents(
       active.provider.id,
     );
     if (circuit?.state === "open") {
-      if (tryFallback("provider_circuit_open")) continue;
+      if (await tryFallback("provider_circuit_open")) continue;
       yield event(
         "run.failed",
-        providerFailureData(
-          { errorCode: "provider_circuit_open" },
-          {
-            circuit,
-            fallback: providerFallback,
-            retryAttempts,
-          },
+        withUsageEvidence(
+          providerFailureData(
+            { errorCode: "provider_circuit_open" },
+            {
+              circuit,
+              fallback: providerFallback,
+              retryAttempts,
+            },
+          ),
         ),
       );
       return;
     }
 
     let chunks: AsyncIterator<StreamChatChunk> | undefined;
-    // Per attempt, deliberately not per run: it decides whether abandoning this attempt leaves
-    // orphaned thinking on the wire that the client has to be told to drop.
     let attemptEmittedReasoning = false;
+    const reasoningSummary = new ReasoningSummaryTracker();
+    let attemptRetainReasoningSummary = false;
+    const finishReasoningSummary = (status: "completed" | "discarded") =>
+      reasoningSummary.finish(
+        status,
+        usageTracker.currentUsage()?.reasoningTokens,
+      );
     const runtime = createProviderStreamRuntime(
       input.signal,
       input.providerTimeoutMs,
@@ -128,7 +164,14 @@ export async function* streamRunEvents(
 
     try {
       const activeApiKey = providerApiKeyFor(input, active.provider.id);
-      const activeTools = providerToolsForTarget(active, input.tools);
+      const resolvedParameters =
+        await resolveRunProviderChatParametersAtAttempt(input, active);
+      const parameters = resolvedParameters.effective;
+      const effectiveReasoningPolicy =
+        resolvedParameters.summary.reasoningPolicy?.effective;
+      attemptRetainReasoningSummary =
+        effectiveReasoningPolicy?.mode === "summary" &&
+        effectiveReasoningPolicy.retainSummary;
       chunks = active.adapter
         .streamChat({
           messages,
@@ -136,13 +179,23 @@ export async function* streamRunEvents(
           provider: active.provider,
           // Carried across retries and provider fallback: the pinned sampling belongs to the
           // managed model version, not to whichever provider ends up answering.
-          ...(input.sampling === undefined ? {} : { sampling: input.sampling }),
+          ...(parameters.sampling === undefined
+            ? {}
+            : { sampling: parameters.sampling }),
+          ...(parameters.reasoning === undefined
+            ? {}
+            : { reasoning: parameters.reasoning }),
+          ...(parameters.structuredOutput === undefined
+            ? {}
+            : { structuredOutput: parameters.structuredOutput }),
           ...(activeApiKey === undefined ? {} : { apiKey: activeApiKey }),
           ...(input.fetchImpl === undefined
             ? {}
             : { fetchImpl: input.fetchImpl }),
           signal: runtime.signal,
-          ...(activeTools === undefined ? {} : { tools: activeTools }),
+          ...(parameters.tools === undefined
+            ? {}
+            : { tools: parameters.tools }),
         })
         [Symbol.asyncIterator]();
 
@@ -153,19 +206,27 @@ export async function* streamRunEvents(
         runtime.markActivity();
 
         if (runtime.outcome === "cancelled") {
-          yield event("run.cancelled", {});
+          for (const summaryEvent of finishReasoningSummary("discarded"))
+            yield event(summaryEvent.type, summaryEvent.data);
+          yield event("run.cancelled", withUsageEvidence({}));
           return;
         }
         if (runtime.outcome === "timeout") {
-          throw new ProviderStreamFailure("provider_stream_timeout");
+          throw new ProviderStreamFailure("provider_timeout");
         }
 
         if (isUsageChunk(chunk)) {
-          usage = sanitizeUsage(chunk.usage);
+          usageTracker.observe(
+            active,
+            sanitizeUsage(chunk.usage, active.adapter.kind),
+          );
           continue;
         }
 
         if (isToolCallChunk(chunk)) {
+          for (const summaryEvent of finishReasoningSummary("completed"))
+            yield event(summaryEvent.type, summaryEvent.data);
+          usageTracker.finishAttempt();
           const requestedToolCalls = toolCallsFromChunk(chunk);
           const toolRequestEvents = requestedToolCalls.map(
             providerToolCallRequestedData,
@@ -175,11 +236,14 @@ export async function* streamRunEvents(
           }
           const firstToolCall = toolRequestEvents[0]!;
           if (input.modelToolExecutor === undefined) {
-            yield event("run.failed", {
-              errorCode: "provider_tool_call_dispatch_unavailable",
-              providerCallIdHash: firstToolCall.providerCallIdHash,
-              toolName: firstToolCall.name,
-            });
+            yield event(
+              "run.failed",
+              withUsageEvidence({
+                errorCode: "provider_tool_call_dispatch_unavailable",
+                providerCallIdHash: firstToolCall.providerCallIdHash,
+                toolName: firstToolCall.name,
+              }),
+            );
             return;
           }
           if (
@@ -189,11 +253,14 @@ export async function* streamRunEvents(
             const limitedToolCall =
               toolRequestEvents[maxModelToolCalls - modelToolCallCount] ??
               toolRequestEvents.at(-1)!;
-            yield event("run.failed", {
-              errorCode: "model_tool_call_limit_exceeded",
-              providerCallIdHash: limitedToolCall.providerCallIdHash,
-              toolName: limitedToolCall.name,
-            });
+            yield event(
+              "run.failed",
+              withUsageEvidence({
+                errorCode: "model_tool_call_limit_exceeded",
+                providerCallIdHash: limitedToolCall.providerCallIdHash,
+                toolName: limitedToolCall.name,
+              }),
+            );
             return;
           }
 
@@ -209,25 +276,28 @@ export async function* streamRunEvents(
               const execution =
                 await input.modelToolExecutor(requestedToolCall);
               if (execution.suspend?.type === "tool_dispatch") {
-                yield event("run.waiting_tool_dispatch", {
-                  connectorId: execution.suspend.connectorId,
-                  errorCode: "tool_operation_dispatch_queued",
-                  jobId: execution.suspend.jobId,
-                  operationId: execution.suspend.operationId,
-                  ...(execution.suspend.parameterKeys === undefined
-                    ? {}
-                    : { parameterKeys: execution.suspend.parameterKeys }),
-                  ...(execution.suspend.bodyKeys === undefined
-                    ? {}
-                    : { bodyKeys: execution.suspend.bodyKeys }),
-                  ...(execution.suspend.payloadStorage === undefined
-                    ? {}
-                    : { payloadStorage: execution.suspend.payloadStorage }),
-                  providerCallIdHash:
-                    toolRequestEvents[index]!.providerCallIdHash,
-                  toolName: toolRequestEvents[index]!.name,
-                  workerQueue: execution.suspend.workerQueue,
-                });
+                yield event(
+                  "run.waiting_tool_dispatch",
+                  withUsageEvidence({
+                    connectorId: execution.suspend.connectorId,
+                    errorCode: "tool_operation_dispatch_queued",
+                    jobId: execution.suspend.jobId,
+                    operationId: execution.suspend.operationId,
+                    ...(execution.suspend.parameterKeys === undefined
+                      ? {}
+                      : { parameterKeys: execution.suspend.parameterKeys }),
+                    ...(execution.suspend.bodyKeys === undefined
+                      ? {}
+                      : { bodyKeys: execution.suspend.bodyKeys }),
+                    ...(execution.suspend.payloadStorage === undefined
+                      ? {}
+                      : { payloadStorage: execution.suspend.payloadStorage }),
+                    providerCallIdHash:
+                      toolRequestEvents[index]!.providerCallIdHash,
+                    toolName: toolRequestEvents[index]!.name,
+                    workerQueue: execution.suspend.workerQueue,
+                  }),
+                );
                 return;
               }
               toolResults.push({
@@ -240,10 +310,13 @@ export async function* streamRunEvents(
                 toolRequestEvents[index]!,
               );
               if (failure.errorCode === "tool_approval_required") {
-                yield event("run.waiting_tool_approval", failure);
+                yield event(
+                  "run.waiting_tool_approval",
+                  withUsageEvidence(failure),
+                );
                 return;
               }
-              yield event("run.failed", failure);
+              yield event("run.failed", withUsageEvidence(failure));
               return;
             }
           }
@@ -264,15 +337,29 @@ export async function* streamRunEvents(
             })),
           ];
           currentAssistantMessageContent = "";
-          usage = undefined;
+          if (attemptEmittedReasoning)
+            yield event("message.started", { role: "assistant" });
           continue providerAttempt;
         }
 
-        // Reasoning is not committed output: it must not touch emittedContent/content, or a provider
-        // that thinks before it speaks would lose its retry and fallback budget for free.
-        if (isReasoningChunk(chunk)) {
+        const reasoning = reasoningChunkEventData(
+          chunk,
+          attemptEmittedReasoning,
+          attemptRetainReasoningSummary,
+        );
+        if (reasoning !== undefined) {
           attemptEmittedReasoning = true;
-          yield event("message.reasoning", { text: chunk.text });
+          if (reasoning.event !== undefined) {
+            if (reasoning.event.type === "reasoning.summary.delta") {
+              reasoningSummary.observe(
+                typeof reasoning.event.data.text === "string"
+                  ? reasoning.event.data.text
+                  : "",
+              );
+            }
+            if (reasoning.event.type !== "reasoning.summary.delta")
+              yield event(reasoning.event.type, reasoning.event.data);
+          }
           continue;
         }
 
@@ -283,21 +370,31 @@ export async function* streamRunEvents(
         yield event("message.delta", { text: token });
       }
 
+      for (const summaryEvent of finishReasoningSummary("completed"))
+        yield event(summaryEvent.type, summaryEvent.data);
       input.providerCircuitBreaker?.recordSuccess(active.provider.id);
       yield event("message.completed", { role: "assistant", content });
+      const usageEvidence = usageTracker.evidence();
       yield event(
         "run.completed",
-        completionData(usage, retryAttempts, providerFallback),
+        completionData(
+          usageEvidence.usage,
+          retryAttempts,
+          providerFallback,
+          usageEvidence.usageSegments,
+        ),
       );
       return;
     } catch (error) {
+      for (const summaryEvent of finishReasoningSummary("discarded"))
+        yield event(summaryEvent.type, summaryEvent.data);
       if (runtime.outcome === "cancelled") {
-        yield event("run.cancelled", {});
+        yield event("run.cancelled", withUsageEvidence({}));
         return;
       }
       const failure: { errorCode: string; errorType?: string } =
         runtime.outcome === "timeout"
-          ? { errorCode: "provider_stream_timeout" }
+          ? { errorCode: "provider_timeout", errorType: "timeout" }
           : providerFailureData(error);
       // A malformed payload is not a provider health signal: the breaker keys on providerId alone, so
       // one tenant's oversized request could otherwise open the circuit for every tenant on that provider.
@@ -306,6 +403,7 @@ export async function* streamRunEvents(
         : input.providerCircuitBreaker?.snapshot(active.provider.id);
       const currentRetryAttempts =
         retryAttemptsByProvider.get(active.provider.id) ?? 0;
+      usageTracker.finishAttempt();
 
       if (
         isRetryableProviderFailure(failure.errorCode) &&
@@ -320,10 +418,9 @@ export async function* streamRunEvents(
         try {
           await retryDelay(retryPolicy.backoffMs, input.signal);
         } catch {
-          yield event("run.cancelled", {});
+          yield event("run.cancelled", withUsageEvidence({}));
           return;
         }
-        usage = undefined;
         // Reasoning is exempt from emittedContent (above), so an attempt can be abandoned after
         // streaming thinking that belongs to nothing. Re-announcing the message is the reset
         // marker: it already means "the assistant message starts here" -- core rebuilds content
@@ -335,20 +432,21 @@ export async function* streamRunEvents(
         continue;
       }
 
-      if (!emittedContent && tryFallback(failure.errorCode)) {
-        usage = undefined;
+      if (!emittedContent && (await tryFallback(failure.errorCode))) {
         // Same marker, and it matters more here: the next attempt is a different model.
         if (attemptEmittedReasoning)
           yield event("message.started", { role: "assistant" });
         continue;
       }
 
+      const usageEvidence = usageTracker.evidence();
       yield event(
         "run.failed",
         providerFailureData(failure, {
           circuit: circuitState,
           fallback: providerFallback,
           retryAttempts,
+          ...usageEvidence,
         }),
       );
       return;
@@ -362,11 +460,18 @@ export async function* streamRunEvents(
     }
   }
 
-  function tryFallback(reason: string): boolean {
+  async function tryFallback(reason: string): Promise<boolean> {
     if (fallback === undefined || emittedContent) return false;
+    const fallbackParameters = await resolveRunProviderChatParametersAtAttempt(
+      input,
+      fallback,
+    );
     providerFallback = {
       fromModelId: active.model.id,
       fromProviderId: active.provider.id,
+      ...(hasRequestedProviderChatParameters(fallbackParameters.summary)
+        ? { parameterResolution: fallbackParameters.summary }
+        : {}),
       reason,
       toModelId: fallback.model.id,
       toProviderId: fallback.provider.id,
@@ -375,57 +480,6 @@ export async function* streamRunEvents(
     fallback = undefined;
     return true;
   }
-}
-
-function normalizeProviderRetryPolicy(
-  input: Partial<ProviderRetryPolicy> | undefined,
-): ProviderRetryPolicy {
-  return {
-    maxRetries: nonNegativeInteger(input?.maxRetries),
-    backoffMs: nonNegativeInteger(input?.backoffMs),
-  };
-}
-
-function nonNegativeInteger(value: unknown): number {
-  return Number.isInteger(value) && typeof value === "number" && value > 0
-    ? value
-    : 0;
-}
-
-function isRetryableProviderFailure(errorCode: string): boolean {
-  return (
-    errorCode === "provider_stream_error" ||
-    errorCode === "provider_stream_timeout"
-  );
-}
-
-// Only rejections of the request payload itself are excluded. 401/403/404/429/5xx must keep counting:
-// a revoked key is exactly the condition the breaker exists to back off from.
-const clientPayloadErrorTypes = new Set(["http_400", "http_413", "http_422"]);
-
-function countsAgainstProviderHealth(errorType: string | undefined): boolean {
-  return errorType === undefined || !clientPayloadErrorTypes.has(errorType);
-}
-
-function retryDelay(
-  ms: number,
-  signal: AbortSignal | undefined,
-): Promise<void> {
-  if (signal?.aborted === true)
-    return Promise.reject(new ProviderStreamAborted());
-  if (ms <= 0) return Promise.resolve();
-  let abort: (() => void) | undefined;
-  const delay = new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(resolve, ms);
-    abort = () => {
-      clearTimeout(timeout);
-      reject(new ProviderStreamAborted());
-    };
-    signal?.addEventListener("abort", abort, { once: true });
-  });
-  return delay.finally(() => {
-    if (abort !== undefined) signal?.removeEventListener("abort", abort);
-  });
 }
 
 export async function executeRun(

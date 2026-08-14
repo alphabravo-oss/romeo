@@ -13,7 +13,11 @@ import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import type { DeferredRunStart, RunService } from "./run-service";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
 import { assertWorkspaceActive } from "./workspace-guard";
@@ -450,11 +454,11 @@ export class WorkflowService {
     }
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
     repository: RomeoRepository = this.repository,
   ): Promise<void> {
     await writeAuditLog(repository, {

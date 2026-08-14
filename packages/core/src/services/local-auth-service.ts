@@ -125,6 +125,13 @@ export class LocalAuthService {
           orgId: user.orgId,
           userId: user.id,
         });
+        await this.repository.createLocalMfaChallenge({
+          id: challenge.challengeId,
+          orgId: user.orgId,
+          userId: user.id,
+          expiresAt: challenge.expiresAt,
+          createdAt: new Date().toISOString(),
+        });
         await this.audit.write({
           orgId: user.orgId,
           actorId: user.id,
@@ -193,6 +200,13 @@ export class LocalAuthService {
         ? {}
         : { recoveryCode: input.recoveryCode }),
     });
+    const consumed = await this.repository.consumeLocalMfaChallenge({
+      id: challenge.challengeId,
+      orgId: challenge.orgId,
+      userId: challenge.userId,
+      consumedAt: new Date().toISOString(),
+    });
+    if (consumed === undefined) throw invalidLocalLogin();
     const session = await this.createSessionForUser(user);
     await this.audit.write({
       orgId: user.orgId,
@@ -242,6 +256,12 @@ export class LocalAuthService {
         input.newPassword,
         existing,
       );
+      await this.revokeUserSessions(
+        repository,
+        user.orgId,
+        user.id,
+        new Date().toISOString(),
+      );
       await this.audit.write(
         {
           orgId: user.orgId,
@@ -249,7 +269,7 @@ export class LocalAuthService {
           action: "local_auth.password.set",
           resourceType: "user",
           resourceId: user.id,
-          metadata: { selfService: true },
+          metadata: { selfService: true, sessionsRevoked: true },
         },
         repository,
       );
@@ -427,18 +447,14 @@ export class LocalAuthService {
   private async recordFailedPasswordAttempt(
     credential: LocalPasswordCredential,
   ): Promise<{ locked: boolean }> {
-    const failedAttemptCount = credential.failedAttemptCount + 1;
     const now = new Date();
-    const update: LocalPasswordCredential = {
-      ...credential,
-      failedAttemptCount,
-      updatedAt: now.toISOString(),
-    };
-    if (failedAttemptCount >= maxFailedAttempts) {
-      update.lockedUntil = new Date(now.getTime() + lockoutMs).toISOString();
-    }
-    await this.repository.updateLocalPasswordCredential(update);
-    return { locked: update.lockedUntil !== undefined };
+    const update = await this.repository.recordFailedLocalPasswordAttempt({
+      credentialId: credential.id,
+      attemptedAt: now.toISOString(),
+      lockedUntil: new Date(now.getTime() + lockoutMs).toISOString(),
+      maxFailedAttempts,
+    });
+    return { locked: update?.lockedUntil !== undefined };
   }
 
   private async revokeUserSessions(

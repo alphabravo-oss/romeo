@@ -51,7 +51,6 @@
   "opSlowQueryTelemetry": "Telemetría de consultas lentas",
   "opStatus": "Estado",
   "opStatusCode": "Código de estado",
-  "opSystemPosture": "Estado del sistema",
   "opTotal": "Total",
   "opTotalJobs": "Trabajos totales",
   "opType": "Tipo",

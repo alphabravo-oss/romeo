@@ -1,3 +1,5 @@
+import type { FileObject } from "./entities";
+
 const emptyContentSha256 =
   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
@@ -18,4 +20,22 @@ export function fileTombstoneFields(fileId: string, deletedAt: string) {
     deletedAt,
     updatedAt: deletedAt,
   };
+}
+
+export function tombstoneFileObject(
+  file: FileObject,
+  deletedAt: string,
+): FileObject {
+  const tombstone = {
+    ...file,
+    ...fileTombstoneFields(file.id, deletedAt),
+  };
+  delete tombstone.lifecycleFailureCode;
+  delete tombstone.lifecycleNextAttemptAt;
+  delete tombstone.lifecycleLeaseOwner;
+  delete tombstone.lifecycleLeaseToken;
+  delete tombstone.lifecycleLeaseExpiresAt;
+  delete tombstone.attachedAt;
+  delete tombstone.retainedAt;
+  return tombstone;
 }

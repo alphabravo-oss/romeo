@@ -7,7 +7,7 @@ import {
 import type { ObjectStore } from "@romeo/storage";
 
 import type { FileObject, FileObjectPurpose } from "../domain/entities";
-import { fileTombstoneFields } from "../domain/file-tombstone";
+import { tombstoneFileObject } from "../domain/file-tombstone";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import {
@@ -18,6 +18,11 @@ import {
 } from "./file-object-state";
 import { FilePipelineSupport } from "./file-pipeline-support";
 import { deleteFileObjectStoredObjects } from "./file-resumable-helpers";
+import {
+  assertFileReadyForUse,
+  isFileReadyForUse,
+  transitionFileLifecycle,
+} from "./file-lifecycle";
 import type { FileObjectResponse } from "./file-service-contracts";
 
 export interface FileContentResponse {
@@ -68,7 +73,7 @@ export class FileAccessService {
       this.repository.listResourceGrants(subject.orgId),
     ]);
     return files
-      .filter((file) => file.status === "available")
+      .filter(isFileReadyForUse)
       .filter((file) => hasWorkspaceAccess(subject, file.workspaceId))
       .filter((file) => canReadFile(subject, grants, file))
       .map(publicFileObject);
@@ -123,13 +128,7 @@ export class FileAccessService {
       "files:read",
       "read",
     );
-    if (file.status !== "available") {
-      throw new ApiError(
-        "file_upload_not_complete",
-        "The file is not available for content readback.",
-        409,
-      );
-    }
+    assertFileReadyForUse(file);
     const bytes = await this.pipeline.traceObjectStore(
       subject,
       file.workspaceId,
@@ -162,7 +161,7 @@ export class FileAccessService {
       "files:write",
       "write",
     );
-    if (file.status !== "available") {
+    if (!isFileReadyForUse(file)) {
       throw new ApiError(
         "file_not_available",
         "File extraction can only be retried after upload completes.",
@@ -237,12 +236,37 @@ export class FileAccessService {
       "write",
     );
     if (file.status === "deleted") return publicFileObject(file);
+    if (file.status === "retained") {
+      throw new ApiError(
+        "data_deletion_legal_hold",
+        "The retained file cannot be deleted through the file lifecycle.",
+        409,
+      );
+    }
+    if ((await this.repository.countMessageFileReferences(file.id)) > 0) {
+      throw new ApiError(
+        "file_lifecycle_transition_invalid",
+        "A referenced file cannot be deleted before its message references are removed.",
+        409,
+      );
+    }
+    const deletionPlan = await this.repository.getDataDeletionPlan(
+      subject.orgId,
+      "file_object",
+      file.id,
+    );
+    if (deletionPlan?.legalHold !== undefined) {
+      throw new ApiError(
+        "data_deletion_legal_hold",
+        "The file is under legal hold and cannot be deleted.",
+        409,
+      );
+    }
     const now = new Date().toISOString();
     const deleted = await this.repository.transaction(async (repository) => {
-      const result = await repository.updateFileObject({
-        ...file,
-        ...fileTombstoneFields(file.id, now),
-      });
+      const result = await repository.updateFileObject(
+        tombstoneFileObject(transitionFileLifecycle(file, "deleted", now), now),
+      );
       await this.pipeline.audit(repository, subject, "file.delete", result, {
         purpose: file.purpose,
         sizeBytes: file.sizeBytes,
@@ -258,6 +282,48 @@ export class FileAccessService {
       () => deleteFileObjectStoredObjects(this.objectStore, file),
     );
     return publicFileObject(deleted);
+  }
+
+  async retryLifecycle(
+    subject: AuthSubject,
+    fileId: string,
+  ): Promise<FileObjectResponse> {
+    const file = await this.authorizedFile(
+      subject,
+      fileId,
+      "files:write",
+      "write",
+    );
+    if (file.status !== "failed" || (file.lifecycleAttempts ?? 0) >= 100) {
+      throw new ApiError(
+        "file_lifecycle_transition_invalid",
+        "The file lifecycle cannot be retried from its current state.",
+        409,
+      );
+    }
+    const retrying = transitionFileLifecycle(
+      file,
+      "quarantined",
+      new Date().toISOString(),
+    );
+    const failureCode = file.lifecycleFailureCode ?? "file_lifecycle_failed";
+    delete retrying.lifecycleFailureCode;
+    delete retrying.lifecycleNextAttemptAt;
+    const updated = await this.repository.transaction(async (repository) => {
+      const persisted = await repository.updateFileObject(retrying);
+      await this.pipeline.audit(
+        repository,
+        subject,
+        "file.lifecycle.retry",
+        persisted,
+        {
+          attempts: file.lifecycleAttempts ?? 0,
+          failureCode,
+        },
+      );
+      return persisted;
+    });
+    return publicFileObject(updated);
   }
 
   async authorizedFile(

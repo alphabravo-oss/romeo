@@ -4,6 +4,11 @@ import type { BaseModel, ProviderInstance } from "@romeo/providers";
 import type { Agent, AgentVersion, Chat } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
+import {
+  routeModelSelection,
+  type ModelRoutingDecision,
+  type ModelRoutingMode,
+} from "./model-routing";
 import { assertWorkspaceActive } from "./workspace-guard";
 
 export interface ResolvedRunContext {
@@ -12,6 +17,7 @@ export interface ResolvedRunContext {
   agentVersion: AgentVersion;
   model: BaseModel;
   provider: ProviderInstance;
+  routingDecision: ModelRoutingDecision;
 }
 
 export async function resolveRunContext(
@@ -21,6 +27,8 @@ export async function resolveRunContext(
     chatId: string;
     agentId: string;
     modelId?: string;
+    routingMode?: ModelRoutingMode;
+    disabledProviderIds?: ReadonlySet<string>;
   },
 ): Promise<ResolvedRunContext> {
   const [chat, agent] = await Promise.all([
@@ -109,5 +117,25 @@ export async function resolveRunContext(
     grants,
   });
 
-  return { chat, agent, agentVersion, model, provider };
+  const routed = await routeModelSelection(repository, {
+    agentId: agent.id,
+    chatId: chat.id,
+    ...(input.disabledProviderIds === undefined
+      ? {}
+      : { disabledProviderIds: input.disabledProviderIds }),
+    ...(input.routingMode === undefined ? {} : { mode: input.routingMode }),
+    orgId: chat.orgId,
+    primaryModel: model,
+    primaryProvider: provider,
+    subject: input.subject,
+    workspaceId: chat.workspaceId,
+  });
+  return {
+    chat,
+    agent,
+    agentVersion,
+    model: routed.model,
+    provider: routed.provider,
+    routingDecision: routed.decision,
+  };
 }

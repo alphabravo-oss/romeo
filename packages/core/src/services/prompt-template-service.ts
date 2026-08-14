@@ -15,6 +15,7 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
+import { enforceContentPolicyText } from "./content-policy-service";
 import { assertWorkspaceActive } from "./workspace-guard";
 
 export interface PromptTemplateInput {
@@ -123,6 +124,9 @@ export class PromptTemplateService {
       orgId: subject.orgId,
       workspaceId: input.workspaceId,
     });
+    const body = (
+      await enforceContentPolicyText(this.repository, subject, input.body)
+    ).content;
     return this.repository.transaction(async (repository) => {
       const now = new Date().toISOString();
       const template = await repository.createPromptTemplate({
@@ -130,7 +134,7 @@ export class PromptTemplateService {
         orgId: subject.orgId,
         workspaceId: input.workspaceId,
         name: input.name.trim(),
-        body: input.body,
+        body,
         tags: normalizeTags(input.tags ?? []),
         visibility: input.visibility ?? "private",
         createdBy: subject.id,
@@ -182,7 +186,10 @@ export class PromptTemplateService {
       updatedAt: new Date().toISOString(),
     };
     if (input.name !== undefined) updated.name = input.name.trim();
-    if (input.body !== undefined) updated.body = input.body;
+    if (input.body !== undefined)
+      updated.body = (
+        await enforceContentPolicyText(this.repository, subject, input.body)
+      ).content;
     if (input.description !== undefined) {
       if (input.description === null) delete updated.description;
       else updated.description = input.description.trim();
@@ -338,14 +345,14 @@ export class PromptTemplateService {
     );
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     repository: RomeoRepository,
     subject: AuthSubject,
-    action: string,
+    action: A,
     promptTemplateId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
   ): Promise<void> {
-    await repository.createAuditLog({
+    await writeAuditLog(repository, {
       id: createId("audit"),
       orgId: subject.orgId,
       actorId: subject.id,
@@ -427,3 +434,8 @@ function validateShare(share: PromptTemplateShareInput): void {
       { permissions: invalid },
     );
 }
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";

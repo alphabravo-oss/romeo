@@ -5,34 +5,52 @@ import {
   hasGrant,
   type AuthSubject,
 } from "@romeo/auth";
-import { getProviderAdapter } from "@romeo/providers";
-
+import {
+  translateProviderChatParameters,
+  type ProviderReasoningPolicy,
+} from "@romeo/providers";
 import type {
-  BaseModel,
   EvalCase,
-  EvalDashboard,
   EvalReleaseCandidateEvidence,
+  EvalReasoningComparison,
   EvalResultHumanRating,
   EvalResultHumanRatingValue,
   EvalRubric,
   EvalRun,
   EvalRunResult,
   EvalSuite,
+  BaseModel,
   ProviderInstance,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { getAuthorizedAgent } from "./agent-access";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import { assistantsEnabledForOrg } from "./chat-experience-service";
-import { normalizeEvalRubric, scoreEvalCase } from "./eval-case-scoring";
+import { enforceContentPolicyStrings } from "./content-policy-service";
+import { providerApiError } from "./provider-api-error";
+import { normalizeEvalRubric } from "./eval-case-scoring";
+import { buildEvalDashboard } from "./eval-dashboard";
+import { executeReasoningAwareEval } from "./eval-reasoning-execution";
+import { buildEvalReasoningComparison } from "./eval-reasoning-comparison";
+import {
+  createFeedbackEvalCase,
+  type FeedbackEvalCaseResult,
+} from "./eval-feedback-case";
 import { buildEvalReleaseCandidateEvidence } from "./eval-reporting";
 import { assertEvalRunAllowed } from "./eval-run-policy";
 import type { QuotaCoordinator } from "./quota-coordination";
 import type { SecretResolver } from "./secret-resolver";
+import type { CapabilityPlatformPolicy } from "./capability-platform-policy";
+import { reasoningPolicyLayersForStart } from "./run-reasoning-policy";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
 import type { WebhookEmitter } from "./webhook-service";
+export type { FeedbackEvalCaseResult } from "./eval-feedback-case";
 
 export interface CreatedEvalSuite {
   suite: EvalSuite;
@@ -44,6 +62,7 @@ export class EvalService {
     private readonly repository: RomeoRepository,
     private readonly options: {
       providerFetch?: typeof fetch;
+      capabilityPlatformPolicy?: CapabilityPlatformPolicy;
       quotaCoordinator?: QuotaCoordinator;
       secretResolver?: SecretResolver;
       webhooks?: WebhookEmitter;
@@ -84,6 +103,11 @@ export class EvalService {
         "Eval suite requires at least one case.",
         400,
       );
+    const governedInputs = await enforceContentPolicyStrings(
+      this.repository,
+      input.subject,
+      input.cases.map((testCase) => testCase.input),
+    );
     const now = new Date().toISOString();
     return this.repository.transaction(async (repository) => {
       const createdBy = await persistedSubjectActorId(
@@ -105,11 +129,11 @@ export class EvalService {
         updatedAt: now,
       });
       const cases = await repository.createEvalCases(
-        input.cases.map((testCase) => ({
+        input.cases.map((testCase, index) => ({
           id: createId("eval_case"),
           orgId: agent.orgId,
           suiteId: suite.id,
-          input: testCase.input,
+          input: governedInputs.contents[index]!,
           ...(testCase.expectedContains !== undefined
             ? { expectedContains: testCase.expectedContains }
             : {}),
@@ -134,6 +158,17 @@ export class EvalService {
     });
   }
 
+  async createCaseFromMessageFeedback(input: {
+    subject: AuthSubject;
+    agentId: string;
+    chatId: string;
+    messageId: string;
+    suiteId?: string;
+    suiteName?: string;
+  }): Promise<FeedbackEvalCaseResult> {
+    return createFeedbackEvalCase(this.repository, input);
+  }
+
   async listRuns(subject: AuthSubject, agentId: string): Promise<EvalRun[]> {
     await getAuthorizedAgent(this.repository, {
       agentId,
@@ -143,10 +178,7 @@ export class EvalService {
     return this.repository.listEvalRuns(agentId);
   }
 
-  async dashboard(
-    subject: AuthSubject,
-    agentId: string,
-  ): Promise<EvalDashboard> {
+  async dashboard(subject: AuthSubject, agentId: string) {
     await getAuthorizedAgent(this.repository, {
       agentId,
       subject,
@@ -156,69 +188,7 @@ export class EvalService {
       this.repository.listEvalSuites(agentId),
       this.repository.listEvalRuns(agentId),
     ]);
-    const suiteSummaries: EvalDashboard["suites"] = suites.map((suite) => {
-      const suiteRuns = runs
-        .filter((run) => run.suiteId === suite.id)
-        .sort((left, right) =>
-          right.completedAt.localeCompare(left.completedAt),
-        );
-      const latestRun = suiteRuns[0];
-      return {
-        suiteId: suite.id,
-        name: suite.name,
-        latestRunId: latestRun?.id ?? null,
-        status: latestRun?.status ?? "missing",
-        score: latestRun?.score ?? null,
-        completedAt: latestRun?.completedAt ?? null,
-        runCount: suiteRuns.length,
-      };
-    });
-    const completedSuites = suiteSummaries.filter(
-      (suite) => suite.score !== null,
-    );
-    const failedCount = suiteSummaries.filter(
-      (suite) => suite.status === "failed",
-    ).length;
-    const missingCount = suiteSummaries.filter(
-      (suite) => suite.status === "missing",
-    ).length;
-
-    return {
-      agentId,
-      generatedAt: new Date().toISOString(),
-      status:
-        suites.length === 0
-          ? "not_required"
-          : missingCount > 0
-            ? "missing"
-            : failedCount > 0
-              ? "failed"
-              : "passed",
-      suiteCount: suites.length,
-      runCount: runs.length,
-      averageLatestScore:
-        completedSuites.length === 0
-          ? null
-          : completedSuites.reduce(
-              (total, suite) => total + (suite.score ?? 0),
-              0,
-            ) / completedSuites.length,
-      suites: suiteSummaries,
-      trend: [...runs]
-        .sort((left, right) =>
-          right.completedAt.localeCompare(left.completedAt),
-        )
-        .slice(0, 20)
-        .map((run) => ({
-          runId: run.id,
-          suiteId: run.suiteId,
-          modelId: run.modelId,
-          status: run.status,
-          score: run.score,
-          completedAt: run.completedAt,
-        }))
-        .reverse(),
-    };
+    return buildEvalDashboard(agentId, suites, runs);
   }
 
   async results(subject: AuthSubject, runId: string): Promise<EvalRunResult[]> {
@@ -299,6 +269,7 @@ export class EvalService {
     subject: AuthSubject;
     suiteId: string;
     modelId?: string;
+    reasoningPolicy?: ProviderReasoningPolicy;
   }): Promise<{ run: EvalRun; results: EvalRunResult[] }> {
     assertScope(input.subject, "agents:run");
     const suite = await this.getAuthorizedSuite(input.subject, input.suiteId);
@@ -314,12 +285,56 @@ export class EvalService {
     const cases = await this.repository.listEvalCases(suite.id);
     if (cases.length === 0)
       throw new ApiError("eval_suite_empty", "Eval suite has no cases.", 409);
+    // Legacy cases and agent prompts may predate content-policy enforcement. Govern them before
+    // quota consumption or any provider setup so a block has no billable/provider side effects.
+    const assistantsEnabled = await assistantsEnabledForOrg(
+      this.repository,
+      input.subject.orgId,
+    );
+    const governedEvalContent = await enforceContentPolicyStrings(
+      this.repository,
+      input.subject,
+      [
+        assistantsEnabled ? agent.systemPrompt : "",
+        ...cases.map((testCase) => testCase.input),
+      ],
+    );
+    const governedSystemPrompt = governedEvalContent.contents[0]!;
+    const governedCases = cases.map((testCase, index) => ({
+      ...testCase,
+      input: governedEvalContent.contents[index + 1]!,
+    }));
+    const reasoningPolicy = await reasoningPolicyLayersForStart(
+      this.repository,
+      {
+        agentParameters: agent.parameters,
+        orgId: agent.orgId,
+        workspaceId: agent.workspaceId,
+        ...(this.options.capabilityPlatformPolicy === undefined
+          ? {}
+          : { platformPolicy: this.options.capabilityPlatformPolicy }),
+        ...(input.reasoningPolicy === undefined
+          ? {}
+          : { runRequest: input.reasoningPolicy }),
+      },
+    );
+    // Resolve all policy and target constraints before quota consumption or credentials.
+    try {
+      translateProviderChatParameters({
+        kind: provider.type,
+        model,
+        provider,
+        ...(reasoningPolicy === undefined ? {} : { reasoningPolicy }),
+      });
+    } catch (error) {
+      throw providerApiError(error, { kind: provider.type, operation: "chat" });
+    }
     await assertEvalRunAllowed({
       repository: this.repository,
       subject: input.subject,
       agent,
       provider,
-      cases,
+      cases: governedCases,
       ...(this.options.quotaCoordinator === undefined
         ? {}
         : { quotaCoordinator: this.options.quotaCoordinator }),
@@ -330,20 +345,24 @@ export class EvalService {
 
     // Same suppression the run path applies, read off the same org row: an eval that measured a
     // system turn production never sends would score a request shape that does not exist.
-    const assistantsEnabled = await assistantsEnabledForOrg(
-      this.repository,
-      input.subject.orgId,
-    );
-    const resultDrafts: Array<Omit<EvalRunResult, "createdAt" | "runId">> = [];
-    for (const testCase of cases) {
-      const output = await this.generateOutput(
-        provider,
-        model,
-        assistantsEnabled ? agent.systemPrompt : "",
-        testCase.input,
-      );
-      resultDrafts.push(scoreEvalCase(testCase, output, input.subject.orgId));
-    }
+    const execution = await executeReasoningAwareEval({
+      repository: this.repository,
+      subject: input.subject,
+      provider,
+      model,
+      systemPrompt: governedSystemPrompt,
+      cases: governedCases,
+      ...(reasoningPolicy === undefined ? {} : { reasoningPolicy }),
+      options: {
+        ...(this.options.providerFetch === undefined
+          ? {}
+          : { providerFetch: this.options.providerFetch }),
+        ...(this.options.secretResolver === undefined
+          ? {}
+          : { secretResolver: this.options.secretResolver }),
+      },
+    });
+    const resultDrafts = execution.results;
 
     const averageScore =
       resultDrafts.reduce((total, result) => total + result.score, 0) /
@@ -375,6 +394,10 @@ export class EvalService {
         createdBy,
         createdAt: now,
         completedAt: now,
+        ...(execution.evidence === undefined
+          ? {}
+          : { reasoningPolicy: execution.evidence }),
+        metrics: execution.metrics,
       });
       const storedResults = await repository.createEvalRunResults(
         resultDrafts.map((result) => ({
@@ -398,6 +421,17 @@ export class EvalService {
     agentId: string,
   ): Promise<EvalReleaseCandidateEvidence> {
     return buildEvalReleaseCandidateEvidence(this.repository, subject, agentId);
+  }
+
+  async reasoningComparison(
+    subject: AuthSubject,
+    suiteId: string,
+  ): Promise<EvalReasoningComparison> {
+    const suite = await this.getAuthorizedSuite(subject, suiteId);
+    return buildEvalReasoningComparison(
+      suite.id,
+      await this.repository.listEvalRuns(suite.agentId),
+    );
   }
 
   private async getAuthorizedSuite(
@@ -439,52 +473,12 @@ export class EvalService {
     return { model, provider };
   }
 
-  private async generateOutput(
-    provider: ProviderInstance,
-    model: BaseModel,
-    systemPrompt: string,
-    input: string,
-  ): Promise<string> {
-    const adapter = getProviderAdapter(provider.type);
-    let output = "";
-    const apiKey = await this.resolveProviderApiKey(provider);
-    for await (const token of adapter.streamChat({
-      provider,
-      model,
-      ...(apiKey === undefined ? {} : { apiKey }),
-      ...(this.options.providerFetch === undefined
-        ? {}
-        : { fetchImpl: this.options.providerFetch }),
-      messages: [
-        // buildRunMessages' empty-prompt guard, repeated because evals bypass that assembler:
-        // every provider but Anthropic serializes a blank system turn verbatim.
-        ...(systemPrompt.trim().length === 0
-          ? []
-          : [{ role: "system" as const, content: systemPrompt }]),
-        { role: "user", content: input },
-      ],
-    })) {
-      if (typeof token === "string") output += token;
-    }
-    return output;
-  }
-
-  private async resolveProviderApiKey(
-    provider: ProviderInstance,
-  ): Promise<string | undefined> {
-    if (provider.credentialRef === undefined) return undefined;
-    const resolution = await this.options.secretResolver?.resolveValue?.(
-      provider.credentialRef,
-    );
-    return resolution?.available === true ? resolution.value : undefined;
-  }
-
-  private async audit(
+  private async audit<A extends AuditAction>(
     repository: RomeoRepository,
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceId: string,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
   ): Promise<void> {
     await writeAuditLog(repository, {
       subject,

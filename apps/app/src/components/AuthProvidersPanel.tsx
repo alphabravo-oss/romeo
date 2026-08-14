@@ -1,15 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@romeo/ui";
 import { useState } from "react";
 
 import {
-  deprovisionSsoOidcUser,
-  getAuthProviderCatalog,
-  getAuthProviderSettings,
-  testAuthProviderConnection,
-  updateAuthProviderSettings,
+  authProviderCatalogQueryOptions,
+  authProviderSettingsQueryOptions,
+  deprovisionSsoOidcUserMutationOptions,
+  testAuthProviderConnectionMutationOptions,
+  updateAuthProviderSettingsMutationOptions,
 } from "../features/auth-provider-administration";
-import { getBootstrap } from "../features/identity";
 import type {
   AuthProviderCatalogEntry,
   AuthProviderConnectionTestReport,
@@ -22,6 +21,8 @@ import type {
 import { PanelState } from "../lib/panel-state";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { bootstrapQueryOptions } from "../lib/api-query-options";
+import { useRouterApiClient } from "../lib/router-context";
 import { Section } from "./console";
 import { AuthDirectorySyncDialog } from "./AuthDirectorySyncDialog";
 import { ConfigureDialog } from "./AuthProviderConfigureDialog";
@@ -31,12 +32,9 @@ import { useConfirm } from "./ConfirmDialog";
 
 type Scope = "global" | "org";
 
-const SETTINGS_KEY = ["authProviderSettings"] as const;
-const CATALOG_KEY = ["authProviderCatalog"] as const;
-
 export function AuthProvidersPanel(): React.ReactNode {
+  const apiClient = useRouterApiClient();
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { ask, dialog } = useConfirm();
   const [scope, setScope] = useState<Scope>("global");
   const [configuring, setConfiguring] =
@@ -47,29 +45,20 @@ export function AuthProvidersPanel(): React.ReactNode {
     Record<string, AuthProviderConnectionTestReport>
   >({});
   const [syncOpen, setSyncOpen] = useState(false);
-  const catalogQuery = useQuery({
-    queryKey: CATALOG_KEY,
-    queryFn: getAuthProviderCatalog,
-  });
-  const settingsQuery = useQuery({
-    queryKey: SETTINGS_KEY,
-    queryFn: getAuthProviderSettings,
-  });
+  const catalogQuery = useQuery(authProviderCatalogQueryOptions());
+  const settingsQuery = useQuery(authProviderSettingsQueryOptions());
   // Deploy-time tenancy (from /me). Single-tenant hides the org-scope switcher.
-  const bootstrapQuery = useQuery({
-    queryKey: ["bootstrap"],
-    queryFn: getBootstrap,
-  });
+  const bootstrapQuery = useQuery(bootstrapQueryOptions(apiClient));
   const isMultiTenant =
     bootstrapQuery.data?.deployment?.tenancyMode === "multi";
 
-  const updateMutation = useMutation({
-    mutationFn: updateAuthProviderSettings,
-  });
-  const testMutation = useMutation({ mutationFn: testAuthProviderConnection });
-  const deprovisionMutation = useMutation({
-    mutationFn: deprovisionSsoOidcUser,
-  });
+  const updateMutation = useMutation(
+    updateAuthProviderSettingsMutationOptions(),
+  );
+  const testMutation = useMutation(testAuthProviderConnectionMutationOptions());
+  const deprovisionMutation = useMutation(
+    deprovisionSsoOidcUserMutationOptions(),
+  );
 
   /** Wrap a providers[] patch array in the right scope envelope. */
   function envelope(
@@ -100,7 +89,6 @@ export function AuthProvidersPanel(): React.ReactNode {
   ): Promise<boolean> {
     try {
       await updateMutation.mutateAsync(envelope(providers, extra));
-      await queryClient.invalidateQueries({ queryKey: SETTINGS_KEY });
       toast(t("authProvidersUpdated"), "success");
       return true;
     } catch {

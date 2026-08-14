@@ -23,6 +23,10 @@ import type { SecretResolver } from "./secret-resolver";
 import type { CreatedUserSession, SessionService } from "./session-service";
 import { writeAuditLog } from "./audit-log";
 import { ensureSystemAuditActor } from "./system-audit-actor";
+import {
+  createLdapLoginAttemptStore,
+  type LdapLoginAttemptStore,
+} from "./ldap-login-attempt-store";
 
 export interface LdapLoginResult extends CreatedUserSession {
   status: "authenticated";
@@ -65,10 +69,7 @@ import {
 
 export class LdapAuthService {
   private readonly clientFactory: LdapClientFactory;
-  private readonly failedAttempts = new Map<
-    string,
-    { count: number; lockedUntil?: number }
-  >();
+  private readonly attemptStore: LdapLoginAttemptStore;
 
   constructor(
     private readonly repository: RomeoRepository,
@@ -76,9 +77,15 @@ export class LdapAuthService {
     private readonly authProviderSettings: AuthProviderSettingsService,
     private readonly secretResolver: SecretResolver,
     private readonly env: RomeoEnv,
-    options: { clientFactory?: LdapClientFactory } = {},
+    options: {
+      attemptStore?: LdapLoginAttemptStore;
+      clientFactory?: LdapClientFactory;
+    } = {},
   ) {
     this.clientFactory = options.clientFactory ?? defaultLdapClientFactory;
+    this.attemptStore =
+      options.attemptStore ??
+      createLdapLoginAttemptStore(env, { lockoutMs, maxFailedAttempts });
   }
 
   async login(input: {
@@ -92,7 +99,7 @@ export class LdapAuthService {
     const identifier = normalizeLdapIdentifier(input.identifier);
     const identifierHash = this.identifierHash(orgId, providerId, identifier);
     const lockoutKey = `${orgId}:${providerId}:${identifierHash}`;
-    if (this.isLocked(lockoutKey)) {
+    if (await this.attemptStore.isLocked(lockoutKey)) {
       await this.auditFailure({
         failureClass: "credential_locked",
         identifierHash,
@@ -111,6 +118,7 @@ export class LdapAuthService {
         identifier,
         password: input.password,
       });
+      await this.attemptStore.clear(lockoutKey);
       const userId = ldapUserId(config, identity.directorySubject);
       const created = await this.repository.transaction(async (repository) => {
         const user = await provisionExternalUser(repository, {
@@ -148,7 +156,6 @@ export class LdapAuthService {
           ttlHours: defaultSessionTtlHours,
         });
       });
-      this.clearFailedAttempt(lockoutKey);
       return { status: "authenticated", ...created };
     } catch (error) {
       const apiError =
@@ -157,7 +164,7 @@ export class LdapAuthService {
           : invalidLdapLogin("ldap_login_failed");
       const recordFailure = apiError.status === 401 || apiError.status === 403;
       const locked = recordFailure
-        ? this.recordFailedAttempt(lockoutKey)
+        ? await this.attemptStore.recordFailure(lockoutKey)
         : false;
       await this.auditFailure({
         failureClass: apiError.code,
@@ -348,44 +355,6 @@ export class LdapAuthService {
       .digest("hex");
   }
 
-  private isLocked(key: string): boolean {
-    const state = this.failedAttempts.get(key);
-    if (state?.lockedUntil === undefined) return false;
-    if (state.lockedUntil > Date.now()) return true;
-    this.failedAttempts.delete(key);
-    return false;
-  }
-
-  private recordFailedAttempt(key: string): boolean {
-    const current = this.failedAttempts.get(key);
-    const nextCount = (current?.count ?? 0) + 1;
-    const locked = nextCount >= maxFailedAttempts;
-    this.failedAttempts.set(key, {
-      count: nextCount,
-      ...(locked ? { lockedUntil: Date.now() + lockoutMs } : {}),
-    });
-    if (this.failedAttempts.size > 5_000) this.pruneFailedAttempts();
-    return locked;
-  }
-
-  private clearFailedAttempt(key: string): void {
-    this.failedAttempts.delete(key);
-  }
-
-  private pruneFailedAttempts(): void {
-    const now = Date.now();
-    for (const [key, value] of this.failedAttempts.entries()) {
-      if (value.lockedUntil !== undefined && value.lockedUntil <= now) {
-        this.failedAttempts.delete(key);
-      }
-    }
-    while (this.failedAttempts.size > 5_000) {
-      const first = this.failedAttempts.keys().next().value;
-      if (first === undefined) break;
-      this.failedAttempts.delete(first);
-    }
-  }
-
   private async auditSuccess(
     subject: AuthSubject,
     input: {
@@ -424,7 +393,7 @@ export class LdapAuthService {
       name: "LDAP Auth Audit Actor",
       orgId: input.orgId,
     });
-    await this.repository.createAuditLog({
+    await writeAuditLog(this.repository, {
       id: createId("audit"),
       orgId: input.orgId,
       actorId: actor.id,

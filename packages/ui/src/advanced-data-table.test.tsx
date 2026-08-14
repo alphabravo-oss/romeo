@@ -7,6 +7,7 @@ import {
   DataTable,
   type DataTableLabels,
 } from "./advanced-data-table";
+import type { ServerTableState } from "./server-table-state";
 
 Element.prototype.scrollIntoView = vi.fn();
 globalThis.ResizeObserver = class ResizeObserver {
@@ -146,6 +147,55 @@ describe("advanced data table", () => {
     await user.click(screen.getByRole("button", { name: "Only 30" }));
     expect((search as HTMLInputElement).value).toBe("30");
     expect(screen.getAllByRole("row")).toHaveLength(2);
+  });
+
+  it("drives sorting, search, paging, totals, and page size from one server state", async () => {
+    const user = userEvent.setup();
+    const onNextPage = vi.fn();
+    const onPreviousPage = vi.fn();
+    const onPageSizeChange = vi.fn();
+    const onSearchChange = vi.fn();
+    const onSortingChange = vi.fn();
+    const serverState: ServerTableState = {
+      filters: [],
+      hasNextPage: true,
+      isFetching: false,
+      onFiltersChange: vi.fn(),
+      onNextPage,
+      onPageSizeChange,
+      onPreviousPage,
+      onSearchChange,
+      onSortingChange,
+      pageIndex: 1,
+      pageSize: 25,
+      search: "",
+      sorting: [],
+      total: { mode: "estimated", value: 120 },
+    };
+    render(
+      <DataTable
+        columns={columns}
+        data={data.slice(0, 2)}
+        labels={labels}
+        preferenceKey="server-users-test"
+        searchVisibility="always"
+        serverState={serverState}
+      />,
+    );
+
+    expect(screen.getByText(/page 2 · 2 shown · ~120 total/u)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Name" }));
+    await user.type(screen.getByRole("textbox", { name: "Search table" }), "a");
+    await user.click(screen.getByRole("button", { name: "Previous page" }));
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    await user.click(screen.getByRole("button", { name: "Table options" }));
+    await user.selectOptions(screen.getByLabelText("Rows per page"), "50");
+
+    expect(onSortingChange).toHaveBeenCalledOnce();
+    expect(onSearchChange).toHaveBeenCalled();
+    expect(onPreviousPage).toHaveBeenCalledOnce();
+    expect(onNextPage).toHaveBeenCalledOnce();
+    expect(onPageSizeChange).toHaveBeenCalledWith(50);
   });
 });
 

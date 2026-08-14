@@ -5,6 +5,10 @@ import { parseArgs } from "./args";
 import { CliUsageError } from "./cli-errors";
 import { executeCommand } from "./commands";
 import { createGeneratedApiClient, resolveConfig } from "./config";
+import {
+  dnsPinnedFetch,
+  type ToolDispatchPinnedFetch,
+} from "./dns-pinned-fetch";
 import { processIo, type CliIo } from "./io";
 
 export interface RunCliInput {
@@ -12,6 +16,7 @@ export interface RunCliInput {
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
   io?: CliIo;
+  pinnedFetchImpl?: ToolDispatchPinnedFetch;
   dnsLookup?: (
     host: string,
   ) => Promise<Array<{ address: string; family?: number }>>;
@@ -30,6 +35,11 @@ export async function runCli(input: RunCliInput = {}): Promise<number> {
       dnsLookup: input.dnsLookup ?? nodeDnsLookup,
       fetchImpl: input.fetchImpl ?? fetch,
       io,
+      ...(input.pinnedFetchImpl !== undefined
+        ? { pinnedFetchImpl: input.pinnedFetchImpl }
+        : input.fetchImpl === undefined
+          ? { pinnedFetchImpl: dnsPinnedFetch }
+          : {}),
       parsed,
       readFile: input.readFile ?? readFile,
     });

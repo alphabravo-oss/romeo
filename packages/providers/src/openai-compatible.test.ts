@@ -198,14 +198,15 @@ describe("OpenAI-compatible adapter", () => {
     );
   });
 
-  it("emits streamed reasoning without mixing it into the answer", async () => {
+  it("drops unclassified hidden reasoning fields without mixing them into the answer", async () => {
+    const rawSentinel = "private-hidden-reasoning-sentinel";
     const chunks = await collect(
       openAiCompatibleAdapter.streamChat({
         apiKey: "provider-api-key",
         fetchImpl: async () =>
           new Response(
             sse([
-              { choices: [{ delta: { reasoning_content: "Plan " } }] },
+              { choices: [{ delta: { reasoning_content: rawSentinel } }] },
               { choices: [{ delta: { reasoning: "the answer." } }] },
               { choices: [{ delta: { content: "Hello" } }] },
             ]),
@@ -217,11 +218,8 @@ describe("OpenAI-compatible adapter", () => {
       }),
     );
 
-    expect(chunks).toEqual([
-      { type: "reasoning", text: "Plan " },
-      { type: "reasoning", text: "the answer." },
-      "Hello",
-    ]);
+    expect(chunks).toEqual(["Hello"]);
+    expect(JSON.stringify(chunks)).not.toContain(rawSentinel);
   });
 
   it("sends vision inputs as OpenAI image content parts", async () => {

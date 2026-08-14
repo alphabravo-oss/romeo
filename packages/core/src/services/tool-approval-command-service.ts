@@ -4,6 +4,7 @@ import {
   hasWorkspaceAccess,
   type AuthSubject,
 } from "@romeo/auth";
+import type { RunEvent } from "@romeo/ai-runtime";
 
 import type { BackgroundJob } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
@@ -126,89 +127,100 @@ export class ToolApprovalCommandService {
       now,
     );
     try {
-      await this.repository.transaction(async (repository) => {
-        const currentJobs = await repository.listBackgroundJobs(subject.orgId);
-        const currentDecision = toolApprovalDecision(
-          approvalRequest,
-          currentJobs,
-        );
-        if (currentDecision !== undefined) {
-          if (currentDecision.status === decision) return;
-          throw new ApiError(
-            "tool_approval_request_already_decided",
-            "Tool approval request already has a terminal decision.",
-            409,
-            { approvalRequestId, status: currentDecision.status },
+      const events = await this.repository.transaction<RunEvent[]>(
+        async (repository) => {
+          const currentJobs = await repository.listBackgroundJobs(
+            subject.orgId,
           );
-        }
-        if (currentJobs.some((job) => job.id === decisionJob.id)) return;
-        await repository.createBackgroundJob(decisionJob);
-        if (decision !== "approved" && approvalRequest.runId !== undefined) {
-          const run = await repository.getRun(approvalRequest.runId);
-          if (
-            run !== undefined &&
-            run.orgId === subject.orgId &&
-            run.status === "waiting_tool_approval"
-          ) {
-            await repository.updateRun({
-              ...run,
-              status: "cancelled",
-              completedAt: now,
-            });
-            const errorCode = toolApprovalDecisionErrorCode(decision);
-            const failedEvent = await this.runEventSequencer.create(
-              repository,
-              {
-                runId: run.id,
-                type: "tool.failed",
-                data: {
-                  agentId: approvalRequest.agentId,
-                  toolId: approvalRequest.toolId,
-                  riskLevel: approvalRequest.riskLevel,
-                  approvalRequired: true,
-                  inputKeys: approvalRequest.inputKeys,
-                  outputKeys: [],
-                  errorCode,
-                  approvalRequestId: approvalRequest.id,
-                },
-              },
+          const currentDecision = toolApprovalDecision(
+            approvalRequest,
+            currentJobs,
+          );
+          if (currentDecision !== undefined) {
+            if (currentDecision.status === decision) return [];
+            throw new ApiError(
+              "tool_approval_request_already_decided",
+              "Tool approval request already has a terminal decision.",
+              409,
+              { approvalRequestId, status: currentDecision.status },
             );
-            const cancelledEvent = await this.runEventSequencer.create(
-              repository,
-              {
-                runId: run.id,
-                type: "run.cancelled",
-                data: {
-                  reason: errorCode,
-                  agentId: approvalRequest.agentId,
-                  toolId: approvalRequest.toolId,
-                  approvalRequestId: approvalRequest.id,
-                },
-              },
-            );
-            await repository.appendRunEvents([failedEvent, cancelledEvent]);
           }
-        }
-        await writeAuditLog(repository, {
-          subject,
-          action: toolApprovalAuditAction(decision),
-          resourceType: "tool",
-          resourceId: approvalRequest.toolId,
-          metadata: {
-            agentId: approvalRequest.agentId,
-            approvalRequestId: approvalRequest.id,
-            decision,
-            ...(decision === "approved"
-              ? {}
-              : { errorCode: toolApprovalDecisionErrorCode(decision) }),
-            inputKeyCount: approvalRequest.inputKeys.length,
-            ...(approvalRequest.runId === undefined
-              ? {}
-              : { runId: approvalRequest.runId }),
-            workspaceId: approvalRequest.workspaceId,
-          },
-        });
-      });
+          if (currentJobs.some((job) => job.id === decisionJob.id)) return [];
+          const events: RunEvent[] = [];
+          await repository.createBackgroundJob(decisionJob);
+          if (decision !== "approved" && approvalRequest.runId !== undefined) {
+            const run = await repository.getRun(approvalRequest.runId);
+            if (
+              run !== undefined &&
+              run.orgId === subject.orgId &&
+              run.status === "waiting_tool_approval"
+            ) {
+              await repository.updateRun({
+                ...run,
+                status: "cancelled",
+                completedAt: now,
+              });
+              const errorCode = toolApprovalDecisionErrorCode(decision);
+              const failedEvent = await this.runEventSequencer.create(
+                repository,
+                {
+                  runId: run.id,
+                  type: "tool.failed",
+                  data: {
+                    agentId: approvalRequest.agentId,
+                    toolId: approvalRequest.toolId,
+                    riskLevel: approvalRequest.riskLevel,
+                    approvalRequired: true,
+                    inputKeys: approvalRequest.inputKeys,
+                    outputKeys: [],
+                    errorCode,
+                    approvalRequestId: approvalRequest.id,
+                  },
+                },
+              );
+              const cancelledEvent = await this.runEventSequencer.create(
+                repository,
+                {
+                  runId: run.id,
+                  type: "run.cancelled",
+                  data: {
+                    reason: errorCode,
+                    agentId: approvalRequest.agentId,
+                    toolId: approvalRequest.toolId,
+                    approvalRequestId: approvalRequest.id,
+                  },
+                },
+              );
+              await this.runEventSequencer.persist(repository, [
+                failedEvent,
+                cancelledEvent,
+              ]);
+              events.push(failedEvent, cancelledEvent);
+            }
+          }
+          await writeAuditLog(repository, {
+            subject,
+            action: toolApprovalAuditAction(decision),
+            resourceType: "tool",
+            resourceId: approvalRequest.toolId,
+            metadata: {
+              agentId: approvalRequest.agentId,
+              approvalRequestId: approvalRequest.id,
+              decision,
+              ...(decision === "approved"
+                ? {}
+                : { errorCode: toolApprovalDecisionErrorCode(decision) }),
+              inputKeyCount: approvalRequest.inputKeys.length,
+              ...(approvalRequest.runId === undefined
+                ? {}
+                : { runId: approvalRequest.runId }),
+              workspaceId: approvalRequest.workspaceId,
+            },
+          });
+          return events;
+        },
+      );
+      await this.runEventSequencer.notify(events);
     } catch (error) {
       if (!isUniqueConstraintError(error)) throw error;
     }

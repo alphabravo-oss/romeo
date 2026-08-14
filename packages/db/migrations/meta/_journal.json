@@ -50,6 +50,181 @@
       "when": 1786564000000,
       "tag": "0006_queued_turn_agentic_rag",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786565000000,
+      "tag": "0007_billing_event_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786566000000,
+      "tag": "0008_saml_auth_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786567000000,
+      "tag": "0009_local_mfa_challenges",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786568000000,
+      "tag": "0010_queued_turn_routing_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786569000000,
+      "tag": "0011_queued_turn_research_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786570000000,
+      "tag": "0012_webhook_delivery_leases",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1786654800000,
+      "tag": "0013_run_event_sequences",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1786741200000,
+      "tag": "0014_run_event_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1786827600000,
+      "tag": "0015_capability_assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1786914000000,
+      "tag": "0016_audit_log_keyset_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787000400000,
+      "tag": "0017_audit_log_search_trigram",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787086800000,
+      "tag": "0018_workspace_folder_item_batch_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787173200000,
+      "tag": "0019_message_page_keyset_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787259600000,
+      "tag": "0020_chat_transcript_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787346000000,
+      "tag": "0021_exact_chat_branch_selection",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1787432400000,
+      "tag": "0022_organization_capability_flags",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787518800000,
+      "tag": "0023_idempotency_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787605200000,
+      "tag": "0024_versioned_capability_assignment_scopes",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787691600000,
+      "tag": "0025_queued_turn_reasoning_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787778000000,
+      "tag": "0026_typed_message_part_rollout",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1787864400000,
+      "tag": "0027_secure_file_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1787950800000,
+      "tag": "0028_eval_reasoning_policy_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1788037200000,
+      "tag": "0029_message_file_references",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788123600000,
+      "tag": "0030_reasoning_summary_event_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788210000000,
+      "tag": "0031_inventoried_table_sort_indexes",
+      "breakpoints": true
     }
   ]
 }

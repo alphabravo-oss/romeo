@@ -41,8 +41,7 @@ export function buildProvenanceChips(input: ProvenanceInput): ProvenanceChip[] {
       ? input.modelId.trim()
       : undefined);
   const custom =
-    input.agentName !== undefined &&
-    !isGenericCustomModelName(input.agentName)
+    input.agentName !== undefined && !isGenericCustomModelName(input.agentName)
       ? input.agentName.trim()
       : undefined;
   if (custom !== undefined) chips.push({ kind: "model", label: custom });
@@ -113,7 +112,7 @@ const POLICY_MAP: Record<
   },
 };
 
-/** Map a run/error code (+ optional server message) to human guidance. */
+/** Map a run/error code to trusted, actionable guidance. */
 export function policyErrorCopy(input: {
   code: string;
   message?: string | undefined;
@@ -121,15 +120,13 @@ export function policyErrorCopy(input: {
   const code = input.code.trim() || "provider_run_failed";
   const mapped = POLICY_MAP[code] ?? {
     title: "Something went wrong",
-    body:
-      input.message?.trim() ||
-      "The run ended without a usable reply.",
+    body: "The run ended without a usable reply.",
     nextStep: "Retry the turn or contact support with the error code.",
   };
   return {
     code,
     title: mapped.title,
-    body: input.message?.trim() || mapped.body,
+    body: mapped.body,
     nextStep: mapped.nextStep,
   };
 }
@@ -306,7 +303,9 @@ export const FEEDBACK_REASON_CODES = [
 
 export type FeedbackReasonCode = (typeof FEEDBACK_REASON_CODES)[number];
 
-export function isFeedbackReasonCode(value: string): value is FeedbackReasonCode {
+export function isFeedbackReasonCode(
+  value: string,
+): value is FeedbackReasonCode {
   return (FEEDBACK_REASON_CODES as readonly string[]).includes(value);
 }
 
@@ -365,7 +364,11 @@ export function complianceExportChecklist(exportPayload: {
     (m) => Array.isArray(m.citations) && m.citations.length > 0,
   );
   const complete =
-    hasSchema && hasExportedAt && hasChatIdentity && hasMessages && messagesHaveTimestamps;
+    hasSchema &&
+    hasExportedAt &&
+    hasChatIdentity &&
+    hasMessages &&
+    messagesHaveTimestamps;
   return {
     hasSchema,
     hasExportedAt,

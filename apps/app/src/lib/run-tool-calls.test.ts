@@ -6,7 +6,10 @@ import { reduceToolCalls, type ChatToolCall } from "./run-tool-calls";
 let sequence = 0;
 
 function event(
-  type: RunEvent["type"],
+  type: Exclude<
+    RunEvent["type"],
+    "reasoning.summary.completed" | "reasoning.summary.delta" | "run.continuing"
+  >,
   data: Record<string, unknown>,
   second = 0,
 ): RunEvent {
@@ -15,10 +18,11 @@ function event(
     id: `evt_${sequence}`,
     runId: "run_1",
     sequence,
+    schemaVersion: 1,
     type,
     data,
     createdAt: `2026-01-01T00:00:${String(second).padStart(2, "0")}.000Z`,
-  };
+  } as RunEvent;
 }
 
 function fold(events: RunEvent[]): ChatToolCall[] {

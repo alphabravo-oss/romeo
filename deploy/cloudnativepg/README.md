@@ -23,12 +23,17 @@ Romeo consumes the CloudNativePG-generated app Secret through the Helm values in
 Minimal flow:
 
 ```sh
+export ROMEO_IMAGE_DIGEST='sha256:<64 hex characters from the release manifest>'
+export ROMEO_NETWORK_POLICY_VALUES='/reviewed/path/romeo-network-policy-values.yaml'
+
 kubectl apply -n romeo -f deploy/cloudnativepg/objectstore.example.yaml
 kubectl apply -n romeo -f deploy/cloudnativepg/cluster.example.yaml
 kubectl apply -n romeo -f deploy/cloudnativepg/scheduled-backup.example.yaml
 helm upgrade --install romeo deploy/helm \
   -n romeo \
-  -f deploy/helm/cloudnativepg-values.example.yaml
+  -f deploy/helm/cloudnativepg-values.example.yaml \
+  -f "$ROMEO_NETWORK_POLICY_VALUES" \
+  --set-string image.digest="$ROMEO_IMAGE_DIGEST"
 ```
 
 Restore drill flow:
@@ -38,6 +43,8 @@ kubectl apply -n romeo-drill -f deploy/cloudnativepg/restore-cluster.example.yam
 helm upgrade --install romeo-drill deploy/helm \
   -n romeo-drill \
   -f deploy/helm/cloudnativepg-values.example.yaml \
+  -f "$ROMEO_NETWORK_POLICY_VALUES" \
+  --set-string image.digest="$ROMEO_IMAGE_DIGEST" \
   --set-string postgres.cloudnativepg.clusterName=romeo-pg-restore \
   --set-string postgres.cloudnativepg.databaseUrlSecret.name=romeo-pg-restore-app \
   --set-string postgres.cloudnativepg.databaseUrlSecret.key=uri

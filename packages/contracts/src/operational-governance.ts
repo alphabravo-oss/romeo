@@ -6,6 +6,11 @@ import {
   jsonResponse,
   standardErrorResponses,
 } from "./common";
+import {
+  createServerTablePageSchema,
+  createServerTableQuerySchema,
+} from "./server-table";
+import { UsageMetricDefinitionSchema } from "./usage-metrics";
 
 const identifier = z.string().trim().min(1).max(300);
 const timestamp = z.iso.datetime();
@@ -48,15 +53,7 @@ export const AuditLogFilterSchema = z
     action: z.string().min(1).max(300).optional(),
     actorId: identifier.optional(),
     category: z
-      .enum([
-        "security",
-        "admin",
-        "access",
-        "data",
-        "chat",
-        "run",
-        "system",
-      ])
+      .enum(["security", "admin", "access", "data", "chat", "run", "system"])
       .optional(),
     from: timestamp.optional(),
     includeNoise: z.enum(["true", "false"]).optional(),
@@ -76,6 +73,38 @@ export const AuditLogPageSchema = z
     nextCursor: z.string().optional(),
   })
   .openapi("AuditLogPage");
+
+export const AuditLogTableQuerySchema = createServerTableQuerySchema({
+  sortFields: ["createdAt"],
+  filters: {
+    action: { eq: z.string().trim().min(1).max(300) },
+    actorId: { eq: identifier },
+    category: {
+      eq: z.enum([
+        "security",
+        "admin",
+        "access",
+        "data",
+        "chat",
+        "run",
+        "system",
+      ]),
+    },
+    createdAt: { gte: timestamp, lte: timestamp },
+    includeNoise: { eq: z.boolean() },
+    outcome: { eq: z.enum(["success", "failure"]) },
+    resourceId: { eq: identifier },
+    resourceType: { eq: z.string().trim().min(1).max(300) },
+  },
+  defaultSort: [{ field: "createdAt", direction: "desc" }],
+  maxFilters: 8,
+  maxLimit: 200,
+  maxSorts: 1,
+  search: { minLength: 3, maxLength: 300 },
+}).openapi("AuditLogTableQuery");
+
+export const AuditLogTablePageSchema =
+  createServerTablePageSchema(AuditLogSchema).openapi("AuditLogTablePage");
 
 export const UsageEventSchema = z
   .strictObject({
@@ -221,6 +250,18 @@ export const listAuditLogsRoute = createRoute({
     ...errors,
   },
 });
+export const queryAuditLogsRoute = createRoute({
+  ...metadata,
+  method: "post",
+  path: "/api/v1/audit-logs/query",
+  operationId: "operationalGovernance.queryAuditLogs",
+  summary: "Query audit logs with server-driven keyset pagination",
+  request: { body: body(AuditLogTableQuerySchema) },
+  responses: {
+    200: jsonResponse("Audit log table page", AuditLogTablePageSchema),
+    ...errors,
+  },
+});
 export const exportAuditLogsRoute = createRoute({
   ...metadata,
   method: "get",
@@ -238,6 +279,20 @@ export const listUsageEventsRoute = createRoute({
   summary: "List usage events",
   responses: {
     200: jsonResponse("Usage events", dataEnvelope(z.array(UsageEventSchema))),
+    ...errors,
+  },
+});
+export const listUsageMetricDefinitionsRoute = createRoute({
+  ...metadata,
+  method: "get",
+  path: "/api/v1/usage/taxonomy",
+  operationId: "operationalGovernance.listUsageMetricDefinitions",
+  summary: "List canonical usage metric definitions",
+  responses: {
+    200: jsonResponse(
+      "Usage metric definitions",
+      dataEnvelope(z.array(UsageMetricDefinitionSchema)),
+    ),
     ...errors,
   },
 });
@@ -341,8 +396,10 @@ export const deleteQuotaBucketRoute = createRoute({
 
 export const operationalGovernanceRoutes = [
   listAuditLogsRoute,
+  queryAuditLogsRoute,
   exportAuditLogsRoute,
   listUsageEventsRoute,
+  listUsageMetricDefinitionsRoute,
   exportUsageEventsRoute,
   getUsageSummaryRoute,
   listUsageAlertsRoute,

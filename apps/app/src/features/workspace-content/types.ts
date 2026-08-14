@@ -1,4 +1,8 @@
-export type { WorkspaceContentItem } from "@romeo/api-client/generated/sdk";
+export type {
+  CreateWorkspaceContentRequest,
+  UpdateWorkspaceContentRequest,
+  WorkspaceContentItem,
+} from "@romeo/api-client/generated/sdk";
 
 export type ContentKind = "memories" | "notes";
 

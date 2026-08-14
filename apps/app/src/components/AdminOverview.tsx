@@ -2,12 +2,13 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import { listJobs } from "../features/jobs";
-import { getReadinessReport } from "../features/readiness";
-import { listProviders } from "../features/providers/queries";
+import { jobsQueryOptions } from "../features/jobs";
+import { readinessQueryOptions } from "../features/readiness";
 import type { ProviderOperationalSummary } from "../features/providers/types";
 import { useLocale } from "../lib/i18n";
 import { formatNumber, LocalizedNumber } from "../lib/locale-format";
+import { providersQueryOptions } from "../lib/api-query-options";
+import { useRouterApiClient } from "../lib/router-context";
 import { ADMIN_GROUPS, ADMIN_META } from "./admin-console-navigation";
 import { AdminDisclosure } from "./AdminDisclosure";
 import { JobPanel } from "./JobPanel";
@@ -45,15 +46,10 @@ export function AdminOverview({
   agentCount: number;
 }) {
   const { locale, t } = useLocale();
-  const readiness = useQuery({
-    queryKey: ["readiness"],
-    queryFn: getReadinessReport,
-  });
-  const jobs = useQuery({ queryKey: ["jobs"], queryFn: listJobs });
-  const providers = useQuery({
-    queryKey: ["providers"],
-    queryFn: listProviders,
-  });
+  const apiClient = useRouterApiClient();
+  const readiness = useQuery(readinessQueryOptions());
+  const jobs = useQuery(jobsQueryOptions());
+  const providers = useQuery(providersQueryOptions(apiClient));
 
   const checks = readiness.data?.checks ?? [];
   const readinessSummary = summarizeReadinessChecks(checks);

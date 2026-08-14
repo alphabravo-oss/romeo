@@ -1,34 +1,18 @@
-import { Textarea, Button, DropdownMenu } from "@romeo/ui";
+import { Button, DropdownMenu } from "@romeo/ui";
 import BotMessageSquare from "lucide-react/dist/esm/icons/bot-message-square.mjs";
 import Check from "lucide-react/dist/esm/icons/check.mjs";
-import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left.mjs";
-import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.mjs";
 import Copy from "lucide-react/dist/esm/icons/copy.mjs";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch.mjs";
-import Pencil from "lucide-react/dist/esm/icons/pencil.mjs";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
 import ThumbsDown from "lucide-react/dist/esm/icons/thumbs-down.mjs";
 import ThumbsUp from "lucide-react/dist/esm/icons/thumbs-up.mjs";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
-import User from "lucide-react/dist/esm/icons/user.mjs";
 import Volume2 from "lucide-react/dist/esm/icons/volume-2.mjs";
-import { memo, type ReactNode } from "react";
+import { memo } from "react";
 
-import type {
-  Message,
-  MessageAttachment,
-  SpeechArtifact,
-} from "../features/types";
 import { Markdown } from "../lib/markdown";
 import { useLocale } from "../lib/i18n";
 import { formatDateTime } from "../lib/locale-format";
-import type {
-  ChatCitation,
-  ChatReasoning,
-  ChatRunActivity,
-  ChatRunWait,
-} from "../lib/run-registry";
-import type { ChatToolCall } from "../lib/run-tool-calls";
 import {
   CitationList,
   formatSpeechArtifact,
@@ -49,16 +33,45 @@ import {
   type ChatWriteAction,
 } from "./chat-enterprise";
 import { ChatFollowUps } from "./ChatFollowUps";
+import { UserChatMessageRow } from "./UserChatMessageRow";
+import type { ChatMessageRowProps } from "./chat-message-row-types";
+import { StreamingAssistantMessage } from "./StreamingAssistantMessage";
+import { transcriptMessageDomId } from "./TranscriptWindow";
+import { VisibilityAwareAudio } from "./VisibilityAwareAudio";
+import { MessageHeading, messageHeadingId } from "./MessageHeading";
+import {
+  MessageToolbar,
+  VariantSwitcher,
+  waitStatusLabel,
+} from "./ChatMessageRowControls";
 
-/**
- * One transcript row, memoised. A streamed answer changes the message array
- * once per token, so without this every row in the conversation reconciles on
- * every token. Every prop is therefore either a scalar or an identity that only
- * changes when that row's own content does -- notably per-message slices of the
- * feedback and speech records rather than the whole records, and frozen empties
- * for the run state that belongs to the last row alone.
- */
-export const ChatMessageRow = memo(function ChatMessageRow({
+export const ChatMessageRow = memo(function ChatMessageRow(
+  props: ChatMessageRowProps,
+) {
+  return props.observeStreamingMessage ? (
+    <StreamingAssistantMessage
+      fallback={props.message}
+      onContentChange={props.onStreamingContentChange}
+    >
+      {(message) => (
+        <ChatMessageRowView
+          {...props}
+          isThinking={
+            message.role === "assistant" &&
+            message.error === undefined &&
+            message.content.length === 0 &&
+            props.isStreaming
+          }
+          message={message}
+        />
+      )}
+    </StreamingAssistantMessage>
+  ) : (
+    <ChatMessageRowView {...props} />
+  );
+});
+
+const ChatMessageRowView = memo(function ChatMessageRowView({
   activeVoiceProfileId,
   authorName,
   artifact,
@@ -72,12 +85,15 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   isStreaming,
   isThinking,
   message,
+  positionInSet,
+  setSize,
   modelDisplayName,
   nextVariantId,
   onAttachmentRetention,
   onBranch,
   onCancelEdit,
   onContinue,
+  onCreateFeedbackEvalCase,
   onCopy,
   onDelete,
   onEditValueChange,
@@ -105,67 +121,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   toolCalls,
   variantIndex,
   variantTotal,
-}: {
-  activeVoiceProfileId: string | undefined;
-  authorName: string | undefined;
-  artifact: SpeechArtifact | undefined;
-  citations: ChatCitation[];
-  copied: boolean;
-  editing: boolean;
-  editValue: string;
-  isGeneratingSpeech: boolean;
-  isLast: boolean;
-  isSpeechTarget: boolean;
-  isStreaming: boolean;
-  isThinking: boolean;
-  message: Message;
-  /** Display name of the model that produced this assistant turn. */
-  modelDisplayName: string | undefined;
-  nextVariantId: string | undefined;
-  onAttachmentRetention: (
-    messageId: string,
-    attachmentId: string,
-    retainedInContext: boolean,
-  ) => void;
-  onBranch: (messageId: string) => void;
-  onCancelEdit: () => void;
-  onContinue: () => void;
-  onCopy: (message: Message) => void;
-  onDelete: (messageId: string) => void;
-  onEditValueChange: (value: string) => void;
-  onGenerateSpeech: (messageId: string) => void;
-  onPreview: (attachment: MessageAttachment) => void;
-  onRate: (
-    messageId: string,
-    rating: "negative" | "none" | "positive",
-    reasonCode?: string,
-  ) => void;
-  onRegenerate: () => void;
-  onRegenerateWith: (input: {
-    modelId?: string;
-    mode?: "again" | "shorter";
-  }) => void;
-  onFollowUp: (prompt: string) => void;
-  regenerateModels: Array<{ id: string; label: string }>;
-  onSelectVariant: (messageId: string) => void;
-  onStartEdit: (message: Message) => void;
-  onSubmitEdit: (messageId: string, content: string) => void;
-  previousVariantId: string | undefined;
-  rating: "negative" | "positive" | undefined;
-  reasoning: ChatReasoning | undefined;
-  runActivities: ChatRunActivity[];
-  runWait: ChatRunWait | undefined;
-  showContinueButton: boolean;
-  showFollowUps: boolean;
-  showMessageTimestamps: boolean;
-  showRunStatus: boolean;
-  chatAccess: "owner" | "write" | "read";
-  agentName: string | undefined;
-  toolCalls: ChatToolCall[];
-  /** Sibling position, spread into scalars so the memo survives a stream. */
-  variantIndex: number | undefined;
-  variantTotal: number | undefined;
-}) {
+}: ChatMessageRowProps) {
   const { locale, t } = useLocale();
   const canWrite = (action: ChatWriteAction) =>
     canPerformChatWriteAction(chatAccess, action);
@@ -191,94 +147,28 @@ export const ChatMessageRow = memo(function ChatMessageRow({
 
   if (message.role !== "assistant") {
     return (
-      <article className="rm-message-row user">
-        <div className="rm-message-body">
-          {editing ? (
-            <div className="rm-message-edit">
-              <Textarea
-                aria-label={t("editResend")}
-                autoFocus
-                onChange={(event) =>
-                  onEditValueChange(event.currentTarget.value)
-                }
-                rows={Math.min(12, Math.max(3, editValue.split("\n").length))}
-                value={editValue}
-              />
-              <div className="rm-message-edit-actions">
-                <Button onClick={onCancelEdit} type="button">
-                  {t("cancel")}
-                </Button>
-                <Button
-                  className="primary"
-                  disabled={isStreaming || editValue.trim().length === 0}
-                  onClick={() => onSubmitEdit(message.id, editValue)}
-                  title={isStreaming ? t("waitForResponse") : t("saveSubmit")}
-                  type="button"
-                >
-                  {t("saveSubmit")}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="rm-message-content">
-              <Markdown content={message.content} />
-            </div>
-          )}
-          {attachments}
-          {editing ? null : (
-            <MessageToolbar
-              {...(showMessageTimestamps
-                ? { timestamp: formatDateTime(message.createdAt, locale) }
-                : {})}
-            >
-              {variantSwitcher}
-              <MessageActions>
-                <Action
-                  label={copied ? t("copied") : t("copy")}
-                  onClick={() => onCopy(message)}
-                >
-                  {copied ? <Check size={15} /> : <Copy size={15} />}
-                </Action>
-                {canWrite("edit") ? (
-                  <Action
-                    disabled={isStreaming}
-                    label={t("editResend")}
-                    onClick={() => onStartEdit(message)}
-                    title={isStreaming ? t("waitForResponse") : t("editResend")}
-                  >
-                    <Pencil size={15} />
-                  </Action>
-                ) : null}
-                {canWrite("branch") ? (
-                  <Action
-                    disabled={isStreaming}
-                    label={t("branch")}
-                    onClick={() => onBranch(message.id)}
-                    title={isStreaming ? t("waitForResponse") : t("branch")}
-                  >
-                    <GitBranch size={15} />
-                  </Action>
-                ) : null}
-                {canWrite("delete") ? (
-                  <Action
-                    disabled={isStreaming}
-                    label={t("deleteMessage")}
-                    onClick={() => onDelete(message.id)}
-                    title={
-                      isStreaming ? t("waitForResponse") : t("deleteMessage")
-                    }
-                  >
-                    <Trash2 size={15} />
-                  </Action>
-                ) : null}
-              </MessageActions>
-            </MessageToolbar>
-          )}
-        </div>
-        <div className="rm-message-avatar user">
-          <User aria-hidden="true" size={16} />
-        </div>
-      </article>
+      <UserChatMessageRow
+        attachments={attachments}
+        canBranch={canWrite("branch")}
+        canDelete={canWrite("delete")}
+        canEdit={canWrite("edit")}
+        copied={copied}
+        editing={editing}
+        editValue={editValue}
+        isStreaming={isStreaming}
+        message={message}
+        positionInSet={positionInSet}
+        setSize={setSize}
+        onBranch={onBranch}
+        onCancelEdit={onCancelEdit}
+        onCopy={onCopy}
+        onDelete={onDelete}
+        onEditValueChange={onEditValueChange}
+        onStartEdit={onStartEdit}
+        onSubmitEdit={onSubmitEdit}
+        showMessageTimestamps={showMessageTimestamps}
+        variantSwitcher={variantSwitcher}
+      />
     );
   }
 
@@ -300,7 +190,6 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   const provenance = buildProvenanceChips({
     ...(message.modelId === undefined ? {} : { modelId: message.modelId }),
     ...(modelDisplayName === undefined ? {} : { modelDisplayName }),
-    // Custom model name is the model identity, not a persona chip.
     ...(agentName === undefined ||
     agentName === modelDisplayName ||
     isGenericCustomModelName(agentName)
@@ -312,8 +201,15 @@ export const ChatMessageRow = memo(function ChatMessageRow({
 
   return (
     <article
+      aria-labelledby={messageHeadingId(message.id)}
+      aria-posinset={positionInSet}
+      aria-setsize={setSize}
       className={`rm-message-row assistant${runError === undefined ? "" : " error"}`}
+      data-message-id={message.id}
+      id={transcriptMessageDomId(message.id)}
+      tabIndex={-1}
     >
+      <MessageHeading id={message.id} position={positionInSet} />
       <div className="rm-message-avatar">
         <BotMessageSquare aria-hidden="true" size={16} />
       </div>
@@ -345,7 +241,10 @@ export const ChatMessageRow = memo(function ChatMessageRow({
           );
         })()}
         {reasoning === undefined ? null : (
-          <ReasoningPanel reasoning={reasoning} streaming={showThinking} />
+          <ReasoningPanel
+            reasoning={reasoning}
+            streaming={showThinking && !reasoning.completed}
+          />
         )}
         <ToolCallList calls={toolCalls} />
         {isLast && isStreaming && showRunStatus ? (
@@ -396,10 +295,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
           <div className="rm-speech-artifact">
             <span>{formatSpeechArtifact(artifact)}</span>
             {artifact.playbackUrl ? (
-              // The assistant message immediately above is the text
-              // alternative for this generated speech-only artifact.
-              // oxlint-disable-next-line jsx-a11y/media-has-caption
-              <audio controls preload="metadata" src={artifact.playbackUrl} />
+              <VisibilityAwareAudio src={artifact.playbackUrl} />
             ) : null}
           </div>
         ) : null}
@@ -439,8 +335,19 @@ export const ChatMessageRow = memo(function ChatMessageRow({
                     items={
                       rating === "negative"
                         ? [
+                            ...(onCreateFeedbackEvalCase === undefined
+                              ? []
+                              : [
+                                  {
+                                    label: t("feedbackAddToEvals"),
+                                    onSelect: () =>
+                                      onCreateFeedbackEvalCase(message.id),
+                                  },
+                                ]),
                             {
                               label: t("clearFeedback"),
+                              separatorBefore:
+                                onCreateFeedbackEvalCase !== undefined,
                               onSelect: () => onRate(message.id, "none"),
                             },
                           ]
@@ -590,104 +497,3 @@ export const ChatMessageRow = memo(function ChatMessageRow({
     </article>
   );
 });
-
-function waitStatusLabel(
-  wait: ChatRunWait | undefined,
-  t: (
-    key: import("../lib/i18n").MessageKey,
-    values?: Record<string, boolean | number | string>,
-  ) => string,
-): string {
-  if (wait === undefined) return t("chatActivityGeneratingResponse");
-  if (wait.phase === "reconnecting") {
-    return t("streamReconnecting");
-  }
-  const timeoutSeconds =
-    wait.streamTimeoutMs === undefined
-      ? undefined
-      : Math.max(1, Math.round(wait.streamTimeoutMs / 1_000));
-  if (wait.phase === "streaming") return t("chatActivityGeneratingResponse");
-  if (wait.phase === "retrying") {
-    return timeoutSeconds === undefined
-      ? t("modelWaitRetrying", {
-          attempt: wait.attempt,
-          maxAttempts: wait.maxAttempts,
-          seconds: wait.elapsedSeconds,
-        })
-      : t("modelWaitRetryingBudget", {
-          attempt: wait.attempt,
-          maxAttempts: wait.maxAttempts,
-          seconds: wait.elapsedSeconds,
-          timeout: timeoutSeconds,
-        });
-  }
-  return timeoutSeconds === undefined
-    ? t("modelWaitElapsed", { seconds: wait.elapsedSeconds })
-    : t("modelWaitElapsedBudget", {
-        seconds: wait.elapsedSeconds,
-        timeout: timeoutSeconds,
-      });
-}
-
-/**
- * "‹ 2 / 3 ›" over the siblings of a regenerated or edited turn. Selecting one
- * repoints the chat at that branch, which is how the answer this one replaced
- * stays reachable.
- */
-function MessageToolbar({
-  children,
-  timestamp,
-}: {
-  children?: ReactNode;
-  timestamp?: string;
-}) {
-  return (
-    <div className="rm-message-toolbar">
-      <div className="rm-message-toolbar__controls">{children}</div>
-      {timestamp === undefined ? null : (
-        <span className="rm-message-meta" suppressHydrationWarning>
-          {timestamp}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function VariantSwitcher({
-  disabled,
-  index,
-  nextId,
-  onSelect,
-  previousId,
-  total,
-}: {
-  disabled: boolean;
-  index: number;
-  nextId: string | undefined;
-  onSelect: (messageId: string) => void;
-  previousId: string | undefined;
-  total: number;
-}) {
-  const { t } = useLocale();
-  return (
-    <div className="rm-message-variants">
-      <Action
-        disabled={disabled || previousId === undefined}
-        label={t("previousVariant")}
-        onClick={() => previousId !== undefined && onSelect(previousId)}
-      >
-        <ChevronLeft size={14} />
-      </Action>
-      <span className="rm-message-variant-count">
-        {index + 1} / {total}
-      </span>
-      <Action
-        disabled={disabled || nextId === undefined}
-        label={t("nextVariant")}
-        onClick={() => nextId !== undefined && onSelect(nextId)}
-      >
-        <ChevronRight size={14} />
-      </Action>
-    </div>
-  );
-}

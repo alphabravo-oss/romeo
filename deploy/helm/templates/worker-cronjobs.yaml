@@ -46,8 +46,14 @@ spec:
                   value: {{ .Values.workers.dataConnectorSync.workspaceId | quote }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.workers.dataConnectorSync.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
 {{- end }}
 {{- if .Values.workers.workflowResume.enabled }}
 ---
@@ -100,8 +106,14 @@ spec:
                   value: {{ .Values.workers.workflowResume.workspaceId | quote }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.workers.workflowResume.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
 {{- end }}
 {{- if .Values.workers.webhookRetry.enabled }}
 ---
@@ -140,8 +152,14 @@ spec:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.workers.webhookRetry.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
 {{- end }}
 {{- if .Values.workers.notificationRetry.enabled }}
 ---
@@ -180,8 +198,14 @@ spec:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.workers.notificationRetry.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
 {{- end }}
 {{- if .Values.workers.retentionEnforce.enabled }}
 ---
@@ -220,8 +244,14 @@ spec:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.workers.retentionEnforce.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
 {{- end }}
 {{- if .Values.workers.billingEntitlementReconcile.enabled }}
 ---
@@ -260,8 +290,14 @@ spec:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.workers.billingEntitlementReconcile.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
 {{- end }}
 {{- if .Values.workers.billingLifecycleEnforce.enabled }}
 ---
@@ -300,8 +336,14 @@ spec:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.workers.billingLifecycleEnforce.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
 {{- end }}
 {{- if .Values.workers.toolDispatch.enabled }}
 ---
@@ -430,11 +472,19 @@ spec:
                 - name: tool-dispatch-payloads
                   mountPath: /var/run/romeo-tool-dispatch
                   readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+              {{- else }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               {{- end }}
               resources:
                 {{- toYaml .Values.workers.toolDispatch.resources | nindent 16 }}
-          {{- if .Values.workers.toolDispatch.payloadSecret.name }}
           volumes:
+            - name: tmp
+              emptyDir: {}
+          {{- if .Values.workers.toolDispatch.payloadSecret.name }}
             - name: tool-dispatch-payloads
               secret:
                 secretName: {{ .Values.workers.toolDispatch.payloadSecret.name | quote }}
@@ -494,8 +544,14 @@ spec:
                   value: {{ .Values.workers.browserAutomation.maxBytes | quote }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.workers.browserAutomation.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
 {{- end }}
 {{- if .Values.workers.knowledgeExtraction.enabled }}
 ---
@@ -589,6 +645,12 @@ spec:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 {{- toYaml .Values.workers.voiceCatalogSync.resources | nindent 16 }}
+          volumes:
+            - name: tmp
+              emptyDir: {}
 {{- end }}

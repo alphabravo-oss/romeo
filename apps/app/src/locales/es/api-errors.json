@@ -1,0 +1,15 @@
+{
+  "intents.authenticate": "Vuelve a iniciar sesión e inténtalo de nuevo.",
+  "intents.contact_support": "Se produjo un error. Contacta con soporte e incluye el identificador de la solicitud.",
+  "intents.correct_content": "Revisa el contenido enviado e inténtalo de nuevo.",
+  "intents.correct_request": "Revisa la solicitud e inténtalo de nuevo.",
+  "intents.reduce_payload": "Reduce el tamaño de la solicitud e inténtalo de nuevo.",
+  "intents.request_access": "No tienes acceso a esta acción. Solicítalo a un administrador si es necesario.",
+  "intents.resolve_conflict": "El recurso cambió. Actualízalo e inténtalo de nuevo.",
+  "intents.resource_missing": "No se encontró el recurso solicitado.",
+  "intents.retry_later": "Se recibieron demasiadas solicitudes. Espera e inténtalo de nuevo.",
+  "intents.temporarily_unavailable": "El servicio no está disponible temporalmente. Inténtalo más tarde.",
+  "intents.upstream_failure": "Un servicio dependiente no pudo completar la solicitud. Inténtalo más tarde.",
+  "intents.upstream_timeout": "Se agotó el tiempo de espera de un servicio dependiente. Inténtalo más tarde.",
+  "intents.use_supported_media": "Usa un formato de archivo o contenido compatible e inténtalo de nuevo."
+}

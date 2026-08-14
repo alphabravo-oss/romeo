@@ -1,0 +1,55 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f7f7f8;
+  color: #202123;
+}
+
+main {
+  width: min(900px, 100%);
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 18px;
+}
+
+.benchmark-viewport {
+  height: 720px;
+  overflow: auto;
+  border: 1px solid #d9d9e3;
+  background: white;
+  padding: 16px;
+}
+
+.benchmark-message {
+  box-sizing: border-box;
+  border-bottom: 1px solid #ececf1;
+  padding: 12px;
+}
+
+.benchmark-message h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.benchmark-message p {
+  margin: 8px 0;
+}
+
+.benchmark-message pre,
+.benchmark-message table,
+.benchmark-artifact {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  background: #f4f4f4;
+}
+
+.benchmark-artifact {
+  height: 140px;
+}

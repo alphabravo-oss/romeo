@@ -6,44 +6,64 @@ import Mic from "lucide-react/dist/esm/icons/mic.mjs";
 import Users from "lucide-react/dist/esm/icons/users.mjs";
 import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
 import { Field, Select } from "@romeo/ui";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
-import {
-  AgentStudioPanel,
-  resolveAgentStudioTab,
-} from "../components/AgentStudioPanel";
-import { CollaborationPanel } from "../components/CollaborationPanel";
 import { ConsoleLayout } from "../components/ConsoleLayout";
-import { EvalPanel } from "../components/EvalPanel";
-import { KnowledgePanel } from "../components/KnowledgePanel";
-import { PageHeader } from "../components/PageHeader";
-import { ToolPanel } from "../components/ToolPanel";
-import { ToolTracePanel } from "../components/ToolTracePanel";
-import { useToolExecution } from "../components/useToolExecution";
+import { resolveAgentStudioTab } from "../components/agent-studio-model";
+import {
+  MasterDetail,
+  MasterList,
+  MasterListItem,
+  Page,
+} from "../components/console";
 import { useWorkspaceData } from "../components/useWorkspaceData";
-import { VoicePanel } from "../components/VoicePanel";
 import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
 import {
-  localeNamespaceGroups,
+  AgentStudioPanel,
+  CollaborationPanel,
+  EvalPanel,
+  KnowledgePanel,
+  VoicePanel,
+  WorkspaceToolsSection,
+  preloadWorkspaceSection,
+} from "../components/workspace-console-lazy-panels";
+import {
+  localeNamespacesForWorkspaceSection,
   type MessageKey,
   useLocale,
   useLocaleNamespaces,
 } from "../lib/i18n";
 import { resolveSectionKey } from "../lib/section-routing";
+import { prefetchPrimaryRouteData } from "../lib/route-data";
+import { validatedWorkspaceRouteSearch } from "../lib/route-workspace-selection";
 import adminCss from "../styles/admin.css?url";
 
 export const Route = createFileRoute("/workspace")({
+  loaderDeps: ({ search }) => ({ workspaceId: search.workspace }),
+  loader: ({ cause, context, deps }) =>
+    prefetchPrimaryRouteData(
+      "workspace",
+      context,
+      cause === "preload" ? "intent" : "navigation",
+      deps,
+    ),
   head: () => ({
     links: [{ rel: "stylesheet", href: adminCss }],
   }),
   validateSearch: (
     search: Record<string, unknown>,
-  ): { resource?: string; section?: string; tab?: string } => ({
+  ): {
+    resource?: string;
+    section?: string;
+    tab?: string;
+    workspace?: string;
+  } => ({
     ...(typeof search.resource === "string"
       ? { resource: search.resource }
       : {}),
     ...(typeof search.section === "string" ? { section: search.section } : {}),
     ...(typeof search.tab === "string" ? { tab: search.tab } : {}),
+    ...validatedWorkspaceRouteSearch(search.workspace),
   }),
   component: WorkspacePage,
 });
@@ -101,20 +121,21 @@ const META: Record<
 };
 
 function WorkspacePage() {
-  useLocaleNamespaces(localeNamespaceGroups.workspace);
   const { t } = useLocale();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const { section: sectionParam } = search;
   const section = resolveSectionKey(sectionParam, META, "agents");
+  useLocaleNamespaces(localeNamespacesForWorkspaceSection(section));
   const [agentId, setAgentId] = useState<string>();
   const data = useWorkspaceData(agentId, { includeDrafts: true });
-  const tools = useToolExecution(data.activeAgent, data.tools, () => {});
   const workspaceId = data.workspace?.id;
 
-  // Per-agent sections need a chosen agent; expose a picker at the top.
+  // Per-agent sections need a chosen model; expose a picker at the top. The
+  // agents section has its own list beside the editor, so a second control for
+  // the same choice would just disagree with it.
   const agentPicker =
-    data.agents.length > 0 ? (
+    data.agents.length > 0 && section !== "agents" ? (
       <div className="rm-console-agentpicker">
         <Field label={t("workspaceAgent")}>
           <Select
@@ -141,6 +162,7 @@ function WorkspacePage() {
       }))}
       route="/workspace"
       title={t("workspace")}
+      onSectionIntent={preloadWorkspaceSection}
       userMenu={
         <WorkspaceUserMenu
           isAdmin={data.subject?.isAdmin === true}
@@ -153,107 +175,126 @@ function WorkspacePage() {
         />
       }
     >
-      <div className="rm-console-topline">
-        <PageHeader
-          description={t(META[section]!.descriptionKey)}
-          title={t(META[section]!.titleKey)}
-        />
-        {agentPicker}
-      </div>
-
-      {section === "agents" ? (
-        <div className="grid gap-4">
-          <AgentStudioPanel
-            activeAgent={data.activeAgent}
-            activeTab={resolveAgentStudioTab(search.tab)}
-            isAdmin={data.subject?.isAdmin === true}
-            models={data.models}
-            onAgentCreated={setAgentId}
-            onTabChange={(tab) =>
-              void navigate({
-                search: (previous) => ({
-                  ...previous,
-                  section: "agents",
-                  tab,
-                }),
-              })
-            }
-            providers={data.providers}
-            workspaceId={workspaceId}
-          />
-        </div>
-      ) : null}
-
-      {section === "knowledge" ? (
-        <KnowledgePanel
-          activeAgent={data.activeAgent}
-          isAdmin={data.subject?.isAdmin === true}
-          onSelectionChange={(resource) =>
-            void navigate({
-              search: (previous) => {
-                const { resource: _resource, ...rest } = previous;
-                return {
-                  ...rest,
-                  section: "knowledge",
-                  ...(resource ? { resource } : {}),
-                };
-              },
-            })
+      {/* One Page owns the header and rhythm for every workspace section, the
+          same way the admin route does. */}
+      <Page
+        actions={agentPicker}
+        description={t(META[section]!.descriptionKey)}
+        title={t(META[section]!.titleKey)}
+      >
+        <Suspense
+          fallback={
+            <div className="rm-loading" role="status">
+              {t("loading")}
+            </div>
           }
-          selectedKnowledgeBaseId={search.resource}
-          workspaceId={workspaceId}
-        />
-      ) : null}
+        >
+          {/* Master–detail: the model you are editing stays visible in a list
+            beside the editor, instead of hiding behind a header dropdown that
+            showed neither the set nor its size. */}
+          {section === "agents" ? (
+            <MasterDetail
+              list={
+                <MasterList>
+                  {data.agents.map((agent) => (
+                    <MasterListItem
+                      badge={
+                        agent.publishedVersionId === undefined
+                          ? t("agentDraftOnly")
+                          : t("agentPublished")
+                      }
+                      key={agent.id}
+                      meta={agent.baseModelId}
+                      onSelect={() => setAgentId(agent.id)}
+                      selected={agent.id === data.activeAgent?.id}
+                      title={agent.name}
+                    />
+                  ))}
+                </MasterList>
+              }
+            >
+              <AgentStudioPanel
+                activeAgent={data.activeAgent}
+                activeTab={resolveAgentStudioTab(search.tab)}
+                isAdmin={data.subject?.isAdmin === true}
+                models={data.models}
+                onAgentCreated={setAgentId}
+                onTabChange={(tab) =>
+                  void navigate({
+                    search: (previous) => ({
+                      ...previous,
+                      section: "agents",
+                      tab,
+                    }),
+                  })
+                }
+                providers={data.providers}
+                workspaceId={workspaceId}
+              />
+            </MasterDetail>
+          ) : null}
 
-      {section === "tools" ? (
-        <div className="rm-console-page">
-          <ToolPanel
-            isExecuting={tools.isExecutingTool}
-            onApproveTool={() => void tools.approvePendingTool()}
-            onCancelToolApproval={tools.cancelPendingTool}
-            onExecuteCalculator={(expression) =>
-              void tools.handleExecuteCalculator(expression)
-            }
-            onExecuteDateTime={() => void tools.handleExecuteDateTime()}
-            pendingApproval={tools.pendingApproval}
-            result={tools.toolResult}
-            tools={data.tools}
-          />
-          <ToolTracePanel activeAgentId={data.activeAgent?.id} />
-        </div>
-      ) : null}
+          {section === "knowledge" ? (
+            <KnowledgePanel
+              activeAgent={data.activeAgent}
+              isAdmin={data.subject?.isAdmin === true}
+              onSelectionChange={(resource) =>
+                void navigate({
+                  search: (previous) => {
+                    const { resource: _resource, ...rest } = previous;
+                    return {
+                      ...rest,
+                      section: "knowledge",
+                      ...(resource ? { resource } : {}),
+                    };
+                  },
+                })
+              }
+              selectedKnowledgeBaseId={search.resource}
+              workspaceId={workspaceId}
+            />
+          ) : null}
 
-      {section === "voice" ? (
-        <VoicePanel
-          activeAgent={data.activeAgent}
-          onSelectionChange={(resource) =>
-            void navigate({
-              search: (previous) => {
-                const { resource: _resource, ...rest } = previous;
-                return {
-                  ...rest,
-                  section: "voice",
-                  ...(resource ? { resource } : {}),
-                };
-              },
-            })
-          }
-          selectedVoiceId={search.resource}
-          workspaceId={workspaceId}
-        />
-      ) : null}
+          {section === "tools" ? (
+            <WorkspaceToolsSection
+              activeAgent={data.activeAgent}
+              tools={data.tools}
+            />
+          ) : null}
 
-      {section === "evals" ? (
-        <EvalPanel activeAgent={data.activeAgent} />
-      ) : null}
+          {section === "voice" ? (
+            <VoicePanel
+              activeAgent={data.activeAgent}
+              onSelectionChange={(resource) =>
+                void navigate({
+                  search: (previous) => {
+                    const { resource: _resource, ...rest } = previous;
+                    return {
+                      ...rest,
+                      section: "voice",
+                      ...(resource ? { resource } : {}),
+                    };
+                  },
+                })
+              }
+              selectedVoiceId={search.resource}
+              workspaceId={workspaceId}
+            />
+          ) : null}
 
-      {section === "collaboration" ? (
-        <CollaborationPanel
-          activeAgent={data.activeAgent}
-          activeChatId={undefined}
-          workspaceId={workspaceId}
-        />
-      ) : null}
+          {section === "evals" ? (
+            <EvalPanel activeAgent={data.activeAgent} />
+          ) : null}
+
+          {section === "collaboration" ? (
+            <CollaborationPanel
+              activeAgent={data.activeAgent}
+              activeChatId={undefined}
+              workspaceId={workspaceId}
+            />
+          ) : null}
+        </Suspense>
+      </Page>
     </ConsoleLayout>
   );
 }

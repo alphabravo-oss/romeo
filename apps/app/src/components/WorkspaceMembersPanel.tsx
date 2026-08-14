@@ -2,39 +2,30 @@ import { NativeSelect } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import {
-  listWorkspaceMembers,
-  revokeWorkspaceMember,
-  shareWorkspace,
-} from "../features/access/api";
-import { listWorkspaces } from "../features/tenancy/queries";
+import { revokeWorkspaceMember, shareWorkspace } from "../features/access/api";
+import { workspaceMembersQueryOptions } from "../features/access/query-options";
+import { workspacesQueryOptions } from "../features/tenancy";
 import { useLocale } from "../lib/i18n";
+import { Section } from "./console";
 import { ResourceGrantEditor } from "./ResourceGrantEditor";
-import { SettingsSection } from "./SettingsSection";
+import * as appQueryKeys from "../lib/app-query-keys";
 
 export function WorkspaceMembersPanel() {
   const { t } = useLocale();
-  const workspacesQuery = useQuery({
-    queryKey: ["workspaces"],
-    queryFn: listWorkspaces,
-  });
+  const workspacesQuery = useQuery(workspacesQueryOptions());
   const workspaces = workspacesQuery.data ?? [];
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
   const selectedId = workspaces.some((item) => item.id === workspaceId)
     ? workspaceId
     : (workspaces[0]?.id ?? "");
-  const membersQuery = useQuery({
-    queryKey: ["workspaceMembers", selectedId],
-    queryFn: () => listWorkspaceMembers(selectedId),
-    enabled: selectedId.length > 0,
-  });
+  const membersQuery = useQuery(workspaceMembersQueryOptions(selectedId));
 
+  // No section title: the page header already reads "Workspace members", and
+  // the old two-column settings split put a duplicate heading in a label rail
+  // beside controls that then ran the full width of the page.
   return (
-    <SettingsSection
-      description={t("workspaceMembersHelp")}
-      title={t("workspaceMembersTitle")}
-    >
-      <label className="grid gap-1 text-sm">
+    <Section description={t("workspaceMembersHelp")}>
+      <label className="cs-fields grid gap-1 text-sm">
         <span className="text-muted">{t("workspace")}</span>
         <NativeSelect
           name="workspace-members-workspace"
@@ -54,9 +45,9 @@ export function WorkspaceMembersPanel() {
           onGrant={(share) => shareWorkspace(selectedId, share)}
           onRevoke={(grantId) => revokeWorkspaceMember(selectedId, grantId)}
           permissionOptions={["read"]}
-          queryKey={["workspaceMembers", selectedId]}
+          queryKey={appQueryKeys.workspaceMembers(selectedId)}
         />
       ) : null}
-    </SettingsSection>
+    </Section>
   );
 }

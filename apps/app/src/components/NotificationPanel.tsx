@@ -1,8 +1,10 @@
 import { Button } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { listNotifications, markNotificationRead } from "../features";
+import {
+  markNotificationReadMutationOptions,
+} from "../features";
 import { toast } from "../lib/toast";
 import type { UserNotification } from "../features/notifications";
 import { PanelState } from "../lib/panel-state";
@@ -10,22 +12,18 @@ import { LocalizedDateTime } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
 import { Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const col = createColumnHelper<UserNotification>();
 
 export function NotificationPanel() {
-  const queryClient = useQueryClient();
   const { t } = useLocale();
-  const notificationsQuery = useQuery({
-    queryKey: ["notifications"],
-    queryFn: listNotifications,
-  });
-  const readMutation = useMutation({ mutationFn: markNotificationRead });
+  const table = useInventoriedServerTable<UserNotification>("notifications");
+  const readMutation = useMutation(markNotificationReadMutationOptions());
 
   async function handleRead(notificationId: string) {
     try {
       await readMutation.mutateAsync(notificationId);
-      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
       toast(t("notificationRead"), "success");
     } catch {
       toast(t("couldNotMarkRead"), "error");
@@ -86,23 +84,32 @@ export function NotificationPanel() {
   return (
     <Section>
       <div className="rm-card-title">{t("notifications")}</div>
-      <PanelState query={notificationsQuery} empty={t("noNotifications")}>
-        {(notifications) => (
+      <PanelState
+        empty={t("noNotifications")}
+        isEmpty={(page) =>
+          page.items.length === 0 &&
+          table.isFirstPage &&
+          table.search.trim() === ""
+        }
+        query={table.query}
+      >
+        {() => (
           <div className="grid gap-4">
             <StatRow
               items={[
-                { label: t("total"), value: notifications.length },
+                { label: t("total"), value: table.estimatedTotal },
                 {
                   label: t("unread"),
-                  value: notifications.filter(
+                  value: table.rows.filter(
                     (notification) => notification.readAt === undefined,
                   ).length,
                 },
               ]}
             />
             <DataTable
+              serverState={table.serverState}
               columns={columns}
-              data={notifications}
+              data={table.rows}
               empty={t("noNotifications")}
             />
           </div>

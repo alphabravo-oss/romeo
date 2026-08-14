@@ -4,12 +4,17 @@ import type { Message, RunRecord } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
-import { samplingForModel, samplingFromParameters } from "./run-sampling";
+import { requestedChatParametersForStart } from "./run-reasoning-policy";
 import { enforceAgentSafetySettings } from "./agent-safety";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import { assistantsEnabledForOrg } from "./chat-experience-service";
 import { consumeQuota } from "./consume-quota";
-import { storeMessageAttachments } from "./message-attachments";
+import { enforceContentPolicyText } from "./content-policy-service";
+import {
+  materializeInlineAttachmentsAsFiles,
+  planFileReferenceAttach,
+} from "./file-reference-writer";
+import { fileIdsForMessagePart } from "./message-part-v1";
 import {
   createProviderRoutePlan,
   type ProviderRoutingPolicy,
@@ -40,10 +45,12 @@ import type {
   RunServiceOptions,
   StartRunInput,
 } from "./run-service-contracts";
+import { persistRunRetrievalEvent } from "./run-retrieval-event-persistence";
 import { routeServingModel } from "./run-stream-service";
 import { deleteObjectKeys } from "./run-tool-service";
-import { buildProviderToolDefinitions } from "./provider-tool-schemas";
+import { governRunProviderInputs } from "./run-provider-input-governance";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
+import { writeAuditLog } from "./audit-log";
 import type { WebhookEmitter } from "./webhook-service";
 import { resolveRunMemories } from "./workspace-content-service";
 
@@ -63,6 +70,12 @@ export class RunStartService {
   ) {}
 
   async start(input: StartRunInput): Promise<RunRecord> {
+    return (await this.startWithInputMessage(input)).run;
+  }
+
+  async startWithInputMessage(
+    input: StartRunInput,
+  ): Promise<{ inputMessageId: string; run: RunRecord }> {
     const storedObjectKeys: string[] = [];
     try {
       const prepared = await this.prepare(this.repository, input, {
@@ -72,7 +85,7 @@ export class RunStartService {
         this.persist(repository, prepared),
       );
       started.startExecution();
-      return started.run;
+      return { inputMessageId: started.inputMessageId, run: started.run };
     } catch (error) {
       await deleteObjectKeys(this.objectStore, storedObjectKeys);
       throw error;
@@ -91,8 +104,16 @@ export class RunStartService {
     input: StartRunInput,
     options: { storedObjectKeys?: string[] } = {},
   ): Promise<PreparedRunStart> {
-    const { chat, agent, agentVersion, model, provider } =
-      await resolveRunContext(repository, input);
+    const { chat, agent, agentVersion, model, provider, routingDecision } =
+      await resolveRunContext(repository, {
+        ...input,
+        disabledProviderIds: this.providerRoutingPolicy.disabledProviderIds,
+      });
+    const governedPrompt = await enforceContentPolicyText(
+      repository,
+      input.subject,
+      input.content,
+    );
     const routePlan = await createProviderRoutePlan(
       repository,
       this.providerRoutingPolicy,
@@ -137,6 +158,8 @@ export class RunStartService {
         messages: branchMessages,
         objectStore: this.objectStore,
         repository,
+        subject: input.subject,
+        workspaceId: chat.workspaceId,
       }),
       resolveGovernedRunFiles({
         fileIds: input.fileIds ?? [],
@@ -155,7 +178,7 @@ export class RunStartService {
           customization.preferences.personalMemoryEnabled === true,
       }),
     ]);
-    const runContent = appendDocumentContext(input.content, [
+    const combinedContent = appendDocumentContext(governedPrompt.content, [
       ...retainedAttachments.documents,
       ...governedFiles.flatMap((file) =>
         file.extractedText === undefined
@@ -163,6 +186,9 @@ export class RunStartService {
           : [{ fileName: file.fileName, text: file.extractedText }],
       ),
     ]);
+    const runContent = (
+      await enforceContentPolicyText(repository, input.subject, combinedContent)
+    ).content;
     const currentImages = [
       ...(input.attachments ?? []).map((attachment) => ({
         dataBase64: attachment.dataBase64,
@@ -217,39 +243,48 @@ export class RunStartService {
             input.historyBoundaryMessageId,
           );
     const userMessageId = createId("msg");
-    const messageParts = await storeMessageAttachments({
-      messageId: userMessageId,
-      ...(this.options.messageAttachmentMaxBytes === undefined
-        ? {}
-        : { maxAttachmentBytes: this.options.messageAttachmentMaxBytes }),
-      objectStore: this.objectStore,
-      ...(this.options.malwareScanning === undefined
-        ? {}
-        : { malwareScanning: this.options.malwareScanning }),
-      ...(options.storedObjectKeys === undefined
-        ? {}
-        : { storedObjectKeys: options.storedObjectKeys }),
-      attachments: [
-        ...(input.attachments ?? []),
-        ...governedFiles.map((file) => ({
-          dataBase64: Buffer.from(file.bytes).toString("base64"),
-          fileName: file.fileName,
-          mimeType: file.mimeType,
-          sizeBytes: file.bytes.byteLength,
-          ...(file.extractedText === undefined
-            ? {}
-            : { extractedText: file.extractedText }),
-        })),
-      ],
-    });
     const userMessage: Message = {
       id: userMessageId,
       chatId: chat.id,
       role: "user",
-      content: input.content,
+      content: governedPrompt.content,
       ...(parentId === undefined ? {} : { parentId }),
       createdAt: new Date().toISOString(),
     };
+    const inlineFiles = await materializeInlineAttachmentsAsFiles({
+      attachments: [...(input.attachments ?? [])],
+      messageId: userMessageId,
+      now: userMessage.createdAt,
+      objectStore: this.objectStore,
+      orgId: chat.orgId,
+      ownerId: input.subject.id,
+      ownerType: input.subject.type,
+      repository,
+      workspaceId: chat.workspaceId,
+      ...(this.options.messageAttachmentMaxBytes === undefined
+        ? {}
+        : { maxBytes: this.options.messageAttachmentMaxBytes }),
+      ...(this.options.malwareScanning === undefined
+        ? {}
+        : { malwareScanning: this.options.malwareScanning }),
+    });
+    options.storedObjectKeys?.push(...inlineFiles.files.map((file) => file.objectKey));
+    const planned = planFileReferenceAttach({
+      files: [
+        ...inlineFiles.files,
+        ...governedFiles.map((file) => ({
+          id: file.id,
+          status: "ready" as const,
+          mimeType: file.mimeType,
+          fileName: file.fileName,
+        })),
+      ],
+      messageId: userMessageId,
+      now: userMessage.createdAt,
+    });
+    if (planned.outcome === "denied")
+      throw new ApiError("file_not_ready", "The file has not completed its security lifecycle.", 409);
+    const messageParts = planned.parts;
     const run: Omit<RunRecord, "createdBy"> = {
       id: createId("run"),
       orgId: chat.orgId,
@@ -262,10 +297,11 @@ export class RunStartService {
       status: "running",
       createdAt: new Date().toISOString(),
     };
+    const deepResearch = input.researchMode === "deep";
     const agentic = await resolveRunAgentic(
       repository,
       input.subject.orgId,
-      input.agenticRag,
+      deepResearch || input.agenticRag,
     );
     const [knowledge, webHits] = await Promise.all([
       buildRunKnowledgeContext(repository, {
@@ -285,12 +321,17 @@ export class RunStartService {
           : { vectorStore: this.options.knowledgeVectorStore }),
       }),
       this.options.webRetrieval === undefined ||
-      (input.webSearch !== true && (input.urls?.length ?? 0) === 0)
+      (!deepResearch &&
+        input.webSearch !== true &&
+        (input.urls?.length ?? 0) === 0)
         ? Promise.resolve([])
         : this.options.webRetrieval({
             subject: input.subject,
+            workspaceId: chat.workspaceId,
+            agentId: agent.id,
+            agentVersionId: agentVersion.id,
             query: runContent,
-            search: input.webSearch === true,
+            search: deepResearch || input.webSearch === true,
             urls: input.urls ?? [],
           }),
     ]);
@@ -304,30 +345,33 @@ export class RunStartService {
       ...(currentImages.length === 0 ? {} : { userImages: currentImages }),
       knowledgeHits: [...webHits, ...knowledge.hits],
       model: servingModel,
+      ...(input.researchMode === undefined
+        ? {}
+        : { researchMode: input.researchMode }),
     });
-    // The sampling a version pins belongs to the run, not to whichever provider answers it, so it
-    // is resolved once here and carried through retries and fallback.
-    const sampling = {
-      ...samplingFromParameters(
-        servingModel.defaultParameters as
-          | import("../domain/agent-entities").AgentParameters
-          | undefined,
-      ),
-      ...samplingFromParameters(agentVersion.parameters),
-    };
-    const resolvedSampling = samplingForModel(
-      servingModel,
-      Object.keys(sampling).length === 0 ? undefined : sampling,
-    );
-    const providerTools = await buildProviderToolDefinitions(
+    const requestedParameters = await requestedChatParametersForStart(
       repository,
-      input.subject,
-      agent.id,
       {
-        externalOperationExecutionEnabled:
-          this.options.toolOperationExecutionEnabled === true,
+        agentParameters: agentVersion.parameters,
+        model: servingModel,
+        orgId: chat.orgId,
+        workspaceId: chat.workspaceId,
+        ...(this.options.capabilityPlatformPolicy === undefined
+          ? {}
+          : { platformPolicy: this.options.capabilityPlatformPolicy }),
+        ...(input.reasoningPolicy === undefined
+          ? {}
+          : { runRequest: input.reasoningPolicy }),
       },
     );
+    const governedProvider = await governRunProviderInputs({
+      agentId: agent.id,
+      messages: built.messages,
+      repository,
+      subject: input.subject,
+      toolOperationExecutionEnabled:
+        this.options.toolOperationExecutionEnabled === true,
+    });
     return {
       agentId: agent.id,
       agentVersionId: agentVersion.id,
@@ -335,20 +379,21 @@ export class RunStartService {
       estimatedInputTokens: built.estimatedInputTokens,
       historyMessages: built.historyMessages,
       historyTruncated: built.historyTruncated,
-      input: { content: input.content, subject: input.subject },
+      input: { content: governedPrompt.content, subject: input.subject },
       knowledgeHitsDropped: built.knowledgeHitsDropped,
       ...(knowledge.safety === undefined
         ? {}
         : { knowledgeSafety: knowledge.safety }),
       messageParts,
-      messages: built.messages,
+      messages: governedProvider.messages,
       model,
       provider,
-      providerTools,
+      providerTools: governedProvider.providerTools,
       quotaTarget,
       routePlan,
+      routingDecision,
       run,
-      ...(resolvedSampling === undefined ? {} : { sampling: resolvedSampling }),
+      ...requestedParameters,
       userMessage,
     };
   }
@@ -390,17 +435,36 @@ export class RunStartService {
     );
     if (prepared.messageParts.length > 0)
       await repository.createMessageParts(prepared.messageParts);
+    const fileReferenceCount = prepared.messageParts.reduce(
+      (count, part) => count + fileIdsForMessagePart(part).length,
+      0,
+    );
+    if (fileReferenceCount > 0)
+      await writeAuditLog(repository, {
+        subject: prepared.input.subject,
+        action: "file.reference.attach",
+        resourceType: "chat",
+        resourceId: prepared.run.chatId,
+        metadata: {
+          messageId: prepared.userMessage.id,
+          referenceCount: fileReferenceCount,
+          workspaceId: prepared.run.workspaceId,
+        },
+      });
     const createdBy = await persistedSubjectActorId(
       repository,
       prepared.input.subject,
       { kind: "service_account_run", name: "Service Account Run Actor" },
     );
     const run = await repository.createRun({ ...prepared.run, createdBy });
-    await this.appendRetrievalEvent(
+    const retrievalEvents = await persistRunRetrievalEvent(
       repository,
-      run.id,
-      prepared.citations,
-      prepared.knowledgeSafety,
+      this.runEventSequencer,
+      {
+        runId: run.id,
+        citations: prepared.citations,
+        safety: prepared.knowledgeSafety,
+      },
     );
     await recordRunStartedUsage(repository, {
       run: {
@@ -412,30 +476,21 @@ export class RunStartService {
       model: prepared.quotaTarget.model,
       historyMessages: prepared.historyMessages,
       historyTruncated: prepared.historyTruncated,
+      imageInputCount: prepared.messages.reduce(
+        (count, message) =>
+          count + ("images" in message ? (message.images?.length ?? 0) : 0),
+        0,
+      ),
       knowledgeHitsDropped: prepared.knowledgeHitsDropped,
+      routing: prepared.routingDecision,
     });
     return {
+      inputMessageId: prepared.userMessage.id,
       run,
-      startExecution: () => this.beginExecution(prepared, run),
-    };
-  }
-
-  private async appendRetrievalEvent(
-    repository: RomeoRepository,
-    runId: string,
-    citations: PreparedRunStart["citations"],
-    safety: PreparedRunStart["knowledgeSafety"],
-  ): Promise<void> {
-    if (citations.length === 0 && safety === undefined) return;
-    const event = await this.runEventSequencer.create(repository, {
-      runId,
-      type: "retrieval.completed",
-      data: {
-        citationCount: citations.length,
-        citations,
-        ...(safety === undefined ? {} : { safety }),
+      startExecution: () => {
+        void this.runEventSequencer.notify(retrievalEvents);
+        this.beginExecution(prepared, run);
       },
-    });
-    await repository.appendRunEvents([event]);
+    };
   }
 }

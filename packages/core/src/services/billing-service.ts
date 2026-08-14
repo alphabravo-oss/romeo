@@ -21,6 +21,7 @@ import {
   type BillingEntitlementReconciliationResult,
   type BillingEntitlementReport,
 } from "./billing-entitlements";
+import { reconcileBillingEntitlements } from "./billing-entitlement-reconciliation";
 import {
   genericBillingWebhookEvent,
   stripeBillingWebhookEvent,
@@ -51,6 +52,8 @@ export interface BillingServiceOptions {
 }
 
 export class BillingService {
+  private readonly syncTails = new Map<string, Promise<void>>();
+
   constructor(
     private readonly repository: RomeoRepository,
     private readonly options: BillingServiceOptions = {},
@@ -72,125 +75,7 @@ export class BillingService {
     subject: AuthSubject,
   ): Promise<BillingEntitlementReconciliationResult> {
     assertScope(subject, "admin:write");
-    const before = await buildBillingEntitlementReport(
-      this.repository,
-      subject.orgId,
-    );
-    if (!before.billingPlanConfigured) {
-      await this.repository.createAuditLog({
-        id: createId("audit"),
-        orgId: subject.orgId,
-        actorId: subject.id,
-        action: "billing.entitlements_reconciled",
-        resourceType: "billing_plan",
-        resourceId: subject.orgId,
-        outcome: "success",
-        metadata: {
-          billingPlanConfigured: false,
-          createdQuotaCount: 0,
-          updatedQuotaCount: 0,
-          unchangedQuotaCount: 0,
-          warnings: before.warnings,
-        },
-        createdAt: new Date().toISOString(),
-      });
-      return {
-        before,
-        after: before,
-        actions: {
-          createdQuotaIds: [],
-          updatedQuotaIds: [],
-          unchangedQuotaIds: [],
-        },
-      };
-    }
-
-    const plan = await this.repository.getBillingPlan(subject.orgId);
-    if (plan === undefined) {
-      throw new ApiError(
-        "billing_plan_required",
-        "Billing entitlement reconciliation requires a billing plan.",
-        400,
-      );
-    }
-
-    const missingMetrics = new Set(
-      before.quotas
-        .filter((quota) => quota.status === "missing")
-        .map((quota) => quota.metric),
-    );
-    const mismatchedMetrics = new Set(
-      before.quotas
-        .filter(
-          (quota) => quota.status !== "matched" && quota.status !== "missing",
-        )
-        .map((quota) => quota.metric),
-    );
-
-    const reconciled = await this.repository.transaction(async (repository) => {
-      const txPlan = await repository.getBillingPlan(subject.orgId);
-      if (txPlan === undefined) {
-        throw new ApiError(
-          "billing_plan_required",
-          "Billing entitlement reconciliation requires a billing plan.",
-          400,
-        );
-      }
-      const applied = await applyBillingQuotaTemplates(
-        repository,
-        subject,
-        txPlan.quotaTemplates,
-      );
-      const after = await buildBillingEntitlementReport(
-        repository,
-        subject.orgId,
-      );
-      const createdQuotaIds = applied
-        .filter((quota) => missingMetrics.has(quota.metric))
-        .map((quota) => quota.id);
-      const updatedQuotaIds = applied
-        .filter((quota) => mismatchedMetrics.has(quota.metric))
-        .map((quota) => quota.id);
-      const unchangedQuotaIds = applied
-        .filter(
-          (quota) =>
-            !missingMetrics.has(quota.metric) &&
-            !mismatchedMetrics.has(quota.metric),
-        )
-        .map((quota) => quota.id);
-
-      await repository.createAuditLog({
-        id: createId("audit"),
-        orgId: subject.orgId,
-        actorId: subject.id,
-        action: "billing.entitlements_reconciled",
-        resourceType: "billing_plan",
-        resourceId: txPlan.id,
-        outcome: "success",
-        metadata: {
-          billingPlanConfigured: true,
-          planCode: txPlan.code,
-          planStatus: txPlan.status,
-          createdQuotaCount: createdQuotaIds.length,
-          updatedQuotaCount: updatedQuotaIds.length,
-          unchangedQuotaCount: unchangedQuotaIds.length,
-          beforeWarnings: before.warnings,
-          afterWarnings: after.warnings,
-        },
-        createdAt: new Date().toISOString(),
-      });
-      return { after, createdQuotaIds, updatedQuotaIds, unchangedQuotaIds };
-    });
-
-    return {
-      before,
-      after: reconciled.after,
-      actions: {
-        createdQuotaIds: reconciled.createdQuotaIds,
-        updatedQuotaIds: reconciled.updatedQuotaIds,
-        unchangedQuotaIds: reconciled.unchangedQuotaIds,
-      },
-    };
+    return reconcileBillingEntitlements(this.repository, subject);
   }
 
   async applyPlan(input: {
@@ -217,73 +102,137 @@ export class BillingService {
     event: ExternalBillingEventInput;
   }): Promise<BillingPlanApplyResult> {
     assertScope(input.subject, "admin:write");
-    return this.repository.transaction(async (repository) => {
-      const existing = await repository.getBillingPlan(input.subject.orgId);
-      const quotaTemplates =
-        input.event.quotaTemplates ?? existing?.quotaTemplates ?? [];
-      validateBillingQuotaTemplates(quotaTemplates);
-      if (quotaTemplates.length === 0)
-        throw new ApiError(
-          "billing_plan_required",
-          "External billing sync requires quota templates or an existing billing plan.",
-          400,
+    return this.withSyncLock(input.subject.orgId, () =>
+      this.repository.transaction(async (repository) => {
+        await repository.acquireBillingSyncLock(input.subject.orgId);
+        const priorReceipt = await repository.getBillingEventReceipt(
+          input.subject.orgId,
+          input.event.provider,
+          input.event.eventId,
         );
+        if (priorReceipt !== undefined) return priorReceipt.result;
 
-      const code = input.event.planCode ?? existing?.code;
-      const name = input.event.planName ?? existing?.name;
-      if (code === undefined || name === undefined) {
-        throw new ApiError(
-          "billing_plan_required",
-          "External billing sync requires plan code and name before a plan exists.",
-          400,
-        );
-      }
+        const existing = await repository.getBillingPlan(input.subject.orgId);
+        const existingEventAt = externalEventTimestamp(existing?.metadata);
+        if (
+          existing !== undefined &&
+          existingEventAt !== undefined &&
+          Date.parse(input.event.occurredAt) < Date.parse(existingEventAt)
+        ) {
+          const result = {
+            plan: existing,
+            quotas: await repository.listQuotaBuckets(input.subject.orgId),
+          };
+          await repository.createBillingEventReceipt({
+            id: createId("billing_event"),
+            orgId: input.subject.orgId,
+            provider: input.event.provider,
+            eventId: input.event.eventId,
+            eventType: input.event.eventType,
+            occurredAt: input.event.occurredAt,
+            result,
+            createdAt: new Date().toISOString(),
+          });
+          await writeAuditLog(repository, {
+            id: createId("audit"),
+            orgId: input.subject.orgId,
+            actorId: input.subject.id,
+            action: "billing.external_event_ignored",
+            resourceType: "billing_plan",
+            resourceId: existing.id,
+            outcome: "success",
+            metadata: {
+              provider: input.event.provider,
+              eventType: input.event.eventType,
+              reason: "older_than_last_applied_event",
+            },
+            createdAt: new Date().toISOString(),
+          });
+          return result;
+        }
+        const quotaTemplates =
+          input.event.quotaTemplates ?? existing?.quotaTemplates ?? [];
+        validateBillingQuotaTemplates(quotaTemplates);
+        if (quotaTemplates.length === 0)
+          throw new ApiError(
+            "billing_plan_required",
+            "External billing sync requires quota templates or an existing billing plan.",
+            400,
+          );
 
-      const externalCustomerId =
-        input.event.externalCustomerId ?? existing?.externalCustomerId;
-      const externalSubscriptionId =
-        input.event.externalSubscriptionId ?? existing?.externalSubscriptionId;
-      const applyInput: Parameters<BillingService["applyPlan"]>[0] = {
-        subject: input.subject,
-        code,
-        name,
-        status:
-          input.event.status ??
-          statusFromExternalEvent(input.event.eventType, existing?.status),
-        source: "external",
-        quotaTemplates,
-        metadata: externalBillingMetadata(
-          existing?.metadata ?? {},
-          input.event,
-        ),
-      };
-      if (input.event.lifecycle !== undefined)
-        applyInput.lifecycle = input.event.lifecycle;
-      if (externalCustomerId !== undefined)
-        applyInput.externalCustomerId = externalCustomerId;
-      if (externalSubscriptionId !== undefined)
-        applyInput.externalSubscriptionId = externalSubscriptionId;
-      const result = await this.applyPlanInRepository(repository, applyInput);
+        const code = input.event.planCode ?? existing?.code;
+        const name = input.event.planName ?? existing?.name;
+        if (code === undefined || name === undefined) {
+          throw new ApiError(
+            "billing_plan_required",
+            "External billing sync requires plan code and name before a plan exists.",
+            400,
+          );
+        }
 
-      await repository.createAuditLog({
-        id: createId("audit"),
-        orgId: input.subject.orgId,
-        actorId: input.subject.id,
-        action: "billing.external_event_synced",
-        resourceType: "billing_plan",
-        resourceId: result.plan.id,
-        outcome: "success",
-        metadata: {
+        const externalCustomerId =
+          input.event.externalCustomerId ?? existing?.externalCustomerId;
+        const externalSubscriptionId =
+          input.event.externalSubscriptionId ??
+          existing?.externalSubscriptionId;
+        const applyInput: Parameters<BillingService["applyPlan"]>[0] = {
+          subject: input.subject,
+          code,
+          name,
+          status:
+            input.event.eventType === "invoice.paid" &&
+            existing?.status === "canceled"
+              ? "canceled"
+              : (input.event.status ??
+                statusFromExternalEvent(
+                  input.event.eventType,
+                  existing?.status,
+                )),
+          source: "external",
+          quotaTemplates,
+          metadata: externalBillingMetadata(
+            existing?.metadata ?? {},
+            input.event,
+          ),
+        };
+        if (input.event.lifecycle !== undefined)
+          applyInput.lifecycle = input.event.lifecycle;
+        if (externalCustomerId !== undefined)
+          applyInput.externalCustomerId = externalCustomerId;
+        if (externalSubscriptionId !== undefined)
+          applyInput.externalSubscriptionId = externalSubscriptionId;
+        const result = await this.applyPlanInRepository(repository, applyInput);
+
+        await writeAuditLog(repository, {
+          id: createId("audit"),
+          orgId: input.subject.orgId,
+          actorId: input.subject.id,
+          action: "billing.external_event_synced",
+          resourceType: "billing_plan",
+          resourceId: result.plan.id,
+          outcome: "success",
+          metadata: {
+            provider: input.event.provider,
+            eventType: input.event.eventType,
+            status: result.plan.status,
+            hasInvoice: input.event.externalInvoiceId !== undefined,
+            hasSubscription: result.plan.externalSubscriptionId !== undefined,
+          },
+          createdAt: new Date().toISOString(),
+        });
+        await repository.createBillingEventReceipt({
+          id: createId("billing_event"),
+          orgId: input.subject.orgId,
           provider: input.event.provider,
+          eventId: input.event.eventId,
           eventType: input.event.eventType,
-          status: result.plan.status,
-          hasInvoice: input.event.externalInvoiceId !== undefined,
-          hasSubscription: result.plan.externalSubscriptionId !== undefined,
-        },
-        createdAt: new Date().toISOString(),
-      });
-      return result;
-    });
+          occurredAt: input.event.occurredAt,
+          result,
+          createdAt: new Date().toISOString(),
+        });
+        return result;
+      }),
+    );
   }
 
   async syncStripeWebhook(input: {
@@ -359,7 +308,7 @@ export class BillingService {
         orgId: subject.orgId,
         plan: effectivePlan,
       });
-      await repository.createAuditLog({
+      await writeAuditLog(repository, {
         id: createId("audit"),
         orgId: subject.orgId,
         actorId: subject.id,
@@ -423,7 +372,7 @@ export class BillingService {
       input.subject,
       storedPlan.quotaTemplates,
     );
-    await repository.createAuditLog({
+    await writeAuditLog(repository, {
       id: createId("audit"),
       orgId: input.subject.orgId,
       actorId: input.subject.id,
@@ -449,4 +398,33 @@ export class BillingService {
     const plan = await this.repository.getBillingPlan(orgId);
     return buildBillingLifecycleReport({ orgId, plan });
   }
+
+  private async withSyncLock<T>(
+    orgId: string,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const prior = this.syncTails.get(orgId) ?? Promise.resolve();
+    let release!: () => void;
+    const tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.syncTails.set(orgId, tail);
+    await prior;
+    try {
+      return await work();
+    } finally {
+      release();
+      if (this.syncTails.get(orgId) === tail) this.syncTails.delete(orgId);
+    }
+  }
 }
+
+function externalEventTimestamp(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  const value = metadata?.lastExternalEventAt;
+  if (typeof value !== "string" || !Number.isFinite(Date.parse(value)))
+    return undefined;
+  return value;
+}
+import { writeAuditLog } from "./audit-log";

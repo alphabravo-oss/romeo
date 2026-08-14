@@ -1,4 +1,4 @@
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,7 +54,7 @@ describe("readiness API", () => {
       createdAt: "2026-06-27T00:00:00.000Z",
       updatedAt: "2026-06-27T00:00:00.000Z",
     });
-    const env = readEnv({
+    const env = testEnv({
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
       LOCAL_AUTH_SECRET_ENCRYPTION_KEY: "prod-local-auth-secret-key-32-bytes",
       WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -125,7 +125,7 @@ describe("readiness API", () => {
       ],
     });
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({ GA_CHECKLIST_PATH: checklistPath }),
+      env: testEnv({ GA_CHECKLIST_PATH: checklistPath }),
     });
     const response = await api.request("/api/v1/admin/readiness");
     const body = await response.json();
@@ -177,7 +177,7 @@ describe("readiness API", () => {
     });
     const key = await keyResponse.json();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         LOCAL_AUTH_SECRET_ENCRYPTION_KEY: "prod-local-auth-secret-key-32-bytes",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -216,7 +216,7 @@ describe("readiness API", () => {
 
   it("fails readiness when Qdrant mode is enabled without secure deployment wiring", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_API_KEY_REF: "literal-secret-value",
       }),
@@ -248,7 +248,7 @@ describe("readiness API", () => {
 
   it("fails readiness when pgvector partitioned isolation lacks live evidence", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         VECTOR_ISOLATION_MODE: "pgvector_partitioned_by_org",
       }),
     });
@@ -293,7 +293,7 @@ describe("readiness API", () => {
       },
     });
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         VECTOR_ISOLATION_MODE: "pgvector_partitioned_by_org",
         PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH: evidencePath,
       }),
@@ -330,7 +330,7 @@ describe("readiness API", () => {
 
   it("fails readiness when Qdrant uses external secrets but secret resolution is disabled", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.example.com",
         QDRANT_COLLECTION: "romeo-prod",
@@ -364,7 +364,7 @@ describe("readiness API", () => {
   it("fails readiness when Qdrant endpoint is not a safe HTTP origin", async () => {
     const unsafeUrl = "https://user:pass@qdrant.example.com?secret=true";
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: unsafeUrl,
         QDRANT_COLLECTION: "romeo-prod",
@@ -406,7 +406,7 @@ describe("readiness API", () => {
       url: string;
     }> = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.example.com",
         QDRANT_COLLECTION: "romeo-prod",
@@ -481,7 +481,7 @@ describe("readiness API", () => {
     const qdrantApiKey = "qdrant-readiness-key";
     const qdrantCalls: Array<string> = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.example.com",
         QDRANT_COLLECTION: "romeo-prod",
@@ -551,7 +551,7 @@ describe("readiness API", () => {
       partitioningPolicy: "workspace",
     });
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.example.com",
         QDRANT_COLLECTION: "romeo-prod",
@@ -616,7 +616,7 @@ describe("readiness API", () => {
   it("fails readiness when Qdrant routing is active but the collection is unavailable", async () => {
     const qdrantApiKey = "qdrant-readiness-key";
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.example.com",
         QDRANT_COLLECTION: "romeo-prod",
@@ -691,7 +691,7 @@ describe("readiness API", () => {
     });
     const key = await keyResponse.json();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
         DEV_SEEDED_LOGIN: "false",
@@ -744,7 +744,7 @@ describe("readiness API", () => {
     });
     const key = await keyResponse.json();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         SESSION_SECRET_PREVIOUS: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -817,7 +817,7 @@ describe("readiness API", () => {
     });
     const key = await keyResponse.json();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
         DEV_SEEDED_LOGIN: "false",
@@ -860,7 +860,7 @@ describe("readiness API", () => {
     });
     const repository = new InMemoryRomeoRepository(seed);
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
         OBJECT_STORE_DRIVER: "s3",
@@ -881,7 +881,7 @@ describe("readiness API", () => {
 
   it("returns sanitized admin SSO settings without raw client identifiers", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         OIDC_ISSUER_URL: "https://keycloak.example.com/realms/romeo",
         OIDC_CLIENT_ID: "romeo-web",
         OIDC_ADMIN_GROUPS: "platform-admins,security-admins",
@@ -988,7 +988,7 @@ describe("readiness API", () => {
   it("tests OIDC discovery and JWKS without exposing raw SSO secrets or paths", async () => {
     const calls: string[] = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         OIDC_ISSUER_URL: "https://keycloak.example.com/realms/romeo",
         OIDC_CLIENT_ID: "romeo-web",
       }),
@@ -1384,7 +1384,7 @@ describe("readiness API", () => {
 
   it("fails readiness when fail-closed connector egress has no host allowlist", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         DATA_CONNECTOR_EXECUTION_DRIVER: "website-fetch",
         DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
       }),

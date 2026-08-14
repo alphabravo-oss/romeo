@@ -1,17 +1,17 @@
 import { assertScope, canAccessOrg, type AuthSubject } from "@romeo/auth";
-import {
-  generateOpenAiCompatibleImages,
-  ProviderSdkRequestError,
-} from "@romeo/providers";
+import { getImageGenerationAdapter } from "@romeo/providers";
 
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
-import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
+import { CapabilityService } from "./capability-resolver";
 import { consumeQuotas } from "./consume-quota";
+import { enforceContentPolicyText } from "./content-policy-service";
 import type { FileObjectResponse, FileService } from "./file-service";
 import type { QuotaCoordinator } from "./quota-coordination";
+import { recordUsage } from "./record-usage";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
+import { providerApiError } from "./provider-api-error";
 import type { SecretResolver } from "./secret-resolver";
 import type { WebhookEmitter } from "./webhook-service";
 
@@ -28,6 +28,7 @@ export class ImageGenerationService {
     private readonly repository: RomeoRepository,
     private readonly files: FileService,
     private readonly options: {
+      capabilities?: CapabilityService;
       fetchImpl?: typeof fetch;
       quotaCoordinator?: QuotaCoordinator;
       secretResolver?: SecretResolver;
@@ -46,9 +47,23 @@ export class ImageGenerationService {
       count: number;
       size: "1024x1024" | "1024x1536" | "1536x1024";
     },
+    command: { providerIdempotencyKey?: string } = {},
   ): Promise<GeneratedImageArtifact[]> {
     assertScope(subject, "runs:create");
     assertScope(subject, "models:read");
+    const authorization = await (
+      this.options.capabilities ?? new CapabilityService(this.repository)
+    ).authorizeImageGeneration({
+      subject,
+      workspaceId: input.workspaceId,
+      modelId: input.modelId,
+      count: input.count,
+      size: input.size,
+    });
+    const count = authorization.count;
+    const prompt = (
+      await enforceContentPolicyText(this.repository, subject, input.prompt)
+    ).content;
     const model = await this.repository.getModel(input.modelId);
     if (model === undefined) throw notFound("Model");
     const provider = await this.repository.getProvider(model.providerId);
@@ -67,20 +82,20 @@ export class ImageGenerationService {
         409,
       );
     }
-    if (
-      provider.type !== "openai-compatible" &&
-      provider.type !== "openai-responses-compatible"
-    ) {
+    let imageAdapter: ReturnType<typeof getImageGenerationAdapter>;
+    try {
+      imageAdapter = getImageGenerationAdapter(provider.type);
+    } catch {
       throw new ApiError(
         "image_provider_unsupported",
-        "Image generation currently requires an OpenAI-compatible provider.",
+        "The selected provider dialect does not support image generation.",
         409,
       );
     }
     const credential = await this.resolveCredential(provider.credentialRef);
     const unitPriceUsd = model.pricing?.imageGenerationUsd?.[input.size];
     const estimatedCostUsd =
-      unitPriceUsd === undefined ? undefined : unitPriceUsd * input.count;
+      unitPriceUsd === undefined ? undefined : unitPriceUsd * count;
     const estimatedCostMicroUsd =
       estimatedCostUsd === undefined
         ? undefined
@@ -109,7 +124,7 @@ export class ImageGenerationService {
             metric: "image.generated",
             providerId: provider.id,
             workspaceId: input.workspaceId,
-            quantity: input.count,
+            quantity: count,
           },
           ...(estimatedCostMicroUsd === undefined
             ? []
@@ -130,28 +145,25 @@ export class ImageGenerationService {
     );
     let data;
     try {
-      data = await generateOpenAiCompatibleImages({
+      data = await imageAdapter.generate({
         provider,
         ...(credential === undefined ? {} : { apiKey: credential }),
         fetchImpl: this.fetchImpl,
         model: model.name,
-        prompt: input.prompt,
-        count: input.count,
+        prompt,
+        count,
         size: input.size,
+        ...(command.providerIdempotencyKey === undefined
+          ? {}
+          : { idempotencyKey: command.providerIdempotencyKey }),
       });
     } catch (caught) {
-      const status =
-        caught instanceof ProviderSdkRequestError ? caught.status : undefined;
-      throw new ApiError(
-        "image_provider_failed",
-        status === undefined
-          ? "Image provider request failed."
-          : `Image provider returned HTTP ${status}.`,
-        502,
-        status === undefined ? undefined : { status },
-      );
+      throw providerApiError(caught, {
+        kind: provider.type,
+        operation: "imageGeneration",
+      });
     }
-    if (!Array.isArray(data) || data.length < input.count) {
+    if (!Array.isArray(data) || data.length < count) {
       throw new ApiError(
         "image_provider_invalid_response",
         "Image provider did not return image data.",
@@ -160,7 +172,7 @@ export class ImageGenerationService {
     }
     const artifacts: GeneratedImageArtifact[] = [];
     try {
-      for (const [index, raw] of data.slice(0, input.count).entries()) {
+      for (const [index, raw] of data.slice(0, count).entries()) {
         const dataBase64 =
           typeof raw.b64Json === "string" ? raw.b64Json : undefined;
         if (dataBase64 === undefined || dataBase64.length > 14_000_000) {
@@ -220,7 +232,7 @@ export class ImageGenerationService {
         providerId: provider.id,
         artifactCount: artifacts.length,
         size: input.size,
-        promptLength: input.prompt.length,
+        promptLength: prompt.length,
         ...(unitPriceUsd === undefined ? {} : { unitPriceUsd }),
         ...(estimatedCostUsd === undefined ? {} : { estimatedCostUsd }),
       },
@@ -229,8 +241,7 @@ export class ImageGenerationService {
       kind: "image_generation_usage",
       name: "Image generation usage actor",
     });
-    await this.repository.createUsageEvent({
-      id: createId("usage"),
+    await recordUsage(this.repository, {
       orgId: subject.orgId,
       workspaceId: input.workspaceId,
       actorId,
@@ -250,17 +261,15 @@ export class ImageGenerationService {
           ? {}
           : { estimatedCostMicroUsd }),
       },
-      createdAt: new Date().toISOString(),
     });
     if (estimatedCostMicroUsd !== undefined) {
-      await this.repository.createUsageEvent({
-        id: createId("usage"),
+      await recordUsage(this.repository, {
         orgId: subject.orgId,
         workspaceId: input.workspaceId,
         actorId,
         sourceType: "run",
         sourceId: artifacts[0]!.id,
-        metric: "image.cost.estimated",
+        metric: "image.cost.micro_usd",
         quantity: estimatedCostMicroUsd,
         unit: "micro_usd",
         metadata: {
@@ -269,7 +278,6 @@ export class ImageGenerationService {
           size: input.size,
           unitPriceUsd,
         },
-        createdAt: new Date().toISOString(),
       });
     }
     return artifacts;

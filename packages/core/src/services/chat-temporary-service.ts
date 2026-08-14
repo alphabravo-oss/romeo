@@ -7,6 +7,7 @@ import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
 import { ensureSystemAuditActor } from "./system-audit-actor";
 import { currentTelemetryMetadata } from "./telemetry-context";
+import { isLegacyAttachmentPart } from "./message-part-v1";
 
 export type TemporaryChatPurgeOutcome = "deleted" | "legal_hold" | "missing";
 
@@ -92,7 +93,7 @@ export class ChatTemporaryService {
       name: "Temporary Chat Cleanup Worker",
       orgId: input.orgId,
     });
-    await this.repository.createAuditLog({
+    await writeAuditLog(this.repository, {
       id: createId("audit"),
       orgId: input.orgId,
       actorId: actor.id,
@@ -132,7 +133,7 @@ export class ChatTemporaryService {
     ).flat();
     await Promise.all(
       parts
-        .filter((part) => part.type === "attachment")
+        .filter(isLegacyAttachmentPart)
         .map((part) => this.objectStore.deleteObject(part.content)),
     );
     const deleted = await this.repository.deleteDataForResource(

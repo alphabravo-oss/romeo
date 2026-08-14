@@ -6,6 +6,7 @@ import type { RomeoServices } from "../services";
 export interface AppBindings {
   Variables: {
     requestId: string;
+    secureCookie: boolean;
     traceId: string;
     subject: AuthSubject;
     services: RomeoServices;

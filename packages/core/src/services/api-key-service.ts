@@ -6,12 +6,13 @@ import {
   type AuthSubject,
   type Scope,
 } from "@romeo/auth";
+import { AuthenticationError } from "../errors";
 
 import type { ApiKey } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
-import { writeAuditLog } from "./audit-log";
+import { type AuditAction, writeAuditLog } from "./audit-log";
 import { workspaceIdsFromGrants } from "./access-visibility";
 import { canManageServiceAccount } from "./service-account-access";
 import {
@@ -160,16 +161,16 @@ export class ApiKeyService {
       await hashApiKey(token),
     );
     if (!apiKey || apiKey.revokedAt)
-      throw new AuthorizationError("API key is invalid or revoked.");
+      throw new AuthenticationError("API key is invalid or revoked.");
 
     if (apiKey.serviceAccountId !== undefined)
       return this.authenticateServiceAccount(apiKey);
     if (apiKey.userId === undefined)
-      throw new AuthorizationError("API key owner was not found.");
+      throw new AuthenticationError("API key owner was not found.");
     const user = await this.repository.getCurrentUser(apiKey.userId);
-    if (!user) throw new AuthorizationError("API key owner was not found.");
+    if (!user) throw new AuthenticationError("API key owner was not found.");
     if (user.disabledAt !== undefined)
-      throw new AuthorizationError("API key owner is disabled.");
+      throw new AuthenticationError("API key owner is disabled.");
 
     const [workspaces, memberships, grants] = await Promise.all([
       this.repository.listWorkspaces(apiKey.orgId),
@@ -221,10 +222,10 @@ export class ApiKeyService {
     };
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     repository: RomeoRepository,
     subject: AuthSubject,
-    action: string,
+    action: A,
     resourceId: string,
     outcome: "success" | "failure",
   ): Promise<void> {

@@ -1,4 +1,4 @@
-import type { ResourceType } from "@romeo/auth";
+import type { PrincipalType, ResourceType } from "@romeo/auth";
 
 export type FavoritableResourceType = Extract<
   ResourceType,
@@ -47,6 +47,36 @@ export interface WorkspaceFolderItem {
   resourceType: FolderItemResourceType;
   resourceId: string;
   createdAt: string;
+}
+
+export interface AuthorizedWorkspaceFolderItemsBatchInput {
+  canReadAgents: boolean;
+  canReadChats: boolean;
+  canReadKnowledgeBases: boolean;
+  folderIds: string[];
+  groupIds: string[];
+  isAdmin: boolean;
+  limitPerFolder: number;
+  orgId: string;
+  principalId: string;
+  principalType: Extract<PrincipalType, "service_account" | "user">;
+  workspaceId: string;
+}
+
+export interface AuthorizedWorkspaceFoldersByIdsInput {
+  folderIds: string[];
+  groupIds: string[];
+  isAdmin: boolean;
+  orgId: string;
+  principalId: string;
+  principalType: Extract<PrincipalType, "service_account" | "user">;
+  workspaceId: string;
+}
+
+export interface WorkspaceFolderItemsBatchGroup {
+  folderId: string;
+  hasMore: boolean;
+  items: WorkspaceFolderItem[];
 }
 
 export interface ResourceFavorite {

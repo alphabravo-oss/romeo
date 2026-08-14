@@ -35,5 +35,7 @@
   "navWorkflows": "Flujos de trabajo",
   "navWebhooks": "Webhooks",
   "navNotifications": "Notificaciones",
-  "navConnectedApps": "Aplicaciones conectadas"
+  "navConnectedApps": "Aplicaciones conectadas",
+  "navCapabilities": "Capacidades",
+  "navComputeTrust": "Cómputo y confianza"
 }

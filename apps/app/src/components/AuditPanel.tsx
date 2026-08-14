@@ -1,8 +1,8 @@
-import { Input, NativeSelect, Button, Checkbox, StatusBadge } from "@romeo/ui";
+import { Button, InlineError, StatusBadge } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { exportAuditLogsCsv, listAuditLogs } from "../features";
+import { exportAuditLogsCsv } from "../features";
 import type { AuditLog, AuditLogFilter } from "../features/types";
 import { downloadCsv } from "../lib/csv";
 import { useLocale, type MessageKey } from "../lib/i18n";
@@ -10,36 +10,38 @@ import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { Section, StatRow } from "./console";
-import { DateRangeSelect } from "./DateRangeSelect";
 import { PageActions } from "./PageActions";
 import { rangeToBounds, type RangePreset } from "./date-range";
+import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
+import type { AuditRouteState } from "../lib/audit-route-state";
 import {
-  type ColumnDef,
-  DataTable,
-  type ServerPagination,
-  createColumnHelper,
-} from "./DataTable";
+  type AuditCategory,
+  auditLogTableQueryOptions,
+  buildAuditExportFilter,
+  buildAuditTableRequest,
+  hasAuditFilters,
+  isAuditSearchTooShort,
+  isInvalidAuditCursorError,
+} from "./audit-table-query";
+import { useAuditTableController } from "./useAuditTableController";
+import {
+  categoryMessageKey,
+  categoryTone,
+  classifyAuditAction,
+  displayAuditActor,
+  humanizeAuditAction,
+} from "./audit-table-display";
+import { AuditTableFilters } from "./AuditTableFilters";
 
 const col = createColumnHelper<AuditLog>();
-const AUDIT_PAGE_SIZE = 50;
-
-const AUDIT_CATEGORIES = [
-  "security",
-  "admin",
-  "access",
-  "data",
-  "chat",
-  "run",
-  "system",
-] as const;
-
-type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
 type Translate = (key: MessageKey) => string;
 
 function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
   return [
     col.accessor("createdAt", {
       header: t("auditTime"),
+      enableSorting: true,
       cell: (c) => (
         <span className="rm-cell-muted">
           <LocalizedDateTime value={c.getValue()} />
@@ -48,6 +50,7 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
     }),
     col.accessor("action", {
       header: t("auditAction"),
+      enableSorting: false,
       cell: (c) => (
         <span className="grid min-w-0">
           <span className="truncate font-medium">
@@ -62,6 +65,7 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
     col.accessor((row) => classifyAuditAction(row.action), {
       id: "category",
       header: t("auditCategory"),
+      enableSorting: false,
       cell: (c) => (
         <StatusBadge tone={categoryTone(c.getValue())}>
           {t(categoryMessageKey(c.getValue()))}
@@ -70,6 +74,7 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
     }),
     col.accessor("outcome", {
       header: t("auditOutcome"),
+      enableSorting: false,
       cell: (c) => (
         <span
           className={`rm-status ${c.getValue() === "success" ? "pass" : "fail"}`}
@@ -81,6 +86,7 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
     col.accessor((row) => `${row.resourceType}:${row.resourceId}`, {
       id: "resource",
       header: t("auditResource"),
+      enableSorting: false,
       cell: (c) => (
         <span className="rm-cell-muted rm-mono" translate="no">
           {c.getValue()}
@@ -89,6 +95,7 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
     }),
     col.accessor("actorId", {
       header: t("auditActor"),
+      enableSorting: false,
       cell: (c) => (
         <span className="rm-cell-muted">
           {displayAuditActor(c.getValue(), t)}
@@ -98,74 +105,153 @@ function auditColumns(t: Translate): ColumnDef<AuditLog, any>[] {
   ];
 }
 
-export function AuditPanel() {
+export function AuditPanel({
+  routeState,
+  onRouteStateChange,
+}: {
+  routeState?: AuditRouteState;
+  onRouteStateChange?: (
+    state: AuditRouteState,
+    options?: { replace?: boolean },
+  ) => void;
+}) {
   const { t } = useLocale();
-  const [range, setRange] = useState<RangePreset>("7d");
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<AuditCategory | "">("");
-  const [outcome, setOutcome] = useState<AuditLogFilter["outcome"] | "">("");
-  const [includeNoise, setIncludeNoise] = useState(false);
+  const columns = useMemo(() => auditColumns(t), [t]);
+  const [internalRange, setInternalRange] = useState<RangePreset>("7d");
+  const [internalCategory, setInternalCategory] = useState<AuditCategory | "">(
+    "",
+  );
+  const [internalOutcome, setInternalOutcome] = useState<
+    AuditLogFilter["outcome"] | ""
+  >("");
+  const [internalIncludeNoise, setInternalIncludeNoise] = useState(false);
+  const range = routeState?.range ?? internalRange;
+  const category = routeState?.category ?? internalCategory;
+  const outcome = routeState?.outcome ?? internalOutcome;
+  const includeNoise = routeState?.includeNoise ?? internalIncludeNoise;
   const [selectedId, setSelectedId] = useState<string>();
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string>();
-  const [cursorStack, setCursorStack] = useState<(string | undefined)[]>([
-    undefined,
-  ]);
-  const bounds = rangeToBounds(range, new Date());
-  const filter = buildAuditFilter({
-    bounds,
-    category,
-    includeNoise,
-    outcome,
-    query,
-  });
-  const cursor = cursorStack[cursorStack.length - 1];
-  const auditQuery = useQuery({
-    queryKey: ["auditLogs", filter, cursor ?? null],
-    queryFn: () =>
-      listAuditLogs(
-        filter,
-        cursor !== undefined
-          ? { limit: AUDIT_PAGE_SIZE, cursor }
-          : { limit: AUDIT_PAGE_SIZE },
-      ),
-  });
+  const {
+    cursor,
+    debouncedSearch,
+    pageSize,
+    recoverStaleCursor,
+    recoveredStaleCursor,
+    resetPaging: resetTablePaging,
+    search,
+    searchReady,
+    searchTooShort,
+    sortDirection,
+    tableState,
+  } = useAuditTableController(
+    routeState === undefined
+      ? {}
+      : {
+          pageSize: routeState.pageSize,
+          resetKey: JSON.stringify(routeState),
+          sortDirection: routeState.sortDirection,
+          onPageSizeChange: (nextPageSize: number) =>
+            updateRoute({ pageSize: auditPageSize(nextPageSize) }),
+          onSortDirectionChange: (
+            nextSortDirection: AuditRouteState["sortDirection"],
+          ) => updateRoute({ sortDirection: nextSortDirection }),
+        },
+  );
+  const bounds = useMemo(() => rangeToBounds(range, new Date()), [range]);
+  const filterInput = useMemo(
+    () => ({
+      bounds,
+      category,
+      includeNoise,
+      outcome,
+      search: debouncedSearch,
+    }),
+    [bounds, category, debouncedSearch, includeNoise, outcome],
+  );
+  const request = useMemo(
+    () =>
+      buildAuditTableRequest({
+        ...filterInput,
+        ...(cursor === undefined ? {} : { cursor }),
+        pageSize,
+        sortDirection,
+      }),
+    [cursor, filterInput, pageSize, sortDirection],
+  );
+  const auditQuery = useQuery(auditLogTableQueryOptions(request, searchReady));
+
+  useEffect(() => {
+    if (cursor !== undefined && isInvalidAuditCursorError(auditQuery.error)) {
+      recoverStaleCursor();
+      setSelectedId(undefined);
+    }
+  }, [auditQuery.error, cursor, recoverStaleCursor]);
 
   function resetPaging() {
-    setCursorStack([undefined]);
+    resetTablePaging();
+    setSelectedId(undefined);
+  }
+
+  const resetFilters = useCallback(() => {
+    if (routeState === undefined) {
+      setInternalRange("7d");
+      setInternalCategory("");
+      setInternalOutcome("");
+      setInternalIncludeNoise(false);
+    } else {
+      onRouteStateChange?.({
+        ...routeState,
+        category: "",
+        includeNoise: false,
+        outcome: "",
+        range: "7d",
+      });
+    }
+    setSelectedId(undefined);
+    resetTablePaging();
+  }, [onRouteStateChange, resetTablePaging, routeState]);
+
+  function updateRoute(
+    patch: Partial<AuditRouteState>,
+    options?: { replace?: boolean },
+  ) {
+    if (routeState === undefined) return;
+    onRouteStateChange?.({ ...routeState, ...patch }, options);
     setSelectedId(undefined);
   }
 
   async function handleExport() {
+    if (isAuditSearchTooShort(search)) return;
     setExportError(undefined);
     setIsExporting(true);
     try {
-      const csv = await exportAuditLogsCsv(filter);
+      const csv = await exportAuditLogsCsv(
+        buildAuditExportFilter({ ...filterInput, search }),
+      );
       downloadCsv(csv, "romeo-audit-logs.csv");
     } catch (caught) {
-      setExportError(
-        caught instanceof Error ? caught.message : t("auditUnableExport"),
-      );
+      setExportError(safeUserErrorMessage(caught, t("auditUnableExport")));
       toast(t("auditUnableExport"), "error");
     } finally {
       setIsExporting(false);
     }
   }
 
-  const nextCursor = auditQuery.data?.nextCursor;
-  const serverPagination: ServerPagination = {
-    pageSize: AUDIT_PAGE_SIZE,
-    hasNextPage: nextCursor !== undefined,
+  const nextCursor = auditQuery.data?.page.nextCursor ?? undefined;
+  const serverState = tableState({
+    filters: request.filters ?? [],
     isFetching: auditQuery.isFetching,
-    onNextPage: () => {
-      if (nextCursor !== undefined)
-        setCursorStack((stack) => [...stack, nextCursor]);
-    },
-  };
-  if (cursorStack.length > 1) {
-    serverPagination.onPrevPage = () =>
-      setCursorStack((stack) => stack.slice(0, -1));
-  }
+    ...(nextCursor === undefined ? {} : { nextCursor }),
+    onFiltersChange: resetFilters,
+    total:
+      auditQuery.data?.page.estimatedTotal === undefined
+        ? { mode: "unknown" }
+        : {
+            mode: "estimated",
+            value: auditQuery.data.page.estimatedTotal,
+          },
+  });
 
   return (
     <Section
@@ -173,11 +259,12 @@ export function AuditPanel() {
         <div className="flex gap-2">
           <PageActions
             onRefresh={() => void auditQuery.refetch()}
+            refreshDisabled={!searchReady}
             refreshLabel={t("refresh")}
             refreshing={auditQuery.isFetching}
           />
           <Button
-            disabled={isExporting}
+            disabled={isExporting || searchTooShort}
             onClick={() => void handleExport()}
             type="button"
           >
@@ -186,78 +273,80 @@ export function AuditPanel() {
         </div>
       }
       description={t("auditIncludeBackgroundHelp")}
-      title={t("auditTitle")}
     >
       {exportError ? (
         <div className="rm-composer-error mb-3" role="alert">
           {exportError}
         </div>
       ) : null}
-      <div className="mb-3 flex flex-wrap gap-2">
-        <DateRangeSelect
-          onChange={(value) => {
-            setRange(value);
-            resetPaging();
-          }}
-          value={range}
-        />
-        <Input
-          onChange={(event) => {
-            setQuery(event.currentTarget.value);
-            resetPaging();
-          }}
-          aria-label={t("auditFilterAction")}
-          placeholder={t("auditSearch")}
-          style={{ maxWidth: 280 }}
-          value={query}
-        />
-        <NativeSelect
-          aria-label={t("auditCategory")}
-          onChange={(event) => {
-            setCategory(event.currentTarget.value as AuditCategory | "");
-            resetPaging();
-          }}
-          style={{ maxWidth: 180 }}
-          value={category}
+      {recoveredStaleCursor ? (
+        <div
+          className="rm-attention-note mb-3"
+          aria-live="polite"
+          role="status"
         >
-          <option value="">{t("auditCategoryAll")}</option>
-          {AUDIT_CATEGORIES.map((value) => (
-            <option key={value} value={value}>
-              {t(categoryMessageKey(value))}
-            </option>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          aria-label={t("auditOutcome")}
-          onChange={(event) => {
-            setOutcome(
-              event.currentTarget.value as AuditLogFilter["outcome"] | "",
-            );
-            resetPaging();
-          }}
-          style={{ maxWidth: 180 }}
-          value={outcome}
+          {t("auditStaleCursorRecovered")}
+        </div>
+      ) : null}
+      {auditQuery.isError && auditQuery.data !== undefined ? (
+        <InlineError
+          className="mb-3 flex flex-wrap items-center gap-2"
+          role="alert"
         >
-          <option value="">{t("auditAnyOutcome")}</option>
-          <option value="success">{t("auditSuccess")}</option>
-          <option value="failure">{t("auditFailure")}</option>
-        </NativeSelect>
-        <Checkbox
-          checked={includeNoise}
-          label={t("auditIncludeBackground")}
-          onCheckedChange={(checked) => {
-            setIncludeNoise(checked === true);
-            resetPaging();
-          }}
-        />
-      </div>
+          <span>{t("auditUnableLoad")}</span>
+          <Button
+            onClick={() => void auditQuery.refetch()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {t("tryAgain")}
+          </Button>
+        </InlineError>
+      ) : null}
+      <AuditTableFilters
+        category={category}
+        includeNoise={includeNoise}
+        onCategoryChange={(value) => {
+          if (routeState === undefined) setInternalCategory(value);
+          else updateRoute({ category: value });
+          resetPaging();
+        }}
+        onIncludeNoiseChange={(value) => {
+          if (routeState === undefined) setInternalIncludeNoise(value);
+          else updateRoute({ includeNoise: value });
+          resetPaging();
+        }}
+        onOutcomeChange={(value) => {
+          if (routeState === undefined) setInternalOutcome(value);
+          else updateRoute({ outcome: value });
+          resetPaging();
+        }}
+        onRangeChange={(value) => {
+          if (routeState === undefined) setInternalRange(value);
+          else updateRoute({ range: value });
+          resetPaging();
+        }}
+        onSearchChange={(value) => {
+          serverState.onSearchChange?.(value);
+          setSelectedId(undefined);
+        }}
+        outcome={outcome ?? ""}
+        range={range}
+        search={search}
+        searchTooShort={searchTooShort}
+      />
       <PanelState
         query={auditQuery}
-        empty={t("auditNoEvents")}
-        isEmpty={(page) => page.data.length === 0}
+        empty={
+          hasAuditFilters(filterInput)
+            ? t("auditNoMatches")
+            : t("auditNoEvents")
+        }
+        isEmpty={(page) => page.items.length === 0}
       >
         {(page) => {
-          const events = page.data;
+          const events = page.items;
           const failureCount = events.filter(
             (event) => event.outcome === "failure",
           ).length;
@@ -283,14 +372,15 @@ export function AuditPanel() {
                 ]}
               />
               <DataTable
-                columns={auditColumns(t)}
+                columns={columns}
                 data={events}
                 empty={t("auditNoEvents")}
                 getRowId={(row) => row.id}
                 maxBodyHeight={620}
                 onRowActivate={(row) => setSelectedId(row.id)}
                 rowAriaLabel={(row) => humanizeAuditAction(row.action)}
-                serverPagination={serverPagination}
+                searchVisibility="hidden"
+                serverState={serverState}
               />
               <div className="rm-attention-note">
                 <strong>{t("auditSelectedEvent")}</strong>
@@ -323,111 +413,6 @@ export function AuditPanel() {
   );
 }
 
-function buildAuditFilter(input: {
-  bounds: { from: Date | undefined; to: Date };
-  category: AuditCategory | "";
-  includeNoise: boolean;
-  outcome: AuditLogFilter["outcome"] | "";
-  query: string;
-}): AuditLogFilter {
-  const filter: AuditLogFilter = {
-    includeNoise: input.includeNoise ? "true" : "false",
-    to: input.bounds.to.toISOString(),
-  };
-  if (input.bounds.from !== undefined)
-    filter.from = input.bounds.from.toISOString();
-  if (input.query.trim().length > 0) filter.q = input.query.trim();
-  if (input.category !== "") filter.category = input.category;
-  if (input.outcome === "success" || input.outcome === "failure") {
-    filter.outcome = input.outcome;
-  }
-  return filter;
-}
-
-function humanizeAuditAction(action: string): string {
-  const words = action.replaceAll(".", " ").replaceAll("_", " ").trim();
-  if (words.length === 0) return action;
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function displayAuditActor(actorId: string, t: Translate): string {
-  if (
-    actorId.startsWith("system_") ||
-    actorId.includes("service_account_audit")
-  ) {
-    return t("auditActorSystem");
-  }
-  const words = actorId.replace(/[._-]+/gu, " ").trim();
-  if (words.length === 0) return actorId;
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function classifyAuditAction(action: string): AuditCategory {
-  if (
-    action === "provider.models.sync" ||
-    action === "worker.enqueue" ||
-    action === "model.request" ||
-    action.startsWith("worker.")
-  ) {
-    return "system";
-  }
-  if (
-    action.startsWith("local_auth.") ||
-    action.startsWith("auth.") ||
-    action.startsWith("support.") ||
-    action.startsWith("scim.") ||
-    action.startsWith("directory_sync.")
-  ) {
-    return "security";
-  }
-  if (
-    action.includes("share") ||
-    action.includes("favorite") ||
-    action.startsWith("group.") ||
-    action.startsWith("api_key.") ||
-    action.startsWith("service_account.")
-  ) {
-    return "access";
-  }
-  if (
-    action.startsWith("knowledge.") ||
-    action.startsWith("file.") ||
-    action.startsWith("connector.") ||
-    action.startsWith("folder.")
-  ) {
-    return "data";
-  }
-  if (action.startsWith("chat.") || action.startsWith("chat_experience.")) {
-    return "chat";
-  }
-  if (
-    action.startsWith("run.") ||
-    action.startsWith("tool.") ||
-    action.startsWith("eval.") ||
-    action.startsWith("workflow.") ||
-    action.startsWith("voice.")
-  ) {
-    return "run";
-  }
-  return "admin";
-}
-
-function categoryMessageKey(category: AuditCategory): MessageKey {
-  if (category === "security") return "auditCategorySecurity";
-  if (category === "admin") return "auditCategoryAdmin";
-  if (category === "access") return "auditCategoryAccess";
-  if (category === "data") return "auditCategoryData";
-  if (category === "chat") return "auditCategoryChat";
-  if (category === "run") return "auditCategoryRun";
-  return "auditCategorySystem";
-}
-
-function categoryTone(
-  category: AuditCategory,
-): "danger" | "info" | "neutral" | "success" | "warning" {
-  if (category === "security") return "danger";
-  if (category === "admin") return "info";
-  if (category === "system") return "neutral";
-  if (category === "run") return "success";
-  return "warning";
+function auditPageSize(value: number): AuditRouteState["pageSize"] {
+  return value === 10 || value === 25 || value === 100 ? value : 50;
 }

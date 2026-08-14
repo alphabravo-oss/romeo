@@ -50,6 +50,12 @@ spec:
                 secretKeyRef:
                   name: {{ include "romeo.databaseUrlSecretName" . }}
                   key: {{ include "romeo.databaseUrlSecretKey" . }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             {{- toYaml .Values.migration.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- end }}

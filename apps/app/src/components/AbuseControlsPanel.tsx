@@ -1,15 +1,14 @@
 import { Button, Input } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 import {
-  getAbuseControls,
-  updateAbuseControls,
+  abuseControlsQueryOptions,
+  updateAbuseControlsMutationOptions,
   type AbuseControlPolicyReport,
   type BillingStatus,
   type UpdateAbuseControlPolicyRequest,
 } from "../features/admin-insights";
-import { getBootstrap } from "../features/identity";
 import { type MessageKey, useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
@@ -21,8 +20,12 @@ import { confirmTone, requiresTypedConfirmation } from "./danger-tier";
 import { billingPlanStatusKey } from "./billing-display";
 import { PageActions } from "./PageActions";
 import { EdgeSecurityPostureTab } from "./EdgeSecurityPostureTab";
+import { ContentPolicyTab } from "./ContentPolicyTab";
+import { bootstrapQueryOptions } from "../lib/api-query-options";
+import { useRouterApiClient } from "../lib/router-context";
 import { IdListEditor } from "./IdListEditor";
 import { Tabs } from "./Tabs";
+import { AbusePolicySimulator } from "./AbusePolicySimulator";
 
 const billingStatuses: BillingStatus[] = [
   "active",
@@ -86,6 +89,11 @@ export function AbuseControlsPanel() {
             label: t("abuseEdgePostureTab"),
             content: <EdgeSecurityPostureTab />,
           },
+          {
+            id: "content",
+            label: t("contentPolicyTab"),
+            content: <ContentPolicyTab />,
+          },
         ]}
       />
     </Section>
@@ -94,11 +102,7 @@ export function AbuseControlsPanel() {
 
 function ControlsTab() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const controlsQuery = useQuery({
-    queryKey: ["abuseControls"],
-    queryFn: getAbuseControls,
-  });
+  const controlsQuery = useQuery(abuseControlsQueryOptions());
 
   return (
     <div className="grid gap-2">
@@ -115,26 +119,19 @@ function ControlsTab() {
         empty={t("abuseNoControlsLoaded")}
         isEmpty={() => false}
       >
-        {(report) => (
-          <ControlsEditor report={report} queryClient={queryClient} />
-        )}
+        {(report) => <ControlsEditor report={report} />}
       </PanelState>
     </div>
   );
 }
 
-function ControlsEditor(props: {
-  report: AbuseControlPolicyReport;
-  queryClient: ReturnType<typeof useQueryClient>;
-}) {
+function ControlsEditor(props: { report: AbuseControlPolicyReport }) {
+  const apiClient = useRouterApiClient();
   const { t } = useLocale();
-  const { report, queryClient } = props;
-  const updateMutation = useMutation({ mutationFn: updateAbuseControls });
-  const suspensionMutation = useMutation({ mutationFn: updateAbuseControls });
-  const bootstrapQuery = useQuery({
-    queryKey: ["bootstrap"],
-    queryFn: getBootstrap,
-  });
+  const { report } = props;
+  const updateMutation = useMutation(updateAbuseControlsMutationOptions());
+  const suspensionMutation = useMutation(updateAbuseControlsMutationOptions());
+  const bootstrapQuery = useQuery(bootstrapQueryOptions(apiClient));
   const { ask, dialog } = useConfirm();
 
   const form = useForm({
@@ -209,8 +206,6 @@ function ControlsEditor(props: {
 
       try {
         await updateMutation.mutateAsync(input);
-        // Server normalizes (dedupe/sort) — re-render from the fresh report.
-        await queryClient.invalidateQueries({ queryKey: ["abuseControls"] });
         toast(t("abuseControlsUpdated"), "success");
       } catch (caught) {
         toast(t("abuseCouldNotUpdateControls"), "error");
@@ -245,7 +240,6 @@ function ControlsEditor(props: {
       await suspensionMutation.mutateAsync({
         suspension: { suspended: nextSuspended },
       });
-      await queryClient.invalidateQueries({ queryKey: ["abuseControls"] });
       toast(t("abuseControlsUpdated"), "success");
     } catch (caught) {
       toast(t("abuseCouldNotUpdateControls"), "error");
@@ -278,6 +272,8 @@ function ControlsEditor(props: {
           },
         ]}
       />
+
+      <AbusePolicySimulator />
 
       <form
         className="grid gap-4"

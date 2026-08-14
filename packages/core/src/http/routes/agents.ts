@@ -299,16 +299,21 @@ export function registerAgentRoutes(app: RomeoApi): void {
   app.openapi(listManagedModelVersionsRoute, async (context) => {
     const subject = context.get("subject");
     const { agentId } = context.req.valid("param");
-    const data = await context
+    const versions = await context
       .get("services")
       .agents.listVersions(agentId, subject);
+    const data = versions.map(publicAgentVersion);
     return context.json({ data }, 200);
   });
 
   app.openapi(publishManagedModelRoute, async (context) => {
     const subject = context.get("subject");
     const { agentId } = context.req.valid("param");
-    const data = await context.get("services").agents.publish(agentId, subject);
+    const { channel } = context.req.valid("json");
+    const version = await context
+      .get("services")
+      .agents.publish(agentId, subject, channel);
+    const data = publicAgentVersion(version);
     return context.json({ data }, 201);
   });
 
@@ -335,6 +340,14 @@ export function registerAgentRoutes(app: RomeoApi): void {
     });
     return context.json({ data }, 200);
   });
+}
+
+function publicAgentVersion<T extends { capabilityDefaults?: unknown }>(
+  version: T,
+): Omit<T, "capabilityDefaults"> {
+  const { capabilityDefaults: _privateCapabilityDefaults, ...publicVersion } =
+    version;
+  return publicVersion;
 }
 
 function compactSafetySettings(input: {

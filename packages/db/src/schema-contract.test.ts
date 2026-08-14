@@ -8,7 +8,11 @@ import {
   auditLogs,
   backgroundJobs,
   baseModels,
+  billingEventReceipts,
   billingPlans,
+  capabilityAssignments,
+  organizationCapabilityFlags,
+  idempotencyReceipts,
   chatTagAssignments,
   chatTags,
   chats,
@@ -25,6 +29,8 @@ import {
   knowledgeChunks,
   knowledgeSources,
   localMfaFactors,
+  localMfaChallenges,
+  samlAuthRequests,
   localPasswordCredentials,
   managedModelCustomizationPolicies,
   managedModelPreferences,
@@ -60,6 +66,86 @@ import {
 } from "./schema";
 
 describe("durable baseline schema contract", () => {
+  it("keeps capability assignment history versioned and bounded", () => {
+    expect(columnNames(capabilityAssignments)).toEqual(
+      expect.arrayContaining([
+        "org_id",
+        "scope_type",
+        "scope_id",
+        "capability_id",
+        "configuration",
+        "version",
+        "supersedes_id",
+        "effective_at",
+        "expires_at",
+        "revoked_at",
+      ]),
+    );
+    expect(uniqueIndexNames(capabilityAssignments)).toEqual(
+      expect.arrayContaining([
+        "capability_assignment_active_unique_idx",
+        "capability_assignment_version_unique_idx",
+      ]),
+    );
+    expect(indexNames(capabilityAssignments)).toEqual(
+      expect.arrayContaining([
+        "capability_assignment_effective_lookup_idx",
+        "capability_assignment_history_idx",
+      ]),
+    );
+  });
+
+  it("keeps organization capability flags versioned and tenant indexed", () => {
+    expect(columnNames(organizationCapabilityFlags)).toEqual(
+      expect.arrayContaining([
+        "org_id",
+        "flag_id",
+        "state",
+        "allowlisted_subjects",
+        "version",
+        "supersedes_id",
+        "revoked_at",
+      ]),
+    );
+    expect(uniqueIndexNames(organizationCapabilityFlags)).toEqual(
+      expect.arrayContaining([
+        "organization_capability_flag_active_unique_idx",
+        "organization_capability_flag_version_unique_idx",
+      ]),
+    );
+    expect(indexNames(organizationCapabilityFlags)).toContain(
+      "organization_capability_flag_history_idx",
+    );
+  });
+
+  it("keeps idempotency receipts tenant-scoped and bounded", () => {
+    expect(columnNames(idempotencyReceipts)).toEqual(
+      expect.arrayContaining([
+        "org_id",
+        "actor_type",
+        "actor_id",
+        "credential_hash",
+        "operation",
+        "key_hash",
+        "request_hash",
+        "state",
+        "lease_token",
+        "lease_expires_at",
+        "response_body",
+        "expires_at",
+      ]),
+    );
+    expect(uniqueIndexNames(idempotencyReceipts)).toContain(
+      "idempotency_receipt_scope_unique_idx",
+    );
+    expect(indexNames(idempotencyReceipts)).toEqual(
+      expect.arrayContaining([
+        "idempotency_receipt_expiry_idx",
+        "idempotency_receipt_lease_idx",
+      ]),
+    );
+  });
+
   it("keeps tenant and identity natural keys unique in the greenfield baseline", () => {
     expect(uniqueIndexNames(organizations)).toContain("organization_slug_idx");
     expect(uniqueIndexNames(groups)).toContain("groups_org_slug_idx");
@@ -99,6 +185,7 @@ describe("durable baseline schema contract", () => {
 
   it("keeps chat and message ordering indexes explicit", () => {
     expect(indexNames(chats)).toContain("chats_workspace_updated_idx");
+    expect(indexNames(messages)).toContain("messages_chat_created_id_idx");
     expect(indexNames(messages)).toContain("messages_chat_created_idx");
     expect(indexNames(messageParts)).toContain(
       "message_parts_message_position_idx",
@@ -141,6 +228,12 @@ describe("durable baseline schema contract", () => {
         "tool_calls_run_idx",
       ]),
     );
+  });
+
+  it("keeps the audit keyset index aligned with tenant and cursor ordering", () => {
+    expect(
+      indexColumnNames(auditLogs, "audit_logs_org_created_id_idx"),
+    ).toEqual(["org_id", "created_at", "id"]);
   });
 
   it("keeps knowledge list and chunk sequence indexes explicit", () => {
@@ -189,6 +282,18 @@ describe("durable baseline schema contract", () => {
       expect.arrayContaining([
         "local_mfa_factors_user_status_idx",
         "local_mfa_factors_user_type_idx",
+      ]),
+    );
+    expect(indexNames(localMfaChallenges)).toEqual(
+      expect.arrayContaining([
+        "local_mfa_challenges_expiry_idx",
+        "local_mfa_challenges_user_idx",
+      ]),
+    );
+    expect(indexNames(samlAuthRequests)).toEqual(
+      expect.arrayContaining([
+        "saml_auth_requests_expiry_idx",
+        "saml_auth_requests_org_idx",
       ]),
     );
   });
@@ -252,8 +357,10 @@ describe("durable baseline schema contract", () => {
     expect(indexNames(auditLogs)).toEqual(
       expect.arrayContaining([
         "audit_logs_org_created_idx",
+        "audit_logs_org_created_id_idx",
         "audit_logs_resource_idx",
         "audit_logs_actor_created_idx",
+        "audit_logs_search_trgm_idx",
       ]),
     );
     expect(indexNames(usageEvents)).toEqual(
@@ -326,6 +433,12 @@ describe("durable baseline schema contract", () => {
         "billing_plans_external_subscription_idx",
       ]),
     );
+    expect(uniqueIndexNames(billingEventReceipts)).toContain(
+      "billing_event_receipt_provider_event_idx",
+    );
+    expect(indexNames(billingEventReceipts)).toContain(
+      "billing_event_receipt_occurred_idx",
+    );
   });
 
   it("keeps notification list, unread, delivery, and channel indexes explicit", () => {
@@ -372,6 +485,7 @@ describe("durable baseline schema contract", () => {
     );
     expect(indexNames(workspaceFolderItems)).toEqual(
       expect.arrayContaining([
+        "workspace_folder_item_batch_idx",
         "workspace_folder_item_folder_idx",
         "workspace_folder_item_resource_idx",
       ]),
@@ -379,6 +493,9 @@ describe("durable baseline schema contract", () => {
     expect(uniqueIndexNames(workspaceFolderItems)).toContain(
       "workspace_folder_item_unique_idx",
     );
+    expect(
+      indexColumnNames(workspaceFolderItems, "workspace_folder_item_batch_idx"),
+    ).toEqual(["org_id", "workspace_id", "folder_id", "created_at", "id"]);
     expect(indexNames(chatTags)).toContain("chat_tags_user_name_idx");
     expect(uniqueIndexNames(chatTags)).toContain("chat_tags_user_slug_idx");
     expect(indexNames(chatTagAssignments)).toEqual(
@@ -477,6 +594,20 @@ describe("durable baseline schema contract", () => {
       ]),
     );
   });
+
+  it("keeps inventoried model-catalog sort indexes aligned with tenant predicates", () => {
+    expect(indexNames(baseModels)).toEqual(
+      expect.arrayContaining([
+        "base_models_org_created_id_idx",
+        "base_models_org_display_name_idx",
+        "base_models_org_provider_idx",
+        "base_models_provider_name_idx",
+      ]),
+    );
+    expect(
+      indexColumnNames(baseModels, "base_models_org_created_id_idx"),
+    ).toEqual(["org_id", "created_at", "id"]);
+  });
 });
 
 function columnNames(table: Parameters<typeof getTableConfig>[0]): string[] {
@@ -496,6 +627,19 @@ function indexNames(table: Parameters<typeof getTableConfig>[0]): string[] {
   return getTableConfig(table)
     .indexes.map((index) => index.config.name)
     .filter((name): name is string => name !== undefined);
+}
+
+function indexColumnNames(
+  table: Parameters<typeof getTableConfig>[0],
+  name: string,
+): string[] {
+  const index = getTableConfig(table).indexes.find(
+    (candidate) => candidate.config.name === name,
+  );
+  if (index === undefined) return [];
+  return index.config.columns.flatMap((column) =>
+    "name" in column && typeof column.name === "string" ? [column.name] : [],
+  );
 }
 
 function primaryKeyNames(

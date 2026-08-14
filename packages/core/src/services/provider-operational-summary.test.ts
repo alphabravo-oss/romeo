@@ -103,27 +103,36 @@ describe("provider operational summary", () => {
     const repository = new InMemoryRomeoRepository();
     const createdAt = "2026-07-16T12:00:00.000Z";
     const metrics = [
-      ...Array.from({ length: 5 }, () => ["provider.error", 1] as const),
-      ...Array.from({ length: 3 }, () => ["sse.disconnect", 1] as const),
-      ["sse.reconnect", 2] as const,
-      ["queue.wait", 35_000] as const,
-      ["run.time_to_first_token", 12_000] as const,
-      ["run.output_throughput", 25] as const,
-      ["run.recovery", 1] as const,
-      ["llm.input_token.estimated", 4_000] as const,
-      ["file.upload.pipeline_duration", 250] as const,
+      ...Array.from(
+        { length: 5 },
+        () => ["provider.error", 1, "error", "run"] as const,
+      ),
+      ...Array.from(
+        { length: 3 },
+        () => ["sse.disconnect", 1, "connection", "run"] as const,
+      ),
+      ["sse.reconnect", 2, "connection", "run"] as const,
+      ["queue.wait", 35_000, "millisecond", "run"] as const,
+      ["run.time_to_first_token", 12_000, "millisecond", "run"] as const,
+      ["run.output_throughput", 25, "token_per_second", "run"] as const,
+      ["run.recovery", 1, "recovery", "run"] as const,
+      ["llm.input_token.estimated", 4_000, "token", "run"] as const,
+      ["file.upload.pipeline_duration", 250, "millisecond", "storage"] as const,
     ];
-    for (const [index, [metric, quantity]] of metrics.entries()) {
+    for (const [
+      index,
+      [metric, quantity, unit, sourceType],
+    ] of metrics.entries()) {
       await repository.createUsageEvent({
         id: `usage_runtime_${index}`,
         orgId: "org_default",
         workspaceId: "workspace_default",
         actorId: "user_dev_admin",
-        sourceType: metric.startsWith("file.") ? "storage" : "run",
+        sourceType,
         sourceId: `runtime_${index}`,
         metric,
         quantity,
-        unit: "count",
+        unit,
         metadata: {},
         createdAt,
       });

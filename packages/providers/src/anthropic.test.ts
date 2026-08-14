@@ -61,12 +61,23 @@ describe("Anthropic adapter", () => {
   });
 
   it("serializes system, vision, and tools and parses text, usage, and tool use", async () => {
+    const rawReasoningSentinel = "raw-anthropic-thinking-secret";
     const events = [
-      { type: "message_start", message: { usage: { input_tokens: 12 } } },
+      {
+        type: "message_start",
+        message: {
+          usage: { input_tokens: 12, cache_read_input_tokens: 7 },
+        },
+      },
       {
         type: "content_block_delta",
         index: 0,
         delta: { type: "text_delta", text: "Hello" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: rawReasoningSentinel },
       },
       {
         type: "content_block_start",
@@ -143,6 +154,7 @@ describe("Anthropic adapter", () => {
       tools: [{ name: "weather", input_schema: { type: "object" } }],
     });
     expect(chunks).toContain("Hello");
+    expect(JSON.stringify(chunks)).not.toContain(rawReasoningSentinel);
     expect(chunks).toContainEqual({
       type: "tool_call",
       toolCall: {
@@ -156,8 +168,8 @@ describe("Anthropic adapter", () => {
       type: "usage",
       usage: {
         inputTokens: 12,
+        cachedInputTokens: 7,
         outputTokens: 5,
-        totalTokens: 17,
         source: "anthropic",
       },
     });

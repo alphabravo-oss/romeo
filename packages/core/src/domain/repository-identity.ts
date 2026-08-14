@@ -16,7 +16,9 @@ import type {
   Group,
   GroupMembership,
   LocalMfaFactor,
+  LocalMfaChallenge,
   LocalPasswordCredential,
+  SamlAuthRequest,
   ManagedModelCustomizationPolicyRecord,
   ManagedModelPreferenceRecord,
   Organization,
@@ -30,9 +32,11 @@ import type {
 } from "./entities";
 import type {
   ModelCatalogQuery,
+  QueryUsersInput,
   TenantDataPurgeResult,
   UserCatalogPage,
   UserCatalogQuery,
+  UserTableQueryResult,
 } from "./repository";
 
 export interface RepositoryIdentityCapability {
@@ -42,6 +46,10 @@ export interface RepositoryIdentityCapability {
     orgId: string,
     query: UserCatalogQuery,
   ): Promise<UserCatalogPage>;
+  queryUsers(
+    orgId: string,
+    query: QueryUsersInput,
+  ): Promise<UserTableQueryResult>;
   createUser(user: User): Promise<User>;
   updateUser(user: User): Promise<User>;
   listGroups(orgId: string): Promise<Group[]>;
@@ -95,6 +103,10 @@ export interface RepositoryIdentityCapability {
   updateDeviceAuthorization(
     authorization: DeviceAuthorization,
   ): Promise<DeviceAuthorization>;
+  rotateDeviceAuthorization(input: {
+    authorization: DeviceAuthorization;
+    expectedRefreshHash: string;
+  }): Promise<DeviceAuthorization | undefined>;
   listUserSessions(orgId: string, userId: string): Promise<UserSession[]>;
   getUserSession(sessionId: string): Promise<UserSession | undefined>;
   getUserSessionByHash(hashedToken: string): Promise<UserSession | undefined>;
@@ -113,11 +125,38 @@ export interface RepositoryIdentityCapability {
   updateLocalPasswordCredential(
     credential: LocalPasswordCredential,
   ): Promise<LocalPasswordCredential>;
+  recordFailedLocalPasswordAttempt(input: {
+    credentialId: string;
+    attemptedAt: string;
+    lockedUntil: string;
+    maxFailedAttempts: number;
+  }): Promise<LocalPasswordCredential | undefined>;
   listLocalMfaFactors(orgId: string, userId: string): Promise<LocalMfaFactor[]>;
   listLocalMfaFactorsForOrg(orgId: string): Promise<LocalMfaFactor[]>;
   getLocalMfaFactor(factorId: string): Promise<LocalMfaFactor | undefined>;
   createLocalMfaFactor(factor: LocalMfaFactor): Promise<LocalMfaFactor>;
   updateLocalMfaFactor(factor: LocalMfaFactor): Promise<LocalMfaFactor>;
+  consumeLocalMfaFactor(input: {
+    factor: LocalMfaFactor;
+    expectedSecretEncrypted: string;
+  }): Promise<LocalMfaFactor | undefined>;
+  createLocalMfaChallenge(
+    challenge: LocalMfaChallenge,
+  ): Promise<LocalMfaChallenge>;
+  consumeLocalMfaChallenge(input: {
+    id: string;
+    orgId: string;
+    userId: string;
+    consumedAt: string;
+  }): Promise<LocalMfaChallenge | undefined>;
+  createSamlAuthRequest(request: SamlAuthRequest): Promise<SamlAuthRequest>;
+  consumeSamlAuthRequest(input: {
+    id: string;
+    orgId: string;
+    providerId: "saml";
+    relayStateHash: string;
+    consumedAt: string;
+  }): Promise<SamlAuthRequest | undefined>;
   listServiceAccounts(orgId: string): Promise<ServiceAccount[]>;
   getServiceAccount(
     serviceAccountId: string,

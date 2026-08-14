@@ -1,4 +1,7 @@
-import { runsInspectContext } from "@romeo/api-client/generated/sdk";
+import {
+  runsInspectContext,
+  type ReasoningPolicyV1,
+} from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
 import type { RunContextPreview } from "./types";
@@ -8,6 +11,9 @@ export async function inspectRunContext(input: {
   agentId: string;
   content: string;
   modelId?: string;
+  routingMode?: "selected" | "economy";
+  researchMode?: "standard" | "deep";
+  reasoningPolicy?: ReasoningPolicyV1;
   fileIds?: string[];
   imageCount?: number;
   webSearch?: boolean;

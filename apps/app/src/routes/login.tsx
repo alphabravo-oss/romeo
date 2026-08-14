@@ -15,15 +15,15 @@ import Sun from "lucide-react/dist/esm/icons/sun.mjs";
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 
 import {
+  loginSessionQueryOptions,
   localLogin,
   startOidcLogin,
   startSamlLogin,
   verifyLocalMfa,
 } from "../features/auth";
-import { getBootstrap } from "../features/identity";
-import { RomeoApiError } from "@romeo/api-client";
 import { safeReturnTo } from "../lib/auth-navigation";
 import { useLocale, useLocaleNamespaces } from "../lib/i18n";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { setTheme } from "../lib/theme";
 import loginCss from "../styles/login.css?url";
 
@@ -76,11 +76,7 @@ function LoginPage() {
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState<"local" | "oidc" | "saml">();
   const dark = useSyncExternalStore(subscribeToTheme, isDarkTheme, () => false);
-  const sessionQuery = useQuery({
-    queryKey: ["login-session"],
-    queryFn: getBootstrap,
-    retry: false,
-  });
+  const sessionQuery = useQuery(loginSessionQueryOptions());
 
   async function submitLocal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -421,6 +417,5 @@ function LoginPage() {
 }
 
 function loginError(error: unknown, fallback: string): string {
-  if (error instanceof RomeoApiError) return error.message;
-  return fallback;
+  return safeUserErrorMessage(error, fallback);
 }

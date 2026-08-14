@@ -4,43 +4,64 @@ import {
   toChatCommentRecord,
   toChatRecord,
   toMessagePartRecord,
+  toMessagePartInsert,
   toMessageRecord,
+  toQueuedChatTurnInsert,
   toQueuedChatTurnRecord,
+  toQueuedChatTurnUpdate,
 } from "./chat-repository";
 
 describe("chat repository mappers", () => {
   it("maps queued-turn leases and optional payload fields", () => {
-    expect(
-      toQueuedChatTurnRecord({
-        id: "queued_turn_1",
-        orgId: "org_1",
-        workspaceId: "workspace_1",
-        chatId: "chat_1",
-        agentId: "agent_1",
-        modelId: null,
-        content: "Queued prompt",
-        webSearch: true,
-        urls: ["https://example.com/context"],
-        createdBy: "user_1",
-        principalId: "user_1",
-        principalType: "user",
-        scopeSnapshot: ["chats:write", "runs:create"],
-        idempotencyKey: "request_1",
-        status: "leased",
-        attemptCount: 1,
-        leaseOwner: "worker_1",
-        leaseToken: "lease_1",
-        leaseExpiresAt: new Date("2026-07-16T12:02:00.000Z"),
-        heartbeatAt: new Date("2026-07-16T12:01:00.000Z"),
-        lastErrorCode: null,
-        lastErrorMessage: null,
-        createdAt: new Date("2026-07-16T12:00:00.000Z"),
-        updatedAt: new Date("2026-07-16T12:01:00.000Z"),
-        completedAt: null,
-      }),
-    ).toEqual(
+    const row: Parameters<typeof toQueuedChatTurnRecord>[0] = {
+      id: "queued_turn_1",
+      orgId: "org_1",
+      workspaceId: "workspace_1",
+      chatId: "chat_1",
+      agentId: "agent_1",
+      modelId: null,
+      routingMode: "economy",
+      researchMode: "deep",
+      reasoningPolicy: {
+        schemaVersion: 1,
+        mode: "auto",
+        effort: "high",
+      },
+      parentMessageConfigured: true,
+      parentMessageId: "message_parent",
+      content: "Queued prompt",
+      agenticRag: false,
+      webSearch: true,
+      urls: ["https://example.com/context"],
+      createdBy: "user_1",
+      principalId: "user_1",
+      principalType: "user",
+      scopeSnapshot: ["chats:write", "runs:create"],
+      idempotencyKey: "request_1",
+      status: "leased",
+      attemptCount: 1,
+      leaseOwner: "worker_1",
+      leaseToken: "lease_1",
+      leaseExpiresAt: new Date("2026-07-16T12:02:00.000Z"),
+      heartbeatAt: new Date("2026-07-16T12:01:00.000Z"),
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      createdAt: new Date("2026-07-16T12:00:00.000Z"),
+      updatedAt: new Date("2026-07-16T12:01:00.000Z"),
+      completedAt: null,
+    };
+    const mapped = toQueuedChatTurnRecord(row);
+    expect(mapped).toEqual(
       expect.objectContaining({
         id: "queued_turn_1",
+        routingMode: "economy",
+        researchMode: "deep",
+        reasoningPolicy: {
+          schemaVersion: 1,
+          mode: "auto",
+          effort: "high",
+        },
+        parentMessageId: "message_parent",
         status: "leased",
         webSearch: true,
         urls: ["https://example.com/context"],
@@ -48,6 +69,25 @@ describe("chat repository mappers", () => {
         leaseExpiresAt: "2026-07-16T12:02:00.000Z",
       }),
     );
+    expect(toQueuedChatTurnInsert(mapped).reasoningPolicy).toEqual(
+      mapped.reasoningPolicy,
+    );
+    expect(toQueuedChatTurnUpdate(mapped).reasoningPolicy).toEqual(
+      mapped.reasoningPolicy,
+    );
+    expect(
+      toQueuedChatTurnRecord({ ...row, reasoningPolicy: null }).reasoningPolicy,
+    ).toBeUndefined();
+    expect(() =>
+      toQueuedChatTurnRecord({
+        ...row,
+        reasoningPolicy: {
+          schemaVersion: 1,
+          mode: "auto",
+          rawTrace: "private-secret",
+        } as never,
+      }),
+    ).toThrow("invalid reasoning policy");
   });
 
   it("maps optional chat lifecycle fields", () => {
@@ -65,6 +105,7 @@ describe("chat repository mappers", () => {
       legalHoldUntil: new Date("2026-07-01T00:00:00.000Z"),
       legalHoldReason: "investigation",
       activeLeafMessageId: null,
+      transcriptVersion: 0n,
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
       updatedAt: new Date("2026-06-27T00:05:00.000Z"),
     });
@@ -78,6 +119,7 @@ describe("chat repository mappers", () => {
       legalHoldUntil: "2026-07-01T00:00:00.000Z",
       legalHoldReason: "investigation",
       updatedAt: "2026-06-27T00:05:00.000Z",
+      transcriptVersion: "0",
     });
     expect("activeLeafMessageId" in chat).toBe(false);
   });
@@ -115,10 +157,11 @@ describe("chat repository mappers", () => {
         legalHoldUntil: null,
         legalHoldReason: null,
         activeLeafMessageId: "msg_2",
+        transcriptVersion: 9n,
         createdAt: new Date("2026-06-27T00:00:00.000Z"),
         updatedAt: new Date("2026-06-27T00:05:00.000Z"),
       }),
-    ).toMatchObject({ activeLeafMessageId: "msg_2" });
+    ).toMatchObject({ activeLeafMessageId: "msg_2", transcriptVersion: "9" });
   });
 
   it("maps message parts without exposing internal ordering columns", () => {
@@ -149,6 +192,54 @@ describe("chat repository mappers", () => {
       },
     });
     expect(JSON.stringify(part)).not.toContain("position");
+  });
+
+  it("round-trips strict typed parts and fails closed on corrupted rows", () => {
+    const typed = {
+      schemaVersion: 1 as const,
+      type: "text" as const,
+      id: "msg_part_text_1",
+      messageId: "msg_1",
+      position: 3,
+      createdAt: "2026-08-14T12:00:00.000Z",
+      text: "typed text",
+    };
+    const stored = toMessagePartInsert(typed, 99);
+    expect(stored).toMatchObject({
+      position: 3,
+      canonicalPosition: 3,
+      schemaVersion: 1,
+      type: "text",
+      content: "romeo-message-text-v1:typed text",
+      metadata: {},
+    });
+    const storedRow = {
+      id: typed.id,
+      messageId: typed.messageId,
+      position: typed.position,
+      canonicalPosition: typed.position,
+      schemaVersion: 1,
+      type: "text",
+      content: "romeo-message-text-v1:typed text",
+      metadata: {},
+      createdAt: new Date(typed.createdAt),
+    };
+    expect(toMessagePartRecord(storedRow)).toEqual(typed);
+    expect(() =>
+      toMessagePartRecord({
+        ...storedRow,
+        metadata: { text: "smuggled" },
+      }),
+    ).toThrow("Invalid stored typed message part metadata");
+    expect(() =>
+      toMessagePartRecord({
+        ...storedRow,
+        type: "provider_blob",
+      }),
+    ).toThrow("Invalid stored typed message part type.");
+    expect(() =>
+      toMessagePartRecord({ ...storedRow, schemaVersion: 2 }),
+    ).toThrow("Unsupported stored message part schema version.");
   });
 
   it("preserves metadata-only citation provenance from PostgreSQL JSON", () => {

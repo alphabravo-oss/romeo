@@ -254,7 +254,7 @@ export class BuiltInToolExecutionService {
       if (error instanceof ZodError) throw error;
       throw new ApiError(
         "tool_execution_error",
-        error instanceof Error ? error.message : "Tool execution failed.",
+        "The tool could not complete the request.",
         400,
       );
     } finally {

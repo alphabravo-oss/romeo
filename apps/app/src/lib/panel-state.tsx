@@ -8,7 +8,7 @@ import { useLocale } from "./i18n";
  * result uniformly, so the 12 consumer panels don't each re-implement the
  * same `isPending` / `isError` / empty-check ladder.
  *
- *   const query = useQuery({ queryKey: ['users'], queryFn: listUsers })
+ *   const query = useQuery(usersQueryOptions())
  *   <PanelState query={query} empty="No users yet.">
  *     {(users) => <DataTable columns={columns} data={users} />}
  *   </PanelState>
@@ -18,8 +18,8 @@ import { useLocale } from "./i18n";
  * - empty (`isEmpty(data)`) → `<div className="rm-empty">{empty}</div>`.
  * - otherwise → `children(data)`.
  */
-export function PanelState<T>(props: {
-  query: UseQueryResult<T>;
+export function PanelState<T, TError = Error>(props: {
+  query: UseQueryResult<T, TError>;
   empty?: string;
   /** Optional CTA (e.g. a "+ Add X" button) shown under the empty message. */
   emptyAction?: React.ReactNode;

@@ -1,0 +1,26 @@
+rules:
+  - id: romeo.javascript.dynamic-code-execution
+    message: Dynamic code execution is forbidden in Romeo runtime code.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+
+  - id: romeo.node.tls-verification-disabled
+    message: TLS certificate verification must not be disabled.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern: "{..., rejectUnauthorized: false, ...}"
+
+  - id: romeo.node.weak-cryptographic-hash
+    message: MD5 and SHA-1 are forbidden for security-sensitive hashing.
+    severity: ERROR
+    languages: [javascript, typescript]
+    patterns:
+      - pattern-either:
+          - pattern: $CRYPTO.createHash("md5")
+          - pattern: $CRYPTO.createHash("sha1")
+      - metavariable-regex:
+          metavariable: $CRYPTO
+          regex: .*

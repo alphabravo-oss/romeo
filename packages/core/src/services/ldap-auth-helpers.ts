@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { AuthProviderId } from "../domain/auth-providers";
 import { ApiError } from "../errors";
+import { requirePublicApiErrorCode } from "../public-api-error-registry";
 import type { LdapProviderLoginConfig } from "./auth-provider-settings-service";
 import type { LdapDirectoryEntry } from "./ldap-directory-client";
 
@@ -222,7 +223,11 @@ function emailDomain(value: string): string {
 }
 
 export function invalidLdapLogin(code = "ldap_login_invalid"): ApiError {
-  return new ApiError(code, "LDAP login is invalid.", 401);
+  return new ApiError(
+    requirePublicApiErrorCode(code),
+    "LDAP login is invalid.",
+    401,
+  );
 }
 
 export function ldapLoginDenied(): ApiError {

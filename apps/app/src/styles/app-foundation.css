@@ -1,3 +1,5 @@
+@import "./app-foundation-sidebar.css";
+
 /* Bundled variable fonts. Inter leads the Astronomer-inspired interface. */
 
 @font-face {
@@ -60,6 +62,14 @@
   --rm-sidebar: #fafafa;
   --rm-surface: #ffffff;
   --rm-surface-soft: #f4f4f5;
+  /* Second soft step: table zebra/hover and footer bars sit here so they read
+     as *inside* a surface card rather than as another surface. */
+  --rm-surface-soft-2: #fafafa;
+  /* A third text step below muted, for uppercase eyebrows and inactive glyphs
+     that must not compete with real content. */
+  --rm-faint: #a1a1aa;
+  /* Hairline for dividers *within* a card, lighter than the card's own edge. */
+  --rm-border-soft: #f0f0f1;
   --rm-hover: rgb(24 24 27 / 5%);
   --rm-bubble: #f4f4f5;
   --rm-text: #18181b;
@@ -96,7 +106,19 @@
        wide    — a textarea or anything holding a paragraph
        search  — a filter box; wider than this reads as a form field
        prose   — descriptions and helper copy */
-  --rm-measure-console: 66rem;
+  /* Console geometry, from the Romeo Console design. */
+  --rm-row-py: 12px;
+  --rm-nav-h: 34px;
+  --rm-page-pad: 28px;
+  /* Mono is a *role* here — identifiers, endpoints, versions. The design calls
+     for JetBrains Mono; the app self-hosts its fonts so air-gapped installs
+     work, and pulling a Google font would break that. The system mono stack
+     carries the same signal without a network request. */
+  --rm-font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+
+  --rm-measure-console: 88rem;
   /* Inventories earn more room than forms. A settings page capped at the width
      of a data grid wastes half the screen; a data grid squeezed to the width of
      a settings page clips its last column. */
@@ -131,6 +153,9 @@ html.dark {
   --rm-sidebar: #19191d;
   --rm-surface: #25252a;
   --rm-surface-soft: #2c2c32;
+  --rm-surface-soft-2: #232328;
+  --rm-faint: #7a7a86;
+  --rm-border-soft: #2b2b32;
   --rm-hover: rgb(255 255 255 / 6%);
   --rm-bubble: #2f2f36;
   --rm-text: #e8e8ed;
@@ -675,331 +700,4 @@ html.dark .rm-new-chat-button:hover {
 
 .rm-model-meta-grid small {
   color: var(--rm-muted);
-}
-
-@media (max-width: 780px) {
-  .rm-model-catalog-toolbar {
-    grid-template-columns: 1fr;
-  }
-  .rm-model-catalog-layout {
-    grid-template-columns: 1fr;
-  }
-  .rm-model-catalog-list {
-    max-height: 18rem;
-    border-right: 0;
-    border-bottom: 1px solid var(--rm-border);
-  }
-}
-
-.rm-textarea {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--rm-border);
-  border-radius: 8px;
-  background: var(--rm-surface);
-  color: var(--rm-text);
-  font: inherit;
-  min-height: 120px;
-  padding: 10px;
-  resize: vertical;
-}
-
-.rm-empty {
-  color: var(--rm-muted);
-  padding: 24px;
-  text-align: center;
-}
-
-/* Rich empty state: message + a call-to-action (e.g. "+ Add X"). */
-
-.rm-empty-state {
-  display: grid;
-  justify-items: center;
-  gap: 12px;
-  padding: 40px 24px;
-  text-align: center;
-  border: 1px dashed var(--rm-border);
-  border-radius: var(--rm-radius-item, 8px);
-}
-
-.rm-empty-state-text {
-  margin: 0;
-  max-width: 42ch;
-  color: var(--rm-muted);
-  font-size: 14px;
-}
-
-.rm-workspace {
-  display: grid;
-  /* Sidebar width is user-resizable + persisted (Open WebUI parity) */
-  grid-template-columns: var(--rm-sidebar-width, 260px) minmax(0, 1fr);
-  height: 100vh;
-  min-height: 100vh;
-  background: var(--rm-bg);
-}
-
-.rm-workspace-loading {
-  min-height: 100vh;
-  background: var(--rm-bg);
-}
-
-.rm-sidebar-frame {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-  border-right: 1px solid var(--rm-border);
-  background: var(--rm-sidebar);
-}
-
-.rm-sidebar {
-  gap: 14px;
-  padding: 14px;
-}
-
-/* Drag handle on the sidebar's right edge */
-
-.rm-sidebar-resizer {
-  position: absolute;
-  top: 0;
-  right: -3px;
-  width: 6px;
-  height: 100%;
-  z-index: 5;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  cursor: col-resize;
-}
-
-.rm-sidebar-resizer:hover,
-.rm-sidebar-resizer:active {
-  background: linear-gradient(
-    to right,
-    transparent 40%,
-    color-mix(in srgb, var(--rm-accent) 40%, transparent) 40%,
-    color-mix(in srgb, var(--rm-accent) 40%, transparent) 60%,
-    transparent 60%
-  );
-}
-
-.rm-sidebar-brand {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  min-height: 42px;
-}
-
-.rm-sidebar-brand-fixed {
-  flex: 0 0 auto;
-  height: var(--rm-shell-header-height);
-  margin: -14px -14px 0;
-  border-bottom: 1px solid var(--rm-border);
-  padding: 0 16px;
-  color: var(--rm-text);
-  text-decoration: none;
-}
-
-.rm-brand-tagline {
-  font-size: 11px;
-  line-height: 1.3;
-  color: var(--rm-muted);
-}
-
-/* Product metadata at the bottom of the sidebar. */
-
-.rm-sidebar-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  border-top: 1px solid var(--rm-border);
-  padding-top: 7px;
-  font-size: 11px;
-  line-height: 1.3;
-  color: var(--rm-muted);
-}
-
-.rm-sidebar-version {
-  padding: 0 2px;
-}
-
-.rm-built-by {
-  padding: 0 2px;
-}
-
-.rm-built-by::before {
-  content: "·";
-  margin-right: 6px;
-}
-
-.rm-built-by a {
-  color: var(--rm-muted);
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
-}
-
-.rm-built-by a:hover {
-  color: var(--rm-text);
-  border-bottom-color: currentColor;
-}
-
-.rm-built-by a:focus-visible {
-  outline: 2px solid var(--rm-accent);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-.rm-logo-mark,
-.rm-message-avatar {
-  display: grid;
-  place-items: center;
-  background: linear-gradient(
-    135deg,
-    var(--rm-accent),
-    var(--rm-accent-secondary)
-  );
-  color: var(--rm-on-accent);
-  font-weight: 700;
-}
-
-.rm-logo-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  box-shadow: 0 7px 18px color-mix(in srgb, var(--rm-accent) 22%, transparent);
-}
-
-.rm-new-chat-button,
-.rm-sidebar-footer,
-.rm-sidebar-item,
-.rm-topbar-button,
-.rm-icon-button,
-.rm-send-button,
-.rm-message-tool {
-  border: 0;
-  box-sizing: border-box;
-  color: var(--rm-text);
-  font: inherit;
-}
-
-/* Geometry (height, inset, radius, justification) is owned by the sidebar row
-   contract in app-navigation.css — keep only type and icon spacing here. */
-
-.rm-new-chat-button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.rm-chat-create-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
-  align-items: center;
-  gap: 2px;
-}
-
-.rm-chat-create-row .rm-new-chat-button {
-  min-width: 0;
-}
-
-.rm-sidebar-section {
-  display: grid;
-  min-height: 0;
-  gap: 8px;
-}
-
-.rm-sidebar-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  /* Same inset as every row, so the section title's text starts on the same
-     vertical line as the chat titles beneath it. */
-  padding: 0 var(--rm-row-px);
-  color: var(--rm-muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.rm-sidebar-list {
-  display: grid;
-  align-content: start;
-  min-height: 0;
-  gap: 2px;
-  overflow: auto;
-}
-
-.rm-sidebar-search {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: var(--rm-row-h);
-  padding: 0 var(--rm-row-px);
-  border: 1px solid transparent;
-  border-radius: var(--rm-radius-bubble);
-  color: var(--rm-muted);
-  background: var(--rm-surface-soft);
-}
-
-/* No inline margin: the rail's own padding sets the inset, so the search box
-   shares a left edge with the rows above and below it. */
-
-.rm-sidebar-search-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
-  align-items: center;
-  gap: 2px;
-  margin: 4px 0 7px;
-}
-
-.rm-sidebar-search-row .rm-sidebar-search {
-  margin: 0;
-}
-
-.rm-sidebar-filter-trigger {
-  position: relative;
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--rm-muted);
-  cursor: pointer;
-}
-
-.rm-sidebar-filter-trigger:hover,
-.rm-sidebar-filter-trigger[aria-expanded="true"] {
-  border-color: var(--rm-border);
-  background: var(--rm-hover);
-  color: var(--rm-text);
-}
-
-.rm-sidebar-filter-trigger.active {
-  color: var(--rm-accent);
-}
-
-.rm-sidebar-filter-count {
-  position: absolute;
-  top: -3px;
-  right: -3px;
-  display: grid;
-  min-width: 14px;
-  height: 14px;
-  place-items: center;
-  border: 2px solid var(--rm-sidebar);
-  border-radius: 999px;
-  padding: 0 2px;
-  background: var(--rm-accent);
-  color: var(--rm-on-accent);
-  font-size: 8px;
-  font-weight: 700;
-  line-height: 1;
 }

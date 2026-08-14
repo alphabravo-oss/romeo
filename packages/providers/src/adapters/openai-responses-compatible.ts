@@ -1,4 +1,6 @@
 import { openAiResponsesCompatibleCapabilities } from "../capabilities";
+import { translateProviderChatParameters } from "../parameter-translation";
+import { nativeReasoningBody } from "../reasoning-adapter-mapping";
 import {
   normalizeProviderToolCall,
   normalizeProviderToolCalls,
@@ -7,7 +9,9 @@ import {
 import type {
   BaseModel,
   ChatMessage,
-  ModelProviderAdapter,
+  ProviderChatAdapter,
+  ProviderDiscoveryAdapter,
+  ProviderHealthAdapter,
   StreamChatChunk,
   StreamChatInput,
 } from "../types";
@@ -33,9 +37,9 @@ type ResponsesInputItem = ResponseInputItem;
  * same probe against /chat/completions, once an endpoint that is Responses-only shows up in practice.
  */
 async function probeResponsesEndpoint(
-  provider: Parameters<ModelProviderAdapter["health"]>[0],
+  provider: Parameters<ProviderHealthAdapter["health"]>[0],
   model: BaseModel,
-  options: Parameters<ModelProviderAdapter["health"]>[1],
+  options: Parameters<ProviderHealthAdapter["health"]>[1],
 ): Promise<{ ok: boolean; message: string } | undefined> {
   try {
     const client = createOpenAiClient(
@@ -51,8 +55,12 @@ async function probeResponsesEndpoint(
     });
     return undefined;
   } catch (caught) {
-    const status = (caught as { status?: number } | undefined)?.status;
-    if (status !== 404) return undefined;
+    const normalized = normalizeProviderSdkError(
+      caught,
+      "openai-responses-compatible",
+      "health",
+    );
+    if (normalized.status !== 404) return undefined;
     return {
       ok: false,
       message:
@@ -61,7 +69,9 @@ async function probeResponsesEndpoint(
   }
 }
 
-export const openAiResponsesCompatibleAdapter: ModelProviderAdapter = {
+export const openAiResponsesCompatibleAdapter: ProviderHealthAdapter &
+  ProviderDiscoveryAdapter &
+  ProviderChatAdapter = {
   kind: "openai-responses-compatible",
   async health(provider, options) {
     const models = await discoverCompatibleModels(
@@ -75,10 +85,12 @@ export const openAiResponsesCompatibleAdapter: ModelProviderAdapter = {
         message: "The endpoint returned no discoverable models.",
       };
     const verb = await probeResponsesEndpoint(provider, models[0]!, options);
-    return verb ?? {
-      ok: true,
-      message: `Connection available (${models.length} model${models.length === 1 ? "" : "s"}).`,
-    };
+    return (
+      verb ?? {
+        ok: true,
+        message: `Connection available (${models.length} model${models.length === 1 ? "" : "s"}).`,
+      }
+    );
   },
   async listModels(provider, options): Promise<BaseModel[]> {
     return discoverCompatibleModels(
@@ -108,31 +120,34 @@ async function* providerCredentialUnavailableStream(): AsyncIterable<StreamChatC
 async function* streamOpenAiResponsesCompatible(
   input: StreamChatInput,
 ): AsyncIterable<StreamChatChunk> {
-  const client = createOpenAiClient(
-    input.provider,
-    input.apiKey,
-    input.fetchImpl,
-  );
+  const parameters = translateProviderChatParameters({
+    ...input,
+    kind: "openai-responses-compatible",
+  }).effective;
   const request: ResponseCreateParamsStreaming = {
     model: input.model.name,
     input: input.messages.flatMap(toResponsesInputItems),
     stream: true,
     store: false,
     // The Responses API renames the output cap; temperature and top_p keep their names.
-    ...(input.sampling?.temperature === undefined
+    ...(parameters.sampling?.temperature === undefined
       ? {}
-      : { temperature: input.sampling.temperature }),
-    ...(input.sampling?.topP === undefined
+      : { temperature: parameters.sampling.temperature }),
+    ...(parameters.sampling?.topP === undefined
       ? {}
-      : { top_p: input.sampling.topP }),
-    ...(input.sampling?.maxTokens === undefined
+      : { top_p: parameters.sampling.topP }),
+    ...(parameters.sampling?.maxTokens === undefined
       ? {}
-      : { max_output_tokens: input.sampling.maxTokens }),
-    ...(input.tools === undefined || input.tools.length === 0
+      : { max_output_tokens: parameters.sampling.maxTokens }),
+    ...nativeReasoningBody("openai-responses-compatible", parameters.reasoning),
+    ...(parameters.structuredOutput === undefined
+      ? {}
+      : { text: { format: responsesTextFormat(parameters.structuredOutput) } }),
+    ...(parameters.tools === undefined || parameters.tools.length === 0
       ? {}
       : {
           tool_choice: "auto",
-          tools: input.tools.map(
+          tools: parameters.tools.map(
             (tool): FunctionTool => ({
               type: "function",
               name: tool.name,
@@ -145,34 +160,57 @@ async function* streamOpenAiResponsesCompatible(
   };
 
   try {
+    const client = createOpenAiClient(
+      input.provider,
+      input.apiKey,
+      input.fetchImpl,
+    );
     const stream = await client.responses.create(
       request,
       input.signal === undefined ? undefined : { signal: input.signal },
     );
     const toolCalls = new ResponsesToolCallAccumulator();
+    const completedToolCalls: ProviderToolCallRequest[] = [];
     for await (const event of stream) {
       const usage = usageFromOpenAiResponsesPayload(event);
       if (usage !== undefined) yield { type: "usage", usage };
 
       for (const text of reasoningDeltas(event))
-        yield { type: "reasoning", text };
+        yield { type: "reasoning_summary", text };
       for (const token of textDeltas(event)) yield token;
       const calls = toolCalls.merge(event);
-      if (calls.length === 1) yield { type: "tool_call", toolCall: calls[0]! };
-      if (calls.length > 1) {
-        yield {
-          type: "tool_call",
-          toolCall: calls[0]!,
-          toolCalls: calls,
-        };
-      }
+      completedToolCalls.push(...calls);
       if (eventType(event) === "error") {
         throw { errorCode: "provider_stream_error", errorType: "event_error" };
       }
     }
+    if (completedToolCalls.length === 1)
+      yield { type: "tool_call", toolCall: completedToolCalls[0]! };
+    if (completedToolCalls.length > 1)
+      yield {
+        type: "tool_call",
+        toolCall: completedToolCalls[0]!,
+        toolCalls: completedToolCalls,
+      };
   } catch (caught) {
-    throw normalizeProviderSdkError(caught, "openai-responses-compatible");
+    throw normalizeProviderSdkError(
+      caught,
+      "openai-responses-compatible",
+      "chat",
+    );
   }
+}
+
+function responsesTextFormat(
+  output: NonNullable<StreamChatInput["structuredOutput"]>,
+) {
+  if (output.type === "json_object") return output;
+  return {
+    type: "json_schema" as const,
+    name: output.name,
+    schema: output.schema,
+    ...(output.strict === undefined ? {} : { strict: output.strict }),
+  };
 }
 
 function toResponsesInputItems(message: ChatMessage): ResponsesInputItem[] {
@@ -233,14 +271,11 @@ function toResponsesFunctionCall(
   };
 }
 
-// Read-only: the request never sets `reasoning`, because non-OpenAI responses-compatible endpoints
-// reject unknown request params. Endpoints that volunteer reasoning get a panel; the rest are untouched.
+// Only provider-designated summary deltas are public. Raw reasoning text is intentionally ignored;
+// Romeo does not request, expose, or claim support for hidden chain-of-thought.
 function reasoningDeltas(payload: unknown): string[] {
   const record = asRecord(payload);
-  if (
-    record?.type !== "response.reasoning_summary_text.delta" &&
-    record?.type !== "response.reasoning_text.delta"
-  ) {
+  if (record?.type !== "response.reasoning_summary_text.delta") {
     return [];
   }
   return typeof record.delta === "string" && record.delta.length > 0

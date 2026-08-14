@@ -1,13 +1,13 @@
 import { StatusBadge, Switch } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
 import { useCallback, useMemo } from "react";
 
 import type { Agent } from "../features/managed-models";
 import {
-  listAgentTools,
-  updateAgentToolBinding,
+  agentToolsQueryOptions,
+  updateAgentToolBindingMutationOptions,
   type AgentToolSummary,
 } from "../features/tools";
 import { useLocale } from "../lib/i18n";
@@ -22,13 +22,8 @@ export function ManagedModelToolPanel({
   activeAgent: Agent | undefined;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const toolsQuery = useQuery({
-    queryKey: ["agentTools", activeAgent?.id],
-    queryFn: () => listAgentTools(activeAgent!.id),
-    enabled: activeAgent !== undefined,
-  });
-  const updateMutation = useMutation({ mutationFn: updateAgentToolBinding });
+  const toolsQuery = useQuery(agentToolsQueryOptions(activeAgent?.id));
+  const updateMutation = useMutation(updateAgentToolBindingMutationOptions());
   const tools = toolsQuery.data ?? [];
   const update = useCallback(
     async (
@@ -42,15 +37,12 @@ export function ManagedModelToolPanel({
           toolId,
           ...patch,
         });
-        await queryClient.invalidateQueries({
-          queryKey: ["agentTools", activeAgent.id],
-        });
         toast(t("managedModelToolBindingSaved"), "success");
       } catch {
         toast(t("managedModelToolBindingFailed"), "error");
       }
     },
-    [activeAgent, queryClient, t, updateMutation],
+    [activeAgent, t, updateMutation],
   );
   const columns = useMemo(
     () => [

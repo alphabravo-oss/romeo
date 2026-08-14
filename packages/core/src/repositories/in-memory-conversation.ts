@@ -1,12 +1,43 @@
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
-import {
-  append,
-  appendMany,
-  removeById,
-  replaceById,
-} from "./collection-helpers";
+import { ApiError } from "../errors";
+import type {
+  ClaimFileLifecycleInput,
+  FinishFileLifecycleLeaseInput,
+  RenewFileLifecycleLeaseInput,
+} from "../domain/repository-content";
+import { append, removeById, replaceById } from "./collection-helpers";
 import { InMemoryChatRepository } from "./in-memory-chat";
+import {
+  searchInMemoryAuthorizedChatMessages,
+  searchInMemoryChatContent,
+} from "./in-memory-chat-search";
+import { queryInMemoryMessagePage } from "./in-memory-message-page";
+import {
+  backfillInMemoryMessageTextParts,
+  createMessageWithTextPart,
+  findOrderedMessagePart,
+  listOrderedMessagePartsForMessages,
+  orderedMessageParts,
+} from "./in-memory-message-parts";
+import {
+  claimNextInMemoryFileLifecycle,
+  renewInMemoryFileLifecycleLease,
+  writeClaimedInMemoryFileLifecycle,
+} from "./in-memory-file-lifecycle";
+import {
+  createInMemoryFile,
+  listAuthorizedInMemoryFilesPage,
+  listInMemoryFiles,
+  updateInMemoryFile,
+} from "./in-memory-file-catalog";
+import {
+  countMessageFileReferencesInMemory,
+  createMessagePartsWithFileReferences,
+  reconcileChatFileReferencesInMemory,
+  removeMessageFileReferences,
+  updateMessagePartWithImmutableReferences,
+} from "./in-memory-message-file-references";
 
 export abstract class InMemoryConversationRepository extends InMemoryChatRepository {
   async listMessages(chatId: string): Promise<E.Message[]> {
@@ -19,58 +50,23 @@ export abstract class InMemoryConversationRepository extends InMemoryChatReposit
       );
   }
 
+  async queryAuthorizedMessagesPage(
+    input: R.AuthorizedMessagePageQuery,
+  ): Promise<R.MessagePageQueryResult> {
+    return queryInMemoryMessagePage(this.data, input);
+  }
+
   async searchChatContent(
     workspaceId: string,
     query: string,
   ): Promise<Array<{ chatId: string; messageId?: string; snippet: string }>> {
-    const needle = query.toLowerCase();
-    const results: Array<{
-      chatId: string;
-      messageId?: string;
-      snippet: string;
-    }> = [];
-    for (const chat of this.data.chats.filter(
-      (item) => item.workspaceId === workspaceId,
-    )) {
-      if (chat.title.toLowerCase().includes(needle)) {
-        results.push({ chatId: chat.id, snippet: chat.title });
-        continue;
-      }
-      const message = this.data.messages.find(
-        (item) =>
-          item.chatId === chat.id &&
-          item.content.toLowerCase().includes(needle),
-      );
-      if (message !== undefined) {
-        const index = message.content.toLowerCase().indexOf(needle);
-        results.push({
-          chatId: chat.id,
-          messageId: message.id,
-          snippet: message.content.slice(
-            Math.max(0, index - 60),
-            index + needle.length + 100,
-          ),
-        });
-        continue;
-      }
-      const attachment = this.data.messageParts.find((part) => {
-        const parent = this.data.messages.find(
-          (item) => item.id === part.messageId && item.chatId === chat.id,
-        );
-        return (
-          parent !== undefined &&
-          typeof part.metadata.fileName === "string" &&
-          part.metadata.fileName.toLowerCase().includes(needle)
-        );
-      });
-      if (attachment !== undefined)
-        results.push({
-          chatId: chat.id,
-          messageId: attachment.messageId,
-          snippet: String(attachment.metadata.fileName),
-        });
-    }
-    return results;
+    return searchInMemoryChatContent(this.data, workspaceId, query);
+  }
+
+  async searchAuthorizedChatMessages(
+    input: R.AuthorizedChatMessageSearchQuery,
+  ): Promise<R.ChatMessageSearchQueryResult> {
+    return searchInMemoryAuthorizedChatMessages(this.data, input);
   }
 
   async getMessage(messageId: string): Promise<E.Message | undefined> {
@@ -78,12 +74,32 @@ export abstract class InMemoryConversationRepository extends InMemoryChatReposit
   }
 
   async createMessage(message: E.Message): Promise<E.Message> {
-    return append(this.data.messages, message);
+    const created = createMessageWithTextPart(this.data, message);
+    this.bumpTranscriptVersion(message.chatId);
+    return created;
+  }
+
+  async backfillLegacyMessageTextParts(
+    input: import("../domain/repository-content").MessagePartBackfillBatchInput,
+  ): Promise<
+    import("../domain/repository-content").MessagePartBackfillBatchResult
+  > {
+    return backfillInMemoryMessageTextParts(this.data, input);
   }
 
   async deleteMessage(messageId: string): Promise<void> {
     const message = this.data.messages.find((item) => item.id === messageId);
     if (message === undefined) return;
+    const heldChat = this.data.chats.find((item) => item.id === message.chatId);
+    if (
+      heldChat?.legalHoldUntil !== undefined &&
+      heldChat.legalHoldUntil > new Date().toISOString()
+    )
+      throw new ApiError(
+        "chat_delete_legal_hold",
+        "Chat is under legal hold and cannot be changed.",
+        409,
+      );
     // Splice, don't sever: children adopt their grandparent. Left dangling, every turn above the
     // deleted row falls off the branch and silently stops being replayed to the provider.
     this.data.messages = this.data.messages
@@ -95,9 +111,11 @@ export abstract class InMemoryConversationRepository extends InMemoryChatReposit
         else child.parentId = message.parentId;
         return child;
       });
+    removeMessageFileReferences(this.data, messageId);
     this.data.messageParts = this.data.messageParts.filter(
       (part) => part.messageId !== messageId,
     );
+    this.bumpTranscriptVersion(message.chatId);
     const chat = this.data.chats.find((item) => item.id === message.chatId);
     if (chat === undefined || chat.activeLeafMessageId !== messageId) return;
     // A pointer still naming the deleted row resolves to no branch, so the next turn would persist
@@ -112,110 +130,59 @@ export abstract class InMemoryConversationRepository extends InMemoryChatReposit
     await this.updateChat(repaired);
   }
 
+  private bumpTranscriptVersion(chatId: string): void {
+    const chat = this.data.chats.find((item) => item.id === chatId);
+    if (chat === undefined) return;
+    chat.transcriptVersion = (
+      BigInt(chat.transcriptVersion ?? "0") + 1n
+    ).toString();
+  }
+
   async listMessageParts(messageId: string): Promise<E.MessagePart[]> {
-    return this.data.messageParts.filter(
-      (part) => part.messageId === messageId,
+    return orderedMessageParts(
+      this.data.messageParts.filter((part) => part.messageId === messageId),
     );
+  }
+
+  async listMessagePartsForMessages(
+    messageIds: string[],
+  ): Promise<E.MessagePart[]> {
+    return listOrderedMessagePartsForMessages(this.data, messageIds);
   }
 
   async getMessagePart(
     messagePartId: string,
   ): Promise<E.MessagePart | undefined> {
-    return this.data.messageParts.find((part) => part.id === messagePartId);
+    return findOrderedMessagePart(this.data, messagePartId);
   }
 
   async createMessageParts(parts: E.MessagePart[]): Promise<E.MessagePart[]> {
-    return appendMany(this.data.messageParts, parts);
+    return createMessagePartsWithFileReferences(this.data, parts);
   }
 
   async updateMessagePart(part: E.MessagePart): Promise<E.MessagePart> {
-    const index = this.data.messageParts.findIndex(
-      (item) => item.id === part.id,
-    );
-    if (index >= 0) this.data.messageParts[index] = part;
-    else this.data.messageParts.push(part);
-    return part;
+    return updateMessagePartWithImmutableReferences(this.data, part);
+  }
+
+  async reconcileChatFileReferences(chatId: string, now: string): Promise<E.FileObject[]> {
+    return reconcileChatFileReferencesInMemory(this.data, chatId, now);
+  }
+
+  async countMessageFileReferences(fileId: string): Promise<number> {
+    return countMessageFileReferencesInMemory(this.data, fileId);
   }
 
   async listFileObjects(
     orgId: string,
     workspaceId?: string,
   ): Promise<E.FileObject[]> {
-    return this.data.fileObjects
-      .filter((file) => file.orgId === orgId)
-      .filter(
-        (file) => workspaceId === undefined || file.workspaceId === workspaceId,
-      )
-      .sort(
-        (left, right) =>
-          right.updatedAt.localeCompare(left.updatedAt) ||
-          left.id.localeCompare(right.id),
-      );
+    return listInMemoryFiles(this.data, orgId, workspaceId);
   }
 
   async listAuthorizedFileObjectsPage(
     input: R.AuthorizedFileCatalogQuery,
   ): Promise<{ items: E.FileObject[]; total: number }> {
-    const query = input.query?.trim().toLocaleLowerCase() ?? "";
-    const visible = this.data.fileObjects
-      .filter(
-        (file) =>
-          file.orgId === input.orgId &&
-          file.workspaceId === input.workspaceId &&
-          file.status === "available",
-      )
-      .filter(
-        (file) =>
-          input.purposes === undefined || input.purposes.includes(file.purpose),
-      )
-      .filter(
-        (file) =>
-          input.excludePurposes === undefined ||
-          !input.excludePurposes.includes(file.purpose),
-      )
-      .filter((file) => {
-        if (query === "") return true;
-        const title =
-          typeof file.metadata.title === "string" ? file.metadata.title : "";
-        return `${file.fileName} ${file.mimeType} ${title}`
-          .toLocaleLowerCase()
-          .includes(query);
-      })
-      .filter((file) => {
-        if (input.isAdmin) return true;
-        if (
-          file.ownerType === input.principalType &&
-          file.ownerId === input.principalId
-        )
-          return true;
-        if (
-          input.accessMode === "workspace_content" &&
-          file.metadata.scope === "workspace"
-        )
-          return true;
-        return (
-          input.accessMode === "file_grants" &&
-          this.data.grants.some(
-            (grant) =>
-              grant.resourceType === "file" &&
-              grant.resourceId === file.id &&
-              (grant.permission === "read" || grant.permission === "write") &&
-              ((grant.principalType === input.principalType &&
-                grant.principalId === input.principalId) ||
-                (grant.principalType === "group" &&
-                  input.groupIds.includes(grant.principalId))),
-          )
-        );
-      })
-      .sort(
-        (left, right) =>
-          right.updatedAt.localeCompare(left.updatedAt) ||
-          left.id.localeCompare(right.id),
-      );
-    return {
-      items: visible.slice(input.offset, input.offset + input.limit),
-      total: visible.length,
-    };
+    return listAuthorizedInMemoryFilesPage(this.data, input);
   }
 
   async getFileObject(fileId: string): Promise<E.FileObject | undefined> {
@@ -223,11 +190,42 @@ export abstract class InMemoryConversationRepository extends InMemoryChatReposit
   }
 
   async createFileObject(file: E.FileObject): Promise<E.FileObject> {
-    return append(this.data.fileObjects, file);
+    return createInMemoryFile(this.data, file);
   }
 
   async updateFileObject(file: E.FileObject): Promise<E.FileObject> {
-    return replaceById(this.data.fileObjects, file);
+    return updateInMemoryFile(this.data, file);
+  }
+
+  async claimNextFileLifecycle(
+    input: ClaimFileLifecycleInput,
+  ): Promise<E.FileObject | undefined> {
+    return claimNextInMemoryFileLifecycle(this.data, input);
+  }
+
+  async renewFileLifecycleLease(
+    input: RenewFileLifecycleLeaseInput,
+  ): Promise<E.FileObject | undefined> {
+    return renewInMemoryFileLifecycleLease(this.data, input);
+  }
+
+  async finishFileLifecycleLease(
+    input: FinishFileLifecycleLeaseInput,
+  ): Promise<E.FileObject | undefined> {
+    return this.writeClaimedFileLifecycle(input, true);
+  }
+
+  async advanceFileLifecycleLease(
+    input: FinishFileLifecycleLeaseInput,
+  ): Promise<E.FileObject | undefined> {
+    return this.writeClaimedFileLifecycle(input, false);
+  }
+
+  private writeClaimedFileLifecycle(
+    input: FinishFileLifecycleLeaseInput,
+    clearLease: boolean,
+  ): E.FileObject | undefined {
+    return writeClaimedInMemoryFileLifecycle(this.data, input, clearLease);
   }
 
   async listChatComments(chatId: string): Promise<E.ChatComment[]> {

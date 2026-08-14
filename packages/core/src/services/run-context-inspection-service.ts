@@ -1,4 +1,8 @@
 import type { AuthSubject } from "@romeo/auth";
+import {
+  resolveProviderReasoningPolicy,
+  type ProviderReasoningPolicy,
+} from "@romeo/providers";
 import type { ObjectStore } from "@romeo/storage";
 
 import type { RomeoRepository } from "../domain/repository";
@@ -16,6 +20,8 @@ import { buildRunKnowledgeContext } from "./run-knowledge";
 import { orderChatHistory, pathThroughMessage } from "./run-messages";
 import type { RunServiceOptions } from "./run-service-contracts";
 import { resolveRunMemories } from "./workspace-content-service";
+import type { ModelRoutingMode } from "./model-routing";
+import { reasoningPolicyLayersForStart } from "./run-reasoning-policy";
 
 export interface RunContextInspectionInput {
   subject: AuthSubject;
@@ -23,6 +29,9 @@ export interface RunContextInspectionInput {
   agentId: string;
   content: string;
   modelId?: string;
+  routingMode?: ModelRoutingMode;
+  researchMode?: "standard" | "deep";
+  reasoningPolicy?: ProviderReasoningPolicy;
   fileIds?: string[];
   imageCount: number;
   webSearch?: boolean;
@@ -36,13 +45,15 @@ export class RunContextInspectionService {
     private readonly objectStore: ObjectStore,
     private readonly embeddingFetch: typeof fetch | undefined,
     private readonly options: RunServiceOptions,
+    private readonly disabledProviderIds: ReadonlySet<string> = new Set(),
   ) {}
 
   async inspect(input: RunContextInspectionInput) {
-    const { chat, agentVersion, model } = await resolveRunContext(
-      this.repository,
-      input,
-    );
+    const { chat, agentVersion, model, provider, routingDecision } =
+      await resolveRunContext(this.repository, {
+        ...input,
+        disabledProviderIds: this.disabledProviderIds,
+      });
     const customization = await resolveManagedModelCustomization(
       this.repository,
       input.subject,
@@ -83,6 +94,8 @@ export class RunContextInspectionService {
       messages: history,
       objectStore: this.objectStore,
       repository: this.repository,
+      subject: input.subject,
+      workspaceId: chat.workspaceId,
     });
     const documents = [
       ...retained.documents.map((document) => ({
@@ -102,10 +115,11 @@ export class RunContextInspectionService {
       ),
     ];
     const runContent = appendDocumentContext(input.content, documents);
+    const deepResearch = input.researchMode === "deep";
     const agentic = await resolveRunAgentic(
       this.repository,
       input.subject.orgId,
-      input.agenticRag,
+      deepResearch || input.agenticRag,
     );
     const [knowledge, webHits] = await Promise.all([
       buildRunKnowledgeContext(this.repository, {
@@ -122,12 +136,17 @@ export class RunContextInspectionService {
           : { vectorStore: this.options.knowledgeVectorStore }),
       }),
       this.options.webRetrieval === undefined ||
-      (input.webSearch !== true && (input.urls?.length ?? 0) === 0)
+      (!deepResearch &&
+        input.webSearch !== true &&
+        (input.urls?.length ?? 0) === 0)
         ? Promise.resolve([])
         : this.options.webRetrieval({
             subject: input.subject,
+            workspaceId: chat.workspaceId,
+            agentId: input.agentId,
+            agentVersionId: agentVersion.id,
             query: runContent,
-            search: input.webSearch === true,
+            search: deepResearch || input.webSearch === true,
             urls: input.urls ?? [],
           }),
     ]);
@@ -168,14 +187,52 @@ export class RunContextInspectionService {
       userContent: runContent,
       knowledgeHits: [...webHits, ...knowledge.hits],
       model,
+      ...(input.researchMode === undefined
+        ? {}
+        : { researchMode: input.researchMode }),
       ...(previewImages.length === 0 ? {} : { userImages: previewImages }),
     });
+    const reasoningLayers = await reasoningPolicyLayersForStart(
+      this.repository,
+      {
+        agentParameters: agentVersion.parameters,
+        orgId: chat.orgId,
+        workspaceId: chat.workspaceId,
+        ...(this.options.capabilityPlatformPolicy === undefined
+          ? {}
+          : { platformPolicy: this.options.capabilityPlatformPolicy }),
+        ...(input.reasoningPolicy === undefined
+          ? {}
+          : { runRequest: input.reasoningPolicy }),
+      },
+    );
+    const reasoningResolution =
+      reasoningLayers === undefined
+        ? undefined
+        : resolveProviderReasoningPolicy({
+            kind: provider.type,
+            layers: reasoningLayers,
+            model,
+            provider,
+          });
     return {
+      routing: routingDecision,
       model: {
         id: model.id,
         name: model.displayName,
         contextWindow: built.contextWindow,
       },
+      ...(reasoningResolution === undefined
+        ? {}
+        : {
+            reasoningPolicy: {
+              requested: reasoningResolution.requested,
+              effective: reasoningResolution.effective,
+              source: reasoningResolution.source,
+              rejected: reasoningResolution.rejected,
+              adjustments: [...reasoningResolution.adjustments],
+            },
+          }),
       budget: {
         estimatedInputTokens: built.estimatedInputTokens,
         usableInputTokens: built.usableInputTokens,
@@ -210,7 +267,11 @@ export class RunContextInspectionService {
         : [],
       messages: built.messages.map((message) => ({
         role: message.role,
-        content: message.content,
+        // The builder output can contain system prompts, retrieved document text,
+        // policy instructions, and provider-ready transformations. Keep the
+        // compatibility shape and role/image counts without returning that raw
+        // request body to a browser client.
+        content: "",
         imageCount: message.role === "user" ? (message.images?.length ?? 0) : 0,
       })),
     };

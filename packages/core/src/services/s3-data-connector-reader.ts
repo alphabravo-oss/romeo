@@ -6,6 +6,7 @@ import {
 } from "@aws-sdk/client-s3";
 
 import { ApiError } from "../errors";
+import { requirePublicApiErrorCode } from "../public-api-error-registry";
 import type {
   S3ConnectorObject,
   S3ConnectorReader,
@@ -148,7 +149,7 @@ export class S3HttpConnectorReader implements S3ConnectorReader {
       if (caught instanceof ApiError) throw caught;
       const status = awsStatus(caught);
       const error = new ApiError(
-        errorCode,
+        requirePublicApiErrorCode(errorCode),
         "S3 connector request failed.",
         502,
         status === undefined ? undefined : { status },

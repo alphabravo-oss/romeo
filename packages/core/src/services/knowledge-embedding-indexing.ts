@@ -27,6 +27,7 @@ import {
 } from "./job-service";
 import { getAuthorizedKnowledgeBase } from "./knowledge-access";
 import { recordSubjectUsage } from "./record-usage";
+import { providerApiError } from "./provider-api-error";
 import { writeAuditLog } from "./audit-log";
 import {
   assertEmbeddingProviderModelAllowed,
@@ -151,8 +152,12 @@ export async function indexKnowledgeEmbeddings(
       model: input.model,
     };
   } catch (error) {
-    await failBackgroundJob(input.repository, job, errorCode(error));
-    throw error;
+    const normalized = providerApiError(error, {
+      kind: provider.type,
+      operation: "embeddings",
+    });
+    await failBackgroundJob(input.repository, job, errorCode(normalized));
+    throw normalized;
   }
 }
 

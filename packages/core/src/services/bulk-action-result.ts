@@ -1,4 +1,4 @@
-import { ApiError } from "../errors";
+import { publicErrorMessage } from "./public-error";
 
 export interface BulkActionItemResult {
   id: string;
@@ -15,7 +15,5 @@ export function dedupeIds(ids: string[]): string[] {
 }
 
 export function bulkErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Unknown error.";
+  return publicErrorMessage(error, "The item could not be updated.");
 }

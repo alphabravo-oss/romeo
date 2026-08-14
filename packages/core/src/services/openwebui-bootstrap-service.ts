@@ -1,9 +1,10 @@
 import { AuthorizationError, assertScope, type AuthSubject } from "@romeo/auth";
-import type {
-  OpenWebUiConfigResponse,
-  OpenWebUiSessionUserResponse,
-  OpenWebUiVersionResponse,
-  OpenWebUiVersionUpdatesResponse,
+import {
+  ROMEO_PRODUCT_VERSION,
+  type OpenWebUiConfigResponse,
+  type OpenWebUiSessionUserResponse,
+  type OpenWebUiVersionResponse,
+  type OpenWebUiVersionUpdatesResponse,
 } from "@romeo/contracts";
 
 import type { RomeoRepository } from "../domain/repository";
@@ -12,7 +13,6 @@ import {
   permissionsForSubject,
 } from "./openwebui-permissions";
 
-const romeoVersion = "0.1.0";
 const deploymentId = "romeo";
 
 export class OpenWebUiBootstrapService {
@@ -22,7 +22,7 @@ export class OpenWebUiBootstrapService {
     return {
       status: true,
       name: "Romeo",
-      version: romeoVersion,
+      version: ROMEO_PRODUCT_VERSION,
       default_locale: "en-US",
       oauth: { providers: {}, auto_redirect: false },
       features: {
@@ -90,11 +90,14 @@ export class OpenWebUiBootstrapService {
   }
 
   version(): OpenWebUiVersionResponse {
-    return { version: romeoVersion, deployment_id: deploymentId };
+    return { version: ROMEO_PRODUCT_VERSION, deployment_id: deploymentId };
   }
 
   versionUpdates(): OpenWebUiVersionUpdatesResponse {
-    return { current: romeoVersion, latest: romeoVersion };
+    return {
+      current: ROMEO_PRODUCT_VERSION,
+      latest: ROMEO_PRODUCT_VERSION,
+    };
   }
 
   async sessionUser(

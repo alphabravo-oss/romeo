@@ -1,24 +1,35 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 
-import { getChat, listChatsPage, listMessages } from "../features";
-import { getChatExperience } from "../features/chat-experience";
+import { chatExperienceQueryOptions } from "../features/chat-experience/query-options";
+import {
+  chatQueryOptions,
+  chatsInfiniteQueryOptions,
+} from "../features/chats/query-options";
+import { agentToolsQueryOptions } from "../features/tools/query-options";
 import type { Message } from "../features/types";
-import { messagesQueryKey } from "../lib/run-registry";
 import {
-  listAgentGallery,
-  listAgents,
-  type AgentGalleryItem,
-} from "../features/managed-models";
-import { getServerInterfacePreferences } from "../features/interface-preferences";
+  interfacePreferencesQueryOptions,
+  providerOperationalSummaryQueryOptions,
+  workspaceDraftAgentsQueryOptions,
+  workspaceGalleryAgentsQueryOptions,
+  workspaceModelsQueryOptions,
+  workspaceProvidersQueryOptions,
+} from "../lib/api-query-options";
+import { useRouterApiClient } from "../lib/router-context";
+import { optimisticMessagesQueryOptions } from "../lib/optimistic-message-query-options";
 import {
-  getProviderOperationalSummary,
-  listModels,
-  listProviders,
-} from "../features/providers/queries";
-import { listAgentTools } from "../features/tools";
+  activeMessagePageQueryOptions,
+  activeMessagePageSnapshot,
+  isMessagePageResetError,
+  resetActiveMessagePages,
+  snapshotBranchLeafForChat,
+} from "../lib/message-page-query";
 import { resolveActiveAssistant } from "./assistant-selection";
-import { chatPath, messageVariants } from "./message-tree";
 import { useWorkspace } from "./WorkspaceContext";
 
 // Stable identity for "this chat has no transcript yet", so an idle chat does
@@ -31,93 +42,58 @@ export function useWorkspaceData(
     activeChatId?: string;
     includeDrafts?: boolean;
     requestedAgentId?: string;
+    requestedLeafMessageId?: string;
   } = {},
 ) {
   // The selected workspace is owned by WorkspaceProvider (persisted +
   // validated). This deduplicates the same ["bootstrap"] query rather than
   // re-fetching. Falls back to nothing while the selection reconciles.
   const { latestChatEvent, subject, workspace } = useWorkspace();
-  const agentsQuery = useQuery({
-    queryKey: [
-      options.includeDrafts ? "agents" : "agentGallery",
+  const queryClient = useQueryClient();
+  const apiClient = useRouterApiClient();
+  const draftAgentsQuery = useQuery(
+    workspaceDraftAgentsQueryOptions(
       workspace?.id,
-    ],
-    queryFn: async (): Promise<AgentGalleryItem[]> =>
-      options.includeDrafts
-        ? (await listAgents(workspace!.id)).map((agent) => ({
-            ...agent,
-            favorite: false,
-            readinessStatus:
-              agent.publishedVersionId === undefined ? "blocked" : "ready",
-            ...(agent.publishedVersionId === undefined
-              ? { readinessReason: "Publish this custom model before using it." }
-              : {}),
-          }))
-        : listAgentGallery(workspace!.id),
-    enabled: workspace !== undefined,
-    refetchOnWindowFocus: true,
-  });
-  const chatsQuery = useInfiniteQuery({
-    queryKey: ["chats", workspace?.id],
-    queryFn: ({ pageParam }) =>
-      listChatsPage(workspace!.id, { limit: 50, offset: pageParam }),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.offset + lastPage.items.length : undefined,
-    enabled: workspace !== undefined,
-  });
-  const activeChatQuery = useQuery({
-    queryKey: ["chat", options.activeChatId],
-    queryFn: () => getChat(options.activeChatId!),
-    enabled: options.activeChatId !== undefined,
-  });
-  // Never auto-refetched: the run registry streams deltas into this exact key
-  // from outside React, and a background refresh would replace a half-written
-  // answer with the empty row the server still has. Refreshes are explicit
-  // invalidations, issued once a run has settled.
-  //
-  // ponytail: the guard is unconditional rather than scoped to a live run, so a
-  // transcript changed in another tab or device, or by an admin deletion, never
-  // refreshes for the life of this mount. Upgrade path: restore the default
-  // refetch behaviour and gate it on getActiveRun(chatId)?.isStreaming.
-  const messagesQuery = useQuery({
-    queryKey: messagesQueryKey(options.activeChatId ?? ""),
-    queryFn: () => listMessages(options.activeChatId!),
-    enabled: options.activeChatId !== undefined,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-  });
-  const chatExperienceQuery = useQuery({
-    queryKey: ["chatExperience"],
-    queryFn: getChatExperience,
-  });
-  const modelsQuery = useQuery({
-    queryKey: ["models"],
-    queryFn: listModels,
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
-  });
-  const providersQuery = useQuery({
-    queryKey: ["providers"],
-    queryFn: listProviders,
-    refetchInterval: (query) =>
-      query.state.data?.some(
-        (provider) =>
-          provider.catalogSync === undefined ||
-          ["never", "stale", "syncing"].includes(provider.catalogSync.status),
-      )
-        ? 3_000
-        : 60_000,
-    refetchOnWindowFocus: true,
-  });
-  const providerOperationalSummaryQuery = useQuery({
-    queryKey: ["providerOperationalSummary"],
-    queryFn: getProviderOperationalSummary,
-  });
-  const interfacePreferencesQuery = useQuery({
-    queryKey: ["interfacePreferences"],
-    queryFn: getServerInterfacePreferences,
-  });
+      apiClient,
+      options.includeDrafts === true,
+    ),
+  );
+  const galleryAgentsQuery = useQuery(
+    workspaceGalleryAgentsQueryOptions(
+      workspace?.id,
+      apiClient,
+      options.includeDrafts !== true,
+    ),
+  );
+  const agentsQuery =
+    options.includeDrafts === true ? draftAgentsQuery : galleryAgentsQuery;
+  const chatsQuery = useInfiniteQuery(
+    chatsInfiniteQueryOptions(workspace?.id, apiClient),
+  );
+  const activeChatQuery = useQuery(
+    chatQueryOptions(options.activeChatId, apiClient),
+  );
+  const messagePagesQuery = useInfiniteQuery(
+    activeMessagePageQueryOptions(
+      options.activeChatId,
+      options.requestedLeafMessageId,
+      apiClient,
+    ),
+  );
+  // This disabled query is a client-only overlay. It contains only rows from
+  // accepted turns that have not yet reconciled into the authoritative page.
+  const optimisticMessagesQuery = useQuery(
+    optimisticMessagesQueryOptions(options.activeChatId),
+  );
+  const chatExperienceQuery = useQuery(chatExperienceQueryOptions());
+  const modelsQuery = useQuery(workspaceModelsQueryOptions(apiClient));
+  const providersQuery = useQuery(workspaceProvidersQueryOptions(apiClient));
+  const providerOperationalSummaryQuery = useQuery(
+    providerOperationalSummaryQueryOptions(apiClient),
+  );
+  const interfacePreferencesQuery = useQuery(
+    interfacePreferencesQueryOptions(apiClient),
+  );
 
   const agents = useMemo(() => agentsQuery.data ?? [], [agentsQuery.data]);
   const chats = useMemo(() => {
@@ -173,45 +149,57 @@ export function useWorkspaceData(
       workspace,
     ],
   );
-  const toolsQuery = useQuery({
-    queryKey: ["agentTools", activeAgent?.id],
-    queryFn: () => listAgentTools(activeAgent!.id),
-    enabled: activeAgent !== undefined,
-  });
+  const toolsQuery = useQuery(agentToolsQueryOptions(activeAgent?.id));
 
-  // The transcript is a tree; what the reader sees is the one branch ending at
-  // the chat's active leaf. Both derivations are local, so switching variants
-  // is a pointer PATCH and a re-render rather than another round trip.
-  const allMessages = messagesQuery.data ?? noMessages;
-  const activeLeafMessageId = activeChatQuery.data?.activeLeafMessageId;
-  const messages = useMemo(
-    () => chatPath(allMessages, activeLeafMessageId),
-    [activeLeafMessageId, allMessages],
-  );
-  const variantsByMessageId = useMemo(
-    () => messageVariants(allMessages, messages),
-    [allMessages, messages],
-  );
-
+  const pageSnapshot = activeMessagePageSnapshot(messagePagesQuery.data?.pages);
+  const optimisticMessages = optimisticMessagesQuery.data;
+  const messages = useMemo(() => {
+    const byId = new Map(
+      (pageSnapshot?.messages ?? noMessages).map((message) => [
+        message.id,
+        message,
+      ]),
+    );
+    for (const message of optimisticMessages) byId.set(message.id, message);
+    return [...byId.values()];
+  }, [optimisticMessages, pageSnapshot?.messages]);
+  const loadOlderMessages = useCallback(async () => {
+    const result = await messagePagesQuery.fetchNextPage();
+    if (
+      options.activeChatId !== undefined &&
+      isMessagePageResetError(result.error)
+    ) {
+      await resetActiveMessagePages(queryClient, options.activeChatId);
+    }
+    return result;
+  }, [messagePagesQuery, options.activeChatId, queryClient]);
   return {
     activeAgent,
     agents,
-    allMessages,
+    allMessages: optimisticMessages,
+    branchLeafMessageId: snapshotBranchLeafForChat(
+      pageSnapshot,
+      options.activeChatId,
+    ),
     chats,
     chatExperience: chatExperienceQuery.data,
     chatsTotal: chatsQuery.data?.pages[0]?.total ?? 0,
     hasMoreChats: chatsQuery.hasNextPage,
+    hasOlderMessages: pageSnapshot?.hasOlder ?? false,
+    isLoadingOlderMessages: messagePagesQuery.isFetchingNextPage,
     isLoadingMoreChats: chatsQuery.isFetchingNextPage,
     loadMoreChats: chatsQuery.fetchNextPage,
+    loadOlderMessages,
     models: modelsQuery.data ?? [],
     providerOperationalSummary: providerOperationalSummaryQuery.data,
     providers: providersQuery.data ?? [],
     interfacePreferences: interfacePreferencesQuery.data,
     latestChatEvent,
     messages,
+    messagePageNeedsReset: isMessagePageResetError(messagePagesQuery.error),
     subject,
     tools: toolsQuery.data ?? [],
-    variantsByMessageId,
+    variantsByMessageId: pageSnapshot?.variantsByMessageId ?? {},
     workspace,
   };
 }

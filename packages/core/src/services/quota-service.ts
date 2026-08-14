@@ -4,7 +4,11 @@ import type { QuotaBucket } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import {
   createDisabledQuotaCoordinator,
   toQuotaReservationBucket,
@@ -204,12 +208,12 @@ export class QuotaService {
     return agent.id;
   }
 
-  private async audit(
+  private async audit<A extends AuditAction>(
     repository: RomeoRepository,
     subject: AuthSubject,
-    action: string,
+    action: A,
     bucket: QuotaBucket,
-    metadata: Record<string, unknown>,
+    metadata: AuditMetadata<A>,
   ): Promise<void> {
     await writeAuditLog(repository, {
       subject,

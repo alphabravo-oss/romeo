@@ -1,10 +1,7 @@
 import { Button, Input } from "@romeo/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import Check from "lucide-react/dist/esm/icons/check.mjs";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
-import Pin from "lucide-react/dist/esm/icons/pin.mjs";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
-import Star from "lucide-react/dist/esm/icons/star.mjs";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -12,7 +9,16 @@ import { deleteFavorite, favoriteResource, listFavorites } from "../features";
 import type { AgentGalleryItem } from "../features/managed-models";
 import type { BaseModel, Provider } from "../features/types";
 import { useLocale } from "../lib/i18n";
-import { isGenericCustomModelName } from "./chat-enterprise";
+import {
+  CustomModelPickerOption,
+  ModelPickerOption,
+  modelPickerRows,
+  selectableRowId,
+} from "./composer-model-picker-options";
+import { type ModelCapabilityFilter } from "./composer-model-capability-filter";
+import { useComposerModelOptions } from "./use-composer-model-options";
+
+export { formatModelPricing } from "./composer-model-picker-options";
 
 export function ComposerModelSelect({
   customModels = [],
@@ -23,6 +29,11 @@ export function ComposerModelSelect({
   onSelectCustomModel,
   onSelectModel,
   onToggleDefaultModel,
+  requiresReasoning,
+  requiresTools,
+  requiresVision,
+  requiresLocalOnly,
+  minContextWindow,
   selectedCustomModelId,
   selectedModelId,
 }: {
@@ -34,15 +45,19 @@ export function ComposerModelSelect({
   onSelectCustomModel?: (agentId: string, baseModelId: string) => void;
   onSelectModel: (modelId: string) => void;
   onToggleDefaultModel: (modelId: string) => void;
+  requiresReasoning: boolean;
+  requiresTools?: boolean;
+  requiresVision: boolean;
+  requiresLocalOnly?: boolean;
+  minContextWindow?: number;
   selectedCustomModelId?: string;
   selectedModelId: string | undefined;
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [capabilityFilter, setCapabilityFilter] = useState<
-    "all" | "tools" | "vision"
-  >("all");
+  const [capabilityFilter, setCapabilityFilter] =
+    useState<ModelCapabilityFilter>("all");
   const [menuMaxHeight, setMenuMaxHeight] = useState<number>();
   const [pinnedModels, setPinnedModels] = useState<Map<string, string>>(
     () => new Map(),
@@ -52,79 +67,28 @@ export function ComposerModelSelect({
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const enabledProviderIds = useMemo(
-    () =>
-      new Set(
-        providers
-          .filter((provider) => provider.enabled)
-          .map((provider) => provider.id),
-      ),
-    [providers],
-  );
-  const enabledModels = useMemo(
-    () =>
-      models.filter(
-        (model) =>
-          model.enabled &&
-          model.available !== false &&
-          enabledProviderIds.has(model.providerId),
-      ),
-    [enabledProviderIds, models],
-  );
   const providerById = useMemo(
     () => new Map(providers.map((provider) => [provider.id, provider.name])),
     [providers],
   );
-  const readyCustomModels = useMemo(
-    () =>
-      customModels.filter(
-        (agent) =>
-          agent.readinessStatus === "ready" &&
-          !isGenericCustomModelName(agent.name),
-      ),
-    [customModels],
-  );
-  const filteredModels = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return enabledModels
-      .filter((model) =>
-        capabilityFilter === "vision"
-          ? model.capabilities.vision
-          : capabilityFilter === "tools"
-            ? model.capabilities.toolCalling
-            : true,
-      )
-      .filter((model) =>
-        `${model.displayName} ${model.name} ${model.providerId}`
-          .toLowerCase()
-          .includes(normalizedQuery),
-      )
-      .sort((left, right) => {
-        const pinDifference =
-          Number(pinnedIds.has(right.id)) - Number(pinnedIds.has(left.id));
-        return (
-          pinDifference || left.displayName.localeCompare(right.displayName)
-        );
-      });
-  }, [capabilityFilter, enabledModels, pinnedIds, query]);
-  const filteredCustomModels = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return readyCustomModels.filter((agent) => {
-      const base = enabledModels.find(
-        (model) => model.id === agent.baseModelId,
-      );
-      if (capabilityFilter === "vision" && base?.capabilities.vision !== true)
-        return false;
-      if (
-        capabilityFilter === "tools" &&
-        base?.capabilities.toolCalling !== true
-      )
-        return false;
-      return `${agent.name} ${agent.description ?? ""} ${base?.displayName ?? ""}`
-        .toLowerCase()
-        .includes(normalizedQuery);
+  const {
+    enabledModels,
+    filteredCustomModels,
+    filteredModels,
+    readyCustomModels,
+  } = useComposerModelOptions({
+      models,
+      providers,
+      customModels,
+      query,
+      capabilityFilter,
+      pinnedIds,
+      requiresReasoning,
+      requiresVision,
+      requiresTools,
+      requiresLocalOnly,
+      minContextWindow,
     });
-  }, [capabilityFilter, enabledModels, query, readyCustomModels]);
   const pickerRows = useMemo(
     () =>
       modelPickerRows(
@@ -157,6 +121,10 @@ export function ComposerModelSelect({
   );
   const triggerLabel =
     selectedCustomModel?.name ?? selectedModel?.displayName ?? t("selectModel");
+  const requiredCapabilities = [
+    requiresReasoning ? t("reasoning") : undefined,
+    requiresVision ? t("vision") : undefined,
+  ].filter((value): value is string => value !== undefined);
 
   function closeModelMenu({ restoreFocus = false } = {}) {
     setOpen(false);
@@ -342,22 +310,35 @@ export function ComposerModelSelect({
             />
           </label>
           <div className="rm-chat-model-filters">
-            {(["all", "tools", "vision"] as const).map((filter) => (
-              <Button
-                aria-pressed={capabilityFilter === filter}
-                className={capabilityFilter === filter ? "active" : ""}
-                key={filter}
-                onClick={() => setCapabilityFilter(filter)}
-                type="button"
-              >
-                {filter === "all"
-                  ? t("all")
-                  : filter === "tools"
-                    ? t("tools")
-                    : t("vision")}
-              </Button>
-            ))}
+            {(["all", "economy", "reasoning", "tools", "vision"] as const).map(
+              (filter) => (
+                <Button
+                  aria-pressed={capabilityFilter === filter}
+                  className={capabilityFilter === filter ? "active" : ""}
+                  key={filter}
+                  onClick={() => setCapabilityFilter(filter)}
+                  type="button"
+                >
+                  {filter === "all"
+                    ? t("all")
+                    : filter === "economy"
+                      ? t("economy")
+                      : filter === "reasoning"
+                        ? t("reasoning")
+                        : filter === "tools"
+                          ? t("tools")
+                          : t("vision")}
+                </Button>
+              ),
+            )}
           </div>
+          {requiredCapabilities.length > 0 ? (
+            <p className="text-sm text-muted" role="status">
+              {t("turnRequiresCapabilities", {
+                capabilities: requiredCapabilities.join(", "),
+              })}
+            </p>
+          ) : null}
           <div
             aria-label={t("models")}
             className="rm-chat-model-list"
@@ -440,205 +421,4 @@ export function ComposerModelSelect({
       ) : null}
     </div>
   );
-}
-
-function ModelPickerOption({
-  closeModelMenu,
-  isDefault,
-  model,
-  onSelectModel,
-  onToggleDefaultModel,
-  pinned,
-  selected,
-  togglePinned,
-}: {
-  closeModelMenu: (options?: { restoreFocus?: boolean }) => void;
-  isDefault: boolean;
-  model: BaseModel;
-  onSelectModel: (modelId: string) => void;
-  onToggleDefaultModel: (modelId: string) => void;
-  pinned: boolean;
-  selected: boolean;
-  togglePinned: (modelId: string) => Promise<void>;
-}) {
-  const { t } = useLocale();
-  return (
-    <div className={`rm-chat-model-row ${selected ? "selected" : ""}`}>
-      <Button
-        aria-selected={selected}
-        className="rm-model-option min-w-0 flex-1"
-        data-model-id={model.id}
-        onClick={() => {
-          onSelectModel(model.id);
-          closeModelMenu({ restoreFocus: true });
-        }}
-        role="option"
-        type="button"
-      >
-        <span className="rm-chat-model-copy">
-          <span
-            className="rm-chat-model-name"
-            title={model.displayName}
-            translate="no"
-          >
-            {model.displayName}
-          </span>
-          <small className="rm-chat-model-meta">
-            {isDefault ? `${t("defaultModelBadge")} · ` : ""}
-            {model.capabilities.toolCalling ? "Tools" : "Chat"}
-            {model.capabilities.vision ? " · Vision" : ""} ·{" "}
-            {formatModelContext(model.contextWindow)}
-          </small>
-        </span>
-        {selected ? (
-          <Check aria-hidden="true" className="rm-chat-model-check" size={14} />
-        ) : null}
-      </Button>
-      <Button
-        aria-label={
-          isDefault ? t("assistantClearDefault") : t("assistantMakeDefault")
-        }
-        className={`rm-chat-model-action rm-chat-model-default ${isDefault ? "active" : ""}`}
-        onClick={() => onToggleDefaultModel(model.id)}
-        title={
-          isDefault ? t("assistantClearDefault") : t("assistantMakeDefault")
-        }
-        type="button"
-      >
-        <Pin
-          aria-hidden="true"
-          fill={isDefault ? "currentColor" : "none"}
-          size={13}
-        />
-      </Button>
-      <Button
-        aria-label={
-          pinned ? `Unpin ${model.displayName}` : `Pin ${model.displayName}`
-        }
-        className={`rm-chat-model-action rm-chat-model-pin ${pinned ? "active" : ""}`}
-        onClick={() => void togglePinned(model.id)}
-        type="button"
-      >
-        <Star
-          aria-hidden="true"
-          fill={pinned ? "currentColor" : "none"}
-          size={14}
-        />
-      </Button>
-    </div>
-  );
-}
-
-function CustomModelPickerOption({
-  agent,
-  baseLabel,
-  closeModelMenu,
-  onSelect,
-  selected,
-}: {
-  agent: AgentGalleryItem;
-  baseLabel: string | undefined;
-  closeModelMenu: (options?: { restoreFocus?: boolean }) => void;
-  onSelect: () => void;
-  selected: boolean;
-}) {
-  return (
-    <div className={`rm-chat-model-row ${selected ? "selected" : ""}`}>
-      <Button
-        aria-selected={selected}
-        className="rm-model-option min-w-0 flex-1"
-        data-model-id={`agent:${agent.id}`}
-        onClick={() => {
-          onSelect();
-          closeModelMenu({ restoreFocus: true });
-        }}
-        role="option"
-        type="button"
-      >
-        <span className="rm-chat-model-copy">
-          <span
-            className="rm-chat-model-name"
-            title={agent.name}
-            translate="no"
-          >
-            {agent.name}
-          </span>
-          {baseLabel === undefined ? null : (
-            <small className="rm-chat-model-meta">{baseLabel}</small>
-          )}
-        </span>
-        {selected ? (
-          <Check aria-hidden="true" className="rm-chat-model-check" size={14} />
-        ) : null}
-      </Button>
-    </div>
-  );
-}
-
-function formatModelContext(contextWindow: number): string {
-  return contextWindow >= 1_000
-    ? `${Math.round(contextWindow / 1_000)}k context`
-    : `${contextWindow} context`;
-}
-
-type ModelPickerRow =
-  | { id: string; kind: "provider"; label: string }
-  | { id: string; kind: "model"; model: BaseModel }
-  | {
-      id: string;
-      kind: "custom";
-      agent: AgentGalleryItem;
-      base: BaseModel | undefined;
-    };
-
-function selectableRowId(row: ModelPickerRow): string | undefined {
-  if (row.kind === "model") return row.model.id;
-  if (row.kind === "custom") return `agent:${row.agent.id}`;
-  return undefined;
-}
-
-function modelPickerRows(
-  models: BaseModel[],
-  providerById: Map<string, string>,
-  customModels: AgentGalleryItem[],
-  customGroupLabel: string,
-): ModelPickerRow[] {
-  const rows: ModelPickerRow[] = [];
-  if (customModels.length > 0) {
-    rows.push({
-      id: "provider:custom",
-      kind: "provider",
-      label: customGroupLabel,
-    });
-    const baseById = new Map(models.map((model) => [model.id, model]));
-    for (const agent of customModels) {
-      rows.push({
-        id: `custom:${agent.id}`,
-        kind: "custom",
-        agent,
-        base: baseById.get(agent.baseModelId),
-      });
-    }
-  }
-  const grouped = new Map<string, BaseModel[]>();
-  for (const model of models) {
-    const group = grouped.get(model.providerId) ?? [];
-    group.push(model);
-    grouped.set(model.providerId, group);
-  }
-  for (const [providerId, providerModels] of grouped) {
-    rows.push({
-      id: `provider:${providerId}`,
-      kind: "provider",
-      label: providerById.get(providerId) ?? providerId,
-    });
-    for (const model of providerModels) {
-      rows.push({
-        id: `model:${model.id}`,
-        kind: "model",
-        model,
-      });
-    }
-  }
-  return rows;
 }

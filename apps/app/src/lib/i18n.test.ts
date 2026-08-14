@@ -7,7 +7,12 @@ import {
   supportedLocales,
   type SupportedLocale,
 } from "../locales";
-import { localeNamespaceGroups } from "./i18n";
+import {
+  localeNamespaceGroups,
+  localeNamespacesForAdminSection,
+  localeNamespacesForSettingsSection,
+  localeNamespacesForWorkspaceSection,
+} from "./i18n";
 
 function interpolationVariables(message: string): string[] {
   return [...message.matchAll(/{{\s*([^},\s]+)[^}]*}}/g)]
@@ -69,6 +74,37 @@ describe("core chat translation catalogs", () => {
     );
   });
 
+  it("loads only the namespaces owned by the active console section", () => {
+    expect(localeNamespacesForAdminSection("overview")).toContain(
+      "admin-overview",
+    );
+    expect(localeNamespacesForAdminSection("overview")).not.toContain(
+      "rag-governance",
+    );
+    expect(localeNamespacesForAdminSection("rag")).toContain("rag-governance");
+    expect(localeNamespacesForAdminSection("usage")).toContain(
+      "admin-operations",
+    );
+    expect(localeNamespacesForAdminSection("compute")).toContain(
+      "trust-compute",
+    );
+    expect(localeNamespacesForSettingsSection("security")).toEqual(
+      expect.arrayContaining(["access-credential", "security"]),
+    );
+    expect(localeNamespacesForSettingsSection("interface")).not.toContain(
+      "device-impersonation",
+    );
+    expect(localeNamespacesForWorkspaceSection("evals")).toContain(
+      "eval-workspace",
+    );
+    expect(localeNamespacesForWorkspaceSection("agents")).toContain(
+      "eval-workspace",
+    );
+    expect(localeNamespacesForWorkspaceSection("evals")).not.toContain(
+      "agent-studio",
+    );
+  });
+
   it("has no key defined in more than one namespace with conflicting values", async () => {
     const conflicts: string[] = [];
     for (const locale of supportedLocales) {
@@ -96,6 +132,9 @@ describe("core chat translation catalogs", () => {
     const sources = await readAllSourceText(new URL("../", import.meta.url));
     const unused: string[] = [];
     for (const namespace of namespaceNames) {
+      // These keys are allocated by the backend public-error registry and are
+      // validated against every locale by check:public-api-errors.
+      if (namespace === "api-errors") continue;
       const catalog = await loadLocaleNamespace("en", namespace);
       for (const key of Object.keys(catalog)) {
         // Deliberately conservative substring matching can miss a dead key

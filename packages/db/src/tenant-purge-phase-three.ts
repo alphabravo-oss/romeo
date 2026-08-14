@@ -5,9 +5,11 @@ import {
   auditLogs,
   backgroundJobs,
   baseModels,
+  billingEventReceipts,
   billingPlans,
   groups,
   identities,
+  localMfaChallenges,
   organizations,
   orgSsoOidcSettings,
   providerCapabilities,
@@ -15,6 +17,7 @@ import {
   providerInstances,
   quotaBuckets,
   retentionPolicies,
+  samlAuthRequests,
   rolePermissions,
   roles,
   sessions,
@@ -87,6 +90,13 @@ export async function purgeTenantPhaseThree({
   await deleteWhere(
     database,
     counts,
+    "billing_event_receipts",
+    billingEventReceipts,
+    eq(billingEventReceipts.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
     "billing_plans",
     billingPlans,
     eq(billingPlans.orgId, orgId),
@@ -97,6 +107,20 @@ export async function purgeTenantPhaseThree({
     "retention_policies",
     retentionPolicies,
     eq(retentionPolicies.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "local_mfa_challenges",
+    localMfaChallenges,
+    eq(localMfaChallenges.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "saml_auth_requests",
+    samlAuthRequests,
+    eq(samlAuthRequests.orgId, orgId),
   );
   await deleteWhere(
     database,

@@ -4,13 +4,14 @@ import {
   operationalGovernanceGetQuotaCoordinationStatus,
   operationalGovernanceGetUsageSummary,
   operationalGovernanceListAuditLogs,
+  operationalGovernanceQueryAuditLogs,
   operationalGovernanceListQuotaBuckets,
   operationalGovernanceListUsageAlerts,
   operationalGovernanceListUsageEvents,
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
-import type { AuditLogFilter } from "./types";
+import type { AuditLogFilter, AuditLogTableRequest } from "./types";
 
 export async function listAuditLogs(
   filter: AuditLogFilter = {},
@@ -31,7 +32,11 @@ export async function listAuditLogs(
 
 export async function exportAuditLogsCsv(filter: AuditLogFilter = {}) {
   configureBrowserApiClients();
-  const { limit: _limit, cursor: _cursor, ...query } = compactAuditQuery(filter);
+  const {
+    limit: _limit,
+    cursor: _cursor,
+    ...query
+  } = compactAuditQuery(filter);
   const response = await operationalGovernanceExportAuditLogs({
     headers: { accept: "text/csv" },
     query,
@@ -39,6 +44,19 @@ export async function exportAuditLogsCsv(filter: AuditLogFilter = {}) {
     throwOnError: true,
   });
   return response.data;
+}
+
+export async function queryAuditLogs(
+  body: AuditLogTableRequest,
+  signal?: AbortSignal,
+) {
+  configureBrowserApiClients();
+  const response = await operationalGovernanceQueryAuditLogs({
+    body,
+    ...(signal === undefined ? {} : { signal }),
+    throwOnError: true,
+  });
+  return response.data.data;
 }
 
 function compactAuditQuery(filter: AuditLogFilter): AuditLogFilter {

@@ -1,8 +1,9 @@
 import { Button, Field, Input, NativeSelect, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
+import { useMutation } from "@tanstack/react-query";
 
 import {
-  updatePromptTemplate,
+  updatePromptTemplateMutationOptions,
   type PromptTemplate,
   type PromptTemplateVisibility,
 } from "../features/prompts";
@@ -17,14 +18,17 @@ import {
 
 export function PromptTemplateEditDialog({
   template,
+  workspaceId,
   onClose,
   onSaved,
 }: {
   template: PromptTemplate;
+  workspaceId: string;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: () => void;
 }) {
   const { t } = useLocale();
+  const updateMutation = useMutation(updatePromptTemplateMutationOptions());
   const editForm = useForm({
     defaultValues: {
       name: template.name,
@@ -35,18 +39,22 @@ export function PromptTemplateEditDialog({
     },
     onSubmit: async ({ value }) => {
       try {
-        await updatePromptTemplate(template.id, {
-          name: value.name,
-          description:
-            value.description.trim().length === 0
-              ? null
-              : value.description.trim(),
-          body: value.body,
-          tags: parsePromptTemplateTags(value.tags),
-          visibility: value.visibility,
+        await updateMutation.mutateAsync({
+          promptTemplateId: template.id,
+          workspaceId,
+          update: {
+            name: value.name,
+            description:
+              value.description.trim().length === 0
+                ? null
+                : value.description.trim(),
+            body: value.body,
+            tags: parsePromptTemplateTags(value.tags),
+            visibility: value.visibility,
+          },
         });
         toast(t("promptTemplateUpdated"), "success");
-        await onSaved();
+        onSaved();
       } catch (caught) {
         toast(t("promptCouldNotUpdate"), "error");
         throw caught;

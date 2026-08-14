@@ -3,6 +3,7 @@ import type {
   QueuedChatTurn as PersistedQueuedChatTurn,
   RunRecord,
 } from "../domain/entities";
+import type { ProviderReasoningPolicy } from "@romeo/providers";
 import type { RomeoRepository } from "../domain/repository";
 import { compareChatMessages } from "./run-messages";
 
@@ -12,6 +13,8 @@ export interface QueuedChatTurn {
   content: string;
   createdAt: string;
   idempotencyKey: string;
+  parentMessageId?: string | null;
+  reasoningPolicy?: ProviderReasoningPolicy;
   status: "queued" | "leased" | "failed" | "cancelled" | "completed";
   error?: string;
 }
@@ -52,6 +55,12 @@ export function publicQueuedTurn(
     content: turn.content,
     createdAt: turn.createdAt,
     idempotencyKey: turn.idempotencyKey,
+    ...(turn.parentMessageId === undefined
+      ? {}
+      : { parentMessageId: turn.parentMessageId }),
+    ...(turn.reasoningPolicy === undefined
+      ? {}
+      : { reasoningPolicy: turn.reasoningPolicy }),
     status: turn.status,
     ...(turn.lastErrorMessage === undefined
       ? {}

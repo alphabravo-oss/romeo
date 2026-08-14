@@ -114,7 +114,8 @@
 }
 
 .rm-codeblock.promoted {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rm-accent) 45%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--rm-accent) 45%, transparent);
 }
 
 /*

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { MessageSchema, UpdateChatSchema } from "./chat-schemas";
 import { contractOpenApiDocument } from "./document";
-import { EnqueueChatTurnSchema, StartRunSchema } from "./runs";
+import { EnqueueChatTurnSchema, RunEventSchema, StartRunSchema } from "./runs";
 import {
   InterfacePreferencesSchema,
   UpdateInterfacePreferencesSchema,
@@ -16,8 +16,116 @@ import {
   versionDiffSchema,
 } from "./managed-model-schemas";
 import { CreateKnowledgeBaseSchema } from "./knowledge-schemas";
+import { OpenAiChatCompletionRequestSchema } from "./openai-compatibility-schemas";
+import { ReasoningPolicySchema } from "./reasoning";
 
 describe("Romeo HTTP contracts", () => {
+  it("accepts only bounded version-one reasoning policies without a raw mode", () => {
+    expect(
+      ReasoningPolicySchema.parse({
+        schemaVersion: 1,
+        mode: "summary",
+        effort: "high",
+        maxReasoningTokens: 8_000,
+        summaryDetail: "standard",
+        retainSummary: true,
+      }),
+    ).toMatchObject({ mode: "summary", retainSummary: true });
+    expect(
+      ReasoningPolicySchema.safeParse({ schemaVersion: 1, mode: "raw" })
+        .success,
+    ).toBe(false);
+    expect(
+      ReasoningPolicySchema.safeParse({
+        schemaVersion: 1,
+        mode: "off",
+        effort: "high",
+      }).success,
+    ).toBe(false);
+    expect(
+      ReasoningPolicySchema.safeParse({
+        schemaVersion: 1,
+        mode: "auto",
+        maxReasoningTokens: 200_001,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("binds reasoning summary event types to strict bounded payloads", () => {
+    const envelope = {
+      id: "evt_summary_1",
+      runId: "run_summary_1",
+      sequence: 1,
+      schemaVersion: 1,
+      createdAt: "2026-08-14T12:00:00.000Z",
+    };
+    expect(
+      RunEventSchema.safeParse({
+        ...envelope,
+        type: "reasoning.summary.delta",
+        data: {
+          classification: "provider_safe_summary",
+          contentPolicyApplied: true,
+          text: "Governed summary.",
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      RunEventSchema.safeParse({
+        ...envelope,
+        type: "reasoning.summary.delta",
+        data: {
+          classification: "provider_safe_summary",
+          contentPolicyApplied: false,
+          text: "ungoverned",
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      RunEventSchema.safeParse({
+        ...envelope,
+        type: "reasoning.summary.completed",
+        data: {
+          classification: "hidden_reasoning_omitted",
+          status: "completed",
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("retains bounded OpenAI chat parameters without retaining unknown knobs", () => {
+    expect(
+      OpenAiChatCompletionRequestSchema.parse({
+        model: "gpt-compatible",
+        messages: [{ role: "user", content: "hello" }],
+        temperature: 0.4,
+        top_p: 0.8,
+        max_tokens: 512,
+        reasoning_effort: "high",
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "answer",
+            schema: { type: "object" },
+            strict: true,
+          },
+        },
+        presence_penalty: 1,
+      }),
+    ).toEqual({
+      model: "gpt-compatible",
+      messages: [{ role: "user", content: "hello" }],
+      sampling: { temperature: 0.4, topP: 0.8, maxTokens: 512 },
+      reasoning: { effort: "high" },
+      structuredOutput: {
+        type: "json_schema",
+        name: "answer",
+        schema: { type: "object" },
+        strict: true,
+      },
+    });
+  });
+
   it("keeps response-side version diff fields forward compatible", () => {
     expect(
       versionDiffSchema.safeParse({
@@ -155,8 +263,13 @@ describe("Romeo HTTP contracts", () => {
         agentId: "agent_1",
         content: "Retry",
         parentMessageId: "msg_1",
+        reasoningPolicy: {
+          schemaVersion: 1,
+          mode: "auto",
+          effort: "high",
+        },
       }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       StartRunSchema.safeParse({
         chatId: "chat_1",

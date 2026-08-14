@@ -1,3 +1,4 @@
+import { Button } from "@romeo/ui";
 import type { ReactNode } from "react";
 
 /**
@@ -21,13 +22,14 @@ export function ResourceRow(props: {
       data-selected={props.selected === true ? "true" : undefined}
     >
       {interactive ? (
-        <button
+        <Button
           className="rm-resource-row__main"
           onClick={props.onSelect}
           type="button"
+          variant="ghost"
         >
           <ResourceRowCopy {...copyProps(props)} />
-        </button>
+        </Button>
       ) : (
         <div className="rm-resource-row__main">
           <ResourceRowCopy {...copyProps(props)} />

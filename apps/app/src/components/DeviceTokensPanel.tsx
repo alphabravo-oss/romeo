@@ -1,15 +1,14 @@
 import { Input, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import {
-  createDeviceAuthorization,
+  createDeviceAuthorizationMutationOptions,
   type CreateDeviceAuthorizationRequest,
   type CreatedDeviceAuthorization,
   type DeviceAuthorization,
-  listDeviceAuthorizations,
-  revokeDeviceAuthorization,
+  revokeDeviceAuthorizationMutationOptions,
 } from "../features/device-authorizations";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
@@ -19,6 +18,7 @@ import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const col = createColumnHelper<DeviceAuthorization>();
 
@@ -41,17 +41,19 @@ function authorizationStatus(
 }
 
 export function DeviceTokensPanel() {
-  const queryClient = useQueryClient();
   const { t } = useLocale();
+  const inventoriedTable = useInventoriedServerTable<DeviceAuthorization>(
+    "device_tokens",
+  );
   const { ask, dialog } = useConfirm();
   const [addOpen, setAddOpen] = useState(false);
   const [created, setCreated] = useState<CreatedDeviceAuthorization>();
-  const tokensQuery = useQuery({
-    queryKey: ["deviceAuthorizations"],
-    queryFn: listDeviceAuthorizations,
-  });
-  const createMutation = useMutation({ mutationFn: createDeviceAuthorization });
-  const revokeMutation = useMutation({ mutationFn: revokeDeviceAuthorization });
+  const createMutation = useMutation(
+    createDeviceAuthorizationMutationOptions(),
+  );
+  const revokeMutation = useMutation(
+    revokeDeviceAuthorizationMutationOptions(),
+  );
 
   const tokenForm = useForm({
     defaultValues: {
@@ -67,9 +69,7 @@ export function DeviceTokensPanel() {
           ttlDays: value.ttlDays,
         });
         setCreated(result);
-        await queryClient.invalidateQueries({
-          queryKey: ["deviceAuthorizations"],
-        });
+        createMutation.reset();
         toast(t("deviceTokensCreated"), "success");
         setAddOpen(false);
         tokenForm.reset();
@@ -91,9 +91,6 @@ export function DeviceTokensPanel() {
       return;
     try {
       await revokeMutation.mutateAsync(deviceAuthorizationId);
-      await queryClient.invalidateQueries({
-        queryKey: ["deviceAuthorizations"],
-      });
       toast(t("deviceTokensRevokedToast"), "success");
     } catch {
       toast(t("deviceTokensCouldNotRevoke"), "error");
@@ -173,8 +170,16 @@ export function DeviceTokensPanel() {
       title={t("deviceTokensTitle")}
     >
       {created ? (
-        <div className="mt-3 grid gap-2 rounded-md border border-border p-2 text-sm">
-          <div className="text-muted">{t("deviceTokensStoreNow")}</div>
+        <div
+          className="mt-3 grid gap-2 rounded-md border border-border p-2 text-sm"
+          role="status"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-muted">{t("deviceTokensStoreNow")}</div>
+            <Button onClick={() => setCreated(undefined)} type="button">
+              {t("dismiss")}
+            </Button>
+          </div>
           <div>
             <div className="text-muted">{t("deviceTokensAccessToken")}</div>
             <div className="break-all font-mono">{created.accessToken}</div>
@@ -187,29 +192,39 @@ export function DeviceTokensPanel() {
       ) : null}
 
       <PanelState
-        query={tokensQuery}
+        query={inventoriedTable.query}
         empty={t("deviceTokensNone")}
         emptyAction={
           <AddButton onClick={() => setAddOpen(true)}>
             {t("deviceTokensAdd")}
           </AddButton>
         }
+        isEmpty={() =>
+          inventoriedTable.rows.length === 0 &&
+          inventoriedTable.isFirstPage &&
+          inventoriedTable.search.trim() === ""
+        }
       >
-        {(rows) => (
+        {() => (
           <div className="grid gap-4">
             <StatRow
               items={[
-                { label: t("deviceTokensTotal"), value: rows.length },
+                {
+                  label: t("deviceTokensTotal"),
+                  value: inventoriedTable.estimatedTotal,
+                },
                 {
                   label: t("deviceTokensRevokedExpired"),
-                  value: rows.filter((r) => authorizationStatus(r) !== "active")
-                    .length,
+                  value: inventoriedTable.rows.filter(
+                    (row) => authorizationStatus(row) !== "active",
+                  ).length,
                 },
               ]}
             />
             <DataTable
+              serverState={inventoriedTable.serverState}
               columns={columns}
-              data={rows}
+              data={inventoriedTable.rows}
               empty={t("deviceTokensNone")}
             />
           </div>
@@ -252,7 +267,7 @@ export function DeviceTokensPanel() {
                   value={field.state.value}
                 />
                 {field.state.meta.errors.length ? (
-                  <div className="rm-composer-error">
+                  <div className="rm-composer-error" role="alert">
                     {field.state.meta.errors.join(", ")}
                   </div>
                 ) : null}

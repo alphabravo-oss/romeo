@@ -21,5 +21,6 @@ export * from "./tenant-administration";
 export * from "./tool-approvals";
 export * from "./tool-connectors";
 export * from "./tools";
+export * from "./trust-compute";
 export * from "./voices";
 export * from "./webhooks";

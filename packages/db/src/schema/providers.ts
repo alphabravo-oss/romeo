@@ -99,6 +99,16 @@ export const baseModels = pgTable(
       table.orgId,
       table.providerId,
     ),
+    baseModelsOrgCreatedIdIdx: index("base_models_org_created_id_idx").on(
+      table.orgId,
+      table.createdAt,
+      table.id,
+    ),
+    baseModelsOrgDisplayNameIdx: index("base_models_org_display_name_idx").on(
+      table.orgId,
+      table.displayName,
+      table.id,
+    ),
     baseModelsProviderNameIdx: uniqueIndex("base_models_provider_name_idx").on(
       table.providerId,
       table.name,

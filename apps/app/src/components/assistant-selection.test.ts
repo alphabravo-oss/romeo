@@ -82,8 +82,6 @@ describe("chat author names (base model + custom model)", () => {
     expect(
       resolveChatAuthorNames({
         agentName: "Support bot",
-        assistantsEnabled: true,
-        fallbackName: "Custom model",
         modelDisplayName: "Kimi K2.5",
       }),
     ).toEqual({ nextTurn: "Support bot", transcript: "Support bot" });
@@ -93,8 +91,6 @@ describe("chat author names (base model + custom model)", () => {
     expect(
       resolveChatAuthorNames({
         agentName: "Romeo Assistant",
-        assistantsEnabled: true,
-        fallbackName: "Custom model",
         modelDisplayName: "Kimi K2.5",
       }),
     ).toEqual({ nextTurn: "Kimi K2.5", transcript: undefined });
@@ -104,8 +100,6 @@ describe("chat author names (base model + custom model)", () => {
     expect(
       resolveChatAuthorNames({
         agentName: "Kimi K2.5",
-        assistantsEnabled: true,
-        fallbackName: "Custom model",
         modelDisplayName: "Kimi K2.5",
       }),
     ).toEqual({ nextTurn: "Kimi K2.5", transcript: undefined });
@@ -115,8 +109,6 @@ describe("chat author names (base model + custom model)", () => {
     expect(
       resolveChatAuthorNames({
         agentName: "Support bot",
-        assistantsEnabled: true,
-        fallbackName: "Custom model",
         modelDisplayName: undefined,
       }),
     ).toEqual({ nextTurn: "Support bot", transcript: "Support bot" });
@@ -126,19 +118,15 @@ describe("chat author names (base model + custom model)", () => {
     expect(
       resolveChatAuthorNames({
         agentName: undefined,
-        assistantsEnabled: true,
-        fallbackName: "Custom model",
         modelDisplayName: undefined,
       }),
     ).toEqual({ nextTurn: undefined, transcript: undefined });
   });
 
-  it("ignores dual-mode flag for labeling", () => {
+  it("prefers the custom model over the base model", () => {
     expect(
       resolveChatAuthorNames({
         agentName: "Support bot",
-        assistantsEnabled: false,
-        fallbackName: "Custom model",
         modelDisplayName: "DeepSeek V3",
       }),
     ).toEqual({ nextTurn: "Support bot", transcript: "Support bot" });

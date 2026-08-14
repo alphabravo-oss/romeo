@@ -1,7 +1,9 @@
 import {
+  createEvalCaseFromFeedbackRoute,
   createEvalSuiteRoute,
   getEvalDashboardRoute,
   getEvalReleaseCandidateEvidenceRoute,
+  getEvalReasoningComparisonRoute,
   listEvalRatingsRoute,
   listEvalResultsRoute,
   listEvalRunsRoute,
@@ -42,6 +44,22 @@ export function registerEvalRoutes(app: RomeoApi): void {
     return context.json({ data }, 201);
   });
 
+  app.openapi(createEvalCaseFromFeedbackRoute, async (context) => {
+    const body = context.req.valid("json");
+    const data = await context
+      .get("services")
+      .evals.createCaseFromMessageFeedback({
+        subject: context.get("subject"),
+        agentId: body.agentId,
+        chatId: body.chatId,
+        messageId: body.messageId,
+        ...(body.suiteId === undefined ? {} : { suiteId: body.suiteId }),
+        ...(body.suiteName === undefined ? {} : { suiteName: body.suiteName }),
+      });
+    if (data.created) return context.json({ data }, 201);
+    return context.json({ data }, 200);
+  });
+
   app.openapi(listEvalRunsRoute, async (context) => {
     const subject = context.get("subject");
     const data = await context
@@ -76,8 +94,21 @@ export function registerEvalRoutes(app: RomeoApi): void {
       subject,
       suiteId: context.req.valid("param").suiteId,
       ...(body.modelId !== undefined ? { modelId: body.modelId } : {}),
+      ...(body.reasoningPolicy === undefined
+        ? {}
+        : { reasoningPolicy: body.reasoningPolicy }),
     });
     return context.json({ data }, 202);
+  });
+
+  app.openapi(getEvalReasoningComparisonRoute, async (context) => {
+    const data = await context
+      .get("services")
+      .evals.reasoningComparison(
+        context.get("subject"),
+        context.req.valid("param").suiteId,
+      );
+    return context.json({ data });
   });
 
   app.openapi(listEvalResultsRoute, async (context) => {

@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   canSelectWorkspace,
   resolveWorkspaceSelection,
+  switchWorkspaceRouteSearch,
   visibleWorkspaces,
+  withWorkspaceRouteSearch,
 } from "./workspace-selection";
 
 const alpha = { id: "workspace_alpha", name: "Alpha" };
@@ -29,13 +31,35 @@ describe("workspace selection membership", () => {
     expect(canSelectWorkspace("workspace_beta", visible)).toBe(true);
   });
 
+  it("preserves route state on normalization and clears resource state on switch", () => {
+    const deepLink = {
+      agent: "agent-a",
+      chat: "chat-a",
+      leaf: "message-a",
+      workspace: "workspace-a",
+    };
+    expect(withWorkspaceRouteSearch(deepLink, "workspace-a")).toEqual(deepLink);
+    expect(switchWorkspaceRouteSearch(deepLink, "workspace-b")).toEqual({
+      workspace: "workspace-b",
+    });
+    expect(
+      withWorkspaceRouteSearch(
+        { section: "members", workspace: "workspace-a" },
+        "workspace-b",
+      ),
+    ).toEqual({ section: "members", workspace: "workspace-b" });
+  });
+
   it("keeps an allowed selection and treats a missing allowlist as empty", () => {
     expect(visibleWorkspaces(listed, undefined)).toEqual([]);
     expect(
       resolveWorkspaceSelection({
         persistedId: "workspace_alpha",
         selectedId: "workspace_beta",
-        workspaces: visibleWorkspaces(listed, ["workspace_alpha", "workspace_beta"]),
+        workspaces: visibleWorkspaces(listed, [
+          "workspace_alpha",
+          "workspace_beta",
+        ]),
       }),
     ).toBe("workspace_beta");
   });

@@ -1,6 +1,7 @@
 import type { QuotaCoordinator } from "./quota-coordination";
 import type { SecretResolver } from "./secret-resolver";
 import type { WebhookEmitter } from "./webhook-service";
+import type { CapabilityService } from "./capability-resolver";
 import { dnsPinnedFetch, type DnsPinnedFetch } from "./dns-pinned-fetch";
 import {
   assertConnectorHostAllowed,
@@ -16,6 +17,7 @@ import {
 } from "./web-search-support";
 
 export interface WebSearchServiceOptions {
+  capabilities?: CapabilityService;
   fetchImpl?: typeof fetch;
   hostLookup?: WebsiteConnectorHostLookup;
   pinnedFetchImpl?: DnsPinnedFetch;

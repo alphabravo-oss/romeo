@@ -7,6 +7,7 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
+import { enforceContentPolicyText } from "./content-policy-service";
 import { getAuthorizedChat } from "./chat-access";
 import { publicQueuedTurn, type QueuedChatTurn } from "./run-command-service";
 import { isTerminalRunStatus } from "./run-recovery-service";
@@ -76,7 +77,7 @@ export class RunQueueService {
   async enqueue(
     input: Omit<
       StartRunInput,
-      "attachments" | "fileIds" | "historyBoundaryMessageId" | "parentMessageId"
+      "attachments" | "fileIds" | "historyBoundaryMessageId"
     > & { idempotencyKey?: string },
   ): Promise<QueuedChatTurn> {
     const chat = await getAuthorizedChat(this.repository, {
@@ -85,6 +86,16 @@ export class RunQueueService {
       scope: "chats:write",
       permission: "write",
     });
+    const governedPrompt = await enforceContentPolicyText(
+      this.repository,
+      input.subject,
+      input.content,
+    );
+    if (typeof input.parentMessageId === "string") {
+      const parent = await this.repository.getMessage(input.parentMessageId);
+      if (parent === undefined || parent.chatId !== chat.id)
+        throw notFound("Message");
+    }
     const createdBy = await persistedSubjectActorId(
       this.repository,
       input.subject,
@@ -97,7 +108,7 @@ export class RunQueueService {
       workspaceId: chat.workspaceId,
       chatId: input.chatId,
       agentId: input.agentId,
-      content: input.content,
+      content: governedPrompt.content,
       createdBy,
       principalId: input.subject.id,
       principalType: input.subject.type,
@@ -108,6 +119,14 @@ export class RunQueueService {
       createdAt: now,
       updatedAt: now,
       ...(input.modelId === undefined ? {} : { modelId: input.modelId }),
+      ...(input.routingMode === "economy" ? { routingMode: "economy" } : {}),
+      ...(input.researchMode === "deep" ? { researchMode: "deep" } : {}),
+      ...(input.reasoningPolicy === undefined
+        ? {}
+        : { reasoningPolicy: input.reasoningPolicy }),
+      ...(input.parentMessageId === undefined
+        ? {}
+        : { parentMessageId: input.parentMessageId }),
       ...(input.webSearch === undefined ? {} : { webSearch: input.webSearch }),
       ...(input.agenticRag === undefined
         ? {}
@@ -120,7 +139,10 @@ export class RunQueueService {
         turn.chatId,
         turn.idempotencyKey,
       );
-      if (existing !== undefined) return existing;
+      if (existing !== undefined) {
+        assertSameReasoningPolicy(existing, turn);
+        return existing;
+      }
       const current = (
         await repository.listQueuedChatTurns(input.chatId)
       ).filter((item) => item.status === "queued" || item.status === "leased");
@@ -130,7 +152,9 @@ export class RunQueueService {
           "A chat can queue at most 20 turns.",
           409,
         );
-      return repository.createQueuedChatTurn(turn);
+      const stored = await repository.createQueuedChatTurn(turn);
+      assertSameReasoningPolicy(stored, turn);
+      return stored;
     });
     void this.drain(input.chatId);
     return publicQueuedTurn(created);
@@ -221,6 +245,18 @@ export class RunQueueService {
           agentId: next.agentId,
           content: next.content,
           ...(next.modelId === undefined ? {} : { modelId: next.modelId }),
+          ...(next.routingMode === undefined
+            ? {}
+            : { routingMode: next.routingMode }),
+          ...(next.researchMode === undefined
+            ? {}
+            : { researchMode: next.researchMode }),
+          ...(next.reasoningPolicy === undefined
+            ? {}
+            : { reasoningPolicy: next.reasoningPolicy }),
+          ...(next.parentMessageId === undefined
+            ? {}
+            : { parentMessageId: next.parentMessageId }),
           ...(next.webSearch === undefined
             ? {}
             : { webSearch: next.webSearch }),
@@ -272,4 +308,30 @@ export class RunQueueService {
       this.drainingChats.delete(chatId);
     }
   }
+}
+
+function assertSameReasoningPolicy(
+  left: PersistedQueuedChatTurn,
+  right: PersistedQueuedChatTurn,
+): void {
+  if (policyKey(left.reasoningPolicy) === policyKey(right.reasoningPolicy))
+    return;
+  throw new ApiError(
+    "idempotency_key_conflict",
+    "The idempotency key was already used for a different request.",
+    409,
+  );
+}
+
+function policyKey(policy: PersistedQueuedChatTurn["reasoningPolicy"]): string {
+  if (policy === undefined) return "absent";
+  if (policy.mode === "off") return "1|off";
+  return [
+    "1",
+    policy.mode,
+    policy.effort ?? "",
+    policy.maxReasoningTokens ?? "",
+    policy.mode === "summary" ? (policy.summaryDetail ?? "") : "",
+    policy.mode === "summary" ? String(policy.retainSummary) : "",
+  ].join("|");
 }

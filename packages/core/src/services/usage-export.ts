@@ -1,4 +1,10 @@
 import type { UsageEvent } from "../domain/entities";
+import { USAGE_METRIC_DEFINITIONS } from "../usage-taxonomy";
+import { isUsageMetricCode } from "../usage-taxonomy-validation";
+import {
+  recordedUsageCostUsd,
+  selectUsageCostEventIds,
+} from "./usage-cost-reconciliation";
 
 const usageCsvColumns = [
   "id",
@@ -14,24 +20,40 @@ const usageCsvColumns = [
   "modelId",
   "agentId",
   "estimatedCostUsd",
+  "measurement",
+  "overlapPolicy",
+  "billable",
+  "costSelected",
+  "reconciledCostUsd",
 ] as const;
 
 export function formatUsageEventsCsv(events: UsageEvent[]): string {
-  const rows = events.map((event) => [
-    event.id,
-    event.createdAt,
-    event.actorId,
-    event.workspaceId ?? "",
-    event.sourceType,
-    event.sourceId,
-    event.metric,
-    event.quantity,
-    event.unit,
-    stringMetadata(event, "providerId"),
-    stringMetadata(event, "modelId"),
-    stringMetadata(event, "agentId"),
-    numberMetadata(event, "estimatedCostUsd"),
-  ]);
+  const costEventIds = selectUsageCostEventIds(events);
+  const rows = events.map((event) => {
+    const definition = isUsageMetricCode(event.metric)
+      ? USAGE_METRIC_DEFINITIONS[event.metric]
+      : undefined;
+    return [
+      event.id,
+      event.createdAt,
+      event.actorId,
+      event.workspaceId ?? "",
+      event.sourceType,
+      event.sourceId,
+      event.metric,
+      event.quantity,
+      event.unit,
+      stringMetadata(event, "providerId"),
+      stringMetadata(event, "modelId"),
+      stringMetadata(event, "agentId"),
+      numberMetadata(event, "estimatedCostUsd"),
+      definition?.measurement ?? "",
+      definition?.overlapPolicy ?? "",
+      definition === undefined ? "" : String(definition.billable),
+      String(costEventIds.has(event.id)),
+      costEventIds.has(event.id) ? (recordedUsageCostUsd(event) ?? "") : "",
+    ];
+  });
   return [usageCsvColumns, ...rows]
     .map((row) => row.map(csvCell).join(","))
     .join("\n");

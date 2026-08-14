@@ -1,5 +1,10 @@
-import { exportAuditLogsRoute, listAuditLogsRoute } from "@romeo/contracts";
+import {
+  exportAuditLogsRoute,
+  listAuditLogsRoute,
+  queryAuditLogsRoute,
+} from "@romeo/contracts";
 import type { RomeoApi } from "../context";
+import { assertCapabilityFlagEnabled } from "../../services/capability-flag-enforcement";
 import type {
   AuditLogFilter,
   AuditLogPageOptions,
@@ -18,6 +23,18 @@ export function registerAuditRoutes(app: RomeoApi): void {
     return page.nextCursor !== undefined
       ? context.json({ data: page.data, nextCursor: page.nextCursor })
       : context.json({ data: page.data });
+  });
+
+  app.openapi(queryAuditLogsRoute, async (context) => {
+    await assertCapabilityFlagEnabled(
+      context.get("services").capabilityFlags,
+      context.get("subject"),
+      "server_table_v2",
+    );
+    const page = await context
+      .get("services")
+      .audit.queryTable(context.get("subject"), context.req.valid("json"));
+    return context.json(page);
   });
 
   app.openapi(exportAuditLogsRoute, async (context) => {

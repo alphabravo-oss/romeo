@@ -34,6 +34,9 @@ const paths = {
   tenantIsolation:
     argValue("--tenant-isolation") ??
     "dist/ci/tenant-isolation-negative-suite.json",
+  programRequirements:
+    argValue("--program-requirements") ??
+    "docs/release/evidence-requirements.json",
 };
 const outputPath = repoPath(
   argValue("--output") ?? "dist/release/ga-evidence-bundle.json",
@@ -87,6 +90,11 @@ const tenantIsolation = jsonEvidence(
   paths.tenantIsolation,
   requireTenantIsolation,
 );
+const programRequirements = jsonEvidence(
+  "program_evidence_requirements",
+  paths.programRequirements,
+  true,
+);
 const extraEvidence = extraEvidencePaths.map((path, index) =>
   jsonEvidence(`extra_${index + 1}`, path, false),
 );
@@ -94,6 +102,7 @@ const extraEvidence = extraEvidencePaths.map((path, index) =>
 validateReleaseEvidence();
 validateChecklistEvidence();
 validateSupportEvidence();
+validateProgramRequirements();
 validateRedaction();
 
 const allEvidence = [
@@ -109,6 +118,7 @@ const allEvidence = [
   supportRedaction,
   docsCommandCheck,
   tenantIsolation,
+  programRequirements,
   ...extraEvidence,
 ].filter((item) => item.file.present);
 
@@ -193,6 +203,12 @@ const bundle = {
     supportRedaction: supportRedaction.file,
     docsCommandCheck: docsCommandCheck.file,
     tenantIsolation: tenantIsolation.file,
+  },
+  programEvidence: {
+    requirements: programRequirements.file,
+    categoryIds: programEvidenceCategoryIds(programRequirements.json),
+    categoryCount: programEvidenceCategoryIds(programRequirements.json).length,
+    evidenceBodiesIncluded: false,
   },
   extraEvidence: extraEvidence.map((item) => item.file),
   inventory: {
@@ -503,6 +519,37 @@ function validateSupportEvidence() {
   );
 }
 
+function validateProgramRequirements() {
+  check(
+    "program evidence requirements schema is valid",
+    programRequirements.json?.schemaVersion ===
+      "romeo.program-evidence-requirements.v1",
+    { code: "program_evidence_requirements_schema_invalid" },
+  );
+  const expected = [
+    "browser_matrix",
+    "capability_posture",
+    "load_results",
+    "migration_level",
+    "provider_probes",
+    "rollback_rehearsal",
+    "security_scans",
+  ];
+  check(
+    "program evidence requirements cover every roadmap category",
+    programEvidenceCategoryIds(programRequirements.json).join("\n") ===
+      expected.join("\n"),
+    { code: "program_evidence_requirements_categories_invalid" },
+  );
+  check(
+    "program evidence requirements contain no evidence bodies",
+    programRequirements.json?.privacy?.evidenceBodiesIncluded === false &&
+      programRequirements.json?.privacy?.rawContentAllowed === false &&
+      programRequirements.json?.privacy?.secretValuesAllowed === false,
+    { code: "program_evidence_requirements_privacy_invalid" },
+  );
+}
+
 function validateDocsCommandCheckRedaction() {
   if (!docsCommandCheck.file.present) return;
   check(
@@ -573,6 +620,7 @@ function validateRedaction() {
       supportRedaction.file,
       docsCommandCheck.file,
       tenantIsolation.file,
+      programRequirements.file,
       ...extraEvidence.map((item) => item.file),
     ],
     release: {
@@ -685,6 +733,16 @@ function blockedGateIds(json) {
   return json.gates
     .filter((gate) => gate?.status === "blocked")
     .map((gate) => String(gate.id))
+    .sort();
+}
+
+function programEvidenceCategoryIds(json) {
+  if (!Array.isArray(json?.categories)) return [];
+  return json.categories
+    .map((category) =>
+      typeof category?.id === "string" ? category.id : undefined,
+    )
+    .filter((value) => value !== undefined)
     .sort();
 }
 

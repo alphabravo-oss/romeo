@@ -35,5 +35,7 @@
   "navWorkflows": "Workflows",
   "navWebhooks": "Webhooks",
   "navNotifications": "Notifications",
-  "navConnectedApps": "Connected apps"
+  "navConnectedApps": "Connected apps",
+  "navCapabilities": "Capabilities",
+  "navComputeTrust": "Compute & trust"
 }

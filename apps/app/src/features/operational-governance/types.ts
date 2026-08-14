@@ -1,8 +1,13 @@
-import type { OperationalGovernanceListAuditLogsData } from "@romeo/api-client/generated/sdk";
+import type {
+  OperationalGovernanceListAuditLogsData,
+  OperationalGovernanceQueryAuditLogsData,
+} from "@romeo/api-client/generated/sdk";
 
 export type {
   AuditLog,
   AuditLogPage,
+  AuditLogTablePage,
+  AuditLogTableQuery,
   CreateQuotaBucketRequest,
   QuotaBucket,
   QuotaCoordinationStatus,
@@ -16,3 +21,6 @@ export type {
 export type AuditLogFilter = NonNullable<
   OperationalGovernanceListAuditLogsData["query"]
 >;
+
+export type AuditLogTableRequest =
+  OperationalGovernanceQueryAuditLogsData["body"];

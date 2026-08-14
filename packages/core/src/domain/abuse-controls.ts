@@ -78,3 +78,21 @@ export interface UpdateAbuseControlPolicyRequest {
     workerClasses?: string[];
   };
 }
+
+export interface AbuseControlSimulationRequest {
+  action: AbuseControlAction;
+  agentId?: string;
+  connectorId?: string;
+  providerId?: string;
+  toolId?: string;
+  workerClass?: string;
+  workspaceId?: string;
+}
+
+export interface AbuseControlSimulationResult {
+  allowed: boolean;
+  action: AbuseControlAction;
+  reasonCodes: AbuseControlBlockReason[];
+  evaluatedAt: string;
+  policySource: "default" | "org";
+}

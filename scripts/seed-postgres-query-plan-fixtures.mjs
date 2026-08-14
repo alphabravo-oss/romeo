@@ -26,6 +26,7 @@ if (!dryRun && databaseUrlValue === undefined) readDatabaseUrl();
 const connection = new URL(databaseUrl);
 const database = postgresEnvironment(databaseUrl).PGDATABASE;
 const chatCount = argInteger("--chat-count", 100_000);
+const auditCount = argInteger("--audit-count", 1_000_000);
 const outputValue = argValue("--output");
 const output =
   outputValue === undefined
@@ -37,6 +38,11 @@ const output =
 if (chatCount < 100_000) {
   throw new Error(
     "--chat-count must be at least 100000 for representative evidence.",
+  );
+}
+if (auditCount < 1_000_000) {
+  throw new Error(
+    "--audit-count must be at least 1000000 for representative evidence.",
   );
 }
 
@@ -64,6 +70,7 @@ if (dryRun) {
       chats: chatCount,
       messages: chatCount,
       messageParts: chatCount,
+      auditLogs: auditCount,
     },
     generatedCustomerData: false,
     rawFixtureContentPersistedInEvidence: false,
@@ -72,7 +79,7 @@ if (dryRun) {
   process.exit(0);
 }
 
-const sql = fixtureSql(chatCount);
+const sql = fixtureSql(chatCount, auditCount);
 runPostgresCommandCapture({
   command,
   args: [
@@ -102,7 +109,8 @@ const counts = JSON.parse(
       `SELECT json_build_object(
         'chats', (SELECT count(*) FROM chats),
         'messages', (SELECT count(*) FROM messages),
-        'messageParts', (SELECT count(*) FROM message_parts)
+        'messageParts', (SELECT count(*) FROM message_parts),
+        'auditLogs', (SELECT count(*) FROM audit_logs)
       );`,
     ],
     databaseUrl,
@@ -115,7 +123,8 @@ const evidence = {
   status:
     counts.chats >= 100_000 &&
     counts.messages >= 100_000 &&
-    counts.messageParts >= 100_000
+    counts.messageParts >= 100_000 &&
+    counts.auditLogs >= 1_000_000
       ? "passed"
       : "failed",
   classification: {
@@ -141,7 +150,7 @@ if (output !== undefined) {
   console.log(`Wrote query-plan fixture evidence to ${output}`);
 }
 
-function fixtureSql(count) {
+function fixtureSql(count, auditRows) {
   return `
     INSERT INTO organizations (id, name, slug)
     VALUES ('org_default', 'Synthetic query-plan organization', 'synthetic-query-plan')
@@ -204,8 +213,32 @@ function fixtureSql(count) {
     FROM generate_series(1, ${count}) AS series
     ON CONFLICT (id) DO UPDATE SET metadata = EXCLUDED.metadata;
 
+    INSERT INTO audit_logs (
+      id, org_id, actor_id, action, resource_type, resource_id, outcome,
+      metadata, created_at
+    )
+    SELECT
+      'query_plan_audit_' || lpad(series::text, 7, '0'),
+      'org_default',
+      'user_dev_admin',
+      CASE WHEN series % 10007 = 0
+        THEN 'admin.romeo-audit-search-marker.' || series
+        ELSE 'admin.synthetic.audit.' || series
+      END,
+      'synthetic_resource',
+      'query_plan_resource_' || series,
+      'success',
+      '{}'::jsonb,
+      TIMESTAMPTZ '2026-01-01T00:00:00Z' + series * INTERVAL '1 second'
+    FROM generate_series(1, ${auditRows}) AS series
+    ON CONFLICT (id) DO UPDATE SET
+      action = EXCLUDED.action,
+      resource_id = EXCLUDED.resource_id,
+      created_at = EXCLUDED.created_at;
+
     ANALYZE chats;
     ANALYZE messages;
     ANALYZE message_parts;
+    ANALYZE audit_logs;
   `;
 }

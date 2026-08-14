@@ -6,6 +6,29 @@ export function formatAdminAnalyticsSummaryCsv(
   const rows: string[][] = [
     ["category", "dimension", "id", "metric", "value"],
     ["overall", "org", summary.orgId, "status", summary.status],
+    [
+      "adoption",
+      "org",
+      summary.orgId,
+      "active_users",
+      String(summary.adoption.activeUserCount),
+    ],
+    [
+      "adoption",
+      "org",
+      summary.orgId,
+      "engaged_users",
+      String(summary.adoption.engagedUserCount),
+    ],
+    [
+      "adoption",
+      "org",
+      summary.orgId,
+      "feedback_positive_rate",
+      summary.adoption.feedback.positiveRate === null
+        ? ""
+        : String(summary.adoption.feedback.positiveRate),
+    ],
     ["window", "org", summary.orgId, "from", summary.window.from ?? ""],
     ["window", "org", summary.orgId, "to", summary.window.to],
     ["eval", "org", summary.orgId, "status", summary.evals.status],
@@ -86,13 +109,7 @@ export function formatAdminAnalyticsSummaryCsv(
       "critical_alert_count",
       String(summary.jobs.criticalAlertCount),
     ],
-    [
-      "job",
-      "org",
-      summary.orgId,
-      "failed",
-      String(summary.jobs.failed),
-    ],
+    ["job", "org", summary.orgId, "failed", String(summary.jobs.failed)],
     [
       "tool",
       "org",

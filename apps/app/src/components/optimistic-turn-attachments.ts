@@ -1,5 +1,6 @@
 import { fileContentUrl } from "../features";
 import type { Message } from "../features/types";
+import { readyDocuments, readyImages } from "./composer-tray-lifecycle";
 import type {
   PendingDocumentAttachment,
   PendingImageAttachment,
@@ -20,7 +21,7 @@ export function optimisticTurnAttachments(
   documents: readonly PendingDocumentAttachment[],
 ): Message["attachments"] {
   return [
-    ...images.map((attachment) => ({
+    ...readyImages(images).map((attachment) => ({
       id: attachment.id,
       messageId: attachment.id,
       fileName: attachment.fileName,
@@ -30,7 +31,7 @@ export function optimisticTurnAttachments(
       retainedInContext: true,
       previewUrl: attachment.previewUrl,
     })),
-    ...documents.map((attachment) => ({
+    ...readyDocuments(documents).map((attachment) => ({
       id: attachment.id,
       messageId: attachment.id,
       fileName: attachment.fileName,

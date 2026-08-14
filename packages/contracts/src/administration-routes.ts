@@ -14,6 +14,7 @@ import {
   listGroupsRoute,
   listServiceAccountsRoute,
   listUsersRoute,
+  queryUsersRoute,
   removeGroupMemberRoute,
   revokeApiKeyRoute,
   setUserLocalPasswordRoute,
@@ -22,6 +23,7 @@ import {
 
 export const administrationRoutes = [
   listUsersRoute,
+  queryUsersRoute,
   disableUserRoute,
   updateUserRoleRoute,
   setUserLocalPasswordRoute,

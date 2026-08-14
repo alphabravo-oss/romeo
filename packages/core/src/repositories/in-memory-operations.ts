@@ -3,21 +3,55 @@ import type * as Auth from "@romeo/auth";
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
 import { append, removeById, replaceById } from "./collection-helpers";
+import {
+  applyWorkerLease,
+  compareWebhookDeliveries,
+  payloadEquals,
+  readWorkerLease,
+  renewWorkerLease,
+} from "./in-memory-operation-helpers";
 import { listSeedResourceGrants } from "./resource-grants";
-import { InMemoryRunRepository } from "./in-memory-run";
+import { InMemoryIdempotencyRepository } from "./in-memory-idempotency";
+import { assertUsageEventTaxonomy } from "../usage-taxonomy-validation";
+import { assertUsageEventUpdate } from "../usage-taxonomy-update";
 
-export abstract class InMemoryOperationsRepository extends InMemoryRunRepository {
+export abstract class InMemoryOperationsRepository extends InMemoryIdempotencyRepository {
   async listUsageEvents(orgId: string): Promise<E.UsageEvent[]> {
     return this.data.usageEvents
       .filter((event) => event.orgId === orgId)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
+  async listUsageEventsForRun(
+    orgId: string,
+    workspaceId: string,
+    runId: string,
+    limit: number,
+  ): Promise<E.UsageEvent[]> {
+    return this.data.usageEvents
+      .filter(
+        (event) =>
+          event.orgId === orgId &&
+          event.workspaceId === workspaceId &&
+          event.sourceType === "run" &&
+          event.sourceId === runId,
+      )
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, Math.max(0, limit));
+  }
+
   async createUsageEvent(event: E.UsageEvent): Promise<E.UsageEvent> {
+    assertUsageEventTaxonomy(event);
     return append(this.data.usageEvents, event);
   }
 
   async updateUsageEvent(event: E.UsageEvent): Promise<E.UsageEvent> {
+    const current = this.data.usageEvents.find(
+      (candidate) => candidate.id === event.id,
+    );
+    if (current === undefined)
+      throw new Error(`Usage event ${event.id} does not exist.`);
+    assertUsageEventUpdate(current, event);
     this.data.usageEvents = this.data.usageEvents.map((candidate) =>
       candidate.id === event.id ? event : candidate,
     );
@@ -144,7 +178,106 @@ export abstract class InMemoryOperationsRepository extends InMemoryRunRepository
           (subscriptionId === undefined ||
             delivery.subscriptionId === subscriptionId),
       )
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+      .sort(compareWebhookDeliveries);
+  }
+
+  async listWebhookDeliveriesPage(
+    input: R.ListWebhookDeliveriesPageInput,
+  ): Promise<E.WebhookDelivery[]> {
+    return this.data.webhookDeliveries
+      .filter(
+        (delivery) =>
+          delivery.orgId === input.orgId &&
+          (input.subscriptionId === undefined ||
+            delivery.subscriptionId === input.subscriptionId) &&
+          (input.cursor === undefined ||
+            delivery.createdAt < input.cursor.createdAt ||
+            (delivery.createdAt === input.cursor.createdAt &&
+              delivery.id > input.cursor.id)),
+      )
+      .sort(compareWebhookDeliveries)
+      .slice(0, input.limit);
+  }
+
+  async claimWebhookDelivery(
+    input: R.ClaimWebhookDeliveryInput,
+  ): Promise<R.ClaimedWebhookDelivery | undefined> {
+    const delivery = this.data.webhookDeliveries.find(
+      (candidate) =>
+        candidate.id === input.deliveryId &&
+        candidate.orgId === input.orgId &&
+        candidate.status === "pending",
+    );
+    if (delivery === undefined || !this.leaseAvailable(delivery.id, input.now))
+      return undefined;
+    return this.claimDelivery(delivery, input);
+  }
+
+  async claimDueWebhookDeliveries(
+    input: R.ClaimDueWebhookDeliveriesInput,
+  ): Promise<R.ClaimedWebhookDelivery[]> {
+    return this.data.webhookDeliveries
+      .filter(
+        (delivery) =>
+          delivery.orgId === input.orgId &&
+          delivery.status === "failed" &&
+          delivery.nextAttemptAt !== undefined &&
+          delivery.nextAttemptAt <= input.now &&
+          delivery.attemptCount < input.maxAttempts &&
+          this.leaseAvailable(delivery.id, input.now),
+      )
+      .sort((left, right) =>
+        left.nextAttemptAt === right.nextAttemptAt
+          ? left.createdAt === right.createdAt
+            ? left.id.localeCompare(right.id)
+            : left.createdAt.localeCompare(right.createdAt)
+          : left.nextAttemptAt!.localeCompare(right.nextAttemptAt!),
+      )
+      .slice(0, input.limit)
+      .map((delivery) => this.claimDelivery(delivery, input));
+  }
+
+  async completeWebhookDeliveryAttempt(
+    input: R.CompleteWebhookDeliveryAttemptInput,
+  ): Promise<E.WebhookDelivery | undefined> {
+    const lease = this.webhookDeliveryLeases.get(input.delivery.id);
+    if (
+      lease === undefined ||
+      lease.leaseOwner !== input.leaseOwner ||
+      lease.leaseToken !== input.leaseToken ||
+      lease.leaseExpiresAt <= input.now
+    )
+      return undefined;
+    const current = this.data.webhookDeliveries.find(
+      (delivery) =>
+        delivery.id === input.delivery.id &&
+        delivery.orgId === input.delivery.orgId,
+    );
+    if (current === undefined) return undefined;
+    this.webhookDeliveryLeases.delete(input.delivery.id);
+    return replaceById(this.data.webhookDeliveries, input.delivery);
+  }
+
+  private leaseAvailable(deliveryId: string, now: string): boolean {
+    const lease = this.webhookDeliveryLeases.get(deliveryId);
+    return lease === undefined || lease.leaseExpiresAt <= now;
+  }
+
+  private claimDelivery(
+    delivery: E.WebhookDelivery,
+    input: {
+      leaseExpiresAt: string;
+      leaseOwner: string;
+      leaseToken: string;
+    },
+  ): R.ClaimedWebhookDelivery {
+    const lease = {
+      leaseExpiresAt: input.leaseExpiresAt,
+      leaseOwner: input.leaseOwner,
+      leaseToken: input.leaseToken,
+    };
+    this.webhookDeliveryLeases.set(delivery.id, lease);
+    return { delivery, ...lease };
   }
 
   async createWebhookDelivery(
@@ -264,6 +397,34 @@ export abstract class InMemoryOperationsRepository extends InMemoryRunRepository
     return this.data.billingPlans.find((plan) => plan.orgId === orgId);
   }
 
+  async acquireBillingSyncLock(_orgId: string): Promise<void> {}
+
+  async getBillingEventReceipt(
+    orgId: string,
+    provider: string,
+    eventId: string,
+  ): Promise<E.BillingEventReceipt | undefined> {
+    return this.data.billingEventReceipts.find(
+      (receipt) =>
+        receipt.orgId === orgId &&
+        receipt.provider === provider &&
+        receipt.eventId === eventId,
+    );
+  }
+
+  async createBillingEventReceipt(
+    receipt: E.BillingEventReceipt,
+  ): Promise<E.BillingEventReceipt> {
+    const existing = await this.getBillingEventReceipt(
+      receipt.orgId,
+      receipt.provider,
+      receipt.eventId,
+    );
+    if (existing !== undefined) return existing;
+    this.data.billingEventReceipts.push(receipt);
+    return receipt;
+  }
+
   async upsertBillingPlan(plan: E.BillingPlan): Promise<E.BillingPlan> {
     const index = this.data.billingPlans.findIndex(
       (item) => item.orgId === plan.orgId,
@@ -312,101 +473,4 @@ export abstract class InMemoryOperationsRepository extends InMemoryRunRepository
     }
     return deleted.reverse();
   }
-}
-
-function payloadEquals(
-  payload: Record<string, unknown>,
-  expected: Record<string, string> | undefined,
-): boolean {
-  if (expected === undefined) return true;
-  return Object.entries(expected).every(
-    ([key, value]) => payload[key] === value,
-  );
-}
-
-interface WorkerLeasePayload {
-  attempt: number;
-  claimedAt: string;
-  expiresAt: string;
-  leaseSeconds: number;
-  renewedAt: string;
-  workerId: string;
-}
-
-function applyWorkerLease(
-  job: E.BackgroundJob,
-  input: R.ClaimBackgroundJobInput,
-  now: string,
-): E.BackgroundJob {
-  const previousLease = readWorkerLease(job.payload);
-  return {
-    ...job,
-    status: "running",
-    payload: {
-      ...job.payload,
-      workerLease: {
-        attempt: (previousLease?.attempt ?? 0) + 1,
-        claimedAt: now,
-        expiresAt: leaseExpiresAt(now, input.leaseSeconds),
-        leaseSeconds: input.leaseSeconds,
-        renewedAt: now,
-        workerId: input.workerId,
-      },
-    },
-    updatedAt: now,
-  };
-}
-
-function renewWorkerLease(
-  job: E.BackgroundJob,
-  input: R.RenewBackgroundJobLeaseInput,
-  now: string,
-  lease: WorkerLeasePayload,
-): E.BackgroundJob {
-  return {
-    ...job,
-    payload: {
-      ...job.payload,
-      workerLease: {
-        ...lease,
-        expiresAt: leaseExpiresAt(now, input.leaseSeconds),
-        leaseSeconds: input.leaseSeconds,
-        renewedAt: now,
-      },
-    },
-    updatedAt: now,
-  };
-}
-
-function readWorkerLease(
-  payload: Record<string, unknown>,
-): WorkerLeasePayload | undefined {
-  const value = payload.workerLease;
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return undefined;
-  const lease = value as Partial<WorkerLeasePayload>;
-  if (
-    typeof lease.workerId !== "string" ||
-    typeof lease.claimedAt !== "string" ||
-    typeof lease.renewedAt !== "string" ||
-    typeof lease.expiresAt !== "string" ||
-    typeof lease.leaseSeconds !== "number" ||
-    typeof lease.attempt !== "number"
-  ) {
-    return undefined;
-  }
-  return {
-    attempt: lease.attempt,
-    claimedAt: lease.claimedAt,
-    expiresAt: lease.expiresAt,
-    leaseSeconds: lease.leaseSeconds,
-    renewedAt: lease.renewedAt,
-    workerId: lease.workerId,
-  };
-}
-
-function leaseExpiresAt(now: string, leaseSeconds: number): string {
-  return new Date(
-    Date.parse(now) + Math.max(1, leaseSeconds) * 1000,
-  ).toISOString();
 }

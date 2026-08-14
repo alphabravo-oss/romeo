@@ -103,6 +103,9 @@ async function toolDispatchWorker(context: CommandContext): Promise<number> {
     io: context.io,
     leaseSeconds,
     maxBytes,
+    ...(context.pinnedFetchImpl === undefined
+      ? {}
+      : { pinnedFetchImpl: context.pinnedFetchImpl }),
     timeoutMs,
     ...(maxIterations === undefined ? {} : { maxIterations }),
     ...(maxJobsPerIteration === undefined ? {} : { maxJobsPerIteration }),
@@ -128,6 +131,9 @@ function browserAutomationWorker(context: CommandContext): Promise<number> {
   const maxBytes = optionalIntegerFlag(context.parsed, "max-bytes") ?? 20_000;
   return runBrowserAutomationWorker({
     client: browserWorkerClient(context),
+    ...(context.dnsLookup === undefined
+      ? {}
+      : { dnsLookup: context.dnsLookup }),
     fetchImpl: context.fetchImpl,
     intervalMs,
     io: context.io,

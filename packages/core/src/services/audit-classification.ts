@@ -34,6 +34,8 @@ export function isAuditNoise(log: {
 }
 
 export function classifyAuditAction(action: string): AuditCategory {
+  const registered = auditActionDefinition(action);
+  if (registered !== undefined) return registered.category;
   if (isAuditNoiseAction(action)) return "system";
   if (
     action.startsWith("local_auth.") ||
@@ -98,3 +100,4 @@ export function isSystemAuditActor(actorId: string): boolean {
     actorId.startsWith("system_") || actorId.includes("service_account_audit")
   );
 }
+import { auditActionDefinition } from "../audit-taxonomy";

@@ -23,6 +23,7 @@ import {
   parseLocalMfaRecoveryCodeEnvelope,
   serializeLocalMfaRecoveryCodeEnvelope,
 } from "./local-mfa-recovery-codes";
+import { summarizeLocalMfaPosture } from "./local-mfa-posture";
 import { LocalMfaSecretVault } from "./local-mfa-secret-vault";
 
 export class LocalMfaService {
@@ -60,14 +61,20 @@ export class LocalMfaService {
     const enrollment = createTotpEnrollmentSecret({ email: user.email });
     const now = new Date().toISOString();
     const factor = await this.repository.transaction(async (repository) => {
+      const factorId = createId("mfa_factor");
       const factor = await repository.createLocalMfaFactor({
-        id: createId("mfa_factor"),
+        id: factorId,
         orgId: user.orgId,
         userId: user.id,
         type: "totp",
         name: normalizeFactorName(input.name),
         status: "pending",
-        secretEncrypted: this.mfaVault().encrypt(enrollment.secret),
+        secretEncrypted: this.mfaVault().encrypt(enrollment.secret, {
+          factorId,
+          factorType: "totp",
+          orgId: user.orgId,
+          userId: user.id,
+        }),
         createdAt: now,
         updatedAt: now,
       });
@@ -109,7 +116,10 @@ export class LocalMfaService {
         409,
       );
     }
-    const secret = this.mfaVault().decrypt(factor.secretEncrypted);
+    const secret = this.mfaVault().decrypt(
+      factor.secretEncrypted,
+      localMfaSecretContext(factor),
+    );
     if (!(await verifyTotpCode({ secret, code: input.code }))) {
       throw new ApiError("local_mfa_code_invalid", "MFA code is invalid.", 401);
     }
@@ -168,8 +178,9 @@ export class LocalMfaService {
         user.id,
         now,
       );
+      const factorId = createId("mfa_recovery_codes");
       const factor = await repository.createLocalMfaFactor({
-        id: createId("mfa_recovery_codes"),
+        id: factorId,
         orgId: user.orgId,
         userId: user.id,
         type: "recovery_codes",
@@ -177,6 +188,12 @@ export class LocalMfaService {
         status: "active",
         secretEncrypted: this.mfaVault().encrypt(
           serializeLocalMfaRecoveryCodeEnvelope(generated.envelope),
+          {
+            factorId,
+            factorType: "recovery_codes",
+            orgId: user.orgId,
+            userId: user.id,
+          },
         ),
         confirmedAt: now,
         createdAt: now,
@@ -228,7 +245,10 @@ export class LocalMfaService {
           "MFA code is required to disable an active factor.",
           400,
         );
-      const secret = this.mfaVault().decrypt(factor.secretEncrypted);
+      const secret = this.mfaVault().decrypt(
+        factor.secretEncrypted,
+        localMfaSecretContext(factor),
+      );
       if (!(await verifyTotpCode({ secret, code: input.code }))) {
         throw new ApiError(
           "local_mfa_code_invalid",
@@ -277,30 +297,10 @@ export class LocalMfaService {
     factorCount: number;
     methods: LocalMfaMethod[];
   }> {
-    return this.activeMfaPostureFromFactors(
+    return summarizeLocalMfaPosture(
       await this.repository.listLocalMfaFactors(orgId, userId),
+      (factor) => this.recoveryCodeRemainingCount(factor),
     );
-  }
-
-  private async activeMfaPostureFromFactors(
-    factors: LocalMfaFactor[],
-  ): Promise<{
-    factorCount: number;
-    methods: LocalMfaMethod[];
-  }> {
-    const activeTotpCount = factors.filter(
-      (factor) => factor.type === "totp" && factor.status === "active",
-    ).length;
-    const activeRecoveryCount = factors.filter(
-      (factor) =>
-        factor.type === "recovery_codes" &&
-        factor.status === "active" &&
-        (this.recoveryCodeRemainingCount(factor) ?? 0) > 0,
-    ).length;
-    const methods: LocalMfaMethod[] = [];
-    if (activeTotpCount > 0) methods.push("totp");
-    if (activeRecoveryCount > 0) methods.push("recovery_code");
-    return { factorCount: activeTotpCount + activeRecoveryCount, methods };
   }
 
   async satisfyMfaForLogin(input: {
@@ -367,33 +367,41 @@ export class LocalMfaService {
       const remainingCount = localMfaRecoveryCodeRemainingCount(
         result.envelope,
       );
-      await this.repository.transaction(async (repository) => {
-        await repository.updateLocalMfaFactor({
-          ...factor,
-          secretEncrypted: this.mfaVault().encrypt(
-            serializeLocalMfaRecoveryCodeEnvelope(result.envelope),
-          ),
-          status: remainingCount === 0 ? "disabled" : "active",
-          ...(remainingCount === 0 ? { disabledAt: now } : {}),
-          lastUsedAt: now,
-          updatedAt: now,
-        });
-        await this.audit.write(
-          {
-            orgId: user.orgId,
-            actorId: user.id,
-            action: "local_auth.mfa.recovery_code.consume",
-            resourceType: "local_mfa_factor",
-            resourceId: factor.id,
-            metadata: {
-              type: "recovery_codes",
-              remainingCount,
+      const didConsume = await this.repository.transaction(
+        async (repository) => {
+          const consumedFactor = await repository.consumeLocalMfaFactor({
+            expectedSecretEncrypted: factor.secretEncrypted,
+            factor: {
+              ...factor,
+              secretEncrypted: this.mfaVault().encrypt(
+                serializeLocalMfaRecoveryCodeEnvelope(result.envelope),
+                localMfaSecretContext(factor),
+              ),
+              status: remainingCount === 0 ? "disabled" : "active",
+              ...(remainingCount === 0 ? { disabledAt: now } : {}),
+              lastUsedAt: now,
+              updatedAt: now,
             },
-          },
-          repository,
-        );
-      });
-      return true;
+          });
+          if (consumedFactor === undefined) return false;
+          await this.audit.write(
+            {
+              orgId: user.orgId,
+              actorId: user.id,
+              action: "local_auth.mfa.recovery_code.consume",
+              resourceType: "local_mfa_factor",
+              resourceId: factor.id,
+              metadata: {
+                type: "recovery_codes",
+                remainingCount,
+              },
+            },
+            repository,
+          );
+          return true;
+        },
+      );
+      if (didConsume) return true;
     }
     return false;
   }
@@ -411,7 +419,10 @@ export class LocalMfaService {
   ): ReturnType<typeof parseLocalMfaRecoveryCodeEnvelope> | undefined {
     try {
       return parseLocalMfaRecoveryCodeEnvelope(
-        this.mfaVault().decrypt(factor.secretEncrypted),
+        this.mfaVault().decrypt(
+          factor.secretEncrypted,
+          localMfaSecretContext(factor),
+        ),
       );
     } catch {
       return undefined;
@@ -447,7 +458,10 @@ export class LocalMfaService {
     code: string,
   ): Promise<void> {
     for (const factor of factors) {
-      const secret = this.mfaVault().decrypt(factor.secretEncrypted);
+      const secret = this.mfaVault().decrypt(
+        factor.secretEncrypted,
+        localMfaSecretContext(factor),
+      );
       if (await verifyTotpCode({ secret, code })) {
         await this.repository.updateLocalMfaFactor({
           ...factor,
@@ -460,25 +474,18 @@ export class LocalMfaService {
     throw new ApiError("local_mfa_code_invalid", "MFA code is invalid.", 401);
   }
 
-  private async revokeUserSessions(
-    repository: RomeoRepository,
-    orgId: string,
-    userId: string,
-    revokedAt: string,
-  ): Promise<void> {
-    const sessions = await repository.listUserSessions(orgId, userId);
-    await Promise.all(
-      sessions
-        .filter((session) => session.revokedAt === undefined)
-        .map((session) =>
-          repository.updateUserSession({ ...session, revokedAt }),
-        ),
-    );
-  }
-
   private mfaVault(): LocalMfaSecretVault {
     return new LocalMfaSecretVault(
       this.env.LOCAL_AUTH_SECRET_ENCRYPTION_KEY || this.env.SESSION_SECRET,
     );
   }
+}
+
+function localMfaSecretContext(factor: LocalMfaFactor) {
+  return {
+    factorId: factor.id,
+    factorType: factor.type,
+    orgId: factor.orgId,
+    userId: factor.userId,
+  };
 }

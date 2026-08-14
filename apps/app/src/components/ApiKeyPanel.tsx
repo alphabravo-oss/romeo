@@ -1,15 +1,13 @@
 import { Input, Button } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
 import { useMemo, useState } from "react";
-
 import {
-  bulkRevokeApiKeys,
-  createApiKey,
-  listApiKeys,
-  revokeApiKey,
-} from "../features";
+  bulkRevokeApiKeysMutationOptions,
+  createApiKeyMutationOptions,
+  revokeApiKeyMutationOptions,
+} from "../features/administration/mutation-options";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDate, LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
@@ -22,6 +20,7 @@ import { Drawer } from "./Drawer";
 import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
 import { SecretRevealCard } from "./SecretRevealCard";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const col = createColumnHelper<ApiKeySummary>();
 
@@ -36,18 +35,14 @@ const scopeOptions = [
 
 export function ApiKeyPanel() {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { ask, dialog } = useConfirm();
   const [addOpen, setAddOpen] = useState(false);
   const [createdToken, setCreatedToken] = useState<string>();
   const [detailKey, setDetailKey] = useState<ApiKeySummary>();
-  const apiKeysQuery = useQuery({
-    queryKey: ["apiKeys"],
-    queryFn: listApiKeys,
-  });
-  const createMutation = useMutation({ mutationFn: createApiKey });
-  const revokeMutation = useMutation({ mutationFn: revokeApiKey });
-  const bulkRevokeMutation = useMutation({ mutationFn: bulkRevokeApiKeys });
+  const table = useInventoriedServerTable<ApiKeySummary>("api_keys");
+  const createMutation = useMutation(createApiKeyMutationOptions());
+  const revokeMutation = useMutation(revokeApiKeyMutationOptions());
+  const bulkRevokeMutation = useMutation(bulkRevokeApiKeysMutationOptions());
 
   const ApiKeyForm = useForm({
     defaultValues: { name: "", scopes: ["me:read"] as ApiKeyScope[] },
@@ -58,7 +53,6 @@ export function ApiKeyPanel() {
           scopes: value.scopes,
         });
         setCreatedToken(created.token);
-        await queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
         toast(t("apiKeyCreated"), "success");
         setAddOpen(false);
         ApiKeyForm.reset();
@@ -80,7 +74,6 @@ export function ApiKeyPanel() {
       return;
     try {
       await revokeMutation.mutateAsync(apiKeyId);
-      await queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
       setDetailKey((current) =>
         current?.id === apiKeyId ? undefined : current,
       );
@@ -106,7 +99,6 @@ export function ApiKeyPanel() {
       return;
     try {
       const result = await bulkRevokeMutation.mutateAsync(apiKeyIds);
-      await queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
       clearSelection();
       const failed = result.results.filter(
         (item) => item.status === "failure",
@@ -199,7 +191,7 @@ export function ApiKeyPanel() {
   return (
     <Section
       actions={
-        (apiKeysQuery.data?.length ?? 0) > 0 ? (
+        table.estimatedTotal > 0 ? (
           <AddButton onClick={() => setAddOpen(true)}>
             {t("addApiKey")}
           </AddButton>
@@ -224,22 +216,31 @@ export function ApiKeyPanel() {
         }
         emptyDescription={t("noApiKeysDescription")}
         emptyIcon={<KeyRound aria-hidden size={24} />}
-        query={apiKeysQuery}
+        isEmpty={(page) =>
+          page.items.length === 0 &&
+          table.isFirstPage &&
+          table.search.trim() === ""
+        }
+        query={table.query}
       >
-        {(apiKeys) => (
+        {() => (
           <div className="grid gap-4">
             <StatRow
               items={[
-                { label: t("totalKeys"), value: apiKeys.length },
+                {
+                  label: t("totalKeys"),
+                  value: table.summary.total ?? table.estimatedTotal,
+                },
                 {
                   label: t("revokedStatus"),
-                  value: apiKeys.filter((k) => k.revokedAt).length,
+                  value: table.summary.revokedTotal ?? 0,
                 },
               ]}
             />
             <DataTable
+              serverState={table.serverState}
               columns={columns}
-              data={apiKeys}
+              data={table.rows}
               empty={t("noApiKeys")}
               enableRowSelection
               getRowId={(row) => row.id}
@@ -296,7 +297,7 @@ export function ApiKeyPanel() {
                   value={field.state.value}
                 />
                 {field.state.meta.errors.length ? (
-                  <div className="rm-composer-error">
+                  <div className="rm-composer-error" role="alert">
                     {field.state.meta.errors.join(", ")}
                   </div>
                 ) : null}

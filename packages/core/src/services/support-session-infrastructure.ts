@@ -172,18 +172,18 @@ export async function createSupportSessionForTarget(
   return { session: toSessionSummary(session), token };
 }
 
-export async function writeSupportSessionAudit(
+export async function writeSupportSessionAudit<A extends AuditAction>(
   repository: RomeoRepository,
   subject: AuthSubject,
-  action: string,
+  action: A,
   resourceId: string,
-  metadata: Record<string, unknown>,
+  metadata: AuditMetadata<A>,
   options: {
     resourceType?: string;
     createdAt?: string;
   } = {},
 ): Promise<void> {
-  await repository.createAuditLog({
+  await writeAuditLog(repository, {
     id: createId("audit"),
     orgId: subject.orgId,
     actorId: subject.id,
@@ -225,3 +225,8 @@ export async function createSupportNotification(
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";

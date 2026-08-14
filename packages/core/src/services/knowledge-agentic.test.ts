@@ -21,9 +21,9 @@ describe("shouldUseAgenticRag", () => {
   });
 
   it("honors the member toggle only when the org leaves it optional", () => {
-    expect(
-      shouldUseAgenticRag({ enabled: true, userMode: "optional" }),
-    ).toBe(false);
+    expect(shouldUseAgenticRag({ enabled: true, userMode: "optional" })).toBe(
+      false,
+    );
     expect(
       shouldUseAgenticRag({ enabled: true, userMode: "optional" }, true),
     ).toBe(true);

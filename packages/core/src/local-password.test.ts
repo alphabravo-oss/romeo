@@ -1,6 +1,6 @@
 import { scrypt as scryptCallback } from "node:crypto";
 
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { describe, expect, it } from "vitest";
 
 import { createRomeoApi } from "./api";
@@ -59,7 +59,7 @@ describe("local password hashing", () => {
       updatedAt: now,
     });
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         LOCAL_AUTH_SECRET_ENCRYPTION_KEY: "prod-local-auth-key-32-bytes-long",

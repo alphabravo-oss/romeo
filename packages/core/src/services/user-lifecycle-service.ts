@@ -7,9 +7,33 @@ import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { normalizeUserRole } from "./auth-subject";
 import { normalizeLocalAuthEmail } from "./local-password";
+import {
+  createPageCursorCodec,
+  InvalidPageCursorError,
+  type PageCursorCodec,
+} from "./page-cursor";
+import {
+  normalizeUserTableQuery,
+  userCursorPosition,
+  type UserTablePage,
+  type UserTableQueryRequest,
+} from "./user-table-query";
+
+const defaultUserCursorSecret = "romeo-development-user-table-cursor-secret-v1";
 
 export class UserLifecycleService {
-  constructor(private readonly repository: RomeoRepository) {}
+  private readonly pageCursor: PageCursorCodec;
+
+  constructor(
+    private readonly repository: RomeoRepository,
+    options: { cursorSecrets?: readonly [string, ...string[]] } = {},
+  ) {
+    this.pageCursor = createPageCursorCodec({
+      secrets: options.cursorSecrets ?? [defaultUserCursorSecret],
+      resource: "admin_users",
+      maxAgeSeconds: 24 * 60 * 60,
+    });
+  }
 
   async list(subject: AuthSubject): Promise<User[]> {
     assertScope(subject, "admin:read");
@@ -22,6 +46,86 @@ export class UserLifecycleService {
   ): Promise<UserCatalogPage> {
     assertScope(subject, "admin:read");
     return this.repository.listUsersPage(subject.orgId, query);
+  }
+
+  async queryTable(
+    subject: AuthSubject,
+    request: UserTableQueryRequest,
+  ): Promise<UserTablePage> {
+    assertScope(subject, "admin:read");
+    const normalized = normalizeUserTableQuery(request);
+    const cursorContext = {
+      filter: {
+        orgId: subject.orgId,
+        filter: normalized.filter,
+        ...(normalized.search === undefined
+          ? {}
+          : { search: normalized.search }),
+      },
+      sort: normalized.sort,
+    };
+    let position: { id: string; value: string } | undefined;
+    if (request.cursor !== undefined) {
+      try {
+        position = this.pageCursor.decode(
+          request.cursor,
+          cursorContext,
+          userCursorPosition,
+        );
+      } catch (error) {
+        if (error instanceof InvalidPageCursorError) {
+          throw new ApiError(
+            error.code,
+            "Page cursor is invalid or expired.",
+            400,
+          );
+        }
+        throw error;
+      }
+    }
+    const result = await this.repository.queryUsers(subject.orgId, {
+      direction: normalized.sort.direction,
+      filter: normalized.filter,
+      limit: normalized.limit,
+      ...(position === undefined ? {} : { position }),
+      ...(normalized.search === undefined ? {} : { search: normalized.search }),
+      sort: normalized.sort.field,
+    });
+    const last = result.items.at(-1);
+    const nextCursor =
+      result.hasMore && last !== undefined
+        ? this.pageCursor.encode({
+            ...cursorContext,
+            position: {
+              id: last.id,
+              value: normalized.sort.field === "email" ? last.email : last.name,
+            },
+          })
+        : null;
+    return {
+      data: {
+        applied: {
+          filters: normalized.appliedFilters,
+          sort: [normalized.sort],
+        },
+        items: result.items.map((user) => ({
+          ...user,
+          role: normalizeUserRole(user),
+        })),
+        page: {
+          estimatedTotal: result.total,
+          limit: normalized.limit,
+          nextCursor,
+          previousCursor: null,
+        },
+        summary: {
+          activeGlobalAdminTotal: result.activeGlobalAdminTotal,
+          adminTotal: result.adminTotal,
+          disabledTotal: result.disabledTotal,
+          userTotal: result.userTotal,
+        },
+      },
+    };
   }
 
   async updateCurrentProfile(input: {
@@ -112,7 +216,7 @@ export class UserLifecycleService {
           updatedAt: now,
         });
       }
-      await repository.createAuditLog({
+      await writeAuditLog(repository, {
         id: createId("audit"),
         orgId: user.orgId,
         actorId: user.id,
@@ -158,7 +262,7 @@ export class UserLifecycleService {
         user.id,
         now,
       );
-      await repository.createAuditLog({
+      await writeAuditLog(repository, {
         id: createId("audit"),
         orgId: input.subject.orgId,
         actorId: input.subject.id,
@@ -212,7 +316,7 @@ export class UserLifecycleService {
         role: input.role,
       });
       await this.revokeUserCredentials(repository, user.orgId, user.id, now);
-      await repository.createAuditLog({
+      await writeAuditLog(repository, {
         id: createId("audit"),
         orgId: input.subject.orgId,
         actorId: input.subject.id,
@@ -318,3 +422,4 @@ export class UserLifecycleService {
     }
   }
 }
+import { writeAuditLog } from "./audit-log";

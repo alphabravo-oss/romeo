@@ -53,7 +53,8 @@ export function suggestFollowUps(input: {
   if (isLong || looksList) {
     picks.push({
       label: input.labels.makeShorter,
-      prompt: "Rewrite your last answer more concisely, keeping the key points.",
+      prompt:
+        "Rewrite your last answer more concisely, keeping the key points.",
     });
   } else {
     picks.push({

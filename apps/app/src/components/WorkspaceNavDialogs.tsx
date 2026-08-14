@@ -1,24 +1,26 @@
-import { Button, Checkbox, Input, NativeSelect } from "@romeo/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button, Input, NativeSelect } from "@romeo/ui";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import {
-  addFolderItem,
-  assignChatTag,
-  createFolder,
-  updateFolder,
-} from "../features";
+  addFolderItemMutationOptions,
+  assignChatTagMutationOptions,
+  createFolderMutationOptions,
+  revokeChatShareMutationOptions,
+  shareChatAccessMutationOptions,
+  updateFolderMutationOptions,
+} from "../features/collaboration/mutation-options";
 import {
-  listChatShares,
-  listShareTargets,
-  revokeChatShare,
-  shareChatAccess,
+  chatSharesQueryOptions,
+  shareTargetsQueryOptions,
 } from "../features/collaboration";
 import type { Chat } from "../features/types";
 import { useLocale } from "../lib/i18n";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
 import { FormDialog } from "./FormDialog";
+import { ShareDialog } from "./WorkspaceShareDialog";
 
 export type WorkspaceNavDialog =
   | { kind: "create-folder" }
@@ -39,19 +41,6 @@ interface WorkspaceNavDialogsProps {
   workspaceId: string | undefined;
 }
 
-function apiErrorMessage(error: unknown, fallback: string): string {
-  if (
-    error !== null &&
-    typeof error === "object" &&
-    "message" in error &&
-    typeof (error as { message: unknown }).message === "string"
-  ) {
-    const message = (error as { message: string }).message.trim();
-    if (message.length > 0) return message;
-  }
-  return fallback;
-}
-
 export function WorkspaceNavDialogs({
   dialog,
   folders,
@@ -62,32 +51,28 @@ export function WorkspaceNavDialogs({
   workspaceId,
 }: WorkspaceNavDialogsProps) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const { ask, dialog: confirmDialog } = useConfirm();
   const [value, setValue] = useState("");
   const [formError, setFormError] = useState("");
   const [shareTargetKey, setShareTargetKey] = useState("");
   const [shareCanWrite, setShareCanWrite] = useState(false);
   const sharingChat = dialog?.kind === "share" ? dialog.chat : null;
-  const createFolderMutation = useMutation({ mutationFn: createFolder });
-  const updateFolderMutation = useMutation({
-    mutationFn: ({ folderId, name }: { folderId: string; name: string }) =>
-      updateFolder(folderId, { name }),
-  });
-  const addFolderItemMutation = useMutation({ mutationFn: addFolderItem });
-  const assignTagMutation = useMutation({ mutationFn: assignChatTag });
-  const shareChatMutation = useMutation({ mutationFn: shareChatAccess });
-  const revokeChatShareMutation = useMutation({ mutationFn: revokeChatShare });
-  const shareTargetsQuery = useQuery({
-    queryKey: ["shareTargets", sharingChat?.id],
-    queryFn: () => listShareTargets(),
-    enabled: sharingChat !== null,
-  });
-  const chatSharesQuery = useQuery({
-    queryKey: ["chatShares", sharingChat?.id],
-    queryFn: () => listChatShares(sharingChat!.id),
-    enabled: sharingChat !== null,
-  });
+  const createFolderMutation = useMutation(createFolderMutationOptions());
+  const updateFolderMutation = useMutation(updateFolderMutationOptions());
+  const addFolderItemMutation = useMutation(addFolderItemMutationOptions());
+  const assignTagMutation = useMutation(assignChatTagMutationOptions());
+  const shareChatMutation = useMutation(shareChatAccessMutationOptions());
+  const revokeChatShareMutation = useMutation(revokeChatShareMutationOptions());
+  const shareTargetsQuery = useQuery(
+    shareTargetsQueryOptions(
+      { resourceId: sharingChat?.id },
+      "",
+      sharingChat !== null,
+    ),
+  );
+  const chatSharesQuery = useQuery(
+    chatSharesQueryOptions(sharingChat?.id, undefined, sharingChat !== null),
+  );
 
   useEffect(() => {
     setValue(
@@ -147,7 +132,8 @@ export function WorkspaceNavDialogs({
           className="rm-form-dialog-body"
           onSubmit={(event) => {
             event.preventDefault();
-            if (dialog?.kind !== "rename-folder") return;
+            if (dialog?.kind !== "rename-folder" || workspaceId === undefined)
+              return;
             const name = value.trim();
             if (name.length === 0) {
               setFormError(t("folderNameRequired"));
@@ -155,16 +141,20 @@ export function WorkspaceNavDialogs({
             }
             setFormError("");
             void updateFolderMutation
-              .mutateAsync({ folderId: dialog.folder.id, name })
-              .then(async () => {
-                await queryClient.invalidateQueries({
-                  queryKey: ["folders", workspaceId],
-                });
+              .mutateAsync({
+                folderId: dialog.folder.id,
+                name,
+                workspaceId,
+              })
+              .then(() => {
                 toast(t("folderRenamed"), "success");
                 onClose();
               })
               .catch((error: unknown) => {
-                const message = apiErrorMessage(error, t("folderRenameFailed"));
+                const message = safeUserErrorMessage(
+                  error,
+                  t("folderRenameFailed"),
+                );
                 setFormError(message);
                 toast(message, "error");
               });
@@ -231,16 +221,16 @@ export function WorkspaceNavDialogs({
             setFormError("");
             void createFolderMutation
               .mutateAsync({ workspaceId, name })
-              .then(async (folder) => {
-                await queryClient.invalidateQueries({
-                  queryKey: ["folders", workspaceId],
-                });
+              .then((folder) => {
                 toast(t("folderCreated"), "success");
                 onFolderCreated?.(folder.id);
                 onClose();
               })
               .catch((error: unknown) => {
-                const message = apiErrorMessage(error, t("folderCreateFailed"));
+                const message = safeUserErrorMessage(
+                  error,
+                  t("folderCreateFailed"),
+                );
                 setFormError(message);
                 toast(message, "error");
               });
@@ -297,23 +287,27 @@ export function WorkspaceNavDialogs({
           className="rm-form-dialog-body"
           onSubmit={(event) => {
             event.preventDefault();
-            if (dialog?.kind !== "move" || value.length === 0) return;
+            if (
+              dialog?.kind !== "move" ||
+              value.length === 0 ||
+              workspaceId === undefined
+            )
+              return;
             setFormError("");
             void addFolderItemMutation
               .mutateAsync({
                 folderId: value,
+                folderIds: folders.map((folder) => folder.id),
                 resourceType: "chat",
                 resourceId: dialog.chat.id,
+                workspaceId,
               })
-              .then(async () => {
-                await queryClient.invalidateQueries({
-                  queryKey: ["folderItems"],
-                });
+              .then(() => {
                 toast(t("chatAddedToFolder"), "success");
                 onClose();
               })
               .catch((error: unknown) => {
-                const message = apiErrorMessage(
+                const message = safeUserErrorMessage(
                   error,
                   t("chatAddToFolderFailed"),
                 );
@@ -379,7 +373,6 @@ export function WorkspaceNavDialogs({
             chatId: sharingChat.id,
             grantId,
           });
-          await chatSharesQuery.refetch();
         }}
         onSubmit={(targetKey) => {
           if (sharingChat === null) return;
@@ -394,8 +387,7 @@ export function WorkspaceNavDialogs({
               principalId: target.principalId,
               permissions: shareCanWrite ? ["read", "write"] : ["read"],
             })
-            .then(async () => {
-              await chatSharesQuery.refetch();
+            .then(() => {
               setShareTargetKey("");
             });
         }}
@@ -423,11 +415,7 @@ export function WorkspaceNavDialogs({
             if (dialog?.kind !== "tag" || value.trim().length === 0) return;
             void assignTagMutation
               .mutateAsync({ chatId: dialog.chat.id, name: value.trim() })
-              .then(async () => {
-                await Promise.all([
-                  queryClient.invalidateQueries({ queryKey: ["chatTags"] }),
-                  queryClient.invalidateQueries({ queryKey: ["chatsByTag"] }),
-                ]);
+              .then(() => {
                 onClose();
               });
           }}
@@ -456,114 +444,5 @@ export function WorkspaceNavDialogs({
         </form>
       </FormDialog>
     </>
-  );
-}
-
-interface ShareDialogProps {
-  canWrite: boolean;
-  chat: Chat | null;
-  isPending: boolean;
-  onCanWriteChange: (value: boolean) => void;
-  onClose: () => void;
-  onRevoke: (grantId: string) => void;
-  onSubmit: (targetKey: string) => void;
-  onTargetKeyChange: (value: string) => void;
-  revokeError: boolean;
-  revokePending: boolean;
-  shareError: boolean;
-  shares: Array<{ id: string; permission: string; principalId: string }>;
-  sharesLoaded: boolean;
-  targetKey: string;
-  targets: Array<{
-    label: string;
-    principalId: string;
-    principalType: "group" | "service_account" | "user";
-  }>;
-  targetsLoaded: boolean;
-}
-
-function ShareDialog(props: ShareDialogProps) {
-  const { t } = useLocale();
-  return (
-    <FormDialog
-      onClose={props.onClose}
-      open={props.chat !== null}
-      title={t("shareChat")}
-    >
-      <form
-        className="grid gap-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (props.targetKey.length > 0) props.onSubmit(props.targetKey);
-        }}
-      >
-        <label className="grid gap-1 text-sm" htmlFor="share-chat-target">
-          <span className="text-muted">{t("personOrGroup")}</span>
-          <NativeSelect
-            name="share-chat-target"
-            id="share-chat-target"
-            onChange={(event) =>
-              props.onTargetKeyChange(event.currentTarget.value)
-            }
-            required
-            value={props.targetKey}
-          >
-            <option value="">{t("selectShareTarget")}</option>
-            {props.targets.map((target) => (
-              <option
-                key={`${target.principalType}:${target.principalId}`}
-                value={`${target.principalType}:${target.principalId}`}
-              >
-                {target.label} · {target.principalType}
-              </option>
-            ))}
-          </NativeSelect>
-        </label>
-        <Checkbox
-          checked={props.canWrite}
-          label={t("allowEdits")}
-          onCheckedChange={(checked) =>
-            props.onCanWriteChange(checked === true)
-          }
-        />
-        {props.targetsLoaded && props.targets.length === 0 ? (
-          <p className="text-sm text-muted">{t("noEligibleShares")}</p>
-        ) : null}
-        {props.shareError ? (
-          <p className="text-sm text-danger">{t("shareFailed")}</p>
-        ) : null}
-        <Button
-          variant="primary"
-          disabled={props.targetKey.length === 0 || props.isPending}
-          type="submit"
-        >
-          {props.isPending ? t("sharing") : t("share")}
-        </Button>
-        <div className="grid gap-2 border-t border-border pt-3">
-          <strong className="text-sm">{t("currentAccess")}</strong>
-          {props.shares.map((grant) => (
-            <div className="rm-list-row" key={grant.id}>
-              <span className="min-w-0 flex-1 truncate text-sm">
-                {grant.principalId} · {grant.permission}
-              </span>
-              <Button
-                variant="danger"
-                disabled={props.revokePending}
-                onClick={() => props.onRevoke(grant.id)}
-                type="button"
-              >
-                {t("revoke")}
-              </Button>
-            </div>
-          ))}
-          {props.sharesLoaded && props.shares.length === 0 ? (
-            <p className="text-sm text-muted">{t("noAccessGrants")}</p>
-          ) : null}
-          {props.revokeError ? (
-            <p className="text-sm text-danger">{t("revokeFailed")}</p>
-          ) : null}
-        </div>
-      </form>
-    </FormDialog>
   );
 }

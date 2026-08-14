@@ -5,6 +5,7 @@ import type { EvalRun, EvalRunResult, EvalSuite } from "../features/types";
 import { useLocale } from "../lib/i18n";
 import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
 import { createColumnHelper, DataTable } from "./DataTable";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const suiteColumn = createColumnHelper<EvalSuite>();
 const runColumn = createColumnHelper<EvalRun>();
@@ -18,6 +19,7 @@ export function EvalSuiteTable({
   onSelect: (id: string) => void;
 }) {
   const { t } = useLocale();
+  const inventoriedTable = useInventoriedServerTable<any>("eval_suites");
   const columns = useMemo(
     () => [
       suiteColumn.accessor("name", {
@@ -40,8 +42,9 @@ export function EvalSuiteTable({
   );
   return (
     <DataTable
+      serverState={inventoriedTable.serverState}
       columns={columns}
-      data={data}
+      data={inventoriedTable.rows}
       getRowId={(suite) => suite.id}
       onRowActivate={(suite) => onSelect(suite.id)}
       preferenceKey="eval-suites"
@@ -86,6 +89,34 @@ export function EvalRunTable({
           <span className="font-mono text-xs">{getValue()}</span>
         ),
       }),
+      runColumn.display({
+        id: "reasoningPolicy",
+        header: t("evalReasoningPolicy"),
+        cell: ({ row }) => {
+          const policy = row.original.reasoningPolicy?.effective;
+          if (policy === undefined) return t("evalNotAvailable");
+          if (policy.mode === "off") return t("evalReasoningOff");
+          return policy.effort === undefined
+            ? t("evalReasoningAuto")
+            : t(
+                policy.effort === "low"
+                  ? "evalReasoningLow"
+                  : policy.effort === "medium"
+                    ? "evalReasoningMedium"
+                    : "evalReasoningHigh",
+              );
+        },
+      }),
+      runColumn.display({
+        id: "latency",
+        header: t("evalAverageLatency"),
+        cell: ({ row }) =>
+          row.original.metrics === undefined ? (
+            t("evalNotAvailable")
+          ) : (
+            <LocalizedNumber value={row.original.metrics.latencyMs} />
+          ),
+      }),
       runColumn.accessor("completedAt", {
         header: t("evalCompleted"),
         cell: ({ getValue }) => <LocalizedDateTime value={getValue()} />,
@@ -98,7 +129,7 @@ export function EvalRunTable({
       columns={columns}
       data={data}
       getRowId={(run) => run.id}
-      minTableWidth={680}
+      minTableWidth={900}
       onRowActivate={(run) => onSelect(run.id)}
       preferenceKey="eval-runs"
       rowAriaLabel={(run) => `${run.status} ${run.modelId}`}

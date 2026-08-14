@@ -35,6 +35,96 @@ export const zApiError = z.object({
   }),
 });
 
+export const zAdminUserTablePage = z.object({
+  data: z.object({
+    items: z.array(zAdminUser),
+    page: z.object({
+      nextCursor: z.string().min(1).max(2000).nullable(),
+      previousCursor: z.string().min(1).max(2000).nullable(),
+      limit: z.int().gt(0),
+      estimatedTotal: z.int().gte(0).optional(),
+    }),
+    applied: z.object({
+      sort: z.array(
+        z.object({
+          field: z.string().min(1).max(100),
+          direction: z.enum(["asc", "desc"]),
+          nulls: z.enum(["first", "last"]).optional(),
+        }),
+      ),
+      filters: z.array(
+        z.object({
+          field: z.string().min(1).max(100),
+          operator: z.enum([
+            "eq",
+            "neq",
+            "in",
+            "not_in",
+            "contains",
+            "starts_with",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "between",
+            "is_null",
+            "not_null",
+          ]),
+          value: z.unknown().optional(),
+        }),
+      ),
+    }),
+    summary: z.object({
+      activeGlobalAdminTotal: z.int().gte(0),
+      adminTotal: z.int().gte(0),
+      disabledTotal: z.int().gte(0),
+      userTotal: z.int().gte(0),
+    }),
+  }),
+});
+
+export const zAdminUserTableQuery = z.object({
+  cursor: z.string().min(1).max(2000).optional(),
+  limit: z.int().gte(1).lte(100).optional().default(50),
+  search: z.string().min(3).max(200).optional(),
+  sort: z
+    .array(
+      z.object({
+        field: z.string().min(1).max(100),
+        direction: z.enum(["asc", "desc"]),
+        nulls: z.enum(["first", "last"]).optional(),
+      }),
+    )
+    .max(1)
+    .optional()
+    .default([{ field: "name", direction: "asc" }]),
+  filters: z
+    .array(
+      z.object({
+        field: z.string().min(1).max(100),
+        operator: z.enum([
+          "eq",
+          "neq",
+          "in",
+          "not_in",
+          "contains",
+          "starts_with",
+          "gt",
+          "gte",
+          "lt",
+          "lte",
+          "between",
+          "is_null",
+          "not_null",
+        ]),
+        value: z.unknown().optional(),
+      }),
+    )
+    .max(2)
+    .optional()
+    .default([]),
+});
+
 export const zUpdateUserRoleRequest = z.object({
   confirmUserId: z.string().min(1).max(300),
   role: z.enum(["user", "org_admin", "global_admin"]),
@@ -208,6 +298,9 @@ export const zApiKeySummary = z.object({
       "voices:manage",
       "tools:use",
       "tools:manage",
+      "capabilities:read",
+      "capabilities:manage",
+      "capabilities:approve",
       "admin:read",
       "admin:write",
     ]),
@@ -255,12 +348,15 @@ export const zCreateApiKeyRequest = z.object({
         "voices:manage",
         "tools:use",
         "tools:manage",
+        "capabilities:read",
+        "capabilities:manage",
+        "capabilities:approve",
         "admin:read",
         "admin:write",
       ]),
     )
     .min(1)
-    .max(31),
+    .max(34),
 });
 
 export const zBulkActionResult = z.object({
@@ -312,6 +408,9 @@ export const zServiceAccount = z.object({
       "voices:manage",
       "tools:use",
       "tools:manage",
+      "capabilities:read",
+      "capabilities:manage",
+      "capabilities:approve",
       "admin:read",
       "admin:write",
     ]),
@@ -355,12 +454,15 @@ export const zCreateServiceAccountRequest = z.object({
         "voices:manage",
         "tools:use",
         "tools:manage",
+        "capabilities:read",
+        "capabilities:manage",
+        "capabilities:approve",
         "admin:read",
         "admin:write",
       ]),
     )
     .min(1)
-    .max(31),
+    .max(34),
 });
 
 export const zBulkDisableServiceAccountsRequest = z.object({
@@ -832,22 +934,19 @@ export const zUsageSummaryMetric = z.object({
 });
 
 export const zAdminAnalyticsSummary = z.object({
-  attention: z.object({
-    models: z.array(
-      z.object({
-        displayName: z.string().min(1).max(300),
-        issues: z.array(
-          z.enum([
-            "invalid_context_window",
-            "missing_max_output",
-            "missing_pricing",
-            "unavailable",
-          ]),
-        ),
-        modelId: z.string().min(1).max(300),
-        providerId: z.string().min(1).max(300),
-      }),
-    ),
+  adoption: z.object({
+    activeUserCount: z.int().gte(0),
+    activeWorkspaceCount: z.int().gte(0),
+    engagedUserCount: z.int().gte(0),
+    completedRunsPerActiveUser: z.number().gte(0),
+    runCompletionRate: z.number().gte(0).lte(1).nullable(),
+    toolSuccessRate: z.number().gte(0).lte(1).nullable(),
+    feedback: z.object({
+      negativeCount: z.int().gte(0),
+      positiveCount: z.int().gte(0),
+      positiveRate: z.number().gte(0).lte(1).nullable(),
+      totalCount: z.int().gte(0),
+    }),
   }),
   evals: z.object({
     agentCount: z.int().gte(0),
@@ -968,6 +1067,23 @@ export const zAdminAnalyticsSummary = z.object({
     totals: z.array(zUsageSummaryMetric),
     unpricedTokenQuantity: z.number().gte(0),
   }),
+  attention: z.object({
+    models: z.array(
+      z.object({
+        displayName: z.string().min(1).max(300),
+        issues: z.array(
+          z.enum([
+            "invalid_context_window",
+            "missing_max_output",
+            "missing_pricing",
+            "unavailable",
+          ]),
+        ),
+        modelId: z.string().min(1).max(300),
+        providerId: z.string().min(1).max(300),
+      }),
+    ),
+  }),
   window: z.object({
     from: z.iso.datetime().nullable(),
     to: z.iso.datetime(),
@@ -1047,6 +1163,58 @@ export const zUpdateAbuseControlPolicyRequest = z.object({
       workerClasses: z.array(z.string().min(1).max(300)).max(250).optional(),
     })
     .optional(),
+});
+
+export const zAbuseControlSimulationResult = z.object({
+  allowed: z.boolean(),
+  action: z.enum([
+    "connector.sync",
+    "eval.run",
+    "file.upload",
+    "knowledge.ingest",
+    "model.request",
+    "run.start",
+    "tool.dispatch",
+    "tool.execute",
+    "voice.request",
+    "workflow.run",
+    "worker.enqueue",
+  ]),
+  reasonCodes: z.array(
+    z.enum([
+      "billing_plan_missing",
+      "billing_status_blocked",
+      "connector_kill_switch",
+      "org_suspended",
+      "provider_kill_switch",
+      "tool_kill_switch",
+      "worker_class_kill_switch",
+    ]),
+  ),
+  evaluatedAt: z.iso.datetime(),
+  policySource: z.enum(["default", "org"]),
+});
+
+export const zSimulateAbuseControlPolicyRequest = z.object({
+  action: z.enum([
+    "connector.sync",
+    "eval.run",
+    "file.upload",
+    "knowledge.ingest",
+    "model.request",
+    "run.start",
+    "tool.dispatch",
+    "tool.execute",
+    "voice.request",
+    "workflow.run",
+    "worker.enqueue",
+  ]),
+  agentId: z.string().min(1).max(300).optional(),
+  connectorId: z.string().min(1).max(300).optional(),
+  providerId: z.string().min(1).max(300).optional(),
+  toolId: z.string().min(1).max(300).optional(),
+  workerClass: z.string().min(1).max(300).optional(),
+  workspaceId: z.string().min(1).max(300).optional(),
 });
 
 export const zBillingPlan = z.object({
@@ -1156,6 +1324,7 @@ export const zApplyBillingPlanRequest = z.object({
 });
 
 export const zSyncExternalBillingEventRequest = z.object({
+  eventId: z.string().min(1).max(300),
   provider: z.string().min(1).max(80),
   eventType: z.enum([
     "customer.updated",
@@ -1183,7 +1352,7 @@ export const zSyncExternalBillingEventRequest = z.object({
     .string()
     .regex(/^[A-Z]{3}$\/u/)
     .optional(),
-  occurredAt: z.iso.datetime().optional(),
+  occurredAt: z.iso.datetime(),
   planCode: z.string().min(1).max(120).optional(),
   planName: z.string().min(1).max(200).optional(),
   status: z.enum(["active", "canceled", "past_due", "trialing"]).optional(),
@@ -2199,6 +2368,7 @@ export const zManagedModelMemoryPolicy = z.union([
 export const zManagedModelSafetySettings = z.object({
   maxUserInputLength: z.int().gte(1).lte(200000).optional(),
   blockedTerms: z.array(z.string().min(1).max(120)).max(100).optional(),
+  knowledgeGroundingMode: z.enum(["optional", "prefer", "required"]).optional(),
   promptInjectionGuard: z
     .object({
       mode: z.enum(["disabled", "block"]),
@@ -2215,7 +2385,7 @@ export const zManagedModel = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
   icon: z.string().max(16).optional(),
-  avatarUrl: z.union([z.enum([""]), z.url().max(2000)]).optional(),
+  avatarUrl: z.union([z.enum([""]), z.url().max(32000)]).optional(),
   createdBy: z.string().min(1).max(300),
   baseModelId: z.string().min(1).max(300),
   systemPrompt: z.string(),
@@ -2244,7 +2414,7 @@ export const zCreateManagedModelRequest = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
   icon: z.string().max(16).optional(),
-  avatarUrl: z.union([z.enum([""]), z.url().max(2000)]).optional(),
+  avatarUrl: z.union([z.enum([""]), z.url().max(32000)]).optional(),
   baseModelId: z.string().min(1).max(300),
   systemPrompt: z.string().min(1).max(200000),
   parameters: z.record(z.string(), z.unknown()).optional(),
@@ -2266,7 +2436,7 @@ export const zUpdateManagedModelRequest = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(1000).optional(),
   icon: z.string().max(16).optional(),
-  avatarUrl: z.union([z.enum([""]), z.url().max(2000)]).optional(),
+  avatarUrl: z.union([z.enum([""]), z.url().max(32000)]).optional(),
   baseModelId: z.string().min(1).max(300).optional(),
   systemPrompt: z.string().min(1).max(200000).optional(),
   parameters: z.record(z.string(), z.unknown()).optional(),
@@ -2337,7 +2507,7 @@ export const zManagedModelExportDocument = z.object({
     name: z.string().min(1),
     description: z.string().max(1000).optional(),
     icon: z.string().max(16).optional(),
-    avatarUrl: z.union([z.enum([""]), z.url().max(2000)]).optional(),
+    avatarUrl: z.union([z.enum([""]), z.url().max(32000)]).optional(),
     baseModelId: z.string().min(1).max(300),
     systemPrompt: z.string().min(1),
     parameters: z.record(z.string(), z.unknown()),
@@ -2397,7 +2567,7 @@ export const zImportManagedModelRequest = z.object({
       name: z.string().min(1),
       description: z.string().max(1000).optional(),
       icon: z.string().max(16).optional(),
-      avatarUrl: z.union([z.enum([""]), z.url().max(2000)]).optional(),
+      avatarUrl: z.union([z.enum([""]), z.url().max(32000)]).optional(),
       baseModelId: z.string().min(1).max(300),
       systemPrompt: z.string().min(1),
       parameters: z.record(z.string(), z.unknown()).optional().default({}),
@@ -2518,6 +2688,15 @@ export const zManagedModelVersion = z.object({
     })
     .optional(),
 });
+
+export const zPublishManagedModelRequest = z
+  .object({
+    channel: z
+      .enum(["candidate", "production"])
+      .optional()
+      .default("production"),
+  })
+  .default({ channel: "production" });
 
 export const zManagedModelGrant = z.object({
   createdAt: z.iso.datetime().optional(),
@@ -2846,6 +3025,16 @@ export const zOpenAiChatCompletionResponse = z.object({
       prompt_tokens: z.int().optional(),
       total_tokens: z.int().optional(),
       completion_tokens: z.int().optional(),
+      prompt_tokens_details: z
+        .object({
+          cached_tokens: z.int().gte(0),
+        })
+        .optional(),
+      completion_tokens_details: z
+        .object({
+          reasoning_tokens: z.int().gte(0),
+        })
+        .optional(),
     })
     .nullable(),
 });
@@ -2947,6 +3136,90 @@ export const zAuditLogPage = z.object({
   nextCursor: z.string().optional(),
 });
 
+export const zAuditLogTablePage = z.object({
+  data: z.object({
+    items: z.array(zAuditLog),
+    page: z.object({
+      nextCursor: z.string().min(1).max(2000).nullable(),
+      previousCursor: z.string().min(1).max(2000).nullable(),
+      limit: z.int().gt(0),
+      estimatedTotal: z.int().gte(0).optional(),
+    }),
+    applied: z.object({
+      sort: z.array(
+        z.object({
+          field: z.string().min(1).max(100),
+          direction: z.enum(["asc", "desc"]),
+          nulls: z.enum(["first", "last"]).optional(),
+        }),
+      ),
+      filters: z.array(
+        z.object({
+          field: z.string().min(1).max(100),
+          operator: z.enum([
+            "eq",
+            "neq",
+            "in",
+            "not_in",
+            "contains",
+            "starts_with",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "between",
+            "is_null",
+            "not_null",
+          ]),
+          value: z.unknown().optional(),
+        }),
+      ),
+    }),
+  }),
+});
+
+export const zAuditLogTableQuery = z.object({
+  cursor: z.string().min(1).max(2000).optional(),
+  limit: z.int().gte(1).lte(200).optional().default(50),
+  search: z.string().min(3).max(300).optional(),
+  sort: z
+    .array(
+      z.object({
+        field: z.string().min(1).max(100),
+        direction: z.enum(["asc", "desc"]),
+        nulls: z.enum(["first", "last"]).optional(),
+      }),
+    )
+    .max(1)
+    .optional()
+    .default([{ field: "createdAt", direction: "desc" }]),
+  filters: z
+    .array(
+      z.object({
+        field: z.string().min(1).max(100),
+        operator: z.enum([
+          "eq",
+          "neq",
+          "in",
+          "not_in",
+          "contains",
+          "starts_with",
+          "gt",
+          "gte",
+          "lt",
+          "lte",
+          "between",
+          "is_null",
+          "not_null",
+        ]),
+        value: z.unknown().optional(),
+      }),
+    )
+    .max(8)
+    .optional()
+    .default([]),
+});
+
 export const zUsageEvent = z.object({
   id: z.string().min(1).max(300),
   orgId: z.string().min(1).max(300),
@@ -2959,6 +3232,106 @@ export const zUsageEvent = z.object({
   unit: z.string(),
   metadata: z.record(z.string(), z.unknown()),
   createdAt: z.iso.datetime(),
+});
+
+export const zUsageMetricCode = z.enum([
+  "audio.input_byte",
+  "audio.input_second",
+  "audio.output_character",
+  "audio.output_second",
+  "chat.message.feedback",
+  "compute.cpu_millisecond",
+  "compute.memory_byte_millisecond",
+  "file.upload.pipeline_duration",
+  "image.cost.micro_usd",
+  "image.generated",
+  "image.input",
+  "llm.cached_input_token.reported",
+  "llm.input_token.estimated",
+  "llm.input_token.reported",
+  "llm.output_token.estimated",
+  "llm.output_token.reported",
+  "llm.reasoning_token.reported",
+  "llm.total_token.reported",
+  "provider.error",
+  "queue.wait",
+  "retrieval.unit",
+  "run.cancelled",
+  "run.completed",
+  "run.duration",
+  "run.failed",
+  "run.output_throughput",
+  "run.recovery",
+  "run.started",
+  "run.time_to_first_token",
+  "sse.connection",
+  "sse.disconnect",
+  "sse.reconnect",
+  "storage.byte",
+  "storage.embedding_indexed",
+  "storage.source_completed",
+  "storage.source_deleted",
+  "storage.source_extracted",
+  "storage.source_registered",
+  "storage.source_reindexed",
+  "tool.call.failure",
+  "tool.call.success",
+  "trace.span",
+  "video.input_second",
+  "voice.message.generated",
+  "voice.preview.generated",
+  "voice.transcription.generated",
+  "web.search.request",
+  "web.url.fetch",
+]);
+
+export const zUsageUnitCode = z.enum([
+  "byte",
+  "byte_millisecond",
+  "call",
+  "character",
+  "connection",
+  "cpu_millisecond",
+  "embedding",
+  "error",
+  "event",
+  "feedback",
+  "image",
+  "micro_usd",
+  "millisecond",
+  "recovery",
+  "request",
+  "retrieval_unit",
+  "run",
+  "second",
+  "token",
+  "token_per_second",
+  "url",
+]);
+
+export const zUsageMetricDefinition = z.object({
+  metric: zUsageMetricCode,
+  category: z.enum([
+    "activity",
+    "audio",
+    "compute",
+    "cost",
+    "image",
+    "latency",
+    "retrieval",
+    "storage",
+    "text_token",
+    "video",
+  ]),
+  unit: zUsageUnitCode,
+  sourceTypes: z
+    .array(z.enum(["chat", "retrieval", "run", "storage", "tool", "voice"]))
+    .min(1)
+    .max(6),
+  aggregation: z.enum(["maximum", "sum"]),
+  measurement: z.enum(["activity", "estimated", "measured", "reported"]),
+  overlapPolicy: z.enum(["component_of_total", "exclusive", "non_additive"]),
+  billable: z.boolean(),
 });
 
 export const zUsageSummary = z.object({
@@ -3778,6 +4151,24 @@ export const zPostgresOperationalPostureReport = z.object({
   ),
 });
 
+export const zProviderDialectSummary = z.object({
+  contractVersion: z.enum(["1"]),
+  version: z.string().regex(/^[a-z0-9][a-z0-9.-]{2,79}$\/u/),
+  operations: z.object({
+    audio: z.boolean(),
+    batches: z.boolean(),
+    capabilityProbing: z.boolean(),
+    chat: z.literal(true),
+    discovery: z.literal(true),
+    embeddings: z.boolean(),
+    errorNormalization: z.boolean(),
+    files: z.boolean(),
+    imageGeneration: z.boolean(),
+    tokenCounting: z.boolean(),
+    usageParsing: z.boolean(),
+  }),
+});
+
 export const zProviderCapabilities = z.object({
   streaming: z.boolean(),
   toolCalling: z.boolean(),
@@ -3794,6 +4185,105 @@ export const zProviderCapabilities = z.object({
     mode: z.enum(["hosted-api", "local-runtime"]),
     networkAccess: z.enum(["external-http", "local-http"]),
     credentialRequired: z.boolean(),
+  }),
+});
+
+export const zProviderCapabilityReport = z.object({
+  providerId: z.string().min(1).max(300),
+  kind: z.enum([
+    "anthropic",
+    "openai-compatible",
+    "openai-responses-compatible",
+    "ollama",
+  ]),
+  enabled: z.boolean(),
+  credentialConfigured: z.boolean(),
+  dialect: zProviderDialectSummary,
+  advertisedDefaults: zProviderCapabilities,
+  configuredCapabilities: zProviderCapabilities,
+  catalog: z.object({
+    status: z.enum(["error", "never", "ready", "stale", "syncing"]),
+    modelCount: z.int().gte(0).lte(1000000),
+    lastAttemptAt: z.iso.datetime().optional(),
+    lastSyncedAt: z.iso.datetime().optional(),
+  }),
+  visibleModels: z.object({
+    total: z.int().gte(0).lte(1000000),
+    enabled: z.int().gte(0).lte(1000000),
+    available: z.int().gte(0).lte(1000000),
+  }),
+});
+
+export const zProviderModelCapabilityReport = z.object({
+  modelId: z.string().min(1).max(300),
+  providerId: z.string().min(1).max(300),
+  kind: z.enum([
+    "anthropic",
+    "openai-compatible",
+    "openai-responses-compatible",
+    "ollama",
+  ]),
+  name: z.string().min(1).max(500),
+  displayName: z.string().min(1).max(500),
+  enabled: z.boolean(),
+  available: z.boolean(),
+  capabilitySource: z.enum(["detected", "override"]),
+  capabilities: zProviderCapabilities,
+  limits: z.object({
+    contextWindow: z.int().gt(0).lte(10000000),
+    defaultParameters: z
+      .object({
+        temperature: z.number().gte(0).lte(2).optional(),
+        topP: z.number().gte(0).lte(1).optional(),
+        maxOutputTokens: z.int().gt(0).lte(200000).optional(),
+      })
+      .optional(),
+  }),
+  provider: z.object({
+    enabled: z.boolean(),
+    dialect: zProviderDialectSummary,
+    catalogStatus: z.enum(["error", "never", "ready", "stale", "syncing"]),
+  }),
+  operationallyUsable: z.boolean(),
+  operationalReason: z.enum([
+    "available",
+    "model_disabled",
+    "model_unavailable",
+    "provider_disabled",
+  ]),
+});
+
+export const zProviderKindConfigurationField = z.object({
+  id: z.enum(["baseUrl", "credentialRef", "modelIds", "name"]),
+  input: z.enum(["identifier_list", "secret_reference", "text", "url"]),
+  required: z.boolean(),
+  writeOnly: z.boolean(),
+  sensitive: z.boolean(),
+  maxLength: z.int().gt(0).lte(10000).optional(),
+  maxItems: z.int().gt(0).lte(10000).optional(),
+  copyKey: z
+    .string()
+    .regex(/^providerSetupField(?:BaseUrl|CredentialRef|ModelIds|Name)$\/u/),
+});
+
+export const zProviderKindCatalogEntry = z.object({
+  kind: z.enum([
+    "anthropic",
+    "openai-compatible",
+    "openai-responses-compatible",
+    "ollama",
+  ]),
+  defaultClassification: z.enum(["external", "local"]),
+  supportedClassifications: z
+    .array(z.enum(["external", "local"]))
+    .min(1)
+    .max(2),
+  displayName: z.string().min(1).max(100),
+  dialect: zProviderDialectSummary,
+  defaultCapabilities: zProviderCapabilities,
+  configuration: z.object({
+    schemaVersion: z.literal(1),
+    fields: z.array(zProviderKindConfigurationField).min(3).max(8),
   }),
 });
 
@@ -3819,9 +4309,15 @@ export const zProviderConnection = z.object({
   modelIds: z.array(z.string().min(1).max(300)).optional(),
   enabled: z.boolean(),
   capabilities: zProviderCapabilities,
+  dialect: zProviderDialectSummary,
   catalogSync: zProviderCatalogSync.optional(),
   credentialConfigured: z.boolean(),
   credentialRefScheme: z.string().optional(),
+  auth: z.string().min(1).max(80).optional(),
+  target: z.string().min(1).max(80).optional(),
+  region: z.string().min(1).max(80).optional(),
+  project: z.string().min(1).max(80).optional(),
+  deployment: z.string().min(1).max(80).optional(),
 });
 
 export const zCreateProviderConnectionRequest = z.object({
@@ -3833,15 +4329,25 @@ export const zCreateProviderConnectionRequest = z.object({
   ]),
   name: z.string().min(1).max(200),
   baseUrl: z.url(),
+  auth: z.string().min(1).max(80).optional(),
   credentialRef: z.string().min(1).max(500).optional(),
+  deployment: z.string().min(1).max(80).optional(),
   modelIds: z.array(z.string().min(1).max(300)).max(2000).optional(),
+  project: z.string().min(1).max(80).optional(),
+  region: z.string().min(1).max(80).optional(),
+  target: z.string().min(1).max(80).optional(),
 });
 
 export const zUpdateProviderConnectionRequest = z.object({
   name: z.string().min(1).max(200).optional(),
   baseUrl: z.url().optional(),
+  auth: z.string().min(1).max(80).optional(),
   credentialRef: z.string().min(1).max(500).optional(),
+  deployment: z.string().min(1).max(80).optional(),
   modelIds: z.array(z.string().min(1).max(300)).max(2000).optional(),
+  project: z.string().min(1).max(80).optional(),
+  region: z.string().min(1).max(80).optional(),
+  target: z.string().min(1).max(80).optional(),
   enabled: z.boolean().optional(),
 });
 
@@ -3856,6 +4362,24 @@ export const zProviderVerification = z.object({
       detail: z.string(),
     }),
   ),
+});
+
+export const zCatalogModelSurface = z.object({
+  contextWindow: z.int().gt(0),
+  deploymentBoundary: z.enum(["hosted-api", "local-runtime"]),
+  maxOutputTokens: z.int().gt(0).optional(),
+  modalities: z.array(z.string().min(1).max(40)).max(16),
+  pricing: z
+    .object({
+      inputTokenUsd: z.number().gte(0),
+      outputTokenUsd: z.number().gte(0),
+    })
+    .optional(),
+  probeFreshness: z.enum(["fresh", "never", "stale"]),
+  reasoning: z.enum(["emulated", "native", "unsupported"]),
+  region: z.string().min(1).max(80).optional(),
+  tools: z.enum(["emulated", "native", "unsupported"]),
+  vision: z.enum(["emulated", "native", "unsupported"]),
 });
 
 export const zProviderModel = z.object({
@@ -3880,7 +4404,25 @@ export const zProviderModel = z.object({
         .optional(),
     })
     .optional(),
+  defaultParameters: z
+    .object({
+      temperature: z.number().gte(0).lte(2).optional(),
+      topP: z.number().gte(0).lte(1).optional(),
+      maxOutputTokens: z.int().gte(1).lte(200000).optional(),
+    })
+    .optional(),
   capabilitiesSource: z.enum(["detected", "override"]).optional(),
+  probedAt: z.iso.datetime().optional(),
+  catalogSurface: zCatalogModelSurface.optional(),
+});
+
+export const zProviderCatalogSyncJob = z.object({
+  jobId: z.string().min(1).max(300),
+  providerId: z.string().min(1).max(300),
+  state: z.enum(["queued", "running", "ready", "failed"]),
+  percent: z.int().gte(0).lte(100),
+  modelCount: z.int().gte(0),
+  error: z.string().max(300).optional(),
 });
 
 export const zProviderOperationalSummary = z.object({
@@ -3897,6 +4439,11 @@ export const zProviderOperationalSummary = z.object({
         "provider_errors_recent",
         "queue_wait_high",
         "sse_disconnects_recent",
+        "sse_heartbeat_failures_recent",
+        "sse_notifier_lag_high",
+        "sse_notifier_unavailable_recent",
+        "sse_slow_consumers_recent",
+        "sse_terminal_close_slow",
         "time_to_first_token_high",
       ]),
       id: z.string().min(1).max(300),
@@ -3946,6 +4493,90 @@ export const zProviderOperationalSummary = z.object({
     }),
   ),
   runtime: z.object({
+    apiDeprecations: z.object({
+      generatedAt: z.iso.datetime(),
+      observationScope: z.enum(["process"]),
+      observationStartedAt: z.iso.datetime(),
+      observationWindowSeconds: z.int().gte(0),
+      operations: z.array(
+        z.object({
+          firstUsedAt: z.iso.datetime().optional(),
+          lastUsedAt: z.iso.datetime().optional(),
+          operationId: z.string().min(1).max(300),
+          requestCount: z.int().gte(0),
+          responseClasses: z.object({
+            "1xx": z.int().gte(0),
+            "2xx": z.int().gte(0),
+            "3xx": z.int().gte(0),
+            "4xx": z.int().gte(0),
+            "5xx": z.int().gte(0),
+            other: z.int().gte(0),
+          }),
+          zeroUsageWindowSeconds: z.int().gte(0),
+          zeroUsageWindowStartedAt: z.iso.datetime(),
+        }),
+      ),
+    }),
+    capabilityFlags: z.object({
+      observationScope: z.enum(["process"]),
+      total: z.int().gte(0),
+      resolutions: z.array(
+        z.object({
+          flagId: z.string().min(1).max(100),
+          effectiveState: z.enum(["disabled", "enabled"]),
+          reasonCode: z.enum([
+            "enabled",
+            "disabled",
+            "preview_allowlisted",
+            "preview_not_allowlisted",
+            "platform_disabled",
+          ]),
+          count: z.int().gte(0),
+        }),
+      ),
+    }),
+    capabilityAssignments: z.object({
+      observationScope: z.enum(["process"]),
+      total: z.int().gte(0),
+      resolutions: z.array(
+        z.object({
+          capabilityId: z.enum([
+            "image_generation",
+            "reasoning_policy",
+            "voice_processing",
+            "web_retrieval",
+          ]),
+          status: z.enum([
+            "enabled",
+            "disabled",
+            "required",
+            "normalized",
+            "not_configured",
+            "not_entitled",
+            "not_allowed",
+            "unsupported",
+            "unhealthy",
+          ]),
+          count: z.int().gte(0),
+        }),
+      ),
+    }),
+    idempotency: z.object({
+      observationScope: z.enum(["process"]),
+      outcomes: z.array(
+        z.object({
+          operation: z.enum(["images.generate", "runs.start"]),
+          outcome: z.enum([
+            "owner",
+            "replay",
+            "conflict",
+            "in_progress",
+            "failed",
+          ]),
+          count: z.int().gte(0),
+        }),
+      ),
+    }),
     contextInputTokensAverage: z.number(),
     lookbackSeconds: z.number().gte(0),
     objectStoreFailureCount: z.number().gte(0),
@@ -3954,6 +4585,26 @@ export const zProviderOperationalSummary = z.object({
     recoveryCount: z.number().gte(0),
     sseDisconnectCount: z.number().gte(0),
     sseReconnectCount: z.number().gte(0),
+    sse: z
+      .object({
+        activeStreams: z.int().gte(0),
+        bufferedBytesHighWater: z.int().gte(0),
+        connectionCount: z.int().gte(0),
+        cursorQueryCount: z.int().gte(0),
+        cursorQueryRowCount: z.int().gte(0),
+        heartbeatFailureCount: z.int().gte(0),
+        lookbackSeconds: z.int().gt(0),
+        notifierLagAverageMs: z.number().gte(0),
+        notifierLagP95Ms: z.number().gte(0),
+        notifierUnavailableCount: z.int().gte(0),
+        observationScope: z.enum(["process"]),
+        reconnectCount: z.int().gte(0),
+        replayedRowCount: z.int().gte(0),
+        slowConsumerDropCount: z.int().gte(0),
+        terminalCloseLatencyAverageMs: z.number().gte(0),
+        terminalCloseLatencyP95Ms: z.number().gte(0),
+      })
+      .optional(),
     timeToFirstTokenAverageMs: z.number().gte(0),
     timeToFirstTokenP95Ms: z.number().gte(0),
     uploadPipelineAverageMs: z.number().gte(0),
@@ -4246,6 +4897,18 @@ export const zRagPostureReport = z.object({
   }),
 });
 
+export const zRagPolicyRetrievalSettings = z.object({
+  topK: z.int().gte(1).lte(20),
+  similarityThreshold: z.number().gte(0).lte(1),
+  hybridSearch: z.boolean(),
+  hybridBm25Weight: z.number().gte(0).lte(1),
+});
+
+export const zRagPolicyAgenticSettings = z.object({
+  enabled: z.boolean(),
+  userMode: z.enum(["optional", "required"]),
+});
+
 export const zRagPolicyReport = z.object({
   orgId: z.string().min(1).max(120),
   source: z.enum(["default", "org"]),
@@ -4268,12 +4931,8 @@ export const zRagPolicyReport = z.object({
       model: z.string().min(1).max(200),
     }),
   ),
-  agentic: z
-    .object({
-      enabled: z.boolean(),
-      userMode: z.enum(["optional", "required"]),
-    })
-    .optional(),
+  retrieval: zRagPolicyRetrievalSettings,
+  agentic: zRagPolicyAgenticSettings,
   knowledgeBaseTierAssignments: z.object({
     org: z.array(z.string().min(1).max(120)).max(500),
     shared: z.array(z.string().min(1).max(120)).max(500),
@@ -4342,6 +5001,14 @@ export const zUpdateRagPolicyRequest = z.object({
       }),
     )
     .max(100)
+    .optional(),
+  retrieval: z
+    .object({
+      topK: z.int().gte(1).lte(20).optional(),
+      similarityThreshold: z.number().gte(0).lte(1).optional(),
+      hybridSearch: z.boolean().optional(),
+      hybridBm25Weight: z.number().gte(0).lte(1).optional(),
+    })
     .optional(),
   agentic: z
     .object({
@@ -4489,12 +5156,65 @@ export const zReadinessReport = z.object({
   checks: z.array(zReadinessCheck),
 });
 
+export const zReasoningPolicyV1 = z.union([
+  z.object({
+    schemaVersion: z.literal(1),
+    mode: z.enum(["off"]),
+  }),
+  z.object({
+    schemaVersion: z.literal(1),
+    mode: z.enum(["auto"]),
+    effort: z.enum(["low", "medium", "high"]).optional(),
+    maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+  }),
+  z.object({
+    schemaVersion: z.literal(1),
+    mode: z.enum(["summary"]),
+    effort: z.enum(["low", "medium", "high"]).optional(),
+    maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+    summaryDetail: z.enum(["brief", "standard", "detailed"]).optional(),
+    retainSummary: z.boolean(),
+  }),
+]);
+
 export const zRunContextPreview = z.object({
+  routing: z.object({
+    mode: z.enum(["selected", "economy"]),
+    requestedModelId: z.string().min(1).max(300),
+    selectedModelId: z.string().min(1).max(300),
+    candidateCount: z.int().gte(0),
+    estimatedBlendedTokenUsd: z.number().gte(0).optional(),
+  }),
   model: z.object({
     id: z.string().min(1).max(300),
     name: z.string().min(1).max(300),
     contextWindow: z.int().gt(0),
   }),
+  reasoningPolicy: z
+    .object({
+      requested: zReasoningPolicyV1,
+      effective: zReasoningPolicyV1,
+      source: z.enum(["agent_default", "run_request"]),
+      rejected: z.boolean(),
+      adjustments: z.array(
+        z.object({
+          parameter: z.enum([
+            "effort",
+            "maxReasoningTokens",
+            "mode",
+            "retainSummary",
+            "summaryDetail",
+          ]),
+          reason: z.enum([
+            "capped_by_governance",
+            "summary_persistence_not_implemented",
+            "unsupported_by_dialect",
+            "unsupported_by_model_or_provider",
+          ]),
+        }),
+      ),
+    })
+    .optional(),
   budget: z.object({
     estimatedInputTokens: z.int().gte(0),
     usableInputTokens: z.int().gte(0),
@@ -4550,11 +5270,144 @@ export const zInspectRunContextRequest = z.object({
   agentId: z.string().min(1).max(300),
   content: z.string().min(1).max(200000),
   modelId: z.string().min(1).max(300).optional(),
+  routingMode: z.enum(["selected", "economy"]).optional(),
+  researchMode: z.enum(["standard", "deep"]).optional(),
+  reasoningPolicy: zReasoningPolicyV1.optional(),
   fileIds: z.array(z.string().min(1).max(160)).max(8).optional(),
   imageCount: z.int().gte(0).lte(4).optional(),
   webSearch: z.boolean().optional(),
   urls: z.array(z.url()).max(5).optional(),
   agenticRag: z.boolean().optional(),
+});
+
+export const zPersistedRunContextInspection = z.object({
+  run: z.object({
+    id: z.string().min(1).max(300),
+    chatId: z.string().min(1).max(300),
+    agentId: z.string().min(1).max(300),
+    agentVersionId: z.string().min(1).max(300),
+    status: z.enum([
+      "queued",
+      "running",
+      "waiting_tool_approval",
+      "cancelled",
+      "completed",
+      "failed",
+    ]),
+    createdAt: z.iso.datetime(),
+    completedAt: z.iso.datetime().optional(),
+  }),
+  branch: z.object({
+    inputMessageId: z.string().min(1).max(300).optional(),
+    parentMessageId: z.string().min(1).max(300).optional(),
+    visibleMessageCount: z.int().gte(0),
+    currentTranscriptVersion: z.string().regex(/^[0-9]{1,20}$\/u/),
+  }),
+  model: z.object({
+    id: z.string().min(1).max(300),
+    displayName: z.string().min(1).max(300).optional(),
+    available: z.boolean(),
+  }),
+  provider: z.object({
+    id: z.string().min(1).max(300),
+    displayName: z.string().min(1).max(300).optional(),
+    available: z.boolean(),
+  }),
+  messages: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(300),
+        role: z.enum(["assistant", "user"]),
+        content: z.string().max(20000),
+        contentTruncated: z.boolean(),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .max(8),
+  checkpoints: z
+    .array(
+      z.object({
+        sequence: z.int().gte(0),
+        type: z.enum([
+          "run.started",
+          "message.started",
+          "message.completed",
+          "reasoning.summary.completed",
+          "retrieval.completed",
+          "tool.requested",
+          "tool.started",
+          "tool.approval_required",
+          "tool.completed",
+          "tool.failed",
+          "run.cancelled",
+          "run.completed",
+          "run.failed",
+          "run.continuing",
+          "run.waiting_tool_approval",
+          "run.waiting_tool_dispatch",
+          "output.part.ready",
+        ]),
+        createdAt: z.iso.datetime(),
+      }),
+    )
+    .max(50),
+  knowledge: z.object({
+    totalCitationCount: z.int().gte(0),
+    revokedOrUnavailableCount: z.int().gte(0),
+    citations: z
+      .array(
+        z.object({
+          chunkId: z.string().min(1).max(300),
+          documentId: z.string().min(1).max(300),
+          title: z.string().min(1).max(1000),
+          sourceType: z.string().min(1).max(100).optional(),
+          provider: z.string().min(1).max(100).optional(),
+        }),
+      )
+      .max(100),
+  }),
+  tools: z
+    .array(
+      z.object({
+        toolId: z.string().min(1).max(300),
+        status: z.enum(["blocked", "approval_required", "success", "failure"]),
+        riskLevel: z.string().min(1).max(100),
+        approvalRequired: z.boolean(),
+        startedAt: z.iso.datetime(),
+        completedAt: z.iso.datetime(),
+      }),
+    )
+    .max(50),
+  policies: z.object({
+    memoryMode: z.enum(["disabled", "recent_messages"]),
+    memoryMessageLimit: z.int().gt(0).optional(),
+    knowledgeGroundingMode: z
+      .enum(["optional", "prefer", "required"])
+      .optional(),
+    maxUserInputLength: z.int().gt(0).optional(),
+    blockedTermCount: z.int().gte(0),
+    promptInjectionGuard: z
+      .object({
+        mode: z.enum(["block"]),
+        scanUserInput: z.boolean(),
+        scanRetrievedContext: z.boolean(),
+      })
+      .optional(),
+  }),
+  transformations: z
+    .array(
+      z.object({
+        type: z.enum([
+          "content_policy_applied",
+          "history_trimmed",
+          "knowledge_dropped",
+          "knowledge_prompt_injection_filtered",
+          "provider_fallback",
+        ]),
+        count: z.int().gte(0).optional(),
+      }),
+    )
+    .max(10),
 });
 
 export const zRunRecord = z.object({
@@ -4584,6 +5437,8 @@ export const zQueuedChatTurn = z.object({
   chatId: z.string().min(1).max(300),
   content: z.string().min(1).max(200000),
   idempotencyKey: z.string().min(1).max(200),
+  parentMessageId: z.string().min(1).max(300).nullish(),
+  reasoningPolicy: zReasoningPolicyV1.optional(),
   status: z.enum(["queued", "leased", "failed", "cancelled", "completed"]),
   error: z.string().optional(),
   createdAt: z.iso.datetime(),
@@ -4593,6 +5448,10 @@ export const zEnqueueChatTurnRequest = z.object({
   agentId: z.string().min(1).max(300),
   content: z.string().min(1).max(200000),
   modelId: z.string().min(1).max(300).optional(),
+  routingMode: z.enum(["selected", "economy"]).optional(),
+  researchMode: z.enum(["standard", "deep"]).optional(),
+  reasoningPolicy: zReasoningPolicyV1.optional(),
+  parentMessageId: z.string().min(1).max(300).nullish(),
   webSearch: z.boolean().optional(),
   urls: z.array(z.url()).max(5).optional(),
   knowledgeBaseIds: z.array(z.string().min(1).max(300)).max(25).optional(),
@@ -4600,18 +5459,27 @@ export const zEnqueueChatTurnRequest = z.object({
   idempotencyKey: z.string().min(1).max(200).optional(),
 });
 
+export const zStartedRunRecord = zRunRecord.and(
+  z.object({
+    inputMessageId: z.string().min(1).max(300),
+  }),
+);
+
+export const zIdempotencyKey = z.string().min(1).max(200);
+
 export const zStartRunRequest = z.object({
   chatId: z.string().min(1).max(300),
   agentId: z.string().min(1).max(300),
   content: z.string().min(1).max(200000),
   modelId: z.string().min(1).max(300).optional(),
+  routingMode: z.enum(["selected", "economy"]).optional(),
+  researchMode: z.enum(["standard", "deep"]).optional(),
+  reasoningPolicy: zReasoningPolicyV1.optional(),
   historyBoundaryMessageId: z.string().min(1).max(300).optional(),
   parentMessageId: z.string().min(1).max(300).nullish(),
   fileIds: z.array(z.string().min(1).max(160)).max(8).optional(),
   webSearch: z.boolean().optional(),
   urls: z.array(z.url()).max(5).optional(),
-  knowledgeBaseIds: z.array(z.string().min(1).max(300)).max(25).optional(),
-  agenticRag: z.boolean().optional(),
   attachments: z
     .array(
       z.object({
@@ -4628,7 +5496,32 @@ export const zStartRunRequest = z.object({
     )
     .max(4)
     .optional(),
+  knowledgeBaseIds: z.array(z.string().min(1).max(300)).max(25).optional(),
+  agenticRag: z.boolean().optional(),
+  idempotencyKey: z.string().min(1).max(200).optional(),
 });
+
+export const zReasoningSummaryDeltaEventData = z.object({
+  classification: z.enum(["provider_safe_summary"]),
+  contentPolicyApplied: z.literal(true),
+  text: z.string().max(4096),
+});
+
+export const zReasoningSummaryCompletedEventData = z.union([
+  z.object({
+    classification: z.enum(["provider_safe_summary"]),
+    status: z.enum(["completed"]),
+    characterCount: z.int().gte(0).lte(20000).optional(),
+    durationMs: z.int().gte(0).lte(86400000).optional(),
+    reasoningTokens: z.int().gte(0).lte(200000).optional(),
+  }),
+  z.object({
+    classification: z.enum(["hidden_reasoning_omitted"]),
+    status: z.enum(["discarded"]),
+    durationMs: z.int().gte(0).lte(86400000).optional(),
+    reasoningTokens: z.int().gte(0).lte(200000).optional(),
+  }),
+]);
 
 export const zRunContinuingEventData = z.object({
   reason: z.enum(["tool_approval", "tool_dispatch"]),
@@ -4639,32 +5532,70 @@ export const zRunContinuingEventData = z.object({
   errorCode: z.string().optional(),
 });
 
-export const zRunEvent = z.object({
-  id: z.string().min(1).max(300),
-  runId: z.string().min(1).max(300),
-  sequence: z.int().gte(0),
-  type: z.enum([
-    "run.started",
-    "message.started",
-    "message.delta",
-    "message.reasoning",
-    "message.completed",
-    "retrieval.completed",
-    "tool.requested",
-    "tool.started",
-    "tool.approval_required",
-    "tool.completed",
-    "tool.failed",
-    "run.cancelled",
-    "run.completed",
-    "run.failed",
-    "run.continuing",
-    "run.waiting_tool_approval",
-    "run.waiting_tool_dispatch",
-  ]),
-  data: z.union([zRunContinuingEventData, z.record(z.string(), z.unknown())]),
-  createdAt: z.iso.datetime(),
-});
+export const zRunEvent = z.union([
+  z.object({
+    id: z.string().min(1).max(300),
+    runId: z.string().min(1).max(300),
+    sequence: z.int().gte(0),
+    schemaVersion: z.literal(1),
+    legId: z.string().min(1).max(300).optional(),
+    channel: z.string().min(1).max(64).optional(),
+    createdAt: z.iso.datetime(),
+    type: z.enum(["reasoning.summary.delta"]),
+    data: zReasoningSummaryDeltaEventData,
+  }),
+  z.object({
+    id: z.string().min(1).max(300),
+    runId: z.string().min(1).max(300),
+    sequence: z.int().gte(0),
+    schemaVersion: z.literal(1),
+    legId: z.string().min(1).max(300).optional(),
+    channel: z.string().min(1).max(64).optional(),
+    createdAt: z.iso.datetime(),
+    type: z.enum(["reasoning.summary.completed"]),
+    data: zReasoningSummaryCompletedEventData,
+  }),
+  z.object({
+    id: z.string().min(1).max(300),
+    runId: z.string().min(1).max(300),
+    sequence: z.int().gte(0),
+    schemaVersion: z.literal(1),
+    legId: z.string().min(1).max(300).optional(),
+    channel: z.string().min(1).max(64).optional(),
+    createdAt: z.iso.datetime(),
+    type: z.enum(["run.continuing"]),
+    data: zRunContinuingEventData,
+  }),
+  z.object({
+    id: z.string().min(1).max(300),
+    runId: z.string().min(1).max(300),
+    sequence: z.int().gte(0),
+    schemaVersion: z.literal(1),
+    legId: z.string().min(1).max(300).optional(),
+    channel: z.string().min(1).max(64).optional(),
+    createdAt: z.iso.datetime(),
+    type: z.enum([
+      "run.started",
+      "message.started",
+      "message.delta",
+      "message.reasoning",
+      "message.completed",
+      "retrieval.completed",
+      "tool.requested",
+      "tool.started",
+      "tool.approval_required",
+      "tool.completed",
+      "tool.failed",
+      "run.cancelled",
+      "run.completed",
+      "run.failed",
+      "run.waiting_tool_approval",
+      "run.waiting_tool_dispatch",
+      "output.part.ready",
+    ]),
+    data: z.record(z.string(), z.unknown()),
+  }),
+]);
 
 export const zSsoOidcProviderPreset = z.object({
   id: z.enum([
@@ -4955,6 +5886,10 @@ export const zChat = z.object({
   legalHoldUntil: z.iso.datetime().optional(),
   legalHoldReason: z.string().max(500).optional(),
   activeLeafMessageId: z.string().min(1).max(300).optional(),
+  transcriptVersion: z
+    .string()
+    .regex(/^[0-9]{1,20}$\/u/)
+    .optional(),
   updatedAt: z.iso.datetime(),
 });
 
@@ -4970,6 +5905,321 @@ export const zMessageCitation = z.object({
   publishedAt: z.iso.datetime().optional(),
 });
 
+export const zTextMessagePart = z.object({
+  schemaVersion: z.literal(1),
+  type: z.enum(["text"]),
+  text: z.string().min(1).max(1000000),
+  language: z
+    .string()
+    .min(2)
+    .max(35)
+    .regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$\/u/)
+    .optional(),
+});
+
+export const zImageRefMessagePart = z.object({
+  schemaVersion: z.literal(1),
+  type: z.enum(["image_ref"]),
+  fileId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+  mediaType: z.enum(["image/gif", "image/jpeg", "image/png", "image/webp"]),
+  dimensions: z
+    .object({
+      width: z.int().gt(0).lte(32768),
+      height: z.int().gt(0).lte(32768),
+    })
+    .optional(),
+  altText: z.string().min(1).max(2000).optional(),
+  transform: z
+    .object({
+      sourceFileId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+        .optional(),
+      operations: z
+        .array(z.enum(["crop", "resize", "rotate", "metadata_strip"]))
+        .min(1)
+        .max(8),
+    })
+    .optional(),
+  provenance: z
+    .object({
+      source: z.enum(["upload", "provider", "tool", "artifact", "import"]),
+      sourceId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+        .optional(),
+      modelId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+        .optional(),
+      sha256: z
+        .string()
+        .regex(/^[A-Fa-f0-9]{64}$\/u/)
+        .optional(),
+      createdAt: z.iso.datetime().optional(),
+    })
+    .optional(),
+});
+
+export const zAudioRefMessagePart = z.object({
+  schemaVersion: z.literal(1),
+  type: z.enum(["audio_ref"]),
+  fileId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+  mediaType: z.enum([
+    "audio/flac",
+    "audio/m4a",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/ogg",
+    "audio/wav",
+    "audio/webm",
+  ]),
+  durationMs: z.int().gt(0).lte(14400000),
+  transcriptPartId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+    .optional(),
+  waveformFileId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+    .optional(),
+  language: z
+    .string()
+    .min(2)
+    .max(35)
+    .regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$\/u/)
+    .optional(),
+  provenance: z
+    .object({
+      source: z.enum(["upload", "provider", "tool", "artifact", "import"]),
+      sourceId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+        .optional(),
+      modelId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+        .optional(),
+      sha256: z
+        .string()
+        .regex(/^[A-Fa-f0-9]{64}$\/u/)
+        .optional(),
+      createdAt: z.iso.datetime().optional(),
+    })
+    .optional(),
+});
+
+export const zVideoRefMessagePart = z.object({
+  schemaVersion: z.literal(1),
+  type: z.enum(["video_ref"]),
+  fileId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+  mediaType: z.enum(["video/mp4", "video/quicktime", "video/webm"]),
+  durationMs: z.int().gt(0).lte(14400000),
+  dimensions: z.object({
+    width: z.int().gt(0).lte(32768),
+    height: z.int().gt(0).lte(32768),
+  }),
+  transcriptPartId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+    .optional(),
+  keyframeFileIds: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+    )
+    .max(32)
+    .optional(),
+  provenance: z
+    .object({
+      source: z.enum(["upload", "provider", "tool", "artifact", "import"]),
+      sourceId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+        .optional(),
+      modelId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+        .optional(),
+      sha256: z
+        .string()
+        .regex(/^[A-Fa-f0-9]{64}$\/u/)
+        .optional(),
+      createdAt: z.iso.datetime().optional(),
+    })
+    .optional(),
+});
+
+export const zDocumentRefMessagePart = z.object({
+  schemaVersion: z.literal(1),
+  type: z.enum(["document_ref"]),
+  fileId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+  fileName: z.string().min(1).max(160),
+  mediaType: z.enum([
+    "application/json",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/csv",
+    "text/markdown",
+    "text/plain",
+  ]),
+  pageSelection: z
+    .object({
+      start: z.int().gt(0).lte(100000),
+      end: z.int().gt(0).lte(100000),
+    })
+    .optional(),
+  extractedTextPartId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+    .optional(),
+  provenance: z
+    .object({
+      source: z.enum(["upload", "provider", "tool", "artifact", "import"]),
+      sourceId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+        .optional(),
+      modelId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+        .optional(),
+      sha256: z
+        .string()
+        .regex(/^[A-Fa-f0-9]{64}$\/u/)
+        .optional(),
+      createdAt: z.iso.datetime().optional(),
+    })
+    .optional(),
+});
+
+export const zToolResultRefMessagePart = z.object({
+  schemaVersion: z.literal(1),
+  type: z.enum(["tool_result_ref"]),
+  toolCallId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+  toolResultId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+  outcome: z.enum(["succeeded", "failed", "cancelled"]),
+  safePreview: z.string().max(2000).optional(),
+});
+
+export const zArtifactRefMessagePart = z.object({
+  schemaVersion: z.literal(1),
+  type: z.enum(["artifact_ref"]),
+  artifactId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+  artifactVersion: z.int().gt(0),
+  mediaType: z
+    .string()
+    .min(3)
+    .max(127)
+    .regex(
+      /^[a-z0-9][a-z0-9!#$&^_.+-]{0,62}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,62}$\/u/,
+    ),
+  title: z.string().min(1).max(300),
+  renderer: z.enum([
+    "text",
+    "markdown",
+    "code",
+    "table",
+    "image",
+    "audio",
+    "video",
+    "pdf",
+    "download",
+  ]),
+});
+
+export const zCitationRefMessagePart = z.object({
+  schemaVersion: z.literal(1),
+  type: z.enum(["citation_ref"]),
+  sourceId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+  documentId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+  chunkId: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/)
+    .optional(),
+  title: z.string().min(1).max(1000),
+});
+
+export const zMessagePart = z.discriminatedUnion("type", [
+  zTextMessagePart.extend({ type: z.literal("text") }),
+  zImageRefMessagePart.extend({ type: z.literal("image_ref") }),
+  zAudioRefMessagePart.extend({ type: z.literal("audio_ref") }),
+  zVideoRefMessagePart.extend({ type: z.literal("video_ref") }),
+  zDocumentRefMessagePart.extend({ type: z.literal("document_ref") }),
+  zToolResultRefMessagePart.extend({ type: z.literal("tool_result_ref") }),
+  zArtifactRefMessagePart.extend({ type: z.literal("artifact_ref") }),
+  zCitationRefMessagePart.extend({ type: z.literal("citation_ref") }),
+]);
+
 export const zImportChatRequest = z.object({
   workspaceId: z.string().min(1).max(300),
   title: z.string().min(1).max(200).optional(),
@@ -4982,6 +6232,7 @@ export const zImportChatRequest = z.object({
         role: z.enum(["system", "user", "assistant", "tool"]),
         content: z.string().max(1000000),
         citations: z.array(zMessageCitation).max(100).optional(),
+        parts: z.array(zMessagePart).max(100).optional(),
         attachments: z
           .array(
             z.object({
@@ -5012,6 +6263,11 @@ export const zCreateChatRequest = z.object({
   expiresAt: z.iso.datetime().optional(),
 });
 
+export const zMessageRunError = z.object({
+  code: z.string().min(1).max(120),
+  message: z.string().min(1).max(2000).optional(),
+});
+
 export const zMessageAttachment = z.object({
   id: z.string().min(1).max(300),
   messageId: z.string().min(1).max(300),
@@ -5034,6 +6290,8 @@ export const zChatExport = z.object({
       role: z.enum(["system", "user", "assistant", "tool"]),
       content: z.string(),
       citations: z.array(zMessageCitation).max(100).optional(),
+      error: zMessageRunError.optional(),
+      modelId: z.string().min(1).max(300).optional(),
       parentId: z.string().min(1).max(300).optional(),
       createdAt: z.iso.datetime(),
       attachments: z
@@ -5045,6 +6303,7 @@ export const zChatExport = z.object({
           ),
         )
         .optional(),
+      parts: z.array(zMessagePart).max(100).optional(),
     }),
   ),
 });
@@ -5117,13 +6376,147 @@ export const zDeleteChatRequest = z.object({
   confirmChatId: z.string().min(1).max(300),
 });
 
+export const zMessagePartOutput = z.union([
+  zTextMessagePart.and(
+    z.object({
+      id: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      messageId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      position: z.int().gte(0).lte(9999),
+      createdAt: z.iso.datetime(),
+    }),
+  ),
+  zImageRefMessagePart.and(
+    z.object({
+      id: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      messageId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      position: z.int().gte(0).lte(9999),
+      createdAt: z.iso.datetime(),
+    }),
+  ),
+  zAudioRefMessagePart.and(
+    z.object({
+      id: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      messageId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      position: z.int().gte(0).lte(9999),
+      createdAt: z.iso.datetime(),
+    }),
+  ),
+  zVideoRefMessagePart.and(
+    z.object({
+      id: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      messageId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      position: z.int().gte(0).lte(9999),
+      createdAt: z.iso.datetime(),
+    }),
+  ),
+  zDocumentRefMessagePart.and(
+    z.object({
+      id: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      messageId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      position: z.int().gte(0).lte(9999),
+      createdAt: z.iso.datetime(),
+    }),
+  ),
+  zToolResultRefMessagePart.and(
+    z.object({
+      id: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      messageId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      position: z.int().gte(0).lte(9999),
+      createdAt: z.iso.datetime(),
+    }),
+  ),
+  zArtifactRefMessagePart.and(
+    z.object({
+      id: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      messageId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      position: z.int().gte(0).lte(9999),
+      createdAt: z.iso.datetime(),
+    }),
+  ),
+  zCitationRefMessagePart.and(
+    z.object({
+      id: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      messageId: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,299}$\/u/),
+      position: z.int().gte(0).lte(9999),
+      createdAt: z.iso.datetime(),
+    }),
+  ),
+]);
+
 export const zMessage = z.object({
   id: z.string().min(1).max(300),
   chatId: z.string().min(1).max(300),
   role: z.enum(["system", "user", "assistant", "tool"]),
   content: z.string(),
+  parts: z.array(zMessagePartOutput).max(100).optional(),
   citations: z.array(zMessageCitation).max(100).optional(),
   attachments: z.array(zMessageAttachment).max(100).optional(),
+  error: zMessageRunError.optional(),
+  modelId: z.string().min(1).max(300).optional(),
   parentId: z.string().min(1).max(300).optional(),
   createdAt: z.iso.datetime(),
 });
@@ -5345,6 +6738,698 @@ export const zChannelMessageReactionRequest = z.object({
   name: z.string().min(1).max(80),
 });
 
+export const zCapabilityLayer = z.enum([
+  "deployment",
+  "platform",
+  "entitlement",
+  "organization",
+  "workspace",
+  "agent_version",
+  "agent",
+  "group",
+  "user",
+  "resource",
+  "provider_model",
+  "quota",
+  "action",
+]);
+
+export const zCapabilityAssignmentState = z.enum([
+  "inherit",
+  "enabled",
+  "disabled",
+  "required",
+]);
+
+export const zCapabilityConfiguration = z.object({
+  maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+  allowedSizes: z
+    .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+    .max(3)
+    .optional(),
+  maxSearchResults: z.int().gte(1).lte(10).optional(),
+  maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+  reasoningModeMaximum: z.enum(["off", "auto", "summary"]).optional(),
+  reasoningEffortMaximum: z.enum(["low", "medium", "high"]).optional(),
+  maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+  allowReasoningSummaryRetention: z.boolean().optional(),
+});
+
+export const zCapabilityDefinition = z.object({
+  id: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+  schemaVersion: z.literal(1),
+  lifecycle: z.enum(["disabled", "preview", "ga", "deprecated"]),
+  category: z.enum([
+    "media",
+    "reasoning",
+    "retrieval",
+    "compute",
+    "compare",
+    "security",
+    "governance",
+  ]),
+  risk: z.enum(["low", "medium", "high", "critical"]),
+  controllingLayers: z.array(zCapabilityLayer),
+  allowedStates: z.array(zCapabilityAssignmentState),
+  defaultState: z.enum(["enabled", "disabled"]),
+  defaultConfiguration: zCapabilityConfiguration,
+  merge: z.object({
+    boolean: z.enum(["deny_dominates"]),
+    maxima: z.array(z.string()),
+    allowlists: z.array(z.string()),
+  }),
+  requiredScopes: z.array(z.string().min(1).max(300)),
+  entitlementKey: z.string().min(1).max(300).optional(),
+  dependencies: z.array(z.string().min(1).max(300)),
+  copy: z.object({
+    nameKey: z.string().min(1).max(300),
+    descriptionKey: z.string().min(1).max(300),
+    riskKey: z.string().min(1).max(300),
+    remediationKey: z.string().min(1).max(300),
+  }),
+  registryVersion: z.string().min(1).max(300),
+});
+
+export const zPlatformCapabilityPosture = z.object({
+  registryVersion: z.string().min(1).max(300),
+  controlPlane: z.enum(["deployment_environment"]),
+  mutableViaApi: z.literal(false),
+  capabilities: z.array(
+    z.object({
+      capabilityId: z.enum([
+        "image_generation",
+        "reasoning_policy",
+        "voice_processing",
+        "web_retrieval",
+        "content_firewall",
+        "knowledge_acl",
+        "realtime_voice",
+        "image_editing",
+        "secure_compute",
+        "multi_model_compare",
+        "tenant_encryption",
+        "data_export",
+      ]),
+      lifecycle: z.enum(["disabled", "preview", "ga", "deprecated"]),
+      risk: z.enum(["low", "medium", "high", "critical"]),
+      state: z.enum(["enabled", "disabled"]),
+      reason: z.enum(["allowed", "platform_disabled"]),
+    }),
+  ),
+});
+
+export const zCapabilityReason = z.object({
+  code: z.enum([
+    "platform_disabled",
+    "not_configured",
+    "not_entitled",
+    "organization_policy",
+    "workspace_policy",
+    "agent_version_policy",
+    "agent_policy",
+    "group_policy",
+    "user_policy",
+    "missing_grant",
+    "model_unsupported",
+    "dependency_unhealthy",
+    "quota_exceeded",
+    "requested_value_outside_limit",
+  ]),
+  layer: zCapabilityLayer,
+  effect: z.string().max(300).optional(),
+});
+
+export const zEffectiveCapability = z.object({
+  capabilityId: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+  status: z.enum([
+    "enabled",
+    "disabled",
+    "required",
+    "normalized",
+    "not_configured",
+    "not_entitled",
+    "not_allowed",
+    "unsupported",
+    "unhealthy",
+  ]),
+  dimensions: z.object({
+    installed: z.enum(["yes", "no", "unknown"]),
+    entitled: z.enum(["yes", "no", "unknown", "not_required"]),
+    available: z.enum(["yes", "no", "unknown"]),
+    allowed: z.enum(["yes", "no"]),
+    capable: z.enum(["yes", "no", "unknown"]),
+    selected: z.enum(["yes", "no", "defaulted"]),
+  }),
+  effective: zCapabilityConfiguration,
+  requestedChanges: z.array(
+    z.object({
+      path: z.string().max(300),
+      effect: z.enum(["clamped", "removed", "rejected"]),
+    }),
+  ),
+  reasons: z.array(zCapabilityReason),
+  assignmentVersions: z.array(
+    z.object({
+      layer: zCapabilityLayer,
+      version: z.int().gt(0),
+    }),
+  ),
+  registryVersion: z.string().min(1).max(300),
+  resolvedAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime().optional(),
+});
+
+export const zResolveCapabilitiesRequest = z.object({
+  capabilityIds: z
+    .array(
+      z.enum([
+        "image_generation",
+        "reasoning_policy",
+        "voice_processing",
+        "web_retrieval",
+        "content_firewall",
+        "knowledge_acl",
+        "realtime_voice",
+        "image_editing",
+        "secure_compute",
+        "multi_model_compare",
+        "tenant_encryption",
+        "data_export",
+      ]),
+    )
+    .min(1)
+    .max(25),
+  context: z.object({
+    workspaceId: z.string().min(1).max(300),
+    modelId: z.string().min(1).max(300).optional(),
+    agentId: z.string().min(1).max(300).optional(),
+    agentVersionId: z.string().min(1).max(300).optional(),
+  }),
+  requested: z
+    .object({
+      image_generation: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      reasoning_policy: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      voice_processing: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      web_retrieval: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      content_firewall: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      knowledge_acl: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      realtime_voice: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      image_editing: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      secure_compute: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      multi_model_compare: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      tenant_encryption: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+      data_export: z
+        .object({
+          selected: z.boolean().optional(),
+          maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+          allowedSizes: z
+            .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+            .min(1)
+            .max(3)
+            .optional(),
+          maxSearchResults: z.int().gte(1).lte(10).optional(),
+          maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+          reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+          reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+          maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+          retainReasoningSummary: z.boolean().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+export const zCapabilityScopeType = z.enum([
+  "organization",
+  "workspace",
+  "agent",
+  "group",
+  "user",
+]);
+
+export const zCapabilityConfigurationPatch = z.object({
+  maxImagesPerRequest: z.int().gte(1).lte(4).optional(),
+  allowedSizes: z
+    .array(z.enum(["1024x1024", "1024x1536", "1536x1024"]))
+    .max(3)
+    .optional(),
+  maxSearchResults: z.int().gte(1).lte(10).optional(),
+  maxUrlsPerRequest: z.int().gte(1).lte(5).optional(),
+  reasoningModeMaximum: z.enum(["off", "auto", "summary"]).optional(),
+  reasoningEffortMaximum: z.enum(["low", "medium", "high"]).optional(),
+  maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+  allowReasoningSummaryRetention: z.boolean().optional(),
+});
+
+export const zCapabilityAssignment = z.object({
+  id: z.string().min(1).max(300),
+  orgId: z.string().min(1).max(300),
+  scopeType: zCapabilityScopeType,
+  scopeId: z.string().min(1).max(300),
+  capabilityId: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+  state: zCapabilityAssignmentState,
+  configuration: zCapabilityConfigurationPatch,
+  version: z.int().gt(0),
+  supersedesId: z.string().min(1).max(300).optional(),
+  actorId: z.string().min(1).max(300),
+  reason: z.string().min(1).max(1000),
+  effectiveAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime().optional(),
+  revokedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+});
+
+export const zCapabilityAdminOverview = z.object({
+  scopeType: zCapabilityScopeType,
+  scopeId: z.string().min(1).max(300),
+  registryVersion: z.string().min(1).max(300),
+  capabilities: z.array(
+    z.object({
+      definition: zCapabilityDefinition,
+      configuredAssignment: zCapabilityAssignment.optional(),
+      inheritedAssignment: zCapabilityAssignment.optional(),
+      effective: zEffectiveCapability,
+      controllingLayer: zCapabilityLayer.optional(),
+      canOverride: z.boolean(),
+    }),
+  ),
+});
+
+export const zCapabilityExplanation = z.object({
+  effective: zEffectiveCapability,
+  assignments: z.array(
+    z.object({
+      id: z.string().min(1).max(300),
+      layer: zCapabilityLayer,
+      version: z.int().gt(0),
+      state: zCapabilityAssignmentState,
+      expiresAt: z.iso.datetime().optional(),
+    }),
+  ),
+});
+
+export const zUpdateCapabilityAssignmentRequest = z.object({
+  scopeType: zCapabilityScopeType,
+  scopeId: z.string().min(1).max(300),
+  state: zCapabilityAssignmentState,
+  configuration: zCapabilityConfigurationPatch.optional(),
+  reason: z.string().min(1).max(1000),
+  expectedVersion: z.int().gte(0).optional(),
+  expiresAt: z.iso.datetime().nullish(),
+});
+
+export const zPreviewCapabilityAssignmentRequest = z.object({
+  scopeType: zCapabilityScopeType,
+  scopeId: z.string().min(1).max(300),
+  state: zCapabilityAssignmentState,
+  configuration: zCapabilityConfigurationPatch.optional(),
+  expiresAt: z.iso.datetime().nullish(),
+  workspaceId: z.string().min(1).max(300).optional(),
+  requested: z
+    .object({
+      selected: z.boolean().optional(),
+      reasoningMode: z.enum(["off", "auto", "summary"]).optional(),
+      reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
+      maxReasoningTokens: z.int().gte(1).lte(200000).optional(),
+      retainReasoningSummary: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+export const zCapabilityImpactPreview = z.object({
+  sampleCount: z.int().gte(0),
+  counts: z.object({
+    enabled: z.int().gte(0),
+    disabled: z.int().gte(0),
+    required: z.int().gte(0),
+    normalized: z.int().gte(0),
+    not_configured: z.int().gte(0),
+    not_entitled: z.int().gte(0),
+    not_allowed: z.int().gte(0),
+    unsupported: z.int().gte(0),
+    unhealthy: z.int().gte(0),
+  }),
+  reasons: z.array(
+    z.object({
+      code: z.enum([
+        "platform_disabled",
+        "not_configured",
+        "not_entitled",
+        "organization_policy",
+        "workspace_policy",
+        "agent_version_policy",
+        "agent_policy",
+        "group_policy",
+        "user_policy",
+        "missing_grant",
+        "model_unsupported",
+        "dependency_unhealthy",
+        "quota_exceeded",
+        "requested_value_outside_limit",
+      ]),
+      layer: zCapabilityLayer,
+      count: z.int().gt(0),
+    }),
+  ),
+});
+
+export const zPreviewCapabilityImpactRequest =
+  zPreviewCapabilityAssignmentRequest.and(
+    z.object({
+      samples: z
+        .array(
+          z.object({
+            role: z.enum(["admin", "member", "service_account"]),
+            workspaceClass: z.enum(["default", "regulated", "general"]),
+          }),
+        )
+        .min(1)
+        .max(25),
+    }),
+  );
+
+export const zPolicyBundle = z.object({
+  id: z.string().min(1).max(300),
+  orgId: z.string().min(1).max(300),
+  state: z.enum([
+    "draft",
+    "pending_approval",
+    "approved",
+    "published",
+    "rejected",
+    "rolled_back",
+  ]),
+  proposerId: z.string().min(1).max(300),
+  approverId: z.string().min(1).max(300).optional(),
+  reason: z.string().min(1).max(1000),
+  capabilityId: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+  publicationRequired: z.boolean(),
+});
+
+export const zCapabilityFlagId = z.enum([
+  "stream_transport_v2",
+  "router_query_hydration_v1",
+  "server_table_v2",
+  "virtual_transcript_v1",
+  "provider_capabilities_v2",
+  "reasoning_policy_v1",
+  "content_firewall_v2",
+  "knowledge_acl_v2",
+  "multimodal_parts_v2",
+  "image_jobs_v2",
+  "realtime_voice_v1",
+  "compute_artifacts_v1",
+  "compare_consensus_v1",
+  "trust_plane_v1",
+]);
+
+export const zCapabilityFlagState = z.enum(["disabled", "preview", "enabled"]);
+
+export const zEffectiveCapabilityFlag = z.object({
+  flagId: zCapabilityFlagId,
+  configuredState: zCapabilityFlagState,
+  effectiveState: z.enum(["disabled", "enabled"]),
+  reasonCode: z.enum([
+    "enabled",
+    "disabled",
+    "preview_allowlisted",
+    "preview_not_allowlisted",
+    "platform_disabled",
+  ]),
+  version: z.int().gt(0).optional(),
+});
+
+export const zCapabilityFlagDefinition = z.object({
+  id: zCapabilityFlagId,
+  defaultState: z.enum(["disabled", "enabled"]),
+  consumerStatus: z.enum(["enforced", "reserved"]),
+  platformCapabilityId: z.string().min(1).max(300).optional(),
+});
+
+export const zCapabilityFlagSubject = z.object({
+  subjectType: z.enum(["user", "service_account"]),
+  subjectId: z.string().min(1).max(300),
+});
+
+export const zOrganizationCapabilityFlag = z.object({
+  id: z.string().min(1).max(300),
+  orgId: z.string().min(1).max(300),
+  flagId: zCapabilityFlagId,
+  state: zCapabilityFlagState,
+  allowlistedSubjects: z.array(zCapabilityFlagSubject).max(100),
+  version: z.int().gt(0),
+  supersedesId: z.string().min(1).max(300).optional(),
+  actorId: z.string().min(1).max(300),
+  reason: z.string().min(1).max(1000),
+  revokedAt: z.iso.datetime().optional(),
+  createdAt: z.iso.datetime(),
+});
+
+export const zCapabilityFlagAdminReport = z.object({
+  definitions: z.array(zCapabilityFlagDefinition),
+  configured: z.array(zOrganizationCapabilityFlag),
+  platformDisabledFlagIds: z.array(zCapabilityFlagId),
+});
+
+export const zUpdateCapabilityFlagRequest = z.object({
+  state: zCapabilityFlagState,
+  allowlistedSubjects: z
+    .array(zCapabilityFlagSubject)
+    .max(100)
+    .optional()
+    .default([]),
+  reason: z.string().min(1).max(1000),
+  expectedVersion: z.int().gte(0).optional(),
+});
+
 export const zShareTarget = z.object({
   principalType: z.enum(["group", "service_account", "user"]),
   principalId: z.string().min(1).max(300),
@@ -5441,6 +7526,18 @@ export const zWorkspaceFolderItem = z.object({
   createdAt: z.iso.datetime(),
 });
 
+export const zWorkspaceFolderItemsBatchGroup = z.object({
+  folderId: z.string().min(1).max(300),
+  hasMore: z.boolean(),
+  items: z.array(zWorkspaceFolderItem).max(200),
+});
+
+export const zListFolderItemsBatchRequest = z.object({
+  workspaceId: z.string().min(1).max(300),
+  folderIds: z.array(z.string().min(1).max(300)).min(1).max(50),
+  limitPerFolder: z.int().gte(1).lte(200).optional().default(100),
+});
+
 export const zCreateFolderItemRequest = z.object({
   resourceType: z.enum(["agent", "chat", "knowledge_base"]),
   resourceId: z.string().min(1).max(300),
@@ -5459,6 +7556,142 @@ export const zChatTag = z.object({
 
 export const zAssignChatTagRequest = z.object({
   name: z.string().min(1).max(160),
+});
+
+export const zContentPolicyReport = z.object({
+  schema: z.enum(["romeo.content-policy.v1"]),
+  orgId: z.string().min(1).max(300),
+  detectors: z.object({
+    credit_card: z.enum(["disabled", "audit", "block", "redact"]),
+    email_address: z.enum(["disabled", "audit", "block", "redact"]),
+    us_ssn: z.enum(["disabled", "audit", "block", "redact"]),
+    api_token: z.enum(["disabled", "audit", "block", "redact"]),
+  }),
+  policySource: z.enum(["default", "org"]),
+  updatedAt: z.iso.datetime().optional(),
+  updatedBy: z.string().min(1).max(300).optional(),
+  redaction: z.object({
+    rawContentReturned: z.literal(false),
+    rawMatchesReturned: z.literal(false),
+    detectorPatternsReturned: z.literal(false),
+  }),
+});
+
+export const zUpdateContentPolicyRequest = z.object({
+  detectors: z.object({
+    credit_card: z.enum(["disabled", "audit", "block", "redact"]).optional(),
+    email_address: z.enum(["disabled", "audit", "block", "redact"]).optional(),
+    us_ssn: z.enum(["disabled", "audit", "block", "redact"]).optional(),
+    api_token: z.enum(["disabled", "audit", "block", "redact"]).optional(),
+  }),
+});
+
+export const zContentPolicySimulation = z.object({
+  action: z.enum(["allow", "audit", "redact", "block"]),
+  detections: z.array(
+    z.object({
+      code: z.enum(["credit_card", "email_address", "us_ssn", "api_token"]),
+      count: z.int().gt(0),
+      action: z.enum(["audit", "block", "redact"]),
+    }),
+  ),
+  evaluatedAt: z.iso.datetime(),
+  redaction: z.object({
+    rawContentReturned: z.literal(false),
+    rawMatchesReturned: z.literal(false),
+  }),
+});
+
+export const zSimulateContentPolicyRequest = z.object({
+  content: z.string().max(200000),
+});
+
+export const zContentPolicyVersion = z.object({
+  id: z.string().min(1).max(300),
+  version: z.int().gt(0),
+  state: z.enum(["draft", "staged", "published", "retired"]),
+  detectors: z.object({
+    credit_card: z.enum(["disabled", "audit", "block", "redact"]),
+    email_address: z.enum(["disabled", "audit", "block", "redact"]),
+    us_ssn: z.enum(["disabled", "audit", "block", "redact"]),
+    api_token: z.enum(["disabled", "audit", "block", "redact"]),
+  }),
+  approvalRequired: z.boolean(),
+  approvalTtlSeconds: z.int().gte(60).lte(86400),
+  createdAt: z.iso.datetime(),
+  publishedAt: z.iso.datetime().optional(),
+});
+
+export const zCreateContentPolicyVersionRequest = z.object({
+  detectors: z.object({
+    credit_card: z.enum(["disabled", "audit", "block", "redact"]),
+    email_address: z.enum(["disabled", "audit", "block", "redact"]),
+    us_ssn: z.enum(["disabled", "audit", "block", "redact"]),
+    api_token: z.enum(["disabled", "audit", "block", "redact"]),
+  }),
+  approvalRequired: z.boolean().optional(),
+  approvalTtlSeconds: z.int().gte(60).lte(86400).optional(),
+});
+
+export const zContentPolicyDryRun = z.object({
+  action: z.enum(["allow", "audit", "redact", "block"]),
+  detections: z.array(
+    z.object({
+      code: z.enum(["credit_card", "email_address", "us_ssn", "api_token"]),
+      count: z.int().gt(0),
+      action: z.enum(["audit", "block", "redact"]),
+    }),
+  ),
+  evaluatedAt: z.iso.datetime(),
+  versionId: z.string().min(1).max(300),
+  redaction: z.object({
+    rawContentReturned: z.literal(false),
+    rawMatchesReturned: z.literal(false),
+  }),
+});
+
+export const zDryRunContentPolicyVersionRequest = z.object({
+  content: z.string().max(200000),
+});
+
+export const zRollbackContentPolicyRequest = z.object({
+  versionId: z.string().min(1).max(300).optional(),
+});
+
+export const zContentPolicyDecision = z.object({
+  id: z.string().min(1).max(300),
+  versionId: z.string().min(1).max(300),
+  surface: z.string().min(1).max(300),
+  action: z.enum(["allow", "audit", "redact", "block"]),
+  detectors: z.array(
+    z.object({
+      code: z.enum(["credit_card", "email_address", "us_ssn", "api_token"]),
+      count: z.int().gt(0),
+      action: z.enum(["audit", "block", "redact"]),
+    }),
+  ),
+  decidedAt: z.iso.datetime(),
+});
+
+export const zContentPolicyApproval = z.object({
+  id: z.string().min(1).max(300),
+  runId: z.string().min(1).max(300),
+  decisionId: z.string().min(1).max(300),
+  state: z.enum(["pending", "approved", "denied", "expired"]),
+  expiresAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+  resolvedAt: z.iso.datetime().optional(),
+});
+
+export const zRequestContentPolicyApprovalRequest = z.object({
+  runId: z.string().min(1).max(300),
+  decisionId: z.string().min(1).max(300),
+  expiresAt: z.iso.datetime(),
+});
+
+export const zResolveContentPolicyApprovalRequest = z.object({
+  decision: z.enum(["approve", "deny"]),
+  runId: z.string().min(1).max(300).optional(),
 });
 
 export const zDataConnectorPostureReport = z.object({
@@ -5903,6 +8136,9 @@ export const zDeviceAuthorization = z.object({
       "voices:manage",
       "tools:use",
       "tools:manage",
+      "capabilities:read",
+      "capabilities:manage",
+      "capabilities:approve",
       "admin:read",
       "admin:write",
     ]),
@@ -5955,6 +8191,9 @@ export const zCreateDeviceAuthorizationRequest = z.object({
         "voices:manage",
         "tools:use",
         "tools:manage",
+        "capabilities:read",
+        "capabilities:manage",
+        "capabilities:approve",
         "admin:read",
         "admin:write",
       ]),
@@ -6129,6 +8368,189 @@ export const zEdgeSecurityPostureReport = z.object({
   }),
 });
 
+export const zRealtimeSessionDecision = z.object({
+  outcome: z.enum(["accepted", "denied"]),
+  code: z
+    .enum(["capability_platform_disabled", "realtime_runtime_uninstalled"])
+    .optional(),
+  fallback: z.enum(["none", "batch_stt_tts"]),
+  retention: z.enum(["none", "transcript_only", "audio_governed"]).optional(),
+});
+
+export const zComputeJobDecision = z.object({
+  outcome: z.enum(["accepted", "denied"]),
+  code: z
+    .enum([
+      "capability_platform_disabled",
+      "compute_runtime_uninstalled",
+      "compute_egress_denied",
+      "compute_lease_lost",
+    ])
+    .optional(),
+  jobId: z.string().min(1).max(300).optional(),
+});
+
+export const zComparePreflightDecision = z.object({
+  outcome: z.enum(["accepted", "denied"]),
+  code: z
+    .enum([
+      "capability_platform_disabled",
+      "compare_preflight_failed",
+      "compare_cost_cap_exceeded",
+    ])
+    .optional(),
+  estimatedMicroUsd: z.int().gte(0).optional(),
+  legIds: z.array(z.string().min(1).max(300)).optional(),
+  failedLegIds: z.array(z.string().min(1).max(300)).optional(),
+});
+
+export const zFirewallOutputEvaluation = z.object({
+  action: z.enum(["hold", "release", "block"]),
+  code: z
+    .enum(["firewall_output_blocked", "content_policy_unavailable"])
+    .optional(),
+  detectors: z.array(z.string()).optional(),
+  releasedCharacters: z.int().gte(0),
+});
+
+export const zKnowledgeAclPrefilter = z.object({
+  allowedDocumentCount: z.int().gte(0),
+  deniedCount: z.int().gte(0),
+  reasonCode: z
+    .enum([
+      "knowledge_acl_denied",
+      "knowledge_acl_stale",
+      "knowledge_acl_revoked",
+      "knowledge_acl_tombstoned",
+    ])
+    .optional(),
+});
+
+export const zTrustPosture = z.object({
+  keys: z.enum([
+    "verified",
+    "failed",
+    "stale",
+    "not_configured",
+    "not_applicable",
+  ]),
+  residency: z.enum([
+    "verified",
+    "failed",
+    "stale",
+    "not_configured",
+    "not_applicable",
+  ]),
+  dlp: z.enum([
+    "verified",
+    "failed",
+    "stale",
+    "not_configured",
+    "not_applicable",
+  ]),
+  acl: z.enum([
+    "verified",
+    "failed",
+    "stale",
+    "not_configured",
+    "not_applicable",
+  ]),
+  syntheticGreen: z.literal(false),
+});
+
+export const zImageJobDecision = z.object({
+  outcome: z.enum(["accepted", "denied"]),
+  code: z
+    .enum([
+      "capability_platform_disabled",
+      "image_job_cancelled",
+      "image_job_source_revoked",
+      "file_not_ready",
+    ])
+    .optional(),
+  jobId: z.string().min(1).max(300).optional(),
+  state: z
+    .enum([
+      "queued",
+      "running",
+      "cancelling",
+      "cancelled",
+      "completed",
+      "failed",
+    ])
+    .optional(),
+});
+
+export const zServerTableSavedView = z.object({
+  id: z.string().min(1).max(300),
+  resource: z.string().min(1).max(300),
+  name: z.string().min(1).max(80),
+  source: z.enum(["server", "local_fallback"]),
+  query: z.object({
+    sort: z.array(
+      z.object({
+        field: z.string().min(1).max(300),
+        direction: z.enum(["asc", "desc"]),
+      }),
+    ),
+    filters: z.array(
+      z.object({
+        field: z.string().min(1).max(300),
+        operator: z.string().min(1).max(300),
+      }),
+    ),
+    search: z.string().min(1).max(300).optional(),
+    pageSize: z.int().gte(1).lte(100),
+  }),
+  presentation: z.object({
+    columnVisibility: z.record(z.string(), z.boolean()),
+    density: z.enum(["comfortable", "compact"]),
+  }),
+});
+
+export const zTableExportJob = z.object({
+  outcome: z.enum(["accepted", "denied"]),
+  code: z.enum(["table_export_must_be_async"]).optional(),
+  jobId: z.string().min(1).max(300).optional(),
+  state: z
+    .enum(["queued", "running", "artifact_ready", "failed", "expired"])
+    .optional(),
+  percent: z.int().gte(0).lte(100).optional(),
+  artifactId: z.string().min(1).max(300).optional(),
+  expiresAt: z.iso.datetime().optional(),
+});
+
+export const zInventoriedTableRow = z.object({
+  id: z.string().min(1).max(300),
+});
+
+export const zInventoriedTablePage = z.object({
+  items: z.array(zInventoriedTableRow),
+  page: z.object({
+    nextCursor: z.string().min(1).max(2000).nullable(),
+    previousCursor: z.string().min(1).max(2000).nullable(),
+    limit: z.int().gt(0),
+    estimatedTotal: z.int().gte(0),
+  }),
+  applied: z.object({
+    sort: z.array(
+      z.object({
+        field: z.string().min(1).max(300),
+        direction: z.enum(["asc", "desc"]),
+      }),
+    ),
+    filters: z.array(
+      z.object({
+        field: z.string().min(1).max(300),
+        operator: z.string().min(1).max(300),
+        value: z.unknown().optional(),
+      }),
+    ),
+  }),
+  resource: z.string().min(1).max(300),
+  summary: z.record(z.string(), z.int().gte(0)).optional(),
+});
+
 export const zEvalSuite = z.object({
   id: z.string().min(1).max(300),
   orgId: z.string().min(1).max(300),
@@ -6204,6 +8626,54 @@ export const zCreateEvalSuiteRequest = z.object({
     .max(100),
 });
 
+export const zFeedbackEvalCaseResult = z.object({
+  suiteId: z.string().min(1).max(300),
+  caseId: z.string().min(1).max(300),
+  created: z.boolean(),
+  redaction: z.object({
+    evalInputReturned: z.literal(false),
+    assistantContentPersisted: z.literal(false),
+    assistantContentReturned: z.literal(false),
+    feedbackReasonPersisted: z.literal(false),
+    feedbackReasonReturned: z.literal(false),
+    reviewerIdentityPersisted: z.literal(false),
+    reviewerIdentityReturned: z.literal(false),
+  }),
+});
+
+export const zCreateEvalCaseFromFeedbackRequest = z.object({
+  agentId: z.string().min(1).max(300),
+  chatId: z.string().min(1).max(300),
+  messageId: z.string().min(1).max(300),
+  suiteId: z.string().min(1).max(300).optional(),
+  suiteName: z.string().min(1).max(200).optional(),
+});
+
+export const zEvalReasoningPolicyEvidence = z.object({
+  requested: zReasoningPolicyV1,
+  effective: zReasoningPolicyV1,
+});
+
+export const zEvalRunMetrics = z.object({
+  latencyMs: z.int().gte(0).lte(86400000),
+  usage: z.object({
+    coverage: z.enum(["complete", "partial", "none"]),
+    inputTokens: z.int().gte(0).lte(2000000000).optional(),
+    outputTokens: z.int().gte(0).lte(2000000000).optional(),
+    reasoningTokens: z.int().gte(0).lte(2000000000).optional(),
+    source: z
+      .enum([
+        "anthropic",
+        "ollama",
+        "openai-compatible",
+        "openai-responses-compatible",
+      ])
+      .optional(),
+  }),
+  costBasis: z.enum(["reported_tokens", "unavailable"]),
+  estimatedCostUsd: z.number().gte(0).lte(1000000).optional(),
+});
+
 export const zEvalRun = z.object({
   id: z.string().min(1).max(300),
   orgId: z.string().min(1).max(300),
@@ -6216,6 +8686,8 @@ export const zEvalRun = z.object({
   createdBy: z.string().min(1).max(300),
   createdAt: z.iso.datetime(),
   completedAt: z.iso.datetime(),
+  reasoningPolicy: zEvalReasoningPolicyEvidence.optional(),
+  metrics: zEvalRunMetrics.optional(),
 });
 
 export const zEvalDashboard = z.object({
@@ -6244,6 +8716,8 @@ export const zEvalDashboard = z.object({
       status: z.enum(["failed", "passed"]),
       score: z.number().gte(0).lte(1),
       completedAt: z.iso.datetime(),
+      reasoningPolicy: zEvalReasoningPolicyEvidence.optional(),
+      metrics: zEvalRunMetrics.optional(),
     }),
   ),
 });
@@ -6342,6 +8816,34 @@ export const zEvalRunWithResults = z.object({
 
 export const zRunEvalSuiteRequest = z.object({
   modelId: z.string().min(1).max(300).optional(),
+  reasoningPolicy: zReasoningPolicyV1.optional(),
+});
+
+export const zEvalReasoningComparison = z.object({
+  suiteId: z.string().min(1).max(300),
+  generatedAt: z.iso.datetime(),
+  variants: z.array(
+    z.object({
+      modelId: z.string().min(1).max(300),
+      requested: zReasoningPolicyV1,
+      effective: zReasoningPolicyV1,
+      runCount: z.int().gte(0),
+      averageScore: z.number().gte(0).lte(1),
+      averageLatencyMs: z.number().gte(0).lte(86400000),
+      reportedInputTokens: z.int().gte(0).lte(2000000000).nullable(),
+      reportedOutputTokens: z.int().gte(0).lte(2000000000).nullable(),
+      reportedReasoningTokens: z.int().gte(0).lte(2000000000).nullable(),
+      estimatedCostUsd: z.number().gte(0).lte(1000000).nullable(),
+      trend: z.array(
+        z.object({
+          runId: z.string().min(1).max(300),
+          score: z.number().gte(0).lte(1),
+          latencyMs: z.int().gte(0).lte(86400000),
+          completedAt: z.iso.datetime(),
+        }),
+      ),
+    }),
+  ),
 });
 
 export const zEvalResultHumanRating = z.object({
@@ -6359,6 +8861,36 @@ export const zEvalResultHumanRating = z.object({
 export const zRateEvalResultRequest = z.object({
   rating: z.enum(["pass", "neutral", "fail"]),
   comment: z.string().min(1).max(2000).optional(),
+});
+
+export const zFileLifecycle = z.object({
+  schemaVersion: z.literal(1),
+  state: z.enum([
+    "uploading",
+    "quarantined",
+    "scanning",
+    "extracting",
+    "transcoding",
+    "ready",
+    "attached",
+    "retained",
+    "failed",
+    "deleted",
+    "available",
+  ]),
+  version: z.int().gte(0),
+  attempts: z.int().gte(0).lte(100),
+  retryable: z.boolean(),
+  failureCode: z
+    .string()
+    .min(1)
+    .max(80)
+    .regex(/^[a-z0-9_]+$\/u/)
+    .nullable(),
+  nextAttemptAt: z.iso.datetime().nullable(),
+  leaseExpiresAt: z.iso.datetime().nullable(),
+  attachedAt: z.iso.datetime().nullable(),
+  retainedAt: z.iso.datetime().nullable(),
 });
 
 export const zFileExtraction = z.object({
@@ -6403,7 +8935,20 @@ export const zFileObject = z.object({
     "web_source",
     "voice_artifact",
   ]),
-  status: z.enum(["available", "deleted", "uploading"]),
+  status: z.enum([
+    "uploading",
+    "quarantined",
+    "scanning",
+    "extracting",
+    "transcoding",
+    "ready",
+    "attached",
+    "retained",
+    "failed",
+    "deleted",
+    "available",
+  ]),
+  lifecycle: zFileLifecycle,
   metadata: z.record(z.string(), z.unknown()),
   extraction: zFileExtraction,
   contentUrl: z.string().nullable(),
@@ -6503,6 +9048,7 @@ export const zCreateFileResumableUploadSessionRequest =
 export const zRetentionPolicy = z.object({
   orgId: z.string().min(1).max(300),
   auditLogRetentionDays: z.int().gte(30).lte(3650),
+  runEventRetentionDays: z.int().gte(1).lte(3650),
   fileRetentionDays: z.int().gte(1).lte(3650).nullable(),
   workspaceFileRetentionDays: z.record(
     z.string(),
@@ -6518,6 +9064,7 @@ export const zRetentionPolicy = z.object({
 
 export const zUpdateRetentionPolicyRequest = z.object({
   auditLogRetentionDays: z.int().gte(30).lte(3650),
+  runEventRetentionDays: z.int().gte(1).lte(3650),
   fileRetentionDays: z.int().gte(1).lte(3650).nullish(),
   workspaceFileRetentionDays: z
     .record(z.string(), z.int().gte(1).lte(3650).nullable())
@@ -6530,7 +9077,9 @@ export const zUpdateRetentionPolicyRequest = z.object({
 export const zRetentionEnforcementResult = z.object({
   orgId: z.string().min(1).max(300),
   auditLogRetentionDays: z.int().gte(0),
+  runEventRetentionDays: z.int().gte(0),
   cutoffAt: z.iso.datetime(),
+  runEventCutoffAt: z.iso.datetime(),
   cleanedBrowserAutomationJobCount: z.int().gte(0).optional(),
   deletedBrowserAutomationArtifactCount: z.int().gte(0).optional(),
   cleanedVoiceArtifactUsageEventCount: z.int().gte(0).optional(),
@@ -6542,6 +9091,8 @@ export const zRetentionEnforcementResult = z.object({
   missingFileObjectCount: z.int().gte(0).optional(),
   deletedFileObjectBytes: z.int().gte(0).optional(),
   deletedAuditLogCount: z.int().gte(0),
+  deletedRunEventCount: z.int().gte(0),
+  runEventCompactionLimitReached: z.boolean(),
   enforcedAt: z.iso.datetime(),
 });
 
@@ -7015,6 +9566,9 @@ export const zAccessReviewReport = z.object({
           "voices:manage",
           "tools:use",
           "tools:manage",
+          "capabilities:read",
+          "capabilities:manage",
+          "capabilities:approve",
           "admin:read",
           "admin:write",
         ]),
@@ -7222,6 +9776,18 @@ export const zIdentityLifecyclePolicy = z.object({
   }),
 });
 
+export const zAgenticRagSettings = z.object({
+  enabled: z.boolean(),
+  userMode: z.enum(["optional", "required"]),
+});
+
+export const zKnowledgeIngestReadiness = z.object({
+  ready: z.boolean(),
+  reason: z
+    .enum(["embedding_unset", "tiers_disabled", "vector_unconfigured"])
+    .optional(),
+});
+
 export const zKnowledgeBase = z.object({
   id: z.string().min(1).max(300),
   orgId: z.string().min(1).max(300),
@@ -7238,10 +9804,18 @@ export const zKnowledgeBase = z.object({
   totalSizeBytes: z.int().gte(0).optional(),
 });
 
+export const zKnowledgeBaseScope = z.enum([
+  "user_private",
+  "workspace",
+  "org",
+  "shared",
+]);
+
 export const zCreateKnowledgeBaseRequest = z.object({
   workspaceId: z.string().min(1).max(300),
   name: z.string().min(1),
   description: z.string().min(1).optional(),
+  scope: zKnowledgeBaseScope.optional(),
 });
 
 export const zUpdateKnowledgeBaseRequest = z.object({
@@ -7288,7 +9862,7 @@ export const zKnowledgeUploadRegistration = z.object({
 export const zCreateKnowledgeUploadRequest = z.object({
   fileName: z.string().min(1),
   mimeType: z.string().min(1),
-  sizeBytes: z.int().gt(0),
+  sizeBytes: z.int().gt(0).lte(25000000),
 });
 
 export const zBackgroundJob = z.object({
@@ -7659,6 +10233,7 @@ export const zGenerateImagesRequest = z.object({
     .enum(["1024x1024", "1024x1536", "1536x1024"])
     .optional()
     .default("1024x1024"),
+  idempotencyKey: z.string().min(1).max(200).optional(),
 });
 
 export const zJobLagThresholds = z.object({
@@ -9573,6 +12148,13 @@ export const zAdministrationListUsersQuery = z.object({
  */
 export const zAdministrationListUsersResponse = zAdminUserPage;
 
+export const zAdministrationQueryUsersBody = zAdminUserTableQuery;
+
+/**
+ * User table page
+ */
+export const zAdministrationQueryUsersResponse = zAdminUserTablePage;
+
 export const zAdministrationDisableUserPath = z.object({
   userId: z.string().min(1).max(300),
 });
@@ -9814,11 +12396,21 @@ export const zAuthProviderAdministrationDeprovisionOidcUserResponse = z.object({
   data: zSsoOidcDeprovisionResult,
 });
 
+export const zAdminInsightsGetAnalyticsSummaryQuery = z.object({
+  from: z.iso.datetime().optional(),
+  to: z.iso.datetime().optional(),
+});
+
 /**
  * Admin analytics summary
  */
 export const zAdminInsightsGetAnalyticsSummaryResponse = z.object({
   data: zAdminAnalyticsSummary,
+});
+
+export const zAdminInsightsExportAnalyticsSummaryQuery = z.object({
+  from: z.iso.datetime().optional(),
+  to: z.iso.datetime().optional(),
 });
 
 /**
@@ -9841,6 +12433,16 @@ export const zAdminInsightsUpdateAbuseControlsBody =
  */
 export const zAdminInsightsUpdateAbuseControlsResponse = z.object({
   data: zAbuseControlPolicyReport,
+});
+
+export const zAdminInsightsSimulateAbuseControlsBody =
+  zSimulateAbuseControlPolicyRequest;
+
+/**
+ * Abuse-control simulation
+ */
+export const zAdminInsightsSimulateAbuseControlsResponse = z.object({
+  data: zAbuseControlSimulationResult,
 });
 
 /**
@@ -10498,6 +13100,8 @@ export const zManagedModelsListVersionsResponse = z.object({
   data: z.array(zManagedModelVersion),
 });
 
+export const zManagedModelsPublishBody = zPublishManagedModelRequest;
+
 export const zManagedModelsPublishPath = z.object({
   agentId: z.string().min(1).max(300),
 });
@@ -10822,9 +13426,16 @@ export const zSystemGetApiDocsResponse = z.string();
 export const zOperationalGovernanceListAuditLogsQuery = z.object({
   action: z.string().min(1).max(300).optional(),
   actorId: z.string().min(1).max(300).optional(),
+  category: z
+    .enum(["security", "admin", "access", "data", "chat", "run", "system"])
+    .optional(),
+  from: z.iso.datetime().optional(),
+  includeNoise: z.enum(["true", "false"]).optional(),
   outcome: z.enum(["success", "failure"]).optional(),
+  q: z.string().min(1).max(300).optional(),
   resourceId: z.string().min(1).max(300).optional(),
   resourceType: z.string().min(1).max(300).optional(),
+  to: z.iso.datetime().optional(),
   limit: z.int().gte(1).lte(1000).optional(),
   cursor: z.string().min(1).max(2000).optional(),
 });
@@ -10834,12 +13445,26 @@ export const zOperationalGovernanceListAuditLogsQuery = z.object({
  */
 export const zOperationalGovernanceListAuditLogsResponse = zAuditLogPage;
 
+export const zOperationalGovernanceQueryAuditLogsBody = zAuditLogTableQuery;
+
+/**
+ * Audit log table page
+ */
+export const zOperationalGovernanceQueryAuditLogsResponse = zAuditLogTablePage;
+
 export const zOperationalGovernanceExportAuditLogsQuery = z.object({
   action: z.string().min(1).max(300).optional(),
   actorId: z.string().min(1).max(300).optional(),
+  category: z
+    .enum(["security", "admin", "access", "data", "chat", "run", "system"])
+    .optional(),
+  from: z.iso.datetime().optional(),
+  includeNoise: z.enum(["true", "false"]).optional(),
   outcome: z.enum(["success", "failure"]).optional(),
+  q: z.string().min(1).max(300).optional(),
   resourceId: z.string().min(1).max(300).optional(),
   resourceType: z.string().min(1).max(300).optional(),
+  to: z.iso.datetime().optional(),
 });
 
 /**
@@ -10853,6 +13478,14 @@ export const zOperationalGovernanceExportAuditLogsResponse = z.string();
 export const zOperationalGovernanceListUsageEventsResponse = z.object({
   data: z.array(zUsageEvent),
 });
+
+/**
+ * Usage metric definitions
+ */
+export const zOperationalGovernanceListUsageMetricDefinitionsResponse =
+  z.object({
+    data: z.array(zUsageMetricDefinition),
+  });
 
 /**
  * Usage events CSV
@@ -10937,6 +13570,35 @@ export const zOperationalPostureGetPostgresResponse = z.object({
   data: zPostgresOperationalPostureReport,
 });
 
+export const zProvidersGetCapabilityReportPath = z.object({
+  providerId: z.string().min(1).max(300),
+});
+
+/**
+ * Provider capability report
+ */
+export const zProvidersGetCapabilityReportResponse = z.object({
+  data: zProviderCapabilityReport,
+});
+
+export const zProvidersGetModelCapabilityReportPath = z.object({
+  modelId: z.string().min(1).max(300),
+});
+
+/**
+ * Provider model capability report
+ */
+export const zProvidersGetModelCapabilityReportResponse = z.object({
+  data: zProviderModelCapabilityReport,
+});
+
+/**
+ * Installed provider kinds
+ */
+export const zProvidersListKindsResponse = z.object({
+  data: z.array(zProviderKindCatalogEntry).max(32),
+});
+
 /**
  * Provider connections
  */
@@ -10981,11 +13643,41 @@ export const zProvidersSyncModelsPath = z.object({
   providerId: z.string().min(1).max(300),
 });
 
+export const zProvidersSyncModelsQuery = z.object({
+  mode: z.enum(["async_job", "inline"]).optional(),
+});
+
+export const zProvidersSyncModelsResponse = z.union([
+  z.object({
+    data: z.array(zProviderModel),
+  }),
+  z.object({
+    data: zProviderCatalogSyncJob,
+  }),
+]);
+
+export const zProvidersSyncJobsRunPath = z.object({
+  jobId: z.string().min(1).max(300),
+  providerId: z.string().min(1).max(300),
+});
+
 /**
- * Synchronized provider models
+ * Catalog sync job
  */
-export const zProvidersSyncModelsResponse = z.object({
-  data: z.array(zProviderModel),
+export const zProvidersSyncJobsRunResponse = z.object({
+  data: zProviderCatalogSyncJob,
+});
+
+export const zProvidersSyncJobsGetPath = z.object({
+  jobId: z.string().min(1).max(300),
+  providerId: z.string().min(1).max(300),
+});
+
+/**
+ * Catalog sync job
+ */
+export const zProvidersSyncJobsGetResponse = z.object({
+  data: zProviderCatalogSyncJob,
 });
 
 export const zProvidersPullOllamaModelBody = z.object({
@@ -11078,6 +13770,13 @@ export const zProvidersUpdateModelPricingResponse = z.object({
 export const zProvidersUpdateModelCapabilitiesBody = z.object({
   capabilities: zProviderCapabilities,
   contextWindow: z.int().gt(0).lte(10000000),
+  defaultParameters: z
+    .object({
+      temperature: z.number().gte(0).lte(2).optional(),
+      topP: z.number().gte(0).lte(1).optional(),
+      maxOutputTokens: z.int().gte(1).lte(200000).optional(),
+    })
+    .optional(),
 });
 
 export const zProvidersUpdateModelCapabilitiesPath = z.object({
@@ -11111,6 +13810,100 @@ export const zProvidersUpdateModelEnabledResponse = z.object({
  */
 export const zProvidersGetOperationalSummaryResponse = z.object({
   data: zProviderOperationalSummary,
+});
+
+export const zModelsProbeBody = z.object({
+  features: z
+    .array(
+      z.enum(["streaming", "tools", "json", "vision", "audio", "reasoning"]),
+    )
+    .min(1)
+    .max(8),
+});
+
+export const zModelsProbePath = z.object({
+  modelId: z.string().min(1).max(300),
+});
+
+/**
+ * Model probe
+ */
+export const zModelsProbeResponse = z.object({
+  data: z.object({
+    modelId: z.string().min(1).max(300),
+    probedAt: z.iso.datetime(),
+    results: z.array(
+      z.object({
+        feature: z.enum([
+          "streaming",
+          "tools",
+          "json",
+          "vision",
+          "audio",
+          "reasoning",
+        ]),
+        advertised: z.boolean(),
+        probed: z.boolean(),
+        outcome: z.enum(["match", "mismatch"]),
+        code: z.enum(["provider_probe_mismatch"]).optional(),
+      }),
+    ),
+  }),
+});
+
+export const zModelsCapabilityOverridesUpdateBody = z.object({
+  tools: z.boolean().optional(),
+  reasoning: z.boolean().optional(),
+  vision: z.boolean().optional(),
+  imageOutput: z.boolean().optional(),
+  reason: z.string().min(1).max(300),
+  expiresAt: z.iso.datetime().optional(),
+});
+
+export const zModelsCapabilityOverridesUpdatePath = z.object({
+  modelId: z.string().min(1).max(300),
+});
+
+/**
+ * Capability override
+ */
+export const zModelsCapabilityOverridesUpdateResponse = z.object({
+  data: z.object({
+    modelId: z.string().min(1).max(300),
+    source: z.enum(["override"]),
+    updatedAt: z.iso.datetime(),
+  }),
+});
+
+export const zModelsCompatibilityPreviewBody = z.object({
+  modelId: z.string().min(1).max(300),
+  required: z.object({
+    attachments: z.boolean(),
+    tools: z.boolean(),
+    reasoning: z.boolean(),
+    imageOutput: z.boolean(),
+    localOnly: z.boolean(),
+  }),
+});
+
+/**
+ * Compatibility preview
+ */
+export const zModelsCompatibilityPreviewResponse = z.object({
+  data: z.object({
+    modelId: z.string().min(1).max(300),
+    outcome: z.enum(["available", "unavailable"]),
+    constraint: z
+      .enum([
+        "tools_unsupported",
+        "reasoning_unsupported",
+        "image_output_unsupported",
+        "local_only_policy",
+        "region_outside_residency",
+        "not_entitled",
+      ])
+      .optional(),
+  }),
 });
 
 export const zPromptsListTemplatesQuery = z.object({
@@ -11289,6 +14082,21 @@ export const zRunsInspectContextResponse = z.object({
   data: zRunContextPreview,
 });
 
+export const zRunsInspectPersistedContextPath = z.object({
+  chatId: z.string().min(1).max(300),
+});
+
+export const zRunsInspectPersistedContextQuery = z.object({
+  runId: z.string().min(1).max(300).optional(),
+});
+
+/**
+ * Privacy-safe persisted run context inspection
+ */
+export const zRunsInspectPersistedContextResponse = z.object({
+  data: zPersistedRunContextInspection.nullable(),
+});
+
 export const zRunsGetActiveForChatPath = z.object({
   chatId: z.string().min(1).max(300),
 });
@@ -11338,11 +14146,15 @@ export const zRunsCancelQueuedTurnResponse = z.object({
 
 export const zRunsStartBody = zStartRunRequest;
 
+export const zRunsStartHeaders = z.object({
+  "idempotency-key": zIdempotencyKey.optional(),
+});
+
 /**
  * Started run
  */
 export const zRunsStartResponse = z.object({
-  data: zRunRecord,
+  data: zStartedRunRecord,
 });
 
 export const zRunsGetPath = z.object({
@@ -11354,6 +14166,10 @@ export const zRunsGetPath = z.object({
  */
 export const zRunsGetResponse = z.object({
   data: zRunRecord,
+});
+
+export const zRunsStreamEventsHeaders = z.object({
+  "last-event-id": z.string().min(1).max(20).optional(),
 });
 
 export const zRunsStreamEventsPath = z.object({
@@ -11735,6 +14551,81 @@ export const zChatsListMessagesPath = z.object({
  */
 export const zChatsListMessagesResponse = z.object({
   data: z.array(zMessage),
+});
+
+export const zChatsListMessagePagePath = z.object({
+  chatId: z.string().min(1).max(300),
+});
+
+export const zChatsListMessagePageQuery = z.object({
+  branchLeafMessageId: z.string().min(1).max(300).optional(),
+  cursor: z.string().min(1).max(2000).optional(),
+  direction: z.enum(["older"]),
+  limit: z.int().gte(1).lte(100).optional(),
+});
+
+/**
+ * Active-branch message page
+ */
+export const zChatsListMessagePageResponse = z.object({
+  data: z.array(zMessage).max(100),
+  meta: z.object({
+    activeBranchChanged: z.boolean(),
+    branchVariants: z
+      .array(
+        z.object({
+          index: z.int().gte(0),
+          messageId: z.string().min(1).max(300),
+          nextLeafMessageId: z.string().min(1).max(300).optional(),
+          previousLeafMessageId: z.string().min(1).max(300).optional(),
+          total: z.int().gte(2),
+        }),
+      )
+      .max(100),
+    branchLeafMessageId: z.string().min(1).max(300).optional(),
+    currentActiveLeafMessageId: z.string().min(1).max(300).optional(),
+    direction: z.enum(["older"]),
+    hasOlder: z.boolean(),
+    limit: z.int().gte(1).lte(100),
+    mode: z.enum(["branch", "linear"]),
+    olderCursor: z.string().max(2000).optional(),
+    transcriptVersion: z.string().regex(/^[0-9]{1,20}$\/u/),
+  }),
+});
+
+export const zChatsSearchMessagesPath = z.object({
+  chatId: z.string().min(1).max(300),
+});
+
+export const zChatsSearchMessagesQuery = z.object({
+  cursor: z.string().min(1).max(2000).optional(),
+  limit: z.int().gte(1).lte(50).optional(),
+  q: z.string().min(2).max(200),
+});
+
+/**
+ * Current-chat message search results
+ */
+export const zChatsSearchMessagesResponse = z.object({
+  data: z
+    .array(
+      z.object({
+        branch: z.enum(["active", "alternate"]),
+        branchLeafMessageId: z.string().min(1).max(300),
+        createdAt: z.iso.datetime(),
+        messageId: z.string().min(1).max(300),
+        role: z.enum(["system", "user", "assistant", "tool"]),
+        snippet: z.string().max(242),
+      }),
+    )
+    .max(50),
+  meta: z.object({
+    hasMore: z.boolean(),
+    limit: z.int().gte(1).lte(50),
+    nextCursor: z.string().max(2000).optional(),
+    total: z.int().gte(0),
+    transcriptVersion: z.string().regex(/^[0-9]{1,20}$\/u/),
+  }),
 });
 
 export const zChatsDeleteMessagePath = z.object({
@@ -12188,6 +15079,290 @@ export const zChannelsRemoveReactionResponse = z.object({
   data: zChannelMessage,
 });
 
+/**
+ * Capability definitions
+ */
+export const zCapabilitiesListDefinitionsResponse = z.object({
+  data: z.array(zCapabilityDefinition),
+});
+
+/**
+ * Global operator capability posture
+ */
+export const zCapabilitiesGetPlatformPostureResponse = z.object({
+  data: zPlatformCapabilityPosture,
+});
+
+export const zCapabilitiesResolveEffectiveBody = zResolveCapabilitiesRequest;
+
+/**
+ * Effective capabilities
+ */
+export const zCapabilitiesResolveEffectiveResponse = z.object({
+  data: z.array(zEffectiveCapability),
+});
+
+export const zCapabilitiesGetAdminOverviewQuery = z.object({
+  scopeType: zCapabilityScopeType,
+  scopeId: z.string().min(1).max(300),
+  workspaceId: z.string().min(1).max(300).optional(),
+  modelId: z.string().min(1).max(300).optional(),
+});
+
+/**
+ * Capability administration overview
+ */
+export const zCapabilitiesGetAdminOverviewResponse = z.object({
+  data: zCapabilityAdminOverview,
+});
+
+export const zCapabilitiesGetAssignmentHistoryPath = z.object({
+  capabilityId: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+});
+
+export const zCapabilitiesGetAssignmentHistoryQuery = z.object({
+  scopeType: zCapabilityScopeType,
+  scopeId: z.string().min(1).max(300),
+});
+
+/**
+ * Capability assignment history
+ */
+export const zCapabilitiesGetAssignmentHistoryResponse = z.object({
+  data: z.array(zCapabilityAssignment),
+});
+
+export const zCapabilitiesExplainAdminPath = z.object({
+  capabilityId: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+});
+
+export const zCapabilitiesExplainAdminQuery = z.object({
+  scopeType: zCapabilityScopeType,
+  scopeId: z.string().min(1).max(300),
+  workspaceId: z.string().min(1).max(300).optional(),
+  modelId: z.string().min(1).max(300).optional(),
+});
+
+/**
+ * Capability explanation
+ */
+export const zCapabilitiesExplainAdminResponse = z.object({
+  data: zCapabilityExplanation,
+});
+
+export const zCapabilitiesPatchAssignmentBody =
+  zUpdateCapabilityAssignmentRequest;
+
+export const zCapabilitiesPatchAssignmentPath = z.object({
+  capabilityId: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+});
+
+/**
+ * Updated capability assignment
+ */
+export const zCapabilitiesPatchAssignmentResponse = z.object({
+  data: zCapabilityAssignment,
+});
+
+export const zCapabilitiesUpdateAssignmentBody =
+  zUpdateCapabilityAssignmentRequest;
+
+export const zCapabilitiesUpdateAssignmentPath = z.object({
+  capabilityId: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+});
+
+/**
+ * Updated capability assignment
+ */
+export const zCapabilitiesUpdateAssignmentResponse = z.object({
+  data: zCapabilityAssignment,
+});
+
+export const zCapabilitiesPreviewAssignmentBody =
+  zPreviewCapabilityAssignmentRequest;
+
+export const zCapabilitiesPreviewAssignmentPath = z.object({
+  capabilityId: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+});
+
+/**
+ * Previewed effective capability
+ */
+export const zCapabilitiesPreviewAssignmentResponse = z.object({
+  data: zEffectiveCapability,
+});
+
+export const zCapabilitiesPreviewImpactBody = zPreviewCapabilityImpactRequest;
+
+export const zCapabilitiesPreviewImpactPath = z.object({
+  capabilityId: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+});
+
+/**
+ * Capability impact preview
+ */
+export const zCapabilitiesPreviewImpactResponse = z.object({
+  data: zCapabilityImpactPreview,
+});
+
+export const zCapabilitiesPublishAssignmentBody =
+  zUpdateCapabilityAssignmentRequest;
+
+export const zCapabilitiesPublishAssignmentPath = z.object({
+  capabilityId: z.enum([
+    "image_generation",
+    "reasoning_policy",
+    "voice_processing",
+    "web_retrieval",
+    "content_firewall",
+    "knowledge_acl",
+    "realtime_voice",
+    "image_editing",
+    "secure_compute",
+    "multi_model_compare",
+    "tenant_encryption",
+    "data_export",
+  ]),
+});
+
+/**
+ * Published capability assignment or pending approval bundle
+ */
+export const zCapabilitiesPublishAssignmentResponse = z.object({
+  data: z.union([zCapabilityAssignment, zPolicyBundle]),
+});
+
+export const zCapabilitiesApprovePublicationBody = z.object({
+  reason: z.string().min(1).max(1000),
+});
+
+export const zCapabilitiesApprovePublicationPath = z.object({
+  bundleId: z.string().min(1).max(300),
+});
+
+/**
+ * Approved policy bundle
+ */
+export const zCapabilitiesApprovePublicationResponse = z.object({
+  data: zPolicyBundle,
+});
+
+/**
+ * Effective capability flags
+ */
+export const zCapabilityFlagsListEffectiveResponse = z.object({
+  data: z.array(zEffectiveCapabilityFlag),
+});
+
+/**
+ * Capability flag report
+ */
+export const zCapabilityFlagsGetAdminReportResponse = z.object({
+  data: zCapabilityFlagAdminReport,
+});
+
+export const zCapabilityFlagsGetHistoryPath = z.object({
+  flagId: zCapabilityFlagId,
+});
+
+/**
+ * Capability flag history
+ */
+export const zCapabilityFlagsGetHistoryResponse = z.object({
+  data: z.array(zOrganizationCapabilityFlag),
+});
+
+export const zCapabilityFlagsUpdateBody = zUpdateCapabilityFlagRequest;
+
+export const zCapabilityFlagsUpdatePath = z.object({
+  flagId: zCapabilityFlagId,
+});
+
+/**
+ * Updated capability flag
+ */
+export const zCapabilityFlagsUpdateResponse = z.object({
+  data: zOrganizationCapabilityFlag,
+});
+
 export const zCollaborationListShareTargetsQuery = z.object({
   query: z.string().max(500).optional(),
   limit: z.int().gte(1).lte(50).optional(),
@@ -12222,6 +15397,90 @@ export const zCollaborationShareKnowledgeBasePath = z.object({
  */
 export const zCollaborationShareKnowledgeBaseResponse = z.object({
   data: z.array(zResourceGrant),
+});
+
+export const zCollaborationRevokeKnowledgeBaseSharePath = z.object({
+  knowledgeBaseId: z.string().min(1).max(300),
+  grantId: z.string().min(1).max(300),
+});
+
+/**
+ * Resource grant
+ */
+export const zCollaborationRevokeKnowledgeBaseShareResponse = z.object({
+  data: zResourceGrant,
+});
+
+export const zCollaborationListModelSharesPath = z.object({
+  modelId: z.string().min(1).max(300),
+});
+
+/**
+ * Resource grants
+ */
+export const zCollaborationListModelSharesResponse = z.object({
+  data: z.array(zResourceGrant),
+});
+
+export const zCollaborationShareModelBody = zShareResourceRequest;
+
+export const zCollaborationShareModelPath = z.object({
+  modelId: z.string().min(1).max(300),
+});
+
+/**
+ * Resource grants
+ */
+export const zCollaborationShareModelResponse = z.object({
+  data: z.array(zResourceGrant),
+});
+
+export const zCollaborationRevokeModelSharePath = z.object({
+  modelId: z.string().min(1).max(300),
+  grantId: z.string().min(1).max(300),
+});
+
+/**
+ * Resource grant
+ */
+export const zCollaborationRevokeModelShareResponse = z.object({
+  data: zResourceGrant,
+});
+
+export const zCollaborationListWorkspaceMembersPath = z.object({
+  workspaceId: z.string().min(1).max(300),
+});
+
+/**
+ * Resource grants
+ */
+export const zCollaborationListWorkspaceMembersResponse = z.object({
+  data: z.array(zResourceGrant),
+});
+
+export const zCollaborationShareWorkspaceBody = zShareResourceRequest;
+
+export const zCollaborationShareWorkspacePath = z.object({
+  workspaceId: z.string().min(1).max(300),
+});
+
+/**
+ * Resource grants
+ */
+export const zCollaborationShareWorkspaceResponse = z.object({
+  data: z.array(zResourceGrant),
+});
+
+export const zCollaborationRevokeWorkspaceMemberPath = z.object({
+  workspaceId: z.string().min(1).max(300),
+  grantId: z.string().min(1).max(300),
+});
+
+/**
+ * Resource grant
+ */
+export const zCollaborationRevokeWorkspaceMemberResponse = z.object({
+  data: zResourceGrant,
 });
 
 export const zCollaborationListChatSharesPath = z.object({
@@ -12414,6 +15673,16 @@ export const zCollaborationAddFolderItemResponse = z.object({
   data: zWorkspaceFolderItem,
 });
 
+export const zCollaborationListFolderItemsBatchBody =
+  zListFolderItemsBatchRequest;
+
+/**
+ * Authorized workspace folder item groups
+ */
+export const zCollaborationListFolderItemsBatchResponse = z.object({
+  data: z.array(zWorkspaceFolderItemsBatchGroup).max(50),
+});
+
 export const zCollaborationDeleteFolderItemPath = z.object({
   folderId: z.string().min(1).max(300),
   itemId: z.string().min(1).max(300),
@@ -12482,6 +15751,120 @@ export const zCollaborationRemoveChatTagPath = z.object({
  */
 export const zCollaborationRemoveChatTagResponse = z.object({
   data: z.array(zChatTag),
+});
+
+/**
+ * Content policy
+ */
+export const zContentPolicyGetResponse = z.object({
+  data: zContentPolicyReport,
+});
+
+export const zContentPolicyUpdateBody = zUpdateContentPolicyRequest;
+
+/**
+ * Content policy
+ */
+export const zContentPolicyUpdateResponse = z.object({
+  data: zContentPolicyReport,
+});
+
+export const zContentPolicySimulateBody = zSimulateContentPolicyRequest;
+
+/**
+ * Content policy simulation
+ */
+export const zContentPolicySimulateResponse = z.object({
+  data: zContentPolicySimulation,
+});
+
+/**
+ * Content policy versions
+ */
+export const zContentPolicyVersionsListResponse = z.object({
+  data: z.array(zContentPolicyVersion),
+});
+
+export const zContentPolicyVersionsCreateBody =
+  zCreateContentPolicyVersionRequest;
+
+/**
+ * Content policy version
+ */
+export const zContentPolicyVersionsCreateResponse = z.object({
+  data: zContentPolicyVersion,
+});
+
+export const zContentPolicyVersionsDryRunBody =
+  zDryRunContentPolicyVersionRequest;
+
+export const zContentPolicyVersionsDryRunPath = z.object({
+  versionId: z.string().min(1).max(300),
+});
+
+/**
+ * Content policy dry-run
+ */
+export const zContentPolicyVersionsDryRunResponse = z.object({
+  data: zContentPolicyDryRun,
+});
+
+export const zContentPolicyVersionsPublishPath = z.object({
+  versionId: z.string().min(1).max(300),
+});
+
+/**
+ * Content policy version
+ */
+export const zContentPolicyVersionsPublishResponse = z.object({
+  data: zContentPolicyVersion,
+});
+
+export const zContentPolicyRollbackBody = zRollbackContentPolicyRequest;
+
+/**
+ * Content policy version
+ */
+export const zContentPolicyRollbackResponse = z.object({
+  data: zContentPolicyVersion,
+});
+
+/**
+ * Content policy decisions
+ */
+export const zContentPolicyDecisionsListResponse = z.object({
+  data: z.array(zContentPolicyDecision),
+});
+
+/**
+ * Content policy approvals
+ */
+export const zContentPolicyApprovalsListResponse = z.object({
+  data: z.array(zContentPolicyApproval),
+});
+
+export const zContentPolicyApprovalsRequestBody =
+  zRequestContentPolicyApprovalRequest;
+
+/**
+ * Content policy approval
+ */
+export const zContentPolicyApprovalsRequestResponse = z.object({
+  data: zContentPolicyApproval,
+});
+
+export const zContentPolicyApprovalsResolveBody =
+  zResolveContentPolicyApprovalRequest;
+
+export const zContentPolicyApprovalsResolvePath = z.object({
+  approvalId: z.string().min(1).max(300),
+});
+
+/**
+ * Content policy approval
+ */
+export const zContentPolicyApprovalsResolveResponse = z.object({
+  data: zContentPolicyApproval,
 });
 
 /**
@@ -12638,6 +16021,725 @@ export const zEdgeSecurityGetPostureResponse = z.object({
   data: zEdgeSecurityPostureReport,
 });
 
+export const zRealtimeCreateSessionBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  retention: z
+    .enum(["none", "transcript_only", "audio_governed"])
+    .optional()
+    .default("none"),
+  durationSeconds: z.int().gte(1).lte(1800).optional().default(30),
+});
+
+/**
+ * Realtime session decision
+ */
+export const zRealtimeCreateSessionResponse = z.object({
+  data: zRealtimeSessionDecision,
+});
+
+export const zComputeCreateJobBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  imageDigest: z.string().min(16).max(200),
+});
+
+/**
+ * Compute job decision
+ */
+export const zComputeCreateJobResponse = z.object({
+  data: zComputeJobDecision,
+});
+
+export const zCompareCreateSessionBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  modelIds: z.array(z.string().min(1).max(300)).min(2).max(8),
+  maxAggregateMicroUsd: z.int().gt(0).lte(1000000),
+});
+
+/**
+ * Compare preflight decision
+ */
+export const zCompareCreateSessionResponse = z.object({
+  data: zComparePreflightDecision,
+});
+
+export const zFirewallEvaluateOutputBody = z.object({
+  mode: z.enum(["rolling", "strict"]).optional().default("rolling"),
+  chunks: z.array(z.string().max(4096)).min(1).max(64),
+});
+
+/**
+ * Firewall output evaluation
+ */
+export const zFirewallEvaluateOutputResponse = z.object({
+  data: zFirewallOutputEvaluation,
+});
+
+export const zKnowledgePrefilterAclBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  documentIds: z.array(z.string().min(1).max(300)).min(1).max(200),
+});
+
+/**
+ * Knowledge ACL prefilter
+ */
+export const zKnowledgePrefilterAclResponse = z.object({
+  data: zKnowledgeAclPrefilter,
+});
+
+/**
+ * Trust posture
+ */
+export const zTrustGetPostureResponse = z.object({
+  data: zTrustPosture,
+});
+
+export const zImagesCreateJobBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  kind: z.enum(["generate", "edit", "variation"]),
+  sourceFileId: z.string().min(1).max(300).optional(),
+});
+
+/**
+ * Image job decision
+ */
+export const zImagesCreateJobResponse = z.object({
+  data: zImageJobDecision,
+});
+
+export const zImagesCancelJobPath = z.object({
+  jobId: z.string().min(1).max(300),
+});
+
+/**
+ * Image job decision
+ */
+export const zImagesCancelJobResponse = z.object({
+  data: zImageJobDecision,
+});
+
+export const zRealtimeAdaptersPreviewBody = z.object({
+  nativeAvailable: z.boolean(),
+  pipelineAvailable: z.boolean(),
+});
+
+/**
+ * Realtime adapter preview
+ */
+export const zRealtimeAdaptersPreviewResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    adapter: z.enum(["native", "pipeline"]).optional(),
+    fallback: z.enum(["batch_stt_tts"]).optional(),
+  }),
+});
+
+export const zCompareSynthesisPreviewBody = z.object({
+  candidateIds: z.array(z.string().min(1).max(300)).min(1).max(8),
+  candidateHashes: z.array(z.string().min(1).max(300)).min(1).max(8),
+  providerAuthorized: z.boolean(),
+});
+
+/**
+ * Compare synthesis preview
+ */
+export const zCompareSynthesisPreviewResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    citations: z
+      .array(
+        z.object({
+          candidateId: z.string().min(1).max(300),
+          hash: z.string().min(1).max(300),
+        }),
+      )
+      .optional(),
+  }),
+});
+
+export const zKnowledgeAclFreshnessBody = z.object({
+  sensitivity: z.enum(["restricted", "internal", "public"]),
+  ageMs: z.int().gte(0),
+  maxStalenessMs: z.int().gte(0),
+});
+
+/**
+ * ACL freshness
+ */
+export const zKnowledgeAclFreshnessResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["fresh", "stale"]),
+    failClosed: z.boolean().optional(),
+    code: z.enum(["knowledge_acl_stale"]).optional(),
+  }),
+});
+
+export const zTrustCryptoShredPreviewBody = z.object({
+  legalHold: z.boolean(),
+  backupChecked: z.boolean(),
+  approverIds: z.array(z.string().min(1).max(300)).max(8),
+});
+
+/**
+ * Crypto-shred preview
+ */
+export const zTrustCryptoShredPreviewResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    externalCopiesClaimed: z.literal(false).optional(),
+  }),
+});
+
+export const zTrustAuditSegmentsSealBody = z.object({
+  eventIds: z.array(z.string().min(1).max(300)).max(500),
+  previousHash: z.string().min(1).max(128).optional(),
+  signingKeyVersion: z.string().min(1).max(80),
+});
+
+/**
+ * Audit segment
+ */
+export const zTrustAuditSegmentsSealResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    code: z.enum(["audit_segment_empty"]).optional(),
+    segmentHash: z.string().min(1).max(300).optional(),
+    previousHash: z.string().min(1).max(128).optional(),
+    eventCount: z.int().gte(0).optional(),
+  }),
+});
+
+export const zTrustSiemExportCheckpointBody = z.object({
+  attempt: z.int().gte(0).lte(20),
+  destination: z.enum(["customer_siem", "worm_compatible"]),
+  priorReceiptHash: z.string().min(1).max(128).optional(),
+  receiptHash: z.string().min(1).max(128).optional(),
+  sealedAt: z.iso.datetime(),
+  segmentHash: z.string().min(1).max(300),
+});
+
+/**
+ * SIEM export checkpoint
+ */
+export const zTrustSiemExportCheckpointResponse = z.object({
+  data: z.object({
+    state: z.enum(["duplicate", "exported", "failed", "in_flight", "pending"]),
+    lagMs: z.int().gte(0),
+    destination: z.enum(["customer_siem", "worm_compatible"]),
+  }),
+});
+
+export const zTrustBreakGlassAuthorizeBody = z.object({
+  approverId: z.string().min(1).max(300),
+  reason: z.string().min(1).max(300),
+  requestedControls: z.array(z.string().min(1).max(80)).max(16),
+  ttlMinutes: z.int().gte(1).lte(1440),
+});
+
+/**
+ * Break-glass decision
+ */
+export const zTrustBreakGlassAuthorizeResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    alerted: z.literal(true).optional(),
+    expiresAt: z.iso.datetime().optional(),
+    code: z
+      .enum([
+        "break_glass_mandatory_control",
+        "break_glass_reason_required",
+        "break_glass_self_approval",
+        "break_glass_ttl_exceeded",
+      ])
+      .optional(),
+  }),
+});
+
+export const zComputeSandboxPostureBody = z.object({
+  allowPrivilegeEscalation: z.boolean(),
+  apparmor: z.boolean(),
+  capabilities: z.array(z.string().min(1).max(40)).max(16),
+  cpuMillis: z.int().gte(0).lte(120000),
+  diskBytes: z.int().gte(0).lte(8589934592),
+  hostNamespaces: z.boolean(),
+  jobScopedTmp: z.boolean(),
+  memoryBytes: z.int().gte(0).lte(8589934592),
+  nonRoot: z.boolean(),
+  pidLimit: z.int().gte(0).lte(4096),
+  privileged: z.boolean(),
+  rootReadOnly: z.boolean(),
+  seccomp: z.boolean(),
+  teardown: z.enum(["deterministic", "best_effort"]),
+  wallSeconds: z.int().gte(0).lte(3600),
+});
+
+/**
+ * Sandbox posture
+ */
+export const zComputeSandboxPostureResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    code: z
+      .enum([
+        "compute_sandbox_posture_denied",
+        "compute_runtime_image_unverified",
+        "compute_public_package_install_denied",
+        "compute_artifact_intake_denied",
+        "compute_provenance_incomplete",
+        "compute_artifact_version_immutable",
+        "compute_artifact_preview_denied",
+        "compute_artifact_quota_exceeded",
+        "compute_artifact_retention_active",
+        "data_deletion_legal_hold",
+        "policy_bundle_approval_required",
+      ])
+      .optional(),
+    version: z.int().gt(0).optional(),
+    currentVersion: z.int().gt(0).optional(),
+    contentDisposition: z.string().min(1).max(200).optional(),
+    sandbox: z.boolean().optional(),
+    runtimeDigest: z.string().min(1).max(300).optional(),
+    outputHash: z.string().min(1).max(300).optional(),
+  }),
+});
+
+export const zComputeRuntimeImagesAuthorizeBody = z.object({
+  allowlistedDigests: z
+    .array(z.string().regex(/^sha256:[a-f0-9]{64}$\/u/))
+    .max(32),
+  approvedOfflineMirror: z.boolean(),
+  imageDigest: z.string().min(1).max(200),
+  mutableTag: z.boolean(),
+  publicPackageInstall: z.boolean(),
+  signed: z.boolean(),
+});
+
+/**
+ * Runtime image decision
+ */
+export const zComputeRuntimeImagesAuthorizeResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    code: z
+      .enum([
+        "compute_sandbox_posture_denied",
+        "compute_runtime_image_unverified",
+        "compute_public_package_install_denied",
+        "compute_artifact_intake_denied",
+        "compute_provenance_incomplete",
+        "compute_artifact_version_immutable",
+        "compute_artifact_preview_denied",
+        "compute_artifact_quota_exceeded",
+        "compute_artifact_retention_active",
+        "data_deletion_legal_hold",
+        "policy_bundle_approval_required",
+      ])
+      .optional(),
+    version: z.int().gt(0).optional(),
+    currentVersion: z.int().gt(0).optional(),
+    contentDisposition: z.string().min(1).max(200).optional(),
+    sandbox: z.boolean().optional(),
+    runtimeDigest: z.string().min(1).max(300).optional(),
+    outputHash: z.string().min(1).max(300).optional(),
+  }),
+});
+
+export const zComputeArtifactsIntakeBody = z.object({
+  archiveEntries: z.int().gte(0).lte(10000),
+  archiveExpansionBytes: z.int().gte(0).lte(1000000000),
+  count: z.int().gte(0).lte(1000),
+  dlp: z.enum(["allow", "block", "unavailable"]),
+  malware: z.enum(["clean", "dirty", "unavailable"]),
+  mediaType: z.string().min(1).max(200),
+  outputPath: z.string().min(1).max(300),
+  sha256: z.string().min(1).max(128),
+  sizeBytes: z.int().gte(0).lte(1000000000),
+});
+
+/**
+ * Artifact intake
+ */
+export const zComputeArtifactsIntakeResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    code: z
+      .enum([
+        "compute_sandbox_posture_denied",
+        "compute_runtime_image_unverified",
+        "compute_public_package_install_denied",
+        "compute_artifact_intake_denied",
+        "compute_provenance_incomplete",
+        "compute_artifact_version_immutable",
+        "compute_artifact_preview_denied",
+        "compute_artifact_quota_exceeded",
+        "compute_artifact_retention_active",
+        "data_deletion_legal_hold",
+        "policy_bundle_approval_required",
+      ])
+      .optional(),
+    version: z.int().gt(0).optional(),
+    currentVersion: z.int().gt(0).optional(),
+    contentDisposition: z.string().min(1).max(200).optional(),
+    sandbox: z.boolean().optional(),
+    runtimeDigest: z.string().min(1).max(300).optional(),
+    outputHash: z.string().min(1).max(300).optional(),
+  }),
+});
+
+export const zComputeArtifactsProvenanceBody = z.object({
+  codeHash: z.string().min(1).max(128),
+  dependencyManifest: z.array(z.string().min(1).max(120)).max(64),
+  initiatingModelId: z.string().min(1).max(300).optional(),
+  initiatingRunId: z.string().min(1).max(300),
+  initiatingToolId: z.string().min(1).max(300).optional(),
+  inputHashes: z.array(z.string().min(1).max(128)).max(32),
+  outputHash: z.string().min(1).max(128),
+  policyVersion: z.string().min(1).max(80),
+  runtimeDigest: z.string().min(1).max(128),
+  transformations: z.array(z.string().min(1).max(80)).max(32),
+});
+
+/**
+ * Artifact provenance
+ */
+export const zComputeArtifactsProvenanceResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    code: z
+      .enum([
+        "compute_sandbox_posture_denied",
+        "compute_runtime_image_unverified",
+        "compute_public_package_install_denied",
+        "compute_artifact_intake_denied",
+        "compute_provenance_incomplete",
+        "compute_artifact_version_immutable",
+        "compute_artifact_preview_denied",
+        "compute_artifact_quota_exceeded",
+        "compute_artifact_retention_active",
+        "data_deletion_legal_hold",
+        "policy_bundle_approval_required",
+      ])
+      .optional(),
+    version: z.int().gt(0).optional(),
+    currentVersion: z.int().gt(0).optional(),
+    contentDisposition: z.string().min(1).max(200).optional(),
+    sandbox: z.boolean().optional(),
+    runtimeDigest: z.string().min(1).max(300).optional(),
+    outputHash: z.string().min(1).max(300).optional(),
+  }),
+});
+
+export const zComputeArtifactsCreateVersionBody = z.object({
+  artifactId: z.string().min(1).max(300),
+  currentVersion: z.int().gte(0).lte(10000),
+  nextContentHash: z.string().min(1).max(128),
+  overwriteRequested: z.boolean(),
+});
+
+/**
+ * Artifact version
+ */
+export const zComputeArtifactsCreateVersionResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    code: z
+      .enum([
+        "compute_sandbox_posture_denied",
+        "compute_runtime_image_unverified",
+        "compute_public_package_install_denied",
+        "compute_artifact_intake_denied",
+        "compute_provenance_incomplete",
+        "compute_artifact_version_immutable",
+        "compute_artifact_preview_denied",
+        "compute_artifact_quota_exceeded",
+        "compute_artifact_retention_active",
+        "data_deletion_legal_hold",
+        "policy_bundle_approval_required",
+      ])
+      .optional(),
+    version: z.int().gt(0).optional(),
+    currentVersion: z.int().gt(0).optional(),
+    contentDisposition: z.string().min(1).max(200).optional(),
+    sandbox: z.boolean().optional(),
+    runtimeDigest: z.string().min(1).max(300).optional(),
+    outputHash: z.string().min(1).max(300).optional(),
+  }),
+});
+
+export const zComputeArtifactsPreviewBody = z.object({
+  contentDisposition: z.string().min(1).max(200),
+  filename: z.string().min(1).max(80),
+  htmlSameOrigin: z.boolean(),
+  htmlSandbox: z.string().max(120),
+  mediaType: z.string().min(1).max(200),
+  previewer: z.enum(["hardened", "browser_native"]),
+});
+
+/**
+ * Artifact preview
+ */
+export const zComputeArtifactsPreviewResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    code: z
+      .enum([
+        "compute_sandbox_posture_denied",
+        "compute_runtime_image_unverified",
+        "compute_public_package_install_denied",
+        "compute_artifact_intake_denied",
+        "compute_provenance_incomplete",
+        "compute_artifact_version_immutable",
+        "compute_artifact_preview_denied",
+        "compute_artifact_quota_exceeded",
+        "compute_artifact_retention_active",
+        "data_deletion_legal_hold",
+        "policy_bundle_approval_required",
+      ])
+      .optional(),
+    version: z.int().gt(0).optional(),
+    currentVersion: z.int().gt(0).optional(),
+    contentDisposition: z.string().min(1).max(200).optional(),
+    sandbox: z.boolean().optional(),
+    runtimeDigest: z.string().min(1).max(300).optional(),
+    outputHash: z.string().min(1).max(300).optional(),
+  }),
+});
+
+export const zComputeArtifactsLifecycleBody = z.object({
+  action: z.enum([
+    "quota",
+    "retention",
+    "legal_hold",
+    "export",
+    "delete",
+    "purge",
+    "rotate",
+    "shred",
+    "orphan_cleanup",
+  ]),
+  backupChecked: z.boolean(),
+  dualControl: z.boolean(),
+  legalHold: z.boolean(),
+  orphanedStaging: z.boolean(),
+  quotaBytes: z.int().gte(0).lte(10000000000),
+  retentionUntil: z.iso.datetime().optional(),
+  usedBytes: z.int().gte(0).lte(10000000000),
+});
+
+/**
+ * Artifact lifecycle
+ */
+export const zComputeArtifactsLifecycleResponse = z.object({
+  data: z.object({
+    outcome: z.enum(["accepted", "denied"]),
+    code: z
+      .enum([
+        "compute_sandbox_posture_denied",
+        "compute_runtime_image_unverified",
+        "compute_public_package_install_denied",
+        "compute_artifact_intake_denied",
+        "compute_provenance_incomplete",
+        "compute_artifact_version_immutable",
+        "compute_artifact_preview_denied",
+        "compute_artifact_quota_exceeded",
+        "compute_artifact_retention_active",
+        "data_deletion_legal_hold",
+        "policy_bundle_approval_required",
+      ])
+      .optional(),
+    version: z.int().gt(0).optional(),
+    currentVersion: z.int().gt(0).optional(),
+    contentDisposition: z.string().min(1).max(200).optional(),
+    sandbox: z.boolean().optional(),
+    runtimeDigest: z.string().min(1).max(300).optional(),
+    outputHash: z.string().min(1).max(300).optional(),
+  }),
+});
+
+export const zComputeOperationsPostureBody = z.object({
+  capacityRemaining: z.int().gte(0).lte(10000),
+  cleanupBacklog: z.int().gte(0).lte(10000),
+  imageAvailable: z.boolean(),
+  lastRejectionCode: z.string().min(1).max(80).optional(),
+  leaseLagMs: z.int().gte(0).lte(86400000),
+  queueLagMs: z.int().gte(0).lte(86400000),
+  resourcePressure: z.boolean(),
+  workerHealthy: z.boolean(),
+});
+
+/**
+ * Compute operations posture
+ */
+export const zComputeOperationsPostureResponse = z.object({
+  data: z.object({
+    alerts: z.array(
+      z.enum([
+        "worker_unhealthy",
+        "lease_lag",
+        "queue_lag",
+        "resource_pressure",
+        "image_unavailable",
+        "cleanup_backlog",
+        "capacity_exhausted",
+      ]),
+    ),
+    lastRejectionCode: z.string().min(1).max(80).optional(),
+    state: z.enum(["healthy", "degraded", "unavailable"]),
+  }),
+});
+
+export const zTableViewsListBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  resource: z.string().min(1).max(300),
+  localViews: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(80),
+        globalFilter: z.string().max(300).optional(),
+        pageSize: z.int().optional(),
+        density: z.enum(["comfortable", "compact"]).optional(),
+        columnVisibility: z.record(z.string(), z.boolean()).optional(),
+        sorting: z
+          .array(
+            z.object({
+              id: z.string().min(1).max(300),
+              desc: z.boolean(),
+            }),
+          )
+          .optional(),
+      }),
+    )
+    .max(25)
+    .optional(),
+});
+
+/**
+ * Saved views
+ */
+export const zTableViewsListResponse = z.object({
+  data: z.array(zServerTableSavedView),
+});
+
+export const zTableViewsReplaceBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  resource: z.string().min(1).max(300),
+  name: z.string().min(1).max(80),
+  globalFilter: z.string().max(300).optional(),
+  pageSize: z.int().optional(),
+  density: z.enum(["comfortable", "compact"]).optional(),
+  columnVisibility: z.record(z.string(), z.boolean()).optional(),
+  sorting: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(300),
+        desc: z.boolean(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * Saved view
+ */
+export const zTableViewsReplaceResponse = z.object({
+  data: zServerTableSavedView,
+});
+
+export const zTableExportsCreateBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  resource: z.string().min(1).max(300),
+  mode: z
+    .enum(["browser_csv", "async_artifact"])
+    .optional()
+    .default("async_artifact"),
+  estimatedRows: z.int().gte(0).lte(10000000),
+  sort: z
+    .array(
+      z.object({
+        field: z.string().min(1).max(300),
+        direction: z.enum(["asc", "desc"]),
+      }),
+    )
+    .max(3)
+    .optional()
+    .default([]),
+  filters: z
+    .array(
+      z.object({
+        field: z.string().min(1).max(300),
+        operator: z.string().min(1).max(300),
+      }),
+    )
+    .max(20)
+    .optional()
+    .default([]),
+});
+
+/**
+ * Table export job
+ */
+export const zTableExportsCreateResponse = z.object({
+  data: zTableExportJob,
+});
+
+export const zTableExportsRunPath = z.object({
+  jobId: z.string().min(1).max(300),
+});
+
+/**
+ * Table export job
+ */
+export const zTableExportsRunResponse = z.object({
+  data: zTableExportJob,
+});
+
+export const zTableExportsGetPath = z.object({
+  jobId: z.string().min(1).max(300),
+});
+
+/**
+ * Table export job
+ */
+export const zTableExportsGetResponse = z.object({
+  data: zTableExportJob,
+});
+
+export const zTablePagesQueryBody = z.object({
+  resource: z.string().min(1).max(300),
+  parentId: z.string().min(1).max(300).optional(),
+  workspaceId: z.string().min(1).max(300).optional(),
+  cursor: z.string().min(1).max(2000).optional(),
+  limit: z.int().gte(1).lte(100).optional().default(25),
+  search: z.string().min(1).max(200).optional(),
+  sort: z
+    .array(
+      z.object({
+        field: z.string().min(1).max(300),
+        direction: z.enum(["asc", "desc"]),
+      }),
+    )
+    .max(3)
+    .optional()
+    .default([]),
+  filters: z
+    .array(
+      z.object({
+        field: z.string().min(1).max(300),
+        operator: z.string().min(1).max(300),
+        value: z.unknown().optional(),
+      }),
+    )
+    .max(20)
+    .optional()
+    .default([]),
+});
+
+/**
+ * Inventoried table page
+ */
+export const zTablePagesQueryResponse = z.object({
+  data: zInventoriedTablePage,
+});
+
 export const zEvalsListSuitesPath = z.object({
   agentId: z.string().min(1).max(300),
 });
@@ -12657,6 +16759,18 @@ export const zEvalsCreateSuiteBody = zCreateEvalSuiteRequest;
 export const zEvalsCreateSuiteResponse = z.object({
   data: zCreatedEvalSuite,
 });
+
+export const zEvalsCreateCaseFromMessageFeedbackBody =
+  zCreateEvalCaseFromFeedbackRequest;
+
+export const zEvalsCreateCaseFromMessageFeedbackResponse = z.union([
+  z.object({
+    data: zFeedbackEvalCaseResult,
+  }),
+  z.object({
+    data: zFeedbackEvalCaseResult,
+  }),
+]);
 
 export const zEvalsListRunsPath = z.object({
   agentId: z.string().min(1).max(300),
@@ -12702,6 +16816,17 @@ export const zEvalsRunSuitePath = z.object({
  */
 export const zEvalsRunSuiteResponse = z.object({
   data: zEvalRunWithResults,
+});
+
+export const zEvalsGetReasoningComparisonPath = z.object({
+  suiteId: z.string().min(1).max(300),
+});
+
+/**
+ * Reasoning-policy eval comparison
+ */
+export const zEvalsGetReasoningComparisonResponse = z.object({
+  data: zEvalReasoningComparison,
 });
 
 export const zEvalsListResultsPath = z.object({
@@ -12888,6 +17013,17 @@ export const zFilesRetryExtractionResponse = z.object({
   data: zFileObject,
 });
 
+export const zFilesRetryLifecyclePath = z.object({
+  fileId: z.string().min(1).max(300),
+});
+
+/**
+ * Updated file lifecycle
+ */
+export const zFilesRetryLifecycleResponse = z.object({
+  data: zFileObject,
+});
+
 export const zFilesReadContentPath = z.object({
   fileId: z.string().min(1).max(300),
 });
@@ -13068,6 +17204,20 @@ export const zGovernanceExportAccessReviewReportCsvResponse = z.string();
  */
 export const zGovernanceGetIdentityLifecyclePolicyResponse = z.object({
   data: zIdentityLifecyclePolicy,
+});
+
+/**
+ * Agentic RAG settings
+ */
+export const zKnowledgeGetAgenticSettingsResponse = z.object({
+  data: zAgenticRagSettings,
+});
+
+/**
+ * Knowledge ingest readiness
+ */
+export const zKnowledgeGetIngestReadinessResponse = z.object({
+  data: zKnowledgeIngestReadiness,
 });
 
 export const zKnowledgeListBasesQuery = z.object({
@@ -13256,6 +17406,10 @@ export const zKnowledgeCompareTieredReplayResponse = z.object({
 });
 
 export const zImagesGenerateBody = zGenerateImagesRequest;
+
+export const zImagesGenerateHeaders = z.object({
+  "idempotency-key": zIdempotencyKey.optional(),
+});
 
 /**
  * Generated images

@@ -184,6 +184,9 @@ function configurationPosture(env) {
   ];
 
   return {
+    capabilityPlatformPolicy: capabilityPlatformPolicyPosture(
+      env.CAPABILITY_PLATFORM_DISABLED_IDS,
+    ),
     safeEnums: Object.fromEntries(
       Object.entries(safeEnums).map(([key, allowedValues]) => [
         key,
@@ -199,6 +202,46 @@ function configurationPosture(env) {
     configuredSecrets: Object.fromEntries(
       configuredOnly.map((key) => [key, isConfigured(env[key])]),
     ),
+  };
+}
+
+function capabilityPlatformPolicyPosture(value) {
+  const safeDefault =
+    "realtime_voice,external_provider_use,secure_compute,image_editing,multi_model_compare,streamed_output_policy";
+  const allowed = new Set([
+    "realtime_voice",
+    "external_provider_use",
+    "secure_compute",
+    "image_generation",
+    "image_editing",
+    "multi_model_compare",
+    "streamed_output_policy",
+  ]);
+  const configuredValue = value === undefined ? safeDefault : value;
+  const ids =
+    typeof configuredValue === "string" && configuredValue !== ""
+      ? configuredValue.split(",")
+      : [];
+  const recognized =
+    ids.every((id) => id === id.trim() && allowed.has(id)) &&
+    new Set(ids).size === ids.length;
+  if (!recognized) {
+    return {
+      configured: value !== undefined,
+      recognized: false,
+      rawConfigurationReturned: false,
+    };
+  }
+  const imageGenerationDisabled = ids.includes("image_generation");
+  return {
+    configured: value !== undefined,
+    recognized: true,
+    disabledCount: ids.length,
+    imageGeneration: {
+      allowed: !imageGenerationDisabled,
+      reason: imageGenerationDisabled ? "platform_disabled" : "allowed",
+    },
+    rawConfigurationReturned: false,
   };
 }
 

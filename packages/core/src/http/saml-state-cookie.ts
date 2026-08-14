@@ -17,5 +17,5 @@ export function clearSamlStateCookie(secure: boolean): string {
 }
 
 function cookieValue(value: string, maxAge: number, secure: boolean): string {
-  return `${samlStateCookieName}=${value}; HttpOnly; Path=/api/v1/auth/saml/callback; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
+  return `${samlStateCookieName}=${value}; HttpOnly; Path=/api/v1/auth/saml/callback; SameSite=${secure ? "None" : "Lax"}; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
 }

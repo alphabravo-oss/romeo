@@ -339,7 +339,7 @@ export class KnowledgeSourceService {
               orgId: subject.orgId,
             })
           ).id;
-    await repository.createAuditLog({
+    await writeAuditLog(repository, {
       id: createId("audit"),
       orgId: subject.orgId,
       actorId,
@@ -432,3 +432,4 @@ export class KnowledgeSourceService {
     });
   }
 }
+import { writeAuditLog } from "./audit-log";

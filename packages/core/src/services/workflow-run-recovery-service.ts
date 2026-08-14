@@ -10,7 +10,11 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
-import { writeAuditLog } from "./audit-log";
+import {
+  type AuditAction,
+  type AuditMetadata,
+  writeAuditLog,
+} from "./audit-log";
 import type { DeferredRunStart } from "./run-service";
 import {
   appendWorkflowPreviousAttempt,
@@ -354,16 +358,16 @@ function completeActiveStep(
   );
 }
 
-async function updateEvaluatedRun(
+async function updateEvaluatedRun<A extends AuditAction>(
   repository: RomeoRepository,
   input: {
     subject: AuthSubject;
-    action: string;
+    action: A;
     run: WorkflowRun;
     workflow: WorkflowDefinition;
     evaluated: Awaited<ReturnType<WorkflowStepExecutor["evaluate"]>>;
     now: string;
-    metadata: Record<string, unknown>;
+    metadata: AuditMetadata<A>;
   },
 ): Promise<WorkflowRun> {
   const {
@@ -392,15 +396,15 @@ async function updateEvaluatedRun(
   });
 }
 
-async function updateWithAudit(
+async function updateWithAudit<A extends AuditAction>(
   repository: RomeoRepository,
   input: {
     subject: AuthSubject;
-    action: string;
+    action: A;
     runId: string;
     workflowId: string;
     nextRun: WorkflowRun;
-    metadata: Record<string, unknown>;
+    metadata: AuditMetadata<A>;
   },
 ): Promise<WorkflowRun> {
   const updated = await repository.updateWorkflowRun(input.nextRun);

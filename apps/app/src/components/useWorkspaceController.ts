@@ -1,18 +1,6 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-
-import { listMessageFeedback } from "../features";
-import type { MessageFeedbackState, SpeechArtifact } from "../features/types";
-import { inspectRunContext, type RunContextPreview } from "../features/chat";
-import { getManagedModelPreferences } from "../features/managed-models";
-import { getAgenticRagSettings } from "../features/knowledge";
-import { listQueuedTurns, type QueuedChatTurn } from "../features/runs";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocale } from "../lib/i18n";
-import {
-  lastAssistantModelId,
-  resolveChatModelSelection,
-} from "./chat-model-selection";
-import { useActiveRun } from "./useActiveRun";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { useChatMessageState } from "./useChatMessageState";
 import { useToolExecution } from "./useToolExecution";
 import { useWorkspaceAttachments } from "./useWorkspaceAttachments";
@@ -22,98 +10,50 @@ import { useWorkspaceProviderActions } from "./useWorkspaceProviderActions";
 import { useWorkspaceSelectionSync } from "./useWorkspaceSelectionSync";
 import { useWorkspaceTurnActions } from "./useWorkspaceTurnActions";
 import { useWorkspaceVoiceActions } from "./useWorkspaceVoiceActions";
-
-const initialDraft = "";
-// Stable identities for "this chat has nothing yet", so an idle chat does not
-// hand the panel a fresh empty value on every render. Mirrors useWorkspaceData.
-const noQueuedTurns: QueuedChatTurn[] = [];
-const noFeedback: Record<string, MessageFeedbackState> = {};
-export type {
-  PendingDocumentAttachment,
-  PendingImageAttachment,
-} from "./useWorkspaceAttachments";
-
-export type {
-  ChatCitation,
-  ChatReasoning,
-  ChatRunActivity,
-  ChatRunWait,
-} from "../lib/run-registry";
+import { useWorkspaceDraft } from "./useWorkspaceDraft";
+import { useWorkspaceRuntimeState } from "./useWorkspaceRuntimeState";
+import { useWorkspaceCompositionState } from "./useWorkspaceCompositionState";
+import { useWorkspaceModelState } from "./useWorkspaceModelState";
+import type { WorkspaceControllerOptions } from "./workspace-controller-types";
+import { useReaderBranchSelection } from "./useReaderBranchSelection";
+import { readerScopedBranchLeaf } from "./chat-selection";
+import * as controllerOperations from "./workspace-controller-operations";
 
 export function useWorkspaceController(
-  options: {
-    onAgentSelection?: (agentId: string) => void;
-    onChatSelection?: (
-      chatId: string | undefined,
-      options?: { replace: boolean },
-    ) => void;
-    requestedAgentId?: string;
-    requestedChatId?: string;
-  } = {},
+  options: WorkspaceControllerOptions = {},
 ) {
   const queryClient = useQueryClient();
   const { t } = useLocale();
-  const [draft, setDraft] = useState(initialDraft);
-  const [activeAgentId, setActiveAgentId] = useState<string | undefined>(
-    options.requestedAgentId,
-  );
-  const [activeChatId, setActiveChatId] = useState<string | undefined>();
-  // Explicit intent: the user asked for a blank chat and there is no chat row
-  // behind it yet. Distinguishes "New chat" from "the active chat vanished",
-  // which look identical from activeChatId alone. See ./chat-selection.
-  const [isDraftingNewChat, setIsDraftingNewChat] = useState(false);
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
-  const [agenticRagRequested, setAgenticRagRequested] = useState(false);
-  const agenticSettingsQuery = useQuery({
-    queryKey: ["agenticRagSettings"],
-    queryFn: getAgenticRagSettings,
-  });
-  const agenticRagAvailable = agenticSettingsQuery.data?.enabled === true;
-  const agenticRagForced =
-    agenticRagAvailable && agenticSettingsQuery.data?.userMode === "required";
-  const agenticRagEnabled = agenticRagForced || agenticRagRequested;
-  /**
-   * Per-turn knowledge override. `undefined` keeps the custom model's bindings;
-   * an array (including empty) is sent as `knowledgeBaseIds` on startRun.
-   */
-  const [knowledgeBaseIdsOverride, setKnowledgeBaseIdsOverride] = useState<
-    string[] | undefined
-  >();
-  const [attachedUrls, setAttachedUrls] = useState<string[]>([]);
-  const [temporaryNextChat, setTemporaryNextChat] = useState(false);
-  const [modelOverrideId, setModelOverrideId] = useState<string>();
-  const [speechArtifacts, setSpeechArtifacts] = useState<
-    Record<string, SpeechArtifact>
-  >({});
-  // Keyed per chat like the transcript, and for the same reason: a run settles
-  // in the chat it started in, which is no longer necessarily the chat on
-  // screen. A shared slot let a background run overwrite the visible queue and
-  // the visible ratings.
-  const queuedTurnsQuery = useQuery({
-    queryKey: ["queuedTurns", activeChatId],
-    queryFn: () => listQueuedTurns(activeChatId!),
-    enabled: activeChatId !== undefined,
-  });
-  const messageFeedbackQuery = useQuery({
-    queryKey: ["messageFeedback", activeChatId],
-    queryFn: async () =>
-      Object.fromEntries(
-        (await listMessageFeedback(activeChatId!)).map((item) => [
-          item.messageId,
-          item,
-        ]),
-      ),
-    enabled: activeChatId !== undefined,
-  });
-  const [contextPreview, setContextPreview] = useState<RunContextPreview>();
-  const [contextPreviewError, setContextPreviewError] = useState<string>();
-  const [isInspectingContext, setIsInspectingContext] = useState(false);
-  const [error, setError] = useState<string>();
-  // Streaming state is per chat and lives outside React, so a run that started
-  // here keeps going while the user reads or writes somewhere else. Everything
-  // the transcript needs comes out of this one subscription: a second
-  // useActiveRun elsewhere in the tree would key off its own idea of the active
-  // chat, and during a switch the two disagree for a render.
+  const {
+    activeAgentId,
+    activeChatId,
+    agenticRagAvailable,
+    agenticRagEnabled,
+    agenticRagForced,
+    attachedUrls,
+    isDraftingNewChat,
+    knowledgeBaseIdsOverride,
+    modelOverrideId,
+    reasoningMode,
+    researchMode,
+    routingMode,
+    setActiveAgentId,
+    setActiveChatId,
+    setAgenticRagRequested,
+    setAttachedUrls,
+    setIsDraftingNewChat,
+    setKnowledgeBaseIdsOverride,
+    setModelOverrideId,
+    setReasoningMode,
+    setResearchMode,
+    setRoutingMode,
+    setSpeechArtifacts,
+    setTemporaryNextChat,
+    setWebSearchEnabled,
+    speechArtifacts,
+    temporaryNextChat,
+    webSearchEnabled,
+  } = useWorkspaceCompositionState(options.requestedAgentId);
   const {
     activities: runActivities,
     citations,
@@ -123,7 +63,17 @@ export function useWorkspaceController(
     reasoning,
     toolCalls,
     wait: runWait,
-  } = useActiveRun(activeChatId);
+    contextPreview,
+    contextPreviewError,
+    error,
+    isInspectingContext,
+    messageFeedback,
+    queuedTurns,
+    setContextPreview,
+    setContextPreviewError,
+    setError,
+    setIsInspectingContext,
+  } = useWorkspaceRuntimeState(activeChatId);
   const {
     appendMessage,
     handleAttachmentRetention,
@@ -137,18 +87,28 @@ export function useWorkspaceController(
     queryClient,
     setError,
   });
+  const scopedLeafMessageId = readerScopedBranchLeaf({
+    activeChatId,
+    requestedChatId: options.requestedChatId,
+    requestedLeafMessageId: options.requestedLeafMessageId,
+  });
   const {
     activeAgent,
     agents,
     allMessages,
+    branchLeafMessageId,
     chats,
     chatsTotal,
     chatExperience,
     hasMoreChats,
+    hasOlderMessages,
     interfacePreferences,
     isLoadingMoreChats,
+    isLoadingOlderMessages,
     latestChatEvent,
     loadMoreChats,
+    loadOlderMessages,
+    messagePageNeedsReset,
     messages,
     models,
     providerOperationalSummary,
@@ -162,6 +122,26 @@ export function useWorkspaceController(
     ...(options.requestedAgentId === undefined
       ? {}
       : { requestedAgentId: options.requestedAgentId }),
+    ...(scopedLeafMessageId === undefined
+      ? {}
+      : { requestedLeafMessageId: scopedLeafMessageId }),
+  });
+  const selectSettledBranch = useReaderBranchSelection({
+    activeChatId,
+    branchLeafMessageId,
+    invalidSelection:
+      messagePageNeedsReset ||
+      (options.requestedChatId !== undefined &&
+        options.requestedChatId !== activeChatId),
+    ...(options.onBranchSelection === undefined
+      ? {}
+      : { onBranchSelection: options.onBranchSelection }),
+    requestedLeafMessageId: scopedLeafMessageId,
+  });
+  const { draft, setDraft } = useWorkspaceDraft({
+    chatId: activeChatId,
+    subjectId: subject?.id,
+    workspaceId: workspace?.id,
   });
   const {
     clearPendingAttachments,
@@ -170,8 +150,8 @@ export function useWorkspaceController(
     handleAttachFiles,
     handleAttachImages,
     handleGenerateImages,
-    handleRemoveDocumentAttachment,
-    handleRemoveImageAttachment,
+    handleCancelAttachment, handleMoveDocumentAttachment, handleMoveImageAttachment,
+    handleRetryDocumentAttachment, handleSelectDocumentPage, handleRemoveDocumentAttachment, handleRemoveImageAttachment,
     imageAttachments,
     restorePendingAttachments,
   } = useWorkspaceAttachments({
@@ -188,16 +168,17 @@ export function useWorkspaceController(
     isUpdatingModelPricing,
     syncingProviderId,
   } = useWorkspaceProviderActions({
-    queryClient,
     setError,
   });
-  // Chat model wins when set; otherwise user default, last-used, then curated
-  // base. A pending override also survives the first send while a new chat is
-  // being created.
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const workspaceId = workspace?.id;
-  const selectedModelId = resolveChatModelSelection({
-    assistantModelId: activeAgent?.baseModelId,
+  const {
+    activeVoiceProfileId,
+    lastReplyModelId,
+    modelDisplayNames,
+    selectedModelId,
+  } = useWorkspaceModelState({
+    activeAgent,
     chatModelId: activeChat?.modelId,
     defaultModelId:
       workspaceId === undefined
@@ -207,24 +188,10 @@ export function useWorkspaceController(
       workspaceId === undefined
         ? undefined
         : interfacePreferences?.lastModelByWorkspace[workspaceId],
-    overrideModelId: modelOverrideId,
+    messages,
+    modelOverrideId,
+    models,
   });
-  const lastReplyModelId = lastAssistantModelId(messages);
-  const modelDisplayNames = useMemo(
-    () =>
-      Object.fromEntries(
-        models.map((model) => [model.id, model.displayName] as const),
-      ),
-    [models],
-  );
-  const managedModelPreferencesQuery = useQuery({
-    queryKey: ["managedModelPreferences", activeAgent?.id],
-    queryFn: () => getManagedModelPreferences(activeAgent!.id),
-    enabled: activeAgent !== undefined,
-  });
-  const activeVoiceProfileId =
-    managedModelPreferencesQuery.data?.voiceProfileId ??
-    activeAgent?.voiceProfileId;
   const {
     handleGenerateSpeech,
     handleTranscribeAudio,
@@ -266,12 +233,10 @@ export function useWorkspaceController(
       ? {}
       : { knowledgeBaseIdsOverride }),
     messages,
+    onBranchSelection: selectSettledBranch,
     ...(options.onChatSelection === undefined
       ? {}
       : {
-          // Replaces: the chat row is minted by the first send, so this URL
-          // describes the blank entry the user is already standing on. Pushing
-          // would put an unreachable "no chat yet" state behind them.
           onChatCreated: (chatId: string) =>
             options.onChatSelection?.(chatId, { replace: true }),
         }),
@@ -291,6 +256,9 @@ export function useWorkspaceController(
     temporaryNextChat,
     webSearchEnabled,
     agenticRagEnabled,
+    reasoningMode,
+    routingMode,
+    researchMode,
     workspaceId: workspace?.id,
   });
   const {
@@ -309,7 +277,12 @@ export function useWorkspaceController(
     renameChat,
   } = useWorkspaceChatActions({
     activeChatId,
-    allMessages,
+    ...(options.onBranchSelection === undefined
+      ? {}
+      : {
+          onBranchSelection: (leafMessageId: string) =>
+            options.onBranchSelection?.(leafMessageId),
+        }),
     followQueuedRuns,
     queryClient,
     setActiveAgentId,
@@ -325,11 +298,6 @@ export function useWorkspaceController(
     trackChatRun,
     workspaceId: workspace?.id,
   });
-  // The three direct selections below all PUSH: they are the navigations Back
-  // and Forward are supposed to walk. Each one first checks that the selection
-  // actually moves, because re-opening the chat already on screen (or pressing
-  // "New chat" on an already-blank one) leaves the URL identical, and stacking
-  // duplicate entries would make Back need several presses to go anywhere.
   const handleSelectChat = async (chatId: string) => {
     setModelOverrideId(undefined);
     const moved = chatId !== activeChatId;
@@ -372,58 +340,46 @@ export function useWorkspaceController(
     setIsDraftingNewChat,
     setModelOverrideId,
   });
-
-  useEffect(() => {
-    const key = `romeo:draft:${activeChatId ?? `new:${workspace?.id ?? "none"}`}`;
-    const saved = localStorage.getItem(key);
-    setDraft(saved ?? "");
-  }, [activeChatId, workspace?.id]);
-
-  useEffect(() => {
-    const key = `romeo:draft:${activeChatId ?? `new:${workspace?.id ?? "none"}`}`;
-    if (draft.length === 0) localStorage.removeItem(key);
-    else localStorage.setItem(key, draft);
-  }, [activeChatId, draft, workspace?.id]);
-
   async function handleInspectContext() {
     if (activeChatId === undefined || activeAgent === undefined) return;
     setIsInspectingContext(true);
     setContextPreviewError(undefined);
     try {
       setContextPreview(
-        await inspectRunContext({
+        await controllerOperations.inspectWorkspaceRunContext({
           chatId: activeChatId,
           agentId: activeAgent.id,
-          ...(selectedModelId === undefined
-            ? {}
-            : { modelId: selectedModelId }),
+          modelId: selectedModelId,
+          routingMode,
+          researchMode,
+          reasoningMode,
           content: draft.trim() || "Continue the conversation.",
           fileIds: documentAttachments.map((item) => item.fileId),
           imageCount: imageAttachments.length,
-          ...(webSearchEnabled ? { webSearch: true } : {}),
-          ...(agenticRagEnabled ? { agenticRag: true } : {}),
-          ...(attachedUrls.length === 0 ? {} : { urls: attachedUrls }),
+          webSearchEnabled,
+          agenticRagEnabled,
+          attachedUrls,
         }),
       );
     } catch (caught) {
       setContextPreviewError(
-        caught instanceof Error ? caught.message : "Unable to inspect context.",
+        safeUserErrorMessage(caught, t("unexpectedAsyncFailure")),
       );
     } finally {
       setIsInspectingContext(false);
     }
   }
-
   async function refreshUsageControls() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["usageEvents"] }),
-      queryClient.invalidateQueries({ queryKey: ["usageSummary"] }),
-      queryClient.invalidateQueries({ queryKey: ["usageAlerts"] }),
-      queryClient.invalidateQueries({
-        queryKey: ["providerOperationalSummary"],
-      }),
-      queryClient.invalidateQueries({ queryKey: ["quotas"] }),
-    ]);
+    await controllerOperations.refreshWorkspaceUsageControls(queryClient);
+  }
+  async function handleCreateFeedbackEvalCase(messageId: string) {
+    if (activeChatId === undefined || activeAgent === undefined) return;
+    await controllerOperations.createFeedbackEvalCase({
+      agentId: activeAgent.id,
+      chatId: activeChatId,
+      messageId,
+      t,
+    });
   }
 
   return {
@@ -441,8 +397,6 @@ export function useWorkspaceController(
     deleteChat,
     documentAttachments,
     draft,
-    // A local failure is always the newer signal: every handler clears it
-    // before acting, so a lingering provider error must not mask it.
     error: error ?? runError,
     handleCancel,
     handleCancelQueuedTurn,
@@ -457,6 +411,7 @@ export function useWorkspaceController(
     handleGenerateSpeech,
     handleBranchFromMessage,
     handleContinueResponse,
+    handleCreateFeedbackEvalCase,
     handleDeleteMessage,
     handleInspectContext,
     handleAttachmentRetention,
@@ -470,8 +425,9 @@ export function useWorkspaceController(
       setAttachedUrls((current) => current.filter((item) => item !== url)),
     handleAttachExistingFile,
     handleGenerateImages,
-    handleRemoveImageAttachment,
-    handleRemoveDocumentAttachment,
+    handleCancelAttachment, handleMoveDocumentAttachment, handleMoveImageAttachment,
+    handleRetryDocumentAttachment, handleSelectDocumentPage,
+    handleRemoveImageAttachment, handleRemoveDocumentAttachment,
     handleRateMessage,
     handleTranscriptionError: setError,
     handleTranscribeAudio,
@@ -487,12 +443,15 @@ export function useWorkspaceController(
     isGeneratingSpeech,
     isInspectingContext,
     hasMoreChats,
+    hasOlderMessages,
     isLoadingMoreChats,
+    isLoadingOlderMessages,
     isTranscribingVoice,
     isUpdatingModelPricing,
     isStreaming,
-    queuedTurns: queuedTurnsQuery.data ?? noQueuedTurns,
+    queuedTurns,
     loadMoreChats,
+    loadOlderMessages,
     attachedUrls,
     knowledgeBaseIdsOverride,
     setKnowledgeBaseIdsOverride,
@@ -502,10 +461,16 @@ export function useWorkspaceController(
     agenticRagForced,
     agenticRagEnabled,
     setAgenticRagRequested,
+    routingMode,
+    setRoutingMode,
+    reasoningMode,
+    setReasoningMode,
+    researchMode,
+    setResearchMode,
     temporaryNextChat,
     imageAttachments,
     messages,
-    messageFeedback: messageFeedbackQuery.data ?? noFeedback,
+    messageFeedback,
     models,
     modelDisplayNames,
     lastReplyModelId,

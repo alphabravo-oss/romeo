@@ -55,7 +55,7 @@ describe("ollama adapter", () => {
       }),
     ).resolves.toEqual({
       ok: false,
-      message: "Ollama returned HTTP 503.",
+      message: "The provider is temporarily unavailable.",
     });
   });
 
@@ -155,7 +155,11 @@ describe("ollama adapter", () => {
       }),
     );
 
-    await expect(ollamaAdapter.listModels(provider)).rejects.toThrow("offline");
+    await expect(ollamaAdapter.listModels(provider)).rejects.toMatchObject({
+      category: "unexpected",
+      errorCode: "provider_unexpected_failure",
+      operation: "discovery",
+    });
   });
 
   it("enforces configured Ollama model IDs after endpoint discovery", async () => {
@@ -269,6 +273,7 @@ describe("ollama adapter", () => {
   });
 
   it("streams text, usage, and tool definitions through the Ollama chat API", async () => {
+    const rawReasoningSentinel = "raw-ollama-thinking-secret";
     const calls: Array<{ body?: string; headers: HeadersInit; url: string }> =
       [];
     const chunks = await collect(
@@ -285,6 +290,14 @@ describe("ollama adapter", () => {
             jsonLines([
               {
                 message: { role: "assistant", content: "Hello " },
+                done: false,
+              },
+              {
+                message: {
+                  role: "assistant",
+                  content: "",
+                  thinking: rawReasoningSentinel,
+                },
                 done: false,
               },
               { message: { role: "assistant", content: "Romeo" }, done: false },
@@ -318,11 +331,11 @@ describe("ollama adapter", () => {
         usage: {
           inputTokens: 3,
           outputTokens: 4,
-          totalTokens: 7,
           source: "ollama",
         },
       },
     ]);
+    expect(JSON.stringify(chunks)).not.toContain(rawReasoningSentinel);
     expect(calls[0]?.url).toBe("http://localhost:11434/api/chat");
     expect(new Headers(calls[0]?.headers).get("authorization")).toBe(
       "Bearer ollama-proxy-token",

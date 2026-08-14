@@ -1,4 +1,4 @@
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { describe, expect, it } from "vitest";
 
 import { createRomeoApi } from "./api";
@@ -10,7 +10,7 @@ const sessionSecret = "delegated-oauth-test-session-secret";
 describe("Delegated OAuth API", () => {
   it("lists provider posture and fails closed when GitHub OAuth is not configured", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         APP_ORIGIN: "https://romeo.example",
         DELEGATED_OAUTH_GITHUB_SCOPES: "repo,read:user",
         SESSION_SECRET: sessionSecret,
@@ -56,7 +56,7 @@ describe("Delegated OAuth API", () => {
     const activeExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const revokedAt = "2026-01-01T00:05:00.000Z";
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         APP_ORIGIN: "https://romeo.example",
         DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-client-id",
         DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: "github-client-secret",
@@ -181,7 +181,7 @@ describe("Delegated OAuth API", () => {
 
   it("starts a configured GitHub PKCE flow without returning verifier or signed state payload", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         APP_ORIGIN: "https://romeo.example",
         DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-client-id",
         DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: "github-client-secret",
@@ -252,7 +252,7 @@ describe("Delegated OAuth API", () => {
 
   it("rejects provider callbacks without app authentication when state is missing", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         APP_ORIGIN: "https://romeo.example",
         DEV_SEEDED_LOGIN: "false",
         SESSION_SECRET: sessionSecret,
@@ -276,7 +276,7 @@ describe("Delegated OAuth API", () => {
       url: string;
     }> = [];
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         APP_ORIGIN: "https://romeo.example",
         DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-client-id",
         DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: "github-client-secret",

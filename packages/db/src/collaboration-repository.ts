@@ -1,3 +1,4 @@
+import type { AuthorizedWorkspaceFoldersByIdsInput } from "@romeo/core";
 import {
   and,
   asc,
@@ -34,6 +35,7 @@ import {
   type WorkspaceFolderItemRecord,
   type WorkspaceFolderRecord,
 } from "./collaboration-record-mapping";
+import { PgWorkspaceFolderItemBatchRepository } from "./workspace-folder-item-batch-repository";
 
 export type * from "./collaboration-record-mapping";
 export {
@@ -43,8 +45,10 @@ export {
   toWorkspaceFolderRecord,
 };
 
-export class PgCollaborationRepository {
-  constructor(private readonly db: RomeoDatabase) {}
+export class PgCollaborationRepository extends PgWorkspaceFolderItemBatchRepository {
+  constructor(db: RomeoDatabase) {
+    super(db);
+  }
 
   async listPromptTemplates(
     orgId: string,
@@ -281,6 +285,57 @@ export class PgCollaborationRepository {
             ),
       )
       .orderBy(desc(workspaceFolders.updatedAt), asc(workspaceFolders.id));
+    return rows.map(toWorkspaceFolderRecord);
+  }
+
+  async listAuthorizedWorkspaceFoldersByIds(
+    input: AuthorizedWorkspaceFoldersByIdsInput,
+  ): Promise<WorkspaceFolderRecord[]> {
+    const folderIds = [...new Set(input.folderIds)].sort().slice(0, 50);
+    if (folderIds.length === 0) return [];
+    const principalMatch = or(
+      and(
+        eq(resourceGrants.principalType, input.principalType),
+        eq(resourceGrants.principalId, input.principalId),
+      ),
+      input.groupIds.length === 0
+        ? undefined
+        : and(
+            eq(resourceGrants.principalType, "group"),
+            inArray(resourceGrants.principalId, input.groupIds),
+          ),
+    );
+    const folderGrant = exists(
+      this.db
+        .select({ value: sql`1` })
+        .from(resourceGrants)
+        .where(
+          and(
+            eq(resourceGrants.orgId, input.orgId),
+            eq(resourceGrants.resourceType, "folder"),
+            eq(resourceGrants.resourceId, workspaceFolders.id),
+            inArray(resourceGrants.permission, ["read", "write"]),
+            principalMatch,
+          ),
+        ),
+    );
+    const rows = await this.db
+      .select()
+      .from(workspaceFolders)
+      .where(
+        and(
+          eq(workspaceFolders.orgId, input.orgId),
+          eq(workspaceFolders.workspaceId, input.workspaceId),
+          inArray(workspaceFolders.id, folderIds),
+          input.isAdmin
+            ? undefined
+            : or(
+                eq(workspaceFolders.createdBy, input.principalId),
+                folderGrant,
+              ),
+        ),
+      )
+      .orderBy(asc(workspaceFolders.id));
     return rows.map(toWorkspaceFolderRecord);
   }
 

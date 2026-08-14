@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readEnv } from "@romeo/config";
+import { testEnv } from "./test-support/env";
 import { MemoryObjectStore } from "@romeo/storage";
 
 import { createRomeoApi } from "./api";
@@ -490,6 +490,21 @@ describe("collaboration API", () => {
       },
     );
     const emptyItems = await emptyItemsResponse.json();
+    const emptyBatchResponse = await api.request(
+      "/api/v1/collaboration/folder-items/batch",
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${key.data.token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workspaceId: "workspace_default",
+          folderIds: [folder.data.id],
+        }),
+      },
+    );
+    const emptyBatch = await emptyBatchResponse.json();
 
     await api.request("/api/v1/chats/chat_welcome/shares", {
       method: "POST",
@@ -514,6 +529,21 @@ describe("collaboration API", () => {
       },
     );
     const visibleItems = await visibleItemsResponse.json();
+    const visibleBatchResponse = await api.request(
+      "/api/v1/collaboration/folder-items/batch",
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${key.data.token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workspaceId: "workspace_default",
+          folderIds: [folder.data.id],
+        }),
+      },
+    );
+    const visibleBatch = await visibleBatchResponse.json();
     const deleteItemResponse = await api.request(
       `/api/v1/collaboration/folders/${folder.data.id}/items/${chatItem.data.id}`,
       { method: "DELETE" },
@@ -530,6 +560,10 @@ describe("collaboration API", () => {
     expect(folderShareResponse.status).toBe(201);
     expect(emptyItemsResponse.status).toBe(200);
     expect(emptyItems.data).toEqual([]);
+    expect(emptyBatchResponse.status).toBe(200);
+    expect(emptyBatch.data).toEqual([
+      { folderId: folder.data.id, hasMore: false, items: [] },
+    ]);
     expect(foldersResponse.status).toBe(200);
     expect(folders.data.map((item: { id: string }) => item.id)).toContain(
       folder.data.id,
@@ -540,6 +574,19 @@ describe("collaboration API", () => {
         resourceType: "chat",
         resourceId: "chat_welcome",
       }),
+    ]);
+    expect(visibleBatchResponse.status).toBe(200);
+    expect(visibleBatch.data).toEqual([
+      {
+        folderId: folder.data.id,
+        hasMore: false,
+        items: [
+          expect.objectContaining({
+            resourceType: "chat",
+            resourceId: "chat_welcome",
+          }),
+        ],
+      },
     ]);
     expect(deleteItemResponse.status).toBe(200);
     expect(
@@ -671,7 +718,7 @@ describe("collaboration API", () => {
   it("sends mention notifications through the opt-in webhook delivery adapter", async () => {
     const deliveries: Array<{ url: string; init?: RequestInit }> = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         NOTIFICATION_DELIVERY_DRIVER: "webhook",
         WEBHOOK_SIGNING_KEY: "test-webhook-signing-key-32-bytes",
       }),
@@ -785,7 +832,7 @@ describe("collaboration API", () => {
     const deliveries: Array<{ url: string; init?: RequestInit }> = [];
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         NOTIFICATION_DELIVERY_DRIVER: "webhook",
         WEBHOOK_SIGNING_KEY: "test-webhook-signing-key-32-bytes",
       }),
@@ -884,7 +931,7 @@ describe("collaboration API", () => {
     const deliveries: Array<{ url: string; init?: RequestInit }> = [];
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         NOTIFICATION_DELIVERY_DRIVER: "webhook",
         WEBHOOK_SIGNING_KEY: "test-webhook-signing-key-32-bytes",
       }),
@@ -940,7 +987,7 @@ describe("collaboration API", () => {
     const deliveries: Array<{ url: string; init?: RequestInit }> = [];
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
-      env: readEnv({
+      env: testEnv({
         NOTIFICATION_DELIVERY_DRIVER: "webhook",
         WEBHOOK_SIGNING_KEY: "test-webhook-signing-key-32-bytes",
       }),
@@ -1146,7 +1193,7 @@ describe("collaboration API", () => {
       message: Record<string, unknown>;
     }> = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         NOTIFICATION_DELIVERY_DRIVER: "resend-email",
         NOTIFICATION_EMAIL_FROM: "notify@romeo.example",
         NOTIFICATION_RESEND_API_KEY: "resend-test-key",
@@ -1277,7 +1324,7 @@ describe("collaboration API", () => {
   it("sends mention notifications through the opt-in Slack webhook adapter without comment bodies", async () => {
     const deliveries: Array<{ url: string; init?: RequestInit }> = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: readEnv({
+      env: testEnv({
         NOTIFICATION_DELIVERY_DRIVER: "slack-webhook",
       }),
       webhookFetch: async (input, init) => {

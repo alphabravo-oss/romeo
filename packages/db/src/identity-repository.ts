@@ -1,4 +1,15 @@
-import { and, asc, count, desc, eq, ilike, or, sql } from "drizzle-orm";
+import type { QueryUsersInput, UserTableQueryResult } from "@romeo/core";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  or,
+  sql,
+} from "drizzle-orm";
+import { queryIdentityUsers } from "./identity-user-query";
 
 import type { RomeoDatabase } from "./client";
 import { groupMemberships, groups, orgSsoOidcSettings, users } from "./schema";
@@ -142,6 +153,13 @@ export class PgIdentityRepository {
       total: totals[0]?.value ?? 0,
       userTotal: stats[0]?.userTotal ?? 0,
     };
+  }
+
+  async queryUsers(
+    orgId: string,
+    input: QueryUsersInput,
+  ): Promise<UserTableQueryResult> {
+    return queryIdentityUsers(this.db, orgId, input);
   }
 
   async createUser(user: UserRecord): Promise<UserRecord> {

@@ -31,3 +31,25 @@ export function canSelectWorkspace(
 ): boolean {
   return workspaces.some((workspace) => workspace.id === id);
 }
+
+type WorkspaceRouteSearch = {
+  agent?: string;
+  chat?: string;
+  leaf?: string;
+  workspace?: string;
+};
+
+export function withWorkspaceRouteSearch<T extends WorkspaceRouteSearch>(
+  previous: T,
+  workspaceId: string,
+): T {
+  return { ...previous, workspace: workspaceId };
+}
+
+export function switchWorkspaceRouteSearch<T extends WorkspaceRouteSearch>(
+  previous: T,
+  workspaceId: string,
+): T {
+  const { agent: _agent, chat: _chat, leaf: _leaf, ...rest } = previous;
+  return { ...rest, workspace: workspaceId } as T;
+}

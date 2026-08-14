@@ -1,3 +1,5 @@
+@import "./app-navigation-messages.css";
+
 /* ── Sidebar row contract ─────────────────────────────────────────────────
  * Every interactive row in the rail is one height, one inset, one radius, and
  * left-justified. This block exists because @romeo/ui's .rm-ui-button base
@@ -371,31 +373,6 @@ html.dark .rm-sidebar-item.active:hover {
   white-space: nowrap;
 }
 
-.rm-topbar-button {
-  min-height: 34px;
-  border-radius: var(--rm-radius-item); /* Open WebUI rounded-xl = 12px */
-  background: transparent;
-  padding: 0 10px;
-  color: var(--rm-muted);
-}
-
-.rm-personalize-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  font: inherit;
-  font-size: 12px;
-}
-
-.rm-topbar-button:hover {
-  background: var(--rm-gray-50); /* Open WebUI hover:bg-gray-50 (light) */
-}
-
-html.dark .rm-topbar-button:hover {
-  background: var(--rm-gray-850);
-}
-
 .rm-chat-panel {
   display: grid;
   /* session bar (auto) · conversation (flex) · composer (auto) */
@@ -714,6 +691,88 @@ html.dark .rm-scroll-to-bottom:hover {
   padding: 0;
 }
 
+.rm-activation {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--rm-border);
+  border-radius: var(--rm-radius-lg);
+  background: color-mix(in srgb, var(--rm-accent) 4%, var(--rm-surface));
+}
+
+.rm-activation__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rm-activation__header h2,
+.rm-activation__header p {
+  margin: 0;
+}
+
+.rm-activation__header h2 {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.rm-activation__header p {
+  margin-top: 2px;
+  color: var(--rm-muted);
+  font-size: 12px;
+}
+
+.rm-activation__header > span {
+  color: var(--rm-accent);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.rm-activation__steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rm-activation__steps li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rm-text);
+  font-size: 12px;
+}
+
+.rm-activation__steps li svg {
+  flex: 0 0 auto;
+  color: var(--rm-muted);
+}
+
+.rm-activation__steps li.complete {
+  color: var(--rm-muted);
+}
+
+.rm-activation__steps li.complete svg {
+  color: var(--rm-success);
+}
+
+.rm-activation__setup {
+  width: fit-content;
+  color: var(--rm-accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.rm-activation__setup:hover {
+  text-decoration: underline;
+}
+
 .rm-suggestions {
   margin-top: 18px;
 }
@@ -815,417 +874,4 @@ html.dark .rm-suggestion:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.rm-message-list {
-  display: grid;
-  /* Slightly wider reading column — ChatGPT sits closer to ~48–52rem with
-     generous side air from the shell, not a tight avatar rail. */
-  width: min(100%, 48rem);
-  gap: 0.85rem; /* keep user/assistant turns close, not a full-height gap */
-  margin: 0 auto;
-  padding-bottom: 56px;
-}
-
-.rm-message-row {
-  display: grid;
-  /* ChatGPT-clean: no avatar column. Identity lives in the session bar. */
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
-  /* Browser-native rendering virtualization keeps the complete conversation in
-   * DOM/document order for find, selection, and assistive technology while
-   * skipping layout/paint work for distant messages. The last (streaming) row
-   * remains fully live below. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 180px;
-}
-
-.rm-message-row:last-child {
-  content-visibility: visible;
-  contain-intrinsic-size: none;
-}
-
-/* Avatars stay in the DOM for a11y/structure but leave the reading rail. */
-.rm-message-avatar {
-  display: none;
-}
-
-.rm-message-body {
-  display: grid;
-  min-width: 0;
-  gap: 0.55rem;
-}
-
-/* Author / model chrome — quiet metadata, not a second headline. */
-.rm-message-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 10px;
-  margin-bottom: 0.15rem;
-  color: var(--rm-muted);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-/* Primary: which base model produced this answer. */
-.rm-message-model-primary {
-  color: var(--rm-text);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-/* Secondary: curated agent persona, when distinct from the model. */
-.rm-message-agent-secondary {
-  color: var(--rm-muted);
-  font-size: 11px;
-  font-weight: 500;
-  opacity: 0.9;
-}
-
-.rm-message-agent-secondary::before {
-  content: "·";
-  margin-right: 6px;
-  opacity: 0.55;
-}
-
-.rm-message-heading > .rm-message-model {
-  color: var(--rm-muted);
-  font-size: 11px;
-  font-weight: 500;
-  opacity: 0.85;
-}
-
-.rm-message-content {
-  overflow-wrap: anywhere;
-  color: var(--rm-text);
-  /* 15px — between UI chrome (14) and former 16; codeblocks keep their own scale */
-  font-size: 0.9375rem;
-  font-weight: 400;
-  font-variation-settings: "wght" 400;
-  line-height: 1.65;
-  letter-spacing: -0.01em;
-}
-
-/* User: right-aligned soft pill (ChatGPT), no avatar rail. */
-
-.rm-message-row.user {
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-}
-
-.rm-message-row.user .rm-message-content {
-  white-space: pre-wrap;
-}
-
-/* Cap the body against the row so short bubbles hug text and long ones
-   stop around ~70% like ChatGPT, without the self-sized 90% collapse bug. */
-.rm-message-row.user .rm-message-body {
-  width: fit-content;
-  max-width: min(70%, 36rem);
-  justify-self: end;
-}
-
-.rm-message-row.user .rm-message-content {
-  width: fit-content;
-  justify-self: end;
-  border-radius: 1.25rem;
-  background: var(--rm-bubble);
-  /* Match assistant prose scale exactly (size comes from .rm-message-content). */
-  padding: 0.5rem 0.9rem;
-  font-size: inherit;
-  line-height: inherit;
-  letter-spacing: inherit;
-  font-weight: inherit;
-}
-
-/* Assistant: full-width plain prose — no bubble, no side chrome. */
-.rm-message-row.assistant {
-  padding-block: 0.1rem 0.2rem;
-}
-
-.rm-message-row.assistant .rm-message-body {
-  gap: 0.45rem;
-}
-
-.rm-message-row.user .rm-message-body {
-  gap: 0.25rem;
-}
-
-.rm-message-tool {
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--rm-gray-500);
-}
-
-html.dark .rm-message-tool {
-  color: var(--rm-gray-500);
-}
-
-.rm-message-tool:hover:not(:disabled) {
-  background: rgb(0 0 0 / 5%);
-  color: var(--rm-gray-900);
-}
-
-html.dark .rm-message-tool:hover:not(:disabled) {
-  background: rgb(255 255 255 / 8%);
-  color: #ffffff;
-}
-
-.rm-message-tool:disabled {
-  opacity: 0.4;
-}
-
-.rm-message-tool.active {
-  color: var(--rm-accent);
-  background: color-mix(in srgb, var(--rm-accent) 12%, transparent);
-  /* Colour alone fails 1.4.1 and vanishes entirely in forced-colors mode. */
-  outline: 1px solid currentColor;
-  outline-offset: -1px;
-}
-
-/* Sparse action rail — ChatGPT keeps these quiet under the answer. */
-
-.rm-message-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: 0.15rem;
-  min-height: 32px;
-}
-
-.rm-message-toolbar__controls {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 0.15rem;
-}
-
-.rm-message-row.user .rm-message-toolbar {
-  flex-direction: row-reverse;
-}
-
-.rm-message-actions {
-  display: flex;
-  align-items: center;
-  gap: 0;
-}
-
-.rm-message-row.user .rm-message-actions {
-  justify-content: flex-end;
-}
-
-/* Sibling switcher, on any turn that was regenerated or edited. Same muted
- * weight and the same hover reveal as the action row directly below it: it is
- * navigation between answers the reader already asked for, not a new feature
- * announcing itself on every branched message in the thread. */
-
-.rm-message-variants {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.rm-message-row.user .rm-message-variants {
-  justify-self: end;
-  justify-content: flex-end;
-}
-
-.rm-message-variant-count {
-  color: var(--rm-muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums; /* the count must not jitter on ‹ › */
-}
-
-/* ChatGPT-style reveal: the icon row is transparent until its message is
- * hovered or one of its buttons takes focus, so a long thread reads as prose
- * instead of a column of lit icons. Deliberately opacity and never
- * display/visibility — the buttons stay in the tab order, and :focus-within
- * repaints them in the same style recalculation that focus triggers, so the
- * row is opaque before a keyboard user can operate it. A pointer likewise
- * cannot reach a transparent button: .rm-message-actions is a descendant of
- * .rm-message-row, so hovering the button implies hovering the row.
- * Gated on (hover: hover) because touch pointers have no hover state and
- * would otherwise be left with a permanently invisible action row. */
-
-@media (hover: hover) {
-  .rm-message-toolbar {
-    opacity: 0;
-    transition: opacity 120ms ease;
-  }
-
-  .rm-message-row:hover .rm-message-toolbar,
-  .rm-message-toolbar:focus-within {
-    opacity: 1;
-  }
-
-  /* The newest message keeps its actions lit: regenerate and continue live
-   * there, and they are the two a reader reaches for without aiming first. */
-
-  .rm-message-row:last-child .rm-message-toolbar {
-    opacity: 1;
-  }
-}
-
-.rm-message-edit {
-  display: grid;
-  gap: 8px;
-  min-width: min(620px, 75vw);
-  padding: 10px;
-  border: 1px solid var(--rm-border);
-  border-radius: 14px;
-  background: var(--rm-surface);
-}
-
-.rm-message-edit textarea {
-  width: 100%;
-  resize: vertical;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--rm-text);
-  font: inherit;
-  line-height: 1.5;
-}
-
-.rm-message-edit-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.rm-message-edit-actions button,
-.rm-continue-button {
-  border: 1px solid var(--rm-border);
-  border-radius: 8px;
-  padding: 5px 9px;
-  background: var(--rm-surface-soft);
-  color: var(--rm-text);
-  font: inherit;
-  font-size: 12px;
-}
-
-.rm-attachment-with-retention {
-  display: grid;
-  gap: 4px;
-}
-
-.rm-attachment-with-retention > label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 24px;
-  color: var(--rm-muted);
-  font-size: 10px;
-}
-
-.rm-attachment-with-retention > label input[type="checkbox"] {
-  width: 24px;
-  height: 24px;
-  margin: 0;
-}
-
-.rm-context-inspector {
-  position: absolute;
-  z-index: 40;
-  inset: 48px 0 0 auto;
-  width: min(520px, 92vw);
-  overflow: auto;
-  border-left: 1px solid var(--rm-border);
-  background: var(--rm-surface);
-  box-shadow: -12px 0 32px rgb(0 0 0 / 12%);
-}
-
-.rm-context-inspector > header {
-  position: sticky;
-  top: 0;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px;
-  border-bottom: 1px solid var(--rm-border);
-  background: var(--rm-surface);
-}
-
-.rm-context-inspector header p,
-.rm-context-body p {
-  margin: 4px 0 0;
-  color: var(--rm-muted);
-  font-size: 12px;
-}
-
-.rm-context-inspector header button {
-  align-self: flex-start;
-  border: 0;
-  background: transparent;
-  color: var(--rm-muted);
-}
-
-.rm-context-loading,
-.rm-context-body {
-  padding: 16px;
-}
-
-.rm-context-body {
-  display: grid;
-  gap: 18px;
-}
-
-.rm-context-body h3 {
-  margin: 0 0 8px;
-  font-size: 13px;
-}
-
-.rm-context-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-}
-
-.rm-context-stats > div {
-  padding: 8px;
-  border: 1px solid var(--rm-border);
-  border-radius: 8px;
-}
-
-.rm-context-stats dt {
-  color: var(--rm-muted);
-  font-size: 10px;
-}
-
-.rm-context-stats dd {
-  margin: 2px 0 0;
-  font-size: 12px;
-}
-
-.rm-context-body details {
-  border: 1px solid var(--rm-border);
-  border-radius: 8px;
-  margin-top: 7px;
-  overflow: hidden;
-}
-
-.rm-context-body summary {
-  padding: 8px 10px;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.rm-context-body pre {
-  max-height: 300px;
-  overflow: auto;
-  margin: 0;
-  padding: 10px;
-  border-top: 1px solid var(--rm-border);
-  white-space: pre-wrap;
-  font-size: 10px;
 }

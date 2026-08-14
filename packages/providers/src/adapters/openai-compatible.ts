@@ -8,6 +8,8 @@ import type {
 import { openAiCompatibleCapabilities } from "../capabilities";
 import { profileDiscoveredModel } from "../model-discovery";
 import { MAX_DISCOVERED_MODELS } from "../model-catalog";
+import { translateProviderChatParameters } from "../parameter-translation";
+import { nativeReasoningBody } from "../reasoning-adapter-mapping";
 import {
   normalizeProviderToolCall,
   type ProviderToolCallRequest,
@@ -15,7 +17,9 @@ import {
 import type {
   BaseModel,
   ChatMessage,
-  ModelProviderAdapter,
+  ProviderChatAdapter,
+  ProviderDiscoveryAdapter,
+  ProviderHealthAdapter,
   StreamChatChunk,
   StreamChatInput,
 } from "../types";
@@ -23,7 +27,9 @@ import { usageFromOpenAiPayload } from "../usage";
 import { devEchoStream } from "./dev-echo";
 import { createOpenAiClient, normalizeProviderSdkError } from "./provider-sdk";
 
-export const openAiCompatibleAdapter: ModelProviderAdapter = {
+export const openAiCompatibleAdapter: ProviderHealthAdapter &
+  ProviderDiscoveryAdapter &
+  ProviderChatAdapter = {
   kind: "openai-compatible",
   async health(provider, options) {
     const models = await discoverCompatibleModels(
@@ -57,7 +63,7 @@ export const openAiCompatibleAdapter: ModelProviderAdapter = {
 };
 
 export async function discoverCompatibleModels(
-  provider: Parameters<ModelProviderAdapter["listModels"]>[0],
+  provider: Parameters<ProviderDiscoveryAdapter["listModels"]>[0],
   capabilities: typeof openAiCompatibleCapabilities,
   options?: {
     apiKey?: string;
@@ -83,7 +89,8 @@ export async function discoverCompatibleModels(
         metadataById.set(id, asRecord(model) ?? {});
         if (ids.length >= MAX_DISCOVERED_MODELS) break;
       }
-    } catch {
+    } catch (caught) {
+      normalizeProviderSdkError(caught, provider.type, "discovery");
       return [];
     }
   }
@@ -130,32 +137,44 @@ async function* providerCredentialUnavailableStream(): AsyncIterable<StreamChatC
 async function* streamOpenAiCompatibleChat(
   input: StreamChatInput,
 ): AsyncIterable<StreamChatChunk> {
-  const client = createOpenAiClient(
-    input.provider,
-    input.apiKey,
-    input.fetchImpl,
-  );
   try {
+    const parameters = translateProviderChatParameters({
+      ...input,
+      kind: "openai-compatible",
+    }).effective;
+    const client = createOpenAiClient(
+      input.provider,
+      input.apiKey,
+      input.fetchImpl,
+    );
     const stream = await client.chat.completions.create(
       {
         model: input.model.name,
         messages: input.messages.map(toOpenAiMessage),
         stream: true,
         stream_options: { include_usage: true },
-        ...(input.sampling?.temperature === undefined
+        ...(parameters.sampling?.temperature === undefined
           ? {}
-          : { temperature: input.sampling.temperature }),
-        ...(input.sampling?.topP === undefined
+          : { temperature: parameters.sampling.temperature }),
+        ...(parameters.sampling?.topP === undefined
           ? {}
-          : { top_p: input.sampling.topP }),
-        ...(input.sampling?.maxTokens === undefined
+          : { top_p: parameters.sampling.topP }),
+        ...(parameters.sampling?.maxTokens === undefined
           ? {}
-          : { max_tokens: input.sampling.maxTokens }),
-        ...(input.tools === undefined || input.tools.length === 0
+          : { max_tokens: parameters.sampling.maxTokens }),
+        ...nativeReasoningBody("openai-compatible", parameters.reasoning),
+        ...(parameters.structuredOutput === undefined
+          ? {}
+          : {
+              response_format: openAiResponseFormat(
+                parameters.structuredOutput,
+              ),
+            }),
+        ...(parameters.tools === undefined || parameters.tools.length === 0
           ? {}
           : {
               tool_choice: "auto",
-              tools: input.tools.map(
+              tools: parameters.tools.map(
                 (tool): ChatCompletionTool => ({
                   type: "function",
                   function: {
@@ -171,29 +190,42 @@ async function* streamOpenAiCompatibleChat(
     );
 
     const toolCalls = new ToolCallAccumulator();
+    let completedToolCalls: ProviderToolCallRequest[] = [];
     for await (const chunk of stream) {
       const usage = usageFromOpenAiPayload(chunk);
       if (usage !== undefined) yield { type: "usage", usage };
 
-      for (const text of reasoningDeltas(chunk))
-        yield { type: "reasoning", text };
       for (const token of textDeltas(chunk)) yield token;
       toolCalls.merge(chunk);
       if (hasToolCallFinish(chunk)) {
-        const flushed = toolCalls.flush();
-        if (flushed.length === 1)
-          yield { type: "tool_call", toolCall: flushed[0]! };
-        if (flushed.length > 1)
-          yield {
-            type: "tool_call",
-            toolCall: flushed[0]!,
-            toolCalls: flushed,
-          };
+        completedToolCalls = toolCalls.flush();
       }
     }
+    if (completedToolCalls.length === 1)
+      yield { type: "tool_call", toolCall: completedToolCalls[0]! };
+    if (completedToolCalls.length > 1)
+      yield {
+        type: "tool_call",
+        toolCall: completedToolCalls[0]!,
+        toolCalls: completedToolCalls,
+      };
   } catch (caught) {
-    throw normalizeProviderSdkError(caught, "openai-compatible");
+    throw normalizeProviderSdkError(caught, "openai-compatible", "chat");
   }
+}
+
+function openAiResponseFormat(
+  output: NonNullable<StreamChatInput["structuredOutput"]>,
+) {
+  if (output.type === "json_object") return output;
+  return {
+    type: "json_schema" as const,
+    json_schema: {
+      name: output.name,
+      schema: output.schema,
+      ...(output.strict === undefined ? {} : { strict: output.strict }),
+    },
+  };
 }
 
 function toOpenAiMessage(message: ChatMessage): ChatCompletionMessageParam {
@@ -253,19 +285,6 @@ function textDeltas(payload: unknown): string[] {
   return choices(payload).flatMap((choice) =>
     stringFields(asRecord(choice.delta) ?? asRecord(choice.message), [
       "content",
-    ]),
-  );
-}
-
-// DeepSeek and many OpenAI-compatible gateways stream thinking as
-// `reasoning_content` (or `reasoning` / `thinking`) on the same chat-completion
-// delta as the eventual answer. Those tokens must not be treated as content.
-function reasoningDeltas(payload: unknown): string[] {
-  return choices(payload).flatMap((choice) =>
-    stringFields(asRecord(choice.delta) ?? asRecord(choice.message), [
-      "reasoning_content",
-      "reasoning",
-      "thinking",
     ]),
   );
 }

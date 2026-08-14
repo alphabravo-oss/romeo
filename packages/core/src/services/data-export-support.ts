@@ -109,7 +109,13 @@ async function exportObjectBytes(input: {
   ) {
     return { included: false, reason: "total_limit_exceeded" };
   }
-  const bytes = await input.objectStore?.getObject(input.objectKey);
+  const bytes = await input.objectStore?.getObject(input.objectKey, {
+    maxBytes: Math.min(
+      input.declaredSizeBytes,
+      input.request.maxObjectBytes,
+      maxTotalObjectBytes,
+    ),
+  });
   if (bytes === undefined) return { included: false, reason: "missing_object" };
   if (bytes.byteLength > input.request.maxObjectBytes) {
     return { included: false, reason: "object_too_large" };

@@ -3,7 +3,10 @@ import type { RunEvent } from "@romeo/ai-runtime";
 
 import type {
   AuditLog,
+  AuthorizedWorkspaceFoldersByIdsInput,
+  AuthorizedWorkspaceFolderItemsBatchInput,
   BackgroundJob,
+  BillingEventReceipt,
   BillingPlan,
   DataDeletionPlan,
   DataDeletionResourceType,
@@ -22,14 +25,21 @@ import type {
   WorkflowRun,
   WorkspaceFolder,
   WorkspaceFolderItem,
+  WorkspaceFolderItemsBatchGroup,
 } from "./entities";
 import type {
   AuthorizedPromptCatalogQuery,
+  ClaimDueWebhookDeliveriesInput,
   ClaimBackgroundJobInput,
+  ClaimedWebhookDelivery,
+  ClaimWebhookDeliveryInput,
+  CompleteWebhookDeliveryAttemptInput,
   FinalizeRunInput,
+  ListWebhookDeliveriesPageInput,
   RenewBackgroundJobLeaseInput,
   UpdateBackgroundJobWithLeaseInput,
 } from "./repository";
+import type { AuditLogQueryResult, QueryAuditLogsInput } from "./audit-query";
 
 export interface RepositoryOperationsCapability {
   createRun(run: RunRecord): Promise<RunRecord>;
@@ -37,9 +47,28 @@ export interface RepositoryOperationsCapability {
   listRuns(chatId: string): Promise<RunRecord[]>;
   updateRun(run: RunRecord): Promise<RunRecord>;
   finalizeRun(input: FinalizeRunInput): Promise<RunRecord | undefined>;
+  allocateRunEventSequence(runId: string): Promise<number | undefined>;
   appendRunEvents(events: RunEvent[]): Promise<void>;
+  listRunEventsAfter(
+    runId: string,
+    afterSequence: number,
+    limit: number,
+    signal?: AbortSignal,
+  ): Promise<RunEvent[]>;
   listRunEvents(runId: string): Promise<RunEvent[]>;
+  deleteCompactedRunEventsBefore(
+    orgId: string,
+    before: string,
+    now: string,
+    limit: number,
+  ): Promise<number>;
   listToolCalls(orgId: string): Promise<ToolCallRecord[]>;
+  listToolCallsForRun(
+    orgId: string,
+    workspaceId: string,
+    runId: string,
+    limit: number,
+  ): Promise<ToolCallRecord[]>;
   createToolCall(call: ToolCallRecord): Promise<ToolCallRecord>;
   listToolConnectors(orgId: string): Promise<ToolConnector[]>;
   createToolConnector(connector: ToolConnector): Promise<ToolConnector>;
@@ -51,6 +80,7 @@ export interface RepositoryOperationsCapability {
   createToolOperations(operations: ToolOperation[]): Promise<ToolOperation[]>;
   updateToolOperation(operation: ToolOperation): Promise<ToolOperation>;
   listAuditLogs(orgId: string): Promise<AuditLog[]>;
+  queryAuditLogs(input: QueryAuditLogsInput): Promise<AuditLogQueryResult>;
   createAuditLog(log: AuditLog): Promise<AuditLog>;
   deleteAuditLogsBefore(orgId: string, before: string): Promise<number>;
   getDataDeletionPlan(
@@ -64,6 +94,12 @@ export interface RepositoryOperationsCapability {
     resourceId: string,
   ): Promise<DataDeletionPlan | undefined>;
   listUsageEvents(orgId: string): Promise<UsageEvent[]>;
+  listUsageEventsForRun(
+    orgId: string,
+    workspaceId: string,
+    runId: string,
+    limit: number,
+  ): Promise<UsageEvent[]>;
   createUsageEvent(event: UsageEvent): Promise<UsageEvent>;
   updateUsageEvent(event: UsageEvent): Promise<UsageEvent>;
   listBackgroundJobs(orgId: string): Promise<BackgroundJob[]>;
@@ -92,6 +128,18 @@ export interface RepositoryOperationsCapability {
     orgId: string,
     subscriptionId?: string,
   ): Promise<WebhookDelivery[]>;
+  listWebhookDeliveriesPage(
+    input: ListWebhookDeliveriesPageInput,
+  ): Promise<WebhookDelivery[]>;
+  claimWebhookDelivery(
+    input: ClaimWebhookDeliveryInput,
+  ): Promise<ClaimedWebhookDelivery | undefined>;
+  claimDueWebhookDeliveries(
+    input: ClaimDueWebhookDeliveriesInput,
+  ): Promise<ClaimedWebhookDelivery[]>;
+  completeWebhookDeliveryAttempt(
+    input: CompleteWebhookDeliveryAttemptInput,
+  ): Promise<WebhookDelivery | undefined>;
   createWebhookDelivery(delivery: WebhookDelivery): Promise<WebhookDelivery>;
   updateWebhookDelivery(delivery: WebhookDelivery): Promise<WebhookDelivery>;
   listWorkflowDefinitions(
@@ -118,6 +166,15 @@ export interface RepositoryOperationsCapability {
   updateQuotaBucket(bucket: QuotaBucket): Promise<QuotaBucket>;
   deleteQuotaBucket(quotaBucketId: string): Promise<QuotaBucket | undefined>;
   getBillingPlan(orgId: string): Promise<BillingPlan | undefined>;
+  acquireBillingSyncLock(orgId: string): Promise<void>;
+  getBillingEventReceipt(
+    orgId: string,
+    provider: string,
+    eventId: string,
+  ): Promise<BillingEventReceipt | undefined>;
+  createBillingEventReceipt(
+    receipt: BillingEventReceipt,
+  ): Promise<BillingEventReceipt>;
   upsertBillingPlan(plan: BillingPlan): Promise<BillingPlan>;
   listResourceGrants(orgId: string): Promise<ResourceGrant[]>;
   createResourceGrant(grant: ResourceGrant): Promise<ResourceGrant>;
@@ -154,11 +211,17 @@ export interface RepositoryOperationsCapability {
     orgId: string,
     workspaceId?: string,
   ): Promise<WorkspaceFolder[]>;
+  listAuthorizedWorkspaceFoldersByIds(
+    input: AuthorizedWorkspaceFoldersByIdsInput,
+  ): Promise<WorkspaceFolder[]>;
   getWorkspaceFolder(folderId: string): Promise<WorkspaceFolder | undefined>;
   createWorkspaceFolder(folder: WorkspaceFolder): Promise<WorkspaceFolder>;
   updateWorkspaceFolder(folder: WorkspaceFolder): Promise<WorkspaceFolder>;
   deleteWorkspaceFolder(folderId: string): Promise<WorkspaceFolder | undefined>;
   listWorkspaceFolderItems(folderId: string): Promise<WorkspaceFolderItem[]>;
+  listAuthorizedWorkspaceFolderItemsBatch(
+    input: AuthorizedWorkspaceFolderItemsBatchInput,
+  ): Promise<WorkspaceFolderItemsBatchGroup[]>;
   createWorkspaceFolderItem(
     item: WorkspaceFolderItem,
   ): Promise<WorkspaceFolderItem>;

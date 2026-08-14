@@ -19,6 +19,12 @@ import { ChatCommentService } from "./chat-comment-service";
 import type { ChatService } from "./chat-service";
 import { ChatTagService } from "./chat-tag-service";
 import { CollaborationService } from "./collaboration-service";
+import { ContentPolicyService } from "./content-policy-service";
+import { ContentPolicyVersionService } from "./content-policy-version-service";
+import { PolicyApprovalService } from "./policy-approval-service";
+import type { CapabilityService } from "./capability-resolver";
+import type { CapabilityPlatformPolicy } from "./capability-platform-policy";
+import type { OrganizationCapabilityFlagService } from "./organization-capability-flag-service";
 import type { DataConnectorExecutor } from "./data-connector-executors";
 import { DataConnectorService } from "./data-connector-service";
 import type { DelegatedOAuthService } from "./delegated-oauth-service";
@@ -31,8 +37,17 @@ import { GaEvidencePostureService } from "./ga-evidence-posture-service";
 import { GovernanceService } from "./governance-service";
 import { GroupService } from "./group-service";
 import { ImageGenerationService } from "./image-generation-service";
+import { ImageJobStore } from "./image-job-store";
+import { ModelCapabilityProbeService } from "./model-capability-probe";
 import { InterfacePreferenceService } from "./interface-preference-service";
+import { IdempotencyService } from "./idempotency-service";
 import { JobService } from "./job-service";
+import {
+  InventoriedTablePageService,
+  inventoriedTablePageCursorSecrets,
+} from "./inventoried-table-page-service";
+import { ServerTableExportWorker } from "./server-table-export-worker";
+import { ServerTableViewService } from "./server-table-view-service";
 import type { KnowledgeService } from "./knowledge-service";
 import { LdapAuthService } from "./ldap-auth-service";
 import { LocalAuthService } from "./local-auth-service";
@@ -45,10 +60,12 @@ import type { OidcAuthenticator } from "./oidc-auth-service";
 import { OpenAiChatCompletionsService } from "./openai-chat-completions-service";
 import { OpenAiEmbeddingsService } from "./openai-embeddings-service";
 import { OpenAiModelsService } from "./openai-models-service";
+import { derivePageCursorSecret } from "./page-cursor";
 import type { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
 import { PostgresOperationalPostureService } from "./postgres-operational-posture-service";
 import { PromptTemplateService } from "./prompt-template-service";
 import { ProviderService } from "./provider-service";
+import { ProviderCapabilityReportService } from "./provider-capability-report-service";
 import type { createQdrantKnowledgeVectorStore } from "./qdrant-knowledge-vector-store";
 import type { QuotaCoordinator } from "./quota-coordination";
 import { QuotaService } from "./quota-service";
@@ -84,6 +101,9 @@ interface ServiceRegistryInput {
   activeVectorStoreDeployment: VectorStoreDeploymentPosture;
   authProviderSettings: AuthProviderSettingsService;
   browserAutomation: BrowserAutomationService;
+  capabilities: CapabilityService;
+  capabilityFlags: OrganizationCapabilityFlagService;
+  capabilityPlatformPolicy: CapabilityPlatformPolicy;
   chatEvents: ChatEventService;
   chats: ChatService;
   dataConnectorExecutor: DataConnectorExecutor;
@@ -122,6 +142,9 @@ export function buildServiceRegistry(
     activeVectorStoreDeployment,
     authProviderSettings,
     browserAutomation,
+    capabilities,
+    capabilityFlags,
+    capabilityPlatformPolicy,
     chatEvents,
     chats,
     dataConnectorExecutor,
@@ -152,6 +175,14 @@ export function buildServiceRegistry(
     workflows,
   } = input;
 
+  const auditCursorSecrets: [string, ...string[]] = [
+    derivePageCursorSecret(env.SESSION_SECRET, "audit-table"),
+  ];
+  if (env.SESSION_SECRET_PREVIOUS.length > 0)
+    auditCursorSecrets.push(
+      derivePageCursorSecret(env.SESSION_SECRET_PREVIOUS, "audit-table"),
+    );
+
   return {
     abuseControls,
     analytics: new AnalyticsService(repository),
@@ -161,7 +192,9 @@ export function buildServiceRegistry(
       previousEncryptionKey: env.MANAGED_SECRET_ENCRYPTION_KEY_PREVIOUS,
     }),
     apiKeys: new ApiKeyService(repository),
-    audit: new AuditService(repository),
+    audit: new AuditService(repository, {
+      cursorSecrets: auditCursorSecrets,
+    }),
     authProviderSettings,
     billing: new BillingService(repository, {
       genericWebhookSecret: env.BILLING_GENERIC_WEBHOOK_SECRET,
@@ -176,11 +209,16 @@ export function buildServiceRegistry(
     chatEvents,
     chatExperience: new ChatExperienceService(repository),
     channels: new ChannelService(repository, openWebUiCompatibility),
+    capabilities,
+    capabilityFlags,
     chats,
     temporaryChatCleanup,
     chatComments: new ChatCommentService(repository, notificationDelivery),
     chatTags: new ChatTagService(repository),
     collaboration: new CollaborationService(repository),
+    contentPolicy: new ContentPolicyService(repository),
+    contentPolicyVersions: new ContentPolicyVersionService(repository),
+    contentPolicyApprovals: new PolicyApprovalService(repository),
     dataConnectors: new DataConnectorService(
       repository,
       knowledge,
@@ -193,6 +231,7 @@ export function buildServiceRegistry(
     deviceAuthorizations: new DeviceAuthorizationService(repository),
     edgeSecurity: new EdgeSecurityService(env),
     evals: new EvalService(repository, {
+      capabilityPlatformPolicy,
       quotaCoordinator,
       secretResolver,
       webhooks,
@@ -208,7 +247,10 @@ export function buildServiceRegistry(
       deleteKnowledgeSource: (value) => knowledge.deleteSource(value),
     }),
     groups: new GroupService(repository),
+    imageJobs: new ImageJobStore(repository),
+    modelCapabilityProbes: new ModelCapabilityProbeService(repository),
     images: new ImageGenerationService(repository, files, {
+      capabilities,
       quotaCoordinator,
       secretResolver,
       webhooks,
@@ -217,7 +259,18 @@ export function buildServiceRegistry(
         : { fetchImpl: options.providerFetch }),
     }),
     interfacePreferences: new InterfacePreferenceService(repository),
+    idempotency: new IdempotencyService(repository),
     jobs: new JobService(repository),
+    tableExports: new ServerTableExportWorker(repository),
+    tablePages: new InventoriedTablePageService(repository, {
+      cursorSecrets: inventoriedTablePageCursorSecrets({
+        current: env.SESSION_SECRET,
+        ...(env.SESSION_SECRET_PREVIOUS.length > 0
+          ? { previous: env.SESSION_SECRET_PREVIOUS }
+          : {}),
+      }),
+    }),
+    tableViews: new ServerTableViewService(repository),
     knowledge,
     ldapAuth: new LdapAuthService(
       repository,
@@ -293,6 +346,7 @@ export function buildServiceRegistry(
         ? {}
         : { fetchImpl: options.providerFetch }),
     }),
+    providerCapabilityReports: new ProviderCapabilityReportService(repository),
     prompts: new PromptTemplateService(repository),
     quotas: new QuotaService(repository, quotaCoordinator),
     ragPolicy: new RagPolicyService(repository),
@@ -327,7 +381,12 @@ export function buildServiceRegistry(
     tools,
     usage: new UsageService(repository),
     users,
-    voices: new VoiceService(repository, voiceProvider, objectStore),
+    voices: new VoiceService(
+      repository,
+      voiceProvider,
+      objectStore,
+      capabilities,
+    ),
     webhooks,
     webSearch,
     workflows,

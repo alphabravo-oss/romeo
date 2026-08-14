@@ -1,5 +1,7 @@
 import { z } from "@hono/zod-openapi";
 
+import { MessagePartOutputSchema, MessagePartSchema } from "./message-parts";
+
 export const chatIdentifier = z.string().trim().min(1).max(300);
 export const chatTimestamp = z.iso.datetime();
 export const chatRole = z.enum(["system", "user", "assistant", "tool"]);
@@ -22,6 +24,10 @@ export const ChatSchema = z
     // whole chat is one linear path", which is how every chat behaves until it
     // is branched.
     activeLeafMessageId: chatIdentifier.optional(),
+    transcriptVersion: z
+      .string()
+      .regex(/^[0-9]{1,20}$/u)
+      .optional(),
     updatedAt: chatTimestamp,
   })
   .openapi("Chat");
@@ -66,6 +72,7 @@ export const MessageSchema = z
     chatId: chatIdentifier,
     role: chatRole,
     content: z.string(),
+    parts: z.array(MessagePartOutputSchema).max(100).optional(),
     citations: z.array(MessageCitationSchema).max(100).optional(),
     attachments: z.array(MessageAttachmentSchema).max(100).optional(),
     // Present when the model run failed or was cancelled without a usable
@@ -205,6 +212,7 @@ export const importMessage = z.strictObject({
   role: chatRole,
   content: z.string().max(1_000_000),
   citations: z.array(MessageCitationSchema).max(100).optional(),
+  parts: z.array(MessagePartSchema).max(100).optional(),
   attachments: z.array(importAttachment).max(8).optional(),
   createdAt: chatTimestamp.optional(),
 });
@@ -221,11 +229,13 @@ export const ImportChatSchema = z
 export const exportedAttachment = MessageAttachmentSchema.extend({
   dataBase64: z.string().min(1),
 });
-export const exportedMessage = MessageSchema.omit({ attachments: true }).extend(
-  {
-    attachments: z.array(exportedAttachment).optional(),
-  },
-);
+export const exportedMessage = MessageSchema.omit({
+  attachments: true,
+  parts: true,
+}).extend({
+  attachments: z.array(exportedAttachment).optional(),
+  parts: z.array(MessagePartSchema).max(100).optional(),
+});
 export const ChatExportSchema = z
   .strictObject({
     schema: z.literal("romeo.chat-export.v1"),

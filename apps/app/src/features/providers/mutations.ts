@@ -1,4 +1,6 @@
 import {
+  modelsCompatibilityPreview,
+  modelsProbe,
   providersCreateConnection,
   providersDeleteOllamaModel,
   providersPullOllamaModel,
@@ -56,10 +58,47 @@ export async function updateProvider(input: {
 
 export async function verifyProvider(
   providerId: string,
+  signal?: AbortSignal,
 ): Promise<ProviderVerification> {
   configureBrowserApiClients();
   const response = await providersVerifyConnection({
     path: { providerId },
+    throwOnError: true,
+    ...(signal === undefined ? {} : { signal }),
+  });
+  return response.data.data;
+}
+
+export async function probeModelCapabilities(input: {
+  features: Array<
+    "audio" | "json" | "reasoning" | "streaming" | "tools" | "vision"
+  >;
+  modelId: string;
+  signal?: AbortSignal;
+}) {
+  configureBrowserApiClients();
+  const response = await modelsProbe({
+    body: { features: input.features },
+    path: { modelId: input.modelId },
+    throwOnError: true,
+    ...(input.signal === undefined ? {} : { signal: input.signal }),
+  });
+  return response.data.data;
+}
+
+export async function previewModelCompatibility(input: {
+  modelId: string;
+  required: {
+    attachments: boolean;
+    imageOutput: boolean;
+    localOnly: boolean;
+    reasoning: boolean;
+    tools: boolean;
+  };
+}) {
+  configureBrowserApiClients();
+  const response = await modelsCompatibilityPreview({
+    body: input,
     throwOnError: true,
   });
   return response.data.data;

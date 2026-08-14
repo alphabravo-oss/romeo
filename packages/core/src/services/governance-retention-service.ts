@@ -11,6 +11,14 @@ import { ApiError } from "../errors";
 import { createId } from "../ids";
 import { enforceGovernedDataExportPackageRetention } from "./data-export-package";
 import { deleteFileObjectStoredObjects } from "./file-service";
+import { isFileRetentionDeletable } from "./file-lifecycle";
+import {
+  defaultRetentionPolicy,
+  effectiveFileExpiry,
+  retentionPolicyForOrg,
+  validateFileRetentionDays,
+  withoutBrowserArtifacts,
+} from "./governance-retention-policy";
 import {
   browserAutomationJobType,
   readBrowserAutomationStoredArtifacts,
@@ -19,6 +27,7 @@ import {
   readVoiceArtifactUsageMetadata,
   redactVoiceArtifactStorageMetadata,
 } from "./voice-artifact-metadata";
+import { updateRecordedUsage } from "./record-usage";
 
 export interface GovernanceServiceOptions {
   env?: RomeoEnv | undefined;
@@ -41,13 +50,14 @@ export class GovernanceRetentionService {
     assertScope(subject, "admin:read");
     return (
       (await this.repository.getRetentionPolicy(subject.orgId)) ??
-      defaultPolicy(subject)
+      defaultRetentionPolicy(subject)
     );
   }
 
   async updateRetentionPolicy(input: {
     subject: AuthSubject;
     auditLogRetentionDays: number;
+    runEventRetentionDays: number;
     fileRetentionDays?: number | null;
     workspaceFileRetentionDays?: Record<string, number | null>;
     userFileRetentionDays?: Record<string, number | null>;
@@ -63,9 +73,20 @@ export class GovernanceRetentionService {
         400,
       );
     }
+    if (
+      !Number.isInteger(input.runEventRetentionDays) ||
+      input.runEventRetentionDays < 1 ||
+      input.runEventRetentionDays > 3650
+    ) {
+      throw new ApiError(
+        "invalid_retention_policy",
+        "Run event retention must be between 1 and 3650 days.",
+        400,
+      );
+    }
     const current =
       (await this.repository.getRetentionPolicy(input.subject.orgId)) ??
-      defaultPolicy(input.subject);
+      defaultRetentionPolicy(input.subject);
     const fileRetentionDays =
       input.fileRetentionDays === undefined
         ? current.fileRetentionDays
@@ -86,13 +107,14 @@ export class GovernanceRetentionService {
       const policy = await repository.upsertRetentionPolicy({
         orgId: input.subject.orgId,
         auditLogRetentionDays: input.auditLogRetentionDays,
+        runEventRetentionDays: input.runEventRetentionDays,
         fileRetentionDays,
         workspaceFileRetentionDays,
         userFileRetentionDays,
         updatedBy: input.subject.id,
         updatedAt,
       });
-      await repository.createAuditLog({
+      await writeAuditLog(repository, {
         id: createId("audit"),
         orgId: input.subject.orgId,
         actorId: input.subject.id,
@@ -102,6 +124,7 @@ export class GovernanceRetentionService {
         outcome: "success",
         metadata: {
           auditLogRetentionDays: input.auditLogRetentionDays,
+          runEventRetentionDays: input.runEventRetentionDays,
           fileRetentionDays,
           workspaceOverrideCount: Object.keys(workspaceFileRetentionDays)
             .length,
@@ -121,6 +144,9 @@ export class GovernanceRetentionService {
     const enforcedAt = new Date();
     const cutoffAt = new Date(
       enforcedAt.getTime() - policy.auditLogRetentionDays * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const runEventCutoffAt = new Date(
+      enforcedAt.getTime() - policy.runEventRetentionDays * 24 * 60 * 60 * 1000,
     ).toISOString();
     const browserArtifacts = await this.enforceBrowserArtifactRetention(
       subject,
@@ -143,13 +169,20 @@ export class GovernanceRetentionService {
       policy,
       enforcedAt.toISOString(),
     );
-    const deletedAuditLogCount = await this.repository.transaction(
+    const retentionCounts = await this.repository.transaction(
       async (repository) => {
+        const deletedRunEventCount =
+          await repository.deleteCompactedRunEventsBefore(
+            subject.orgId,
+            runEventCutoffAt,
+            enforcedAt.toISOString(),
+            10_000,
+          );
         const deletedAuditLogCount = await repository.deleteAuditLogsBefore(
           subject.orgId,
           cutoffAt,
         );
-        await repository.createAuditLog({
+        await writeAuditLog(repository, {
           id: createId("audit"),
           orgId: subject.orgId,
           actorId: subject.id,
@@ -159,7 +192,9 @@ export class GovernanceRetentionService {
           outcome: "success",
           metadata: {
             auditLogRetentionDays: policy.auditLogRetentionDays,
+            runEventRetentionDays: policy.runEventRetentionDays,
             cutoffAt,
+            runEventCutoffAt,
             cleanedBrowserAutomationJobCount:
               browserArtifacts.cleanedBrowserAutomationJobCount,
             deletedBrowserAutomationArtifactCount:
@@ -176,16 +211,20 @@ export class GovernanceRetentionService {
             missingFileObjectCount: files.missingFileObjectCount,
             deletedFileObjectBytes: files.deletedFileObjectBytes,
             deletedAuditLogCount,
+            deletedRunEventCount,
+            runEventCompactionLimitReached: deletedRunEventCount === 10_000,
           },
           createdAt: enforcedAt.toISOString(),
         });
-        return deletedAuditLogCount;
+        return { deletedAuditLogCount, deletedRunEventCount };
       },
     );
     return {
       orgId: subject.orgId,
       auditLogRetentionDays: policy.auditLogRetentionDays,
+      runEventRetentionDays: policy.runEventRetentionDays,
       cutoffAt,
+      runEventCutoffAt,
       cleanedBrowserAutomationJobCount:
         browserArtifacts.cleanedBrowserAutomationJobCount,
       deletedBrowserAutomationArtifactCount:
@@ -201,7 +240,10 @@ export class GovernanceRetentionService {
       deletedFileObjectCount: files.deletedFileObjectCount,
       missingFileObjectCount: files.missingFileObjectCount,
       deletedFileObjectBytes: files.deletedFileObjectBytes,
-      deletedAuditLogCount,
+      deletedAuditLogCount: retentionCounts.deletedAuditLogCount,
+      deletedRunEventCount: retentionCounts.deletedRunEventCount,
+      runEventCompactionLimitReached:
+        retentionCounts.deletedRunEventCount === 10_000,
       enforcedAt: enforcedAt.toISOString(),
     };
   }
@@ -268,10 +310,16 @@ export class GovernanceRetentionService {
     let deletedFileObjectBytes = 0;
     const enforcedAtMs = Date.parse(enforcedAt);
     for (const file of await this.repository.listFileObjects(subject.orgId)) {
-      if (file.status !== "available") continue;
+      if (!isFileRetentionDeletable(file)) continue;
       const expiresAt = effectiveFileExpiry(file, policy);
       if (expiresAt === undefined || Date.parse(expiresAt) > enforcedAtMs)
         continue;
+      const deletionPlan = await this.repository.getDataDeletionPlan(
+        subject.orgId,
+        "file_object",
+        file.id,
+      );
+      if (deletionPlan?.legalHold !== undefined) continue;
       const stored = await this.objectStore.getObject(file.objectKey);
       if (stored === undefined) missingFileObjectCount += 1;
       else deletedFileObjectBytes += stored.byteLength;
@@ -330,7 +378,7 @@ export class GovernanceRetentionService {
         await this.objectStore.deleteObject(artifact.storageKey);
         deletedVoiceArtifactCount += 1;
       }
-      await this.repository.updateUsageEvent({
+      await updateRecordedUsage(this.repository, {
         ...event,
         metadata: redactVoiceArtifactStorageMetadata(
           event.metadata,
@@ -407,83 +455,4 @@ export class GovernanceRetentionService {
     };
   }
 }
-
-function defaultPolicy(subject: AuthSubject): RetentionPolicy {
-  return {
-    orgId: subject.orgId,
-    auditLogRetentionDays: 365,
-    fileRetentionDays: null,
-    workspaceFileRetentionDays: {},
-    userFileRetentionDays: {},
-    updatedBy: subject.id,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function validateFileRetentionDays(days: number | null): void {
-  if (days !== null && (!Number.isInteger(days) || days < 1 || days > 3650))
-    throw new ApiError(
-      "invalid_retention_policy",
-      "File retention must be indefinite or between 1 and 3650 days.",
-      400,
-    );
-}
-
-function effectiveFileExpiry(
-  file: {
-    createdAt: string;
-    metadata: Record<string, unknown>;
-    ownerId: string;
-    workspaceId: string;
-  },
-  policy: RetentionPolicy,
-): string | undefined {
-  let explicitExpiryMs: number | undefined;
-  if (typeof file.metadata.expiresAt === "string") {
-    const parsed = Date.parse(file.metadata.expiresAt);
-    if (Number.isFinite(parsed)) explicitExpiryMs = parsed;
-  }
-  const days = Object.prototype.hasOwnProperty.call(
-    policy.userFileRetentionDays,
-    file.ownerId,
-  )
-    ? policy.userFileRetentionDays[file.ownerId]
-    : Object.prototype.hasOwnProperty.call(
-          policy.workspaceFileRetentionDays,
-          file.workspaceId,
-        )
-      ? policy.workspaceFileRetentionDays[file.workspaceId]
-      : policy.fileRetentionDays;
-  let policyExpiryMs: number | undefined;
-  if (days !== null && days !== undefined) {
-    const createdAtMs = Date.parse(file.createdAt);
-    if (Number.isFinite(createdAtMs))
-      policyExpiryMs = createdAtMs + days * 86_400_000;
-  }
-  const effectiveExpiryMs =
-    explicitExpiryMs === undefined
-      ? policyExpiryMs
-      : policyExpiryMs === undefined
-        ? explicitExpiryMs
-        : Math.min(explicitExpiryMs, policyExpiryMs);
-  return effectiveExpiryMs === undefined
-    ? undefined
-    : new Date(effectiveExpiryMs).toISOString();
-}
-
-async function retentionPolicyForOrg(
-  repository: RomeoRepository,
-  subject: AuthSubject,
-): Promise<RetentionPolicy> {
-  return (
-    (await repository.getRetentionPolicy(subject.orgId)) ??
-    defaultPolicy(subject)
-  );
-}
-
-function withoutBrowserArtifacts(
-  payload: Record<string, unknown>,
-): Record<string, unknown> {
-  const { browserArtifacts: _browserArtifacts, ...rest } = payload;
-  return rest;
-}
+import { writeAuditLog } from "./audit-log";

@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   foreignKey,
   index,
   integer,
@@ -98,6 +100,7 @@ export const agentVersions = pgTable(
       .notNull()
       .default([]),
     toolBindings: jsonb("tool_bindings").notNull().default([]),
+    capabilityDefaults: jsonb("capability_defaults").notNull().default([]),
     createdBy: text("created_by")
       .notNull()
       .references(() => users.id),
@@ -110,6 +113,10 @@ export const agentVersions = pgTable(
     agentVersionsAgentVersionIdx: uniqueIndex(
       "agent_versions_agent_version_idx",
     ).on(table.agentId, table.version),
+    capabilityDefaultsSizeCheck: check(
+      "agent_versions_capability_defaults_size_check",
+      sql`octet_length(${table.capabilityDefaults}::text) <= 16384`,
+    ),
   }),
 );
 

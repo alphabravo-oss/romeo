@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  fallbackTitle,
-  normalizeGeneratedTitle,
-} from "./chat-title-normalize";
+import { fallbackTitle, normalizeGeneratedTitle } from "./chat-title-normalize";
 
 describe("normalizeGeneratedTitle", () => {
   const fallback = "can i have sample python code";

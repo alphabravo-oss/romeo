@@ -9,13 +9,16 @@ import {
 } from "./common";
 import {
   adminUserRoleSchema as userRole,
-  AdminUserListQuerySchema,
-  AdminUserPageSchema,
   AdminUserSchema,
   administrationIdentifierSchema as identifier,
 } from "./administration-users";
 
-export { AdminUserPageSchema, AdminUserSchema } from "./administration-users";
+export {
+  AdminUserPageSchema,
+  AdminUserSchema,
+  AdminUserTablePageSchema,
+  AdminUserTableQuerySchema,
+} from "./administration-users";
 
 const timestamp = z.iso.datetime();
 const scope = z.enum(scopeValues);
@@ -224,20 +227,10 @@ const body = <T extends z.ZodType>(schema: T) => ({
   content: { "application/json": { schema } },
 });
 
-export const listUsersRoute = createRoute({
-  ...metadata,
-  method: "get",
-  path: "/api/v1/users",
-  operationId: "administration.listUsers",
-  summary: "List organization users",
-  request: {
-    query: AdminUserListQuerySchema,
-  },
-  responses: {
-    200: jsonResponse("Users", AdminUserPageSchema),
-    ...errors,
-  },
-});
+export {
+  listUsersRoute,
+  queryUsersRoute,
+} from "./administration-user-routes";
 export const disableUserRoute = createRoute({
   ...metadata,
   method: "post",

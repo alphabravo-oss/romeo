@@ -1,13 +1,12 @@
 import { Button, Field, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Bell from "lucide-react/dist/esm/icons/bell.mjs";
 import { useMemo, useState } from "react";
 
 import {
-  createNotificationChannel,
-  listNotificationChannels,
-  listNotificationDeliveries,
+  createNotificationChannelMutationOptions,
+  notificationChannelsQueryOptions,
   notificationChannelTypes,
 } from "../features/notifications";
 import type {
@@ -26,6 +25,7 @@ import { FormDialog } from "./FormDialog";
 import { PageActions } from "./PageActions";
 import { NotificationPolicyForm } from "./NotificationPolicyForm";
 import { Tabs } from "./Tabs";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const channelCol = createColumnHelper<NotificationDeliveryChannel>();
 const deliveryCol = createColumnHelper<NotificationDelivery>();
@@ -90,18 +90,15 @@ export function NotificationChannelPanel() {
 
 function ChannelsTab() {
   const { t } = useLocale();
+  const inventoriedTable = useInventoriedServerTable<NotificationDelivery>(
+    "notification_deliveries",
+  );
   const required = ({ value }: { value: string }) =>
     !value?.trim() ? t("required") : undefined;
-  const queryClient = useQueryClient();
-  const channelsQuery = useQuery({
-    queryKey: ["notificationChannels"],
-    queryFn: listNotificationChannels,
-  });
-  const deliveriesQuery = useQuery({
-    queryKey: ["notificationDeliveries"],
-    queryFn: listNotificationDeliveries,
-  });
-  const createMutation = useMutation({ mutationFn: createNotificationChannel });
+  const channelsQuery = useQuery(notificationChannelsQueryOptions());
+  const createMutation = useMutation(
+    createNotificationChannelMutationOptions(),
+  );
   const [addOpen, setAddOpen] = useState(false);
 
   const form = useForm({
@@ -117,11 +114,9 @@ function ChannelsTab() {
       try {
         const input = notificationChannelInput(value);
         await createMutation.mutateAsync(input);
-        await queryClient.invalidateQueries({
-          queryKey: ["notificationChannels"],
-        });
         toast(t("channelCreated"), "success");
         setAddOpen(false);
+        createMutation.reset();
       } catch (caught) {
         toast(t("couldNotCreateChannel"), "error");
         throw caught;
@@ -416,7 +411,10 @@ function ChannelsTab() {
                 },
               ]}
             />
-            <DataTable columns={channelColumns} data={rows} />
+            <DataTable
+              columns={channelColumns}
+              data={rows}
+            />
           </div>
         )}
       </PanelState>
@@ -424,15 +422,16 @@ function ChannelsTab() {
       <div className="rm-card-header mt-4">
         <div className="rm-card-title">{t("deliveries")}</div>
         <PageActions
-          onRefresh={() => void deliveriesQuery.refetch()}
+          onRefresh={() => void inventoriedTable.query.refetch()}
           refreshLabel={t("refresh")}
-          refreshing={deliveriesQuery.isFetching}
+          refreshing={inventoriedTable.query.isFetching}
         />
       </div>
       <DataTable
         columns={deliveryColumns}
-        data={deliveriesQuery.data ?? []}
+        data={inventoriedTable.rows}
         empty={t("noDeliveries")}
+        serverState={inventoriedTable.serverState}
       />
     </div>
   );

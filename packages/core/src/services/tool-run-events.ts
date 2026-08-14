@@ -78,5 +78,5 @@ export async function appendToolRunEvent(
         : { approvalRequestId: input.approvalRequestId }),
     },
   });
-  await repository.appendRunEvents([event]);
+  await sequencer.append(repository, [event]);
 }

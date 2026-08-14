@@ -17,9 +17,18 @@ describe("repository contract inventory", () => {
         "./repository-operations.ts",
         "RepositoryOperationsCapability",
       ),
+      methodsFor(
+        "./repository-capabilities.ts",
+        "RepositoryCapabilityAssignments",
+      ),
+      methodsFor(
+        "./repository-capability-flags.ts",
+        "RepositoryCapabilityFlags",
+      ),
+      methodsFor("./repository-idempotency.ts", "RepositoryIdempotency"),
     ].flat();
 
-    expect(repositoryMethods).toHaveLength(262);
+    expect(repositoryMethods).toHaveLength(305);
     expect(ROMEO_REPOSITORY_METHOD_NAMES).toEqual(repositoryMethods);
     expect(repositoryContractInventory.map((entry) => entry.method)).toEqual(
       repositoryMethods,

@@ -1,8 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Button, Dialog, Field, Input, Select, Textarea } from "@romeo/ui";
 import { useMemo, useState } from "react";
 
-import { createAgent } from "../features/managed-models";
+import { createAgentMutationOptions } from "../features/managed-models/mutation-options";
 import type { BaseModel, Provider } from "../features/providers/types";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
@@ -23,7 +23,6 @@ export function CreateManagedModelDialog({
   trigger?: React.ReactNode;
 }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [baseModelId, setBaseModelId] = useState("");
@@ -47,7 +46,7 @@ export function CreateManagedModelDialog({
       model.available !== false &&
       enabledProviderIds.has(model.providerId),
   );
-  const createMutation = useMutation({ mutationFn: createAgent });
+  const createMutation = useMutation(createAgentMutationOptions());
 
   function reset() {
     setName("");
@@ -64,9 +63,6 @@ export function CreateManagedModelDialog({
         name: name.trim(),
         baseModelId,
         systemPrompt: systemPrompt.trim(),
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["agents", workspaceId],
       });
       onCreated(created.id);
       setOpen(false);

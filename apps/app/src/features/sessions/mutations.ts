@@ -35,7 +35,10 @@ export async function approveImpersonationRequest(requestId: string) {
     path: { requestId },
     throwOnError: true,
   });
-  return response.data.data;
+  // This panel manages the approval state; it never consumes the resulting
+  // bearer credential. Return only the non-secret session projection so the
+  // one-time token cannot enter React Query's mutation cache.
+  return response.data.data.session;
 }
 
 export async function rejectImpersonationRequest(requestId: string) {

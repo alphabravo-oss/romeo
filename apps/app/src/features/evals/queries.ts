@@ -1,5 +1,6 @@
 import {
   evalsGetDashboard,
+  evalsGetReasoningComparison,
   evalsGetReleaseCandidateEvidence,
   evalsListRatings,
   evalsListResults,
@@ -30,6 +31,15 @@ export async function getEvalDashboard(agentId: string) {
   configureBrowserApiClients();
   const response = await evalsGetDashboard({
     path: { agentId },
+    throwOnError: true,
+  });
+  return response.data.data;
+}
+
+export async function getEvalReasoningComparison(suiteId: string) {
+  configureBrowserApiClients();
+  const response = await evalsGetReasoningComparison({
+    path: { suiteId },
     throwOnError: true,
   });
   return response.data.data;

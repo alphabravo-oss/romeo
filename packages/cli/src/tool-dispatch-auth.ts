@@ -5,7 +5,11 @@ import type {
   RunToolDispatchWorkerInput,
   ToolDispatchPayloadAuth,
 } from "./tool-dispatch-worker";
-import { assertResolvedHostAllowed, safeHost } from "./tool-dispatch-network";
+import {
+  assertResolvedHostAllowed,
+  fetchApprovedHost,
+  safeHost,
+} from "./tool-dispatch-network";
 
 export async function applyPayloadAuth(
   input: RunToolDispatchWorkerInput,
@@ -48,7 +52,10 @@ async function resolveOAuthClientCredentialsAccessToken(
   secretRef: string,
 ): Promise<string> {
   const tokenUrl = oauthTokenUrl(claim);
-  await assertResolvedHostAllowed(input, tokenUrl.hostname);
+  const approvedAddresses = await assertResolvedHostAllowed(
+    input,
+    tokenUrl.hostname,
+  );
   const credentials = parseOAuthClientCredentials(
     await resolveWorkerSecret(input, secretRef),
   );
@@ -80,7 +87,9 @@ async function resolveOAuthClientCredentialsAccessToken(
       scopes.length === 0 ? {} : { scope: scopes.join(" ") },
       {
         [oauth.customFetch]: boundedOAuthFetch(
-          input.fetchImpl,
+          input,
+          tokenUrl,
+          approvedAddresses,
           Math.min(input.maxBytes, 16 * 1024),
         ),
         signal: controller.signal,
@@ -171,11 +180,23 @@ function oauthScopes(value: unknown): string[] {
 }
 
 function boundedOAuthFetch(
-  fetchImpl: typeof fetch,
+  input: RunToolDispatchWorkerInput,
+  approvedUrl: URL,
+  approvedAddresses: Awaited<ReturnType<typeof assertResolvedHostAllowed>>,
   maxBytes: number,
 ): typeof fetch {
   return async (resource, init) => {
-    const response = await fetchImpl(resource, { ...init, redirect: "error" });
+    const requestUrl = resource instanceof Request ? resource.url : resource;
+    const url = new URL(String(requestUrl));
+    if (url.toString() !== approvedUrl.toString()) {
+      throw new Error("worker_oauth_token_request_failed");
+    }
+    const response = await fetchApprovedHost(
+      input,
+      url,
+      { ...init, redirect: "error" },
+      approvedAddresses,
+    );
     const text = await readBoundedResponseText(response, maxBytes);
     return new Response(text, {
       status: response.status,

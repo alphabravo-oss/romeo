@@ -82,6 +82,7 @@ export function createTenantIdentityRepositoryFragment(
     listOrganizations: tenancy.listOrganizations.bind(tenancy),
     listUsers: identity.listUsers.bind(identity),
     listUsersPage: identity.listUsersPage.bind(identity),
+    queryUsers: identity.queryUsers.bind(identity),
     listWorkspaces: tenancy.listWorkspaces.bind(tenancy),
     purgeTenantData: purge.purgeTenantData.bind(purge),
     updateGroup: identity.updateGroup.bind(identity),
@@ -101,8 +102,15 @@ export function createAuthCredentialRepositoryFragment(
     createDeviceAuthorization:
       repository.createDeviceAuthorization.bind(repository),
     createLocalMfaFactor: repository.createLocalMfaFactor.bind(repository),
+    createLocalMfaChallenge:
+      repository.createLocalMfaChallenge.bind(repository),
+    consumeLocalMfaFactor: repository.consumeLocalMfaFactor.bind(repository),
+    consumeLocalMfaChallenge:
+      repository.consumeLocalMfaChallenge.bind(repository),
+    consumeSamlAuthRequest: repository.consumeSamlAuthRequest.bind(repository),
     createLocalPasswordCredential:
       repository.createLocalPasswordCredential.bind(repository),
+    createSamlAuthRequest: repository.createSamlAuthRequest.bind(repository),
     createServiceAccount: repository.createServiceAccount.bind(repository),
     createUserSession: repository.createUserSession.bind(repository),
     getApiKey: repository.getApiKey.bind(repository),
@@ -124,11 +132,15 @@ export function createAuthCredentialRepositoryFragment(
     listLocalMfaFactors: repository.listLocalMfaFactors.bind(repository),
     listLocalMfaFactorsForOrg:
       repository.listLocalMfaFactorsForOrg.bind(repository),
+    recordFailedLocalPasswordAttempt:
+      repository.recordFailedLocalPasswordAttempt.bind(repository),
     listServiceAccounts: repository.listServiceAccounts.bind(repository),
     listUserSessions: repository.listUserSessions.bind(repository),
     updateApiKey: repository.updateApiKey.bind(repository),
     updateDeviceAuthorization:
       repository.updateDeviceAuthorization.bind(repository),
+    rotateDeviceAuthorization:
+      repository.rotateDeviceAuthorization.bind(repository),
     updateLocalMfaFactor: repository.updateLocalMfaFactor.bind(repository),
     updateLocalPasswordCredential:
       repository.updateLocalPasswordCredential.bind(repository),
@@ -212,7 +224,11 @@ export function createChatRepositoryFragment(
     createChatComment: repository.createChatComment.bind(repository),
     createQueuedChatTurn: repository.createQueuedChatTurn.bind(repository),
     createMessage: repository.createMessage.bind(repository),
+    backfillLegacyMessageTextParts:
+      repository.backfillLegacyMessageTextParts.bind(repository),
     createMessageParts: repository.createMessageParts.bind(repository),
+    countMessageFileReferences:
+      repository.countMessageFileReferences.bind(repository),
     deleteMessage: repository.deleteMessage.bind(repository),
     getChat: repository.getChat.bind(repository),
     getMessage: repository.getMessage.bind(repository),
@@ -225,7 +241,13 @@ export function createChatRepositoryFragment(
     listAuthorizedChatsPage:
       repository.listAuthorizedChatsPage.bind(repository),
     listMessageParts: repository.listMessageParts.bind(repository),
+    listMessagePartsForMessages:
+      repository.listMessagePartsForMessages.bind(repository),
     listMessages: repository.listMessages.bind(repository),
+    queryAuthorizedMessagesPage:
+      repository.queryAuthorizedMessagesPage.bind(repository),
+    reconcileChatFileReferences:
+      repository.reconcileChatFileReferences.bind(repository),
     listQueuedChatTurns: repository.listQueuedChatTurns.bind(repository),
     claimNextQueuedChatTurn:
       repository.claimNextQueuedChatTurn.bind(repository),
@@ -235,6 +257,8 @@ export function createChatRepositoryFragment(
     renewQueuedChatTurnLease:
       repository.renewQueuedChatTurnLease.bind(repository),
     searchChatContent: repository.searchChatContent.bind(repository),
+    searchAuthorizedChatMessages:
+      repository.searchAuthorizedChatMessages.bind(repository),
     updateChat: repository.updateChat.bind(repository),
     updateMessagePart: repository.updateMessagePart.bind(repository),
     updateQueuedChatTurn: repository.updateQueuedChatTurn.bind(repository),

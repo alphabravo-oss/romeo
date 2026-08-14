@@ -102,7 +102,11 @@ function inferCapabilities(
     booleanFrom(nestedValue(metadata, ["capabilities", "structured_json"])),
     params === undefined
       ? undefined
-      : hasAny(params, ["response_format", "structured_outputs", "json_schema"]),
+      : hasAny(params, [
+          "response_format",
+          "structured_outputs",
+          "json_schema",
+        ]),
     embeddingOnly || imageGeneration ? false : base.structuredJson,
   );
   const reasoning = resolveFlag(
@@ -113,7 +117,7 @@ function inferCapabilities(
     params !== undefined
       ? hasAny(params, ["reasoning", "include_reasoning", "thinking"])
       : undefined,
-    looksLikeReasoningModel(name),
+    looksLikeReasoningModel(name) ? true : undefined,
     base.reasoning,
   );
   const temperature = resolveTemperature(name, params, reasoning);
@@ -150,7 +154,10 @@ function inferContextWindow(name: string): number | undefined {
   if (/\bclaude\b/u.test(normalized)) return 200_000;
   if (/\bgpt[-_. ]?5\b/u.test(normalized)) return 400_000;
   if (/\bo[1-4]\b/u.test(normalized)) return 200_000;
-  if (/\bgpt[-_. ]?4o\b/u.test(normalized) || /\bgpt[-_. ]?4[.]1\b/u.test(normalized)) {
+  if (
+    /\bgpt[-_. ]?4o\b/u.test(normalized) ||
+    /\bgpt[-_. ]?4[.]1\b/u.test(normalized)
+  ) {
     return 128_000;
   }
   if (/\bdeepseek\b/u.test(normalized)) return 128_000;
@@ -163,7 +170,10 @@ function inferMaxOutputTokens(
   contextWindow: number,
   capabilities: ProviderCapabilities,
 ): number | undefined {
-  if (capabilities.modalities.includes("embeddings") && !capabilities.modalities.includes("text")) {
+  if (
+    capabilities.modalities.includes("embeddings") &&
+    !capabilities.modalities.includes("text")
+  ) {
     return undefined;
   }
   if (capabilities.imageGeneration === true) return undefined;
@@ -187,10 +197,16 @@ function looksLikeEmbeddingModel(
   params: Set<string> | undefined,
 ): boolean {
   if (outputIncludes(metadata, "embedding", "embeddings")) return true;
-  if (params !== undefined && params.size > 0 && ![...params].some((item) => item !== "dimensions")) {
+  if (
+    params !== undefined &&
+    params.size > 0 &&
+    ![...params].some((item) => item !== "dimensions")
+  ) {
     return /embed/iu.test(name);
   }
-  return /(?:^|[-_.])(embed|embedding|text[-_.]?embedding)(?:$|[-_.])/iu.test(name);
+  return /(?:^|[-_.])(embed|embedding|text[-_.]?embedding)(?:$|[-_.])/iu.test(
+    name,
+  );
 }
 
 function looksLikeVisionModel(name: string): boolean {
@@ -282,8 +298,12 @@ function modalityIncludes(
   const values = [
     ...arrayOfStrings(metadata.input_modalities),
     ...arrayOfStrings(metadata.output_modalities),
-    ...arrayOfStrings(nestedValue(metadata, ["architecture", "input_modalities"])),
-    ...arrayOfStrings(nestedValue(metadata, ["architecture", "output_modalities"])),
+    ...arrayOfStrings(
+      nestedValue(metadata, ["architecture", "input_modalities"]),
+    ),
+    ...arrayOfStrings(
+      nestedValue(metadata, ["architecture", "output_modalities"]),
+    ),
     ...arrayOfStrings(nestedValue(metadata, ["architecture", "modality"])),
   ];
   return values.some((value) =>
@@ -297,7 +317,9 @@ function outputIncludes(
 ): boolean {
   const values = [
     ...arrayOfStrings(metadata.output_modalities),
-    ...arrayOfStrings(nestedValue(metadata, ["architecture", "output_modalities"])),
+    ...arrayOfStrings(
+      nestedValue(metadata, ["architecture", "output_modalities"]),
+    ),
   ];
   return values.some((value) =>
     needles.some((needle) => value.includes(needle)),
@@ -350,10 +372,7 @@ function nestedNumber(
   return nestedValue(record, path);
 }
 
-function nestedValue(
-  record: Record<string, unknown>,
-  path: string[],
-): unknown {
+function nestedValue(record: Record<string, unknown>, path: string[]): unknown {
   let current: unknown = record;
   for (const key of path) {
     const next = asRecord(current);

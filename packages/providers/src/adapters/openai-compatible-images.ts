@@ -1,21 +1,12 @@
-import type { ProviderInstance } from "../types";
-import { createOpenAiClient, ProviderSdkRequestError } from "./provider-sdk";
+import type {
+  GenerateProviderImagesInput,
+  GeneratedProviderImage,
+  ProviderImageAdapter,
+} from "../types";
+import { createOpenAiClient, normalizeProviderSdkError } from "./provider-sdk";
 
-export interface GenerateOpenAiCompatibleImagesInput {
-  apiKey?: string;
-  count: number;
-  fetchImpl?: typeof fetch;
-  model: string;
-  prompt: string;
-  provider: Pick<ProviderInstance, "baseUrl">;
-  signal?: AbortSignal;
-  size: "1024x1024" | "1024x1536" | "1536x1024";
-}
-
-export interface GeneratedProviderImage {
-  b64Json?: string;
-  revisedPrompt?: string;
-}
+export type GenerateOpenAiCompatibleImagesInput = GenerateProviderImagesInput;
+export type { GeneratedProviderImage } from "../types";
 
 export async function generateOpenAiCompatibleImages(
   input: GenerateOpenAiCompatibleImagesInput,
@@ -33,7 +24,14 @@ export async function generateOpenAiCompatibleImages(
         size: input.size,
         response_format: "b64_json",
       },
-      input.signal === undefined ? undefined : { signal: input.signal },
+      input.signal === undefined && input.idempotencyKey === undefined
+        ? undefined
+        : {
+            ...(input.signal === undefined ? {} : { signal: input.signal }),
+            ...(input.idempotencyKey === undefined
+              ? {}
+              : { headers: { "Idempotency-Key": input.idempotencyKey } }),
+          },
     );
     return (response.data ?? []).map((image) => ({
       ...(image.b64_json === undefined ? {} : { b64Json: image.b64_json }),
@@ -42,6 +40,15 @@ export async function generateOpenAiCompatibleImages(
         : { revisedPrompt: image.revised_prompt }),
     }));
   } catch (caught) {
-    throw new ProviderSdkRequestError("openai-compatible", caught);
+    throw normalizeProviderSdkError(
+      caught,
+      "openai-compatible",
+      "imageGeneration",
+    );
   }
 }
+
+export const openAiCompatibleImageAdapter: ProviderImageAdapter = {
+  kind: "openai-compatible",
+  generate: generateOpenAiCompatibleImages,
+};

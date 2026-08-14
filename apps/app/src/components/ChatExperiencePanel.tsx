@@ -1,22 +1,18 @@
 import { Section } from "./console";
-import { Button, Field, Input, Textarea } from "@romeo/ui";
+import { Button, EmptyState, Field, Input, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
-import {
-  getChatExperience,
-  updateChatExperience,
-  type ChatExperience,
-} from "../features/chat-experience";
+import type { ChatExperience } from "../features/chat-experience";
+import { updateChatExperienceMutationOptions } from "../features/chat-experience/mutation-options";
+import { chatExperienceQueryOptions } from "../features/chat-experience/query-options";
 import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 export function ChatExperiencePanel() {
-  const query = useQuery({
-    queryKey: ["chatExperience"],
-    queryFn: getChatExperience,
-  });
+  const query = useQuery(chatExperienceQueryOptions());
   const { t } = useLocale();
 
   return (
@@ -38,20 +34,16 @@ export function ChatExperiencePanel() {
 
 function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
   const { t } = useLocale();
-  const queryClient = useQueryClient();
-  const mutation = useMutation({ mutationFn: updateChatExperience });
+  const mutation = useMutation(updateChatExperienceMutationOptions());
   const form = useForm({
     defaultValues: { ...initial, assistantsEnabled: true },
     onSubmit: async ({ value }) => {
       try {
         await mutation.mutateAsync({ ...value, assistantsEnabled: true });
-        await queryClient.invalidateQueries({ queryKey: ["chatExperience"] });
         toast(t("chatExperienceSaved"), "success");
       } catch (caught) {
         toast(
-          caught instanceof Error
-            ? caught.message
-            : t("chatExperienceSaveFailed"),
+          safeUserErrorMessage(caught, t("chatExperienceSaveFailed")),
           "error",
         );
       }
@@ -119,7 +111,7 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
             </div>
 
             {suggestionsField.state.value.length === 0 ? (
-              <div className="rm-empty">{t("chatNoStarters")}</div>
+              <EmptyState title={t("chatNoStarters")} />
             ) : null}
 
             {suggestionsField.state.value.map((_, index) => (

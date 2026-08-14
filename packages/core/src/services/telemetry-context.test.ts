@@ -47,9 +47,9 @@ describe("metadata-only telemetry context", () => {
           actorId: "user_dev_admin",
           sourceType: "run",
           sourceId: "run_telemetry",
-          metric: "telemetry.test",
+          metric: "run.started",
           quantity: 1,
-          unit: "event",
+          unit: "run",
           metadata: { boundary: "provider" },
         });
         await withTelemetryFetch(fetchImpl)("https://provider.example/v1");

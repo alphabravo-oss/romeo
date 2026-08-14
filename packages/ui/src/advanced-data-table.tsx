@@ -16,6 +16,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Checkbox } from "./forms";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DataTableControls } from "./data-table-controls";
+import { columnPreferenceIds } from "./data-table-columns";
 import { DataTableGrid } from "./data-table-grid";
 import { ClientTablePager, ServerTablePager } from "./data-table-pagination";
 import { downloadCsv, serializeTableCsv } from "./table-csv";
@@ -29,6 +30,12 @@ import {
   writeTablePreferences,
   writeTableSavedViews,
 } from "./table-preferences";
+import {
+  serverPaginationChangeHandler,
+  serverPaginationFromState,
+  type ServerPagination,
+  type ServerTableState,
+} from "./server-table-state";
 
 export { createColumnHelper };
 export type { ColumnDef };
@@ -39,14 +46,6 @@ export type { ColumnDef };
  * optional `onPrevPage` control the nav buttons; `isFetching` disables them
  * mid-request. `pageSize` is used only for display sizing hints.
  */
-export interface ServerPagination {
-  pageSize: number;
-  hasNextPage: boolean;
-  isFetching?: boolean;
-  onNextPage: () => void;
-  onPrevPage?: () => void;
-}
-
 export interface DataTableLabels {
   columns: string;
   comfortable: string;
@@ -105,6 +104,7 @@ export interface DataTableProps<T> {
   rowAriaLabel?: (row: T) => string;
   searchVisibility?: "auto" | "always" | "hidden";
   serverPagination?: ServerPagination;
+  serverState?: ServerTableState;
   sorting?: SortingState;
 }
 
@@ -141,6 +141,7 @@ export function DataTable<T>({
   rowAriaLabel,
   searchVisibility = "auto",
   serverPagination,
+  serverState,
   sorting: controlledSorting,
   enableRowSelection = false,
   bulkActions,
@@ -178,12 +179,23 @@ export function DataTable<T>({
       pageSize: initialPreferences.pageSize,
     },
   );
-  const sorting = controlledSorting ?? internalSorting;
-  const globalFilter = controlledGlobalFilter ?? internalGlobalFilter;
-  const pagination = controlledPagination ?? internalPagination;
-  const updateSorting = onSortingChange ?? setInternalSorting;
-  const updateGlobalFilter = onGlobalFilterChange ?? setInternalGlobalFilter;
-  const updatePagination = onPaginationChange ?? setInternalPagination;
+  const sorting = serverState?.sorting ?? controlledSorting ?? internalSorting;
+  const globalFilter =
+    serverState?.search ?? controlledGlobalFilter ?? internalGlobalFilter;
+  const pagination = serverState
+    ? { pageIndex: serverState.pageIndex, pageSize: serverState.pageSize }
+    : (controlledPagination ?? internalPagination);
+  const updateSorting =
+    serverState === undefined
+      ? (onSortingChange ?? setInternalSorting)
+      : (serverState.onSortingChange ?? ignoreChange);
+  const updateGlobalFilter =
+    serverState === undefined
+      ? (onGlobalFilterChange ?? setInternalGlobalFilter)
+      : (serverState.onSearchChange ?? ignoreChange);
+  const updatePagination = serverState
+    ? serverPaginationChangeHandler(serverState)
+    : (onPaginationChange ?? setInternalPagination);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [savedViews, setSavedViews] = useState<TableSavedView[]>(() =>
     readTableSavedViews(
@@ -196,7 +208,10 @@ export function DataTable<T>({
   const virtualize = maxBodyHeight !== undefined;
   // Server pagination is authoritative: the parent owns page state, so the
   // internal client paginator must be off.
-  const clientPaginate = !virtualize && !serverPagination;
+  const resolvedServerPagination = serverState
+    ? serverPaginationFromState(serverState)
+    : serverPagination;
+  const clientPaginate = !virtualize && !resolvedServerPagination;
 
   useEffect(() => {
     writeTablePreferences(resolvedPreferenceKey, {
@@ -253,6 +268,8 @@ export function DataTable<T>({
       pagination,
     },
     enableRowSelection,
+    enableSorting:
+      serverState === undefined || serverState.onSortingChange !== undefined,
     ...(getRowId ? { getRowId } : {}),
     onSortingChange: updateSorting,
     onGlobalFilterChange: updateGlobalFilter,
@@ -260,10 +277,14 @@ export function DataTable<T>({
     onPaginationChange: updatePagination,
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
-    manualSorting,
-    manualFiltering,
-    ...(manualSorting ? {} : { getSortedRowModel: getSortedRowModel() }),
-    ...(manualFiltering ? {} : { getFilteredRowModel: getFilteredRowModel() }),
+    manualSorting: serverState !== undefined || manualSorting,
+    manualFiltering: serverState !== undefined || manualFiltering,
+    ...(serverState !== undefined || manualSorting
+      ? {}
+      : { getSortedRowModel: getSortedRowModel() }),
+    ...(serverState !== undefined || manualFiltering
+      ? {}
+      : { getFilteredRowModel: getFilteredRowModel() }),
     ...(clientPaginate
       ? { getPaginationRowModel: getPaginationRowModel() }
       : {}),
@@ -271,8 +292,9 @@ export function DataTable<T>({
 
   const rows = table.getRowModel().rows;
   const showSearch =
-    searchVisibility === "always" ||
-    (searchVisibility === "auto" && data.length > 8);
+    (serverState === undefined || serverState.onSearchChange !== undefined) &&
+    (searchVisibility === "always" ||
+      (searchVisibility === "auto" && data.length > 8));
   const showPager = clientPaginate && table.getPageCount() > 1;
 
   const selectedRows = table.getSelectedRowModel().rows;
@@ -329,6 +351,7 @@ export function DataTable<T>({
     updatePagination({ pageIndex: 0, pageSize: defaults.pageSize });
     updateSorting([]);
     updateGlobalFilter("");
+    serverState?.onFiltersChange?.([]);
     setRowSelection({});
   }
 
@@ -390,12 +413,12 @@ export function DataTable<T>({
       className="rm-table-block"
       data-page-size={pagination.pageSize}
       data-row-count={data.length}
-      data-server-paginated={serverPagination !== undefined}
+      data-server-paginated={resolvedServerPagination !== undefined}
       data-virtualized={virtualize}
     >
       <DataTableControls
         canExport={canExport}
-        clientPaginate={clientPaginate}
+        showPageSize={clientPaginate || serverState !== undefined}
         density={density}
         globalFilter={globalFilter}
         labels={labels}
@@ -407,7 +430,7 @@ export function DataTable<T>({
         pageSize={pagination.pageSize}
         setDensity={setDensity}
         savedViews={savedViews}
-        showExport={exportFileName !== false}
+        showExport={exportFileName !== false && serverState === undefined}
         showSearch={showSearch}
         table={table}
       />
@@ -452,31 +475,16 @@ export function DataTable<T>({
         />
       ) : null}
 
-      {serverPagination ? (
+      {resolvedServerPagination ? (
         <ServerTablePager
           dataLength={data.length}
           formatNumber={formatNumber}
           labels={labels}
-          pagination={serverPagination}
+          pagination={resolvedServerPagination}
         />
       ) : null}
     </div>
   );
 }
 
-function columnPreferenceIds<T>(
-  columns: readonly ColumnDef<T, any>[],
-  includeDisplay: boolean,
-): string[] {
-  return columns.flatMap((column) => {
-    if ("columns" in column && Array.isArray(column.columns)) {
-      return columnPreferenceIds(column.columns, includeDisplay);
-    }
-    if ("accessorKey" in column && column.accessorKey !== undefined) {
-      return [String(column.accessorKey)];
-    }
-    return column.id !== undefined && (includeDisplay || "accessorFn" in column)
-      ? [column.id]
-      : [];
-  });
-}
+function ignoreChange(): void {}

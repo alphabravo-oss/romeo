@@ -2,11 +2,11 @@ import { Button, Input, Textarea } from "@romeo/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { queryTieredKnowledge } from "../features/knowledge";
+import { queryTieredKnowledgeMutationOptions } from "../features/knowledge";
 import {
   buildRagValidateChecklist,
-  getRagPolicy,
-  getRagPosture,
+  ragPolicyQueryOptions,
+  ragPostureQueryOptions,
   vectorBackendPresetFromPolicy,
 } from "../features/rag-governance";
 import { useLocale } from "../lib/i18n";
@@ -15,6 +15,7 @@ import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
 import { PageActions } from "./PageActions";
 import { PanelStats } from "./PanelStats";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 function textToIds(text: string): string[] {
   return text
@@ -29,15 +30,9 @@ export function RagValidateTab() {
   const [query, setQuery] = useState("What policies apply?");
   const [testSummary, setTestSummary] = useState<string | null>(null);
 
-  const postureQuery = useQuery({
-    queryKey: ["ragPosture"],
-    queryFn: getRagPosture,
-  });
-  const policyQuery = useQuery({
-    queryKey: ["ragPolicy"],
-    queryFn: getRagPolicy,
-  });
-  const testMutation = useMutation({ mutationFn: queryTieredKnowledge });
+  const postureQuery = useQuery(ragPostureQueryOptions());
+  const policyQuery = useQuery(ragPolicyQueryOptions());
+  const testMutation = useMutation(queryTieredKnowledgeMutationOptions());
 
   const expectedBackend = policyQuery.data
     ? vectorBackendPresetFromPolicy(policyQuery.data)
@@ -86,10 +81,7 @@ export function RagValidateTab() {
       );
     } catch (caught) {
       setTestSummary(null);
-      toast(
-        caught instanceof Error ? caught.message : t("ragTestRetrievalFailed"),
-        "error",
-      );
+      toast(safeUserErrorMessage(caught, t("ragTestRetrievalFailed")), "error");
     }
   }
 

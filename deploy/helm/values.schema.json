@@ -7,7 +7,61 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "production": { "type": "boolean" }
+        "production": { "const": true }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "digest": {
+          "type": "string",
+          "pattern": "^$|^sha256:[a-fA-F0-9]{64}$"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      }
+    },
+    "imagePolicyException": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "reason": { "type": "string" }
+      },
+      "required": ["enabled", "reason"]
+    },
+    "podSecurityContext": { "$ref": "#/$defs/podSecurityContext" },
+    "securityContext": { "$ref": "#/$defs/containerSecurityContext" },
+    "probes": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "readiness": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "timeoutSeconds": { "type": "integer", "minimum": 1 },
+            "dependencyCheck": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "enabled": { "type": "boolean" } },
+              "required": ["enabled"]
+            }
+          }
+        }
+      }
+    },
+    "valkey": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "urlSecret": { "$ref": "#/$defs/secretKeyRef" }
       }
     },
     "postgres": {
@@ -56,6 +110,10 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
+        "ROMEO_ENV": {
+          "type": "string",
+          "enum": ["production"]
+        },
         "APP_ORIGIN": {
           "type": "string",
           "pattern": "^https?://.+$"
@@ -594,6 +652,10 @@
           "type": "string",
           "pattern": "^$|^[A-Za-z0-9_:-]+(,[A-Za-z0-9_:-]+)*$"
         },
+        "CAPABILITY_PLATFORM_DISABLED_IDS": {
+          "type": "string",
+          "pattern": "^$|^(realtime_voice|external_provider_use|secure_compute|image_generation|image_editing|multi_model_compare|streamed_output_policy)(,(realtime_voice|external_provider_use|secure_compute|image_generation|image_editing|multi_model_compare|streamed_output_policy))*$"
+        },
         "MODEL_PROVIDER_FALLBACK_MODEL_ID": {
           "type": "string",
           "pattern": "^$|^[A-Za-z0-9_:-]+$"
@@ -633,6 +695,12 @@
         "EDGE_TRUSTED_PROXY_MODE": {
           "type": "string",
           "enum": ["direct", "trusted_proxy"]
+        },
+        "EDGE_TRUSTED_PROXY_HOPS": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 10 },
+            { "type": "string", "pattern": "^([1-9]|10)$" }
+          ]
         },
         "EDGE_WAF_MODE": {
           "type": "string",
@@ -990,6 +1058,21 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
+        "image": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string" },
+            "digest": {
+              "type": "string",
+              "pattern": "^$|^sha256:[a-fA-F0-9]{64}$"
+            },
+            "pullPolicy": { "type": "string" }
+          }
+        },
+        "podSecurityContext": { "$ref": "#/$defs/podSecurityContext" },
+        "securityContext": { "$ref": "#/$defs/containerSecurityContext" },
         "apiKeySecret": {
           "$ref": "#/$defs/secretKeyRef"
         },
@@ -1089,6 +1172,145 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "global": {
+            "properties": { "production": { "const": true } },
+            "required": ["production"]
+          }
+        },
+        "required": ["global"]
+      },
+      "then": {
+        "properties": {
+          "env": {
+            "properties": {
+              "ROMEO_ENV": { "const": "production" },
+              "HTTP_RATE_LIMIT_DRIVER": { "const": "valkey" },
+              "QUOTA_COORDINATION_DRIVER": { "const": "valkey" },
+              "FILE_MALWARE_SCAN_POLICY": { "const": "required" }
+            },
+            "required": [
+              "ROMEO_ENV",
+              "HTTP_RATE_LIMIT_DRIVER",
+              "QUOTA_COORDINATION_DRIVER",
+              "FILE_MALWARE_SCAN_POLICY"
+            ]
+          },
+          "valkey": {
+            "properties": {
+              "urlSecret": {
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "key": { "type": "string", "minLength": 1 }
+                },
+                "required": ["name", "key"]
+              }
+            },
+            "required": ["urlSecret"]
+          },
+          "podSecurityContext": {
+            "properties": { "runAsNonRoot": { "const": true } },
+            "required": ["runAsNonRoot"]
+          },
+          "securityContext": {
+            "properties": {
+              "allowPrivilegeEscalation": { "const": false },
+              "readOnlyRootFilesystem": { "const": true }
+            },
+            "required": ["allowPrivilegeEscalation", "readOnlyRootFilesystem"]
+          },
+          "workers": {
+            "properties": {
+              "podSecurityContext": {
+                "properties": { "runAsNonRoot": { "const": true } },
+                "required": ["runAsNonRoot"]
+              },
+              "securityContext": {
+                "properties": {
+                  "allowPrivilegeEscalation": { "const": false },
+                  "readOnlyRootFilesystem": { "const": true }
+                },
+                "required": [
+                  "allowPrivilegeEscalation",
+                  "readOnlyRootFilesystem"
+                ]
+              }
+            },
+            "required": ["podSecurityContext", "securityContext"]
+          },
+          "networkPolicy": {
+            "properties": {
+              "enabled": { "const": true },
+              "egress": { "type": "array", "minItems": 1 }
+            },
+            "required": ["enabled", "egress"]
+          },
+          "probes": {
+            "properties": {
+              "readiness": {
+                "properties": {
+                  "enabled": { "const": true },
+                  "dependencyCheck": {
+                    "properties": { "enabled": { "const": true } },
+                    "required": ["enabled"]
+                  }
+                },
+                "required": ["enabled", "dependencyCheck"]
+              }
+            },
+            "required": ["readiness"]
+          },
+          "migration": {
+            "properties": {
+              "enabled": { "const": true },
+              "useHelmHook": { "const": true }
+            },
+            "required": ["enabled", "useHelmHook"]
+          }
+        },
+        "required": [
+          "env",
+          "valkey",
+          "podSecurityContext",
+          "securityContext",
+          "workers",
+          "networkPolicy",
+          "probes",
+          "migration"
+        ],
+        "anyOf": [
+          {
+            "properties": {
+              "image": {
+                "properties": {
+                  "digest": {
+                    "pattern": "^sha256:[a-fA-F0-9]{64}$"
+                  }
+                },
+                "required": ["digest"]
+              }
+            },
+            "required": ["image"]
+          },
+          {
+            "properties": {
+              "imagePolicyException": {
+                "properties": {
+                  "enabled": { "const": true },
+                  "reason": { "type": "string", "minLength": 16 }
+                },
+                "required": ["enabled", "reason"]
+              }
+            },
+            "required": ["imagePolicyException"]
+          }
+        ]
+      }
+    }
+  ],
   "$defs": {
     "secretKeyRef": {
       "type": "object",
@@ -1096,6 +1318,23 @@
       "properties": {
         "name": { "type": "string" },
         "key": { "type": "string" }
+      }
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "runAsNonRoot": { "type": "boolean" },
+        "runAsUser": { "type": "integer", "minimum": 1 },
+        "runAsGroup": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "containerSecurityContext": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "allowPrivilegeEscalation": { "type": "boolean" },
+        "readOnlyRootFilesystem": { "type": "boolean" }
       }
     },
     "workerToggle": {

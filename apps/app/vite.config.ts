@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
@@ -7,6 +8,8 @@ import { nitro } from "nitro/vite";
 import { defineConfig, loadEnv } from "vite";
 
 const workspaceRoot = fileURLToPath(new URL("../..", import.meta.url));
+const require = createRequire(import.meta.url);
+const tslibEsm = require.resolve("tslib/tslib.es6.mjs");
 
 const serverRuntimeExternals = [
   "@node-rs/argon2",
@@ -36,6 +39,11 @@ export default defineConfig(({ command, mode }) => {
   }
 
   return {
+    // Nitro's current Rolldown pipeline otherwise selects tslib's CommonJS
+    // fallback for Radix/react-remove-scroll and emits an undefined default
+    // export in the SSR chunk. Point both environments at tslib's supported
+    // ESM entry until the upstream bundler no longer needs the disambiguation.
+    resolve: { alias: [{ find: /^tslib$/u, replacement: tslibEsm }] },
     optimizeDeps: {
       exclude: ["@valkey/valkey-glide", "@valkey/valkey-glide-darwin-arm64"],
     },

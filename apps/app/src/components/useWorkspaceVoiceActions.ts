@@ -1,10 +1,14 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState, type Dispatch, type SetStateAction } from "react";
 
-import { generateMessageSpeech, transcribeVoice } from "../features";
+import {
+  generateMessageSpeechMutationOptions,
+  transcribeVoiceMutationOptions,
+} from "../features/voices/mutation-options";
 import type { SpeechArtifact } from "../features/types";
 import type { MessageKey } from "../lib/i18n";
 import { audioExtension, blobToBase64 } from "./workspace-controller-media";
+import { safeUserErrorMessage } from "../lib/safe-user-error";
 
 interface WorkspaceVoiceActionsOptions {
   activeVoiceProfileId: string | undefined;
@@ -24,10 +28,10 @@ export function useWorkspaceVoiceActions({
   t,
 }: WorkspaceVoiceActionsOptions) {
   const [speechMessageId, setSpeechMessageId] = useState<string>();
-  const generateSpeechMutation = useMutation({
-    mutationFn: generateMessageSpeech,
-  });
-  const transcribeVoiceMutation = useMutation({ mutationFn: transcribeVoice });
+  const generateSpeechMutation = useMutation(
+    generateMessageSpeechMutationOptions(),
+  );
+  const transcribeVoiceMutation = useMutation(transcribeVoiceMutationOptions());
 
   async function handleGenerateSpeech(messageId: string) {
     if (activeVoiceProfileId === undefined) {
@@ -42,12 +46,11 @@ export function useWorkspaceVoiceActions({
         voiceProfileId: activeVoiceProfileId,
       });
       setSpeechArtifacts((current) => ({ ...current, [messageId]: artifact }));
+      generateSpeechMutation.reset();
       await refreshUsageControls();
     } catch (caught) {
       setError(
-        caught instanceof Error
-          ? caught.message
-          : t("workspaceUnableGenerateSpeech"),
+        safeUserErrorMessage(caught, t("workspaceUnableGenerateSpeech")),
       );
     } finally {
       setSpeechMessageId(undefined);
@@ -69,12 +72,11 @@ export function useWorkspaceVoiceActions({
       setDraft((current) =>
         `${current}${current.trim().length > 0 ? " " : ""}${result.text}`.trimStart(),
       );
+      transcribeVoiceMutation.reset();
       await refreshUsageControls();
     } catch (caught) {
       setError(
-        caught instanceof Error
-          ? caught.message
-          : t("workspaceUnableTranscribeVoice"),
+        safeUserErrorMessage(caught, t("workspaceUnableTranscribeVoice")),
       );
     }
   }

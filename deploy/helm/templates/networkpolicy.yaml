@@ -9,6 +9,7 @@ spec:
   podSelector:
     matchLabels:
       {{- include "romeo.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: app
   policyTypes:
     - Ingress
     - Egress
@@ -16,8 +17,10 @@ spec:
     - from:
         {{- if .Values.networkPolicy.ingressFrom }}
         {{- toYaml .Values.networkPolicy.ingressFrom | nindent 8 }}
-        {{- else }}
-        - namespaceSelector: {}
+      {{- else }}
+        # Empty ingressFrom permits only callers in this namespace, rather than
+        # silently opening the application to every namespace in the cluster.
+        - podSelector: {}
         {{- end }}
       ports:
         - protocol: TCP

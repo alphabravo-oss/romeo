@@ -27,6 +27,7 @@ import {
   stateSubjectFromConnection,
 } from "./delegated-oauth-support";
 import {
+  delegatedOAuthTokenContext,
   DelegatedOAuthTokenVault,
   type DelegatedOAuthStoredToken,
 } from "./delegated-oauth-token-vault";
@@ -81,7 +82,10 @@ export class DelegatedOAuthTokenRuntime {
       const tokenVault = new DelegatedOAuthTokenVault(
         this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
       );
-      const token = tokenVault.decrypt(connection.token);
+      const token = tokenVault.decrypt(
+        connection.token,
+        delegatedOAuthTokenContext(connection),
+      );
       const definition = this.configuration.providerDefinition(
         connection.providerId,
       );
@@ -98,10 +102,13 @@ export class DelegatedOAuthTokenRuntime {
     const tokenVault = new DelegatedOAuthTokenVault(
       this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
     );
-    const token = tokenVault.decrypt(connection.token);
+    const token = tokenVault.decrypt(
+      connection.token,
+      delegatedOAuthTokenContext(connection),
+    );
     return isExpiredOrNearExpiry(token)
       ? this.refreshUsableToken(connection, tokenVault)
-      : this.markConnectionUsed(connection, token);
+      : this.markConnectionUsed(connection, token, tokenVault);
   }
 
   private async revokeProviderGrant(
@@ -156,9 +163,17 @@ export class DelegatedOAuthTokenRuntime {
               409,
             );
           }
-          const latestToken = tokenVault.decrypt(latest.token);
+          const latestToken = tokenVault.decrypt(
+            latest.token,
+            delegatedOAuthTokenContext(latest),
+          );
           if (!isExpiredOrNearExpiry(latestToken)) {
-            return this.markConnectionUsed(latest, latestToken, repository);
+            return this.markConnectionUsed(
+              latest,
+              latestToken,
+              tokenVault,
+              repository,
+            );
           }
           return this.refreshConnectionToken(
             latest,
@@ -206,7 +221,10 @@ export class DelegatedOAuthTokenRuntime {
           connection,
           now,
           refreshed,
-          token: tokenVault.encrypt(nextToken),
+          token: tokenVault.encrypt(
+            nextToken,
+            delegatedOAuthTokenContext(connection),
+          ),
         }),
       );
       await auditDelegatedOAuth(
@@ -263,11 +281,20 @@ export class DelegatedOAuthTokenRuntime {
   private async markConnectionUsed(
     connection: DelegatedOAuthConnection,
     token: DelegatedOAuthStoredToken,
+    tokenVault: DelegatedOAuthTokenVault,
     repository: RomeoRepository = this.repository,
   ): Promise<DelegatedOAuthUsableToken> {
     const now = new Date().toISOString();
     const updated = await repository.updateDelegatedOAuthConnection({
       ...connection,
+      ...(connection.token.v === 1
+        ? {
+            token: tokenVault.encrypt(
+              token,
+              delegatedOAuthTokenContext(connection),
+            ),
+          }
+        : {}),
       lastUsedAt: now,
       updatedAt: now,
     });

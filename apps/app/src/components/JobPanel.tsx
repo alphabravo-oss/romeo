@@ -1,8 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard.mjs";
 
-import { listJobs, type BackgroundJob } from "../features/jobs";
+import { type BackgroundJob } from "../features/jobs";
 import { useLocale, type MessageKey } from "../lib/i18n";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { Section, StatRow } from "./console";
@@ -13,7 +13,7 @@ const col = createColumnHelper<BackgroundJob>();
 
 export function JobPanel() {
   const { t } = useLocale();
-  const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: listJobs });
+  const table = useInventoriedServerTable<BackgroundJob>("background_jobs");
   const columns: ColumnDef<BackgroundJob, any>[] = [
     col.accessor("type", {
       header: t("jobsType"),
@@ -52,9 +52,9 @@ export function JobPanel() {
     <Section
       actions={
         <PageActions
-          onRefresh={() => void jobsQuery.refetch()}
+          onRefresh={() => void table.query.refetch()}
           refreshLabel={t("refresh")}
-          refreshing={jobsQuery.isFetching}
+          refreshing={table.query.isFetching}
         />
       }
       title={t("jobsTitle")}
@@ -63,24 +63,36 @@ export function JobPanel() {
         empty={t("jobsNone")}
         emptyDescription={t("jobsNoneDescription")}
         emptyIcon={<LayoutDashboard aria-hidden size={24} />}
-        query={jobsQuery}
+        isEmpty={(page) =>
+          page.items.length === 0 &&
+          table.isFirstPage &&
+          table.search.trim() === ""
+        }
+        query={table.query}
       >
-        {(jobs) => (
+        {() => (
           <div className="grid gap-4">
             <StatRow
               items={[
-                { label: t("jobsTotal"), value: jobs.length },
+                { label: t("jobsTotal"), value: table.estimatedTotal },
                 {
                   label: t("jobsRunning"),
-                  value: jobs.filter((job) => job.status === "running").length,
+                  value: table.rows.filter((job) => job.status === "running")
+                    .length,
                 },
                 {
                   label: t("jobsFailed"),
-                  value: jobs.filter((job) => job.status === "failed").length,
+                  value: table.rows.filter((job) => job.status === "failed")
+                    .length,
                 },
               ]}
             />
-            <DataTable columns={columns} data={jobs} empty={t("jobsNone")} />
+            <DataTable
+              serverState={table.serverState}
+              columns={columns}
+              data={table.rows}
+              empty={t("jobsNone")}
+            />
           </div>
         )}
       </PanelState>

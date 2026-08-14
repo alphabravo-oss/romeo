@@ -1,5 +1,4 @@
 {
-  "groupsTitle": "Grupos",
   "groupsAdd": "Añadir grupo",
   "groupsCreated": "Grupo creado",
   "groupsCouldNotCreate": "No se pudo crear el grupo",
@@ -31,7 +30,6 @@
   "groupsSlugOptional": "Slug (opcional)",
   "groupsCreating": "Creando",
   "groupsCreate": "Crear grupo",
-  "organizationsTitle": "Organizaciones",
   "organizationsName": "Nombre",
   "organizationsSlug": "Slug",
   "organizationsId": "ID",
@@ -80,6 +78,5 @@
   "organizationsReactivated": "Organización reactivada",
   "organizationsReactivateFailed": "No se pudo reactivar la organización.",
   "organizationsActionsFor": "Acciones de organización para",
-  "workspaceMembersTitle": "Miembros del espacio",
   "workspaceMembersHelp": "La pertenencia es un permiso de lectura del espacio. Sin él, usuarios y grupos no pueden abrirlo."
 }
