@@ -161,7 +161,7 @@ export function trackRun(input: TrackRunInput): void {
         : {}),
       streamTimeoutMs: 60_000,
     },
-    waitAttemptStartedAt: now,
+    timing: { waitAttemptStartedAt: now },
   };
   runs.set(input.chatId, run);
   startWaitTicker(run);
@@ -260,12 +260,15 @@ async function consumeRun(
             }
             if (event.type === "message.started") {
               // An empty re-announcement means retry/fallback after attempt one.
+              // Read the live entry: `run.wait` is the trackRun-time snapshot
+              // and its elapsedSeconds never advances, so this never fired.
+              const startedWait = runs.get(chatId)?.wait;
               if (
-                run.wait !== undefined &&
-                !run.wait.hasContent &&
-                run.wait.elapsedSeconds > 0
+                startedWait !== undefined &&
+                !startedWait.hasContent &&
+                startedWait.elapsedSeconds > 0
               ) {
-                beginWaitAttempt(run, "retrying", run.wait.attempt + 1);
+                beginWaitAttempt(run, "retrying", startedWait.attempt + 1);
               }
             }
             if (event.type === "message.delta") {
@@ -355,19 +358,25 @@ async function consumeRun(
         } catch (caught) {
           if (controller.signal.aborted) return;
           reconnectAttempts += 1;
+          // Carry the live wait forward, not the trackRun-time snapshot.
+          // Reading `run.wait` here reset hasContent to false and
+          // elapsedSeconds to 0 after a mid-stream reconnect, re-arming the
+          // ticker and putting an already-streaming run back under the
+          // "still waiting" spinner.
+          const reconnectWait = runs.get(chatId)?.wait;
           publish(chatId, runId, {
             streamState: "reconnecting",
             wait: {
-              attempt: run.wait?.attempt ?? 1,
-              elapsedSeconds: run.wait?.elapsedSeconds ?? 0,
-              hasContent: run.wait?.hasContent ?? false,
-              maxAttempts: run.wait?.maxAttempts ?? 2,
+              attempt: reconnectWait?.attempt ?? 1,
+              elapsedSeconds: reconnectWait?.elapsedSeconds ?? 0,
+              hasContent: reconnectWait?.hasContent ?? false,
+              maxAttempts: reconnectWait?.maxAttempts ?? 2,
               phase: "reconnecting",
               reconnectAttempts,
               maxReconnectAttempts: RUN_STREAM_MAX_RECONNECT_ATTEMPTS,
-              ...(run.wait?.streamTimeoutMs === undefined
+              ...(reconnectWait?.streamTimeoutMs === undefined
                 ? {}
-                : { streamTimeoutMs: run.wait.streamTimeoutMs }),
+                : { streamTimeoutMs: reconnectWait.streamTimeoutMs }),
             },
           });
           if (reconnectAttempts > RUN_STREAM_MAX_RECONNECT_ATTEMPTS)
@@ -456,6 +465,10 @@ function applyRunStarted(
   if (modelId !== undefined) {
     run.modelId = modelId;
     stampAssistantModel(queryClient, run, modelId);
+    // modelId must reach the registry entry too, or getActiveRun(chatId).modelId
+    // stays undefined for the whole run -- publish() copies the entry, so the
+    // assignment above only ever touched the closure object.
+    publish(run.chatId, run.runId, { modelId });
   }
   const streamTimeoutMs =
     typeof record.streamTimeoutMs === "number" &&
@@ -469,7 +482,7 @@ function applyRunStarted(
     record.maxRetries >= 0
       ? Math.floor(record.maxRetries)
       : 1;
-  run.waitAttemptStartedAt = Date.now();
+  run.timing.waitAttemptStartedAt = Date.now();
   publish(run.chatId, run.runId, {
     wait: {
       attempt: 1,

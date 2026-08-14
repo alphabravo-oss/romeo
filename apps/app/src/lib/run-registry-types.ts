@@ -73,8 +73,18 @@ export interface TrackedRun extends ActiveRun {
   queryClient: QueryClient;
   reasoningStartedAt?: string;
   t: (key: MessageKey) => string;
-  waitAttemptStartedAt: number;
-  waitTicker?: ReturnType<typeof setInterval>;
+  /**
+   * Wait-clock state, shared by reference across registry snapshots for the
+   * same reason as assistantBuffer. publish() replaces the entry with
+   * {...current, ...patch}, so a primitive written through one reference is
+   * invisible through the other -- which previously left the ticker measuring
+   * from trackRun time instead of from run.started, and let the interval
+   * handle diverge between the closure and the map entry.
+   */
+  timing: {
+    waitAttemptStartedAt: number;
+    waitTicker?: ReturnType<typeof setInterval>;
+  };
 }
 
 export interface TrackRunInput {

@@ -34,6 +34,7 @@ import {
   toFileObjectUpdate,
 } from "./file-record-mapping";
 import { objectRecords, resourceGrants } from "./schema";
+import { containsPattern } from "./like-pattern";
 
 export interface FileObjectRecord {
   id: string;
@@ -132,9 +133,9 @@ export class PgFileRepository {
       query === undefined || query === ""
         ? undefined
         : or(
-            ilike(objectRecords.fileName, `%${query}%`),
-            ilike(objectRecords.mimeType, `%${query}%`),
-            ilike(sql`${objectRecords.metadata}->>'title'`, `%${query}%`),
+            ilike(objectRecords.fileName, containsPattern(query)),
+            ilike(objectRecords.mimeType, containsPattern(query)),
+            ilike(sql`${objectRecords.metadata}->>'title'`, containsPattern(query)),
           ),
       input.isAdmin
         ? undefined

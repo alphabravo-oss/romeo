@@ -32,4 +32,23 @@ describe("tool dispatch DNS-pinned fetch", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  it("refuses to connect when no address was approved", async () => {
+    // The empty case must throw, never fall through to an unpinned request.
+    await expect(
+      dnsPinnedFetch(new URL("http://example.invalid/resource"), {}, []),
+    ).rejects.toThrow(TypeError);
+  });
+
+  it("fails the lookup rather than resolving when no approved family matches", async () => {
+    // The socket asked for IPv6 and policy only approved IPv4. Falling back to
+    // real DNS here would defeat pinning outright, so the lookup must error.
+    await expect(
+      dnsPinnedFetch(
+        new URL("http://example.invalid/resource"),
+        { headers: { accept: "text/plain" } },
+        [{ address: "::1", family: 6 }],
+      ),
+    ).rejects.toThrow();
+  });
 });

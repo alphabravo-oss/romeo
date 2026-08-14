@@ -20,6 +20,7 @@ import {
   optionalIsoString,
   toIsoString,
 } from "./repository-mapping";
+import { containsPattern } from "./like-pattern";
 
 type UserRole = "global_admin" | "org_admin" | "user";
 
@@ -106,7 +107,7 @@ export class PgIdentityRepository {
       eq(users.orgId, orgId),
       query === undefined || query === ""
         ? undefined
-        : or(ilike(users.name, `%${query}%`), ilike(users.email, `%${query}%`)),
+        : or(ilike(users.name, containsPattern(query)), ilike(users.email, containsPattern(query))),
     );
     const sortColumn =
       input.sort === "email"

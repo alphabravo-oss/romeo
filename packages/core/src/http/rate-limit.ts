@@ -20,6 +20,7 @@ type RateLimitScope =
   | "anonymous"
   | "auth"
   | "authenticated"
+  | "credentialed"
   | "public"
   | "webhook";
 
@@ -53,6 +54,9 @@ const publicPaths = new Set([
   "/api/v1/openwebui/version",
   "/api/v1/openwebui/version/updates",
 ]);
+
+/** Headroom for many principals behind one client address. See preAuthRule. */
+const credentialedPreAuthMultiplier = 10;
 
 const webhookPaths = new Set([
   "/api/v1/billing/webhooks/generic",
@@ -179,7 +183,27 @@ function preAuthRule(
       windowSeconds,
     };
   }
-  if (hasRequestCredential(context) || env.DEV_SEEDED_LOGIN) return undefined;
+  if (env.DEV_SEEDED_LOGIN) return undefined;
+  // A credential-shaped header is not proof of authentication. These requests
+  // still get a client-keyed bucket, otherwise `Authorization: Bearer junk`
+  // turns the limiter off before authenticate() rejects the token and no
+  // bucket is ever incremented -- an unauthenticated flood that costs a
+  // key/session lookup each.
+  //
+  // The ceiling is a multiple of the per-principal budget because one client
+  // address legitimately carries many principals (shared egress, office NAT).
+  // It is a backstop against invalid-token floods, not the primary control:
+  // principalRule still applies the exact per-principal budget once
+  // authentication succeeds, and must stay the binding limit for real traffic.
+  if (hasRequestCredential(context)) {
+    return {
+      key: `client:${client}`,
+      limit:
+        env.HTTP_RATE_LIMIT_AUTHENTICATED_MAX * credentialedPreAuthMultiplier,
+      scope: "credentialed",
+      windowSeconds,
+    };
+  }
   return {
     key: `client:${client}`,
     limit: env.HTTP_RATE_LIMIT_PUBLIC_MAX,

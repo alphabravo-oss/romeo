@@ -2,6 +2,11 @@ import type { AuthSubject } from "@romeo/auth";
 import type { ToolDefinition } from "@romeo/tools";
 
 import type { ToolConnector, ToolOperation } from "../domain/entities";
+import {
+  lookupNetworkHost,
+  type WebsiteConnectorHostLookup,
+} from "./data-connector-network-policy";
+import { dnsPinnedFetch, type DnsPinnedFetch } from "./dns-pinned-fetch";
 import type { QuotaCoordinator } from "./quota-coordination";
 import type { SecretResolver } from "./secret-resolver";
 import type { ToolDispatchPayloadStore } from "./tool-dispatch-payload-store";
@@ -10,10 +15,38 @@ export interface ToolServiceOptions {
   dispatchPayloadStore?: ToolDispatchPayloadStore;
   externalOperationExecutionEnabled?: boolean;
   fetchImpl?: typeof fetch;
+  hostLookup?: WebsiteConnectorHostLookup;
   maxBytes?: number;
+  pinnedFetchImpl?: DnsPinnedFetch;
   quotaCoordinator?: QuotaCoordinator | undefined;
   secretResolver?: SecretResolver;
   timeoutMs?: number;
+}
+
+/**
+ * Egress wiring for tool operation dispatch, shared by every call site that
+ * builds a DispatchToolOperationInput.
+ *
+ * Real DNS resolution and pinning are the default. An injected fetchImpl means
+ * a test double or an offline transport, where there is no host to resolve, so
+ * pinning is left off and the dispatch host check falls back to its literal
+ * private-network guard. Explicit options always win over both.
+ */
+export function toolDispatchEgressOptions(options: ToolServiceOptions): {
+  hostLookup?: WebsiteConnectorHostLookup;
+  pinnedFetchImpl?: DnsPinnedFetch;
+} {
+  if (options.hostLookup !== undefined || options.pinnedFetchImpl !== undefined)
+    return {
+      ...(options.hostLookup === undefined
+        ? {}
+        : { hostLookup: options.hostLookup }),
+      ...(options.pinnedFetchImpl === undefined
+        ? {}
+        : { pinnedFetchImpl: options.pinnedFetchImpl }),
+    };
+  if (options.fetchImpl !== undefined) return {};
+  return { hostLookup: lookupNetworkHost, pinnedFetchImpl: dnsPinnedFetch };
 }
 
 export interface OperationToolContext {

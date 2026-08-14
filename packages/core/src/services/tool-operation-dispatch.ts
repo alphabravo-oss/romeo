@@ -109,6 +109,12 @@ export async function dispatchToolOperation(
       input.operation,
       input.timeoutMs,
       input.maxBytes,
+      {
+        approvedAddresses: request.approvedAddresses,
+        ...(input.pinnedFetchImpl === undefined
+          ? {}
+          : { pinnedFetchImpl: input.pinnedFetchImpl }),
+      },
     );
     const completed = await completeBackgroundJob(input.repository, job);
     await auditDispatch(input, completed, request, response, "success");

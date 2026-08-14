@@ -3,8 +3,11 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { ToolOperationDispatchReadbackResponse } from "../domain/tools";
 import type { RomeoRepository } from "../domain/repository";
 import { notFound } from "../errors";
+import type { WebsiteConnectorHostLookup } from "./data-connector-network-policy";
+import type { DnsPinnedFetch } from "./dns-pinned-fetch";
 import type { SecretResolver } from "./secret-resolver";
 import type { ToolDispatchPayloadStore } from "./tool-dispatch-payload-store";
+import { toolDispatchEgressOptions } from "./tool-service-contracts";
 import {
   dispatchToolOperation,
   enqueueToolOperationDispatch,
@@ -23,7 +26,9 @@ export interface ToolConnectorDispatchOptions {
   dispatchPayloadStore?: ToolDispatchPayloadStore;
   externalOperationExecutionEnabled?: boolean;
   fetchImpl?: typeof fetch;
+  hostLookup?: WebsiteConnectorHostLookup;
   maxBytes?: number;
+  pinnedFetchImpl?: DnsPinnedFetch;
   timeoutMs?: number;
 }
 
@@ -50,6 +55,7 @@ export class ToolConnectorDispatchService {
       externalExecutionEnabled:
         this.dispatchOptions.externalOperationExecutionEnabled === true,
       fetchImpl: this.dispatchOptions.fetchImpl ?? fetch,
+      ...toolDispatchEgressOptions(this.dispatchOptions),
       timeoutMs: this.dispatchOptions.timeoutMs ?? 10_000,
       maxBytes: this.dispatchOptions.maxBytes ?? 1_000_000,
       subject: input.subject,
@@ -83,6 +89,7 @@ export class ToolConnectorDispatchService {
       externalExecutionEnabled:
         this.dispatchOptions.externalOperationExecutionEnabled === true,
       fetchImpl: this.dispatchOptions.fetchImpl ?? fetch,
+      ...toolDispatchEgressOptions(this.dispatchOptions),
       timeoutMs: this.dispatchOptions.timeoutMs ?? 10_000,
       maxBytes: this.dispatchOptions.maxBytes ?? 1_000_000,
       subject: input.subject,

@@ -5,6 +5,7 @@ import type {
 import { sql } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
+import { containsPattern } from "./like-pattern";
 
 interface SearchRow extends Record<string, unknown> {
   activeBranch: boolean | null;
@@ -33,10 +34,7 @@ async function querySearch(
   db: RomeoDatabase,
   input: AuthorizedChatMessageSearchQuery,
 ): Promise<ChatMessageSearchQueryResult> {
-  const escaped = `%${input.normalizedQuery.replace(
-    /[\\%_]/gu,
-    (value) => `\\${value}`,
-  )}%`;
+  const escaped = containsPattern(input.normalizedQuery);
   const cursorCreatedAt = input.cursor?.createdAt;
   const cursorId = input.cursor?.id;
   const rows = await db.execute<SearchRow>(sql`

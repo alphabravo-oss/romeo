@@ -37,8 +37,78 @@ describe("provider reasoning policy", () => {
       effective: { mode: "auto", effort: "low" },
       nativeParameters: { effort: "low" },
       adjustments: [{ parameter: "effort", reason: "capped_by_governance" }],
-      rejected: true,
+      // A governance cap is enforceable: the run proceeds at the clamped
+      // effort rather than failing with a 400.
+      rejected: false,
     });
+  });
+
+  it("drops an inherited token ceiling no dialect can express, without disabling reasoning", () => {
+    // Every reasoning_policy default configuration carries maxReasoningTokens,
+    // so this ceiling reaches the dialect check on every single run. It must
+    // not turn reasoning off -- the caller asked for no budget at all.
+    const target = fixture("openai-responses-compatible");
+    const resolution = resolveProviderReasoningPolicy({
+      ...target,
+      kind: "openai-responses-compatible",
+      layers: {
+        runRequest: { schemaVersion: 1, mode: "auto", effort: "medium" },
+        organizationMaximum: {
+          schemaVersion: 1,
+          mode: "auto",
+          effort: "high",
+          maxReasoningTokens: 8_000,
+        },
+      },
+    });
+
+    expect(resolution?.effective).toEqual({
+      schemaVersion: 1,
+      mode: "auto",
+      effort: "medium",
+    });
+    expect(resolution?.rejected).toBe(false);
+  });
+
+  it("fails closed on a token budget the caller explicitly asked for", () => {
+    // Unchanged, deliberate behaviour: a budget the caller requested is a
+    // safety constraint, so an unenforceable one must not run unbounded.
+    const target = fixture("openai-responses-compatible");
+    const resolution = resolveProviderReasoningPolicy({
+      ...target,
+      kind: "openai-responses-compatible",
+      layers: {
+        runRequest: {
+          schemaVersion: 1,
+          mode: "auto",
+          effort: "medium",
+          maxReasoningTokens: 4_000,
+        },
+      },
+    });
+
+    expect(resolution?.effective.mode).toBe("off");
+    expect(resolution?.rejected).toBe(true);
+  });
+
+  it("caps effort without rejecting when only governance adjusted it", () => {
+    const target = fixture("openai-responses-compatible");
+    const resolution = resolveProviderReasoningPolicy({
+      ...target,
+      kind: "openai-responses-compatible",
+      layers: {
+        runRequest: { schemaVersion: 1, mode: "auto", effort: "high" },
+        organizationMaximum: {
+          schemaVersion: 1,
+          mode: "auto",
+          effort: "low",
+        },
+      },
+    });
+
+    expect(resolution?.effective).toMatchObject({ effort: "low" });
+    expect(resolution?.nativeParameters).toEqual({ effort: "low" });
+    expect(resolution?.rejected).toBe(false);
   });
 
   it.each([

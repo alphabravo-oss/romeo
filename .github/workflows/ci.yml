@@ -127,6 +127,9 @@ jobs:
       - name: Check dead code and unused dependencies
         run: pnpm check:dead-code
 
+      - name: Check DNS pinning parity
+        run: pnpm check:dns-pinning-parity
+
       - name: Check test contracts
         run: pnpm check:test-contracts
 

@@ -1,5 +1,4 @@
 import { readEnv } from "@romeo/config";
-import { lookup } from "node:dns/promises";
 import { disabledObjectStore } from "@romeo/storage";
 
 import type { RomeoRepository } from "../domain/repository";
@@ -7,6 +6,7 @@ import { AbuseControlService } from "./abuse-control-service";
 import { AuthProviderSettingsService } from "./auth-provider-settings-service";
 import { BrowserAutomationService } from "./browser-automation-service";
 import { ChatService } from "./chat-service";
+import { lookupNetworkHost } from "./data-connector-network-policy";
 import { ChatEventService } from "./chat-event-service";
 import { CapabilityService } from "./capability-resolver";
 import { capabilityPlatformPolicyFromEnv } from "./capability-platform-policy";
@@ -144,13 +144,7 @@ export function createServices(
   if (options.webhookFetch !== undefined) {
     webhookOptions.fetchImpl = options.webhookFetch;
   } else {
-    webhookOptions.hostLookup = async (hostname) =>
-      (await lookup(hostname, { all: true, verbatim: true })).flatMap(
-        (address) =>
-          address.family === 4 || address.family === 6
-            ? [{ address: address.address, family: address.family }]
-            : [],
-      );
+    webhookOptions.hostLookup = lookupNetworkHost;
   }
   const webhooks = new WebhookService(repository, webhookOptions);
   const notificationDelivery = createNotificationDeliverySender(env, {
@@ -220,11 +214,7 @@ export function createServices(
     ...(options.providerFetch === undefined
       ? {}
       : { fetchImpl: options.providerFetch }),
-    hostLookup: async (hostname) =>
-      (await lookup(hostname, { all: true })).map((address) => ({
-        address: address.address,
-        family: address.family === 6 ? 6 : 4,
-      })),
+    hostLookup: lookupNetworkHost,
   });
   const runs = new RunService(
     repository,

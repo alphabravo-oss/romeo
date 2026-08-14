@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+
 import { ApiError } from "../errors";
 import {
   isBlockedNetworkAddress,
@@ -15,6 +17,23 @@ export interface WebsiteConnectorHostAddress {
 export type WebsiteConnectorHostLookup = (
   hostname: string,
 ) => Promise<WebsiteConnectorHostAddress[]>;
+
+/**
+ * The single DNS resolver behind every egress policy check. Records of an
+ * unrecognized family are dropped rather than coerced, so an address can never
+ * be pinned under the wrong family and reach a socket the policy did not
+ * approve.
+ */
+export const lookupNetworkHost: WebsiteConnectorHostLookup = async (
+  hostname,
+) => {
+  const records = await lookup(hostname, { all: true, verbatim: true });
+  return records.flatMap((record) =>
+    record.family === 4 || record.family === 6
+      ? [{ address: record.address, family: record.family }]
+      : [],
+  );
+};
 
 export async function assertConnectorHostAllowed(
   url: URL,

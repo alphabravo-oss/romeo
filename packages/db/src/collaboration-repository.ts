@@ -36,6 +36,7 @@ import {
   type WorkspaceFolderRecord,
 } from "./collaboration-record-mapping";
 import { PgWorkspaceFolderItemBatchRepository } from "./workspace-folder-item-batch-repository";
+import { containsPattern } from "./like-pattern";
 
 export type * from "./collaboration-record-mapping";
 export {
@@ -128,9 +129,9 @@ export class PgCollaborationRepository extends PgWorkspaceFolderItemBatchReposit
       query === undefined || query === ""
         ? undefined
         : or(
-            ilike(promptTemplates.name, `%${query}%`),
-            ilike(promptTemplates.description, `%${query}%`),
-            sql`array_to_string(${promptTemplates.tags}, ' ') ILIKE ${`%${query}%`}`,
+            ilike(promptTemplates.name, containsPattern(query)),
+            ilike(promptTemplates.description, containsPattern(query)),
+            sql`array_to_string(${promptTemplates.tags}, ' ') ILIKE ${containsPattern(query)}`,
           ),
     );
     const [rows, totals] = await Promise.all([

@@ -18,7 +18,10 @@ import { enqueueToolOperationDispatch } from "./tool-operation-dispatch";
 import type { OperationToolInput } from "./tool-operation-tooling";
 import { appendToolRunEvent, getToolRun } from "./tool-run-events";
 import type { RunEventSequencer } from "./run-event-sequencer";
-import type { ToolServiceOptions } from "./tool-service-contracts";
+import {
+  toolDispatchEgressOptions,
+  type ToolServiceOptions,
+} from "./tool-service-contracts";
 import {
   isToolExecutionReplayError,
   isUniqueConstraintError,
@@ -55,6 +58,7 @@ export class ToolExecutionSupport {
       externalExecutionEnabled:
         this.options.externalOperationExecutionEnabled === true,
       fetchImpl: this.options.fetchImpl ?? fetch,
+      ...toolDispatchEgressOptions(this.options),
       timeoutMs: this.options.timeoutMs ?? 10_000,
       maxBytes: this.options.maxBytes ?? 1_000_000,
       subject: input.subject,

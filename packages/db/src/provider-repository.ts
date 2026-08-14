@@ -12,6 +12,7 @@ import {
   toProviderRecord,
 } from "./provider-record-mapping";
 import { baseModels, providerInstances } from "./schema";
+import { containsPattern } from "./like-pattern";
 
 export type ProviderKind =
   | "anthropic"
@@ -162,8 +163,8 @@ export class PgProviderRepository {
       query === undefined || query === ""
         ? undefined
         : or(
-            ilike(baseModels.name, `%${query}%`),
-            ilike(baseModels.displayName, `%${query}%`),
+            ilike(baseModels.name, containsPattern(query)),
+            ilike(baseModels.displayName, containsPattern(query)),
           ),
     );
     const sortColumn =

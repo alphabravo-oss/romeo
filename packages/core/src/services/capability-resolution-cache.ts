@@ -15,6 +15,13 @@ export interface CapabilityResolutionCacheKey {
   capabilityId: CapabilityId;
   healthVersion: string;
   registryVersion: string;
+  /**
+   * Fingerprint of the caller's requested values. The requested payload changes
+   * both requestedChanges and status, so leaving it out of the key replayed one
+   * caller's decision for a differently-parameterized request -- letting an
+   * over-limit value through on the back of an earlier compliant one.
+   */
+  requestedVersion: string;
 }
 
 export interface CapabilityResolutionCacheEntry {
@@ -41,7 +48,25 @@ export function capabilityResolutionCacheKey(
     input.capabilityId,
     input.healthVersion,
     input.registryVersion,
+    input.requestedVersion,
   ].join("\0");
+}
+
+/**
+ * Stable fingerprint of a requested capability payload. Keys are sorted so two
+ * structurally equal requests share a cache entry regardless of property order.
+ */
+export function requestedCapabilityVersion(requested: unknown): string {
+  if (requested === undefined) return "";
+  return JSON.stringify(requested, (_key, value: unknown) =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+            a < b ? -1 : a > b ? 1 : 0,
+          ),
+        )
+      : value,
+  );
 }
 
 export function assignmentPolicyVersion(
@@ -62,7 +87,15 @@ export function readCapabilityResolutionCache(input: {
   const sameKey =
     capabilityResolutionCacheKey(input.entry.key) ===
     capabilityResolutionCacheKey(input.key);
-  const expired = Date.parse(input.entry.expiresAt) <= Date.parse(input.now);
+  // Date.parse returns NaN for unparseable input and every NaN comparison is
+  // false, so a plain `expiresAt <= now` treats a corrupt timestamp as fresh.
+  // Count unparseable as expired and let the risk branch below fail closed.
+  const expiresAt = Date.parse(input.entry.expiresAt);
+  const now = Date.parse(input.now);
+  const expired =
+    !Number.isFinite(expiresAt) ||
+    !Number.isFinite(now) ||
+    expiresAt <= now;
   if (sameKey && !expired) return { outcome: "hit", value: input.entry.value };
   if (input.risk === "high" || input.risk === "critical")
     return { outcome: "stale_fail", code: "capability_resolution_stale" };

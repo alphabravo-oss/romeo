@@ -5,6 +5,8 @@ import type {
 } from "../domain/entities";
 import { ApiError } from "../errors";
 import { writeAuditLog } from "./audit-log";
+import type { WebsiteConnectorHostAddress } from "./data-connector-network-policy";
+import type { DnsPinnedFetch } from "./dns-pinned-fetch";
 import type { DispatchToolOperationInput } from "./tool-operation-dispatch-types";
 import { validateToolOperationResponse } from "./tool-response-validation";
 
@@ -15,14 +17,23 @@ export async function fetchBounded(
   operation: ToolOperation,
   timeoutMs: number,
   maxBytes: number,
+  pinning?: {
+    approvedAddresses: WebsiteConnectorHostAddress[];
+    pinnedFetchImpl?: DnsPinnedFetch;
+  },
 ): Promise<ToolOperationDispatchResult["response"]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(url, {
-      ...init,
-      signal: controller.signal,
-    });
+    const pinnedInit: RequestInit = { ...init, signal: controller.signal };
+    // Pin to the addresses the egress policy already approved when a pinned
+    // transport is wired; otherwise fall back to the injected fetch, which is
+    // how tests and the literal-IP path (no addresses to pin) run.
+    const response =
+      pinning?.pinnedFetchImpl !== undefined &&
+      pinning.approvedAddresses.length > 0
+        ? await pinning.pinnedFetchImpl(url, pinnedInit, pinning.approvedAddresses)
+        : await fetchImpl(url, pinnedInit);
     const body = await readBodySize(response, maxBytes);
     const contentType = response.headers.get("content-type") ?? undefined;
     const schemaValidation = validateToolOperationResponse({

@@ -13,7 +13,7 @@ export function startRunWaitTicker(
   publish: PublishRun,
 ): void {
   stopRunWaitTicker(run);
-  run.waitTicker = setInterval(() => {
+  run.timing.waitTicker = setInterval(() => {
     const current = registry.get(run.chatId);
     if (
       current === undefined ||
@@ -26,7 +26,7 @@ export function startRunWaitTicker(
     if (current.wait?.hasContent === true) return;
     const elapsedSeconds = Math.max(
       0,
-      Math.floor((Date.now() - current.waitAttemptStartedAt) / 1_000),
+      Math.floor((Date.now() - current.timing.waitAttemptStartedAt) / 1_000),
     );
     if (current.wait?.elapsedSeconds === elapsedSeconds) return;
     publish(current.chatId, current.runId, {
@@ -41,13 +41,13 @@ export function startRunWaitTicker(
       },
     });
   }, 1_000);
-  run.waitTicker.unref?.();
+  run.timing.waitTicker.unref?.();
 }
 
 export function stopRunWaitTicker(run: TrackedRun | undefined): void {
-  if (run?.waitTicker === undefined) return;
-  clearInterval(run.waitTicker);
-  delete run.waitTicker;
+  if (run?.timing.waitTicker === undefined) return;
+  clearInterval(run.timing.waitTicker);
+  delete run.timing.waitTicker;
 }
 
 export function beginRunWaitAttempt(
@@ -57,17 +57,21 @@ export function beginRunWaitAttempt(
   phase: "waiting" | "retrying",
   attempt: number,
 ): void {
-  run.waitAttemptStartedAt = Date.now();
+  run.timing.waitAttemptStartedAt = Date.now();
+  // Read the live entry, not the closure: the server-advertised maxAttempts and
+  // streamTimeoutMs were published after `run` was captured, so reading them
+  // off `run` reverted both to the trackRun defaults on every retry.
+  const currentWait = registry.get(run.chatId)?.wait ?? run.wait;
   publish(run.chatId, run.runId, {
     wait: {
       attempt,
       elapsedSeconds: 0,
       hasContent: false,
-      maxAttempts: run.wait?.maxAttempts ?? 2,
+      maxAttempts: currentWait?.maxAttempts ?? 2,
       phase,
-      ...(run.wait?.streamTimeoutMs === undefined
+      ...(currentWait?.streamTimeoutMs === undefined
         ? {}
-        : { streamTimeoutMs: run.wait.streamTimeoutMs }),
+        : { streamTimeoutMs: currentWait.streamTimeoutMs }),
     },
   });
   startRunWaitTicker(run, registry, publish);

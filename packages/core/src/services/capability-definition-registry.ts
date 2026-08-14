@@ -69,7 +69,10 @@ export interface CapabilityDefinition {
   defaultState: "enabled" | "disabled";
   defaultConfiguration: CapabilityConfiguration;
   merge: {
+    /** Merge rule applied to every field listed in `booleans`. */
     boolean: "deny_dominates";
+    /** Boolean fields merged with AND, so any layer setting false wins. */
+    booleans: string[];
     maxima: string[];
     allowlists: string[];
   };
@@ -120,6 +123,7 @@ const definitions = [
     },
     merge: {
       boolean: "deny_dominates",
+      booleans: [],
       maxima: ["maxImagesPerRequest"],
       allowlists: ["allowedSizes"],
     },
@@ -150,6 +154,7 @@ const definitions = [
     },
     merge: {
       boolean: "deny_dominates",
+      booleans: ["allowReasoningSummaryRetention"],
       maxima: [
         "reasoningModeMaximum",
         "reasoningEffortMaximum",
@@ -186,6 +191,7 @@ const definitions = [
     defaultConfiguration: {},
     merge: {
       boolean: "deny_dominates",
+      booleans: [],
       maxima: [],
       allowlists: [],
     },
@@ -218,6 +224,7 @@ const definitions = [
     defaultConfiguration: { maxSearchResults: 10, maxUrlsPerRequest: 5 },
     merge: {
       boolean: "deny_dominates",
+      booleans: [],
       maxima: ["maxSearchResults", "maxUrlsPerRequest"],
       allowlists: [],
     },
@@ -241,7 +248,7 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "required"],
     defaultState: "enabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", maxima: [], allowlists: [] },
+    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
     requiredScopes: ["admin:read"],
     dependencies: [],
     copy: {
@@ -262,7 +269,7 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "required"],
     defaultState: "enabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", maxima: [], allowlists: [] },
+    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
     requiredScopes: ["knowledge:read"],
     dependencies: [],
     copy: {
@@ -283,7 +290,7 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "disabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", maxima: [], allowlists: [] },
+    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
     requiredScopes: ["voices:use"],
     dependencies: ["realtime_gateway"],
     copy: {
@@ -304,7 +311,7 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "disabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", maxima: [], allowlists: [] },
+    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
     requiredScopes: ["runs:create"],
     dependencies: ["object_storage", "image_provider"],
     copy: {
@@ -325,7 +332,7 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "disabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", maxima: [], allowlists: [] },
+    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
     requiredScopes: ["admin:write"],
     dependencies: ["kata_runtime"],
     copy: {
@@ -346,7 +353,7 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "disabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", maxima: [], allowlists: [] },
+    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
     requiredScopes: ["runs:create"],
     dependencies: [],
     copy: {
@@ -367,7 +374,7 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "required"],
     defaultState: "disabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", maxima: [], allowlists: [] },
+    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
     requiredScopes: ["admin:write"],
     dependencies: ["customer_kms"],
     copy: {
@@ -388,7 +395,7 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "enabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", maxima: [], allowlists: [] },
+    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
     requiredScopes: ["admin:read"],
     dependencies: [],
     copy: {
@@ -430,6 +437,7 @@ function cloneDefinition(
     defaultConfiguration: structuredClone(definition.defaultConfiguration),
     merge: {
       boolean: definition.merge.boolean,
+      booleans: [...definition.merge.booleans],
       maxima: [...definition.merge.maxima],
       allowlists: [...definition.merge.allowlists],
     },

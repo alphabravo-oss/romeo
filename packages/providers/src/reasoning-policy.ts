@@ -45,6 +45,15 @@ export interface ProviderReasoningPolicyResolution {
   adjustments: readonly ProviderReasoningPolicyAdjustment[];
   effective: ProviderReasoningPolicy;
   nativeParameters?: ProviderReasoningParameters;
+  /**
+   * True when the policy could not be honoured, which the caller turns into a
+   * 400. A `capped_by_governance` adjustment that lands inside the same mode is
+   * NOT a rejection: `effective` carries the clamped policy and the run should
+   * proceed at the lower setting. Treating every adjustment as a rejection made
+   * each organization maximum hard-fail instead of capping and left the whole
+   * clamp path unreachable. A cap that drives mode to "off" still rejects,
+   * since the caller asked for reasoning and governance denies it outright.
+   */
   rejected: boolean;
   requested: ProviderReasoningPolicy;
   source: "agent_default" | "run_request";
@@ -102,19 +111,40 @@ export function resolveProviderReasoningPolicy(input: {
     effective.maxReasoningTokens !== undefined &&
     !support.tokenBudget
   ) {
-    // A maximum that cannot be enforced is a safety constraint, not an optional hint.
-    adjustments.push({
-      parameter: "maxReasoningTokens",
-      reason: "unsupported_by_dialect",
-    });
-    effective = offPolicy;
+    if (policyTokenBudget(requested) === undefined) {
+      // Ceiling inherited from the organization maximum, which every default
+      // configuration carries. The caller never asked for a token budget and no
+      // dialect can express one natively, so drop the field rather than
+      // disabling reasoning outright -- nothing the caller requested changed.
+      // Once a dialect declares tokenBudget support the ceiling binds normally.
+      effective = withoutTokenBudget(effective);
+    } else {
+      // A maximum the caller explicitly asked for is a safety constraint, not
+      // an optional hint: fail closed rather than run unbounded.
+      adjustments.push({
+        parameter: "maxReasoningTokens",
+        reason: "unsupported_by_dialect",
+      });
+      effective = offPolicy;
+    }
   }
   const nativeParameters = nativeReasoningParameters(effective);
+  // A governance cap that lands inside the same mode is enforceable, so the run
+  // proceeds at the lower setting. A cap that takes the mode all the way to
+  // "off" is not a cap at all -- the caller asked for reasoning and governance
+  // denies it outright, which the caller must see rather than silently getting
+  // a non-reasoning run.
+  const governanceDisabled =
+    requested.mode !== "off" && effective.mode === "off";
   return Object.freeze({
     adjustments: Object.freeze(adjustments),
     effective: Object.freeze(effective),
     ...(nativeParameters === undefined ? {} : { nativeParameters }),
-    rejected: adjustments.length > 0,
+    rejected:
+      governanceDisabled ||
+      adjustments.some(
+        (adjustment) => adjustment.reason !== "capped_by_governance",
+      ),
     requested: Object.freeze(requested),
     source,
   });
@@ -214,7 +244,14 @@ function applyOrganizationMaximum(
       ? undefined
       : normalizedMaximum.maxReasoningTokens,
   );
-  if (maxReasoningTokens !== requested.maxReasoningTokens) {
+  // Only a value the caller actually specified can be "capped". Inheriting the
+  // organization ceiling on a request that omitted the field changes nothing
+  // the caller asked for, and reporting it as an adjustment surfaced a cap in
+  // the preview API that the dialect then dropped anyway.
+  if (
+    requested.maxReasoningTokens !== undefined &&
+    maxReasoningTokens !== requested.maxReasoningTokens
+  ) {
     adjustments.push({
       parameter: "maxReasoningTokens",
       reason: "capped_by_governance",
@@ -380,11 +417,30 @@ function lowerEffort(
     : maximum;
 }
 
+/** mode "off" carries no budget field, so narrow before reading it. */
+function policyTokenBudget(
+  policy: ProviderReasoningPolicy,
+): number | undefined {
+  return policy.mode === "off" ? undefined : policy.maxReasoningTokens;
+}
+
+function withoutTokenBudget(
+  policy: ProviderReasoningPolicy,
+): ProviderReasoningPolicy {
+  if (policy.mode === "off") return policy;
+  const { maxReasoningTokens: _dropped, ...rest } = policy;
+  return rest;
+}
+
 function lowerPositiveInteger(
   requested: number | undefined,
   maximum: number | undefined,
 ): number | undefined {
-  if (requested === undefined) return undefined;
+  // Omitting the field is not an opt-out of the organization maximum. Falling
+  // back to `maximum` mirrors lowerEffort, which defaults the request to
+  // "medium" before comparing; returning undefined here made the org token cap
+  // a no-op for every request that left maxReasoningTokens unset.
+  if (requested === undefined) return maximum;
   return maximum === undefined ? requested : Math.min(requested, maximum);
 }
 

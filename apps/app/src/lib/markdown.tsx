@@ -19,7 +19,11 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { writeTextToClipboard } from "./clipboard";
-import { citationHrefPrefix, renderableContent } from "./chat-citations";
+import {
+  citationHrefPrefix,
+  renderableContent,
+  safeCitationHref,
+} from "./chat-citations";
 import { useLocale } from "./i18n";
 import {
   absoluteMarkdownOffset,
@@ -433,15 +437,16 @@ function CitationMarker({
   citation: ChatCitation;
 }) {
   const { t } = useLocale();
+  const href = safeCitationHref(citation.sourceUri);
   return (
     <sup className="rm-citation-sup">
-      {citation.sourceUri === undefined ? (
+      {href === undefined ? (
         <span className="rm-citation-marker">{children}</span>
       ) : (
         <a
           aria-label={t("citationMarkerLabel", { title: citation.title })}
           className="rm-citation-marker"
-          href={citation.sourceUri}
+          href={href}
           rel="noreferrer nofollow"
           target="_blank"
         >

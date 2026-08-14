@@ -18,6 +18,7 @@ import {
 import type { RomeoDatabase } from "./client";
 import { optionalIsoString } from "./repository-mapping";
 import { users } from "./schema";
+import { containsPattern } from "./like-pattern";
 
 const userTableSortColumns = {
   email: users.email,
@@ -43,7 +44,7 @@ export async function queryIdentityUsers(
         : undefined,
     search === undefined || search === ""
       ? undefined
-      : like(userSearchDocument(), `%${search}%`),
+      : like(userSearchDocument(), containsPattern(search)),
   );
   const position = input.position;
   const positionPredicate =

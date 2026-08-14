@@ -10,6 +10,7 @@ import {
   assignmentPolicyVersion,
   capabilityResolutionCacheKey,
   readCapabilityResolutionCache,
+  requestedCapabilityVersion,
   type CapabilityResolutionCacheEntry,
   type CapabilityResolutionCacheKey,
 } from "./capability-resolution-cache";
@@ -120,6 +121,7 @@ export async function resolveCapabilityWithDetails(
     capabilityId: input.capabilityId,
     healthVersion: "health:1",
     registryVersion: definition.registryVersion,
+    requestedVersion: requestedCapabilityVersion(input.requested),
   };
   const cached =
     assignmentOverride === undefined

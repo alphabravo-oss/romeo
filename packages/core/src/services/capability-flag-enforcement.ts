@@ -9,7 +9,18 @@ export async function assertCapabilityFlagEnabled(
   subject: AuthSubject,
   flagId: CapabilityFlagId,
 ): Promise<void> {
-  if (flags === undefined) return;
+  // A security gate with no policy source is an unresolvable decision, not an
+  // approval. ServiceRegistry types capabilityFlags as required, so this only
+  // fires for partial registries and test doubles -- which is exactly the case
+  // that used to silently downgrade a 403 into an allow.
+  if (flags === undefined) {
+    throw new ApiError(
+      "capability_not_allowed",
+      "The requested capability is not available.",
+      403,
+      { flagId, reasonCode: "capability_flag_service_unavailable" },
+    );
+  }
   const resolved = await flags.resolve(subject, flagId);
   if (resolved.effectiveState === "enabled") return;
   throw new ApiError(

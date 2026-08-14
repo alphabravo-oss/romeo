@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import type { SpeechArtifact } from "../features/types";
 import { useLocale, type Locale, type MessageKey } from "../lib/i18n";
+import { safeCitationHref } from "../lib/chat-citations";
 import { formatDateTime } from "../lib/locale-format";
 import type { ChatReasoning, ChatRunWait } from "../lib/run-registry";
 import type { ChatToolCall } from "../lib/run-tool-calls";
@@ -237,10 +238,12 @@ export function CitationList({ citations }: { citations: ChatCitation[] }) {
         {citations.length === 1 ? t("citationSource") : t("citationSources")}
       </summary>
       <ol>
-        {citations.map((citation) => (
+        {citations.map((citation) => {
+          const href = safeCitationHref(citation.sourceUri);
+          return (
           <li key={citation.chunkId}>
-            {citation.sourceUri ? (
-              <a href={citation.sourceUri} rel="noreferrer" target="_blank">
+            {href ? (
+              <a href={href} rel="noreferrer" target="_blank">
                 <strong>{citation.title}</strong>
               </a>
             ) : (
@@ -259,7 +262,8 @@ export function CitationList({ citations }: { citations: ChatCitation[] }) {
                 : ""}
             </span>
           </li>
-        ))}
+          );
+        })}
       </ol>
     </details>
   );

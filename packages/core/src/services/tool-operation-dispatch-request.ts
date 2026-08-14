@@ -6,6 +6,11 @@ import type {
   ToolOperationDispatchTransport,
 } from "../domain/entities";
 import { ApiError } from "../errors";
+import {
+  assertConnectorHostAllowed,
+  type WebsiteConnectorHostAddress,
+  type WebsiteConnectorHostLookup,
+} from "./data-connector-network-policy";
 import { resolveOAuthClientCredentialsAccessToken } from "./tool-oauth-client-credentials";
 import type { DispatchToolOperationInput } from "./tool-operation-dispatch-types";
 import {
@@ -13,9 +18,12 @@ import {
   escapeRegExp,
 } from "./tool-operation-dispatch-execution";
 
-export async function buildRequest(
-  input: DispatchToolOperationInput,
-): Promise<{ authInjected: boolean; init: RequestInit; url: URL }> {
+export async function buildRequest(input: DispatchToolOperationInput): Promise<{
+  approvedAddresses: WebsiteConnectorHostAddress[];
+  authInjected: boolean;
+  init: RequestInit;
+  url: URL;
+}> {
   const baseUrl =
     typeof input.connector.schema.baseUrl === "string"
       ? input.connector.schema.baseUrl
@@ -25,7 +33,11 @@ export async function buildRequest(
     input.operation,
     input.parameters ?? {},
   );
-  assertHostAllowed(input.connector, url);
+  const approvedAddresses = await resolveDispatchAddresses(
+    input.connector,
+    url,
+    input.hostLookup,
+  );
   const auth = await authForConnector(input);
   for (const [name, value] of Object.entries(auth.query))
     url.searchParams.set(name, value);
@@ -52,7 +64,7 @@ export async function buildRequest(
     headers["content-type"] = "application/json";
     init.body = JSON.stringify(input.body);
   }
-  return { authInjected: auth.injected, init, url };
+  return { approvedAddresses, authInjected: auth.injected, init, url };
 }
 
 export function toolOperationDispatchTransport(
@@ -179,6 +191,28 @@ function assertHostAllowed(connector: ToolConnector, url: URL): void {
       { host: url.hostname },
     );
   }
+}
+
+/**
+ * Resolves the dispatch host and returns the addresses the caller must pin to.
+ *
+ * The allowlist above only compares hostname strings, so an allowlisted name
+ * whose DNS answers 169.254.169.254 or 127.0.0.1 used to be fetched with the
+ * connector's injected auth headers. This applies the same private-network and
+ * pinning checks the data-connector path already uses, closing both the
+ * literal private host case and the rebind between check and connect.
+ */
+async function resolveDispatchAddresses(
+  connector: ToolConnector,
+  url: URL,
+  hostLookup: WebsiteConnectorHostLookup | undefined,
+): Promise<WebsiteConnectorHostAddress[]> {
+  assertHostAllowed(connector, url);
+  return await assertConnectorHostAllowed(url, {
+    allowedHosts: connector.networkPolicy.allowedHosts,
+    egressPolicy: "require_allowlist",
+    ...(hostLookup === undefined ? {} : { hostLookup }),
+  });
 }
 
 export function dispatchBaseHost(connector: ToolConnector): string {

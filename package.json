@@ -24,6 +24,7 @@
     "check:container-image-policy": "node scripts/container-image-policy.mjs",
     "check:helm-production-policy": "node scripts/helm-production-policy-smoke.mjs",
     "check:supply-chain-policy": "node scripts/check-supply-chain-policy.mjs",
+    "check:dns-pinning-parity": "node scripts/check-dns-pinning-parity.mjs",
     "check:test-contracts": "node scripts/check-test-contracts.mjs",
     "check:ui-form-contracts": "node scripts/check-ui-form-contracts.mjs",
     "check:query-key-contracts": "node scripts/check-app-query-key-contracts.mjs",

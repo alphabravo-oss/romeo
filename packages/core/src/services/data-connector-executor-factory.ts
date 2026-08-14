@@ -1,5 +1,4 @@
 import type { RomeoEnv } from "@romeo/config";
-import { lookup } from "node:dns/promises";
 
 import { AtlassianDataConnectorExecutor } from "./atlassian-data-connector-executor";
 import type { DelegatedOAuthService } from "./delegated-oauth-service";
@@ -8,8 +7,8 @@ import {
   S3DataConnectorExecutor,
   WebsiteDataConnectorExecutor,
   type DataConnectorExecutor,
-  type WebsiteConnectorHostAddress,
 } from "./data-connector-executors";
+import { lookupNetworkHost } from "./data-connector-network-policy";
 import {
   GitHubDataConnectorExecutor,
   RoutingDataConnectorExecutor,
@@ -32,7 +31,7 @@ export function createDataConnectorExecutor(
       ),
       egressPolicy: env.DATA_CONNECTOR_EGRESS_POLICY,
       maxBytes: env.DATA_CONNECTOR_FETCH_MAX_BYTES,
-      hostLookup: lookupWebsiteConnectorHost,
+      hostLookup: lookupNetworkHost,
       retryAttempts: env.DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS,
       retryBackoffMs: env.DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS,
       timeoutMs: env.DATA_CONNECTOR_FETCH_TIMEOUT_MS,
@@ -65,7 +64,7 @@ export function createDataConnectorExecutor(
     ),
     egressPolicy: env.DATA_CONNECTOR_EGRESS_POLICY,
     maxBytes: env.DATA_CONNECTOR_FETCH_MAX_BYTES,
-    hostLookup: lookupWebsiteConnectorHost,
+    hostLookup: lookupNetworkHost,
     retryAttempts: env.DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS,
     retryBackoffMs: env.DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS,
     secretResolver,
@@ -110,17 +109,6 @@ export function createDataConnectorExecutor(
     default:
       return disabledDataConnectorExecutor;
   }
-}
-
-async function lookupWebsiteConnectorHost(
-  hostname: string,
-): Promise<WebsiteConnectorHostAddress[]> {
-  const records = await lookup(hostname, { all: true, verbatim: true });
-  return records.flatMap((record) =>
-    record.family === 4 || record.family === 6
-      ? [{ address: record.address, family: record.family }]
-      : [],
-  );
 }
 
 export function parseCsvEnvironmentList(value: string): string[] {

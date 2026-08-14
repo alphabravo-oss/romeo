@@ -21,6 +21,30 @@ const citationMarker = /\[(\d+)\](?![([:])/gu;
 // at all and every marker would fall through to a plain link.
 export const citationHrefPrefix = "#romeo-citation-";
 
+/**
+ * Gate for citation URIs rendered as anchors outside react-markdown.
+ *
+ * sourceUri is typed as a bare string in the contracts and is populated from
+ * external web-search results and uploaded-document metadata, so it is
+ * attacker-influenceable. CitationList and CitationMarker build their own
+ * anchors and therefore never pass through react-markdown's urlTransform, which
+ * is what strips non-http schemes everywhere else -- a "javascript:" URI would
+ * otherwise reach the DOM as a live href. Citation sources are absolute
+ * external URLs, so anything relative or non-http is dropped rather than
+ * resolved.
+ */
+export function safeCitationHref(value: string | undefined): string | undefined {
+  if (value === undefined || value.length === 0) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function stripCitationFooter(content: string): string {
   return content.replace(citationFooter, "");
 }

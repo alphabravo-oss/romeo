@@ -4,6 +4,7 @@ import {
   assignmentPolicyVersion,
   capabilityResolutionCacheKey,
   readCapabilityResolutionCache,
+  requestedCapabilityVersion,
 } from "./capability-resolution-cache";
 import type { EffectiveCapability } from "./capability-resolution-model";
 
@@ -16,6 +17,7 @@ const key = {
   capabilityId: "web_retrieval" as const,
   healthVersion: "h1",
   registryVersion: "cap-registry-v2",
+  requestedVersion: requestedCapabilityVersion({ maxSearchResults: 3 }),
 };
 
 describe("capability resolution cache", () => {
@@ -71,6 +73,65 @@ describe("capability resolution cache", () => {
         risk: "low",
       }),
     ).toEqual({ outcome: "miss" });
+  });
+
+  it("misses when the requested values differ", () => {
+    // The requested payload changes requestedChanges and status, so a decision
+    // made for maxSearchResults=3 must not be replayed for an over-limit 50.
+    const entry = {
+      key,
+      value: effective(),
+      storedAt: "2026-08-14T10:00:00.000Z",
+      expiresAt: "2027-08-14T10:05:00.000Z",
+    };
+    expect(
+      readCapabilityResolutionCache({
+        entry,
+        key: {
+          ...key,
+          requestedVersion: requestedCapabilityVersion({
+            maxSearchResults: 50,
+          }),
+        },
+        now: "2026-08-14T10:01:00.000Z",
+        risk: "low",
+      }),
+    ).toEqual({ outcome: "miss" });
+  });
+
+  it("treats an unparseable expiry as expired rather than fresh", () => {
+    // Date.parse returns NaN and every NaN comparison is false, so a naive
+    // `expiresAt <= now` returned a corrupt entry as a live hit -- fail-open on
+    // exactly the critical-risk capabilities stale_fail exists to protect.
+    const entry = {
+      key,
+      value: effective(),
+      storedAt: "2026-08-14T10:00:00.000Z",
+      expiresAt: "not-a-timestamp",
+    };
+    expect(
+      readCapabilityResolutionCache({
+        entry,
+        key,
+        now: "2026-08-14T10:01:00.000Z",
+        risk: "critical",
+      }),
+    ).toEqual({
+      outcome: "stale_fail",
+      code: "capability_resolution_stale",
+    });
+  });
+
+  it("fingerprints requested values independently of property order", () => {
+    expect(
+      requestedCapabilityVersion({ maxSearchResults: 3, maxUrlsPerRequest: 2 }),
+    ).toBe(
+      requestedCapabilityVersion({ maxUrlsPerRequest: 2, maxSearchResults: 3 }),
+    );
+    expect(requestedCapabilityVersion(undefined)).toBe("");
+    expect(requestedCapabilityVersion({ maxSearchResults: 3 })).not.toBe(
+      requestedCapabilityVersion({ maxSearchResults: 50 }),
+    );
   });
 
   it("encodes assignment versions into the cache key", () => {

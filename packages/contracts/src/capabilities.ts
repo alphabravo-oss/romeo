@@ -94,6 +94,7 @@ export const CapabilityDefinitionSchema = z
     defaultConfiguration: CapabilityConfigurationSchema,
     merge: z.strictObject({
       boolean: z.literal("deny_dominates"),
+      booleans: z.array(z.string()),
       maxima: z.array(z.string()),
       allowlists: z.array(z.string()),
     }),

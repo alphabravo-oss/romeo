@@ -57,13 +57,15 @@ export function mergeCapabilityConfiguration(
       );
     }
   }
-  if (
-    typeof merged.allowReasoningSummaryRetention === "boolean" &&
-    typeof patch.allowReasoningSummaryRetention === "boolean"
-  ) {
-    merged.allowReasoningSummaryRetention =
-      merged.allowReasoningSummaryRetention &&
-      patch.allowReasoningSummaryRetention;
+  // Driven by definition.merge.booleans rather than a per-capability branch,
+  // so the deny_dominates contract every definition declares actually applies
+  // to any boolean field instead of only the reasoning one.
+  for (const field of definition.merge.booleans) {
+    const existing = merged[field as keyof CapabilityConfiguration];
+    const candidate = patch[field as keyof CapabilityConfiguration];
+    if (typeof existing === "boolean" && typeof candidate === "boolean") {
+      (merged as Record<string, unknown>)[field] = existing && candidate;
+    }
   }
   for (const field of definition.merge.allowlists) {
     const existing = merged[field as keyof CapabilityConfiguration];

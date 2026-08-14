@@ -55,6 +55,7 @@ import {
   reconcileFileReferenceIds,
   referencedFileIdsForMessage,
 } from "./message-file-reference-repository";
+import { containsPattern } from "./like-pattern";
 
 export * from "./chat-repository-records";
 
@@ -136,7 +137,7 @@ export class PgChatRepository extends PgMessagePartRepository {
     workspaceId: string,
     query: string,
   ): Promise<Array<{ chatId: string; messageId?: string; snippet: string }>> {
-    const pattern = `%${query.replace(/[\\%_]/gu, (value) => `\\${value}`)}%`;
+    const pattern = containsPattern(query);
     const [titleRows, messageRows, attachmentRows] = await Promise.all([
       this.db
         .select({ chatId: chats.id, snippet: chats.title })

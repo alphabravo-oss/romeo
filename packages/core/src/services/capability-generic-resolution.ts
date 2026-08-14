@@ -77,6 +77,15 @@ export function resolveGenericCapability(input: {
   }
   if (input.agentVersionDefault?.state === "disabled")
     reasons.push({ code: "agent_version_policy", layer: "agent_version" });
+  // State rank, not layer precedence: required > disabled > enabled. A deny at
+  // any layer overrides an enable at any other (so a group deny beats an org
+  // enable), and a "required" mandate in turn overrides that deny. The
+  // reasons collected above still record each denial even when required wins,
+  // which is why a response can carry denial reasons alongside allowed:"yes".
+  //
+  // merge.boolean: "deny_dominates" is NOT this rule -- it governs how
+  // configuration fields combine (see mergeCapabilityConfiguration), not how
+  // assignment states resolve. Only platformDisabled outranks everything.
   const required =
     policies.some((assignment) => assignment?.state === "required") &&
     !input.platformDisabled;
