@@ -16,7 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.1090.0",
     "@hono/zod-openapi": "^1.4.0",
-    "@linear/sdk": "88.2.0",
+    "@linear/sdk": "90.0.0",
     "@node-rs/argon2": "^2.0.2",
     "@node-saml/node-saml": "^5.1.0",
     "@notionhq/client": "5.23.2",
