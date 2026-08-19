@@ -40,7 +40,7 @@
     "nitro": "3.0.260610-beta",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-i18next": "^16.6.6",
+    "react-i18next": "^17.0.11",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "rehype-katex": "^7.0.1",
