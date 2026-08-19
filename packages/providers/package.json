@@ -15,7 +15,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.112.3",
     "ollama": "0.6.3",
-    "openai": "6.48.0",
+    "openai": "7.4.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
