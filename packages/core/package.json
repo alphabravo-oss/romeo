@@ -36,7 +36,7 @@
     "@valkey/valkey-glide": "2.5.0",
     "firebase-admin": "14.2.0",
     "hono": "^4.12.34",
-    "ldapts": "^8.1.8",
+    "ldapts": "^9.0.0",
     "nodemailer": "^9.0.3",
     "oauth4webapi": "^3.8.6",
     "octokit": "5.0.5",
