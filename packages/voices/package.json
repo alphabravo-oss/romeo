@@ -17,6 +17,6 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "openai": "6.48.0"
+    "openai": "7.4.0"
   }
 }
