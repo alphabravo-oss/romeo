@@ -48,6 +48,7 @@ describe("tenant organization administration", () => {
       headers: {
         "content-type": "application/json",
         cookie: orgAdminCookie,
+        origin: "http://localhost:3000",
       },
       body: JSON.stringify({
         workspaceId: "workspace_acme_inc_ops",
@@ -148,6 +149,7 @@ describe("tenant organization administration", () => {
       headers: {
         "content-type": "application/json",
         cookie: orgAdminCookie,
+        origin: "http://localhost:3000",
       },
       body: JSON.stringify({
         workspaceId: "workspace_acme_inc_ops",
@@ -333,7 +335,7 @@ describe("tenant organization administration", () => {
     expect(await objectStore.getObject(fileObjectKey)).toBeUndefined();
     expect(purgedGetResponse.status).toBe(404);
     expect(
-      (await repository.listSystemSettings()).some(
+      (await repository.listSystemSettings(null)).some(
         (setting) =>
           setting.key ===
           "tenant_lifecycle.deletion_purge_result.v1:org_acme_inc",

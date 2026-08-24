@@ -3,7 +3,7 @@
   --rm-ui-fg: var(--rm-text, #18181b);
   --rm-ui-surface: var(--rm-surface, #fff);
   --rm-ui-soft: var(--rm-surface-soft, #f4f4f5);
-  --rm-ui-muted: var(--rm-muted, #71717a);
+  --rm-ui-muted: var(--rm-muted, #6b6b74);
   --rm-ui-border: var(--rm-border, #e4e4e7);
   --rm-ui-accent: var(--rm-accent, #2563eb);
   --rm-ui-accent-hover: var(--rm-accent-hover, #1d4ed8);
@@ -331,6 +331,9 @@ html.dark {
   width: min(calc(100vw - 2rem), 42rem);
   max-height: calc(100dvh - 2rem);
   overflow: hidden;
+  overscroll-behavior: contain;
+  scroll-padding-block: max(1rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-bottom));
   border: 1px solid var(--rm-ui-border);
   border-radius: var(--rm-ui-radius-lg);
   background: var(--rm-ui-surface);
@@ -366,6 +369,8 @@ html.dark {
 .rm-ui-dialog__body {
   overflow: auto;
   padding: 1.125rem;
+  padding-block-end: max(1.125rem, env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
 }
 .rm-ui-dialog__footer {
   display: flex;
@@ -385,6 +390,8 @@ html.dark {
   width: min(92vw, 32rem);
   max-height: 100dvh;
   border-radius: 0;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
   transform: none;
 }
 .rm-ui-sheet--right {
@@ -396,6 +403,13 @@ html.dark {
 }
 .rm-ui-popover {
   padding: 0.75rem;
+  overscroll-behavior: contain;
+}
+
+:where(.rm-ui-dialog, .rm-ui-alert-dialog, .rm-ui-popover, .rm-ui-menu)
+  :focus-visible {
+  scroll-margin-block: max(1rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-bottom));
 }
 .rm-ui-menu {
   min-width: 10rem;
@@ -630,23 +644,25 @@ html.dark {
 }
 .rm-ui-status-badge--neutral {
   background: var(--rm-ui-soft);
-  color: var(--rm-muted, var(--rm-ui-muted));
+  color: var(--rm-ui-status-neutral);
 }
 .rm-ui-status-badge--info {
   background: color-mix(in srgb, var(--rm-accent, #3b82f6) 14%, transparent);
-  color: var(--rm-accent-strong, #2563eb);
+  color: var(--rm-ui-status-info);
 }
 .rm-ui-status-badge--success {
   background: color-mix(in srgb, var(--rm-success, #047857) 14%, transparent);
-  color: var(--rm-success, #047857);
+  color: var(--rm-ui-status-success);
 }
 .rm-ui-status-badge--warning {
   background: color-mix(in srgb, var(--rm-warning, #b45309) 16%, transparent);
-  color: var(--rm-warning, #b45309);
+  color: var(--rm-ui-status-warning);
 }
 .rm-ui-status-badge--danger {
   background: color-mix(in srgb, var(--rm-danger, #dc2626) 14%, transparent);
-  color: var(--rm-danger, #dc2626);
+  /* Status text has a dedicated light/dark ramp. The semantic action token is
+     deliberately more saturated and misses 4.5:1 on tinted dark surfaces. */
+  color: var(--rm-ui-status-danger);
 }
 [data-sonner-toaster] {
   z-index: 100 !important;

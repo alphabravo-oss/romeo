@@ -78,4 +78,48 @@ describe("knowledge computation mutation policies", () => {
     await expect(pending).rejects.toThrow("forbidden");
     expect(client.getQueryData(key)).toEqual([source]);
   });
+
+  it("refreshes only the affected source and workspace inventories", async () => {
+    const client = createRomeoQueryClient();
+    const sourceKey = tableKey("knowledge_sources", "kb-1");
+    const otherSourceKey = tableKey("knowledge_sources", "kb-2");
+    const baseKey = appQueryKeys.tablePages({
+      filters: [],
+      limit: 25,
+      resource: "knowledge_bases",
+      sort: [],
+      workspaceId: "workspace-1",
+    });
+    for (const key of [sourceKey, otherSourceKey, baseKey]) {
+      client.setQueryData(key, { items: [] });
+    }
+    mutationMocks.deleteKnowledgeSource.mockResolvedValueOnce({
+      id: "source-1",
+      knowledgeBaseId: "kb-1",
+    } as KnowledgeSource);
+    const observer = new MutationObserver(
+      client,
+      deleteKnowledgeSourceMutationOptions(),
+    );
+
+    await observer.mutate({
+      knowledgeBaseId: "kb-1",
+      sourceId: "source-1",
+      workspaceId: "workspace-1",
+    });
+
+    expect(client.getQueryState(sourceKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(otherSourceKey)?.isInvalidated).toBe(false);
+    expect(client.getQueryState(baseKey)?.isInvalidated).toBe(true);
+  });
 });
+
+function tableKey(resource: "knowledge_sources", parentId: string) {
+  return appQueryKeys.tablePages({
+    filters: [],
+    limit: 25,
+    parentId,
+    resource,
+    sort: [],
+  });
+}

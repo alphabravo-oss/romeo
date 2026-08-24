@@ -1,19 +1,25 @@
 import type { RomeoRepository } from "../domain/repository";
 import { createId } from "../ids";
+import { settingKey as abuseControlSettingKey } from "./abuse-control-policy-helpers";
 import type { ChatService } from "./chat-service";
 import {
   continueTelemetryContextFromPayload,
   telemetryTraceId,
 } from "./telemetry-context";
 import { WorkerSupervisor } from "./worker-supervisor";
+import { deletionRequestKey } from "./tenant-admin-support";
 
 export interface TemporaryChatCleanupWorkerOptions {
   enabled: boolean;
   intervalMs: number;
   batchSize: number;
   leaseSeconds: number;
+  maxTenantsPerRun?: number;
+  tenantConcurrency?: number;
   workerId?: string;
 }
+
+const tenantProgressKey = "scheduled-work.temporary-chat-cleanup.v1";
 
 export class TemporaryChatCleanupWorker {
   private readonly workerId: string;
@@ -49,21 +55,81 @@ export class TemporaryChatCleanupWorker {
     now = new Date().toISOString(),
     signal?: AbortSignal,
   ): Promise<void> {
-    const organizations = await this.repository.listAllOrganizations();
-    await Promise.all(
-      organizations.map((organization) => {
-        if (signal?.aborted === true) return Promise.resolve();
-        return this.runForOrganization(organization.id, now);
-      }),
+    const organizations = (await this.repository.listAllOrganizations()).sort(
+      (left, right) => left.id.localeCompare(right.id),
     );
+    const previous = await this.repository.getSystemSetting(
+      tenantProgressKey,
+      null,
+    );
+    const cursor =
+      typeof previous?.value.cursorOrgId === "string"
+        ? previous.value.cursorOrgId
+        : undefined;
+    const pivot = organizations.findIndex(
+      (organization) => cursor === undefined || organization.id > cursor,
+    );
+    const ordered =
+      pivot <= 0
+        ? organizations
+        : [...organizations.slice(pivot), ...organizations.slice(0, pivot)];
+    const selected = ordered.slice(
+      0,
+      Math.max(1, Math.min(this.options.maxTenantsPerRun ?? 100, 1_000)),
+    );
+    const concurrency = Math.max(
+      1,
+      Math.min(this.options.tenantConcurrency ?? 4, 20),
+    );
+    let failed = 0;
+    let processed = 0;
+    let skipped = 0;
+    for (let index = 0; index < selected.length; index += concurrency) {
+      if (signal?.aborted === true) break;
+      const batch = selected.slice(index, index + concurrency);
+      const outcomes = await Promise.allSettled(
+        batch.map((organization) =>
+          this.runForOrganization(organization.id, now),
+        ),
+      );
+      for (const outcome of outcomes) {
+        if (outcome.status === "rejected") failed += 1;
+        else if (outcome.value === "skipped") skipped += 1;
+        else processed += 1;
+      }
+      await this.repository.upsertSystemSetting(
+        {
+          key: tenantProgressKey,
+          updatedAt: now,
+          value: {
+            version: 1,
+            cursorOrgId: batch.at(-1)!.id,
+            failed,
+            processed,
+            skipped,
+            updatedAt: now,
+          },
+        },
+        null,
+      );
+    }
   }
 
-  private async runForOrganization(orgId: string, now: string): Promise<void> {
+  runTenantOnce(
+    orgId: string,
+    now = new Date().toISOString(),
+  ): Promise<"processed" | "skipped"> {
+    return this.runForOrganization(orgId, now);
+  }
+
+  private async runForOrganization(
+    orgId: string,
+    now: string,
+  ): Promise<"processed" | "skipped"> {
+    if (!(await this.tenantCanRunScheduledWork(orgId))) return "skipped";
     const bucket = Math.floor(Date.parse(now) / this.options.intervalMs);
     const jobId = `temporary_chat_cleanup_${orgId}_${bucket}`;
-    const existing = (await this.repository.listBackgroundJobs(orgId)).find(
-      (job) => job.id === jobId,
-    );
+    const existing = await this.repository.getBackgroundJob(orgId, jobId);
     if (existing === undefined) {
       try {
         await this.repository.createBackgroundJob({
@@ -92,7 +158,7 @@ export class TemporaryChatCleanupWorker {
     });
     if (claimed === undefined) {
       this.supervisor.recordLease({ claimed: false });
-      return;
+      return "processed";
     }
     this.supervisor.recordLease({
       claimed: true,
@@ -142,5 +208,20 @@ export class TemporaryChatCleanupWorker {
         },
       });
     }
+    return "processed";
+  }
+
+  private async tenantCanRunScheduledWork(orgId: string): Promise<boolean> {
+    const [abuseControl, deletion] = await Promise.all([
+      this.repository.getSystemSetting(abuseControlSettingKey(orgId), orgId),
+      this.repository.getSystemSetting(deletionRequestKey(orgId), orgId),
+    ]);
+    const suspension = abuseControl?.value.suspension;
+    const suspended =
+      typeof suspension === "object" &&
+      suspension !== null &&
+      !Array.isArray(suspension) &&
+      (suspension as Record<string, unknown>).suspended === true;
+    return !suspended && deletion?.value.status !== "requested";
   }
 }

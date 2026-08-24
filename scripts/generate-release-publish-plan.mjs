@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 
 import {
@@ -12,6 +13,10 @@ import {
   validateSha256,
   writeJsonOrStdout,
 } from "./lib/release-artifacts.mjs";
+import {
+  normalizedArtifactDigests,
+  verifyProtectedApprovalAttestation,
+} from "./lib/protected-release-approval.mjs";
 
 const manifestPath = repoPath(
   argValue("--manifest") ?? "dist/release/release-manifest.json",
@@ -24,6 +29,14 @@ const securityEvidencePath = optionalRepoPath(
 );
 const provenancePath = optionalRepoPath(argValue("--provenance-file"));
 const approvalPath = optionalRepoPath(argValue("--approval-file"));
+const approvalAttestationPath = optionalRepoPath(
+  argValue("--approval-attestation-file"),
+);
+const approvalPublicKeyPath = optionalRepoPath(
+  argValue("--approval-trusted-public-key-file"),
+);
+const approvalEnvironment = argValue("--approval-environment");
+const approvalPolicyDigest = argValue("--approval-policy-digest");
 const releaseNotesPath = optionalRepoPath(
   argValue("--release-notes-file") ?? "CHANGELOG.md",
 );
@@ -43,6 +56,7 @@ const requireSignedProvenance = hasFlag("--require-signed-provenance");
 const requireApproval = hasFlag("--require-approval");
 const requireReleaseNotes = hasFlag("--require-release-notes");
 const npmProvenance = hasFlag("--npm-provenance");
+const dryRun = hasFlag("--dry-run");
 const stdout = hasFlag("--stdout");
 
 const blockers = [];
@@ -79,6 +93,8 @@ const plan = {
   schemaVersion: "romeo.release-publish-plan.v1",
   generatedAt,
   status: blockers.length === 0 ? "ready" : "blocked",
+  dryRun,
+  promotable: !dryRun && blockers.length === 0,
   release: {
     name: nonEmptyString(manifest.name, "release manifest name"),
     version,
@@ -116,9 +132,10 @@ const plan = {
     npmProvenance,
     requireApproval,
     requireSignedProvenance,
+    dryRun,
   },
   blockers,
-  steps: blockers.length === 0 ? buildSteps() : [],
+  steps: blockers.length === 0 && !dryRun ? buildSteps() : [],
 };
 
 writeJsonOrStdout({
@@ -449,6 +466,31 @@ function validateApprovalEvidence() {
       "Release approval evidence must pass before publishing.",
     );
   }
+  if (dryRun) {
+    if (
+      approval.mode !== "dry_run" ||
+      approval.authentic !== false ||
+      approval.promotable !== false
+    ) {
+      addBlocker(
+        "approval_dry_run_posture_invalid",
+        "Dry-run publish plans require explicitly non-promotable dry-run approval evidence.",
+      );
+    }
+  } else if (
+    approval.mode !== "protected_environment" ||
+    approval.authentic !== true ||
+    approval.promotable !== true ||
+    typeof approval.approval?.attestation?.keyId !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(approval.approval?.attestation?.sha256 ?? "")
+  ) {
+    addBlocker(
+      "approval_not_authentic",
+      "Publishing requires authentic, signed protected-environment approval evidence.",
+    );
+  } else {
+    validateProtectedApprovalAttestation(approval);
+  }
   if (approval.release?.version !== version) {
     addBlocker(
       "approval_version_mismatch",
@@ -517,6 +559,121 @@ function validateApprovalEvidence() {
     );
   }
   return evidence;
+}
+
+function validateProtectedApprovalAttestation(approval) {
+  if (
+    approvalAttestationPath === undefined ||
+    !existsSync(approvalAttestationPath) ||
+    approvalPublicKeyPath === undefined ||
+    !existsSync(approvalPublicKeyPath)
+  ) {
+    addBlocker(
+      "approval_attestation_material_missing",
+      "Publishing requires the signed approval attestation and pinned public key.",
+    );
+    return;
+  }
+  let attestation;
+  let payload;
+  try {
+    attestation = readJson(approvalAttestationPath);
+    payload = verifyProtectedApprovalAttestation({
+      attestation,
+      trustedPublicKeyPem: readFileSync(approvalPublicKeyPath, "utf8"),
+    });
+  } catch (error) {
+    addBlocker(
+      "approval_attestation_signature_invalid",
+      error instanceof Error ? error.message : "Approval signature is invalid.",
+    );
+    return;
+  }
+  const provenanceDocument =
+    provenancePath !== undefined && existsSync(provenancePath)
+      ? readJson(provenancePath)
+      : undefined;
+  const expectedArtifacts = normalizedArtifactDigests(
+    provenanceDocument?.release?.artifacts,
+  );
+  const expectedApproverHashes = [...new Set(payload.approverIds ?? [])]
+    .map((value) => createHash("sha256").update(String(value)).digest("hex"))
+    .sort();
+  const bindingChecks = [
+    [
+      payload.commitSha === provenanceDocument?.source?.commitSha,
+      "approval_attestation_commit_mismatch",
+      "Signed approval commit does not match provenance.",
+    ],
+    [
+      payload.manifestSha256 === fileEvidence(manifestPath).sha256,
+      "approval_attestation_manifest_mismatch",
+      "Signed approval manifest digest does not match.",
+    ],
+    [
+      provenancePath !== undefined &&
+        existsSync(provenancePath) &&
+        payload.provenanceSha256 === fileEvidence(provenancePath).sha256,
+      "approval_attestation_provenance_mismatch",
+      "Signed approval provenance digest does not match.",
+    ],
+    [
+      JSON.stringify(payload.artifactDigests) ===
+        JSON.stringify(expectedArtifacts),
+      "approval_attestation_artifact_mismatch",
+      "Signed approval artifact digests do not match.",
+    ],
+    [
+      typeof approvalEnvironment === "string" &&
+        payload.environment === approvalEnvironment,
+      "approval_attestation_environment_mismatch",
+      "Signed approval environment does not match.",
+    ],
+    [
+      /^[a-f0-9]{64}$/u.test(approvalPolicyDigest ?? "") &&
+        payload.policyDigest === approvalPolicyDigest,
+      "approval_attestation_policy_mismatch",
+      "Signed approval policy digest does not match.",
+    ],
+    [
+      payload.revoked === false && payload.dryRun === false,
+      "approval_attestation_not_promotable",
+      "Signed approval is revoked or marked dry-run.",
+    ],
+    [
+      validInstant(payload.approvedAt) &&
+        validInstant(payload.expiresAt) &&
+        validInstant(generatedAt) &&
+        instantMs(payload.approvedAt) <= instantMs(generatedAt) &&
+        instantMs(payload.expiresAt) > instantMs(generatedAt),
+      "approval_attestation_time_invalid",
+      "Signed approval is expired or has an invalid approval window.",
+    ],
+    [
+      JSON.stringify(expectedApproverHashes) ===
+        JSON.stringify(approval.approval?.approverHashes),
+      "approval_attestation_approvers_mismatch",
+      "Signed approvers do not match approval evidence.",
+    ],
+    [
+      approval.approval?.refHash ===
+        createHash("sha256")
+          .update(String(payload.approvalRef ?? ""))
+          .digest("hex"),
+      "approval_attestation_reference_mismatch",
+      "Signed approval reference does not match approval evidence.",
+    ],
+    [
+      approval.approval?.attestation?.sha256 ===
+        fileEvidence(approvalAttestationPath).sha256 &&
+        approval.approval?.attestation?.keyId === attestation.signature.keyId,
+      "approval_attestation_identity_mismatch",
+      "Approval evidence is not bound to the supplied attestation.",
+    ],
+  ];
+  for (const [passed, code, message] of bindingChecks) {
+    if (!passed) addBlocker(code, message);
+  }
 }
 
 function findChannelRelease(document, releaseVersion) {

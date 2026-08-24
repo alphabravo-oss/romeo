@@ -25,6 +25,17 @@ import {
   discoverOidcConfiguration,
   oidcMetadataFromConfiguration,
 } from "./oidc-discovery";
+import {
+  OidcEgressClient,
+  oidcEgressOptionsFromEnv,
+  type OidcEgressOptions,
+} from "./oidc-egress";
+import {
+  audienceIncludes,
+  tokenKeyId,
+  unverifiedJwtAudience,
+  unverifiedJwtIssuer,
+} from "./oidc-token-hints";
 
 export interface OidcDiscoveryDocument {
   authorizationEndpoint?: string;
@@ -49,33 +60,81 @@ interface CacheEntry<T> {
   promise: Promise<T>;
 }
 
+export interface OidcRuntimeCache {
+  readonly discovery: Map<string, CacheEntry<ResolvedOidcDiscovery>>;
+  readonly jwks: Map<string, CacheEntry<JsonWebKey[]>>;
+  readonly lastJwksRefresh: Map<string, number>;
+}
+
+export function createOidcRuntimeCache(): OidcRuntimeCache {
+  return {
+    discovery: new Map(),
+    jwks: new Map(),
+    lastJwksRefresh: new Map(),
+  };
+}
+
+export interface OidcClientOptions {
+  cacheTtlMs?: number;
+  fetchImpl?: typeof fetch;
+  hostLookup?: OidcEgressOptions["hostLookup"];
+  jwksRefreshCooldownMs?: number;
+  maxResponseBytes?: number;
+  now?: () => number;
+  pinnedFetchImpl?: OidcEgressOptions["pinnedFetchImpl"];
+  runtimeCache?: OidcRuntimeCache;
+  timeoutMs?: number;
+}
+
 const defaultCacheTtlMs = 5 * 60 * 1000;
 const defaultJwksRefreshCooldownMs = 30 * 1000;
+const maxCacheEntries = 128;
+const maxCacheTtlMs = 60 * 60 * 1000;
+const maxJwksKeys = 100;
 
 export class OidcClient {
-  private readonly discoveryCache = new Map<
-    string,
-    CacheEntry<ResolvedOidcDiscovery>
-  >();
-  private readonly jwksCache = new Map<string, CacheEntry<JsonWebKey[]>>();
-  private readonly lastJwksRefresh = new Map<string, number>();
-  private readonly fetchImpl: typeof fetch;
+  private readonly discoveryCache: OidcRuntimeCache["discovery"];
+  private readonly jwksCache: OidcRuntimeCache["jwks"];
+  private readonly lastJwksRefresh: OidcRuntimeCache["lastJwksRefresh"];
   private readonly cacheTtlMs: number;
+  private readonly egressOptions: OidcEgressOptions;
   private readonly jwksRefreshCooldownMs: number;
   private readonly now: () => number;
 
   constructor(
     private readonly repository: RomeoRepository,
     private readonly env: RomeoEnv,
-    options: {
-      cacheTtlMs?: number;
-      fetchImpl?: typeof fetch;
-      jwksRefreshCooldownMs?: number;
-      now?: () => number;
-    } = {},
+    options: OidcClientOptions = {},
   ) {
-    this.fetchImpl = options.fetchImpl ?? fetch;
-    this.cacheTtlMs = options.cacheTtlMs ?? defaultCacheTtlMs;
+    const runtimeCache = options.runtimeCache ?? createOidcRuntimeCache();
+    this.discoveryCache = runtimeCache.discovery;
+    this.jwksCache = runtimeCache.jwks;
+    this.lastJwksRefresh = runtimeCache.lastJwksRefresh;
+    this.egressOptions = {
+      ...oidcEgressOptionsFromEnv(env),
+      ...(options.fetchImpl === undefined
+        ? {}
+        : { fetchImpl: options.fetchImpl }),
+      ...(options.hostLookup === undefined
+        ? {}
+        : { hostLookup: options.hostLookup }),
+      ...(options.maxResponseBytes === undefined
+        ? {}
+        : { maxResponseBytes: options.maxResponseBytes }),
+      ...(options.pinnedFetchImpl === undefined
+        ? {}
+        : { pinnedFetchImpl: options.pinnedFetchImpl }),
+      ...(options.timeoutMs === undefined
+        ? {}
+        : { timeoutMs: options.timeoutMs }),
+    };
+    this.cacheTtlMs = Math.max(
+      1,
+      Math.min(
+        options.cacheTtlMs ?? env.OIDC_CACHE_TTL_MS ?? defaultCacheTtlMs,
+        maxCacheTtlMs,
+      ),
+    );
     this.jwksRefreshCooldownMs =
       options.jwksRefreshCooldownMs ?? defaultJwksRefreshCooldownMs;
     this.now = options.now ?? Date.now;
@@ -109,7 +168,9 @@ export class OidcClient {
     token: string,
     options: { expectedNonce?: string; orgId?: string } = {},
   ): Promise<OidcMappedSubject> {
-    const { config, discovery, orgId } = await this.configured(options.orgId);
+    const orgId =
+      options.orgId ?? (await this.resolveBearerOrganizationId(token));
+    const { config, discovery } = await this.configured(orgId);
     const claims = await this.verifyClaims(token, config, discovery);
     if (
       options.expectedNonce !== undefined &&
@@ -154,6 +215,7 @@ export class OidcClient {
     this.discoveryCache.delete(cacheKey);
     const promise = this.fetchDiscovery(issuer, clientId);
     const entry = { expiresAt: this.now() + this.cacheTtlMs, promise };
+    this.pruneCache(this.discoveryCache);
     this.discoveryCache.set(cacheKey, entry);
     void promise.catch(() => {
       if (this.discoveryCache.get(cacheKey) === entry)
@@ -166,19 +228,21 @@ export class OidcClient {
     discovery: OidcDiscoveryDocument,
     forceRefresh = false,
   ): Promise<JsonWebKey[]> {
-    const existing = this.jwksCache.get(discovery.jwksUri);
+    const cacheKey = this.jwksCacheKey(discovery);
+    const existing = this.jwksCache.get(cacheKey);
     if (
       !forceRefresh &&
       existing !== undefined &&
       existing.expiresAt > this.now()
     )
       return existing.promise;
-    const promise = this.fetchJwks(discovery.jwksUri);
+    const promise = this.fetchJwks(discovery);
     const entry = { expiresAt: this.now() + this.cacheTtlMs, promise };
-    this.jwksCache.set(discovery.jwksUri, entry);
+    this.pruneCache(this.jwksCache);
+    this.jwksCache.set(cacheKey, entry);
     void promise.catch(() => {
-      if (this.jwksCache.get(discovery.jwksUri) === entry)
-        this.jwksCache.delete(discovery.jwksUri);
+      if (this.jwksCache.get(cacheKey) === entry)
+        this.jwksCache.delete(cacheKey);
     });
     return promise;
   }
@@ -190,12 +254,14 @@ export class OidcClient {
   ): Promise<Record<string, unknown>> {
     let jwks = await this.jwks(discovery);
     const kid = tokenKeyId(token);
+    const jwksCacheKey = this.jwksCacheKey(discovery);
     if (
       kid !== undefined &&
       !jwks.some((key) => (key as { kid?: unknown }).kid === kid) &&
-      this.canRefreshJwks(discovery.jwksUri)
+      this.canRefreshJwks(jwksCacheKey)
     ) {
-      this.lastJwksRefresh.set(discovery.jwksUri, this.now());
+      this.pruneJwksRefreshes();
+      this.lastJwksRefresh.set(jwksCacheKey, this.now());
       jwks = await this.jwks(discovery, true);
     }
     return verifyOidcJwt(token, {
@@ -207,6 +273,7 @@ export class OidcClient {
   }
 
   private canRefreshJwks(jwksUri: string): boolean {
+    this.pruneJwksRefreshes();
     const last = this.lastJwksRefresh.get(jwksUri);
     return (
       last === undefined || this.now() - last >= this.jwksRefreshCooldownMs
@@ -217,10 +284,12 @@ export class OidcClient {
     issuer: string,
     clientId: string,
   ): Promise<ResolvedOidcDiscovery> {
+    const egress = this.egress(issuer);
     const configuration = await discoverOidcConfiguration({
       clientId,
-      fetchImpl: this.fetchImpl,
+      fetchImpl: egress.fetch,
       issuer,
+      validateEndpoint: (value) => egress.assertMetadataEndpoint(value),
     });
     return {
       ...oidcMetadataFromConfiguration(configuration),
@@ -228,17 +297,59 @@ export class OidcClient {
     };
   }
 
-  private async fetchJwks(jwksUri: string): Promise<JsonWebKey[]> {
-    const response = await this.fetchImpl(jwksUri, {
-      headers: { accept: "application/json" },
-    });
-    if (!response.ok) throw new Error("OIDC JWKS fetch failed.");
-    const jwks = (await response.json()) as { keys?: unknown };
-    if (!Array.isArray(jwks.keys))
+  private async fetchJwks(
+    discovery: OidcDiscoveryDocument,
+  ): Promise<JsonWebKey[]> {
+    const egress = this.egress(discovery.issuer);
+    egress.assertMetadataEndpoint(discovery.jwksUri);
+    const jwks = (await egress.fetchJson(discovery.jwksUri)) as {
+      keys?: unknown;
+    };
+    if (
+      !Array.isArray(jwks.keys) ||
+      jwks.keys.length === 0 ||
+      jwks.keys.length > maxJwksKeys
+    )
       throw new Error("OIDC JWKS document is invalid.");
-    return jwks.keys.filter(
+    const keys = jwks.keys.filter(
       (key): key is JsonWebKey => typeof key === "object" && key !== null,
     );
+    if (keys.length === 0) throw new Error("OIDC JWKS document is invalid.");
+    return keys;
+  }
+
+  private egress(issuer: string): OidcEgressClient {
+    return new OidcEgressClient(issuer, this.egressOptions);
+  }
+
+  private jwksCacheKey(discovery: OidcDiscoveryDocument): string {
+    return `${discovery.issuer}\u0000${discovery.jwksUri}`;
+  }
+
+  private pruneCache<T>(cache: Map<string, CacheEntry<T>>): void {
+    const now = this.now();
+    for (const [key, entry] of cache) {
+      if (entry.expiresAt <= now) cache.delete(key);
+    }
+    while (cache.size >= maxCacheEntries) {
+      const oldest = cache.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      cache.delete(oldest);
+    }
+  }
+
+  private pruneJwksRefreshes(): void {
+    const oldestUseful = this.now() - this.jwksRefreshCooldownMs;
+    for (const [key, refreshedAt] of this.lastJwksRefresh) {
+      if (refreshedAt <= oldestUseful) this.lastJwksRefresh.delete(key);
+    }
+    while (this.lastJwksRefresh.size >= maxCacheEntries) {
+      const oldest = this.lastJwksRefresh.keys().next().value as
+        | string
+        | undefined;
+      if (oldest === undefined) break;
+      this.lastJwksRefresh.delete(oldest);
+    }
   }
 
   private async mapAndProvision(
@@ -279,20 +390,28 @@ export class OidcClient {
       oidc: subject.oidc,
     };
   }
-}
 
-function tokenKeyId(token: string): string | undefined {
-  try {
-    const encoded = token.split(".")[0];
-    if (encoded === undefined) return undefined;
-    const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString()) as {
-      kid?: unknown;
-    };
-    return typeof parsed.kid === "string" && parsed.kid.length <= 300
-      ? parsed.kid
-      : undefined;
-  } catch {
-    return undefined;
+  private async resolveBearerOrganizationId(token: string): Promise<string> {
+    if (this.env.TENANCY_MODE !== "multi") return "org_default";
+    const issuer = unverifiedJwtIssuer(token);
+    const audience = unverifiedJwtAudience(token);
+    if (issuer === undefined) {
+      throw new Error("OIDC token issuer is missing.");
+    }
+    const organizations = await this.repository.listAllOrganizations();
+    const matches: string[] = [];
+    for (const organization of organizations) {
+      const settings = await this.repository.getSsoOidcSettings(
+        organization.id,
+      );
+      if (settings === undefined || !settings.enabled) continue;
+      if (normalizeIssuer(settings.issuerUrl) !== normalizeIssuer(issuer))
+        continue;
+      if (!audienceIncludes(audience, settings.clientId)) continue;
+      matches.push(organization.id);
+    }
+    if (matches.length === 1) return matches[0]!;
+    throw new Error("OIDC organization could not be resolved.");
   }
 }
 

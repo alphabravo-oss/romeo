@@ -3,6 +3,7 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { BackgroundJob } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { createId } from "../ids";
+import { collectBackgroundJobs } from "./background-job-query";
 import { telemetryJobPayload } from "./telemetry-context";
 
 export interface JobLagThresholds {
@@ -78,16 +79,24 @@ export class JobService {
 
   list(subject: AuthSubject): Promise<BackgroundJob[]> {
     assertScope(subject, "admin:read");
-    return this.repository.listBackgroundJobs(subject.orgId);
+    return this.repository.listBackgroundJobs(subject.orgId, { limit: 500 });
   }
 
   async operationalSummary(
     subject: AuthSubject,
   ): Promise<JobOperationalSummary> {
     assertScope(subject, "admin:read");
-    return summarizeBackgroundJobs(
-      await this.repository.listBackgroundJobs(subject.orgId),
-    );
+    const generatedAt = new Date().toISOString();
+    const [jobs, fileLifecycle] = await Promise.all([
+      collectBackgroundJobs(this.repository, subject.orgId),
+      this.repository.getFileLifecycleQueueSummary(subject.orgId),
+    ]);
+    return summarizeBackgroundJobs(jobs, {
+      generatedAt,
+      additionalTypeSummaries: [
+        fileLifecycleTypeSummary(fileLifecycle, generatedAt),
+      ],
+    });
   }
 }
 
@@ -170,9 +179,15 @@ export function failBackgroundJob(
 
 export function summarizeBackgroundJobs(
   jobs: BackgroundJob[],
-  input: { now?: string; thresholds?: Partial<JobLagThresholds> } = {},
+  input: {
+    additionalTypeSummaries?: BackgroundJobTypeSummary[];
+    generatedAt?: string;
+    now?: string;
+    thresholds?: Partial<JobLagThresholds>;
+  } = {},
 ): JobOperationalSummary {
-  const generatedAt = input.now ?? new Date().toISOString();
+  const generatedAt =
+    input.generatedAt ?? input.now ?? new Date().toISOString();
   const nowMs = Date.parse(generatedAt);
   const thresholds = { ...DEFAULT_JOB_LAG_THRESHOLDS, ...input.thresholds };
   const totals = { ...emptyCounts(), deadLettered: 0, recentFailed: 0 };
@@ -215,6 +230,17 @@ export function summarizeBackgroundJobs(
       totals.deadLettered += 1;
       summary.deadLettered += 1;
     }
+  }
+
+  for (const additional of input.additionalTypeSummaries ?? []) {
+    byType.set(additional.type, additional);
+    totals.total += additional.total;
+    totals.queued += additional.queued;
+    totals.running += additional.running;
+    totals.completed += additional.completed;
+    totals.failed += additional.failed;
+    totals.deadLettered += additional.deadLettered;
+    totals.recentFailed += additional.recentFailed;
   }
 
   const typeSummaries = Array.from(byType.values()).sort((left, right) =>
@@ -266,10 +292,7 @@ function alertsForType(
   thresholds: JobLagThresholds,
 ): JobOperationalAlert[] {
   const alerts: JobOperationalAlert[] = [];
-  if (
-    summary.oldestQueuedAgeSeconds !== undefined &&
-    summary.oldestQueuedJobId !== undefined
-  ) {
+  if (summary.oldestQueuedAgeSeconds !== undefined) {
     const severity = severityFor(
       summary.oldestQueuedAgeSeconds,
       thresholds.queuedWarningSeconds,
@@ -286,7 +309,9 @@ function alertsForType(
           severity === "critical"
             ? thresholds.queuedCriticalSeconds
             : thresholds.queuedWarningSeconds,
-        jobId: summary.oldestQueuedJobId,
+        ...(summary.oldestQueuedJobId === undefined
+          ? {}
+          : { jobId: summary.oldestQueuedJobId }),
       });
     }
   }
@@ -354,6 +379,27 @@ function alertsForType(
     });
   }
   return alerts;
+}
+
+function fileLifecycleTypeSummary(
+  summary: Awaited<ReturnType<RomeoRepository["getFileLifecycleQueueSummary"]>>,
+  generatedAt: string,
+): BackgroundJobTypeSummary {
+  const oldestQueuedAgeSeconds =
+    summary.oldestQueuedAt === undefined
+      ? undefined
+      : ageSecondsBetween(Date.parse(generatedAt), summary.oldestQueuedAt);
+  return {
+    type: "file.lifecycle",
+    total: summary.queued + summary.deadLettered,
+    queued: summary.queued,
+    running: 0,
+    completed: 0,
+    failed: summary.deadLettered,
+    deadLettered: summary.deadLettered,
+    recentFailed: 0,
+    ...(oldestQueuedAgeSeconds === undefined ? {} : { oldestQueuedAgeSeconds }),
+  };
 }
 
 function isDeadLettered(job: BackgroundJob): boolean {

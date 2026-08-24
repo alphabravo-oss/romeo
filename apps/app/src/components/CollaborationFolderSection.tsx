@@ -1,7 +1,10 @@
 import { Button } from "@romeo/ui";
 import type { UseQueryResult } from "@tanstack/react-query";
 
-import type { WorkspaceFolder, WorkspaceFolderItem } from "../features";
+import type {
+  WorkspaceFolder,
+  WorkspaceFolderItem,
+} from "../features/collaboration";
 import type { Agent } from "../features/types";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { AddButton } from "./AddButton";

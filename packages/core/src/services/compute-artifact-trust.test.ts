@@ -9,7 +9,18 @@ import {
   evaluateSandboxPosture,
   recordComputeProvenance,
   safeArtifactPreview,
+  type ComputeTrustDecision,
+  type ComputeTrustDenial,
 } from "./compute-artifact-trust";
+
+function deniedCode(
+  decision: ComputeTrustDecision<object>,
+): ComputeTrustDenial {
+  if (decision.outcome !== "denied") {
+    throw new Error(`expected denied, got ${JSON.stringify(decision)}`);
+  }
+  return decision.code;
+}
 
 const digest = `sha256:${"ab".repeat(32)}`;
 const other = `sha256:${"cd".repeat(32)}`;
@@ -53,47 +64,66 @@ describe("compute sandbox posture", () => {
 
   it("fails closed for root, writable root, privilege escalation, missing isolators, or shared tmp", () => {
     expect(
-      evaluateSandboxPosture({ ...hardenedSandbox, nonRoot: false }).code,
+      deniedCode(
+        evaluateSandboxPosture({ ...hardenedSandbox, nonRoot: false }),
+      ),
     ).toBe("compute_sandbox_posture_denied");
     expect(
-      evaluateSandboxPosture({ ...hardenedSandbox, rootReadOnly: false }).code,
+      deniedCode(
+        evaluateSandboxPosture({ ...hardenedSandbox, rootReadOnly: false }),
+      ),
     ).toBe("compute_sandbox_posture_denied");
     expect(
-      evaluateSandboxPosture({
-        ...hardenedSandbox,
-        allowPrivilegeEscalation: true,
-      }).code,
+      deniedCode(
+        evaluateSandboxPosture({
+          ...hardenedSandbox,
+          allowPrivilegeEscalation: true,
+        }),
+      ),
     ).toBe("compute_sandbox_posture_denied");
     expect(
-      evaluateSandboxPosture({ ...hardenedSandbox, seccomp: false }).code,
+      deniedCode(
+        evaluateSandboxPosture({ ...hardenedSandbox, seccomp: false }),
+      ),
     ).toBe("compute_sandbox_posture_denied");
     expect(
-      evaluateSandboxPosture({ ...hardenedSandbox, apparmor: false }).code,
+      deniedCode(
+        evaluateSandboxPosture({ ...hardenedSandbox, apparmor: false }),
+      ),
     ).toBe("compute_sandbox_posture_denied");
     expect(
-      evaluateSandboxPosture({
-        ...hardenedSandbox,
-        capabilities: ["NET_ADMIN"],
-      }).code,
+      deniedCode(
+        evaluateSandboxPosture({
+          ...hardenedSandbox,
+          capabilities: ["NET_ADMIN"],
+        }),
+      ),
     ).toBe("compute_sandbox_posture_denied");
     expect(
-      evaluateSandboxPosture({ ...hardenedSandbox, jobScopedTmp: false }).code,
+      deniedCode(
+        evaluateSandboxPosture({ ...hardenedSandbox, jobScopedTmp: false }),
+      ),
     ).toBe("compute_sandbox_posture_denied");
     expect(
-      evaluateSandboxPosture({
-        ...hardenedSandbox,
-        teardown: "best_effort",
-      }).code,
+      deniedCode(
+        evaluateSandboxPosture({
+          ...hardenedSandbox,
+          teardown: "best_effort",
+        }),
+      ),
     ).toBe("compute_sandbox_posture_denied");
     expect(
-      evaluateSandboxPosture({ ...hardenedSandbox, hostNamespaces: true })
-        .code,
+      deniedCode(
+        evaluateSandboxPosture({ ...hardenedSandbox, hostNamespaces: true }),
+      ),
     ).toBe("compute_sandbox_posture_denied");
     expect(
-      evaluateSandboxPosture({ ...hardenedSandbox, privileged: true }).code,
+      deniedCode(
+        evaluateSandboxPosture({ ...hardenedSandbox, privileged: true }),
+      ),
     ).toBe("compute_sandbox_posture_denied");
     expect(
-      evaluateSandboxPosture({ ...hardenedSandbox, pidLimit: 0 }).code,
+      deniedCode(evaluateSandboxPosture({ ...hardenedSandbox, pidLimit: 0 })),
     ).toBe("compute_sandbox_posture_denied");
   });
 });
@@ -111,34 +141,40 @@ describe("compute package policy", () => {
       }),
     ).toEqual({ outcome: "accepted" });
     expect(
-      authorizeRuntimeImage({
-        allowlistedDigests: [digest],
-        approvedOfflineMirror: false,
-        imageDigest: "python:latest",
-        mutableTag: true,
-        publicPackageInstall: false,
-        signed: false,
-      }).code,
+      deniedCode(
+        authorizeRuntimeImage({
+          allowlistedDigests: [digest],
+          approvedOfflineMirror: false,
+          imageDigest: "python:latest",
+          mutableTag: true,
+          publicPackageInstall: false,
+          signed: false,
+        }),
+      ),
     ).toBe("compute_runtime_image_unverified");
     expect(
-      authorizeRuntimeImage({
-        allowlistedDigests: [other],
-        approvedOfflineMirror: false,
-        imageDigest: digest,
-        mutableTag: false,
-        publicPackageInstall: false,
-        signed: true,
-      }).code,
+      deniedCode(
+        authorizeRuntimeImage({
+          allowlistedDigests: [other],
+          approvedOfflineMirror: false,
+          imageDigest: digest,
+          mutableTag: false,
+          publicPackageInstall: false,
+          signed: true,
+        }),
+      ),
     ).toBe("compute_runtime_image_unverified");
     expect(
-      authorizeRuntimeImage({
-        allowlistedDigests: [digest],
-        approvedOfflineMirror: false,
-        imageDigest: digest,
-        mutableTag: false,
-        publicPackageInstall: true,
-        signed: true,
-      }).code,
+      deniedCode(
+        authorizeRuntimeImage({
+          allowlistedDigests: [digest],
+          approvedOfflineMirror: false,
+          imageDigest: digest,
+          mutableTag: false,
+          publicPackageInstall: true,
+          signed: true,
+        }),
+      ),
     ).toBe("compute_public_package_install_denied");
     expect(
       authorizeRuntimeImage({
@@ -159,40 +195,53 @@ describe("compute artifact intake", () => {
       outcome: "accepted",
     });
     expect(
-      admitComputeArtifact({
-        ...cleanArtifact,
-        outputPath: "../etc/passwd",
-      }).code,
+      deniedCode(
+        admitComputeArtifact({
+          ...cleanArtifact,
+          outputPath: "../etc/passwd",
+        }),
+      ),
     ).toBe("compute_artifact_intake_denied");
     expect(
-      admitComputeArtifact({ ...cleanArtifact, outputPath: "/tmp/out.csv" })
-        .code,
+      deniedCode(
+        admitComputeArtifact({ ...cleanArtifact, outputPath: "/tmp/out.csv" }),
+      ),
     ).toBe("compute_artifact_intake_denied");
     expect(
-      admitComputeArtifact({ ...cleanArtifact, count: 64 }).code,
+      deniedCode(admitComputeArtifact({ ...cleanArtifact, count: 64 })),
     ).toBe("compute_artifact_intake_denied");
     expect(
-      admitComputeArtifact({
-        ...cleanArtifact,
-        archiveExpansionBytes: 20_000,
-        sizeBytes: 1_024,
-      }).code,
+      deniedCode(
+        admitComputeArtifact({
+          ...cleanArtifact,
+          archiveExpansionBytes: 20_000,
+          sizeBytes: 1_024,
+        }),
+      ),
     ).toBe("compute_artifact_intake_denied");
     expect(
-      admitComputeArtifact({ ...cleanArtifact, mediaType: "application/x-elf" })
-        .code,
+      deniedCode(
+        admitComputeArtifact({
+          ...cleanArtifact,
+          mediaType: "application/x-elf",
+        }),
+      ),
     ).toBe("compute_artifact_intake_denied");
     expect(
-      admitComputeArtifact({ ...cleanArtifact, malware: "dirty" }).code,
+      deniedCode(admitComputeArtifact({ ...cleanArtifact, malware: "dirty" })),
     ).toBe("compute_artifact_intake_denied");
     expect(
-      admitComputeArtifact({ ...cleanArtifact, malware: "unavailable" }).code,
+      deniedCode(
+        admitComputeArtifact({ ...cleanArtifact, malware: "unavailable" }),
+      ),
     ).toBe("compute_artifact_intake_denied");
     expect(
-      admitComputeArtifact({ ...cleanArtifact, dlp: "block" }).code,
+      deniedCode(admitComputeArtifact({ ...cleanArtifact, dlp: "block" })),
     ).toBe("compute_artifact_intake_denied");
     expect(
-      admitComputeArtifact({ ...cleanArtifact, sha256: "not-a-digest" }).code,
+      deniedCode(
+        admitComputeArtifact({ ...cleanArtifact, sha256: "not-a-digest" }),
+      ),
     ).toBe("compute_artifact_intake_denied");
   });
 });
@@ -217,29 +266,33 @@ describe("compute provenance and versions", () => {
       runtimeDigest: digest,
     });
     expect(
-      recordComputeProvenance({
-        codeHash: digest,
-        dependencyManifest: [],
-        initiatingRunId: "run_1",
-        inputHashes: [],
-        outputHash: digest,
-        policyVersion: "compute-policy.v1",
-        runtimeDigest: digest,
-        transformations: [],
-      }).code,
+      deniedCode(
+        recordComputeProvenance({
+          codeHash: digest,
+          dependencyManifest: [],
+          initiatingRunId: "run_1",
+          inputHashes: [],
+          outputHash: digest,
+          policyVersion: "compute-policy.v1",
+          runtimeDigest: digest,
+          transformations: [],
+        }),
+      ),
     ).toBe("compute_provenance_incomplete");
     expect(
-      recordComputeProvenance({
-        codeHash: "missing",
-        dependencyManifest: [],
-        initiatingModelId: "model_analyst",
-        initiatingRunId: "run_1",
-        inputHashes: [],
-        outputHash: digest,
-        policyVersion: "compute-policy.v1",
-        runtimeDigest: digest,
-        transformations: [],
-      }).code,
+      deniedCode(
+        recordComputeProvenance({
+          codeHash: "missing",
+          dependencyManifest: [],
+          initiatingModelId: "model_analyst",
+          initiatingRunId: "run_1",
+          inputHashes: [],
+          outputHash: digest,
+          policyVersion: "compute-policy.v1",
+          runtimeDigest: digest,
+          transformations: [],
+        }),
+      ),
     ).toBe("compute_provenance_incomplete");
   });
 
@@ -253,12 +306,14 @@ describe("compute provenance and versions", () => {
       }),
     ).toEqual({ outcome: "accepted", currentVersion: 3, version: 3 });
     expect(
-      createArtifactVersion({
-        artifactId: "art_1",
-        currentVersion: 2,
-        nextContentHash: other,
-        overwriteRequested: true,
-      }).code,
+      deniedCode(
+        createArtifactVersion({
+          artifactId: "art_1",
+          currentVersion: 2,
+          nextContentHash: other,
+          overwriteRequested: true,
+        }),
+      ),
     ).toBe("compute_artifact_version_immutable");
   });
 });
@@ -280,44 +335,52 @@ describe("compute artifact preview and lifecycle", () => {
       sandbox: false,
     });
     expect(
-      safeArtifactPreview({
-        contentDisposition: "attachment",
-        filename: "report.pdf",
-        htmlSameOrigin: false,
-        htmlSandbox: "",
-        mediaType: "application/pdf",
-        previewer: "browser_native",
-      }).code,
+      deniedCode(
+        safeArtifactPreview({
+          contentDisposition: "attachment",
+          filename: "report.pdf",
+          htmlSameOrigin: false,
+          htmlSandbox: "",
+          mediaType: "application/pdf",
+          previewer: "browser_native",
+        }),
+      ),
     ).toBe("compute_artifact_preview_denied");
     expect(
-      safeArtifactPreview({
-        contentDisposition: "attachment",
-        filename: "chart.html",
-        htmlSameOrigin: true,
-        htmlSandbox: "allow-scripts allow-same-origin",
-        mediaType: "text/html",
-        previewer: "browser_native",
-      }).code,
+      deniedCode(
+        safeArtifactPreview({
+          contentDisposition: "attachment",
+          filename: "chart.html",
+          htmlSameOrigin: true,
+          htmlSandbox: "allow-scripts allow-same-origin",
+          mediaType: "text/html",
+          previewer: "browser_native",
+        }),
+      ),
     ).toBe("compute_artifact_preview_denied");
     expect(
-      safeArtifactPreview({
-        contentDisposition: "inline",
-        filename: "chart.html",
-        htmlSameOrigin: false,
-        htmlSandbox: "allow-scripts",
-        mediaType: "text/html",
-        previewer: "browser_native",
-      }).code,
+      deniedCode(
+        safeArtifactPreview({
+          contentDisposition: "inline",
+          filename: "chart.html",
+          htmlSameOrigin: false,
+          htmlSandbox: "allow-scripts",
+          mediaType: "text/html",
+          previewer: "browser_native",
+        }),
+      ),
     ).toBe("compute_artifact_preview_denied");
     expect(
-      safeArtifactPreview({
-        contentDisposition: "attachment",
-        filename: "../secret.html",
-        htmlSameOrigin: false,
-        htmlSandbox: "allow-scripts",
-        mediaType: "text/html",
-        previewer: "browser_native",
-      }).code,
+      deniedCode(
+        safeArtifactPreview({
+          contentDisposition: "attachment",
+          filename: "../secret.html",
+          htmlSameOrigin: false,
+          htmlSandbox: "allow-scripts",
+          mediaType: "text/html",
+          previewer: "browser_native",
+        }),
+      ),
     ).toBe("compute_artifact_preview_denied");
     expect(
       safeArtifactPreview({
@@ -333,53 +396,61 @@ describe("compute artifact preview and lifecycle", () => {
 
   it("blocks delete/shred on hold or retention and requires dual control for shred/rotate", () => {
     expect(
-      authorizeArtifactLifecycle({
-        action: "delete",
-        backupChecked: true,
-        dualControl: true,
-        legalHold: true,
-        now: "2026-08-14T12:00:00.000Z",
-        orphanedStaging: false,
-        quotaBytes: 100,
-        usedBytes: 1,
-      }).code,
+      deniedCode(
+        authorizeArtifactLifecycle({
+          action: "delete",
+          backupChecked: true,
+          dualControl: true,
+          legalHold: true,
+          now: "2026-08-14T12:00:00.000Z",
+          orphanedStaging: false,
+          quotaBytes: 100,
+          usedBytes: 1,
+        }),
+      ),
     ).toBe("data_deletion_legal_hold");
     expect(
-      authorizeArtifactLifecycle({
-        action: "delete",
-        backupChecked: true,
-        dualControl: true,
-        legalHold: false,
-        now: "2026-08-14T12:00:00.000Z",
-        orphanedStaging: false,
-        quotaBytes: 100,
-        retentionUntil: "2026-12-01T00:00:00.000Z",
-        usedBytes: 1,
-      }).code,
+      deniedCode(
+        authorizeArtifactLifecycle({
+          action: "delete",
+          backupChecked: true,
+          dualControl: true,
+          legalHold: false,
+          now: "2026-08-14T12:00:00.000Z",
+          orphanedStaging: false,
+          quotaBytes: 100,
+          retentionUntil: "2026-12-01T00:00:00.000Z",
+          usedBytes: 1,
+        }),
+      ),
     ).toBe("compute_artifact_retention_active");
     expect(
-      authorizeArtifactLifecycle({
-        action: "shred",
-        backupChecked: false,
-        dualControl: true,
-        legalHold: false,
-        now: "2026-08-14T12:00:00.000Z",
-        orphanedStaging: false,
-        quotaBytes: 100,
-        usedBytes: 1,
-      }).code,
+      deniedCode(
+        authorizeArtifactLifecycle({
+          action: "shred",
+          backupChecked: false,
+          dualControl: true,
+          legalHold: false,
+          now: "2026-08-14T12:00:00.000Z",
+          orphanedStaging: false,
+          quotaBytes: 100,
+          usedBytes: 1,
+        }),
+      ),
     ).toBe("policy_bundle_approval_required");
     expect(
-      authorizeArtifactLifecycle({
-        action: "quota",
-        backupChecked: true,
-        dualControl: true,
-        legalHold: false,
-        now: "2026-08-14T12:00:00.000Z",
-        orphanedStaging: false,
-        quotaBytes: 10,
-        usedBytes: 11,
-      }).code,
+      deniedCode(
+        authorizeArtifactLifecycle({
+          action: "quota",
+          backupChecked: true,
+          dualControl: true,
+          legalHold: false,
+          now: "2026-08-14T12:00:00.000Z",
+          orphanedStaging: false,
+          quotaBytes: 10,
+          usedBytes: 11,
+        }),
+      ),
     ).toBe("compute_artifact_quota_exceeded");
     expect(
       authorizeArtifactLifecycle({

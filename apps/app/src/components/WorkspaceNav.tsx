@@ -4,14 +4,14 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   collaborationListFolderItemsBatchOptions,
   folderItemGroupsById,
-  chatSearchQueryOptions,
   chatTagsQueryOptions,
   chatsByTagQueryOptions,
   favoritesQueryOptions,
   folderItemsQueryOptions,
   foldersQueryOptions,
   shouldLoadFolderItemsOverflow,
-} from "../features";
+} from "../features/collaboration";
+import { chatSearchQueryOptions } from "../features/chats";
 import {
   addFolderItemMutationOptions,
   deleteFavoriteMutationOptions,

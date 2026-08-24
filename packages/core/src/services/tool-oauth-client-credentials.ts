@@ -2,7 +2,10 @@ import * as oauth from "oauth4webapi";
 
 import type { ToolConnector } from "../domain/entities";
 import { ApiError } from "../errors";
+import type { WebsiteConnectorHostLookup } from "./data-connector-network-policy";
+import type { DnsPinnedFetch } from "./dns-pinned-fetch";
 import type { SecretResolver } from "./secret-resolver";
+import { SecretBearingEgressClient } from "./secret-bearing-egress";
 
 const maxTokenResponseBytes = 16 * 1024;
 const scopePattern = /^[A-Za-z0-9_:./-]{1,120}$/u;
@@ -14,7 +17,9 @@ export type OAuthClientAuthMethod =
 export interface OAuthClientCredentialsTokenInput {
   connector: ToolConnector;
   fetchImpl: typeof fetch;
+  hostLookup?: WebsiteConnectorHostLookup;
   maxBytes: number;
+  pinnedFetchImpl?: DnsPinnedFetch;
   secretResolver: SecretResolver;
   timeoutMs: number;
 }
@@ -44,6 +49,16 @@ export async function resolveOAuthClientCredentialsAccessToken(
     authMethod === "client_secret_post"
       ? oauth.ClientSecretPost(credentials.clientSecret)
       : oauth.ClientSecretBasic(credentials.clientSecret);
+  const tokenFetch = new SecretBearingEgressClient({
+    allowedUrls: [tokenUrl.toString()],
+    fetchImpl: input.fetchImpl,
+    ...(input.hostLookup === undefined ? {} : { hostLookup: input.hostLookup }),
+    maxResponseBytes: Math.min(input.maxBytes, maxTokenResponseBytes),
+    ...(input.pinnedFetchImpl === undefined
+      ? {}
+      : { pinnedFetchImpl: input.pinnedFetchImpl }),
+    timeoutMs: input.timeoutMs,
+  }).fetch;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
@@ -54,10 +69,7 @@ export async function resolveOAuthClientCredentialsAccessToken(
       clientAuthentication,
       scopes.length === 0 ? {} : { scope: scopes.join(" ") },
       {
-        [oauth.customFetch]: boundedOAuthFetch(
-          input.fetchImpl,
-          Math.min(input.maxBytes, maxTokenResponseBytes),
-        ),
+        [oauth.customFetch]: tokenFetch,
         signal: controller.signal,
       },
     );
@@ -163,14 +175,9 @@ function parseOAuthTokenUrl(value: string): URL {
     );
   }
   if (parsed.protocol === "https:") return parsed;
-  if (
-    parsed.protocol === "http:" &&
-    ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)
-  )
-    return parsed;
   throw new ApiError(
     "invalid_tool_oauth_config",
-    "OAuth token URL must use HTTPS outside localhost.",
+    "OAuth token URL must use HTTPS.",
     400,
   );
 }
@@ -264,62 +271,6 @@ function parseOAuthSecret(value: string): {
     );
   }
   return { clientId, clientSecret };
-}
-
-function boundedOAuthFetch(
-  fetchImpl: typeof fetch,
-  maxBytes: number,
-): typeof fetch {
-  return async (resource, init) => {
-    const response = await fetchImpl(resource, { ...init, redirect: "error" });
-    const text = await readBoundedText(response, maxBytes);
-    return new Response(text, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    });
-  };
-}
-
-async function readBoundedText(
-  response: Response,
-  maxBytes: number,
-): Promise<string> {
-  if (response.body === null) return "";
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let bytes = 0;
-  try {
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      bytes += chunk.value.byteLength;
-      if (bytes > maxBytes) {
-        await reader.cancel();
-        throw new ApiError(
-          "tool_operation_oauth_response_too_large",
-          "OAuth token response exceeded the configured byte limit.",
-          502,
-        );
-      }
-      chunks.push(chunk.value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  return new TextDecoder().decode(concatBytes(chunks));
-}
-
-function concatBytes(chunks: Uint8Array[]): Uint8Array {
-  const output = new Uint8Array(
-    chunks.reduce((total, chunk) => total + chunk.byteLength, 0),
-  );
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return output;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

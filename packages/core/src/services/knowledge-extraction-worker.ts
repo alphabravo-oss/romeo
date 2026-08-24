@@ -9,6 +9,7 @@ import type {
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
+import { createId } from "../ids";
 import {
   completeBackgroundJob,
   failBackgroundJob,
@@ -19,17 +20,22 @@ import {
   canIngestInlineText,
   extractKnowledgeSourceBytes,
 } from "./knowledge-ingestion";
-import { indexKnowledgeSource } from "./knowledge-source-indexing";
+import {
+  createChunksForSource,
+  hashKnowledgeContent,
+} from "./knowledge-ingestion";
 import { recordSubjectUsage } from "./record-usage";
 import { emitWebhookEvent } from "./webhook-events";
 import type { WebhookEmitter } from "./webhook-service";
 import { readKnowledgeObject } from "./knowledge-object-read";
+import { startWorkLeaseHeartbeat } from "./work-lease-heartbeat";
 
 export interface KnowledgeBinaryExtractor {
   extract(input: {
     bytes: Uint8Array;
     fileName: string;
     mimeType: string;
+    signal?: AbortSignal;
   }): Promise<ExtractedKnowledgeText>;
 }
 
@@ -81,17 +87,39 @@ export async function extractUploadedKnowledgeSource(input: {
     scope: "knowledge:write",
     permission: "write",
   });
-  const source = (
+  const pendingSource = (
     await input.repository.listKnowledgeSources(knowledgeBase.id)
   ).find((item) => item.id === input.sourceId);
-  if (!source) throw notFound("Knowledge source");
-  if (source.objectKey === undefined)
+  if (!pendingSource) throw notFound("Knowledge source");
+  if (pendingSource.objectKey === undefined)
     throw new ApiError(
       "upload_object_missing",
       "Knowledge source does not have an uploaded object key.",
       409,
     );
 
+  const claimedAt = new Date().toISOString();
+  const leaseToken = createId("knowledge_extraction_lease");
+  const source = await input.repository.claimKnowledgeSourceExtraction({
+    knowledgeBaseId: knowledgeBase.id,
+    leaseExpiresAt: new Date(Date.parse(claimedAt) + 300_000).toISOString(),
+    leaseOwner: input.subject.id,
+    leaseToken,
+    now: claimedAt,
+    sourceId: pendingSource.id,
+  });
+  if (source?.extractionLease === undefined)
+    throw new ApiError(
+      "knowledge_extraction_lease_unavailable",
+      "The knowledge source is already being extracted.",
+      409,
+    );
+  if (source.objectKey === undefined)
+    throw new ApiError(
+      "upload_object_missing",
+      "Knowledge source does not have an uploaded object key.",
+      409,
+    );
   const job = await startBackgroundJob(input.repository, {
     orgId: knowledgeBase.orgId,
     workspaceId: knowledgeBase.workspaceId,
@@ -102,6 +130,23 @@ export async function extractUploadedKnowledgeSource(input: {
       mimeType: source.mimeType,
       sizeBytes: source.sizeBytes,
     },
+  });
+  const heartbeat = startWorkLeaseHeartbeat({
+    leaseDurationMs: 300_000,
+    lostError: () =>
+      new ApiError(
+        "knowledge_extraction_lease_lost",
+        "The knowledge extraction lease was lost.",
+        409,
+      ),
+    renew: async (lease) =>
+      (await input.repository.renewKnowledgeSourceExtractionLease({
+        sourceId: source.id,
+        fencingToken: source.extractionLease!.fencingToken,
+        leaseOwner: source.extractionLease!.owner,
+        leaseToken,
+        ...lease,
+      })) !== undefined,
   });
 
   try {
@@ -114,15 +159,37 @@ export async function extractUploadedKnowledgeSource(input: {
       source,
       bytes,
     );
+    const chunks = createChunksForSource(
+      source,
+      extracted.content,
+      extracted.metadata,
+    );
+    const completedAt = new Date().toISOString();
+    const contentHash = await hashKnowledgeContent(extracted.content);
+    await heartbeat.stop();
     const result = await input.repository.transaction(async (repository) => {
-      const indexed = await indexKnowledgeSource(
-        repository,
-        { ...source, sizeBytes: bytes.byteLength },
-        extracted.content,
-        {
-          metadata: extracted.metadata,
+      const indexed = await repository.finishKnowledgeSourceExtraction({
+        chunks,
+        fencingToken: source.extractionLease!.fencingToken,
+        leaseOwner: source.extractionLease!.owner,
+        leaseToken: source.extractionLease!.token,
+        now: completedAt,
+        source: {
+          ...source,
+          chunkCount: chunks.length,
+          contentHash,
+          indexedAt: completedAt,
+          sizeBytes: bytes.byteLength,
+          status: chunks.length > 0 ? "indexed" : "failed",
+          updatedAt: completedAt,
         },
-      );
+      });
+      if (indexed === undefined)
+        throw new ApiError(
+          "knowledge_extraction_lease_lost",
+          "The knowledge extraction lease was lost before completion.",
+          409,
+        );
       await recordExtractionUsage(
         repository,
         input.subject,
@@ -144,10 +211,15 @@ export async function extractUploadedKnowledgeSource(input: {
     );
     return result;
   } catch (error) {
-    await input.repository.updateKnowledgeSource({
-      ...source,
-      status: "failed",
-      updatedAt: new Date().toISOString(),
+    await heartbeat.stop({ requireOwned: false });
+    const failedAt = new Date().toISOString();
+    await input.repository.finishKnowledgeSourceExtraction({
+      chunks: [],
+      fencingToken: source.extractionLease.fencingToken,
+      leaseOwner: source.extractionLease.owner,
+      leaseToken: source.extractionLease.token,
+      now: failedAt,
+      source: { ...source, status: "failed", updatedAt: failedAt },
     });
     await failBackgroundJob(
       input.repository,

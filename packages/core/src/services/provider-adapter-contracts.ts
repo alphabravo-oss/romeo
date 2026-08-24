@@ -21,7 +21,10 @@ export const PROVIDER_AUTH_STRATEGIES = [
 ] as const;
 export type ProviderAuthStrategy = (typeof PROVIDER_AUTH_STRATEGIES)[number];
 
-const allowedAuth: Record<FirstClassProviderTarget, readonly ProviderAuthStrategy[]> = {
+const allowedAuth: Record<
+  FirstClassProviderTarget,
+  readonly ProviderAuthStrategy[]
+> = {
   openai: ["api_key"],
   "azure-openai": ["api_key", "azure_entra", "workload_identity"],
   anthropic: ["api_key"],

@@ -13,8 +13,11 @@ import {
   listCapabilityDefinitions,
 } from "./services/capability-definition-registry";
 import { CapabilityService } from "./services/capability-resolver";
+import { authorizeDataExport } from "./services/capability-consumer-enforcement";
+import { GovernanceService } from "./services/governance-service";
 import { snapshotAgentCapabilityDefaults } from "./services/agent-version-capability-defaults";
 import { VoiceService } from "./services/voice-service";
+import { syncVoiceCatalog } from "./services/voice-catalog-sync";
 import { WebSearchService } from "./services/web-search-service";
 
 describe("capability policy", () => {
@@ -818,6 +821,114 @@ describe("capability policy", () => {
     expect(provider.listVoices).not.toHaveBeenCalled();
     expect(provider.transcribe).not.toHaveBeenCalled();
     expect(provider.synthesize).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when a direct capability consumer has no authority", async () => {
+    const listVoices = vi.fn(async () => []);
+    await expect(
+      syncVoiceCatalog({
+        capabilities: undefined as never,
+        repository: new InMemoryRomeoRepository(),
+        subject: seededSubject,
+        voiceProvider: {
+          listVoices,
+          synthesize: vi.fn(),
+          transcribe: vi.fn(),
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "capability_authority_unavailable",
+      status: 503,
+    });
+    expect(listVoices).not.toHaveBeenCalled();
+    await expect(
+      authorizeDataExport(undefined, seededSubject),
+    ).rejects.toMatchObject({
+      code: "capability_authority_unavailable",
+      status: 503,
+    });
+  });
+
+  it("enforces data-export capability policy at every governance egress", async () => {
+    const repository = new InMemoryRomeoRepository();
+    await repository.replaceCapabilityAssignment({
+      assignment: {
+        id: "assignment_data_export_disabled",
+        orgId: seededSubject.orgId,
+        scopeType: "organization",
+        scopeId: seededSubject.orgId,
+        capabilityId: "data_export",
+        state: "disabled",
+        configuration: {},
+        actorId: seededSubject.id,
+        reason: "Disable all governed exports",
+        effectiveAt: "2026-08-23T12:00:00.000Z",
+        createdAt: "2026-08-23T12:00:00.000Z",
+      },
+    });
+    const capabilities = new CapabilityService(repository);
+    const governance = new GovernanceService(
+      repository,
+      new MemoryObjectStore(),
+      { capabilities },
+    );
+    const governanceWithDefaultAuthority = new GovernanceService(
+      repository,
+      new MemoryObjectStore(),
+    );
+    const attempts = [
+      () =>
+        governance.previewDataExport({
+          subject: seededSubject,
+          request: { scope: "org" },
+        }),
+      () =>
+        governance.executeDataExport({
+          subject: seededSubject,
+          request: { scope: "org" },
+        }),
+      () =>
+        governance.createDataExportPackage({
+          subject: seededSubject,
+          request: { scope: "org" },
+        }),
+      () =>
+        governance.readDataExportPackage({
+          subject: seededSubject,
+          packageId: "export_pkg_blocked",
+        }),
+      () => governance.listDataExportPackages(seededSubject),
+      () =>
+        governance.deleteDataExportPackage({
+          subject: seededSubject,
+          packageId: "export_pkg_blocked",
+          confirmPackageId: "export_pkg_blocked",
+        }),
+      () => governance.accessReviewCsv(seededSubject),
+      () => governance.accessReviewReportCsv(seededSubject),
+      () => governance.complianceReportCsv(seededSubject),
+    ];
+
+    for (const attempt of attempts) {
+      await expect(attempt()).rejects.toMatchObject({
+        code: "capability_not_allowed",
+        status: 403,
+      });
+    }
+    await expect(
+      governanceWithDefaultAuthority.previewDataExport({
+        subject: seededSubject,
+        request: { scope: "org" },
+      }),
+    ).rejects.toMatchObject({
+      code: "capability_not_allowed",
+      status: 403,
+    });
+    expect(
+      (await repository.listAuditLogs(seededSubject.orgId)).filter((log) =>
+        log.action.startsWith("governance.data_export"),
+      ),
+    ).toEqual([]);
   });
 
   it("rejects unsupported workspace assignments for organization-wide capabilities", async () => {

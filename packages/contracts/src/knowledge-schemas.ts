@@ -31,6 +31,18 @@ const fallbackReason = z.enum([
   "no_authorized_vector_hits",
   "no_visible_chunks",
 ]);
+const knowledgeSourceStatuses = [
+  "pending",
+  "extracting",
+  "indexed",
+  "failed",
+  "deletion_pending",
+] as const;
+export const KnowledgeSourceStatusSchema = z.string().openapi({
+  description:
+    "Knowledge extraction/indexing state. Clients must tolerate future states.",
+  "x-extensible-enum": knowledgeSourceStatuses,
+});
 
 export const KnowledgeBaseSchema = z
   .strictObject({
@@ -59,7 +71,7 @@ export const KnowledgeSourceSchema = z
     fileName: z.string().min(1),
     mimeType: z.string().min(1),
     sizeBytes: z.number().int().nonnegative(),
-    status: z.enum(["pending", "indexed", "failed"]),
+    status: KnowledgeSourceStatusSchema,
     objectKey: z.string().optional(),
     metadata: z.record(z.string(), z.unknown()),
     chunkCount: z.number().int().nonnegative().optional(),

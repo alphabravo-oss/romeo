@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import type { OverlayOpenerRef } from "@romeo/ui";
 
 import type { BaseModel, Provider } from "../features/types";
 import type { FileObject } from "../features/files";
@@ -33,6 +34,7 @@ export interface ChatComposerDialogsProps extends ChatComposerDialogState {
     size: ImageSize;
   }) => void;
   onKnowledgeBaseIdsChange: (knowledgeBaseIds: string[] | undefined) => void;
+  openerRef: OverlayOpenerRef;
   providers: Provider[];
   selectedModelId: string | undefined;
   workspaceId: string | undefined;

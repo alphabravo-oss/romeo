@@ -79,7 +79,8 @@ export async function materializeInlineAttachmentsAsFiles(input: {
         id: fileId,
         orgId: input.orgId,
         workspaceId: input.workspaceId,
-        ownerType: input.ownerType === "service_account" ? "service_account" : "user",
+        ownerType:
+          input.ownerType === "service_account" ? "service_account" : "user",
         ownerId: input.ownerId,
         fileName: normalized.fileName,
         mimeType: normalized.mimeType,

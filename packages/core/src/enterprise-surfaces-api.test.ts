@@ -6,7 +6,8 @@ import { testEnv } from "./test-support/env";
 
 describe("enterprise capability surfaces", () => {
   it("fails closed for uninstalled realtime, compute, and compare", async () => {
-    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository);
     const realtime = await api.request("/api/v1/realtime/sessions", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -76,7 +77,14 @@ describe("enterprise capability surfaces", () => {
     const trust = await api.request("/api/v1/admin/trust/posture");
     expect(trust.status).toBe(200);
     expect(await trust.json()).toMatchObject({
-      data: { syntheticGreen: false, keys: "not_configured" },
+      data: {
+        auditExport: {
+          customerSiem: { state: "not_configured" },
+          wormCompatible: { state: "not_configured" },
+        },
+        syntheticGreen: false,
+        keys: "not_configured",
+      },
     });
   });
 
@@ -104,7 +112,8 @@ describe("enterprise capability surfaces", () => {
   });
 
   it("previews remaining realtime, synthesis, ACL freshness, and crypto-shred contracts", async () => {
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, {
       env: testEnv(),
     });
     const adapter = await api.request("/api/v1/realtime/adapters/preview", {
@@ -112,20 +121,26 @@ describe("enterprise capability surfaces", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ nativeAvailable: false, pipelineAvailable: true }),
     });
-    expect(adapter.status).toBe(200);
+    expect(adapter.status).toBe(403);
     expect(await adapter.json()).toMatchObject({
-      data: { outcome: "accepted", adapter: "pipeline" },
+      error: { code: "capability_platform_disabled" },
     });
-    const synthesis = await api.request("/api/v1/run-groups/synthesis/preview", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        candidateIds: ["c1"],
-        candidateHashes: ["h1"],
-        providerAuthorized: false,
-      }),
+    const synthesis = await api.request(
+      "/api/v1/run-groups/synthesis/preview",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          candidateIds: ["c1"],
+          candidateHashes: ["h1"],
+          providerAuthorized: false,
+        }),
+      },
+    );
+    expect(synthesis.status).toBe(403);
+    expect(await synthesis.json()).toMatchObject({
+      error: { code: "capability_platform_disabled" },
     });
-    expect((await synthesis.json()).data.outcome).toBe("denied");
     const freshness = await api.request("/api/v1/knowledge/acl/freshness", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -147,16 +162,27 @@ describe("enterprise capability surfaces", () => {
         approverIds: ["user_reviewer"],
       }),
     });
+    expect(shred.status).toBe(403);
     expect(await shred.json()).toMatchObject({
-      data: { outcome: "accepted", externalCopiesClaimed: false },
+      error: { code: "capability_not_allowed" },
     });
 
+    await repository.createAuditLog({
+      action: "local_auth.login",
+      actorId: "user_dev_admin",
+      createdAt: "2026-08-14T12:00:00.000Z",
+      id: "audit_enterprise_trust_1",
+      metadata: {},
+      orgId: "org_default",
+      outcome: "success",
+      resourceId: "session_enterprise_trust_1",
+      resourceType: "session",
+    });
     const segment = await api.request("/api/v1/admin/trust/audit-segments", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        eventIds: ["audit_1", "audit_2"],
-        signingKeyVersion: "audit-signing.v1",
+        eventIds: ["caller_claim_is_ignored"],
       }),
     });
     expect(segment.status).toBe(200);
@@ -170,12 +196,11 @@ describe("enterprise capability surfaces", () => {
       body: JSON.stringify({
         attempt: 0,
         destination: "worm_compatible",
-        sealedAt: "2026-08-14T12:00:00.000Z",
         segmentHash: sealed.data.segmentHash,
       }),
     });
     expect(await siem.json()).toMatchObject({
-      data: { destination: "worm_compatible", state: "in_flight" },
+      data: { destination: "worm_compatible", state: "pending" },
     });
 
     const deniedGlass = await api.request("/api/v1/admin/trust/break-glass", {

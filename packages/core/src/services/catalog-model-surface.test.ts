@@ -1,11 +1,25 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  catalogProbeFreshness,
   catalogModelSurface,
   explainModelUnavailability,
 } from "./catalog-model-surface";
 
 describe("catalogModelSurface", () => {
+  it("evaluates probe freshness at deterministic boundaries", () => {
+    const now = Date.parse("2026-08-14T12:00:00.000Z");
+
+    expect(catalogProbeFreshness(undefined, now)).toBe("never");
+    expect(catalogProbeFreshness("not-a-date", now)).toBe("never");
+    expect(catalogProbeFreshness("2026-08-13T12:00:00.000Z", now)).toBe(
+      "fresh",
+    );
+    expect(catalogProbeFreshness("2026-08-13T11:59:59.999Z", now)).toBe(
+      "stale",
+    );
+  });
+
   it("labels native, emulated, and unsupported capabilities plus probe freshness", () => {
     const surface = catalogModelSurface({
       deploymentMode: "hosted-api",

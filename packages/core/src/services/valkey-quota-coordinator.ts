@@ -171,6 +171,10 @@ export class ValkeyQuotaCoordinator implements QuotaCoordinator {
     }
   }
 
+  close(): void {
+    this.client.close();
+  }
+
   private get configured(): boolean {
     return this.options.url.trim().length > 0;
   }

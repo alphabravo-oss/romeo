@@ -50,6 +50,7 @@ export const ContentPolicyApprovalSchema = z
     id: identifier,
     runId: identifier,
     decisionId: identifier,
+    policyVersionId: identifier,
     state: z.enum(["pending", "approved", "denied", "expired"]),
     expiresAt: z.iso.datetime(),
     createdAt: z.iso.datetime(),
@@ -124,7 +125,10 @@ export const createContentPolicyVersionRoute = createRoute({
   summary: "Create an immutable content-policy draft",
   request: { body: requestBody(CreateContentPolicyVersionSchema) },
   responses: {
-    200: jsonResponse("Content policy version", dataEnvelope(ContentPolicyVersionSchema)),
+    200: jsonResponse(
+      "Content policy version",
+      dataEnvelope(ContentPolicyVersionSchema),
+    ),
     ...standardErrorResponses,
   },
 });
@@ -140,7 +144,10 @@ export const dryRunContentPolicyVersionRoute = createRoute({
     body: requestBody(DryRunContentPolicyVersionSchema),
   },
   responses: {
-    200: jsonResponse("Content policy dry-run", dataEnvelope(ContentPolicyDryRunSchema)),
+    200: jsonResponse(
+      "Content policy dry-run",
+      dataEnvelope(ContentPolicyDryRunSchema),
+    ),
     ...standardErrorResponses,
   },
 });
@@ -153,7 +160,10 @@ export const publishContentPolicyVersionRoute = createRoute({
   summary: "Publish a staged or draft content-policy version",
   request: { params: z.strictObject({ versionId: identifier }) },
   responses: {
-    200: jsonResponse("Content policy version", dataEnvelope(ContentPolicyVersionSchema)),
+    200: jsonResponse(
+      "Content policy version",
+      dataEnvelope(ContentPolicyVersionSchema),
+    ),
     ...standardErrorResponses,
   },
 });
@@ -166,7 +176,10 @@ export const rollbackContentPolicyRoute = createRoute({
   summary: "Roll back to a previous published content-policy version",
   request: { body: requestBody(RollbackContentPolicySchema) },
   responses: {
-    200: jsonResponse("Content policy version", dataEnvelope(ContentPolicyVersionSchema)),
+    200: jsonResponse(
+      "Content policy version",
+      dataEnvelope(ContentPolicyVersionSchema),
+    ),
     ...standardErrorResponses,
   },
 });
@@ -206,7 +219,10 @@ export const requestContentPolicyApprovalRoute = createRoute({
   method: "post",
   path: "/api/v1/admin/content-policy/approvals",
   operationId: "contentPolicy.approvals.request",
-  summary: "Pause a run for a scoped, expiring, content-minimized approval",
+  summary: "Retired client-created content-policy approval request",
+  description:
+    "Deprecated and fail-closed. Content-policy approvals are created only by the governed run execution path and cannot be fabricated by API clients.",
+  deprecated: true,
   request: { body: requestBody(RequestContentPolicyApprovalSchema) },
   responses: {
     200: jsonResponse(

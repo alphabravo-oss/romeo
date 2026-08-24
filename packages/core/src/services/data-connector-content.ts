@@ -17,7 +17,7 @@ interface S3ConnectorConfig {
   maxItems: number;
   prefix: string;
   region: string;
-  secretRef?: string;
+  secretRef: string;
 }
 
 export function readS3Config(connector: DataConnector): S3ConnectorConfig {
@@ -32,15 +32,21 @@ export function readS3Config(connector: DataConnector): S3ConnectorConfig {
       "S3 connector requires bucket, prefix, and region.",
       400,
     );
+  if (typeof secretRef !== "string" || secretRef.trim().length === 0)
+    throw new ApiError(
+      "connector_s3_credentials_required",
+      "S3 connector requires a connector-specific secretRef.",
+      400,
+    );
   return {
     bucket,
     prefix,
     region,
+    secretRef,
     maxItems:
       typeof maxItems === "number" && Number.isInteger(maxItems)
         ? maxItems
         : 50,
-    ...(typeof secretRef === "string" ? { secretRef } : {}),
   };
 }
 

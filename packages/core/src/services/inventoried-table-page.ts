@@ -1,8 +1,5 @@
 import { ApiError } from "../errors";
-import {
-  InvalidPageCursorError,
-  type PageCursorCodec,
-} from "./page-cursor";
+import { InvalidPageCursorError, type PageCursorCodec } from "./page-cursor";
 
 export const inventoriedTableMaxLimit = 100;
 
@@ -141,9 +138,7 @@ export function pageInventoriedTable(input: {
 export function inventoriedTableCursorPosition(
   value: unknown,
 ): string | undefined {
-  return typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 300
+  return typeof value === "string" && value.length > 0 && value.length <= 300
     ? value
     : undefined;
 }
@@ -168,16 +163,14 @@ export function normalizeInventoriedTableQuery(
   ) {
     throw invalidInventoriedTableQuery();
   }
-  if (
-    selected !== undefined &&
-    !policy.sortFields.includes(selected.field)
-  ) {
+  if (selected !== undefined && !policy.sortFields.includes(selected.field)) {
     throw invalidInventoriedTableQuery();
   }
   const seen = new Set<string>();
   for (const filter of query.filters) {
-    if (seen.has(filter.field)) throw invalidInventoriedTableQuery();
-    seen.add(filter.field);
+    const identity = `${filter.field}\u0000${filter.operator}`;
+    if (seen.has(identity)) throw invalidInventoriedTableQuery();
+    seen.add(identity);
     const operators = policy.filters[filter.field];
     if (operators === undefined || !operators.includes(filter.operator)) {
       throw invalidInventoriedTableQuery();
@@ -241,21 +234,29 @@ function matchesFilter(
   const cell = row[filter.field];
   if (filter.operator === "eq") return cell === filter.value;
   if (filter.operator === "neq") return cell !== filter.value;
+  if (filter.operator === "gte") return compareCells(cell, filter.value) >= 0;
+  if (filter.operator === "gt") return compareCells(cell, filter.value) > 0;
+  if (filter.operator === "lte") return compareCells(cell, filter.value) <= 0;
+  if (filter.operator === "lt") return compareCells(cell, filter.value) < 0;
   if (filter.operator === "contains") {
     return (
       typeof filter.value === "string" &&
-      cellText(cell).toLocaleLowerCase().includes(filter.value.toLocaleLowerCase())
+      cellText(cell)
+        .toLocaleLowerCase()
+        .includes(filter.value.toLocaleLowerCase())
     );
   }
   if (filter.operator === "is_null") return cell === undefined || cell === null;
-  if (filter.operator === "not_null") return cell !== undefined && cell !== null;
+  if (filter.operator === "not_null")
+    return cell !== undefined && cell !== null;
   return false;
 }
 
 function rowStatus(row: InventoriedTableRow): string {
   if (typeof row.status === "string") return row.status;
   if (row.revokedAt !== undefined && row.revokedAt !== null) return "revoked";
-  if (row.disabledAt !== undefined && row.disabledAt !== null) return "disabled";
+  if (row.disabledAt !== undefined && row.disabledAt !== null)
+    return "disabled";
   return "active";
 }
 
@@ -279,9 +280,5 @@ function cellText(value: unknown): string {
 }
 
 function invalidInventoriedTableQuery(): ApiError {
-  return new ApiError(
-    "invalid_request",
-    "Table page query is invalid.",
-    400,
-  );
+  return new ApiError("invalid_request", "Table page query is invalid.", 400);
 }

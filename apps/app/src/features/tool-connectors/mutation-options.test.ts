@@ -111,11 +111,17 @@ describe("tool connector mutation policies", () => {
     const otherOperationKey = appQueryKeys.toolOperations("connector-2");
     const auditFirst = appQueryKeys.auditLogs({ limit: 25 });
     const auditNext = appQueryKeys.auditLogs({ cursor: "next", limit: 25 });
+    const connectorTableKey = tableKey("tool_connectors");
+    const operationTableKey = tableKey("tool_operations", "connector-1");
+    const otherOperationTableKey = tableKey("tool_operations", "connector-2");
     client.setQueryData(connectorKey, []);
     client.setQueryData(operationKey, []);
     client.setQueryData(otherOperationKey, []);
     client.setQueryData(auditFirst, []);
     client.setQueryData(auditNext, []);
+    client.setQueryData(connectorTableKey, { items: [] });
+    client.setQueryData(operationTableKey, { items: [] });
+    client.setQueryData(otherOperationTableKey, { items: [] });
     mutationMocks.importOpenApiTool.mockResolvedValueOnce({
       connector: connector(true),
       operations: [operation(true)],
@@ -134,6 +140,11 @@ describe("tool connector mutation policies", () => {
     expect(client.getQueryState(otherOperationKey)?.isInvalidated).toBe(false);
     expect(client.getQueryState(auditFirst)?.isInvalidated).toBe(true);
     expect(client.getQueryState(auditNext)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(connectorTableKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(operationTableKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(otherOperationTableKey)?.isInvalidated).toBe(
+      false,
+    );
   });
 
   it("rolls an optimistic operation toggle back after a conflict", async () => {
@@ -231,3 +242,16 @@ describe("tool connector mutation policies", () => {
     expect(mutationMocks.checkToolConnectorAuth).not.toHaveBeenCalled();
   });
 });
+
+function tableKey(
+  resource: "tool_connectors" | "tool_operations",
+  parentId?: string,
+) {
+  return appQueryKeys.tablePages({
+    filters: [],
+    limit: 25,
+    resource,
+    sort: [],
+    ...(parentId === undefined ? {} : { parentId }),
+  });
+}

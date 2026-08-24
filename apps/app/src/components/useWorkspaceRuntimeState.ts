@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { messageFeedbackQueryOptions } from "../features";
+import { messageFeedbackQueryOptions } from "../features/chats";
 import type { RunContextPreview } from "../features/chat";
 import { queuedTurnsQueryOptions, type QueuedChatTurn } from "../features/runs";
 import type { MessageFeedbackState } from "../features/types";
@@ -29,6 +29,7 @@ export function useWorkspaceRuntimeState(activeChatId: string | undefined) {
     isInspectingContext,
     messageFeedback: messageFeedbackQuery.data ?? noFeedback,
     queuedTurns: queuedTurnsQuery.data ?? noQueuedTurns,
+    queuedTurnsUpdatedAt: queuedTurnsQuery.dataUpdatedAt,
     setContextPreview,
     setContextPreviewError,
     setError,

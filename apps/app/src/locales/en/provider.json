@@ -14,8 +14,6 @@
   "catalogError": "Sync error",
   "catalogPending": "Pending",
   "catalogStale": "Stale",
-  "catalogSyncFailedEmpty": "The last catalog sync failed. Check the error above, then verify the connection or sync again.",
-  "catalogSyncPendingEmpty": "Automatic model discovery is pending. You can also sync now.",
   "chooseProviderPreset": "Choose a provider preset",
   "configure": "Configure",
   "configureConnection": "Configure connection",

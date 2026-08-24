@@ -2,7 +2,10 @@ import { Button, Select } from "@romeo/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { shareTargetsQueryOptions, type ShareTarget } from "../features";
+import {
+  shareTargetsQueryOptions,
+  type ShareTarget,
+} from "../features/collaboration";
 import type { AccessGrant, SharePrincipal } from "../features/access/api";
 import {
   grantResourceMutationOptions,
@@ -69,6 +72,7 @@ export function ResourceGrantEditor({
       <div className="cs-fields flex flex-wrap items-end gap-2">
         <div className="min-w-56 flex-1">
           <Select
+            aria-label={t("accessPrincipal")}
             name="access-principal"
             onValueChange={setTargetKey}
             options={targets.map((target) => ({

@@ -3,6 +3,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { assertNoSecretArgv, readSecretInput } from "./lib/secret-input.mjs";
+
 const defaultBaseUrl = "http://127.0.0.1:3000";
 const defaultTimeoutMs = 10_000;
 const providerSummaryPath = "/api/v1/providers/operational-summary";
@@ -118,8 +120,9 @@ export async function probeOperationalReadiness(
 }
 
 async function main() {
+  assertNoSecretArgv();
   const options = {
-    apiKey: argValue("--api-key"),
+    apiKey: readSecretInput({ environment: "ROMEO_API_KEY" }),
     baseUrl: argValue("--base-url"),
     fixtureFile: argValue("--fixture-file"),
     timeoutMs: optionalPositiveInteger(

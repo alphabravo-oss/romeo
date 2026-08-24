@@ -50,7 +50,13 @@ export function PersonalContentTable({
         header: t("expired"),
         cell: ({ row }) => (
           <StatusBadge tone={row.original.expired ? "warning" : "success"}>
-            {row.original.expired ? t("expired") : t("active")}
+            {!row.original.ready
+              ? row.original.lifecycleStatus === "failed"
+                ? t("failed")
+                : t("loading")
+              : row.original.expired
+                ? t("expired")
+                : t("active")}
           </StatusBadge>
         ),
       }),
@@ -65,7 +71,9 @@ export function PersonalContentTable({
           <div className="flex flex-wrap items-center gap-2">
             {kind === "memories" ? (
               <Switch
+                aria-label={`${t("enabled")}: ${row.original.title}`}
                 checked={row.original.enabled}
+                disabled={!row.original.ready}
                 label={t("enabled")}
                 onCheckedChange={() =>
                   void onPatch(row.original, {
@@ -75,6 +83,8 @@ export function PersonalContentTable({
               />
             ) : null}
             <Button
+              aria-label={`${row.original.pinned ? t("unpin") : t("pin")} ${row.original.title}`}
+              disabled={!row.original.ready}
               onClick={() =>
                 void onPatch(row.original, { pinned: !row.original.pinned })
               }
@@ -94,6 +104,8 @@ export function PersonalContentTable({
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-1">
             <Button
+              aria-label={`${t("edit")} ${row.original.title}`}
+              disabled={!row.original.ready}
               onClick={() => onEdit(row.original)}
               size="sm"
               type="button"
@@ -101,6 +113,7 @@ export function PersonalContentTable({
               {t("edit")}
             </Button>
             <Button
+              aria-label={`${t("delete")} ${row.original.title}`}
               onClick={() => void onRemove(row.original)}
               size="sm"
               type="button"

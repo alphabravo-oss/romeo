@@ -73,6 +73,49 @@ export function isBlockedNetworkAddress(value: string): boolean {
   return address.includes(":");
 }
 
+/** Matches a literal peer address against an operator-controlled CIDR list. */
+export function isAddressInNetworkCidrs(
+  value: string,
+  cidrs: readonly string[],
+): boolean {
+  const address = normalizeNetworkHost(value).split("%")[0] ?? "";
+  const family = isIP(address);
+  if (family !== 4 && family !== 6) return false;
+  return cidrs.some((cidr) => isAddressInNetworkCidr(address, family, cidr));
+}
+
+function isAddressInNetworkCidr(
+  address: string,
+  family: 4 | 6,
+  cidr: string,
+): boolean {
+  const separator = cidr.lastIndexOf("/");
+  if (separator <= 0) return false;
+  const network = cidr.slice(0, separator);
+  const networkFamily = isIP(network);
+  const prefix = Number(cidr.slice(separator + 1));
+  if (!Number.isInteger(prefix)) return false;
+  if (family === 4 && networkFamily === 4 && prefix >= 0 && prefix <= 32) {
+    return ipv4InCidr(ipv4Integer(address), ipv4Integer(network), prefix);
+  }
+  if (family !== 6 || networkFamily !== 6 || prefix < 0 || prefix > 128)
+    return false;
+  const addressGroups = expandIpv6(address);
+  const networkGroups = expandIpv6(network);
+  if (addressGroups === undefined || networkGroups === undefined) return false;
+  const wholeGroups = Math.floor(prefix / 16);
+  const remainder = prefix % 16;
+  for (let index = 0; index < wholeGroups; index += 1) {
+    if (addressGroups[index] !== networkGroups[index]) return false;
+  }
+  if (remainder === 0) return true;
+  const mask = (0xffff << (16 - remainder)) & 0xffff;
+  return (
+    ((addressGroups[wholeGroups] ?? 0) & mask) ===
+    ((networkGroups[wholeGroups] ?? 0) & mask)
+  );
+}
+
 function isBlockedIpv4(value: string): boolean {
   const address = ipv4Integer(value);
   return blockedIpv4Cidrs.some(([network, prefix]) =>

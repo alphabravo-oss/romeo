@@ -1,6 +1,8 @@
 export * from "./button";
 export * from "./advanced-data-table";
 export * from "./server-table-state";
+export * from "./table-authority";
+export type { TableSavedView } from "./table-preferences";
 export * from "./data";
 export * from "./feedback";
 export * from "./forms";

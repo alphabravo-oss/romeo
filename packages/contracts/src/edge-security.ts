@@ -138,6 +138,9 @@ export const EdgeSecurityPostureReportSchema = z
     }),
     ingress: z.strictObject({
       allowedOriginRuleCount: nonNegativeInteger,
+      desiredWafMode: z.enum(["disabled", "monitor", "block"]),
+      observedWafEnforcement: z.enum(["unknown", "failed", "block"]),
+      observedWafAt: z.iso.datetime().optional(),
       wafMode: z.enum(["disabled", "monitor", "block"]),
     }),
     limits: z.strictObject({

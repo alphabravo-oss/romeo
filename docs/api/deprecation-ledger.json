@@ -1,4 +1,135 @@
 {
   "schemaVersion": 1,
-  "operations": []
+  "operations": [
+    {
+      "operationId": "contentPolicy.approvals.request",
+      "method": "post",
+      "path": "/api/v1/admin/content-policy/approvals",
+      "status": "active",
+      "sinceVersion": "0.1.0",
+      "deprecatedAt": "2026-08-23T00:00:00.000Z",
+      "sunsetAt": "2027-02-23T00:00:00.000Z",
+      "replacementOperationId": null,
+      "documentationUrl": "https://docs.romeo.ai/api/content-policy-approval-authority",
+      "telemetryMetric": "romeo_api_deprecated_requests_total",
+      "zeroUsageDaysRequired": 90
+    },
+    {
+      "operationId": "workflows.listTemplates",
+      "method": "get",
+      "path": "/api/v1/workflow-templates",
+      "status": "active",
+      "sinceVersion": "0.1.0",
+      "deprecatedAt": "2026-08-23T00:00:00.000Z",
+      "sunsetAt": "2027-02-23T00:00:00.000Z",
+      "replacementOperationId": null,
+      "documentationUrl": "https://docs.romeo.ai/api/workflow-retirement",
+      "telemetryMetric": "romeo_api_deprecated_requests_total",
+      "zeroUsageDaysRequired": 90
+    },
+    {
+      "operationId": "workflows.createFromTemplate",
+      "method": "post",
+      "path": "/api/v1/workflow-templates/{templateId}/create",
+      "status": "active",
+      "sinceVersion": "0.1.0",
+      "deprecatedAt": "2026-08-23T00:00:00.000Z",
+      "sunsetAt": "2027-02-23T00:00:00.000Z",
+      "replacementOperationId": null,
+      "documentationUrl": "https://docs.romeo.ai/api/workflow-retirement",
+      "telemetryMetric": "romeo_api_deprecated_requests_total",
+      "zeroUsageDaysRequired": 90
+    },
+    {
+      "operationId": "workflows.list",
+      "method": "get",
+      "path": "/api/v1/workflows",
+      "status": "active",
+      "sinceVersion": "0.1.0",
+      "deprecatedAt": "2026-08-23T00:00:00.000Z",
+      "sunsetAt": "2027-02-23T00:00:00.000Z",
+      "replacementOperationId": null,
+      "documentationUrl": "https://docs.romeo.ai/api/workflow-retirement",
+      "telemetryMetric": "romeo_api_deprecated_requests_total",
+      "zeroUsageDaysRequired": 90
+    },
+    {
+      "operationId": "workflows.create",
+      "method": "post",
+      "path": "/api/v1/workflows",
+      "status": "active",
+      "sinceVersion": "0.1.0",
+      "deprecatedAt": "2026-08-23T00:00:00.000Z",
+      "sunsetAt": "2027-02-23T00:00:00.000Z",
+      "replacementOperationId": null,
+      "documentationUrl": "https://docs.romeo.ai/api/workflow-retirement",
+      "telemetryMetric": "romeo_api_deprecated_requests_total",
+      "zeroUsageDaysRequired": 90
+    },
+    {
+      "operationId": "workflows.runDueSchedules",
+      "method": "post",
+      "path": "/api/v1/workflows/schedules/run-due",
+      "status": "active",
+      "sinceVersion": "0.1.0",
+      "deprecatedAt": "2026-08-23T00:00:00.000Z",
+      "sunsetAt": "2027-02-23T00:00:00.000Z",
+      "replacementOperationId": null,
+      "documentationUrl": "https://docs.romeo.ai/api/workflow-retirement",
+      "telemetryMetric": "romeo_api_deprecated_requests_total",
+      "zeroUsageDaysRequired": 90
+    },
+    {
+      "operationId": "workflows.listRuns",
+      "method": "get",
+      "path": "/api/v1/workflows/{workflowId}/runs",
+      "status": "active",
+      "sinceVersion": "0.1.0",
+      "deprecatedAt": "2026-08-23T00:00:00.000Z",
+      "sunsetAt": "2027-02-23T00:00:00.000Z",
+      "replacementOperationId": null,
+      "documentationUrl": "https://docs.romeo.ai/api/workflow-retirement",
+      "telemetryMetric": "romeo_api_deprecated_requests_total",
+      "zeroUsageDaysRequired": 90
+    },
+    {
+      "operationId": "workflows.startRun",
+      "method": "post",
+      "path": "/api/v1/workflows/{workflowId}/runs",
+      "status": "active",
+      "sinceVersion": "0.1.0",
+      "deprecatedAt": "2026-08-23T00:00:00.000Z",
+      "sunsetAt": "2027-02-23T00:00:00.000Z",
+      "replacementOperationId": null,
+      "documentationUrl": "https://docs.romeo.ai/api/workflow-retirement",
+      "telemetryMetric": "romeo_api_deprecated_requests_total",
+      "zeroUsageDaysRequired": 90
+    },
+    {
+      "operationId": "workflows.approveRun",
+      "method": "post",
+      "path": "/api/v1/workflow-runs/{workflowRunId}/approve",
+      "status": "active",
+      "sinceVersion": "0.1.0",
+      "deprecatedAt": "2026-08-23T00:00:00.000Z",
+      "sunsetAt": "2027-02-23T00:00:00.000Z",
+      "replacementOperationId": null,
+      "documentationUrl": "https://docs.romeo.ai/api/workflow-retirement",
+      "telemetryMetric": "romeo_api_deprecated_requests_total",
+      "zeroUsageDaysRequired": 90
+    },
+    {
+      "operationId": "workflows.resumeRun",
+      "method": "post",
+      "path": "/api/v1/workflow-runs/{workflowRunId}/resume",
+      "status": "active",
+      "sinceVersion": "0.1.0",
+      "deprecatedAt": "2026-08-23T00:00:00.000Z",
+      "sunsetAt": "2027-02-23T00:00:00.000Z",
+      "replacementOperationId": null,
+      "documentationUrl": "https://docs.romeo.ai/api/workflow-retirement",
+      "telemetryMetric": "romeo_api_deprecated_requests_total",
+      "zeroUsageDaysRequired": 90
+    }
+  ]
 }

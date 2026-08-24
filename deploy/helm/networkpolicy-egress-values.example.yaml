@@ -67,6 +67,10 @@ workers:
   toolDispatch:
     enabled: true
     maxJobs: 5
+    identity:
+      credentialSecret:
+        name: romeo-tool-dispatch-broker
+        key: token
     networkPolicy:
       enabled: true
       egress:

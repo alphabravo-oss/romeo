@@ -101,6 +101,40 @@ describe("model catalog pagination", () => {
       "model_catalog_beta",
     ]);
   });
+
+  it("denies a model delete when the row does not belong to the provider path", async () => {
+    const repository = new InMemoryRomeoRepository();
+    for (const id of ["provider_delete_a", "provider_delete_b"]) {
+      await repository.createProvider({
+        baseUrl: "http://127.0.0.1:11434",
+        capabilities: defaultProviderCapabilities("ollama"),
+        enabled: true,
+        id,
+        name: id,
+        orgId: subject.orgId,
+        type: "ollama",
+      });
+    }
+    await repository.upsertModels([
+      model("model_delete_a", "provider_delete_a", "Model A", true),
+      model("model_delete_b", "provider_delete_b", "Model B", true),
+    ]);
+    const service = new ProviderService(repository);
+    const writeSubject: AuthSubject = {
+      ...subject,
+      isAdmin: true,
+      scopes: ["models:read", "providers:write"],
+    };
+
+    await expect(
+      service.deleteModel(
+        writeSubject,
+        "provider_delete_a",
+        "model b",
+        "model_delete_b",
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+  });
 });
 
 function model(

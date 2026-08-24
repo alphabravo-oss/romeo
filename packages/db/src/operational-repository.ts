@@ -1,25 +1,41 @@
 import type {
   ClaimBackgroundJobInput,
+  ListBackgroundJobsInput,
   RenewBackgroundJobLeaseInput,
   UpdateBackgroundJobWithLeaseInput,
 } from "@romeo/core";
 import { assertUsageEventTaxonomy, assertUsageEventUpdate } from "@romeo/core";
-import { and, asc, desc, eq, isNull, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import { backgroundJobs, systemSettings, usageEvents } from "./schema";
-import {
-  optionalDate,
-  optionalIsoString,
-  toIsoString,
-} from "./repository-mapping";
+import { optionalDate } from "./repository-mapping";
 import type {
   BackgroundJobRecord,
-  BackgroundJobStatusRecord,
   SystemSettingRecord,
   UsageEventRecord,
-  UsageSourceTypeRecord,
 } from "./operational-records";
+import {
+  assertSettingScope,
+  toBackgroundJobInsert,
+  toBackgroundJobRecord,
+  toSystemSettingInsert,
+  toSystemSettingRecord,
+  toUsageEventInsert,
+  toUsageEventRecord,
+} from "./operational-record-mapping";
 import { PgAuditRepository } from "./audit-repository";
 import {
   applyWorkerLease,
@@ -29,6 +45,11 @@ import {
 
 export type * from "./operational-records";
 export { toAuditLogRecord } from "./audit-repository";
+export {
+  toBackgroundJobRecord,
+  toSystemSettingRecord,
+  toUsageEventRecord,
+} from "./operational-record-mapping";
 
 export class PgOperationalRepository extends PgAuditRepository {
   constructor(db: RomeoDatabase) {
@@ -37,31 +58,48 @@ export class PgOperationalRepository extends PgAuditRepository {
 
   async getSystemSetting(
     key: string,
+    orgId: string | null,
   ): Promise<SystemSettingRecord | undefined> {
     const [row] = await this.db
       .select()
       .from(systemSettings)
-      .where(eq(systemSettings.key, key))
+      .where(
+        and(
+          eq(systemSettings.key, key),
+          orgId === null
+            ? isNull(systemSettings.orgId)
+            : eq(systemSettings.orgId, orgId),
+        ),
+      )
       .limit(1);
     return row === undefined ? undefined : toSystemSettingRecord(row);
   }
 
-  async listSystemSettings(): Promise<SystemSettingRecord[]> {
+  async listSystemSettings(
+    orgId: string | null,
+  ): Promise<SystemSettingRecord[]> {
     const rows = await this.db
       .select()
       .from(systemSettings)
+      .where(
+        orgId === null
+          ? isNull(systemSettings.orgId)
+          : eq(systemSettings.orgId, orgId),
+      )
       .orderBy(asc(systemSettings.key));
     return rows.map(toSystemSettingRecord);
   }
 
   async upsertSystemSetting(
     setting: SystemSettingRecord,
+    orgId: string | null,
   ): Promise<SystemSettingRecord> {
+    assertSettingScope(setting, orgId);
     const [row] = await this.db
       .insert(systemSettings)
-      .values(toSystemSettingInsert(setting))
+      .values(toSystemSettingInsert(setting, orgId))
       .onConflictDoUpdate({
-        target: systemSettings.key,
+        target: [systemSettings.scopeOrgId, systemSettings.key],
         set: {
           value: setting.value,
           updatedAt: new Date(setting.updatedAt),
@@ -147,12 +185,47 @@ export class PgOperationalRepository extends PgAuditRepository {
     return toUsageEventRecord(row);
   }
 
-  async listBackgroundJobs(orgId: string): Promise<BackgroundJobRecord[]> {
+  async getBackgroundJob(
+    orgId: string,
+    jobId: string,
+  ): Promise<BackgroundJobRecord | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(backgroundJobs)
+      .where(and(eq(backgroundJobs.orgId, orgId), eq(backgroundJobs.id, jobId)))
+      .limit(1);
+    return row === undefined ? undefined : toBackgroundJobRecord(row);
+  }
+
+  async listBackgroundJobs(
+    orgId: string,
+    input: ListBackgroundJobsInput = { limit: 100 },
+  ): Promise<BackgroundJobRecord[]> {
     const rows = await this.db
       .select()
       .from(backgroundJobs)
-      .where(eq(backgroundJobs.orgId, orgId))
-      .orderBy(desc(backgroundJobs.createdAt), asc(backgroundJobs.id));
+      .where(
+        and(
+          eq(backgroundJobs.orgId, orgId),
+          ...(input.type === undefined
+            ? []
+            : [eq(backgroundJobs.type, input.type)]),
+          ...(input.statuses === undefined || input.statuses.length === 0
+            ? []
+            : [inArray(backgroundJobs.status, input.statuses)]),
+          ...backgroundJobPayloadEquals(input.payloadEquals),
+          ...(input.cursor === undefined
+            ? []
+            : [backgroundJobAfterCursor(input)]),
+        ),
+      )
+      .orderBy(
+        input.order === "asc"
+          ? asc(backgroundJobs.createdAt)
+          : desc(backgroundJobs.createdAt),
+        asc(backgroundJobs.id),
+      )
+      .limit(Math.max(0, input.limit));
     return rows.map(toBackgroundJobRecord);
   }
 
@@ -175,25 +248,32 @@ export class PgOperationalRepository extends PgAuditRepository {
       nowDate.getTime() - Math.max(1, input.leaseSeconds) * 1000,
     );
     const claimable = claimableBackgroundJobWhere(input, staleBefore);
-    const [candidate] = await this.db
-      .select()
-      .from(backgroundJobs)
-      .where(claimable)
-      .orderBy(asc(backgroundJobs.createdAt), asc(backgroundJobs.id))
-      .limit(1);
-    if (candidate === undefined) return undefined;
-
-    const job = toBackgroundJobRecord(candidate);
-    const [row] = await this.db
-      .update(backgroundJobs)
-      .set({
-        payload: applyWorkerLease(job, input, now).payload,
-        status: "running",
-        updatedAt: nowDate,
-      })
-      .where(and(eq(backgroundJobs.id, job.id), claimable))
-      .returning();
-    return row === undefined ? undefined : toBackgroundJobRecord(row);
+    return this.db.transaction(async (transaction) => {
+      const [candidate] = await transaction
+        .select()
+        .from(backgroundJobs)
+        .where(claimable)
+        .orderBy(asc(backgroundJobs.createdAt), asc(backgroundJobs.id))
+        .limit(1)
+        .for("update", { skipLocked: true });
+      if (candidate === undefined) return undefined;
+      const job = toBackgroundJobRecord(candidate);
+      const [row] = await transaction
+        .update(backgroundJobs)
+        .set({
+          payload: applyWorkerLease(job, input, now).payload,
+          status: "running",
+          updatedAt: nowDate,
+        })
+        .where(
+          and(
+            eq(backgroundJobs.id, job.id),
+            eq(backgroundJobs.orgId, input.orgId),
+          ),
+        )
+        .returning();
+      return row === undefined ? undefined : toBackgroundJobRecord(row);
+    });
   }
 
   async renewBackgroundJobLease(
@@ -218,6 +298,8 @@ export class PgOperationalRepository extends PgAuditRepository {
     if (
       lease === undefined ||
       lease.workerId !== input.workerId ||
+      (input.leaseAttempt !== undefined &&
+        lease.attempt !== input.leaseAttempt) ||
       Date.parse(lease.expiresAt) <= Date.parse(now)
     ) {
       return undefined;
@@ -279,6 +361,8 @@ export class PgOperationalRepository extends PgAuditRepository {
     if (
       lease === undefined ||
       lease.workerId !== input.workerId ||
+      (input.leaseAttempt !== undefined &&
+        lease.attempt !== input.leaseAttempt) ||
       Date.parse(lease.expiresAt) <= Date.parse(now)
     )
       return undefined;
@@ -304,110 +388,15 @@ export class PgOperationalRepository extends PgAuditRepository {
   }
 }
 
-export function toUsageEventRecord(
-  row: typeof usageEvents.$inferSelect,
-): UsageEventRecord {
-  const event: UsageEventRecord = {
-    id: row.id,
-    orgId: row.orgId,
-    actorId: row.actorId,
-    sourceType: asUsageSourceType(row.sourceType),
-    sourceId: row.sourceId,
-    metric: row.metric,
-    quantity: row.quantity,
-    unit: row.unit,
-    metadata: asJsonRecord(row.metadata),
-    createdAt: toIsoString(row.createdAt),
-  };
-  const workspaceId = optionalIsoString(row.workspaceId);
-  if (workspaceId !== undefined) event.workspaceId = workspaceId;
-  return event;
-}
-
-export function toBackgroundJobRecord(
-  row: typeof backgroundJobs.$inferSelect,
-): BackgroundJobRecord {
-  const job: BackgroundJobRecord = {
-    id: row.id,
-    orgId: row.orgId,
-    type: row.type,
-    status: asBackgroundJobStatus(row.status),
-    payload: asJsonRecord(row.payload),
-    createdAt: toIsoString(row.createdAt),
-    updatedAt: toIsoString(row.updatedAt),
-  };
-  const workspaceId = optionalIsoString(row.workspaceId);
-  if (workspaceId !== undefined) job.workspaceId = workspaceId;
-  const completedAt = optionalIsoString(row.completedAt);
-  if (completedAt !== undefined) job.completedAt = completedAt;
-  return job;
-}
-
-export function toSystemSettingRecord(
-  row: typeof systemSettings.$inferSelect,
-): SystemSettingRecord {
-  return {
-    key: row.key,
-    value: asJsonRecord(row.value),
-    updatedAt: toIsoString(row.updatedAt),
-  };
-}
-
-function toUsageEventInsert(
-  record: UsageEventRecord,
-): typeof usageEvents.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    workspaceId: record.workspaceId ?? null,
-    actorId: record.actorId,
-    sourceType: record.sourceType,
-    sourceId: record.sourceId,
-    metric: record.metric,
-    quantity: record.quantity,
-    unit: record.unit,
-    metadata: record.metadata,
-    createdAt: new Date(record.createdAt),
-  };
-}
-
-function toBackgroundJobInsert(
-  record: BackgroundJobRecord,
-): typeof backgroundJobs.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    workspaceId: record.workspaceId ?? null,
-    type: record.type,
-    status: record.status,
-    payload: record.payload,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
-    completedAt: optionalDate(record.completedAt),
-  };
-}
-
-function toSystemSettingInsert(
-  record: SystemSettingRecord,
-): typeof systemSettings.$inferInsert {
-  return {
-    key: record.key,
-    value: record.value,
-    updatedAt: new Date(record.updatedAt),
-  };
-}
-
 function claimableBackgroundJobWhere(
   input: ClaimBackgroundJobInput,
   staleBefore: Date,
 ) {
-  const payloadEquals = Object.entries(input.payloadEquals ?? {}).map(
-    ([key, value]) => sql`${backgroundJobs.payload} ->> ${key} = ${value}`,
-  );
   return and(
     eq(backgroundJobs.orgId, input.orgId),
     eq(backgroundJobs.type, input.type),
-    ...payloadEquals,
+    ...(input.jobId === undefined ? [] : [eq(backgroundJobs.id, input.jobId)]),
+    ...backgroundJobPayloadEquals(input.payloadEquals),
     or(
       eq(backgroundJobs.status, "queued"),
       and(
@@ -418,34 +407,30 @@ function claimableBackgroundJobWhere(
   );
 }
 
-function asUsageSourceType(value: string): UsageSourceTypeRecord {
-  if (
-    value === "chat" ||
-    value === "retrieval" ||
-    value === "run" ||
-    value === "storage" ||
-    value === "tool" ||
-    value === "voice"
-  ) {
-    return value;
-  }
-  return "storage";
+function backgroundJobPayloadEquals(
+  payload: Readonly<Record<string, string>> | undefined,
+) {
+  return Object.entries(payload ?? {}).map(
+    ([key, value]) => sql`${backgroundJobs.payload} ->> ${key} = ${value}`,
+  );
 }
 
-function asBackgroundJobStatus(value: string): BackgroundJobStatusRecord {
-  if (
-    value === "completed" ||
-    value === "failed" ||
-    value === "queued" ||
-    value === "running"
-  ) {
-    return value;
-  }
-  return "failed";
-}
-
-function asJsonRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return {};
-  return value as Record<string, unknown>;
+function backgroundJobAfterCursor(input: ListBackgroundJobsInput) {
+  const cursor = input.cursor!;
+  const cursorCreatedAt = new Date(cursor.createdAt);
+  return input.order === "asc"
+    ? or(
+        gt(backgroundJobs.createdAt, cursorCreatedAt),
+        and(
+          eq(backgroundJobs.createdAt, cursorCreatedAt),
+          gt(backgroundJobs.id, cursor.id),
+        ),
+      )!
+    : or(
+        lt(backgroundJobs.createdAt, cursorCreatedAt),
+        and(
+          eq(backgroundJobs.createdAt, cursorCreatedAt),
+          gt(backgroundJobs.id, cursor.id),
+        ),
+      )!;
 }

@@ -53,9 +53,15 @@ export class PgDataDeletionRepository {
     orgId: string,
     resourceType: DataDeletionResourceTypeRecord,
     resourceId: string,
+    evaluatedAt?: string,
   ): Promise<DataDeletionPlanRecord | undefined> {
     if (resourceType === "chat") {
-      const context = await chatDeletionContext(this.db, orgId, resourceId);
+      const context = await chatDeletionContext(
+        this.db,
+        orgId,
+        resourceId,
+        evaluatedAt,
+      );
       return context?.plan;
     }
     if (resourceType === "file_object") {
@@ -71,10 +77,17 @@ export class PgDataDeletionRepository {
     orgId: string,
     resourceType: DataDeletionResourceTypeRecord,
     resourceId: string,
+    evaluatedAt?: string,
   ): Promise<DataDeletionPlanRecord | undefined> {
+    const referenceTime = evaluatedAt ?? new Date().toISOString();
     return this.db.transaction(async (tx) => {
       if (resourceType === "chat") {
-        const context = await chatDeletionContext(tx, orgId, resourceId);
+        const context = await chatDeletionContext(
+          tx,
+          orgId,
+          resourceId,
+          referenceTime,
+        );
         if (context === undefined) return undefined;
         if (context.plan.legalHold !== undefined) {
           throw new Error(
@@ -91,7 +104,7 @@ export class PgDataDeletionRepository {
         await reconcileFileReferenceIds(
           transaction,
           referencedFileIds,
-          new Date().toISOString(),
+          referenceTime,
         );
         return context.plan;
       }
@@ -111,6 +124,7 @@ async function chatDeletionContext(
   db: DataDeletionDatabase,
   orgId: string,
   chatId: string,
+  evaluatedAt: string = new Date().toISOString(),
 ): Promise<ChatDeletionContext | undefined> {
   const [chat] = await db
     .select()
@@ -141,7 +155,7 @@ async function chatDeletionContext(
   const runIds = runRows.map((row) => row.id);
   const messageIds = messageRows.map((row) => row.id);
   const notificationIds = notificationRows.map((row) => row.id);
-  const legalHold = activeChatLegalHold(chat);
+  const legalHold = activeChatLegalHold(chat, evaluatedAt);
 
   return {
     plan: {

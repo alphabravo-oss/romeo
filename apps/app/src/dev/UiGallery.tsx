@@ -114,7 +114,7 @@ export default function UiGallery() {
                 <Button variant="ghost">Hover or focus</Button>
               </Tooltip>
             </div>
-            <EmptyState title="No managed models">
+            <EmptyState headingLevel={3} title="No managed models">
               Add a provider connection, then publish a governed model.
             </EmptyState>
           </Card>
@@ -145,6 +145,7 @@ export default function UiGallery() {
       </div>
 
       <Dialog
+        closeLabel="Close"
         footer={
           <>
             <Button onClick={() => setDialogOpen(false)}>Cancel</Button>

@@ -7,6 +7,8 @@ import {
   syncDataConnectorRoute,
 } from "@romeo/contracts";
 
+import { dataConnectorTypes } from "../../domain/data-connectors";
+import { ApiError } from "../../errors";
 import type { RomeoApi } from "../context";
 
 export function registerDataConnectorRoutes(app: RomeoApi): void {
@@ -34,11 +36,19 @@ export function registerDataConnectorRoutes(app: RomeoApi): void {
   app.openapi(createDataConnectorRoute, async (context) => {
     const subject = context.get("subject");
     const body = context.req.valid("json");
+    if (!dataConnectorTypes.some((type) => type === body.type)) {
+      throw new ApiError(
+        "connector_type_not_implemented",
+        "This connector type is retired and cannot be created. Use one of the connector types returned by the connector catalog.",
+        400,
+        { connectorType: body.type },
+      );
+    }
     const data = await context.get("services").dataConnectors.create({
       subject,
       workspaceId: body.workspaceId,
       knowledgeBaseId: body.knowledgeBaseId,
-      type: body.type,
+      type: body.type as (typeof dataConnectorTypes)[number],
       name: body.name,
       config: body.config,
       ...(body.syncIntervalMinutes === undefined

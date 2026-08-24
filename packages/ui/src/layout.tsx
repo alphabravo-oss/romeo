@@ -19,7 +19,8 @@ export const Panel = forwardRef<HTMLElement, HTMLAttributes<HTMLElement>>(
 
 export const Toolbar = forwardRef<
   HTMLDivElement,
-  HTMLAttributes<HTMLDivElement>
+  HTMLAttributes<HTMLDivElement> &
+    ({ "aria-label": string } | { "aria-labelledby": string })
 >(function Toolbar({ className, ...props }, ref) {
   return (
     <div

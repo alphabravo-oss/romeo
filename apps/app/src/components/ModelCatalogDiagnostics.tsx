@@ -44,7 +44,14 @@ export function ModelCatalogDiagnostics({
     setProbeError(undefined);
     try {
       const result = await probeModelCapabilities({
-        features: ["streaming", "tools", "json", "vision", "audio", "reasoning"],
+        features: [
+          "streaming",
+          "tools",
+          "json",
+          "vision",
+          "audio",
+          "reasoning",
+        ],
         modelId: model.id,
         signal: controller.signal,
       });
@@ -58,7 +65,10 @@ export function ModelCatalogDiagnostics({
           total: result.results.length,
         }),
       );
-      toast(t("catalogProbeComplete", { mismatches, total: result.results.length }), "success");
+      toast(
+        t("catalogProbeComplete", { mismatches, total: result.results.length }),
+        "success",
+      );
     } catch (caught) {
       if (controller.signal.aborted) {
         toast(t("catalogProbeCancelled"));
@@ -84,7 +94,10 @@ export function ModelCatalogDiagnostics({
           : t(constraintKey(result.constraint)),
       );
     } catch (caught) {
-      toast(safeUserErrorMessage(caught, t("catalogCompatibilityFailed")), "error");
+      toast(
+        safeUserErrorMessage(caught, t("catalogCompatibilityFailed")),
+        "error",
+      );
     }
   }
 
@@ -104,7 +117,11 @@ export function ModelCatalogDiagnostics({
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <Button disabled={probing} onClick={() => void runProbe()} pending={probing}>
+        <Button
+          disabled={probing}
+          onClick={() => void runProbe()}
+          pending={probing}
+        >
           {t("catalogProbeModel")}
         </Button>
         {probing ? (
@@ -117,7 +134,14 @@ export function ModelCatalogDiagnostics({
           </Button>
         ) : null}
         <Button asChild size="sm" variant="ghost">
-          <Link search={{ auditCategory: "admin", section: "audit" }} to="/admin">
+          <Link
+            search={(previous) => ({
+              ...previous,
+              auditCategory: "admin",
+              section: "audit",
+            })}
+            to="/admin"
+          >
             {t("catalogViewAudit")}
           </Link>
         </Button>
@@ -144,7 +168,10 @@ export function ModelCatalogDiagnostics({
             key={key}
             label={t(label)}
             onCheckedChange={(checked) =>
-              setRequired((current) => ({ ...current, [key]: checked === true }))
+              setRequired((current) => ({
+                ...current,
+                [key]: checked === true,
+              }))
             }
           />
         ))}
@@ -177,9 +204,12 @@ function constraintKey(
     | undefined,
 ): MessageKey {
   if (constraint === "tools_unsupported") return "catalogConstraintTools";
-  if (constraint === "reasoning_unsupported") return "catalogConstraintReasoning";
-  if (constraint === "image_output_unsupported") return "catalogConstraintImage";
+  if (constraint === "reasoning_unsupported")
+    return "catalogConstraintReasoning";
+  if (constraint === "image_output_unsupported")
+    return "catalogConstraintImage";
   if (constraint === "local_only_policy") return "catalogConstraintLocalOnly";
-  if (constraint === "region_outside_residency") return "catalogConstraintRegion";
+  if (constraint === "region_outside_residency")
+    return "catalogConstraintRegion";
   return "catalogUnavailableNotEntitled";
 }

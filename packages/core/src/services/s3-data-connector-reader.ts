@@ -15,12 +15,10 @@ import type {
 import type { SecretResolver } from "./secret-resolver";
 
 export interface S3HttpConnectorReaderOptions {
-  accessKeyId: string;
   clientFactory?: (config: S3ClientConfig) => S3Client;
   endpoint: string;
   retryAttempts?: number;
-  secretResolver?: SecretResolver;
-  secretAccessKey: string;
+  secretResolver: SecretResolver;
   timeoutMs?: number;
 }
 
@@ -46,7 +44,7 @@ export class S3HttpConnectorReader implements S3ConnectorReader {
     maxKeys: number;
     prefix: string;
     region: string;
-    secretRef?: string;
+    secretRef: string;
   }): Promise<S3ConnectorObject[]> {
     const maxKeys = Math.max(1, Math.min(input.maxKeys, 1_000));
     const client = await this.client(input.region, input.secretRef);
@@ -86,7 +84,7 @@ export class S3HttpConnectorReader implements S3ConnectorReader {
     bucket: string;
     key: string;
     region: string;
-    secretRef?: string;
+    secretRef: string;
   }): Promise<S3ConnectorReadResult | undefined> {
     const client = await this.client(input.region, input.secretRef);
     try {
@@ -123,10 +121,7 @@ export class S3HttpConnectorReader implements S3ConnectorReader {
     }
   }
 
-  private async client(
-    region: string,
-    secretRef: string | undefined,
-  ): Promise<S3Client> {
+  private async client(region: string, secretRef: string): Promise<S3Client> {
     const credentials = await this.credentials(secretRef);
     return this.clientFactory({
       endpoint: this.options.endpoint,
@@ -162,30 +157,21 @@ export class S3HttpConnectorReader implements S3ConnectorReader {
     }
   }
 
-  private async credentials(
-    secretRef: string | undefined,
-  ): Promise<S3ReaderCredentials> {
-    if (secretRef !== undefined) return this.connectorCredentials(secretRef);
-    if (
-      this.options.accessKeyId.length === 0 ||
-      this.options.secretAccessKey.length === 0
-    ) {
+  private async credentials(secretRef: string): Promise<S3ReaderCredentials> {
+    if (secretRef.trim().length === 0) {
       throw new ApiError(
-        "connector_s3_reader_not_configured",
-        "S3 connector reader credentials are not configured.",
-        409,
+        "connector_s3_credentials_required",
+        "S3 connector requires a connector-specific secretRef.",
+        400,
       );
     }
-    return {
-      accessKeyId: this.options.accessKeyId,
-      secretAccessKey: this.options.secretAccessKey,
-    };
+    return this.connectorCredentials(secretRef);
   }
 
   private async connectorCredentials(
     secretRef: string,
   ): Promise<S3ReaderCredentials> {
-    if (this.options.secretResolver?.resolveValue === undefined) {
+    if (this.options.secretResolver.resolveValue === undefined) {
       throw new ApiError(
         "connector_s3_secret_ref_unsupported",
         "S3 connector secret references require a value-capable secret resolver.",

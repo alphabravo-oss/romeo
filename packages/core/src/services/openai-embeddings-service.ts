@@ -5,6 +5,7 @@ import {
   hasGrant,
   type AuthSubject,
 } from "@romeo/auth";
+import { ProviderCircuitBreaker } from "@romeo/ai-runtime";
 import type {
   OpenAiEmbeddingRequest,
   OpenAiEmbeddingResponse,
@@ -25,6 +26,15 @@ import { providerApiError } from "./provider-api-error";
 import type { QuotaCoordinator } from "./quota-coordination";
 import type { SecretResolver } from "./secret-resolver";
 import type { WebhookEmitter } from "./webhook-service";
+import { startCompatibilityInferenceUsage } from "./compatibility-inference-usage";
+import { compatibilityProviderFetch } from "./compatibility-provider-egress";
+import { executeCompatibilityProviderRequest } from "./compatibility-provider-execution";
+import {
+  createProviderRoutePlan,
+  createProviderRoutingPolicy,
+  type ProviderRoutingPolicy,
+} from "./provider-routing";
+import { estimateTokens } from "./token-estimate";
 
 export type {
   OpenAiEmbeddingRequest,
@@ -32,6 +42,9 @@ export type {
 } from "@romeo/contracts";
 
 export class OpenAiEmbeddingsService {
+  private readonly circuitBreaker: ProviderCircuitBreaker;
+  private readonly routingPolicy: ProviderRoutingPolicy;
+
   constructor(
     private readonly repository: RomeoRepository,
     private readonly options: {
@@ -39,11 +52,25 @@ export class OpenAiEmbeddingsService {
       quotaCoordinator?: QuotaCoordinator;
       secretResolver?: SecretResolver;
       webhooks?: WebhookEmitter;
+      circuitBreaker?: ProviderCircuitBreaker;
+      providerDisabledIds?: string;
+      providerFallbackModelId?: string;
+      providerRetryAttempts?: number;
+      providerRetryBackoffMs?: number;
+      providerTimeoutMs?: number;
     } = {},
-  ) {}
+  ) {
+    this.circuitBreaker =
+      options.circuitBreaker ?? new ProviderCircuitBreaker();
+    this.routingPolicy = createProviderRoutingPolicy({
+      disabledProviderIds: options.providerDisabledIds,
+      fallbackModelId: options.providerFallbackModelId,
+    });
+  }
 
   async create(input: {
     request: OpenAiEmbeddingRequest;
+    signal?: AbortSignal;
     subject: AuthSubject;
   }): Promise<OpenAiEmbeddingResponse> {
     const governed = await enforceContentPolicyStrings(
@@ -52,22 +79,98 @@ export class OpenAiEmbeddingsService {
       input.request.input,
     );
     const target = await this.resolveTarget(input.subject, input.request.model);
+    const fallback = await this.resolveFallbackTarget(input.subject, target);
+    const meter = await startCompatibilityInferenceUsage({
+      estimatedInputTokens: governed.contents.reduce(
+        (total, content) => total + estimateTokens(content),
+        0,
+      ),
+      model: target.model,
+      operation: "embeddings",
+      providerId: target.provider.id,
+      repository: this.repository,
+      subject: input.subject,
+    });
+    let execution: Awaited<ReturnType<typeof this.executeProvider>>;
     try {
-      const result = await getEmbeddingAdapter(target.provider.type).embedTexts(
+      execution = await this.executeProvider(
+        target,
+        fallback,
+        governed.contents,
+        input.signal,
+      );
+    } catch (error) {
+      await meter.fail().catch(() => undefined);
+      throw embeddingApiError(error, target.provider.type);
+    }
+    const result = execution.value;
+    await meter.succeed(
+      result.usage === undefined
+        ? {
+            model: execution.target.model,
+            providerId: execution.target.provider.id,
+          }
+        : {
+            model: execution.target.model,
+            providerId: execution.target.provider.id,
+            usage: result.usage,
+          },
+    );
+    return embeddingResponse(result);
+  }
+
+  private executeProvider(
+    primary: ResolvedEmbeddingTarget,
+    fallback: ResolvedEmbeddingTarget | undefined,
+    texts: string[],
+    signal: AbortSignal | undefined,
+  ) {
+    return executeCompatibilityProviderRequest({
+      candidates: [
         {
-          provider: target.provider,
-          model: target.providerModel,
-          texts: governed.contents,
-          ...(target.apiKey === undefined ? {} : { apiKey: target.apiKey }),
+          disabled: this.routingPolicy.disabledProviderIds.has(
+            primary.provider.id,
+          ),
+          kind: primary.provider.type,
+          providerId: primary.provider.id,
+          target: primary,
+        },
+        ...(fallback === undefined
+          ? []
+          : [
+              {
+                kind: fallback.provider.type,
+                providerId: fallback.provider.id,
+                target: fallback,
+              },
+            ]),
+      ],
+      circuitBreaker: this.circuitBreaker,
+      execute: (target, attemptSignal) => {
+        const providerFetch = compatibilityProviderFetch({
+          credentialPresent: target.apiKey !== undefined,
           ...(this.options.fetchImpl === undefined
             ? {}
             : { fetchImpl: this.options.fetchImpl }),
-        },
-      );
-      return embeddingResponse(result);
-    } catch (error) {
-      throw embeddingApiError(error, target.provider.type);
-    }
+          provider: target.provider,
+          maxResponseBytes: 32 * 1024 * 1024,
+          timeoutMs: this.options.providerTimeoutMs ?? 30_000,
+        });
+        return getEmbeddingAdapter(target.provider.type).embedTexts({
+          provider: target.provider,
+          model: target.providerModel,
+          texts,
+          ...(target.apiKey === undefined ? {} : { apiKey: target.apiKey }),
+          ...(providerFetch === undefined ? {} : { fetchImpl: providerFetch }),
+          signal: attemptSignal,
+        });
+      },
+      operation: "embeddings",
+      retryAttempts: this.options.providerRetryAttempts ?? 0,
+      retryBackoffMs: this.options.providerRetryBackoffMs ?? 0,
+      ...(signal === undefined ? {} : { signal }),
+      timeoutMs: this.options.providerTimeoutMs ?? 30_000,
+    });
   }
 
   private async assertModelRequestAllowed(
@@ -103,10 +206,8 @@ export class OpenAiEmbeddingsService {
       subject.orgId,
       requestedModel,
     );
-    if (catalogModel !== undefined) {
-      return this.resolveCatalogTarget(subject, grants, catalogModel);
-    }
-    return this.resolveProviderFallbackTarget(subject, grants, requestedModel);
+    if (catalogModel === undefined) throw notFound("Model");
+    return this.resolveCatalogTarget(subject, grants, catalogModel);
   }
 
   private async resolveCatalogModel(
@@ -161,52 +262,55 @@ export class OpenAiEmbeddingsService {
       );
     }
     await this.assertModelRequestAllowed(subject, provider);
-    const apiKey = await this.resolveProviderApiKey(provider);
+    const apiKey = this.routingPolicy.disabledProviderIds.has(provider.id)
+      ? undefined
+      : await this.resolveProviderApiKey(provider);
     return {
+      model,
       provider,
       providerModel: model.name,
       ...(apiKey === undefined ? {} : { apiKey }),
     };
   }
 
-  private async resolveProviderFallbackTarget(
+  private async resolveFallbackTarget(
     subject: AuthSubject,
-    grants: Awaited<ReturnType<RomeoRepository["listResourceGrants"]>>,
-    providerModel: string,
-  ): Promise<ResolvedEmbeddingTarget> {
-    const providers = (await this.repository.listProviders(subject.orgId))
-      .filter((provider) => provider.enabled)
-      .filter((provider) =>
-        hasGrant(subject, grants, "provider", provider.id, "use"),
-      );
-    const openAiLikeProviders = providers.filter(
-      (provider) =>
-        provider.type === "openai-compatible" ||
-        provider.type === "openai-responses-compatible",
-    );
-    const candidates =
-      openAiLikeProviders.length > 0 ? openAiLikeProviders : providers;
-    if (candidates.length === 0) throw notFound("Provider");
-    if (candidates.length > 1) {
-      throw new ApiError(
-        "embedding_provider_ambiguous",
-        "Multiple granted providers could serve the requested embedding model.",
-        409,
-        {
-          model: providerModel,
-          providerIds: candidates.map((provider) => provider.id).sort(),
-        },
-      );
+    primary: ResolvedEmbeddingTarget,
+  ): Promise<ResolvedEmbeddingTarget | undefined> {
+    const fallback = (
+      await createProviderRoutePlan(
+        this.repository,
+        this.routingPolicy,
+        primary,
+      )
+    ).fallback;
+    if (
+      fallback === undefined ||
+      !fallback.model.capabilities.modalities.includes("embeddings")
+    )
+      return undefined;
+    const grants = await this.repository.listResourceGrants(subject.orgId);
+    if (
+      !hasGrant(subject, grants, "model", fallback.model.id, "use") ||
+      !hasGrant(subject, grants, "provider", fallback.provider.id, "use")
+    )
+      return undefined;
+    try {
+      const apiKey = await this.resolveProviderApiKey(fallback.provider);
+      return {
+        model: fallback.model,
+        provider: fallback.provider,
+        providerModel: fallback.model.name,
+        ...(apiKey === undefined ? {} : { apiKey }),
+      };
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.code === "provider_credential_unavailable"
+      )
+        return undefined;
+      throw error;
     }
-    const provider = candidates[0]!;
-    this.assertProviderAccess(subject, provider);
-    await this.assertModelRequestAllowed(subject, provider);
-    const apiKey = await this.resolveProviderApiKey(provider);
-    return {
-      provider,
-      providerModel,
-      ...(apiKey === undefined ? {} : { apiKey }),
-    };
   }
 
   private assertProviderAccess(
@@ -284,6 +388,7 @@ export class OpenAiEmbeddingsService {
 
 interface ResolvedEmbeddingTarget {
   apiKey?: string;
+  model: BaseModel;
   provider: ProviderInstance;
   providerModel: string;
 }

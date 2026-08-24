@@ -39,6 +39,10 @@ import {
   storeDispatchPayload,
 } from "./tool-operation-dispatch-queue";
 import {
+  dispatchApprovalRequestDigest,
+  withApprovalCriticalSection,
+} from "./tool-approval-integrity";
+import {
   buildRequest,
   dispatchBaseHost,
   toolOperationDispatchTransport,
@@ -186,7 +190,10 @@ export async function enqueueToolOperationDispatch(
       return dispatchRequestResult(input, existing, host, true);
     }
   }
-  if (input.operation.approvalPolicy !== "never" && input.approved !== true) {
+  if (
+    input.operation.approvalPolicy !== "never" &&
+    input.approvalRequestId === undefined
+  ) {
     await assertDispatchApproval(input, "tool.operation.dispatch.enqueue");
   }
   const enforcementInput: AbuseControlEnforcementInput =
@@ -211,98 +218,109 @@ export async function enqueueToolOperationDispatch(
 
   const storedPayload = await storeDispatchPayload(input);
   try {
-    const result = await input.repository.transaction(async (repository) => {
-      const scopedInput = { ...input, repository };
-      if (idempotency !== undefined) {
-        const existing = await findIdempotentDispatchRequest(
-          scopedInput,
-          idempotency.keyHash,
-        );
-        if (existing !== undefined) {
-          await auditDispatchEnqueue(scopedInput, existing, host, {
-            keyHash: idempotency.keyHash,
-            replayed: true,
-          });
-          return dispatchRequestResult(scopedInput, existing, host, true);
+    const runTransaction = () =>
+      input.repository.transaction(async (repository) => {
+        const scopedInput = { ...input, repository };
+        if (idempotency !== undefined) {
+          const existing = await findIdempotentDispatchRequest(
+            scopedInput,
+            idempotency.keyHash,
+          );
+          if (existing !== undefined) {
+            await auditDispatchEnqueue(scopedInput, existing, host, {
+              keyHash: idempotency.keyHash,
+              replayed: true,
+            });
+            return dispatchRequestResult(scopedInput, existing, host, true);
+          }
         }
-      }
 
-      await assertDispatchApproval(
-        scopedInput,
-        "tool.operation.dispatch.enqueue",
-      );
-      const payloadStorage = dispatchPayloadStorage(storedPayload);
-      const transport = toolOperationDispatchTransport(
-        scopedInput.connector,
-        scopedInput.operation,
-      );
-      const job = await queueBackgroundJob(repository, {
-        ...(idempotency === undefined ? {} : { id: idempotency.jobId }),
-        orgId: scopedInput.subject.orgId,
-        ...(scopedInput.runContext === undefined
-          ? {}
-          : { workspaceId: scopedInput.runContext.workspaceId }),
-        type: "tool.operation.dispatch_request",
-        payload: {
-          actorId: scopedInput.subject.id,
-          connectorId: scopedInput.connector.id,
-          operationId: scopedInput.operation.operationId,
-          method: scopedInput.operation.method,
-          path: scopedInput.operation.path,
-          workerQueue: "external_tool_operations",
-          host,
-          approvalPolicy: scopedInput.operation.approvalPolicy,
-          riskLevel: scopedInput.operation.riskLevel,
-          parameterKeys: sortedKeys(scopedInput.parameters),
-          bodyKeys: sortedKeys(scopedInput.body),
-          payloadStorage,
-          ...(transport === undefined ? {} : { transport }),
-          ...(storedPayload === undefined
-            ? {}
-            : { payloadStore: storedPayload }),
+        await assertDispatchApproval(
+          scopedInput,
+          "tool.operation.dispatch.enqueue",
+        );
+        const payloadStorage = dispatchPayloadStorage(storedPayload);
+        const transport = toolOperationDispatchTransport(
+          scopedInput.connector,
+          scopedInput.operation,
+        );
+        const job = await queueBackgroundJob(repository, {
+          ...(idempotency === undefined ? {} : { id: idempotency.jobId }),
+          orgId: scopedInput.subject.orgId,
           ...(scopedInput.runContext === undefined
             ? {}
+            : { workspaceId: scopedInput.runContext.workspaceId }),
+          type: "tool.operation.dispatch_request",
+          payload: {
+            actorId: scopedInput.subject.id,
+            connectorId: scopedInput.connector.id,
+            operationId: scopedInput.operation.operationId,
+            method: scopedInput.operation.method,
+            path: scopedInput.operation.path,
+            workerQueue: "external_tool_operations",
+            host,
+            approvalPolicy: scopedInput.operation.approvalPolicy,
+            riskLevel: scopedInput.operation.riskLevel,
+            requestDigest: dispatchApprovalRequestDigest(scopedInput),
+            parameterKeys: sortedKeys(scopedInput.parameters),
+            bodyKeys: sortedKeys(scopedInput.body),
+            payloadStorage,
+            ...(transport === undefined ? {} : { transport }),
+            ...(storedPayload === undefined
+              ? {}
+              : { payloadStore: storedPayload }),
+            ...(scopedInput.runContext === undefined
+              ? {}
+              : {
+                  agentId: scopedInput.runContext.agentId,
+                  runSubjectGroupIds: scopedInput.subject.groupIds,
+                  runSubjectIsAdmin: scopedInput.subject.isAdmin === true,
+                  runSubjectScopes: scopedInput.subject.scopes,
+                  runSubjectType: scopedInput.subject.type,
+                  runSubjectWorkspaceIds: scopedInput.subject.workspaceIds,
+                  runContinuation: "model_tool_dispatch",
+                  runId: scopedInput.runContext.runId,
+                  toolId: scopedInput.runContext.toolId,
+                  workspaceId: scopedInput.runContext.workspaceId,
+                }),
+            ...(idempotency === undefined
+              ? {}
+              : {
+                  idempotencyKeyHash: idempotency.keyHash,
+                  idempotencyScope: idempotency.scope,
+                }),
+            ...(scopedInput.approvalRequestId === undefined
+              ? {}
+              : { approvalRequestId: scopedInput.approvalRequestId }),
+          },
+        });
+        await auditDispatchEnqueue(
+          scopedInput,
+          job,
+          host,
+          idempotency === undefined
+            ? undefined
             : {
-                agentId: scopedInput.runContext.agentId,
-                runSubjectGroupIds: scopedInput.subject.groupIds,
-                runSubjectIsAdmin: scopedInput.subject.isAdmin === true,
-                runSubjectScopes: scopedInput.subject.scopes,
-                runSubjectType: scopedInput.subject.type,
-                runSubjectWorkspaceIds: scopedInput.subject.workspaceIds,
-                runContinuation: "model_tool_dispatch",
-                runId: scopedInput.runContext.runId,
-                toolId: scopedInput.runContext.toolId,
-                workspaceId: scopedInput.runContext.workspaceId,
-              }),
-          ...(idempotency === undefined
-            ? {}
-            : {
-                idempotencyKeyHash: idempotency.keyHash,
-                idempotencyScope: idempotency.scope,
-              }),
-          ...(scopedInput.approvalRequestId === undefined
-            ? {}
-            : { approvalRequestId: scopedInput.approvalRequestId }),
-        },
+                keyHash: idempotency.keyHash,
+                replayed: false,
+              },
+        );
+        return dispatchRequestResult(
+          scopedInput,
+          job,
+          host,
+          idempotency === undefined ? undefined : false,
+        );
       });
-      await auditDispatchEnqueue(
-        scopedInput,
-        job,
-        host,
-        idempotency === undefined
-          ? undefined
-          : {
-              keyHash: idempotency.keyHash,
-              replayed: false,
-            },
-      );
-      return dispatchRequestResult(
-        scopedInput,
-        job,
-        host,
-        idempotency === undefined ? undefined : false,
-      );
-    });
+    const result =
+      input.operation.approvalPolicy === "never" ||
+      input.approvalRequestId === undefined
+        ? await runTransaction()
+        : await withApprovalCriticalSection(
+            input.subject.orgId,
+            input.approvalRequestId,
+            runTransaction,
+          );
     if (storedPayload !== undefined && result.idempotency?.replayed === true)
       await deleteStoredPayload(input, storedPayload);
     return result;

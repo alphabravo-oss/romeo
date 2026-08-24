@@ -48,7 +48,7 @@ export function ProviderDetailsPage({
   models: BaseModel[];
   onBack: () => void;
   onConfigure: () => void;
-  onDeleteModel: (providerId: string, model: BaseModel) => Promise<void>;
+  onDeleteModel: (model: BaseModel) => Promise<void>;
   onPullModel: (providerId: string) => Promise<void>;
   onRefresh: () => void;
   onToggle: (enabled: boolean) => void;
@@ -144,7 +144,14 @@ export function ProviderDetailsPage({
               </Button>
             ) : null}
             <Button asChild variant="ghost">
-              <Link search={{ auditCategory: "admin", section: "audit" }} to="/admin">
+              <Link
+                search={(previous) => ({
+                  ...previous,
+                  auditCategory: "admin",
+                  section: "audit",
+                })}
+                to="/admin"
+              >
                 {t("catalogViewAudit")}
               </Link>
             </Button>
@@ -169,12 +176,35 @@ export function ProviderDetailsPage({
               ) : (
                 <CircleAlert aria-hidden size={14} />
               )}
-              <span>
-                {verification.ok
-                  ? t("connectionVerified")
-                  : t("couldNotVerifyConnection")}
+              <span className="rm-connection-result__copy">
+                <strong>
+                  {verification.ok
+                    ? t("connectionVerified")
+                    : t("couldNotVerifyConnection")}
+                </strong>
+                <small translate="no">{verification.message}</small>
+                <span className="rm-connection-result__checks" translate="no">
+                  {verification.checks.map((check) => (
+                    <span key={check.label}>
+                      <StatusBadge
+                        tone={
+                          check.status === "pass"
+                            ? "success"
+                            : check.status === "warning"
+                              ? "warning"
+                              : "danger"
+                        }
+                      >
+                        {check.label}
+                      </StatusBadge>
+                      <span>{check.detail}</span>
+                    </span>
+                  ))}
+                </span>
               </span>
-              <small>{verification.latencyMs} ms</small>
+              <small className="rm-connection-result__latency">
+                {verification.latencyMs} ms
+              </small>
             </div>
           ) : null}
           <div className="grid gap-2 border-t border-border pt-4">
@@ -182,34 +212,26 @@ export function ProviderDetailsPage({
               <strong>{t("discoveredModels")}</strong>
               <Button asChild size="sm" variant="ghost">
                 <Link
-                  search={{
+                  search={(previous) => ({
+                    ...previous,
                     section: "providers",
                     view: "base-models",
                     provider: provider.id,
-                  }}
+                  })}
                   to="/admin"
                 >
                   {t("viewModels")}
                 </Link>
               </Button>
             </div>
-            {models.length > 0 ? (
-              <ProviderModelsTable
-                deletingModelId={deletingModelId}
-                dependentAgents={dependentAgents}
-                isUpdating={isUpdating}
-                models={models}
-                onDeleteModel={onDeleteModel}
-                onToggleModel={onToggleModel}
-                provider={provider}
-              />
-            ) : (
-              <p className="text-sm text-muted">
-                {provider.catalogSync?.status === "error"
-                  ? t("catalogSyncFailedEmpty")
-                  : t("catalogSyncPendingEmpty")}
-              </p>
-            )}
+            <ProviderModelsTable
+              deletingModelId={deletingModelId}
+              dependentAgents={dependentAgents}
+              isUpdating={isUpdating}
+              onDeleteModel={onDeleteModel}
+              onToggleModel={onToggleModel}
+              provider={provider}
+            />
           </div>
           {provider.type === "ollama" ? (
             <form

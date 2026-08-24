@@ -1,6 +1,19 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+if (process.argv.includes("--help")) {
+  process.stdout.write(
+    "Usage: node scripts/record-tool-dispatch-live-evidence.mjs --output <path> [evidence options]\n       node scripts/record-tool-dispatch-live-evidence.mjs --dry-run\n",
+  );
+  process.exit(0);
+}
+if (process.argv.includes("--dry-run")) {
+  process.stdout.write(
+    '{"schemaVersion":"romeo.tool-dispatch-live-evidence-plan.v1","writesEvidence":false}\n',
+  );
+  process.exit(0);
+}
+
 const requiredChecks = [
   "worker_claim_execution_verified",
   "managed_payload_read_verified",

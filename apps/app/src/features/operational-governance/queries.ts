@@ -10,6 +10,7 @@ import {
   operationalGovernanceListUsageEvents,
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
+import type { UsageInterval } from "@romeo/contracts";
 
 import type { AuditLogFilter, AuditLogTableRequest } from "./types";
 
@@ -65,27 +66,30 @@ function compactAuditQuery(filter: AuditLogFilter): AuditLogFilter {
   ) as AuditLogFilter;
 }
 
-export async function listUsageEvents() {
+export async function listUsageEvents(interval: UsageInterval = {}) {
   configureBrowserApiClients();
   const response = await operationalGovernanceListUsageEvents({
+    query: compactUsageInterval(interval),
     throwOnError: true,
   });
   return response.data.data;
 }
 
-export async function exportUsageEventsCsv() {
+export async function exportUsageEventsCsv(interval: UsageInterval = {}) {
   configureBrowserApiClients();
   const response = await operationalGovernanceExportUsageEvents({
     headers: { accept: "text/csv" },
     parseAs: "text",
+    query: compactUsageInterval(interval),
     throwOnError: true,
   });
   return response.data;
 }
 
-export async function getUsageSummary() {
+export async function getUsageSummary(interval: UsageInterval = {}) {
   configureBrowserApiClients();
   const response = await operationalGovernanceGetUsageSummary({
+    query: compactUsageInterval(interval),
     throwOnError: true,
   });
   return response.data.data;
@@ -97,6 +101,16 @@ export async function listUsageAlerts() {
     throwOnError: true,
   });
   return response.data.data;
+}
+
+function compactUsageInterval(interval: UsageInterval): {
+  from?: string;
+  to?: string;
+} {
+  return {
+    ...(interval.from === undefined ? {} : { from: interval.from }),
+    ...(interval.to === undefined ? {} : { to: interval.to }),
+  };
 }
 
 export async function listQuotas() {

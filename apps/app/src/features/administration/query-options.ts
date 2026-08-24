@@ -61,10 +61,11 @@ export function usersQueryOptions(input: UsersQueryInput) {
     ...serverQueryPolicy("interactive", "users", {
       direction,
       page,
-      query,
+      pageSize,
+      ...(query.trim() === "" ? {} : { query }),
       sort,
     }),
-    queryKey: appQueryKeys.users({ direction, page, query, sort }),
+    queryKey: appQueryKeys.users({ direction, page, pageSize, query, sort }),
     queryFn: ({ signal }) =>
       abortableQuery(signal, () =>
         listUsers({

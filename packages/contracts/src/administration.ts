@@ -21,7 +21,11 @@ export {
 } from "./administration-users";
 
 const timestamp = z.iso.datetime();
-const scope = z.enum(scopeValues);
+const requestScope = z.enum(scopeValues);
+const responseScope = z.string().openapi({
+  description: "Authorization scope. Clients must tolerate future scopes.",
+  "x-extensible-enum": scopeValues,
+});
 export const GroupSchema = z
   .strictObject({
     id: identifier,
@@ -46,7 +50,7 @@ export const ApiKeySummarySchema = z
     userId: identifier.optional(),
     serviceAccountId: identifier.optional(),
     name: z.string().min(1),
-    scopes: z.array(scope),
+    scopes: z.array(responseScope),
     revokedAt: timestamp.optional(),
     createdAt: timestamp,
   })
@@ -62,7 +66,7 @@ export const ServiceAccountSchema = z
     id: identifier,
     orgId: identifier,
     name: z.string().min(1),
-    scopes: z.array(scope),
+    scopes: z.array(responseScope),
     createdBy: identifier,
     disabledAt: timestamp.optional(),
     createdAt: timestamp,
@@ -205,7 +209,7 @@ export const AdminSetLocalPasswordSchema = z
 export const CreateApiKeySchema = z
   .strictObject({
     name: z.string().trim().min(1).max(200),
-    scopes: z.array(scope).min(1).max(scopeValues.length),
+    scopes: z.array(requestScope).min(1).max(scopeValues.length),
   })
   .openapi("CreateApiKeyRequest");
 export const CreateServiceAccountSchema = CreateApiKeySchema.openapi(
@@ -227,10 +231,7 @@ const body = <T extends z.ZodType>(schema: T) => ({
   content: { "application/json": { schema } },
 });
 
-export {
-  listUsersRoute,
-  queryUsersRoute,
-} from "./administration-user-routes";
+export { listUsersRoute, queryUsersRoute } from "./administration-user-routes";
 export const disableUserRoute = createRoute({
   ...metadata,
   method: "post",

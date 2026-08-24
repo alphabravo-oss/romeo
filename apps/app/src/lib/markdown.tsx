@@ -293,7 +293,12 @@ const MarkdownDocument = memo(function MarkdownDocument({
   const visible = useTranscriptRowVisibility();
   const { fencedCode: usesFencedCode, math: usesMath } =
     detectMarkdownFeatures(content);
-  const featureKey = `${usesFencedCode ? "code" : ""}:${usesMath ? "math" : ""}`;
+  // Syntax color is part of the fenced-code reading contract and must not
+  // depend on an observer race. The highlighter remains a cached dynamic
+  // chunk; math stays visibility-gated because KaTeX is materially heavier.
+  const loadFencedCode = usesFencedCode;
+  const loadMath = usesMath && visible;
+  const featureKey = `${loadFencedCode ? "code" : ""}:${loadMath ? "math" : ""}`;
   const [rehypePlugins, setRehypePlugins] = useState<RehypePlugins>([]);
   const [remarkPlugins, setRemarkPlugins] = useState<RemarkPlugins>([
     remarkGfm,
@@ -301,19 +306,19 @@ const MarkdownDocument = memo(function MarkdownDocument({
   const loadedFeatureKey = useRef(":");
 
   useEffect(() => {
-    if (!visible || (!usesFencedCode && !usesMath)) return;
+    if (!loadFencedCode && !loadMath) return;
     let active = true;
     void Promise.all([
-      usesFencedCode
+      loadFencedCode
         ? import("rehype-highlight").then((module) => module.default)
         : Promise.resolve(undefined),
-      usesMath
+      loadMath
         ? import("rehype-katex").then((module) => module.default)
         : Promise.resolve(undefined),
-      usesMath
+      loadMath
         ? import("remark-math").then((module) => module.default)
         : Promise.resolve(undefined),
-      usesMath
+      loadMath
         ? import("katex/dist/katex.min.css")
         : Promise.resolve(undefined),
     ]).then(([highlight, katex, math]) => {
@@ -335,7 +340,7 @@ const MarkdownDocument = memo(function MarkdownDocument({
     return () => {
       active = false;
     };
-  }, [featureKey, usesFencedCode, usesMath, visible]);
+  }, [featureKey, loadFencedCode, loadMath]);
 
   const activeRehypePlugins =
     loadedFeatureKey.current === featureKey ? rehypePlugins : [];

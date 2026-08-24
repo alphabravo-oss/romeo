@@ -44,13 +44,20 @@ describe("VisibilityAwareAudio", () => {
       root.render(
         <TranscriptRowVisibilityBoundary elementId="row" registry={registry}>
           <article id="row">
-            <VisibilityAwareAudio src="/speech.mp3" />
+            <VisibilityAwareAudio
+              captions="Generated speech"
+              captionsLabel="Captions"
+              src="/speech.mp3"
+            />
           </article>
         </TranscriptRowVisibilityBoundary>,
       );
     });
     const audio = container.querySelector("audio");
     expect(audio?.preload).toBe("none");
+    expect(
+      audio?.querySelector('track[kind="captions"]')?.getAttribute("src"),
+    ).toContain("data:text/vtt");
     const observer = TestIntersectionObserver.instance!;
     await act(async () => observer.emit(document.getElementById("row")!, true));
     pause.mockClear();

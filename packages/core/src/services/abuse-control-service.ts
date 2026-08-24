@@ -118,11 +118,14 @@ export class AbuseControlService {
         now,
         input.subject.id,
       );
-      await repository.upsertSystemSetting({
-        key: settingKey(input.orgId),
-        value: serializeStoredPolicy(updated),
-        updatedAt: now,
-      });
+      await repository.upsertSystemSetting(
+        {
+          key: settingKey(input.orgId),
+          value: serializeStoredPolicy(updated),
+          updatedAt: now,
+        },
+        input.orgId,
+      );
       const report = await toReport(repository, input.orgId, updated);
       await writeAuditLog(repository, {
         subject: input.subject,
@@ -263,7 +266,7 @@ async function readStoredPolicy(
   repository: RomeoRepository,
   orgId: string,
 ): Promise<StoredAbuseControlPolicy | undefined> {
-  const setting = await repository.getSystemSetting(settingKey(orgId));
+  const setting = await repository.getSystemSetting(settingKey(orgId), orgId);
   if (setting === undefined) return undefined;
   return parseStoredPolicy(setting.value, orgId);
 }

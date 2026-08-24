@@ -124,7 +124,12 @@ function capabilityRow(
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "enabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", maxima: [], allowlists: [] },
+    merge: {
+      boolean: "deny_dominates",
+      booleans: [],
+      maxima: [],
+      allowlists: [],
+    },
     requiredScopes: [],
     dependencies: [],
     copy: {

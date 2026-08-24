@@ -172,7 +172,7 @@ function normalizeOptionalIssuer(
   } catch {
     throw new ApiError(
       "invalid_auth_provider_oidc_config",
-      "OIDC issuer URL must use HTTPS outside localhost.",
+      "OIDC issuer URL must use a public HTTPS endpoint.",
       400,
     );
   }

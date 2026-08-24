@@ -6,9 +6,14 @@ export function selectRealtimeAdapter(input: {
   pipelineAvailable: boolean;
 }):
   | { outcome: "accepted"; adapter: RealtimeAdapterKind }
-  | { outcome: "denied"; code: "realtime_runtime_uninstalled"; fallback: "batch_stt_tts" } {
+  | {
+      outcome: "denied";
+      code: "realtime_runtime_uninstalled";
+      fallback: "batch_stt_tts";
+    } {
   if (input.nativeAvailable) return { outcome: "accepted", adapter: "native" };
-  if (input.pipelineAvailable) return { outcome: "accepted", adapter: "pipeline" };
+  if (input.pipelineAvailable)
+    return { outcome: "accepted", adapter: "pipeline" };
   return {
     outcome: "denied",
     code: "realtime_runtime_uninstalled",
@@ -25,7 +30,13 @@ export function authorizeVadInterruption(input: {
   | {
       outcome: "accepted";
       cancelTts: boolean;
-      audit: { interrupted: boolean; audioStored: false };
+      sensitivity: number;
+      audit: {
+        interrupted: boolean;
+        audioStored: false;
+        vadMode: VadMode;
+        vadSensitivity: number;
+      };
     }
   | { outcome: "denied"; code: "realtime_runtime_uninstalled" } {
   if (input.rawAudioRetained)
@@ -34,7 +45,13 @@ export function authorizeVadInterruption(input: {
   return {
     outcome: "accepted",
     cancelTts: input.bargeIn,
-    audit: { interrupted: input.bargeIn, audioStored: false },
+    sensitivity,
+    audit: {
+      interrupted: input.bargeIn,
+      audioStored: false,
+      vadMode: input.mode,
+      vadSensitivity: sensitivity,
+    },
   };
 }
 

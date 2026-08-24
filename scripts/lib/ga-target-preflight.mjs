@@ -13,7 +13,7 @@ import {
 
 export const defaultChecklistPath = "dist/ci/ga-checklist.json";
 
-const gateSpecs = [
+export const gaTargetGateSpecs = [
   {
     id: "phase21.kubernetes_live_smoke",
     command: () =>
@@ -70,7 +70,7 @@ const gateSpecs = [
   {
     id: "phase21.kubernetes_keda_scaler",
     command: () =>
-      `pnpm smoke:kubernetes:keda -- --api-key $ROMEO_API_KEY --namespace ${targetKubernetesNamespace()} --keda-namespace ${targetKedaNamespace()} --service ${targetKubernetesServiceName()} --scaledjob ${targetKedaScaledJobName()} --triggerauthentication ${targetKedaTriggerAuthenticationName()} --output dist/ci/kubernetes-keda-smoke.json`,
+      `pnpm smoke:kubernetes:keda -- --namespace ${targetKubernetesNamespace()} --keda-namespace ${targetKedaNamespace()} --service ${targetKubernetesServiceName()} --scaledjob ${targetKedaScaledJobName()} --triggerauthentication ${targetKedaTriggerAuthenticationName()} --output dist/ci/kubernetes-keda-smoke.json`,
     requiredCommands: ["kubectl"],
     requiredEnv: ["ROMEO_API_KEY"],
     checks: [
@@ -112,7 +112,7 @@ const gateSpecs = [
   {
     id: "phase25.kubernetes_workers_smoke",
     command: () =>
-      `pnpm smoke:kubernetes:workers -- --api-key $ROMEO_API_KEY --namespace ${targetKubernetesNamespace()} --release-name ${targetKubernetesReleaseName()} --service ${targetKubernetesServiceName()} --output dist/ci/kubernetes-workers-smoke.json`,
+      `pnpm smoke:kubernetes:workers -- --namespace ${targetKubernetesNamespace()} --release-name ${targetKubernetesReleaseName()} --service ${targetKubernetesServiceName()} --output dist/ci/kubernetes-workers-smoke.json`,
     requiredCommands: ["kubectl"],
     requiredEnv: ["ROMEO_API_KEY"],
     checks: [
@@ -169,7 +169,7 @@ const gateSpecs = [
   {
     id: "phase32.target_quality_evidence",
     command:
-      "TARGET_QUALITY_REQUIRE_EVAL_PASSED=true TARGET_QUALITY_REQUIRE_VECTOR_COMPARISON=$TARGET_QUALITY_REQUIRE_VECTOR_COMPARISON TARGET_QUALITY_BASELINE_VECTOR_ROUTE_MODE=$TARGET_QUALITY_BASELINE_VECTOR_ROUTE_MODE TARGET_QUALITY_CANDIDATE_VECTOR_ROUTE_MODE=$TARGET_QUALITY_CANDIDATE_VECTOR_ROUTE_MODE pnpm smoke:quality:target -- --api-key $ROMEO_API_KEY --base-url $ROMEO_BASE_URL --agent-ids $TARGET_QUALITY_AGENT_IDS --require-eval-passed --replay-file $TARGET_QUALITY_REPLAY_FILE --output dist/ci/target-quality-evidence.json",
+      "TARGET_QUALITY_REQUIRE_EVAL_PASSED=true TARGET_QUALITY_REQUIRE_VECTOR_COMPARISON=$TARGET_QUALITY_REQUIRE_VECTOR_COMPARISON TARGET_QUALITY_BASELINE_VECTOR_ROUTE_MODE=$TARGET_QUALITY_BASELINE_VECTOR_ROUTE_MODE TARGET_QUALITY_CANDIDATE_VECTOR_ROUTE_MODE=$TARGET_QUALITY_CANDIDATE_VECTOR_ROUTE_MODE pnpm smoke:quality:target -- --base-url $ROMEO_BASE_URL --agent-ids $TARGET_QUALITY_AGENT_IDS --require-eval-passed --replay-file $TARGET_QUALITY_REPLAY_FILE --output dist/ci/target-quality-evidence.json",
     requiredEnv: [
       "ROMEO_BASE_URL",
       "ROMEO_API_KEY",
@@ -379,7 +379,7 @@ const gateSpecs = [
   {
     id: "phase32.kubernetes_tiered_rag_smoke",
     command: () =>
-      `pnpm smoke:kubernetes:tiered-rag -- --api-key $ROMEO_API_KEY --namespace ${targetKubernetesNamespace()} --release-name ${targetKubernetesReleaseName()} --service ${targetKubernetesServiceName()} --deployment ${targetKubernetesDeploymentName()} --output dist/ci/kubernetes-tiered-rag-smoke.json`,
+      `pnpm smoke:kubernetes:tiered-rag -- --namespace ${targetKubernetesNamespace()} --release-name ${targetKubernetesReleaseName()} --service ${targetKubernetesServiceName()} --deployment ${targetKubernetesDeploymentName()} --output dist/ci/kubernetes-tiered-rag-smoke.json`,
     requiredCommands: ["kubectl"],
     requiredEnv: ["ROMEO_API_KEY"],
     checks: [
@@ -392,7 +392,7 @@ const gateSpecs = [
   {
     id: "phase32.qdrant_dr_consistency",
     command:
-      "pnpm smoke:qdrant:dr -- --phase prepare-source --url $SOURCE_QDRANT_URL --collection $SOURCE_QDRANT_COLLECTION --api-key $SOURCE_QDRANT_API_KEY --run-secret $QDRANT_DR_RUN_SECRET --namespace-policy $VECTOR_NAMESPACE_POLICY --partitioning-policy $VECTOR_PARTITIONING_POLICY --confirm-mutation --output dist/ci/qdrant-dr-source.json && pnpm smoke:qdrant:dr -- --phase verify-restore --url $RESTORE_QDRANT_URL --collection $RESTORE_QDRANT_COLLECTION --api-key $RESTORE_QDRANT_API_KEY --run-secret $QDRANT_DR_RUN_SECRET --namespace-policy $VECTOR_NAMESPACE_POLICY --partitioning-policy $VECTOR_PARTITIONING_POLICY --source-evidence dist/ci/qdrant-dr-source.json --confirm-cleanup --output dist/ci/qdrant-dr-restore.json && pnpm smoke:qdrant:dr -- --phase cleanup-source --url $SOURCE_QDRANT_URL --collection $SOURCE_QDRANT_COLLECTION --api-key $SOURCE_QDRANT_API_KEY --run-secret $QDRANT_DR_RUN_SECRET --namespace-policy $VECTOR_NAMESPACE_POLICY --partitioning-policy $VECTOR_PARTITIONING_POLICY --confirm-mutation --output dist/ci/qdrant-dr-source-cleanup.json",
+      "pnpm smoke:qdrant:dr -- --phase prepare-source --url $SOURCE_QDRANT_URL --collection $SOURCE_QDRANT_COLLECTION --namespace-policy $VECTOR_NAMESPACE_POLICY --partitioning-policy $VECTOR_PARTITIONING_POLICY --confirm-mutation --output dist/ci/qdrant-dr-source.json && pnpm smoke:qdrant:dr -- --phase verify-restore --url $RESTORE_QDRANT_URL --collection $RESTORE_QDRANT_COLLECTION --namespace-policy $VECTOR_NAMESPACE_POLICY --partitioning-policy $VECTOR_PARTITIONING_POLICY --source-evidence dist/ci/qdrant-dr-source.json --confirm-cleanup --output dist/ci/qdrant-dr-restore.json && pnpm smoke:qdrant:dr -- --phase cleanup-source --url $SOURCE_QDRANT_URL --collection $SOURCE_QDRANT_COLLECTION --namespace-policy $VECTOR_NAMESPACE_POLICY --partitioning-policy $VECTOR_PARTITIONING_POLICY --confirm-mutation --output dist/ci/qdrant-dr-source-cleanup.json",
     requiredEnv: [
       "SOURCE_QDRANT_URL",
       "SOURCE_QDRANT_COLLECTION",
@@ -418,7 +418,7 @@ const gateSpecs = [
   {
     id: "phase32.qdrant_live_evidence",
     command: () =>
-      `QDRANT_LIVE_EVIDENCE_REVIEWED=true pnpm smoke:qdrant:live -- --url $QDRANT_URL --collection $QDRANT_COLLECTION --api-key $QDRANT_API_KEY --namespace-policy $VECTOR_NAMESPACE_POLICY --partitioning-policy $VECTOR_PARTITIONING_POLICY --confirm-mutation --output dist/ci/qdrant-live-evidence.json`,
+      `QDRANT_LIVE_EVIDENCE_REVIEWED=true pnpm smoke:qdrant:live -- --url $QDRANT_URL --collection $QDRANT_COLLECTION --namespace-policy $VECTOR_NAMESPACE_POLICY --partitioning-policy $VECTOR_PARTITIONING_POLICY --confirm-mutation --output dist/ci/qdrant-live-evidence.json`,
     requiredEnv: [
       "QDRANT_LIVE_EVIDENCE_REVIEWED",
       "QDRANT_URL",
@@ -442,7 +442,7 @@ const gateSpecs = [
   {
     id: "phase33.live_edge_enforcement",
     command:
-      "pnpm smoke:edge:live -- --api-key $ROMEO_API_KEY --base-url $ROMEO_BASE_URL --require-admin-posture --require-waf-block-mode --body-limit-path $EDGE_ENFORCEMENT_BODY_LIMIT_PATH --body-limit-bytes $EDGE_ENFORCEMENT_BODY_LIMIT_BYTES --body-limit-expected-statuses $EDGE_ENFORCEMENT_BODY_LIMIT_EXPECTED_STATUSES --rate-limit-path $EDGE_ENFORCEMENT_RATE_LIMIT_PATH --rate-limit-attempts $EDGE_ENFORCEMENT_RATE_LIMIT_ATTEMPTS --rate-limit-expected-status $EDGE_ENFORCEMENT_RATE_LIMIT_EXPECTED_STATUS --waf-probe-path $EDGE_ENFORCEMENT_WAF_PROBE_PATH --waf-expected-statuses $EDGE_ENFORCEMENT_WAF_EXPECTED_STATUSES --output dist/ci/live-edge-enforcement.json",
+      "pnpm smoke:edge:live -- --base-url $ROMEO_BASE_URL --require-admin-posture --require-waf-block-mode --body-limit-path $EDGE_ENFORCEMENT_BODY_LIMIT_PATH --body-limit-bytes $EDGE_ENFORCEMENT_BODY_LIMIT_BYTES --body-limit-expected-statuses $EDGE_ENFORCEMENT_BODY_LIMIT_EXPECTED_STATUSES --rate-limit-path $EDGE_ENFORCEMENT_RATE_LIMIT_PATH --rate-limit-attempts $EDGE_ENFORCEMENT_RATE_LIMIT_ATTEMPTS --rate-limit-expected-status $EDGE_ENFORCEMENT_RATE_LIMIT_EXPECTED_STATUS --waf-probe-path $EDGE_ENFORCEMENT_WAF_PROBE_PATH --waf-expected-statuses $EDGE_ENFORCEMENT_WAF_EXPECTED_STATUSES --output dist/ci/live-edge-enforcement.json",
     requiredEnv: [
       "ROMEO_BASE_URL",
       "ROMEO_API_KEY",
@@ -501,7 +501,7 @@ const gateSpecs = [
   {
     id: "phase34.kubernetes_load_soak",
     command: () =>
-      `pnpm smoke:kubernetes:load-soak -- --api-key $ROMEO_API_KEY --namespace ${targetKubernetesNamespace()} --release-name ${targetKubernetesReleaseName()} --service ${targetKubernetesServiceName()} --deployment ${targetKubernetesDeploymentName()} --tier $KUBERNETES_LOAD_SOAK_TIER --iterations $KUBERNETES_LOAD_SOAK_ITERATIONS --soak-seconds $KUBERNETES_LOAD_SOAK_SOAK_SECONDS --interval-seconds $KUBERNETES_LOAD_SOAK_INTERVAL_SECONDS --timeout-ms $KUBERNETES_LOAD_SOAK_TIMEOUT_MS --output dist/ci/kubernetes-load-soak.json`,
+      `pnpm smoke:kubernetes:load-soak -- --namespace ${targetKubernetesNamespace()} --release-name ${targetKubernetesReleaseName()} --service ${targetKubernetesServiceName()} --deployment ${targetKubernetesDeploymentName()} --tier $KUBERNETES_LOAD_SOAK_TIER --iterations $KUBERNETES_LOAD_SOAK_ITERATIONS --soak-seconds $KUBERNETES_LOAD_SOAK_SOAK_SECONDS --interval-seconds $KUBERNETES_LOAD_SOAK_INTERVAL_SECONDS --timeout-ms $KUBERNETES_LOAD_SOAK_TIMEOUT_MS --output dist/ci/kubernetes-load-soak.json`,
     requiredCommands: ["kubectl"],
     requiredEnv: [
       "ROMEO_API_KEY",
@@ -567,7 +567,7 @@ export function blockedRequiredGates(checklist) {
 }
 
 function gatePreflight(gate, config) {
-  const spec = gateSpecs.find((candidate) => candidate.id === gate.id);
+  const spec = gaTargetGateSpecs.find((candidate) => candidate.id === gate.id);
   const commandChecks = (spec?.requiredCommands ?? []).map(commandCheck);
   const envChecks = (spec?.requiredEnv ?? []).map(envCheck);
   const envAnyChecks = (spec?.requiredEnvAnyOf ?? []).map(envAnyCheck);

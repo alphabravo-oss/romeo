@@ -8,6 +8,11 @@ import type { AgentService } from "./agent-service";
 import type { AnalyticsService } from "./analytics-service";
 import type { ApiKeyService } from "./api-key-service";
 import type { AuditService } from "./audit-service";
+import type {
+  AuditCheckpointSigner,
+  AuditExportClient,
+  AuditIntegrityService,
+} from "./audit-integrity";
 import type { AuthProviderSettingsService } from "./auth-provider-settings-service";
 import type { BillingService } from "./billing-service";
 import type { BrowserAutomationService } from "./browser-automation-service";
@@ -35,11 +40,17 @@ import type { FileOcrProvider } from "./file-ocr";
 import type { FileMalwareScanner, FileService } from "./file-service";
 import type { GaEvidencePostureService } from "./ga-evidence-posture-service";
 import type { GovernanceService } from "./governance-service";
+import type { GovernanceExportWorker } from "./governance-export-worker";
 import type { GroupService } from "./group-service";
 import type { ImageGenerationService } from "./image-generation-service";
 import type { ImageJobStore } from "./image-job-store";
 import type { ModelCapabilityProbeService } from "./model-capability-probe";
 import type { InterfacePreferenceService } from "./interface-preference-service";
+import type {
+  InternalReadinessService,
+  RuntimeDatabaseReadinessProbe,
+  RuntimeReadinessState,
+} from "./internal-readiness-service";
 import type { IdempotencyService } from "./idempotency-service";
 import type { JobService } from "./job-service";
 import type { KnowledgeBinaryExtractor } from "./knowledge-extraction-worker";
@@ -73,6 +84,7 @@ import type { RagPostureService } from "./rag-posture-service";
 import type { ReadinessService } from "./readiness-service";
 import type { RunService } from "./run-service";
 import type { RunEventTransport } from "./run-event-transport";
+import type { RuntimeKeyRotationPostureService } from "./runtime-key-rotation-posture-service";
 import type { SamlClientFactory } from "./saml-client";
 import type { SamlAuthService } from "./saml-auth-service";
 import type { ScimService } from "./scim-service";
@@ -94,7 +106,7 @@ import type { UserLifecycleService } from "./user-lifecycle-service";
 import type { VoiceService } from "./voice-service";
 import type { WebhookService } from "./webhook-service";
 import type { WebSearchService } from "./web-search-service";
-import type { WorkflowService } from "./workflow-service";
+
 import type { WorkspaceContentService } from "./workspace-content-service";
 import type { WorkspaceService } from "./workspace-service";
 
@@ -105,6 +117,7 @@ export interface RomeoServices {
   agents: AgentService;
   apiKeys: ApiKeyService;
   audit: AuditService;
+  auditIntegrity: AuditIntegrityService;
   authProviderSettings: AuthProviderSettingsService;
   billing: BillingService;
   browserAutomation: BrowserAutomationService;
@@ -123,7 +136,12 @@ export interface RomeoServices {
   contentPolicyApprovals: PolicyApprovalService;
   dataConnectors: DataConnectorService;
   delegatedOAuth: DelegatedOAuthService;
-  deployment: { tenancyMode: RomeoEnv["TENANCY_MODE"] };
+  deployment: {
+    billingEnabled: boolean;
+    malwareScanEnabled: boolean;
+    qdrantConfigured: boolean;
+    tenancyMode: RomeoEnv["TENANCY_MODE"];
+  };
   directorySync: DirectorySyncService;
   deviceAuthorizations: DeviceAuthorizationService;
   edgeSecurity: EdgeSecurityService;
@@ -136,11 +154,13 @@ export interface RomeoServices {
   imageJobs: ImageJobStore;
   modelCapabilityProbes: ModelCapabilityProbeService;
   interfacePreferences: InterfacePreferenceService;
+  internalReadiness: InternalReadinessService;
   idempotency: IdempotencyService;
   ldapAuth: LdapAuthService;
   localAuth: LocalAuthService;
   managedSecrets: ManagedSecretService;
   governance: GovernanceService;
+  governanceExports: GovernanceExportWorker;
   groups: GroupService;
   notifications: NotificationService;
   oidc: OidcAuthenticator;
@@ -159,6 +179,7 @@ export interface RomeoServices {
   ragPosture: RagPostureService;
   readiness: ReadinessService;
   runs: RunService;
+  runtimeKeyRotationPosture: RuntimeKeyRotationPostureService;
   samlAuth: SamlAuthService;
   scim: ScimService;
   secretRotation: SecretRotationService;
@@ -176,20 +197,24 @@ export interface RomeoServices {
   voices: VoiceService;
   webhooks: WebhookService;
   webSearch: WebSearchService;
-  workflows: WorkflowService;
+
   workspace: WorkspaceService;
   workspaceContent: WorkspaceContentService;
 }
 
 export interface CreateServicesOptions {
   env?: RomeoEnv;
+  auditCheckpointSigner?: AuditCheckpointSigner;
   dataConnectorExecutor?: DataConnectorExecutor;
   knowledgeExtractor?: KnowledgeBinaryExtractor;
   embeddingFetch?: typeof fetch;
+  auditExportClient?: AuditExportClient;
   fileMalwareScanner?: FileMalwareScanner;
   fileOcrProvider?: FileOcrProvider;
   delegatedOAuthFetch?: typeof fetch;
   ldapClientFactory?: LdapClientFactory;
+  runtimeDatabaseReadinessProbe?: RuntimeDatabaseReadinessProbe;
+  runtimeReadinessState?: RuntimeReadinessState;
   objectStore?: ObjectStore;
   oidcFetch?: typeof fetch;
   providerFetch?: typeof fetch;

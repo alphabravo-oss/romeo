@@ -187,7 +187,10 @@ export const approveCapabilityPublicationRoute = createRoute({
     },
   },
   responses: {
-    200: jsonResponse("Approved policy bundle", dataEnvelope(PolicyBundleSchema)),
+    200: jsonResponse(
+      "Approved policy bundle",
+      dataEnvelope(PolicyBundleSchema),
+    ),
     ...mutationErrors,
   },
 });

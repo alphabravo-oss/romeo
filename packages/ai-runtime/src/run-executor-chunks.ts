@@ -159,5 +159,5 @@ export function mergeProviderUsage(
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
-  return Number.isInteger(value) && typeof value === "number" && value >= 0;
+  return Number.isSafeInteger(value) && typeof value === "number" && value >= 0;
 }

@@ -13,6 +13,7 @@ vi.mock("mermaid", () => ({ default: mermaid }));
 
 import {
   createTranscriptVisibilityRegistry,
+  isTranscriptRowNearViewport,
   TranscriptRowVisibilityBoundary,
 } from "../components/transcript-row-visibility";
 import { Markdown } from "./markdown";
@@ -29,12 +30,14 @@ describe("visible Markdown features", () => {
   beforeEach(() => {
     reactTestEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
     vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
+    vi.stubGlobal("ResizeObserver", TestResizeObserver);
     vi.spyOn(crypto, "randomUUID").mockReturnValue(
       "00000000-0000-4000-8000-000000000000",
     );
     mermaid.initialize.mockClear();
     mermaid.render.mockClear();
     TestIntersectionObserver.instances = [];
+    TestResizeObserver.instances = [];
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -85,6 +88,91 @@ describe("visible Markdown features", () => {
     expect(mermaid.render).toHaveBeenCalledOnce();
     registry.dispose();
   });
+
+  it("recognizes an already-visible row before observer delivery", () => {
+    const rootElement = document.createElement("div");
+    const row = document.createElement("article");
+    vi.spyOn(rootElement, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    vi.spyOn(row, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(50, 100, 700, 200),
+    );
+
+    expect(isTranscriptRowNearViewport(row, rootElement)).toBe(true);
+  });
+
+  it("rechecks geometry when a streaming row gains layout", () => {
+    const rootElement = document.createElement("div");
+    const row = document.createElement("article");
+    vi.spyOn(rootElement, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    const rowRect = vi
+      .spyOn(row, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect());
+    const listener = vi.fn();
+    const registry = createTranscriptVisibilityRegistry(() => rootElement);
+
+    registry.subscribe(row, listener);
+    expect(listener).toHaveBeenLastCalledWith(false);
+    rowRect.mockReturnValue(new DOMRect(50, 100, 700, 200));
+    TestResizeObserver.instances[0]!.emit(row);
+    expect(listener).toHaveBeenLastCalledWith(true);
+    registry.dispose();
+  });
+
+  it("loads syntax highlighting independently of observer delivery", async () => {
+    const registry = createTranscriptVisibilityRegistry(() => container);
+    await act(async () => {
+      root.render(
+        <TranscriptRowVisibilityBoundary
+          elementId="code-message-row"
+          registry={registry}
+        >
+          <article id="code-message-row">
+            <Markdown
+              content={"```typescript\nconst parity: boolean = true;\n```"}
+            />
+          </article>
+        </TranscriptRowVisibilityBoundary>,
+      );
+    });
+    observer = TestIntersectionObserver.instances[0]!;
+    await vi.waitFor(() =>
+      expect(container.querySelector(".rm-codeblock code.hljs")).not.toBeNull(),
+    );
+
+    await act(async () =>
+      observer.emit(document.getElementById("code-message-row")!, true),
+    );
+    await vi.waitFor(() =>
+      expect(container.querySelector(".rm-codeblock code.hljs")).not.toBeNull(),
+    );
+    expect(
+      container.querySelectorAll(".rm-codeblock .hljs-keyword"),
+    ).toHaveLength(1);
+    registry.dispose();
+  });
+
+  it("renders deferred features when a streaming row has no target yet", async () => {
+    const registry = createTranscriptVisibilityRegistry(() => container);
+    await act(async () => {
+      root.render(
+        <TranscriptRowVisibilityBoundary
+          elementId="pending-streaming-row"
+          registry={registry}
+        >
+          <Markdown content={"```typescript\nconst ready = true;\n```"} />
+        </TranscriptRowVisibilityBoundary>,
+      );
+    });
+
+    await vi.waitFor(() =>
+      expect(container.querySelector(".rm-codeblock code.hljs")).not.toBeNull(),
+    );
+    registry.dispose();
+  });
 });
 
 class TestIntersectionObserver implements IntersectionObserver {
@@ -116,6 +204,33 @@ class TestIntersectionObserver implements IntersectionObserver {
           rootBounds: new DOMRect(),
           target,
           time: performance.now(),
+        },
+      ],
+      this,
+    );
+  }
+}
+
+class TestResizeObserver implements ResizeObserver {
+  static instances: TestResizeObserver[] = [];
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    TestResizeObserver.instances.push(this);
+  }
+
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+
+  emit(target: Element) {
+    this.callback(
+      [
+        {
+          borderBoxSize: [],
+          contentBoxSize: [],
+          contentRect: target.getBoundingClientRect(),
+          devicePixelContentBoxSize: [],
+          target,
         },
       ],
       this,

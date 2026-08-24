@@ -47,6 +47,11 @@ describe("knowledge repository mappers", () => {
       metadata: { visibility: "workspace", labels: ["policy"] },
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
       updatedAt: new Date("2026-06-27T00:05:00.000Z"),
+      extractionLeaseOwner: null,
+      extractionLeaseToken: null,
+      extractionLeaseExpiresAt: null,
+      extractionFence: 0,
+      extractionAttempts: 0,
     });
 
     expect(source).toMatchObject({

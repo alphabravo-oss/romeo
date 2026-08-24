@@ -6,54 +6,22 @@ import { readEnv } from "../packages/config/src/index";
 import { createRomeoApi } from "../packages/core/src/api";
 import { dataConnectorTypes } from "../packages/core/src/domain/data-connectors";
 import { InMemoryRomeoRepository } from "../packages/core/src/repositories/in-memory";
-import { AtlassianDataConnectorExecutor } from "../packages/core/src/services/atlassian-data-connector-executor";
 import { WebsiteDataConnectorExecutor } from "../packages/core/src/services/data-connector-executors";
-import { LinearDataConnectorExecutor } from "../packages/core/src/services/linear-data-connector-executor";
-import { NotionDataConnectorExecutor } from "../packages/core/src/services/notion-data-connector-executor";
-import { EnvironmentSecretResolver } from "../packages/core/src/services/secret-resolver";
-import { SlackDataConnectorExecutor } from "../packages/core/src/services/slack-data-connector-executor";
 
 const output = argValue("--output");
 const pid = process.pid;
 const rawSentinels = {
   allowedHost: `connector-acceptance-${pid}.example.com`,
-  atlassianApiToken: `SECRET_ATLASSIAN_API_TOKEN_${pid}`,
-  atlassianConfluenceContent: `RAW_ATLASSIAN_CONFLUENCE_CONTENT_${pid}`,
-  atlassianCql: `space = "OPS_${pid}" and type = page`,
-  atlassianHost: `atlassian-${pid}.example.com`,
-  atlassianJiraContent: `RAW_ATLASSIAN_JIRA_CONTENT_${pid}`,
-  atlassianJql: `project = OPS${pid} and status != Done`,
-  atlassianSecretRef: `env://ATLASSIAN_ACCEPTANCE_SECRET_${pid}`,
   delegatedOAuthConnectionId: `delegated_oauth_connector_acceptance_${pid}`,
   delegatedOAuthSecret: `SECRET_DELEGATED_OAUTH_${pid}`,
   githubToken: `SECRET_GITHUB_CONNECTOR_TOKEN_${pid}`,
-  linearApiKey: `SECRET_LINEAR_API_KEY_${pid}`,
-  linearContent: `RAW_LINEAR_CONTENT_${pid}`,
-  linearHost: `linear-${pid}.example.com`,
-  linearQuery: `linear acceptance ${pid}`,
-  linearSecretRef: `env://LINEAR_ACCEPTANCE_SECRET_${pid}`,
-  notionContent: `RAW_NOTION_CONTENT_${pid}`,
-  notionHost: `notion-${pid}.example.com`,
-  notionQuery: `notion acceptance ${pid}`,
-  notionSecretRef: `env://NOTION_ACCEPTANCE_SECRET_${pid}`,
-  notionToken: `SECRET_NOTION_TOKEN_${pid}`,
   privateDnsHost: `connector-private-${pid}.example.com`,
   s3AccessKey: `SECRET_S3_ACCESS_${pid}`,
   s3Endpoint: `https://s3-connector-${pid}.internal.example`,
   s3SecretKey: `SECRET_S3_SECRET_${pid}`,
   secretRef: `vault://connectors/acceptance-${pid}`,
-  slackChannelId: `C${pid}ABC`,
-  slackContent: `RAW_SLACK_CONTENT_${pid}`,
-  slackHost: `slack-${pid}.example.com`,
-  slackSecretRef: `env://SLACK_ACCEPTANCE_SECRET_${pid}`,
-  slackToken: `SECRET_SLACK_TOKEN_${pid}`,
   wildcardHost: `*.trusted-connector-${pid}.example`,
 };
-const atlassianSecret = JSON.stringify({
-  email: `admin-${pid}@example.com`,
-  apiToken: rawSentinels.atlassianApiToken,
-});
-const linearSecret = JSON.stringify({ apiKey: rawSentinels.linearApiKey });
 
 const catalogApi = createRomeoApi(new InMemoryRomeoRepository(), {
   env: readEnv({
@@ -302,417 +270,6 @@ assertNoRawContent(
   JSON.stringify(privateDnsSyncs.body),
 );
 
-const atlassianFetches: string[] = [];
-const atlassianApi = createRomeoApi(new InMemoryRomeoRepository(), {
-  env: readEnv({
-    DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-    DATA_CONNECTOR_EXECUTION_DRIVER: "atlassian-fetch",
-    DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: rawSentinels.atlassianHost,
-    DEV_SEEDED_LOGIN: "true",
-    SECRET_RESOLVER_DRIVER: "env",
-  }),
-  dataConnectorExecutor: new AtlassianDataConnectorExecutor({
-    allowedHosts: [rawSentinels.atlassianHost],
-    egressPolicy: "require_allowlist",
-    fetchImpl: async (input, init) => {
-      const url = new URL(String(input));
-      const authorization = headerValue(init?.headers, "authorization");
-      if (!authorization.startsWith("Basic ")) {
-        throw new Error("Atlassian connector did not send Basic auth.");
-      }
-      atlassianFetches.push(url.pathname);
-      if (url.pathname.endsWith("/content/search")) {
-        if (url.searchParams.get("cql") !== rawSentinels.atlassianCql) {
-          throw new Error("Confluence connector did not pass bounded CQL.");
-        }
-        return jsonResponse({
-          results: [
-            {
-              id: "acceptance-page",
-              type: "page",
-              title: "Acceptance Runbook",
-              body: {
-                storage: {
-                  value: `<p>${rawSentinels.atlassianConfluenceContent}</p>`,
-                },
-              },
-            },
-          ],
-        });
-      }
-      if (url.pathname.endsWith("/search/jql")) {
-        if (url.searchParams.get("jql") !== rawSentinels.atlassianJql) {
-          throw new Error("Jira connector did not pass bounded JQL.");
-        }
-        return jsonResponse({
-          issues: [
-            {
-              key: `OPS-${pid}`,
-              fields: {
-                summary: "Acceptance incident",
-                status: { name: "Open" },
-                description: {
-                  type: "doc",
-                  content: [
-                    {
-                      type: "paragraph",
-                      content: [
-                        {
-                          type: "text",
-                          text: rawSentinels.atlassianJiraContent,
-                        },
-                      ],
-                    },
-                  ],
-                },
-              },
-            },
-          ],
-        });
-      }
-      return jsonResponse({}, 404);
-    },
-    retryBackoffMs: 0,
-    secretResolver: new EnvironmentSecretResolver({
-      [`ATLASSIAN_ACCEPTANCE_SECRET_${pid}`]: atlassianSecret,
-    }),
-  }),
-});
-const confluenceConnector = await postJson<{ data: { id: string } }>(
-  atlassianApi,
-  "/api/v1/data-connectors",
-  {
-    workspaceId: "workspace_default",
-    knowledgeBaseId: "kb_default",
-    type: "confluence",
-    name: "Acceptance Confluence",
-    config: {
-      baseUrl: `https://${rawSentinels.atlassianHost}`,
-      cql: rawSentinels.atlassianCql,
-      secretRef: rawSentinels.atlassianSecretRef,
-    },
-  },
-);
-assertStatus(
-  confluenceConnector.response,
-  201,
-  "Confluence connector creation",
-);
-const confluenceSync = await postJson<{
-  data: { itemCount?: number; status?: string; summary?: unknown };
-}>(
-  atlassianApi,
-  `/api/v1/data-connectors/${confluenceConnector.body.data.id}/sync`,
-  {},
-);
-assertStatus(confluenceSync.response, 202, "Confluence connector sync");
-assertAtlassianSyncSummary(
-  confluenceSync.body.data,
-  "confluence",
-  rawSentinels.atlassianCql,
-);
-
-const jiraConnector = await postJson<{ data: { id: string } }>(
-  atlassianApi,
-  "/api/v1/data-connectors",
-  {
-    workspaceId: "workspace_default",
-    knowledgeBaseId: "kb_default",
-    type: "jira",
-    name: "Acceptance Jira",
-    config: {
-      baseUrl: `https://${rawSentinels.atlassianHost}`,
-      jql: rawSentinels.atlassianJql,
-      secretRef: rawSentinels.atlassianSecretRef,
-    },
-  },
-);
-assertStatus(jiraConnector.response, 201, "Jira connector creation");
-const jiraSync = await postJson<{
-  data: { itemCount?: number; status?: string; summary?: unknown };
-}>(
-  atlassianApi,
-  `/api/v1/data-connectors/${jiraConnector.body.data.id}/sync`,
-  {},
-);
-assertStatus(jiraSync.response, 202, "Jira connector sync");
-assertAtlassianSyncSummary(
-  jiraSync.body.data,
-  "jira",
-  rawSentinels.atlassianJql,
-);
-
-const notionFetches: string[] = [];
-const notionApi = createRomeoApi(new InMemoryRomeoRepository(), {
-  env: readEnv({
-    DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-    DATA_CONNECTOR_EXECUTION_DRIVER: "notion-fetch",
-    DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: rawSentinels.notionHost,
-    DEV_SEEDED_LOGIN: "true",
-    SECRET_RESOLVER_DRIVER: "env",
-  }),
-  dataConnectorExecutor: new NotionDataConnectorExecutor({
-    allowedHosts: [rawSentinels.notionHost],
-    egressPolicy: "require_allowlist",
-    fetchImpl: async (input, init) => {
-      const url = new URL(String(input));
-      const authorization = headerValue(init?.headers, "authorization");
-      if (authorization !== `Bearer ${rawSentinels.notionToken}`) {
-        throw new Error("Notion connector did not send bearer auth.");
-      }
-      if (headerValue(init?.headers, "notion-version") !== "2026-03-11") {
-        throw new Error("Notion connector did not send expected API version.");
-      }
-      notionFetches.push(url.pathname);
-      if (url.pathname === "/v1/search") {
-        const body = JSON.parse(String(init?.body)) as {
-          page_size?: number;
-          query?: string;
-        };
-        if (body.query !== rawSentinels.notionQuery || body.page_size !== 25) {
-          throw new Error("Notion connector did not pass bounded search.");
-        }
-        return jsonResponse({
-          results: [
-            {
-              id: "acceptance-page",
-              object: "page",
-              properties: {
-                Name: {
-                  type: "title",
-                  title: [{ plain_text: "Acceptance Notion Page" }],
-                },
-              },
-            },
-          ],
-        });
-      }
-      if (url.pathname === "/v1/blocks/acceptance-page/children") {
-        return jsonResponse({
-          results: [
-            {
-              id: "acceptance-block",
-              type: "paragraph",
-              paragraph: {
-                rich_text: [{ plain_text: rawSentinels.notionContent }],
-              },
-            },
-          ],
-        });
-      }
-      return jsonResponse({}, 404);
-    },
-    retryBackoffMs: 0,
-    secretResolver: new EnvironmentSecretResolver({
-      [`NOTION_ACCEPTANCE_SECRET_${pid}`]: rawSentinels.notionToken,
-    }),
-  }),
-});
-const notionConnector = await postJson<{ data: { id: string } }>(
-  notionApi,
-  "/api/v1/data-connectors",
-  {
-    workspaceId: "workspace_default",
-    knowledgeBaseId: "kb_default",
-    type: "notion",
-    name: "Acceptance Notion",
-    config: {
-      apiUrl: `https://${rawSentinels.notionHost}`,
-      query: rawSentinels.notionQuery,
-      secretRef: rawSentinels.notionSecretRef,
-    },
-  },
-);
-assertStatus(notionConnector.response, 201, "Notion connector creation");
-const notionSync = await postJson<{
-  data: { itemCount?: number; status?: string; summary?: unknown };
-}>(
-  notionApi,
-  `/api/v1/data-connectors/${notionConnector.body.data.id}/sync`,
-  {},
-);
-assertStatus(notionSync.response, 202, "Notion connector sync");
-assertSecretRefConnectorSyncSummary(notionSync.body.data, "notion", [
-  rawSentinels.notionQuery,
-  rawSentinels.notionToken,
-  rawSentinels.notionSecretRef,
-  rawSentinels.notionContent,
-]);
-
-const linearFetches: string[] = [];
-const linearApi = createRomeoApi(new InMemoryRomeoRepository(), {
-  env: readEnv({
-    DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-    DATA_CONNECTOR_EXECUTION_DRIVER: "linear-fetch",
-    DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: rawSentinels.linearHost,
-    DEV_SEEDED_LOGIN: "true",
-    SECRET_RESOLVER_DRIVER: "env",
-  }),
-  dataConnectorExecutor: new LinearDataConnectorExecutor({
-    allowedHosts: [rawSentinels.linearHost],
-    egressPolicy: "require_allowlist",
-    fetchImpl: async (input, init) => {
-      const url = new URL(String(input));
-      const authorization = headerValue(init?.headers, "authorization");
-      if (authorization !== rawSentinels.linearApiKey) {
-        throw new Error("Linear connector did not send API key auth.");
-      }
-      const body = JSON.parse(String(init?.body)) as {
-        query?: string;
-        variables?: { first?: number };
-      };
-      if (
-        url.pathname !== "/graphql" ||
-        !body.query?.includes("query issues") ||
-        body.variables?.first !== 25
-      ) {
-        throw new Error("Linear connector did not send bounded issue query.");
-      }
-      linearFetches.push(url.pathname);
-      return jsonResponse({
-        data: {
-          issues: {
-            nodes: [
-              {
-                id: "acceptance-issue",
-                identifier: `OPS-${pid}`,
-                title: `Acceptance Linear issue ${rawSentinels.linearQuery}`,
-                description: rawSentinels.linearContent,
-                url: `https://linear.app/acceptance/OPS-${pid}`,
-                priority: 1,
-                createdAt: "2026-07-27T12:00:00.000Z",
-                updatedAt: "2026-07-27T13:00:00.000Z",
-                state: { name: "Open" },
-                team: { key: "OPS" },
-                reactions: [],
-                sharedAccess: {
-                  disallowedIssueFields: [],
-                  isShared: false,
-                  sharedWithCount: 0,
-                  sharedWithUsers: [],
-                  viewerHasOnlySharedAccess: false,
-                },
-              },
-            ],
-            pageInfo: {
-              hasNextPage: false,
-              hasPreviousPage: false,
-            },
-          },
-        },
-      });
-    },
-    retryBackoffMs: 0,
-    secretResolver: new EnvironmentSecretResolver({
-      [`LINEAR_ACCEPTANCE_SECRET_${pid}`]: linearSecret,
-    }),
-  }),
-});
-const linearConnector = await postJson<{ data: { id: string } }>(
-  linearApi,
-  "/api/v1/data-connectors",
-  {
-    workspaceId: "workspace_default",
-    knowledgeBaseId: "kb_default",
-    type: "linear",
-    name: "Acceptance Linear",
-    config: {
-      apiUrl: `https://${rawSentinels.linearHost}/graphql`,
-      query: rawSentinels.linearQuery,
-      secretRef: rawSentinels.linearSecretRef,
-    },
-  },
-);
-assertStatus(linearConnector.response, 201, "Linear connector creation");
-const linearSync = await postJson<{
-  data: { itemCount?: number; status?: string; summary?: unknown };
-}>(
-  linearApi,
-  `/api/v1/data-connectors/${linearConnector.body.data.id}/sync`,
-  {},
-);
-assertStatus(linearSync.response, 202, "Linear connector sync");
-assertSecretRefConnectorSyncSummary(linearSync.body.data, "linear", [
-  rawSentinels.linearQuery,
-  rawSentinels.linearApiKey,
-  rawSentinels.linearSecretRef,
-  rawSentinels.linearContent,
-]);
-
-const slackFetches: string[] = [];
-const slackApi = createRomeoApi(new InMemoryRomeoRepository(), {
-  env: readEnv({
-    DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-    DATA_CONNECTOR_EXECUTION_DRIVER: "slack-fetch",
-    DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: rawSentinels.slackHost,
-    DEV_SEEDED_LOGIN: "true",
-    SECRET_RESOLVER_DRIVER: "env",
-  }),
-  dataConnectorExecutor: new SlackDataConnectorExecutor({
-    allowedHosts: [rawSentinels.slackHost],
-    egressPolicy: "require_allowlist",
-    fetchImpl: async (input, init) => {
-      const url = new URL(String(input));
-      const authorization = headerValue(init?.headers, "authorization");
-      if (authorization !== `Bearer ${rawSentinels.slackToken}`) {
-        throw new Error("Slack connector did not send bearer auth.");
-      }
-      const body = new URLSearchParams(String(init?.body));
-      if (
-        url.pathname !== "/api/conversations.history" ||
-        init?.method !== "POST" ||
-        body.get("channel") !== rawSentinels.slackChannelId ||
-        body.get("limit") !== "25"
-      ) {
-        throw new Error("Slack connector did not send bounded channel query.");
-      }
-      slackFetches.push(url.pathname);
-      return jsonResponse({
-        ok: true,
-        messages: [
-          {
-            type: "message",
-            user: `U${pid}ABC`,
-            text: rawSentinels.slackContent,
-            ts: "1719500100.000200",
-          },
-        ],
-      });
-    },
-    retryBackoffMs: 0,
-    secretResolver: new EnvironmentSecretResolver({
-      [`SLACK_ACCEPTANCE_SECRET_${pid}`]: rawSentinels.slackToken,
-    }),
-  }),
-});
-const slackConnector = await postJson<{ data: { id: string } }>(
-  slackApi,
-  "/api/v1/data-connectors",
-  {
-    workspaceId: "workspace_default",
-    knowledgeBaseId: "kb_default",
-    type: "slack",
-    name: "Acceptance Slack",
-    config: {
-      apiUrl: `https://${rawSentinels.slackHost}/api`,
-      channelIds: [rawSentinels.slackChannelId],
-      maxItemsPerChannel: 25,
-      secretRef: rawSentinels.slackSecretRef,
-    },
-  },
-);
-assertStatus(slackConnector.response, 201, "Slack connector creation");
-const slackSync = await postJson<{
-  data: { itemCount?: number; status?: string; summary?: unknown };
-}>(slackApi, `/api/v1/data-connectors/${slackConnector.body.data.id}/sync`, {});
-assertStatus(slackSync.response, 202, "Slack connector sync");
-assertSecretRefConnectorSyncSummary(slackSync.body.data, "slack", [
-  rawSentinels.slackChannelId,
-  rawSentinels.slackToken,
-  rawSentinels.slackSecretRef,
-  rawSentinels.slackContent,
-]);
-
 const evidence = {
   schemaVersion: "romeo.data-connector-acceptance-contract-smoke.v1",
   generatedAt: new Date().toISOString(),
@@ -727,10 +284,6 @@ const evidence = {
     "github_secret_ref_and_delegated_oauth_are_mutually_exclusive",
     "local_import_remains_available_without_outbound_runtime",
     "website_dns_private_address_denied_before_fetch",
-    "atlassian_confluence_and_jira_sync_through_secret_refs",
-    "notion_syncs_through_secret_ref",
-    "linear_syncs_through_secret_ref",
-    "slack_syncs_through_secret_ref",
     "connector_acceptance_evidence_omits_raw_config_and_content",
   ],
   endpoints: {
@@ -768,20 +321,6 @@ const evidence = {
     privateDnsSyncStatus: privateDnsSync.response.status,
     privateDnsSyncCode: privateDnsSync.body.error.code,
     privateDnsFetchAttemptCount: fetchAttempts.length,
-    confluenceCreationStatus: confluenceConnector.response.status,
-    confluenceSyncStatus: confluenceSync.body.data.status,
-    jiraCreationStatus: jiraConnector.response.status,
-    jiraSyncStatus: jiraSync.body.data.status,
-    atlassianFetchAttemptCount: atlassianFetches.length,
-    notionCreationStatus: notionConnector.response.status,
-    notionSyncStatus: notionSync.body.data.status,
-    notionFetchAttemptCount: notionFetches.length,
-    linearCreationStatus: linearConnector.response.status,
-    linearSyncStatus: linearSync.body.data.status,
-    linearFetchAttemptCount: linearFetches.length,
-    slackCreationStatus: slackConnector.response.status,
-    slackSyncStatus: slackSync.body.data.status,
-    slackFetchAttemptCount: slackFetches.length,
   },
   redaction: {
     rawAllowedHostsReturned: false,
@@ -928,22 +467,7 @@ function assertCatalogPosture(catalog: ConnectorCatalog): void {
   const rss = getConnector(catalog, "rss");
   const github = getConnector(catalog, "github");
   const s3 = getConnector(catalog, "s3");
-  const confluence = getConnector(catalog, "confluence");
-  const jira = getConnector(catalog, "jira");
-  const notion = getConnector(catalog, "notion");
-  const linear = getConnector(catalog, "linear");
-  const slack = getConnector(catalog, "slack");
-  for (const connector of [
-    website,
-    rss,
-    github,
-    s3,
-    confluence,
-    jira,
-    notion,
-    linear,
-    slack,
-  ]) {
+  for (const connector of [website, rss, github, s3]) {
     if (
       connector.executionBoundary !== "bounded_runtime_fetch" ||
       connector.egress.required !== true ||
@@ -966,22 +490,6 @@ function assertCatalogPosture(catalog: ConnectorCatalog): void {
     s3.runtime.credentialPosture.connector_secret_ref !== true
   ) {
     throw new Error("Expected S3 credential posture to be fully configured.");
-  }
-  for (const connector of [confluence, jira, notion, linear, slack]) {
-    if (
-      connector.runtime.credentialPosture.deployment_secret !== false ||
-      connector.runtime.credentialPosture.connector_secret_ref !== true ||
-      connector.runtime.credentialPosture.delegated_oauth !== false
-    ) {
-      throw new Error(
-        `Expected ${connector.type} credential posture to use connector secret refs only.`,
-      );
-    }
-    if (connector.egress.allowlistSupported !== true) {
-      throw new Error(
-        `Expected ${connector.type} connector to support host allowlists.`,
-      );
-    }
   }
 }
 
@@ -1048,46 +556,6 @@ function assertDetails(
   }
 }
 
-function assertAtlassianSyncSummary(
-  data: { itemCount?: number; status?: string; summary?: unknown },
-  connectorType: "confluence" | "jira",
-  rawQuery: string,
-): void {
-  if (data.status !== "completed" || data.itemCount !== 1) {
-    throw new Error(`${connectorType} sync did not complete with one source.`);
-  }
-  const summary = JSON.stringify(data.summary);
-  if (!summary.includes(`"connector":"${connectorType}"`)) {
-    throw new Error(`${connectorType} sync summary lacks connector type.`);
-  }
-  for (const raw of [
-    rawQuery,
-    rawSentinels.atlassianApiToken,
-    rawSentinels.atlassianSecretRef,
-    rawSentinels.atlassianConfluenceContent,
-    rawSentinels.atlassianJiraContent,
-  ]) {
-    assertNotContains(summary, raw, `${connectorType} sync summary`);
-  }
-}
-
-function assertSecretRefConnectorSyncSummary(
-  data: { itemCount?: number; status?: string; summary?: unknown },
-  connectorType: "linear" | "notion" | "slack",
-  rawValues: string[],
-): void {
-  if (data.status !== "completed" || data.itemCount !== 1) {
-    throw new Error(`${connectorType} sync did not complete with one source.`);
-  }
-  const summary = JSON.stringify(data.summary);
-  if (!summary.includes(`"connector":"${connectorType}"`)) {
-    throw new Error(`${connectorType} sync summary lacks connector type.`);
-  }
-  for (const raw of rawValues) {
-    assertNotContains(summary, raw, `${connectorType} sync summary`);
-  }
-}
-
 function connectorTypes(catalog: ConnectorCatalog): string[] {
   return catalog.connectors.map((connector) => connector.type).sort();
 }
@@ -1122,31 +590,6 @@ function assertNotContains(value: string, raw: string, label: string): void {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    headers: { "content-type": "application/json" },
-    status,
-  });
-}
-
-function headerValue(headers: HeadersInit | undefined, key: string): string {
-  if (headers === undefined) return "";
-  if (headers instanceof Headers) return headers.get(key) ?? "";
-  const normalizedKey = key.toLowerCase();
-  if (Array.isArray(headers)) {
-    return (
-      headers.find(
-        ([candidate]) => candidate.toLowerCase() === normalizedKey,
-      )?.[1] ?? ""
-    );
-  }
-  return (
-    Object.entries(headers).find(
-      ([candidate]) => candidate.toLowerCase() === normalizedKey,
-    )?.[1] ?? ""
-  );
 }
 
 function argValue(name: string): string | undefined {

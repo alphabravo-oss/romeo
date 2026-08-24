@@ -14,7 +14,7 @@ import { exportLimits, warningsFor } from "./data-export-support";
 
 const defaultMaxObjectBytes = 1_000_000;
 const hardMaxObjectBytes = 5_000_000;
-const exclusions = [
+export const dataExportExclusions = [
   "object_store_keys",
   "embedding_vectors",
   "provider_payloads",
@@ -45,7 +45,7 @@ export async function previewDataExport(input: {
     counts: collected.counts,
     limits: exportLimits(request),
     warnings: warningsFor(request, collected.counts),
-    exclusions,
+    exclusions: dataExportExclusions,
     previewedAt: new Date().toISOString(),
   };
 }
@@ -71,13 +71,13 @@ export async function executeDataExport(input: {
     counts: collected.counts,
     limits: exportLimits(request),
     warnings: warningsFor(request, collected.counts),
-    exclusions,
+    exclusions: dataExportExclusions,
     data: collected.data,
     exportedAt: new Date().toISOString(),
   };
 }
 
-function normalizeDataExportRequest(
+export function normalizeDataExportRequest(
   request: DataExportRequest,
 ): DataExportResolvedRequest {
   if (request.scope !== "org" && request.scope !== "workspace") {

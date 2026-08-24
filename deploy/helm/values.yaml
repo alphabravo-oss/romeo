@@ -7,8 +7,19 @@ fullnameOverride: ""
 image:
   repository: romeo/app
   tag: "0.1.0"
-  # Production installs must set the immutable manifest digest.
-  digest: ""
+  # Render-safe, deliberately unpullable SHA-256 sentinel. Replace it with the
+  # exact published application manifest digest before installing.
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  pullPolicy: IfNotPresent
+
+# Migration, worker, and backup workloads require the executable workspace,
+# package manager, and operational binaries shipped by the ops-runtime target.
+opsImage:
+  repository: romeo/ops
+  tag: "0.1.0"
+  # Render-safe, deliberately unpullable SHA-256 sentinel. Replace it with the
+  # exact published operational manifest digest before installing.
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
   pullPolicy: IfNotPresent
 
 imagePolicyException:
@@ -101,7 +112,7 @@ probes:
     initialDelaySeconds: 5
     periodSeconds: 10
     failureThreshold: 3
-    timeoutSeconds: 3
+    timeoutSeconds: 8
     dependencyCheck:
       enabled: true
   liveness:
@@ -127,11 +138,15 @@ postgres:
 
 valkey:
   urlSecret:
-    name: ""
+    # This Secret is intentionally absent from the chart. Supply it before an
+    # install; keeping credentials out of values makes the default render safe.
+    name: romeo-required-valkey-url
     key: VALKEY_URL
 
 secrets:
-  existingSecret: ""
+  # The chart never creates production credentials. Provision this Secret
+  # through an external-secret controller or another audited secret workflow.
+  existingSecret: romeo-required-runtime-secrets
   create: false
   annotations: {}
 
@@ -145,6 +160,7 @@ secretEnv:
   MANAGED_SECRET_ENCRYPTION_KEY: ""
   MANAGED_SECRET_ENCRYPTION_KEY_PREVIOUS: ""
   WEBHOOK_SIGNING_KEY: ""
+  WEBHOOK_SIGNING_KEY_PREVIOUS: ""
   S3_ACCESS_KEY_ID: ""
   S3_SECRET_ACCESS_KEY: ""
   ROMEO_API_KEY: ""
@@ -163,6 +179,7 @@ secretEnv:
   DATA_CONNECTOR_GITHUB_TOKEN: ""
   DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: ""
   DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: ""
+  DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS: ""
   TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY: ""
   QDRANT_API_KEY_REF: ""
 
@@ -228,6 +245,7 @@ env:
   TOOL_DISPATCH_NETWORK_POLICY_ENABLED: "false"
   BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH: ""
   BROWSER_AUTOMATION_WORKER_ENABLED: "false"
+  KNOWLEDGE_EXTRACTION_WORKER_ENABLED: "false"
   BROWSER_AUTOMATION_RUNNER_URL: ""
   BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED: "false"
   BROWSER_AUTOMATION_MAX_JOBS: "5"
@@ -235,11 +253,23 @@ env:
   BROWSER_AUTOMATION_TIMEOUT_MS: "30000"
   BROWSER_AUTOMATION_MAX_BYTES: "20000"
   POSTGRES_POOL_MAX: "10"
+  POSTGRES_TLS_EXCEPTION_ENABLED: "false"
+  POSTGRES_TLS_EXCEPTION_SCOPE: ""
+  POSTGRES_TLS_EXCEPTION_OWNER: ""
+  POSTGRES_TLS_EXCEPTION_REASON: ""
+  POSTGRES_TLS_EXCEPTION_EXPIRES_AT: ""
   REQUEST_BODY_MAX_BYTES: "50000000"
   FILE_INLINE_MAX_BYTES: "25000000"
   FILE_DIRECT_UPLOAD_MAX_BYTES: "100000000"
   FILE_RESUMABLE_UPLOAD_MAX_BYTES: "500000000"
+  FILE_MALWARE_SCAN_ENABLED: "true"
   FILE_MALWARE_SCAN_POLICY: "required"
+  FILE_MALWARE_SCAN_EXCEPTION_ENABLED: "false"
+  FILE_MALWARE_SCAN_EXCEPTION_OWNER: ""
+  FILE_MALWARE_SCAN_EXCEPTION_REASON: ""
+  FILE_MALWARE_SCAN_EXCEPTION_EXPIRES_AT: ""
+  # Point this at the production scanner service; Romeo fails closed when it is unavailable.
+  CLAMAV_ADDRESS: tcp://clamav.security.svc:3310
   FILE_OCR_DRIVER: disabled
   FILE_OCR_TESSERACT_PATH: tesseract
   FILE_OCR_PDFTOPPM_PATH: pdftoppm
@@ -272,15 +302,27 @@ env:
   # Operator-only deployment kill switches; exact comma-separated IDs, with no spaces.
   CAPABILITY_PLATFORM_DISABLED_IDS: realtime_voice,external_provider_use,secure_compute,image_editing,multi_model_compare,streamed_output_policy
   MODEL_PROVIDER_FALLBACK_MODEL_ID: ""
+  VALKEY_SECURITY_EXCEPTION_ENABLED: "false"
+  VALKEY_SECURITY_EXCEPTION_SCOPE: ""
+  VALKEY_SECURITY_EXCEPTION_OWNER: ""
+  VALKEY_SECURITY_EXCEPTION_REASON: ""
+  VALKEY_SECURITY_EXCEPTION_EXPIRES_AT: ""
+  VALKEY_IN_CLUSTER_NETWORK_POLICY_ENABLED: "false"
   REALTIME_EVENT_DRIVER: valkey
   REALTIME_EVENT_KEY_PREFIX: romeo:chat-events:v1
   REALTIME_EVENT_TIMEOUT_MS: "2000"
   QUOTA_COORDINATION_DRIVER: valkey
   QUOTA_COORDINATION_KEY_PREFIX: romeo:quota:v1
   QUOTA_COORDINATION_TIMEOUT_MS: "2000"
+  SCHEDULED_TENANT_WORK_OWNER: internal
+  SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_PATH: ""
+  SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_MAX_AGE_SECONDS: "900"
   EDGE_TLS_TERMINATION: ingress
   EDGE_TRUSTED_PROXY_MODE: trusted_proxy
   EDGE_TRUSTED_PROXY_HOPS: "1"
+  # Render-only fail-closed sentinel. Replace with the exact ingress/LB source
+  # CIDRs; Romeo ignores forwarding headers from every other transport peer.
+  EDGE_TRUSTED_PROXY_CIDRS: 127.0.0.1/32
   EDGE_WAF_MODE: monitor
   EDGE_ALLOWED_ORIGINS: https://romeo.example.com
   EDGE_HSTS_ENABLED: "true"
@@ -326,6 +368,8 @@ env:
   AZURE_KEY_VAULT_URL: ""
   AZURE_KEY_VAULT_TIMEOUT_MS: "5000"
   NOTIFICATION_DELIVERY_DRIVER: disabled
+  NOTIFICATION_WEBHOOK_EGRESS_POLICY: allow_public
+  NOTIFICATION_WEBHOOK_ALLOWED_HOSTS: ""
   NOTIFICATION_EMAIL_DELIVERY_DRIVER: resend
   NOTIFICATION_EMAIL_FROM: ""
   NOTIFICATION_FCM_PROJECT_ID: ""
@@ -350,11 +394,21 @@ env:
   S3_ENDPOINT: ""
   S3_BUCKET: romeo
   S3_REGION: us-east-1
+  S3_READINESS_TIMEOUT_MS: "5000"
+  S3_READINESS_REQUIRE_ENCRYPTION: "true"
+  S3_READINESS_REQUIRE_VERSIONING: "true"
+  S3_READINESS_REQUIRE_LIFECYCLE: "true"
+  S3_READINESS_REQUIRE_REPLICATION: "false"
+  BILLING_ENABLED: "false"
   BILLING_STRIPE_WEBHOOK_TOLERANCE_SECONDS: "300"
   BILLING_GENERIC_WEBHOOK_TOLERANCE_SECONDS: "300"
   BILLING_WEBHOOK_ORG_ID: org_default
   OIDC_ISSUER_URL: ""
   OIDC_CLIENT_ID: ""
+  OIDC_ENDPOINT_ALLOWED_ORIGINS: ""
+  OIDC_FETCH_MAX_BYTES: "262144"
+  OIDC_FETCH_TIMEOUT_MS: "10000"
+  OIDC_CACHE_TTL_MS: "300000"
   OIDC_GROUP_CLAIM: groups
   OIDC_ADMIN_GROUPS: ""
   OIDC_GROUP_MAP: ""
@@ -370,6 +424,11 @@ migration:
   ttlSecondsAfterFinished: 3600
   activeDeadlineSeconds: 600
   annotations: {}
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    automountServiceAccountToken: false
   resources:
     requests:
       cpu: 100m
@@ -379,19 +438,6 @@ migration:
       memory: 512Mi
 
 workers:
-  serviceAccount:
-    create: true
-    name: ""
-    annotations: {}
-    automountServiceAccountToken: false
-  image:
-    repository: ""
-    tag: ""
-    digest: ""
-    pullPolicy: ""
-  apiKeySecret:
-    name: ""
-    key: ROMEO_API_KEY
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 10001
@@ -417,20 +463,8 @@ workers:
       limits:
         cpu: 500m
         memory: 512Mi
-  workflowResume:
-    enabled: false
-    schedule: "*/2 * * * *"
-    maxWorkflows: 10
-    maxRuns: 10
-    workspaceId: ""
-    resources:
-      requests:
-        cpu: 100m
-        memory: 256Mi
-      limits:
-        cpu: 500m
-        memory: 512Mi
   webhookRetry:
+    # Retired in production: the internal all-tenant coordinator owns retries.
     enabled: false
     schedule: "*/5 * * * *"
     resources:
@@ -441,6 +475,7 @@ workers:
         cpu: 500m
         memory: 512Mi
   notificationRetry:
+    # Retired in production: the internal all-tenant coordinator owns retries.
     enabled: false
     schedule: "*/5 * * * *"
     resources:
@@ -451,6 +486,7 @@ workers:
         cpu: 500m
         memory: 512Mi
   retentionEnforce:
+    # Retired in production: the internal all-tenant coordinator owns retention.
     enabled: false
     schedule: "17 2 * * *"
     resources:
@@ -492,6 +528,24 @@ workers:
     payloadSecret:
       name: ""
       key: payloads.json
+    resolverCredentialSecret:
+      name: ""
+      key: token
+    identity:
+      audience: tool_dispatch
+      scopes:
+        - worker:tool_dispatch
+      credentialSecret:
+        name: ""
+        key: token
+      previousCredentialSecret:
+        name: ""
+        key: ""
+      serviceAccount:
+        create: true
+        name: ""
+        annotations: {}
+        automountServiceAccountToken: false
     networkPolicy:
       enabled: false
       egress: []
@@ -510,6 +564,21 @@ workers:
     leaseSeconds: 300
     timeoutMs: 30000
     maxBytes: 20000
+    identity:
+      audience: browser_automation
+      scopes:
+        - worker:browser_automation
+      credentialSecret:
+        name: ""
+        key: token
+      previousCredentialSecret:
+        name: ""
+        key: ""
+      serviceAccount:
+        create: true
+        name: ""
+        annotations: {}
+        automountServiceAccountToken: false
     networkPolicy:
       enabled: false
       egress: []
@@ -525,6 +594,24 @@ workers:
     schedule: "*/10 * * * *"
     knowledgeBaseId: ""
     maxSources: 10
+    identity:
+      audience: knowledge_extraction
+      scopes:
+        - worker:knowledge_extraction
+      credentialSecret:
+        name: ""
+        key: token
+      previousCredentialSecret:
+        name: ""
+        key: ""
+      serviceAccount:
+        create: true
+        name: ""
+        annotations: {}
+        automountServiceAccountToken: false
+    networkPolicy:
+      enabled: false
+      egress: []
     tmpSizeLimit: 1Gi
     resources:
       requests:
@@ -534,6 +621,7 @@ workers:
         cpu: "1"
         memory: 1Gi
   voiceCatalogSync:
+    # Retired in production: the internal all-tenant coordinator owns voice sync.
     enabled: false
     schedule: "0 */12 * * *"
     resources:
@@ -545,16 +633,48 @@ workers:
         memory: 512Mi
 
 backup:
+  # Use managed-verified for this chart's CronJob, or externally-managed when
+  # the database platform owns backup scheduling, verification, and alerting.
+  mode: externally-managed
   enabled: false
+  externalManagement:
+    # Render-only sentinels. A production release must replace both with the
+    # accountable team and reviewed backup/restore evidence reference.
+    owner: REQUIRED_DEPLOYMENT_OWNER
+    evidenceReference: REQUIRED_REVIEWED_BACKUP_EVIDENCE_REFERENCE
+    observedAt: "2026-08-23T00:00:00Z"
+    statusReference: REQUIRED_LIVE_BACKUP_STATUS_REFERENCE
+    alertsConfigured: true
   schedule: "17 3 * * *"
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+    automountServiceAccountToken: false
   retentionDays: 30
   uploadTimeoutMs: 30000
+  policyMaxAgeSeconds: 3600
   uploadUrlSecret:
     name: ""
     key: POSTGRES_BACKUP_UPLOAD_URL
   manifestUploadUrlSecret:
     name: ""
     key: POSTGRES_BACKUP_MANIFEST_UPLOAD_URL
+  readbackUrlSecret:
+    name: ""
+    key: POSTGRES_BACKUP_READBACK_URL
+  manifestReadbackUrlSecret:
+    name: ""
+    key: POSTGRES_BACKUP_MANIFEST_READBACK_URL
+  statusUploadUrlSecret:
+    name: ""
+    key: POSTGRES_BACKUP_STATUS_UPLOAD_URL
+  statusReadbackUrlSecret:
+    name: ""
+    key: POSTGRES_BACKUP_STATUS_READBACK_URL
+  policyReadbackUrlSecret:
+    name: ""
+    key: POSTGRES_BACKUP_POLICY_READBACK_URL
   resources:
     requests:
       cpu: 250m
@@ -563,10 +683,50 @@ backup:
       cpu: "1"
       memory: 1Gi
 
+# Capabilities that are not shipped as in-chart workloads must have an
+# accountable external owner, live status/readback evidence, and alerting.
+essentialOperations:
+  scheduledTenantWork:
+    mode: internal
+    maxEvidenceAgeSeconds: 900
+    externalManagement:
+      owner: ""
+      evidenceReference: ""
+      statusReference: ""
+      alertsConfigured: false
+      evidenceConfigMap:
+        name: ""
+        key: scheduled-operations.json
+  objectStoreBackup:
+    owner: REQUIRED_DEPLOYMENT_OWNER
+    evidenceReference: REQUIRED_REVIEWED_OBJECT_BACKUP_EVIDENCE_REFERENCE
+    observedAt: "2026-08-23T00:00:00Z"
+    statusReference: REQUIRED_LIVE_OBJECT_BACKUP_STATUS_REFERENCE
+    alertsConfigured: true
+  disasterRecovery:
+    owner: REQUIRED_DEPLOYMENT_OWNER
+    evidenceReference: REQUIRED_REVIEWED_DR_EVIDENCE_REFERENCE
+    observedAt: "2026-08-23T00:00:00Z"
+    statusReference: REQUIRED_LIVE_DR_STATUS_REFERENCE
+    alertsConfigured: true
+
 networkPolicy:
   # Production rendering requires this default-deny policy and an explicit
   # deployment-specific egress allowlist (DNS, Postgres, Valkey, object store,
   # and enabled external providers as applicable).
   enabled: true
-  ingressFrom: []
-  egress: []
+  # Render-only fail-closed sentinel aligned with EDGE_TRUSTED_PROXY_CIDRS.
+  # Replace both with the exact ingress-controller/LB source boundary.
+  ingressFrom:
+    - ipBlock:
+        cidr: 127.0.0.1/32
+  # A reserved TEST-NET address keeps the default render fail-closed and
+  # nonfunctional. Replace this with DNS, Postgres, Valkey, object-storage,
+  # telemetry, scanner, and enabled-provider destinations before installing.
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.1/32
+      ports:
+        - protocol: TCP
+          port: 9

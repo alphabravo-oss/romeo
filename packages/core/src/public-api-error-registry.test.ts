@@ -45,6 +45,33 @@ describe("public API error registry", () => {
     }
   });
 
+  it("allocates policy-bundle state conflicts to HTTP 409", () => {
+    for (const code of [
+      "policy_bundle_not_pending",
+      "policy_bundle_not_approved",
+    ] as const) {
+      expect(publicApiErrorDefinition(code)).toMatchObject({
+        code,
+        httpStatus: 409,
+        localizationIntent: "resolve_conflict",
+        retryable: false,
+      });
+    }
+  });
+
+  it("registers delegated OAuth keyring failures as safe internal errors", () => {
+    for (const code of [
+      "delegated_oauth_token_decryption_failed",
+      "delegated_oauth_token_key_rotation_invalid",
+    ] as const) {
+      expect(publicApiErrorDefinition(code)).toMatchObject({
+        code,
+        httpStatus: 500,
+        retryable: false,
+      });
+    }
+  });
+
   it("normalizes untrusted provider codes and metadata to a registered safe error", () => {
     const secret = "RAW_PROVIDER_CODE_AND_TYPE_SECRET";
     const error = providerApiError({ errorCode: secret, errorType: secret });

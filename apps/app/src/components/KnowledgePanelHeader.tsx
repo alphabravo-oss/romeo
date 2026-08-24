@@ -10,7 +10,10 @@ import type { AccessGrant } from "../features/access/api";
 import { useLocale } from "../lib/i18n";
 import { Section } from "./console";
 import { KnowledgeBaseSummary } from "./KnowledgeBaseSummary";
-import { KnowledgeIngestNotice } from "./KnowledgeIngestNotice";
+import {
+  KnowledgeIngestNotice,
+  knowledgeIngestBlockedMessageKey,
+} from "./KnowledgeIngestNotice";
 import { ResourceGrantEditor } from "./ResourceGrantEditor";
 
 export function KnowledgePanelHeader(props: {
@@ -31,6 +34,13 @@ export function KnowledgePanelHeader(props: {
       </Button>
       <KnowledgeBaseSummary
         canUpload={props.canUpload}
+        {...(props.readiness !== undefined && !props.readiness.ready
+          ? {
+              disabledReason: t(
+                knowledgeIngestBlockedMessageKey(props.readiness.reason),
+              ),
+            }
+          : {})}
         knowledgeBase={props.knowledgeBase}
         onAddSource={props.onAddSource}
       />

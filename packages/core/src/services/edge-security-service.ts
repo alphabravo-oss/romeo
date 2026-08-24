@@ -26,6 +26,18 @@ export class EdgeSecurityService {
     const liveEvidence = await readLiveEdgeEvidence(
       this.env.EDGE_ENFORCEMENT_EVIDENCE_PATH,
     );
+    const observedWafFailure = liveEvidence.failureCodes.some((code) =>
+      code.includes("waf"),
+    );
+    const observedWafEnforcement =
+      liveEvidence.mode === "live" &&
+      liveEvidence.waf.checked &&
+      liveEvidence.waf.status === "passed" &&
+      !observedWafFailure
+        ? ("block" as const)
+        : liveEvidence.waf.checked
+          ? ("failed" as const)
+          : ("unknown" as const);
     const checks = [
       ...edgeSecurityChecks({
         allowedOriginRuleCount,
@@ -75,6 +87,12 @@ export class EdgeSecurityService {
       },
       ingress: {
         allowedOriginRuleCount,
+        desiredWafMode: this.env.EDGE_WAF_MODE,
+        observedWafEnforcement,
+        ...(observedWafEnforcement !== "unknown" &&
+        liveEvidence.generatedAt !== undefined
+          ? { observedWafAt: liveEvidence.generatedAt }
+          : {}),
         wafMode: this.env.EDGE_WAF_MODE,
       },
       limits: {

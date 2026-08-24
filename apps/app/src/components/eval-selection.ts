@@ -8,3 +8,17 @@ export function resolveActiveSuite<T extends { id: string }>(
 ): T | undefined {
   return suites.find((suite) => suite.id === selectedId) ?? suites[0];
 }
+
+export interface ScopedEvalSelection {
+  scopeId: string;
+  selectedId: string;
+}
+
+export function selectedEvalIdWithinScope(
+  selection: ScopedEvalSelection | undefined,
+  scopeId: string | undefined,
+): string | undefined {
+  return selection !== undefined && selection.scopeId === scopeId
+    ? selection.selectedId
+    : undefined;
+}

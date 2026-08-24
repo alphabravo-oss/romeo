@@ -12,6 +12,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 export interface S3PresignInput {
   accessKeyId: string;
   bucket: string;
+  checksumSha256?: string;
   contentType?: string;
   contentLength?: number;
   endpoint: string;
@@ -47,10 +48,7 @@ export async function createS3PresignedRequest(
       expiresAt: new Date(
         now.getTime() + input.expiresInSeconds * 1000,
       ).toISOString(),
-      headers:
-        input.contentType === undefined
-          ? {}
-          : { "content-type": input.contentType },
+      headers: signedHeaders(input),
       url,
     };
   } finally {
@@ -92,6 +90,12 @@ async function presignedUrl(
         ...(input.contentType === undefined
           ? {}
           : { ContentType: input.contentType }),
+        ...(input.checksumSha256 === undefined
+          ? {}
+          : {
+              ChecksumAlgorithm: "SHA256",
+              ChecksumSHA256: input.checksumSha256,
+            }),
       }),
       presignOptions(input, now),
     );
@@ -131,6 +135,20 @@ async function presignedUrl(
     new GetObjectCommand({ Bucket: input.bucket, Key: input.key }),
     presignOptions(input, now),
   );
+}
+
+function signedHeaders(input: S3PresignInput): Record<string, string> {
+  return {
+    ...(input.contentType === undefined
+      ? {}
+      : { "content-type": input.contentType }),
+    ...(input.checksumSha256 === undefined
+      ? {}
+      : {
+          "x-amz-checksum-algorithm": "SHA256",
+          "x-amz-checksum-sha256": input.checksumSha256,
+        }),
+  };
 }
 
 function assertNoQuery(

@@ -25,7 +25,11 @@ export function AdminViewNav({
           >
             <Link
               aria-current={active === value ? "page" : undefined}
-              search={{ section, view: value }}
+              search={(previous) => ({
+                ...previous,
+                section,
+                view: value,
+              })}
               to="/admin"
             >
               {label}

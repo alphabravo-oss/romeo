@@ -8,6 +8,7 @@ export interface Organization {
 
 export interface SystemSetting {
   key: string;
+  orgId?: string;
   value: Record<string, unknown>;
   updatedAt: string;
 }

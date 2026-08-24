@@ -79,9 +79,10 @@ export class DelegatedOAuthTokenRuntime {
     connection: DelegatedOAuthConnection,
   ): Promise<ProviderRevocationResult> {
     try {
-      const tokenVault = new DelegatedOAuthTokenVault(
-        this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
-      );
+      const tokenVault = new DelegatedOAuthTokenVault({
+        active: this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
+        previous: this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS,
+      });
       const token = tokenVault.decrypt(
         connection.token,
         delegatedOAuthTokenContext(connection),
@@ -99,9 +100,10 @@ export class DelegatedOAuthTokenRuntime {
   async getUsableToken(
     connection: DelegatedOAuthConnection,
   ): Promise<DelegatedOAuthUsableToken> {
-    const tokenVault = new DelegatedOAuthTokenVault(
-      this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
-    );
+    const tokenVault = new DelegatedOAuthTokenVault({
+      active: this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
+      previous: this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS,
+    });
     const token = tokenVault.decrypt(
       connection.token,
       delegatedOAuthTokenContext(connection),
@@ -287,7 +289,7 @@ export class DelegatedOAuthTokenRuntime {
     const now = new Date().toISOString();
     const updated = await repository.updateDelegatedOAuthConnection({
       ...connection,
-      ...(connection.token.v === 1
+      ...(tokenVault.needsRewrap(connection.token)
         ? {
             token: tokenVault.encrypt(
               token,

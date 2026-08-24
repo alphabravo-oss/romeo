@@ -6,7 +6,7 @@ import {
   isBlockedNetworkAddress,
   isPrivateNetworkHost,
 } from "./network-host-policy";
-import { normalizeBrowserTaskStep } from "./workflow-browser-tasks";
+import { normalizeBrowserTaskStep } from "./browser-automation-tasks";
 
 describe("canonical network host policy", () => {
   it.each(adversarialCases.addressCases)(
@@ -46,7 +46,6 @@ describe("canonical network host policy", () => {
       expect(() =>
         normalizeBrowserTaskStep({
           name: testCase.label,
-          type: "browser_task",
           targetUrl: `https://${host}/resource`,
           task: "Read the resource",
         }),

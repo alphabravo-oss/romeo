@@ -55,13 +55,13 @@ export interface S3ConnectorReader {
     maxKeys: number;
     prefix: string;
     region: string;
-    secretRef?: string;
+    secretRef: string;
   }): Promise<S3ConnectorObject[]>;
   getObject(input: {
     bucket: string;
     key: string;
     region: string;
-    secretRef?: string;
+    secretRef: string;
   }): Promise<S3ConnectorReadResult | undefined>;
 }
 
@@ -97,9 +97,7 @@ export class S3DataConnectorExecutor implements DataConnectorExecutor {
       prefix: config.prefix,
       region: config.region,
       maxKeys: maxItems,
-      ...(config.secretRef === undefined
-        ? {}
-        : { secretRef: config.secretRef }),
+      secretRef: config.secretRef,
     });
     if (listed.length > maxItems)
       throw new ApiError(
@@ -130,9 +128,7 @@ export class S3DataConnectorExecutor implements DataConnectorExecutor {
         bucket: config.bucket,
         key: object.key,
         region: config.region,
-        ...(config.secretRef === undefined
-          ? {}
-          : { secretRef: config.secretRef }),
+        secretRef: config.secretRef,
       });
       if (objectBody === undefined) continue;
       const mimeType = normalizeTextMimeType(

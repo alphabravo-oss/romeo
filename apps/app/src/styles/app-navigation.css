@@ -286,8 +286,10 @@ html.dark .rm-sidebar-item.active:hover {
   outline: none;
 }
 
-.rm-topbar-title-input:focus {
+.rm-topbar-title-input:focus-visible {
   border-color: var(--rm-accent);
+  outline: 2px solid var(--rm-accent);
+  outline-offset: 2px;
 }
 
 .rm-main-context-divider {
@@ -320,6 +322,12 @@ html.dark .rm-sidebar-item.active:hover {
   color: var(--rm-muted);
   font: inherit;
   font-size: 12px;
+}
+
+.rm-main-workspace select:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--rm-accent);
+  outline-offset: 2px;
 }
 
 .rm-topbar-user {
@@ -653,7 +661,7 @@ html.dark .rm-scroll-to-bottom:hover {
   border-radius: 14px;
   background: linear-gradient(
     135deg,
-    var(--rm-accent),
+    var(--rm-accent-solid),
     var(--rm-accent-secondary)
   );
   box-shadow: 0 8px 26px color-mix(in srgb, var(--rm-accent) 24%, transparent);
@@ -725,7 +733,7 @@ html.dark .rm-scroll-to-bottom:hover {
 }
 
 .rm-activation__header > span {
-  color: var(--rm-accent);
+  color: var(--rm-accent-strong);
   font-size: 12px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
@@ -763,7 +771,7 @@ html.dark .rm-scroll-to-bottom:hover {
 
 .rm-activation__setup {
   width: fit-content;
-  color: var(--rm-accent);
+  color: var(--rm-accent-strong);
   font-size: 12px;
   font-weight: 600;
   text-decoration: none;
@@ -874,4 +882,11 @@ html.dark .rm-suggestion:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 40rem) {
+  .rm-chat-panel-empty {
+    justify-content: flex-start;
+    padding-top: calc(24px + var(--rm-shell-header-height));
+  }
 }

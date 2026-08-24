@@ -13,6 +13,7 @@ import {
   updateToolOperation,
 } from "./mutations";
 import type { ToolConnector, ToolOperation } from "./types";
+import { invalidateInventoriedTablePages } from "../../lib/inventoried-table-cache";
 
 type ConnectorSnapshot = ToolConnector[] | undefined;
 type OperationSnapshot = ToolOperation[] | undefined;
@@ -33,7 +34,16 @@ export function importOpenApiToolMutationOptions() {
         appQueryKeys.toolOperations(imported.connector.id),
         imported.operations,
       );
-      await refreshToolConnectorAudit(client);
+      await Promise.all([
+        refreshToolConnectorAudit(client),
+        invalidateInventoriedTablePages(client, {
+          resource: "tool_connectors",
+        }),
+        invalidateInventoriedTablePages(client, {
+          parentId: imported.connector.id,
+          resource: "tool_operations",
+        }),
+      ]);
     },
     invalidations: (imported) => [
       { exact: true, queryKey: appQueryKeys.toolConnectors() },
@@ -81,7 +91,12 @@ export function updateToolConnectorMutationOptions() {
         (current) =>
           current?.map((item) => (item.id === connector.id ? connector : item)),
       );
-      await refreshToolConnectorAudit(client);
+      await Promise.all([
+        refreshToolConnectorAudit(client),
+        invalidateInventoriedTablePages(client, {
+          resource: "tool_connectors",
+        }),
+      ]);
     },
     invalidations: () => [
       { exact: true, queryKey: appQueryKeys.toolConnectors() },
@@ -138,7 +153,13 @@ export function updateToolOperationMutationOptions() {
             item.operationId === operation.operationId ? operation : item,
           ),
       );
-      await refreshToolConnectorAudit(client);
+      await Promise.all([
+        refreshToolConnectorAudit(client),
+        invalidateInventoriedTablePages(client, {
+          parentId: variables.connectorId,
+          resource: "tool_operations",
+        }),
+      ]);
     },
     invalidations: (_operation, variables) => [
       {
@@ -182,8 +203,5 @@ function restoreQuery<T>(
 function refreshToolConnectorAudit(
   client: Parameters<typeof invalidateCachedResourceExactly>[0],
 ) {
-  return Promise.all([
-    invalidateCachedResourceExactly(client, appQueryKeys.auditLogs()),
-    invalidateCachedResourceExactly(client, appQueryKeys.tablePages()),
-  ]);
+  return invalidateCachedResourceExactly(client, appQueryKeys.auditLogs());
 }

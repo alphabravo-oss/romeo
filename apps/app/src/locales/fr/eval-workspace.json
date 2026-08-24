@@ -73,9 +73,9 @@
   "workspaceCollaboration": "Collaboration",
   "workspaceAgent": "Modèle personnalisé",
   "workspaceAgentsDescription": "Publiez des configurations d’IA gouvernées et contrôlez quels utilisateurs et groupes peuvent les exécuter.",
-  "workspaceKnowledgeDescription": "Sources de l’espace de travail que cet modèle personnalisé peut récupérer et citer.",
-  "workspaceToolsDescription": "Capacités que cet modèle personnalisé peut appeler et leurs approbations.",
-  "workspaceVoiceDescription": "Entrée vocale et voix synthétisée pour cet modèle personnalisé.",
-  "workspaceEvalsDescription": "Testez les réponses de l’modèle personnalisé avec des suites et grilles gouvernées.",
+  "workspaceKnowledgeDescription": "Sources de l’espace de travail que ce modèle personnalisé peut récupérer et citer.",
+  "workspaceToolsDescription": "Capacités que ce modèle personnalisé peut appeler et leurs approbations.",
+  "workspaceVoiceDescription": "Entrée vocale et voix synthétisée pour ce modèle personnalisé.",
+  "workspaceEvalsDescription": "Testez les réponses du modèle personnalisé avec des suites et grilles gouvernées.",
   "workspaceCollaborationDescription": "Partagez des modèles, des discussions, des connaissances et des dossiers avec les personnes de cet espace de travail."
 }

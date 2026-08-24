@@ -5,10 +5,12 @@ import { useLocale } from "../lib/i18n";
 
 export function KnowledgeBaseSummary({
   canUpload = true,
+  disabledReason,
   knowledgeBase,
   onAddSource,
 }: {
   canUpload?: boolean;
+  disabledReason?: string;
   knowledgeBase: KnowledgeBase;
   onAddSource: () => void;
 }) {
@@ -25,9 +27,9 @@ export function KnowledgeBaseSummary({
         <AddButton
           disabled={!canUpload}
           onClick={onAddSource}
-          {...(canUpload
+          {...(canUpload || disabledReason === undefined
             ? {}
-            : { title: t("knowledgeIngestBlockedEmbedding") })}
+            : { title: disabledReason })}
         >
           {t("knowledgeAddSource")}
         </AddButton>

@@ -309,7 +309,7 @@ function normalizeConnectionTestIssuer(value: string): string {
   } catch {
     throw new ApiError(
       "invalid_auth_provider_connection_test",
-      "OIDC issuer URL must use HTTPS outside localhost.",
+      "OIDC issuer URL must use a public HTTPS endpoint.",
       400,
     );
   }

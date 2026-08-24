@@ -114,13 +114,16 @@ describe("reasoning capability policy", () => {
 
   it("uses the legacy organization setting only until a versioned org assignment exists", async () => {
     const repository = new InMemoryRomeoRepository();
-    await repository.upsertSystemSetting({
-      key: reasoningPolicySettingKey("org_default"),
-      value: {
-        policy: { schemaVersion: 1, mode: "auto", effort: "low" },
+    await repository.upsertSystemSetting(
+      {
+        key: reasoningPolicySettingKey("org_default"),
+        value: {
+          policy: { schemaVersion: 1, mode: "auto", effort: "low" },
+        },
+        updatedAt: new Date().toISOString(),
       },
-      updatedAt: new Date().toISOString(),
-    });
+      "org_default",
+    );
     await expect(
       resolveReasoningCapabilityMaximum(repository, {
         orgId: "org_default",

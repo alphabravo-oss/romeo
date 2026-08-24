@@ -45,7 +45,7 @@ export function useReaderBranchSelection({
   ]);
 
   return useCallback(
-    (chatId: string, leafMessageId: string) => {
+    (chatId: string, leafMessageId: string | undefined) => {
       if (activeChatId.current === chatId) {
         onBranchSelection?.(leafMessageId, { replace: true });
       }

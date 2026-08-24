@@ -1,5 +1,6 @@
 {
   "applyProposedRagPolicyForRequest": "Appliquer la politique RAG proposée pour la demande",
+  "approve": "Approuver",
   "approveChangeRequestTitle": "Approuver la demande de changement ?",
   "atLeastOneKnowledgeBaseId": "Au moins un identifiant de base de connaissances est requis.",
   "averageLatencyMs": "Latence moyenne (ms)",

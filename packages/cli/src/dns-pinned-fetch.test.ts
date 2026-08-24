@@ -40,15 +40,16 @@ describe("tool dispatch DNS-pinned fetch", () => {
     ).rejects.toThrow(TypeError);
   });
 
-  it("fails the lookup rather than resolving when no approved family matches", async () => {
-    // The socket asked for IPv6 and policy only approved IPv4. Falling back to
-    // real DNS here would defeat pinning outright, so the lookup must error.
+  it("connects only to the approved address instead of falling back to real DNS", async () => {
+    // If the request resolves example.invalid through real DNS, it will fail
+    // with ENOTFOUND. ECONNREFUSED at ::1 proves the pinned lookup supplied the
+    // approved address and did not fall through to system resolution.
     await expect(
       dnsPinnedFetch(
         new URL("http://example.invalid/resource"),
         { headers: { accept: "text/plain" } },
         [{ address: "::1", family: 6 }],
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow("connect ECONNREFUSED ::1:80");
   });
 });

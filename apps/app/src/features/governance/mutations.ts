@@ -14,9 +14,11 @@ import {
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
-async function data<T>(request: () => Promise<{ data: { data: T } }>) {
+type EnvelopeData<T> = T extends { data: infer Value } ? Value : never;
+
+async function data<T>(request: () => Promise<{ data: T }>) {
   configureBrowserApiClients();
-  return (await request()).data.data;
+  return ((await request()).data as { data: EnvelopeData<T> }).data;
 }
 
 export const updateRetentionPolicy = (body: UpdateRetentionPolicyRequest) =>

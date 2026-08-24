@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { getEmbeddingAdapter } from "./registry";
+import { parseEmbeddingMatrix } from "./adapters/embedding-utils";
 import { defaultProviderCapabilities } from "./capabilities";
 import type { ProviderInstance } from "./types";
 
@@ -82,5 +83,19 @@ describe("provider embedding adapters", () => {
       errorCode: "provider_unexpected_failure",
       operation: "embeddings",
     });
+  });
+
+  it("rejects embedding matrices above the bounded response budget", () => {
+    expect(() => parseEmbeddingMatrix([Array(65_537).fill(0)], 1)).toThrowError(
+      "Provider returned embedding vectors above the response limit.",
+    );
+    expect(() =>
+      parseEmbeddingMatrix(
+        Array.from({ length: 16 }, () => Array(65_000).fill(0)),
+        16,
+      ),
+    ).toThrowError(
+      "Provider returned embedding vectors above the response limit.",
+    );
   });
 });

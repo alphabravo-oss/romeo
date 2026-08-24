@@ -17,7 +17,6 @@ export function ProviderModelsTable({
   deletingModelId,
   dependentAgents,
   isUpdating,
-  models,
   onDeleteModel,
   onToggleModel,
   provider,
@@ -25,13 +24,14 @@ export function ProviderModelsTable({
   deletingModelId: string | undefined;
   dependentAgents: Agent[];
   isUpdating: boolean;
-  models: BaseModel[];
-  onDeleteModel: (providerId: string, model: BaseModel) => Promise<void>;
+  onDeleteModel: (model: BaseModel) => Promise<void>;
   onToggleModel: (model: BaseModel, enabled: boolean) => Promise<void>;
   provider: Provider;
 }) {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<any>("provider_models");
+  const inventoriedTable = useInventoriedServerTable("provider_models", {
+    parentId: provider.id,
+  });
   const columns = useMemo(
     () => [
       modelColumn.accessor("displayName", {
@@ -39,12 +39,13 @@ export function ProviderModelsTable({
         cell: ({ row }) => (
           <Link
             className="block min-w-0 hover:underline"
-            search={{
+            search={(previous) => ({
+              ...previous,
               model: row.original.id,
-              provider: provider.id,
+              provider: row.original.providerId,
               section: "providers",
               view: "base-models",
-            }}
+            })}
             to="/admin"
           >
             <strong className="block truncate">
@@ -123,12 +124,13 @@ export function ProviderModelsTable({
           <div className="flex items-center justify-end gap-1">
             <Button asChild size="sm" variant="ghost">
               <Link
-                search={{
+                search={(previous) => ({
+                  ...previous,
                   model: row.original.id,
-                  provider: provider.id,
+                  provider: row.original.providerId,
                   section: "providers",
                   view: "base-models",
-                }}
+                })}
                 to="/admin"
               >
                 <Pencil aria-hidden size={14} />
@@ -139,7 +141,7 @@ export function ProviderModelsTable({
               <IconButton
                 aria-label={`${t("deleteOllamaModel")} ${row.original.name}`}
                 disabled={deletingModelId === row.original.id}
-                onClick={() => void onDeleteModel(provider.id, row.original)}
+                onClick={() => void onDeleteModel(row.original)}
                 size="sm"
                 variant="ghost"
               >

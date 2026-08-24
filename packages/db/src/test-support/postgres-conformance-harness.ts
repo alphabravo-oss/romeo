@@ -292,6 +292,7 @@ export function postgresConformanceDatabaseUrl(
 
 export async function createLivePostgresRepositoryFixture(
   adminDatabaseUrl: string,
+  options: { throughMigration?: string } = {},
 ): Promise<LivePostgresRepositoryFixture> {
   const databaseName = `romeo_conformance_${randomUUID().replaceAll("-", "")}`;
   const targetUrl = databaseUrlWithDatabase(adminDatabaseUrl, databaseName);
@@ -301,7 +302,7 @@ export async function createLivePostgresRepositoryFixture(
   await admin.unsafe(`CREATE DATABASE ${quoteIdentifier(databaseName)}`);
 
   try {
-    await applyGreenfieldBaseline(targetUrl);
+    await applyGreenfieldBaseline(targetUrl, options.throughMigration);
     connection = createDatabaseConnection(targetUrl);
     await seedConformanceFixtures(connection.db);
   } catch (error) {
@@ -322,10 +323,13 @@ export async function createLivePostgresRepositoryFixture(
   };
 }
 
-async function applyGreenfieldBaseline(databaseUrl: string): Promise<void> {
+async function applyGreenfieldBaseline(
+  databaseUrl: string,
+  throughMigration?: string,
+): Promise<void> {
   const sql = postgres(databaseUrl, { max: 1 });
   try {
-    for (const statement of greenfieldMigrationStatements()) {
+    for (const statement of greenfieldMigrationStatements(throughMigration)) {
       await sql.unsafe(statement);
     }
   } finally {
@@ -333,13 +337,17 @@ async function applyGreenfieldBaseline(databaseUrl: string): Promise<void> {
   }
 }
 
-function greenfieldMigrationStatements(): string[] {
+function greenfieldMigrationStatements(throughMigration?: string): string[] {
   const migrationsDir = fileURLToPath(
     new URL("../../migrations/", import.meta.url),
   );
   return readdirSync(migrationsDir)
     .filter((fileName) => /^\d{4}_.+\.sql$/u.test(fileName))
     .sort()
+    .filter(
+      (fileName) =>
+        throughMigration === undefined || fileName <= throughMigration,
+    )
     .flatMap((fileName) => {
       const migration = readFileSync(
         new URL(`../../migrations/${fileName}`, import.meta.url),

@@ -111,7 +111,7 @@ function ChatExperienceForm({ initial }: { initial: ChatExperience }) {
             </div>
 
             {suggestionsField.state.value.length === 0 ? (
-              <EmptyState title={t("chatNoStarters")} />
+              <EmptyState headingLevel={2} title={t("chatNoStarters")} />
             ) : null}
 
             {suggestionsField.state.value.map((_, index) => (

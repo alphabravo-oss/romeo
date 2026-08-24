@@ -120,6 +120,7 @@ export class OperationToolExecutionService {
     if (
       binding.approvalRequired &&
       operation.approvalPolicy === "never" &&
+      options.approvalRequestId === undefined &&
       options.approved !== true
     ) {
       const toolCall = await recordToolCall(this.repository, {
@@ -163,6 +164,7 @@ export class OperationToolExecutionService {
           tool.id,
           options.approvalRequestId,
           run?.id,
+          input,
         );
       } catch (error) {
         const errorCode =
@@ -185,13 +187,18 @@ export class OperationToolExecutionService {
       }
     }
 
-    if (operation.approvalPolicy !== "never" && options.approved !== true) {
+    if (
+      operation.approvalPolicy !== "never" &&
+      options.approvalRequestId === undefined
+    ) {
       try {
         await this.support.enqueueOperation({
           connector,
           operation,
           parsedInput,
+          run,
           subject,
+          tool,
         });
       } catch (error) {
         if (

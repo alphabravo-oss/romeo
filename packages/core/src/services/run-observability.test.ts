@@ -249,7 +249,7 @@ describe("run observability usage", () => {
     const service = new RunService(repository, new RunEventSequencer());
 
     const resumed: RunEvent[] = [];
-    for await (const item of service.events(run.id, seededSubject, 2))
+    for await (const item of await service.events(run.id, seededSubject, 2))
       resumed.push(item);
     const usage = await repository.listUsageEvents(run.orgId);
 

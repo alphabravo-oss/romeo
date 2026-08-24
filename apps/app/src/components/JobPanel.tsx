@@ -13,7 +13,7 @@ const col = createColumnHelper<BackgroundJob>();
 
 export function JobPanel() {
   const { t } = useLocale();
-  const table = useInventoriedServerTable<BackgroundJob>("background_jobs");
+  const table = useInventoriedServerTable("background_jobs");
   const columns: ColumnDef<BackgroundJob, any>[] = [
     col.accessor("type", {
       header: t("jobsType"),

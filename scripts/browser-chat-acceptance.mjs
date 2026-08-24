@@ -10,11 +10,13 @@ const createdChatIds = new Set();
 let initialChatIds;
 let initialFixtureResourceIds;
 let originalBrowserModelConfiguration;
+let originalInterfacePreferences;
 
 try {
   run("open", baseUrl);
   waitForDocumentReady();
   run("wait", "#prompt");
+  originalInterfacePreferences = readInterfacePreferences();
   originalBrowserModelConfiguration = configureBrowserAcceptanceModel();
   initialChatIds = listWorkspaceChatIds();
   initialFixtureResourceIds = listFixtureResourceIds();
@@ -22,7 +24,7 @@ try {
   for (const required of [
     "New chat",
     "Message",
-    "More actions",
+    "More chat actions",
     "Search the web",
     "Send message",
   ])
@@ -67,10 +69,29 @@ try {
   clickSendMessage();
   run("wait", ".rm-sidebar-item.active[data-chat-id]");
   trackActiveChat();
+  // Observe the assistant turn before waiting for Ready: the composer is
+  // briefly ready between the optimistic user commit and run-stream start.
   run(
     "wait",
     "--fn",
-    `document.querySelectorAll(".rm-codeblock pre").length >= 2 && document.querySelectorAll(".rm-codeblock .token, .rm-codeblock code.hljs").length >= 2`,
+    `document.querySelectorAll(".rm-codeblock pre").length >= 2`,
+  );
+  run(
+    "wait",
+    "--fn",
+    `document.querySelector("#composer-status")?.textContent?.includes("Ready to send") === true && !document.querySelector('button[aria-label="Stop response"]')`,
+  );
+  // Heavy Markdown plugins are intentionally visibility-gated. Bring the
+  // completed assistant fence into the transcript viewport before asserting
+  // that its deferred highlighter has initialized.
+  run(
+    "eval",
+    `[...document.querySelectorAll(".rm-codeblock")].at(-1)?.scrollIntoView({ block: "center" })`,
+  );
+  run(
+    "wait",
+    "--fn",
+    `document.querySelectorAll(".rm-codeblock .token, .rm-codeblock code.hljs").length >= 2`,
   );
 
   const rendered = JSON.parse(
@@ -78,8 +99,10 @@ try {
     bold: [...document.querySelectorAll("strong")].some((node) => node.textContent === "bold"),
     fencedBlocks: document.querySelectorAll(".rm-codeblock pre").length,
     highlightedTokens: document.querySelectorAll(".rm-codeblock .token, .rm-codeblock code.hljs").length,
-    codeCopyActions: [...document.querySelectorAll(".rm-codeblock button")].filter((button) => button.textContent?.includes("Copy")).length,
-    messageCopyActions: [...document.querySelectorAll("button")].filter((button) => button.textContent?.trim() === "Copy").length,
+    codeClasses: [...document.querySelectorAll(".rm-codeblock code")].map((node) => node.className),
+    codeMarkup: [...document.querySelectorAll(".rm-codeblock code")].map((node) => node.outerHTML),
+    codeCopyActions: document.querySelectorAll('.rm-codeblock button[aria-label="Copy"]').length,
+    messageCopyActions: document.querySelectorAll('.rm-message-actions button[aria-label="Copy"]').length,
   })`),
   );
   assert(rendered.bold, "Markdown bold was not rendered");
@@ -89,7 +112,7 @@ try {
   );
   assert(
     rendered.highlightedTokens >= 2,
-    "syntax highlighting tokens were not rendered",
+    `syntax highlighting tokens were not rendered: ${JSON.stringify(rendered)}`,
   );
   assert(rendered.codeCopyActions >= 2, "code copy controls were not rendered");
   assert(
@@ -140,12 +163,49 @@ try {
     `(() => { const items = [...document.querySelectorAll(".rm-pending-attachment")]; return items.some((node) => node.textContent?.includes("browser-source.txt")) && items.some((node) => node.textContent?.includes("browser-image.png") || node.querySelector("img")?.alt === "browser-image.png"); })()`,
   );
   run("fill", "#prompt", "Use both browser acceptance attachments.");
-  clickSendMessage();
-  run(
-    "wait",
-    "--fn",
-    `document.querySelectorAll(".rm-attachment-with-retention").length >= 2 || Boolean(document.querySelector(".rm-composer-error"))`,
+  const assistantCountBeforeAttachmentTurn = Number(
+    evaluate(`document.querySelectorAll(".rm-message-row.assistant").length`),
   );
+  clickSendMessage();
+  try {
+    run(
+      "wait",
+      "--fn",
+      `(() => {
+        const items = [...document.querySelectorAll(".rm-attachment-with-retention")];
+        return (
+          items.some((node) => node.textContent?.includes("browser-source.txt")) &&
+          items.some((node) => node.textContent?.includes("browser-image.png") || node.querySelector("img")?.alt === "browser-image.png")
+        ) || Boolean(document.querySelector(".rm-composer-error"));
+      })()`,
+    );
+  } catch (error) {
+    const attachmentState = evaluate(`(async () => {
+      const chatId = document.querySelector(".rm-sidebar-item.active[data-chat-id]")?.getAttribute("data-chat-id");
+      const response = chatId
+        ? await fetch("/api/v1/chats/" + encodeURIComponent(chatId) + "/messages")
+        : undefined;
+      return {
+        activeChatId: chatId ?? null,
+        composerError: document.querySelector(".rm-composer-error")?.textContent?.trim() ?? null,
+        composerStatus: document.querySelector("#composer-status")?.textContent?.trim() ?? null,
+        messages: response?.ok
+          ? (await response.json()).data.map((message) => ({ content: message.content, role: message.role }))
+          : [],
+        pending: [...document.querySelectorAll(".rm-pending-attachment")].map((node) => node.textContent?.trim()),
+        prompt: document.querySelector("#prompt")?.value ?? null,
+        sendDisabled: document.querySelector('button[aria-label="Send message"]')?.disabled ?? null,
+      };
+    })()`);
+    const network = run("network", "requests", "--filter", "api/v1")
+      .split("\n")
+      .slice(-30)
+      .join("\n");
+    throw new Error(
+      `attachment turn did not commit: ${JSON.stringify(attachmentState)}; network: ${network}`,
+      { cause: error },
+    );
+  }
   const attachmentSubmitError = evaluate(
     `document.querySelector(".rm-composer-error")?.textContent?.trim() ?? ""`,
   );
@@ -153,19 +213,50 @@ try {
     attachmentSubmitError === "",
     `attachment turn failed: ${attachmentSubmitError}`,
   );
+  // Attachment tiles are committed with the optimistic user message before
+  // the provider run starts. Wait for the corresponding assistant turn to
+  // produce content and settle before exercising controls that are correctly
+  // disabled while any response is streaming.
+  run(
+    "wait",
+    "--fn",
+    `(() => { const rows = [...document.querySelectorAll(".rm-message-row.assistant")]; return rows.length > ${assistantCountBeforeAttachmentTurn} && (rows.at(-1)?.querySelector(".rm-message-content")?.textContent?.trim().length ?? 0) > 0; })()`,
+  );
+  run(
+    "wait",
+    "--fn",
+    `document.querySelector("#composer-status")?.textContent?.includes("Ready to send") === true && !document.querySelector('button[aria-label="Stop response"]')`,
+  );
   const attached = JSON.parse(
     evaluate(`JSON.stringify({
     names: [...document.querySelectorAll(".rm-attachment-with-retention")].map((node) => node.textContent),
     retained: [...document.querySelectorAll(".rm-attachment-with-retention input[type=checkbox]")].map((input) => input.checked),
-  })`),
+    })`),
   );
+  const persistedAttachmentState = evaluate(`(async () => {
+    const chatId = document.querySelector(".rm-sidebar-item.active[data-chat-id]")?.getAttribute("data-chat-id");
+    const response = chatId
+      ? await fetch("/api/v1/chats/" + encodeURIComponent(chatId) + "/messages")
+      : undefined;
+    return {
+      chatId: chatId ?? null,
+      messages: response?.ok
+        ? (await response.json()).data.map((message) => ({
+            attachments: message.attachments,
+            content: message.content,
+            parts: message.parts,
+            role: message.role,
+          }))
+        : [],
+    };
+  })()`);
   assert(
     attached.names.some((name) => name.includes("browser-source.txt")),
-    "document upload was not persisted",
+    `document upload was not persisted: ${JSON.stringify({ attached, persistedAttachmentState })}`,
   );
   assert(
     attached.names.some((name) => name.includes("browser-image.png")),
-    "image upload was not persisted",
+    `image upload was not persisted: ${JSON.stringify({ attached, persistedAttachmentState })}`,
   );
   assert(
     attached.retained.length === 2 && attached.retained.every(Boolean),
@@ -178,7 +269,11 @@ try {
   );
 
   clickComposerMenuItem("Inspect context");
-  run("wait", ".rm-context-body");
+  run(
+    "wait",
+    "--fn",
+    `document.querySelector('.rm-context-inspector[aria-busy="false"]')?.textContent?.includes("1 retained document(s)") === true`,
+  );
   const retainedContext = run("get", "text", ".rm-context-inspector");
   assert(
     retainedContext.includes("1 retained document(s)"),
@@ -194,7 +289,10 @@ try {
     "Remaining",
     "History",
     "Files and knowledge",
-    "Provider messages",
+    "Run provenance",
+    "Recent visible messages",
+    "Effective policies",
+    "Lifecycle checkpoints",
   ]) {
     assert(
       retainedContext.includes(section),
@@ -204,12 +302,22 @@ try {
   run("click", 'button[aria-label="Close context inspector"]');
 
   run(
-    "eval",
-    `([...document.querySelectorAll(".rm-attachment-with-retention")].find((node) => node.textContent?.includes("browser-source.txt"))?.querySelector("input[type=checkbox]"))?.click()`,
+    "wait",
+    "--fn",
+    `document.querySelector('input[aria-label="Keep in context: browser-source.txt"]')?.disabled === false`,
   );
-  run("wait", "300");
+  run("click", 'input[aria-label="Keep in context: browser-source.txt"]');
+  run(
+    "wait",
+    "--fn",
+    `document.querySelector('input[aria-label="Keep in context: browser-source.txt"]')?.checked === false`,
+  );
   clickComposerMenuItem("Inspect context");
-  run("wait", ".rm-context-body");
+  run(
+    "wait",
+    "--fn",
+    `document.querySelector('.rm-context-inspector[aria-busy="false"]')?.textContent?.includes("0 retained document(s)") === true`,
+  );
   const releasedContext = run("get", "text", ".rm-context-inspector");
   assert(
     releasedContext.includes("0 retained document(s)"),
@@ -341,6 +449,12 @@ try {
             cleanupSession,
           );
         }
+        if (originalInterfacePreferences !== undefined) {
+          restoreInterfacePreferences(
+            originalInterfacePreferences,
+            cleanupSession,
+          );
+        }
       } finally {
         run("close", { allowFailure: true });
         runFor(secondSession, "close", { allowFailure: true });
@@ -406,6 +520,43 @@ function restoreBrowserAcceptanceModel(model, targetSession = session) {
   );
 }
 
+function readInterfacePreferences(targetSession = session) {
+  return JSON.parse(
+    evaluateFor(
+      targetSession,
+      `(async () => {
+        const response = await fetch("/api/v1/me/interface-preferences");
+        if (!response.ok) throw new Error(await response.text());
+        return JSON.stringify((await response.json()).data);
+      })()`,
+    ),
+  );
+}
+
+function restoreInterfacePreferences(preferences, targetSession = session) {
+  const locale = JSON.stringify(preferences.locale);
+  const restored = JSON.parse(
+    evaluateFor(
+      targetSession,
+      `(async () => {
+        const response = await fetch("/api/v1/me/interface-preferences", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(${JSON.stringify(preferences)}),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        localStorage.setItem("romeo:locale", ${locale});
+        document.cookie = "romeo_locale=" + ${locale} + "; Path=/; Max-Age=31536000; SameSite=Lax";
+        return JSON.stringify((await response.json()).data);
+      })()`,
+    ),
+  );
+  assert(
+    JSON.stringify(restored) === JSON.stringify(preferences),
+    "browser acceptance did not restore the original interface preferences",
+  );
+}
+
 function seedAndAttachBrowserFixtures() {
   const fileInput = JSON.parse(
     evaluate(`JSON.stringify((() => {
@@ -453,6 +604,15 @@ function seedAndAttachBrowserFixtures() {
   for (const fileName of ["browser-source.txt", "browser-image.png"]) {
     clickComposerMenuItem("Reusable files");
     run("wait", ".rm-ui-dialog");
+    run(
+      "wait",
+      "--fn",
+      `(() => {
+        const row = [...document.querySelectorAll(".rm-ui-dialog .rm-list-row")].find((item) => item.textContent?.includes(${JSON.stringify(fileName)}));
+        const button = row?.querySelector(":scope > button:first-of-type");
+        return button instanceof HTMLButtonElement && !button.disabled;
+      })()`,
+    );
     const selected = evaluate(`Boolean((() => {
       const row = [...document.querySelectorAll(".rm-ui-dialog .rm-list-row")].find((item) => item.textContent?.includes(${JSON.stringify(fileName)}));
       const button = row?.querySelector(":scope > button:first-of-type");
@@ -471,6 +631,10 @@ function seedAndAttachBrowserFixtures() {
 
 function assertRealtimeChatListSync() {
   const title = "Browser realtime sidebar sentinel";
+  runFor(secondSession, "open", baseUrl);
+  runFor(secondSession, "wait", "#prompt");
+  waitForChatEventStream(secondSession);
+
   const chat = JSON.parse(
     evaluate(`(async () => {
       const response = await fetch("/api/v1/chats", {
@@ -487,8 +651,6 @@ function assertRealtimeChatListSync() {
   );
   trackChatId(chat.id);
 
-  runFor(secondSession, "open", baseUrl);
-  runFor(secondSession, "wait", "#prompt");
   runFor(
     secondSession,
     "wait",
@@ -518,6 +680,34 @@ function assertRealtimeChatListSync() {
     `!document.body.innerText.includes(${JSON.stringify(title)})`,
   );
   createdChatIds.delete(chat.id);
+}
+
+function waitForChatEventStream(targetSession) {
+  const deadline = Date.now() + 30_000;
+  do {
+    const result = JSON.parse(
+      runFor(
+        targetSession,
+        "network",
+        "requests",
+        "--filter",
+        "chat-events",
+        "--status",
+        "200",
+        "--json",
+      ),
+    );
+    if (
+      result.data?.requests?.some(
+        (request) =>
+          request.resourceType === "EventSource" && request.status === 200,
+      )
+    ) {
+      return;
+    }
+    runFor(targetSession, "wait", "100");
+  } while (Date.now() < deadline);
+  throw new Error("the secondary chat event stream did not connect");
 }
 
 function assertModelPinsAndSelectionSync() {
@@ -701,7 +891,7 @@ function assertQueuedReloadRecovery() {
     "--fn",
     `document.body.innerText.includes("Browser queue recovery anchor") && document.querySelector("#composer-status")?.textContent?.includes("Ready to send")`,
   );
-  const queuedPersisted = evaluate(`(async () => {
+  const queueRecoveryUrl = evaluate(`(async () => {
     const chatId = document.querySelector(".rm-sidebar-item.active")?.dataset.chatId;
     if (!chatId) return false;
     const queueResponse = await fetch("/api/v1/chats/" + encodeURIComponent(chatId) + "/queue", {
@@ -715,16 +905,56 @@ function assertQueuedReloadRecovery() {
     });
     if (!queueResponse.ok) return false;
     const queued = await queueResponse.json();
-    return queued.data.content === "Browser queued continuation follower sentinel" && queued.data.status === "queued";
+    const url = new URL(window.location.href);
+    url.searchParams.delete("leaf");
+    if (
+      queued.data.content !== "Browser queued continuation follower sentinel" ||
+      queued.data.status !== "queued"
+    ) return "";
+    return url.href;
   })()`);
-  assert(queuedPersisted, "queued follower was not durably persisted");
-  run("reload");
-  waitForDocumentReady();
-  run(
-    "wait",
-    "--fn",
-    `document.body.innerText.includes("Browser queued continuation follower sentinel") && !document.body.innerText.includes("Queued: Browser queued continuation follower sentinel")`,
+  assert(
+    queueRecoveryUrl.startsWith(`${baseUrl}/`),
+    "queued follower was not durably persisted",
   );
+  // Navigate to the canonical chat URL in one operation. Mutating history and
+  // issuing a later reload leaves a gap in which the mounted router can write
+  // its old reader-scoped leaf back to the address bar.
+  run("open", queueRecoveryUrl);
+  waitForDocumentReady();
+  try {
+    run(
+      "wait",
+      "--fn",
+      `document.body.innerText.includes("Browser queued continuation follower sentinel") && !document.body.innerText.includes("Queued: Browser queued continuation follower sentinel")`,
+    );
+  } catch (error) {
+    const recoveryState = evaluate(`(async () => {
+      const chatId = document.querySelector(".rm-sidebar-item.active")?.dataset.chatId;
+      if (!chatId) return { body: document.body.innerText.slice(0, 1_200), chatId: null };
+      const [queue, active, messages, page, chat] = await Promise.all([
+        fetch("/api/v1/chats/" + encodeURIComponent(chatId) + "/queue").then((response) => response.json()),
+        fetch("/api/v1/chats/" + encodeURIComponent(chatId) + "/runs/active").then((response) => response.json()),
+        fetch("/api/v1/chats/" + encodeURIComponent(chatId) + "/messages").then((response) => response.json()),
+        fetch("/api/v1/chats/" + encodeURIComponent(chatId) + "/messages/page?direction=older&limit=50").then((response) => response.json()),
+        fetch("/api/v1/chats/" + encodeURIComponent(chatId)).then((response) => response.json()),
+      ]);
+      return {
+        active: active.data,
+        body: document.body.innerText.slice(0, 1_200),
+        chat: chat.data,
+        chatId,
+        href: window.location.href,
+        messages: messages.data.map((message) => ({ content: message.content, role: message.role })),
+        page: { data: page.data.map((message) => ({ content: message.content, role: message.role })), meta: page.meta },
+        queue: queue.data,
+      };
+    })()`);
+    throw new Error(
+      `queued reload recovery did not settle: ${JSON.stringify(recoveryState)}`,
+      { cause: error },
+    );
+  }
   const recovered = run("get", "text", "body");
   assert(
     recovered.includes("Browser queued continuation follower sentinel"),
@@ -901,18 +1131,12 @@ function assertPromptNotesMemoryAndTemporaryChat() {
     `document.body.innerText.includes("Browser controlled memory") && !document.querySelector(".rm-ui-dialog")`,
   );
   run(
-    "eval",
-    `(() => {
-    const row = [...document.querySelectorAll("tbody tr")]
-      .find((item) => item.textContent?.includes("Browser controlled memory"));
-    [...(row?.querySelectorAll("button") ?? [])].find((button) => button.textContent?.trim() === "Pin")?.click();
-  })()`,
-  );
-  run(
     "wait",
     "--fn",
-    `Boolean([...document.querySelectorAll("tbody tr")].find((item) => item.textContent?.includes("Browser controlled memory"))?.textContent?.includes("Unpin"))`,
+    `document.querySelector('button[aria-label="Pin Browser controlled memory"]')?.disabled === false`,
   );
+  run("click", 'button[aria-label="Pin Browser controlled memory"]');
+  run("wait", 'button[aria-label="Unpin Browser controlled memory"]');
 
   run("open", baseUrl);
   waitForDocumentReady();
@@ -1027,7 +1251,22 @@ function assertImageGeneration(port) {
     const sync = await fetch("/api/v1/providers/" + encodeURIComponent(provider.id) + "/sync", { method: "POST" });
     if (!sync.ok) throw new Error(await sync.text());
     const models = (await sync.json()).data;
-    return models.find((model) => model.capabilities.imageGeneration === true)?.id ?? "";
+    const model = models.find(
+      (candidate) => candidate.capabilities.imageGeneration === true,
+    );
+    if (model === undefined) return "";
+    // Catalog discovery is intentionally safe-by-default: new models are not
+    // selectable until an administrator enables them explicitly.
+    const enable = await fetch(
+      "/api/v1/models/" + encodeURIComponent(model.id) + "/enabled",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: true }),
+      },
+    );
+    if (!enable.ok) throw new Error(await enable.text());
+    return model.id;
   })()`);
   assert(
     typeof seeded === "string" && seeded.length > 0,
@@ -1035,7 +1274,28 @@ function assertImageGeneration(port) {
   );
   run("open", baseUrl);
   waitForDocumentReady();
-  clickComposerMenuItem("Generate image");
+  try {
+    clickComposerMenuItem("Generate image");
+  } catch (error) {
+    const state = evaluate(`({
+      body: document.body.innerText.slice(0, 1_200),
+      href: location.href,
+      readyState: document.readyState,
+      resources: performance.getEntriesByType("resource").slice(-20).map((entry) => ({
+        duration: Math.round(entry.duration),
+        name: entry.name.replace(location.origin, ""),
+        transferSize: entry.transferSize,
+      })),
+    })`);
+    const network = run("network", "requests", "--filter", "api/v1")
+      .split("\n")
+      .slice(-40)
+      .join("\n");
+    throw new Error(
+      `image-generation composer did not become ready: ${JSON.stringify(state)}; network: ${network}`,
+      { cause: error },
+    );
+  }
   run("wait", "#image-prompt");
   run("select", "#image-model", seeded);
   run("fill", "#image-prompt", "Browser governed image sentinel");
@@ -1081,6 +1341,11 @@ function assertKeyboardAndFocusNavigation() {
     "model picker did not move keyboard focus into search",
   );
   run("press", "ArrowDown");
+  run(
+    "wait",
+    "--fn",
+    `document.activeElement?.getAttribute("role") === "option"`,
+  );
   assert(
     evaluate(`document.activeElement?.getAttribute("role") === "option"`),
     "model picker ArrowDown did not focus an option",
@@ -1111,7 +1376,7 @@ function assertKeyboardAndFocusNavigation() {
 
   run(
     "eval",
-    `document.querySelector('button[aria-label="More actions"]')?.focus()`,
+    `document.querySelector('button[aria-label="Capabilities"]')?.focus()`,
   );
   run("press", "Enter");
   run("wait", ".rm-ui-menu");
@@ -1123,7 +1388,7 @@ function assertKeyboardAndFocusNavigation() {
   run("wait", "--fn", `!document.querySelector(".rm-ui-menu")`);
   assert(
     evaluate(
-      `document.activeElement?.getAttribute("aria-label") === "More actions"`,
+      `document.activeElement?.getAttribute("aria-label") === "Capabilities"`,
     ),
     "composer menu Escape did not restore trigger focus",
   );
@@ -1148,11 +1413,11 @@ function assertKeyboardAndFocusNavigation() {
   run(
     "wait",
     "--fn",
-    `document.activeElement?.getAttribute("aria-label") === "More actions"`,
+    `document.activeElement?.getAttribute("aria-label") === "Capabilities"`,
   );
   assert(
     evaluate(
-      `document.activeElement?.getAttribute("aria-label") === "More actions"`,
+      `document.activeElement?.getAttribute("aria-label") === "Capabilities"`,
     ),
     "dialog Escape did not restore opener focus",
   );
@@ -1333,6 +1598,7 @@ function assertComposerLocalization() {
       analyticsTitle: "Analítica",
       auditTitle: "Registro de auditoría",
       auditAnyOutcome: "Cualquier resultado",
+      auditFilterAction: "Filtrar por acción…",
       groupsTitle: "Grupos",
       groupsAdd: "Añadir grupo",
       groupsNew: "Nuevo grupo",
@@ -1362,9 +1628,8 @@ function assertComposerLocalization() {
       workspaceVoice: "Voz",
       workspaceBindVoice: "Vincular voz",
       workspaceCollaboration: "Colaboración",
-      workspaceShareAgent: "Compartir asistente",
+      workspaceShareSelectedModel: "Modelo personalizado seleccionado",
       addMemory: "Añadir memoria",
-      addStep: "Añadir paso",
       appearance: "Apariencia",
       apiKeys: "Claves API",
       authConfigure: "Configurar",
@@ -1389,7 +1654,7 @@ function assertComposerLocalization() {
       evalNewSuite: "Nueva suite",
       evalNewSuiteTitle: "Nueva suite de evaluación",
       evalDescription:
-        "Prueba las respuestas del asistente con suites y rúbricas gobernadas.",
+        "Prueba las respuestas del modelo personalizado con suites y rúbricas gobernadas.",
       filterByFolder: "Filtrar chats por carpeta",
       filterByTag: "Filtrar chats por etiqueta",
       files: "Archivos reutilizables",
@@ -1400,19 +1665,23 @@ function assertComposerLocalization() {
       gaEvidence: "Evidencia de GA",
       goTo: "Ir a",
       keyboardShortcuts: "Atajos de teclado",
+      lifecycleActions: "Acciones de ciclo de vida",
       knowledgeTitle: "Conocimiento",
       knowledgeAddBase: "Añadir base de conocimiento",
       knowledgeNewBase: "Nueva base de conocimiento",
       knowledgeAddSource: "Añadir fuente",
+      knowledgeIngestBlockers: [
+        "Las cargas están desactivadas hasta que un administrador configure RAG y elija un modelo de embeddings.",
+        "Las cargas están desactivadas hasta que un administrador active al menos un nivel de recuperación RAG.",
+        "Las cargas están desactivadas hasta que se configure el almacén vectorial de RAG.",
+      ],
       model: "Elegir modelo",
       moreChatActions: "Más acciones de chat",
       modelPricing: "Precios de modelos",
       models: "Modelos",
-      navConfiguration: "Configuración",
+      navConfiguration: "Modelos",
       newExportDsar: "Nueva exportación (DSAR)",
       notificationChannels: "Canales de notificación",
-      createWorkflow: "Crear flujo de trabajo",
-      newWorkflow: "Nuevo flujo de trabajo",
       serviceAccounts: "Cuentas de servicio",
       systemPosture: "Estado del sistema",
       syncDirectory: "Sincronizar directorio",
@@ -1421,14 +1690,13 @@ function assertComposerLocalization() {
       toolConnectors: "Conectores de herramientas",
       toolImportTool: "Importar herramienta",
       toolImportTitle: "Importar conector de herramienta",
-      workflows: "Flujos de trabajo",
       voiceRecord: "Grabar entrada de voz",
       workspaceLifecycle: "Ciclo de vida del espacio de trabajo",
       chatLifecycle: "Ciclo de vida del chat",
       users: "Usuarios",
       userManage: "Administrar",
       userManageTitle: "Administrar usuario",
-      moreActions: "Más acciones",
+      capabilitiesMenu: "Capacidades",
       promptTemplates: "Plantillas de instrucciones",
       promptAddTemplate: "Añadir plantilla",
       promptNewTemplate: "Nueva plantilla",
@@ -1439,7 +1707,8 @@ function assertComposerLocalization() {
       newQuota: "Nueva cuota",
       profileDescription: "Actualiza tu nombre visible o correo electrónico.",
       ready: "Listo para enviar.",
-      ragRetrievalPolicy: "Política de recuperación RAG",
+      ragGovernanceTab: "Gobernanza",
+      ragRetrievalTitle: "Recuperación",
       readiness: "Preparación",
       retentionAccess: "Retención y acceso",
       replay: "Repetición",
@@ -1457,6 +1726,7 @@ function assertComposerLocalization() {
       analyticsTitle: "Analytique",
       auditTitle: "Journal d’audit",
       auditAnyOutcome: "Tout résultat",
+      auditFilterAction: "Filtrer par action…",
       groupsTitle: "Groupes",
       groupsAdd: "Ajouter un groupe",
       groupsNew: "Nouveau groupe",
@@ -1486,9 +1756,9 @@ function assertComposerLocalization() {
       workspaceVoice: "Voix",
       workspaceBindVoice: "Associer la voix",
       workspaceCollaboration: "Collaboration",
-      workspaceShareAgent: "Partager l’assistant",
+      workspaceShareSelectedModel:
+        "Modèle personnalisé actuellement sélectionné",
       addMemory: "Ajouter une mémoire",
-      addStep: "Ajouter une étape",
       appearance: "Apparence",
       apiKeys: "Clés API",
       authConfigure: "Configurer",
@@ -1513,7 +1783,7 @@ function assertComposerLocalization() {
       evalNewSuite: "Nouvelle suite",
       evalNewSuiteTitle: "Nouvelle suite d’évaluation",
       evalDescription:
-        "Testez les réponses de l’assistant avec des suites et grilles gouvernées.",
+        "Testez les réponses du modèle personnalisé avec des suites et grilles gouvernées.",
       filterByFolder: "Filtrer les discussions par dossier",
       filterByTag: "Filtrer les discussions par étiquette",
       files: "Fichiers réutilisables",
@@ -1524,19 +1794,23 @@ function assertComposerLocalization() {
       gaEvidence: "Preuves de disponibilité générale",
       goTo: "Aller à",
       keyboardShortcuts: "Raccourcis clavier",
+      lifecycleActions: "Actions de cycle de vie",
       knowledgeTitle: "Connaissances",
       knowledgeAddBase: "Ajouter une base de connaissances",
       knowledgeNewBase: "Nouvelle base de connaissances",
       knowledgeAddSource: "Ajouter une source",
+      knowledgeIngestBlockers: [
+        "Les téléversements sont désactivés tant qu’un administrateur n’a pas configuré le RAG et choisi un modèle d’embeddings.",
+        "Les téléversements sont désactivés tant qu’un administrateur n’a pas activé au moins un niveau de récupération RAG.",
+        "Les téléversements sont désactivés tant que le magasin vectoriel RAG n’est pas configuré.",
+      ],
       model: "Choisir un modèle",
       moreChatActions: "Plus d’actions de discussion",
       modelPricing: "Tarification des modèles",
       models: "Modèles",
-      navConfiguration: "Configuration",
+      navConfiguration: "Modèles",
       newExportDsar: "Nouvelle exportation (DSAR)",
       notificationChannels: "Canaux de notification",
-      createWorkflow: "Créer un flux de travail",
-      newWorkflow: "Nouveau flux de travail",
       serviceAccounts: "Comptes de service",
       systemPosture: "État du système",
       syncDirectory: "Synchroniser l’annuaire",
@@ -1545,14 +1819,13 @@ function assertComposerLocalization() {
       toolConnectors: "Connecteurs d’outils",
       toolImportTool: "Importer un outil",
       toolImportTitle: "Importer un connecteur d’outil",
-      workflows: "Flux de travail",
       voiceRecord: "Enregistrer une entrée vocale",
       workspaceLifecycle: "Cycle de vie de l’espace de travail",
       chatLifecycle: "Cycle de vie de la discussion",
       users: "Utilisateurs",
       userManage: "Gérer",
       userManageTitle: "Gérer l’utilisateur",
-      moreActions: "Plus d’actions",
+      capabilitiesMenu: "Capacités",
       promptTemplates: "Modèles d’invite",
       promptAddTemplate: "Ajouter un modèle",
       promptNewTemplate: "Nouveau modèle",
@@ -1564,7 +1837,8 @@ function assertComposerLocalization() {
       profileDescription:
         "Mettez à jour votre nom affiché ou votre adresse e-mail.",
       ready: "Prêt à envoyer.",
-      ragRetrievalPolicy: "Politique de récupération RAG",
+      ragGovernanceTab: "Gouvernance",
+      ragRetrievalTitle: "Recherche",
       readiness: "Préparation",
       retentionAccess: "Conservation et accès",
       replay: "Rejeu",
@@ -1585,7 +1859,7 @@ function assertComposerLocalization() {
       lang: document.documentElement.lang,
       filterTrigger: document.querySelector(${JSON.stringify(`button[aria-label="${locale.filterByTag} / ${locale.filterByFolder}"]`)})?.getAttribute("aria-label"),
       moreChatActions: document.querySelector(${JSON.stringify(`button[aria-label="${locale.moreChatActions}"]`)})?.getAttribute("aria-label"),
-      moreActions: document.querySelector(${JSON.stringify(`button[aria-label="${locale.moreActions}"]`)})?.getAttribute("aria-label"),
+      capabilitiesMenu: document.querySelector(${JSON.stringify(`button[aria-label="${locale.capabilitiesMenu}"]`)})?.getAttribute("aria-label"),
       voiceRecord: document.querySelector(${JSON.stringify(`button[aria-label="${locale.voiceRecord}"]`)})?.getAttribute("aria-label"),
       status: document.querySelector("#composer-status")?.textContent,
       skipToChat: document.querySelector(".rm-skip-link")?.textContent?.trim(),
@@ -1601,7 +1875,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate chat filters`,
     );
     assert(
-      localized.moreActions === locale.moreActions,
+      localized.capabilitiesMenu === locale.capabilitiesMenu,
       `${locale.code} did not translate the composer actions menu`,
     );
     assert(
@@ -1636,14 +1910,14 @@ function assertComposerLocalization() {
       `${locale.code} produced an SSR hydration mismatch: ${localeErrors}`,
     );
 
-    clickComposerMenuItem(locale.files, locale.moreActions);
+    clickComposerMenuItem(locale.files, locale.capabilitiesMenu);
     run("wait", ".rm-ui-dialog");
     assert(
       run("get", "text", ".rm-ui-dialog").includes(locale.fileLibrary),
       `${locale.code} did not translate the reusable file library`,
     );
     run("press", "Escape");
-    clickComposerMenuItem(locale.inspect, locale.moreActions);
+    clickComposerMenuItem(locale.inspect, locale.capabilitiesMenu);
     run("wait", ".rm-context-inspector");
     assert(
       run("get", "text", ".rm-context-inspector").includes(
@@ -1705,13 +1979,60 @@ function assertComposerLocalization() {
     );
     run("press", "Escape");
 
-    evaluate(`fetch("/api/v1/me/interface-preferences", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ locale: ${JSON.stringify(locale.code)} }),
-    }).then((response) => { if (!response.ok) throw new Error("locale sync failed"); return response.json(); })`);
+    const persistedLocale = evaluate(`(async () => {
+      const response = await fetch("/api/v1/me/interface-preferences", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ locale: ${JSON.stringify(locale.code)} }),
+      });
+      if (!response.ok) throw new Error("locale sync failed");
+      return (await response.json()).data.locale;
+    })()`);
+    assert(
+      persistedLocale === locale.code,
+      `${locale.code} was not persisted as the interface locale`,
+    );
     run("open", `${baseUrl}/settings?section=interface`);
     waitForDocumentReady();
+    try {
+      run(
+        "wait",
+        "--fn",
+        `document.documentElement.lang === ${JSON.stringify(locale.code)} && document.body.innerText.includes(${JSON.stringify(locale.appearance)})`,
+      );
+    } catch (error) {
+      const localeState = evaluate(`({
+        body: document.body.innerText.slice(0, 1_200),
+        cookie: document.cookie,
+        documentLocale: document.documentElement.lang,
+        href: location.href,
+        readyState: document.readyState,
+        resources: performance.getEntriesByType("resource").slice(-20).map((entry) => ({
+          duration: Math.round(entry.duration),
+          name: entry.name.replace(location.origin, ""),
+          transferSize: entry.transferSize,
+        })),
+        storedLocale: localStorage.getItem("romeo:locale"),
+      })`);
+      const apiProbes = evaluate(`(async () => {
+        const paths = ["/api/v1/me", "/api/v1/me/interface-preferences"];
+        return Promise.all(paths.map(async (path) => {
+          try {
+            const response = await fetch(path, { signal: AbortSignal.timeout(3_000) });
+            await response.text();
+            return { path, status: response.status };
+          } catch (caught) {
+            return { path, error: caught instanceof Error ? caught.name : "unknown" };
+          }
+        }));
+      })()`);
+      const networkRequests = run("network", "requests", "--filter", "api/v1");
+      const browserErrors = run("errors");
+      throw new Error(
+        `${locale.code} interface localization did not settle: ${JSON.stringify(localeState)}; API probes: ${JSON.stringify(apiProbes)}; network: ${networkRequests}; browser errors: ${browserErrors}`,
+        { cause: error },
+      );
+    }
     assert(
       run("get", "text", "body").includes(locale.appearance),
       `${locale.code} did not translate interface settings`,
@@ -1808,7 +2129,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate workspace collaboration`,
     );
     assert(
-      workspaceCollaboration.includes(locale.workspaceShareAgent),
+      workspaceCollaboration.includes(locale.workspaceShareSelectedModel),
       `${locale.code} did not translate workspace sharing actions`,
     );
     run("open", `${baseUrl}/workspace?section=knowledge`);
@@ -1830,17 +2151,60 @@ function assertComposerLocalization() {
     run("open", `${baseUrl}/workspace?section=knowledge&resource=kb_default`);
     waitForDocumentReady();
     run(
-      "eval",
-      `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.knowledgeAddSource)})))?.click()`,
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll("button")].some((button) => button.textContent?.includes(${JSON.stringify(locale.knowledgeAddSource)}))`,
     );
-    run("wait", ".rm-ui-dialog");
+    const knowledgeSourceState = JSON.parse(
+      evaluate(
+        `JSON.stringify((() => {
+          const button = [...document.querySelectorAll("button")].find((candidate) =>
+            candidate.textContent?.includes(${JSON.stringify(locale.knowledgeAddSource)}),
+          );
+          return {
+            body: document.body.innerText,
+            disabled: button instanceof HTMLButtonElement ? button.disabled : undefined,
+            found: Boolean(button),
+            title: button?.getAttribute("title"),
+          };
+        })())`,
+      ),
+    );
     assert(
-      run("get", "text", ".rm-ui-dialog").includes(locale.knowledgeAddSource),
-      `${locale.code} did not translate knowledge-source creation`,
+      knowledgeSourceState.found,
+      `${locale.code} did not render the localized add-source control`,
     );
-    run("press", "Escape");
+    if (knowledgeSourceState.disabled) {
+      const blocker = locale.knowledgeIngestBlockers.find((message) =>
+        knowledgeSourceState.body.includes(message),
+      );
+      assert(
+        blocker !== undefined,
+        `${locale.code} did not explain why knowledge ingestion is disabled`,
+      );
+      assert(
+        knowledgeSourceState.title === blocker,
+        `${locale.code} exposed an inaccurate knowledge-ingestion tooltip`,
+      );
+    } else {
+      run(
+        "eval",
+        `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.knowledgeAddSource)})))?.click()`,
+      );
+      run("wait", ".rm-ui-dialog");
+      assert(
+        run("get", "text", ".rm-ui-dialog").includes(locale.knowledgeAddSource),
+        `${locale.code} did not translate knowledge-source creation`,
+      );
+      run("press", "Escape");
+    }
     run("open", `${baseUrl}/admin?section=providers&view=providers`);
     waitForDocumentReady();
+    run(
+      "wait",
+      "--fn",
+      `document.body.innerText.includes(${JSON.stringify(locale.connections.toLocaleUpperCase(locale.code))}) && document.body.innerText.includes(${JSON.stringify(locale.models)})`,
+    );
     const providerAdmin = run("get", "text", "body");
     assert(
       providerAdmin.includes(locale.admin),
@@ -1853,7 +2217,7 @@ function assertComposerLocalization() {
       `${locale.code} did not translate admin navigation groups`,
     );
     assert(
-      providerAdmin.includes(locale.connections),
+      providerAdmin.includes(locale.connections.toLocaleUpperCase(locale.code)),
       `${locale.code} did not translate provider administration`,
     );
     assert(
@@ -1865,6 +2229,11 @@ function assertComposerLocalization() {
       `${baseUrl}/admin?section=providers&view=models&model=model_openai_compatible_default`,
     );
     waitForDocumentReady();
+    run(
+      "wait",
+      "--fn",
+      `document.body.innerText.includes(${JSON.stringify(locale.modelPricing)})`,
+    );
     const modelAdmin = run("get", "text", "body");
     assert(
       modelAdmin.includes(locale.modelPricing),
@@ -1872,12 +2241,22 @@ function assertComposerLocalization() {
     );
     run("open", `${baseUrl}/admin?section=overview`);
     waitForDocumentReady();
+    run(
+      "wait",
+      "--fn",
+      `document.body.innerText.includes(${JSON.stringify(locale.readiness)})`,
+    );
     assert(
       run("get", "text", "body").includes(locale.readiness),
       `${locale.code} did not translate the admin overview`,
     );
     run("open", `${baseUrl}/admin?section=providers&view=providers`);
     waitForDocumentReady();
+    run(
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll("button")].some((button) => button.textContent?.includes(${JSON.stringify(locale.addProvider)}))`,
+    );
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.addProvider)})))?.click()`,
@@ -1890,6 +2269,11 @@ function assertComposerLocalization() {
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=connections`);
     waitForDocumentReady();
+    run(
+      "wait",
+      "--fn",
+      `document.body.innerText.includes(${JSON.stringify(locale.toolConnectors)})`,
+    );
     const connectionsAdmin = run("get", "text", "body");
     assert(
       connectionsAdmin.includes(locale.toolConnectors),
@@ -1911,11 +2295,16 @@ function assertComposerLocalization() {
         catalogAdmin.includes(locale.connectorCatalog),
       `${locale.code} did not translate data-connector administration`,
     );
-    run("open", `${baseUrl}/admin?section=connections`);
+    run("open", `${baseUrl}/admin?section=connections&view=catalog`);
     waitForDocumentReady();
     run(
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll("button")].some((button) => button.textContent?.trim() === ${JSON.stringify(locale.connectorAdd)} && !button.disabled)`,
+    );
+    run(
       "eval",
-      `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === ${JSON.stringify(`+ ${locale.connectorAdd}`)}))?.click()`,
+      `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === ${JSON.stringify(locale.connectorAdd)} && !button.disabled))?.click()`,
     );
     run("wait", ".rm-ui-dialog");
     assert(
@@ -1925,6 +2314,11 @@ function assertComposerLocalization() {
     run("press", "Escape");
     run("open", `${baseUrl}/admin?section=connections&view=tools`);
     waitForDocumentReady();
+    run(
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll("button")].some((button) => button.textContent?.includes(${JSON.stringify(locale.toolImportTool)}))`,
+    );
     run(
       "eval",
       `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.toolImportTool)})))?.click()`,
@@ -1998,7 +2392,7 @@ function assertComposerLocalization() {
     );
     run("open", `${baseUrl}/admin?section=governance`);
     waitForDocumentReady();
-    const governanceAdmin = run("get", "text", "body");
+    let governanceAdmin = run("get", "text", "body");
     assert(
       governanceAdmin.includes(locale.governance),
       `${locale.code} did not translate governance administration`,
@@ -2007,6 +2401,17 @@ function assertComposerLocalization() {
       governanceAdmin.includes(locale.retentionAccess),
       `${locale.code} did not translate retention administration`,
     );
+    assert(
+      governanceAdmin.includes(locale.lifecycleActions),
+      `${locale.code} did not translate lifecycle progressive disclosure`,
+    );
+    run("click", ".rm-admin-disclosure__summary");
+    run(
+      "wait",
+      "--fn",
+      `document.body.innerText.includes(${JSON.stringify(locale.dataDeletion)})`,
+    );
+    governanceAdmin = run("get", "text", "body");
     assert(
       governanceAdmin.includes(locale.dataDeletion),
       `${locale.code} did not translate data deletion administration`,
@@ -2171,7 +2576,11 @@ function assertComposerLocalization() {
       auditAdmin.includes(locale.auditAnyOutcome),
       `${locale.code} did not translate audit filters`,
     );
-    run("wait", `input[aria-label=${JSON.stringify(locale.tableSearch)}]`);
+    run(
+      "wait",
+      "--fn",
+      `Boolean(document.querySelector(${JSON.stringify(`input[aria-label="${locale.auditFilterAction}"]`)})) && Boolean(document.querySelector(${JSON.stringify(`button[aria-label="${locale.tableOptions}"]`)}))`,
+    );
     assert(
       evaluate(
         `document.querySelector(${JSON.stringify(`button[aria-label="${locale.tableOptions}"]`)})?.getAttribute("aria-label")`,
@@ -2223,32 +2632,26 @@ function assertComposerLocalization() {
       accessAdmin.includes(locale.serviceAccounts),
       `${locale.code} did not translate service account administration`,
     );
-    run("open", `${baseUrl}/admin?section=workflows`);
+    run("open", `${baseUrl}/admin?section=rag`);
     waitForDocumentReady();
-    assert(
-      run("get", "text", "body").includes(locale.workflows),
-      `${locale.code} did not translate workflow administration`,
-    );
     run(
       "wait",
       "--fn",
-      `[...document.querySelectorAll("button")].some((button) => button.textContent?.includes(${JSON.stringify(locale.createWorkflow)}) || button.textContent?.includes(${JSON.stringify(locale.newWorkflow)}))`,
+      `document.body.innerText.includes(${JSON.stringify(locale.ragRetrievalTitle)})`,
+    );
+    assert(
+      run("get", "text", "body").includes(locale.ragRetrievalTitle),
+      `${locale.code} did not translate RAG policy administration`,
     );
     run(
       "eval",
-      `([...document.querySelectorAll("button")].find((button) => button.textContent?.includes(${JSON.stringify(locale.createWorkflow)}) || button.textContent?.includes(${JSON.stringify(locale.newWorkflow)})))?.click()`,
+      `([...document.querySelectorAll('button[role="tab"]')].find((button) => button.textContent?.trim() === ${JSON.stringify(locale.ragGovernanceTab)}))?.focus()`,
     );
-    run("wait", ".rm-ui-dialog");
-    assert(
-      run("get", "text", ".rm-ui-dialog").includes(locale.addStep),
-      `${locale.code} did not translate the workflow step builder`,
-    );
-    run("press", "Escape");
-    run("open", `${baseUrl}/admin?section=rag`);
-    waitForDocumentReady();
-    assert(
-      run("get", "text", "body").includes(locale.ragRetrievalPolicy),
-      `${locale.code} did not translate RAG policy administration`,
+    run("press", "Enter");
+    run(
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll('button[role="tab"]')].some((button) => button.textContent?.trim() === ${JSON.stringify(locale.changeRequests)})`,
     );
     run(
       "eval",
@@ -2392,10 +2795,15 @@ function assertProviderSetupAndDiagnostics() {
   const rowSelector = "tbody tr";
 
   function openVllmDialog() {
-    run(
-      "eval",
-      `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "+ Add provider"))?.click()`,
+    const addProvider = `([...document.querySelectorAll("button")].find((button) => button.textContent?.trim().endsWith("Add provider") && !button.disabled))`;
+    run("wait", "--fn", `Boolean(${addProvider})`);
+    assert(
+      evaluate(
+        `Boolean((() => { const button = ${addProvider}; button?.click(); return button; })())`,
+      ),
+      "add-provider action was unavailable",
     );
+    run("wait", ".rm-ui-dialog");
     run("wait", "#connection-preset");
     run("click", "#connection-preset");
     run("wait", '[role="option"]');
@@ -2470,14 +2878,26 @@ function assertProviderSetupAndDiagnostics() {
     );
   }
 
-  run(
-    "eval",
-    `(() => { const row = [...document.querySelectorAll("${rowSelector}")].find((item) => item.textContent?.includes(${endpointNameLiteral})); const button = [...(row?.querySelectorAll("button") ?? [])].find((item) => item.textContent?.includes("Manage provider")); if (!button) return false; button.click(); return true; })()`,
+  const providerActionsLabel = JSON.parse(
+    evaluate(
+      `JSON.stringify((() => { const row = [...document.querySelectorAll("${rowSelector}")].find((item) => item.textContent?.includes(${endpointNameLiteral})); return row?.querySelector('button[aria-haspopup="menu"]')?.getAttribute("aria-label") ?? null; })())`,
+    ),
   );
+  assert(
+    typeof providerActionsLabel === "string",
+    "created provider actions menu was unavailable",
+  );
+  run("click", `button[aria-label=${JSON.stringify(providerActionsLabel)}]`);
+  run("wait", ".rm-ui-menu");
+  const manageProviderRef = run("snapshot", "-i").match(
+    /menuitem "Manage provider" \[ref=([^\]]+)\]/u,
+  );
+  assert(manageProviderRef?.[1], "manage-provider action was unavailable");
+  run("click", `@${manageProviderRef[1]}`);
   run(
     "wait",
     "--fn",
-    `[...document.querySelectorAll("button")].some((button) => button.textContent?.includes("Back to providers"))`,
+    `new URL(location.href).searchParams.has("connection") && [...document.querySelectorAll("button")].some((button) => button.textContent?.includes("Back to providers"))`,
   );
   run(
     "eval",
@@ -2503,8 +2923,10 @@ function assertProviderSetupAndDiagnostics() {
   );
   assert(
     diagnostics.diagnosticClass.includes("error") &&
-      diagnostics.text.includes("no discoverable models"),
-    "provider diagnostic failure was not explained",
+      diagnostics.text.includes("no discoverable models") &&
+      diagnostics.text.includes("Model discovery") &&
+      diagnostics.text.includes("could not be verified"),
+    `provider diagnostic failure was not explained: ${JSON.stringify(diagnostics)}`,
   );
   assert(
     !diagnostics.secretVisible,
@@ -2604,7 +3026,23 @@ function clickSendMessage() {
     "--fn",
     `document.querySelector('button[aria-label="Send message"]')?.disabled === false`,
   );
-  run("click", 'button[aria-label="Send message"]');
+  const submitted = evaluate(`Boolean((() => {
+    const button = document.querySelector('button[aria-label="Send message"]');
+    if (
+      !(button instanceof HTMLButtonElement) ||
+      button.disabled ||
+      !(button.form instanceof HTMLFormElement)
+    ) return false;
+    button.focus();
+    let fired = false;
+    button.form.addEventListener("submit", () => { fired = true; }, {
+      capture: true,
+      once: true,
+    });
+    button.form.requestSubmit(button);
+    return fired;
+  })())`);
+  assert(submitted, "send action was not available");
 }
 
 function cleanupCreatedChats(baselineChatIds, targetSession = session) {
@@ -2728,11 +3166,44 @@ function evaluateFor(targetSession, script) {
 // The composer's secondary actions live behind the "+" dropdown, so they are
 // portalled `[role=menuitem]` nodes identified by their visible text (no
 // aria-label) and only mounted while the menu is open.
-function clickComposerMenuItem(label, triggerLabel = "More actions") {
+function clickComposerMenuItem(label, triggerLabel = "Capabilities") {
   const lookup = `[...document.querySelectorAll('.rm-ui-menu [role="menuitem"]')].find((item) => item.textContent?.trim() === ${JSON.stringify(label)})`;
-  run("wait", `button[aria-label=${JSON.stringify(triggerLabel)}]`);
-  run("click", `button[aria-label=${JSON.stringify(triggerLabel)}]`);
-  run("wait", ".rm-ui-menu");
+  const triggerLookup = `[...document.querySelectorAll('button[aria-label=${JSON.stringify(triggerLabel)}]')].find((button) => button instanceof HTMLButtonElement && !button.disabled && button.getClientRects().length > 0)`;
+  run("wait", "--fn", `Boolean(${triggerLookup})`);
+  const activated = evaluate(`Boolean((() => {
+    const trigger = ${triggerLookup};
+    if (!(trigger instanceof HTMLButtonElement)) return false;
+    trigger.focus();
+    const accepted = !trigger.dispatchEvent(new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "ArrowDown",
+    }));
+    return document.activeElement === trigger && accepted;
+  })())`);
+  assert(
+    activated,
+    `composer menu trigger did not accept keyboard activation: ${triggerLabel}`,
+  );
+  try {
+    run("wait", ".rm-ui-menu");
+  } catch (error) {
+    const state = evaluate(`({
+      activeElement: document.activeElement?.outerHTML?.slice(0, 500),
+      composerStatus: document.querySelector("#composer-status")?.textContent?.trim(),
+      triggers: [...document.querySelectorAll('button[aria-label=${JSON.stringify(triggerLabel)}]')].map((trigger) => ({
+        connected: trigger.isConnected,
+        disabled: trigger.disabled,
+        expanded: trigger.getAttribute("aria-expanded"),
+        state: trigger.getAttribute("data-state"),
+        visible: trigger.getClientRects().length > 0,
+      })),
+    })`);
+    throw new Error(
+      `composer menu did not open after keyboard activation: ${JSON.stringify(state)}`,
+      { cause: error },
+    );
+  }
   run(
     "wait",
     "--fn",
@@ -2785,18 +3256,28 @@ function run(...args) {
 
 function runFor(targetSession, ...args) {
   const options = typeof args.at(-1) === "object" ? args.pop() : {};
-  const result = spawnSync(
-    "agent-browser",
-    ["--session", targetSession, ...args],
-    {
+  let result;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    result = spawnSync("agent-browser", ["--session", targetSession, ...args], {
       encoding: "utf8",
       env: {
         ...process.env,
         AGENT_BROWSER_CONTENT_BOUNDARIES: "1",
         AGENT_BROWSER_DEFAULT_TIMEOUT: String(options.timeoutMs ?? 30_000),
       },
-    },
-  );
+    });
+    const output = `${result.stderr ?? ""}${result.stdout ?? ""}`;
+    if (
+      result.status === 0 ||
+      !/Resource temporarily unavailable|daemon may be busy or unresponsive/iu.test(
+        output,
+      )
+    )
+      break;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+  }
+  if (result === undefined)
+    throw new Error("agent-browser command did not execute");
   if (result.status !== 0 && options.allowFailure !== true) {
     throw new Error(
       `agent-browser ${args.join(" ")} failed: ${result.stderr || result.stdout}`,

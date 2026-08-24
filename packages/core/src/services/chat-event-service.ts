@@ -70,10 +70,6 @@ export class ChatEventService {
       createdAt: new Date().toISOString(),
     });
   }
-
-  close(): void {
-    this.events.close?.();
-  }
 }
 
 function eventChannel(orgId: string, workspaceId: string): string {

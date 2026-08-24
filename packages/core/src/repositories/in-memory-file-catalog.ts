@@ -22,7 +22,10 @@ export function listInMemoryFiles(
     );
 }
 
-export function createInMemoryFile(data: SeedData, file: FileObject): FileObject {
+export function createInMemoryFile(
+  data: SeedData,
+  file: FileObject,
+): FileObject {
   return append(data.fileObjects, {
     ...file,
     lifecycleVersion: file.lifecycleVersion ?? 0,
@@ -30,8 +33,13 @@ export function createInMemoryFile(data: SeedData, file: FileObject): FileObject
   });
 }
 
-export function updateInMemoryFile(data: SeedData, file: FileObject): FileObject {
-  const current = data.fileObjects.find((candidate) => candidate.id === file.id);
+export function updateInMemoryFile(
+  data: SeedData,
+  file: FileObject,
+): FileObject {
+  const current = data.fileObjects.find(
+    (candidate) => candidate.id === file.id,
+  );
   if (current !== undefined) assertFileLifecycleTransition(current, file);
   return replaceById(data.fileObjects, file);
 }

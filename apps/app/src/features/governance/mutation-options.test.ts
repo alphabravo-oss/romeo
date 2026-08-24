@@ -1,5 +1,5 @@
 import type {
-  DataExportPackage,
+  DataExportPackageJob,
   DataExportPackageList,
   RetentionPolicy,
 } from "@romeo/api-client/generated/sdk";
@@ -79,9 +79,9 @@ const exportCounts = {
   workspaces: 1,
 };
 
-function exportPackage(packageId = "package-1"): DataExportPackage {
+function exportPackage(packageId = "package-1"): DataExportPackageJob {
   return {
-    schema: "romeo.data-export-package.v1",
+    schema: "romeo.data-export-package-job.v1",
     artifact: {
       contentType: "application/json",
       downloadUrl: `/api/v1/governance/data-export-packages/${packageId}`,
@@ -95,6 +95,11 @@ function exportPackage(packageId = "package-1"): DataExportPackage {
     },
     counts: exportCounts,
     createdAt: "2026-08-14T00:00:00.000Z",
+    updatedAt: "2026-08-14T00:00:00.000Z",
+    state: "artifact_ready",
+    percent: 100,
+    processedRows: 1,
+    attemptCount: 1,
     exclusions: [],
     limits: { maxObjectBytes: 1_024, maxTotalObjectBytes: 4_096 },
     orgId: "org-1",
@@ -109,6 +114,25 @@ function exportPackage(packageId = "package-1"): DataExportPackage {
   };
 }
 
+function exportPackageSummary(
+  packageId = "package-1",
+): DataExportPackageList["packages"][number] {
+  const job = exportPackage(packageId);
+  if (job.artifact === undefined) throw new Error("fixture artifact missing");
+  return {
+    schema: "romeo.data-export-package-summary.v1",
+    packageId: job.packageId,
+    orgId: job.orgId,
+    request: job.request,
+    counts: job.counts,
+    limits: job.limits,
+    warnings: job.warnings,
+    exclusions: job.exclusions,
+    artifact: job.artifact,
+    createdAt: job.createdAt,
+  };
+}
+
 function exportPackageList(
   packages: DataExportPackageList["packages"],
 ): DataExportPackageList {
@@ -117,6 +141,7 @@ function exportPackageList(
     generatedAt: "2026-08-14T00:00:00.000Z",
     orgId: "org-1",
     packages,
+    jobs: packages.map((entry) => exportPackage(entry.packageId)),
     redaction: {
       packageContentReturned: false,
       rawObjectKeysReturned: false,
@@ -210,11 +235,9 @@ describe("governance mutation policies", () => {
     await observer.mutate({ scope: "org" });
 
     const cached = client.getQueryData<DataExportPackageList>(packagesKey);
-    expect(cached?.packages).toHaveLength(1);
-    expect(cached?.packages[0]?.schema).toBe(
-      "romeo.data-export-package-summary.v1",
-    );
-    expect(cached?.packages[0]).not.toHaveProperty("data");
+    expect(cached?.jobs).toHaveLength(1);
+    expect(cached?.jobs[0]?.schema).toBe("romeo.data-export-package-job.v1");
+    expect(cached?.jobs[0]).not.toHaveProperty("data");
     expect(client.getQueryState(packagesKey)?.isInvalidated).toBe(true);
     expect(client.getQueryState(auditKey)?.isInvalidated).toBe(true);
   });
@@ -222,9 +245,7 @@ describe("governance mutation policies", () => {
   it("rolls package deletion back after conflict or authorization failure", async () => {
     const client = createRomeoQueryClient();
     const packagesKey = appQueryKeys.dataExportPackages();
-    const existing = exportPackageList([
-      { ...exportPackage(), schema: "romeo.data-export-package-summary.v1" },
-    ]);
+    const existing = exportPackageList([exportPackageSummary()]);
     const observer = new MutationObserver(
       client,
       deleteDataExportPackageMutationOptions(),
@@ -298,10 +319,10 @@ describe("governance mutation policies", () => {
     const client = createRomeoQueryClient();
     const packagesKey = appQueryKeys.dataExportPackages();
     client.setQueryData(packagesKey, exportPackageList([]));
-    let resolveCreate: ((value: DataExportPackage) => void) | undefined;
+    let resolveCreate: ((value: DataExportPackageJob) => void) | undefined;
     mutationMocks.createDataExportPackage.mockImplementationOnce(
       () =>
-        new Promise<DataExportPackage>((resolve) => {
+        new Promise<DataExportPackageJob>((resolve) => {
           resolveCreate = resolve;
         }),
     );

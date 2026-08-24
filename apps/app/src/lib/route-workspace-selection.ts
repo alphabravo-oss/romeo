@@ -15,6 +15,7 @@ import * as appQueryKeys from "./app-query-keys";
 import { bootstrapQueryOptions } from "./api-query-options";
 import { queryCacheProfiles } from "./query-cache-policy";
 import { devQueryDiagnosticMeta } from "./query-cache-diagnostics";
+import { throwIfSignalAborted } from "./abort-signal";
 
 export interface RouteWorkspaceSelectionRequest {
   chatId?: string | undefined;
@@ -140,14 +141,17 @@ export function routeWorkspaceSelectionQueryOptions(
         const chatPromise =
           chatOptions === undefined
             ? Promise.resolve(undefined)
-            : queryClient.fetchQuery(chatOptions).catch(() => {
-                throw new RouteWorkspaceSelectionError("chat_not_authorized");
+            : queryClient.fetchQuery(chatOptions).catch((error: unknown) => {
+                if (isRouteResourceUnavailable(error)) {
+                  throw new RouteWorkspaceSelectionError("chat_not_authorized");
+                }
+                throw error;
               });
         const [bootstrap, chat] = await Promise.all([
           bootstrapPromise,
           chatPromise,
         ]);
-        signal.throwIfAborted();
+        throwIfSignalAborted(signal);
         return resolveAuthorizedRouteWorkspace({ bootstrap, chat, request });
       } finally {
         signal.removeEventListener("abort", cancelNested);
@@ -163,4 +167,11 @@ export function routeWorkspaceSelectionQueryOptions(
       }),
     },
   });
+}
+
+function isRouteResourceUnavailable(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("status" in error)) {
+    return false;
+  }
+  return error.status === 403 || error.status === 404;
 }

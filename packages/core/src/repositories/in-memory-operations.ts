@@ -2,6 +2,13 @@ import type * as Auth from "@romeo/auth";
 
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
+import {
+  accumulateRuntimeKeyUsage,
+  classifyWebhookSigningKeyVersion,
+  emptyRuntimeKeyUsageCounts,
+  type RuntimeKeyUsageCounts,
+  type RuntimeKeyUsageQuery,
+} from "../domain/runtime-key-usage";
 import { append, removeById, replaceById } from "./collection-helpers";
 import {
   applyWorkerLease,
@@ -11,11 +18,11 @@ import {
   renewWorkerLease,
 } from "./in-memory-operation-helpers";
 import { listSeedResourceGrants } from "./resource-grants";
-import { InMemoryIdempotencyRepository } from "./in-memory-idempotency";
+import { InMemoryContentDeletionRepository } from "./in-memory-content-deletion";
 import { assertUsageEventTaxonomy } from "../usage-taxonomy-validation";
 import { assertUsageEventUpdate } from "../usage-taxonomy-update";
 
-export abstract class InMemoryOperationsRepository extends InMemoryIdempotencyRepository {
+export abstract class InMemoryOperationsRepository extends InMemoryContentDeletionRepository {
   async listUsageEvents(orgId: string): Promise<E.UsageEvent[]> {
     return this.data.usageEvents
       .filter((event) => event.orgId === orgId)
@@ -58,10 +65,36 @@ export abstract class InMemoryOperationsRepository extends InMemoryIdempotencyRe
     return event;
   }
 
-  async listBackgroundJobs(orgId: string): Promise<E.BackgroundJob[]> {
+  async getBackgroundJob(
+    orgId: string,
+    jobId: string,
+  ): Promise<E.BackgroundJob | undefined> {
+    return this.data.backgroundJobs.find(
+      (job) => job.orgId === orgId && job.id === jobId,
+    );
+  }
+
+  async listBackgroundJobs(
+    orgId: string,
+    input: R.ListBackgroundJobsInput = { limit: 100 },
+  ): Promise<E.BackgroundJob[]> {
     return this.data.backgroundJobs
       .filter((job) => job.orgId === orgId)
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+      .filter((job) => input.type === undefined || job.type === input.type)
+      .filter(
+        (job) =>
+          input.statuses === undefined || input.statuses.includes(job.status),
+      )
+      .filter((job) => payloadEquals(job.payload, input.payloadEquals))
+      .filter((job) => backgroundJobAfterCursor(job, input))
+      .sort((left, right) =>
+        input.order === "asc"
+          ? left.createdAt.localeCompare(right.createdAt) ||
+            left.id.localeCompare(right.id)
+          : right.createdAt.localeCompare(left.createdAt) ||
+            left.id.localeCompare(right.id),
+      )
+      .slice(0, Math.max(0, input.limit));
   }
 
   async createBackgroundJob(job: E.BackgroundJob): Promise<E.BackgroundJob> {
@@ -79,6 +112,7 @@ export abstract class InMemoryOperationsRepository extends InMemoryIdempotencyRe
       Date.parse(now) - Math.max(1, input.leaseSeconds) * 1000;
     const job = this.data.backgroundJobs
       .filter((item) => item.orgId === input.orgId && item.type === input.type)
+      .filter((item) => input.jobId === undefined || item.id === input.jobId)
       .filter((item) => payloadEquals(item.payload, input.payloadEquals))
       .filter(
         (item) =>
@@ -107,6 +141,8 @@ export abstract class InMemoryOperationsRepository extends InMemoryIdempotencyRe
     if (
       lease === undefined ||
       lease.workerId !== input.workerId ||
+      (input.leaseAttempt !== undefined &&
+        lease.attempt !== input.leaseAttempt) ||
       Date.parse(lease.expiresAt) <= Date.parse(now)
     ) {
       return undefined;
@@ -130,6 +166,8 @@ export abstract class InMemoryOperationsRepository extends InMemoryIdempotencyRe
     if (
       lease === undefined ||
       lease.workerId !== input.workerId ||
+      (input.leaseAttempt !== undefined &&
+        lease.attempt !== input.leaseAttempt) ||
       Date.parse(lease.expiresAt) <= Date.parse(now)
     )
       return undefined;
@@ -197,6 +235,20 @@ export abstract class InMemoryOperationsRepository extends InMemoryIdempotencyRe
       )
       .sort(compareWebhookDeliveries)
       .slice(0, input.limit);
+  }
+
+  async countWebhookSigningKeyUsage(
+    input: RuntimeKeyUsageQuery,
+  ): Promise<RuntimeKeyUsageCounts> {
+    const counts = emptyRuntimeKeyUsageCounts();
+    for (const delivery of this.data.webhookDeliveries) {
+      if (input.orgId !== undefined && delivery.orgId !== input.orgId) continue;
+      accumulateRuntimeKeyUsage(
+        counts,
+        classifyWebhookSigningKeyVersion(delivery.signatureKeyVersion, input),
+      );
+    }
+    return counts;
   }
 
   async claimWebhookDelivery(
@@ -296,66 +348,6 @@ export abstract class InMemoryOperationsRepository extends InMemoryIdempotencyRe
     return replaceById(this.data.webhookDeliveries, delivery);
   }
 
-  async listWorkflowDefinitions(
-    orgId: string,
-    workspaceId?: string,
-  ): Promise<E.WorkflowDefinition[]> {
-    return this.data.workflowDefinitions
-      .filter(
-        (workflow) =>
-          workflow.orgId === orgId &&
-          (workspaceId === undefined || workflow.workspaceId === workspaceId),
-      )
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-  }
-
-  async getWorkflowDefinition(
-    workflowId: string,
-  ): Promise<E.WorkflowDefinition | undefined> {
-    return this.data.workflowDefinitions.find(
-      (workflow) => workflow.id === workflowId,
-    );
-  }
-
-  async createWorkflowDefinition(
-    workflow: E.WorkflowDefinition,
-  ): Promise<E.WorkflowDefinition> {
-    return append(this.data.workflowDefinitions, workflow);
-  }
-
-  async updateWorkflowDefinition(
-    workflow: E.WorkflowDefinition,
-  ): Promise<E.WorkflowDefinition> {
-    return replaceById(this.data.workflowDefinitions, workflow);
-  }
-
-  async listWorkflowRuns(
-    orgId: string,
-    workflowId?: string,
-  ): Promise<E.WorkflowRun[]> {
-    return this.data.workflowRuns
-      .filter(
-        (run) =>
-          run.orgId === orgId &&
-          (workflowId === undefined || run.workflowId === workflowId),
-      )
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-  }
-
-  async getWorkflowRun(
-    workflowRunId: string,
-  ): Promise<E.WorkflowRun | undefined> {
-    return this.data.workflowRuns.find((run) => run.id === workflowRunId);
-  }
-
-  async createWorkflowRun(run: E.WorkflowRun): Promise<E.WorkflowRun> {
-    return append(this.data.workflowRuns, run);
-  }
-
-  async updateWorkflowRun(run: E.WorkflowRun): Promise<E.WorkflowRun> {
-    return replaceById(this.data.workflowRuns, run);
-  }
-
   async getRetentionPolicy(
     orgId: string,
   ): Promise<E.RetentionPolicy | undefined> {
@@ -395,6 +387,16 @@ export abstract class InMemoryOperationsRepository extends InMemoryIdempotencyRe
 
   async getBillingPlan(orgId: string): Promise<E.BillingPlan | undefined> {
     return this.data.billingPlans.find((plan) => plan.orgId === orgId);
+  }
+
+  async getBillingPlanByExternalCustomerId(
+    externalCustomerId: string,
+  ): Promise<E.BillingPlan | undefined> {
+    const customerId = externalCustomerId.trim();
+    if (customerId.length === 0) return undefined;
+    return this.data.billingPlans.find(
+      (plan) => plan.externalCustomerId === customerId,
+    );
   }
 
   async acquireBillingSyncLock(_orgId: string): Promise<void> {}
@@ -473,4 +475,17 @@ export abstract class InMemoryOperationsRepository extends InMemoryIdempotencyRe
     }
     return deleted.reverse();
   }
+}
+
+function backgroundJobAfterCursor(
+  job: E.BackgroundJob,
+  input: R.ListBackgroundJobsInput,
+): boolean {
+  if (input.cursor === undefined) return true;
+  const createdComparison = job.createdAt.localeCompare(input.cursor.createdAt);
+  return input.order === "asc"
+    ? createdComparison > 0 ||
+        (createdComparison === 0 && job.id > input.cursor.id)
+    : createdComparison < 0 ||
+        (createdComparison === 0 && job.id > input.cursor.id);
 }

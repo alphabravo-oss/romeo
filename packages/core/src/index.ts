@@ -1,6 +1,7 @@
 export type { RunEvent, RunEventType } from "@romeo/ai-runtime";
 export * from "./api";
 export * from "./domain/audit-query";
+export * from "./domain/audit-integrity";
 export * from "./domain/capabilities";
 export * from "./domain/capability-flags";
 export * from "./domain/idempotency";
@@ -9,6 +10,8 @@ export * from "./domain/delegated-oauth";
 export * from "./domain/entities";
 export * from "./domain/file-tombstone";
 export * from "./domain/repository";
+export * from "./domain/runtime-key-usage";
+export * from "./domain/repository-request-scope";
 export type {
   ClaimFileLifecycleInput,
   FinishFileLifecycleLeaseInput,
@@ -36,3 +39,8 @@ export {
   capabilityIds,
   parseCapabilityConfigurationPatch,
 } from "./services/capability-definition-registry";
+export {
+  listCapabilityConsumerRegistrations,
+  type CapabilityConsumerKind,
+  type CapabilityConsumerRegistration,
+} from "./services/capability-consumer-registry";

@@ -241,27 +241,27 @@ export function CitationList({ citations }: { citations: ChatCitation[] }) {
         {citations.map((citation) => {
           const href = safeCitationHref(citation.sourceUri);
           return (
-          <li key={citation.chunkId}>
-            {href ? (
-              <a href={href} rel="noreferrer" target="_blank">
+            <li key={citation.chunkId}>
+              {href ? (
+                <a href={href} rel="noreferrer" target="_blank">
+                  <strong>{citation.title}</strong>
+                </a>
+              ) : (
                 <strong>{citation.title}</strong>
-              </a>
-            ) : (
-              <strong>{citation.title}</strong>
-            )}
-            <span suppressHydrationWarning>
-              {citation.sourceUri
-                ? citationHost(citation.sourceUri, t("citationSourceLink"))
-                : `${citation.documentId} · ${citation.chunkId}`}
-              {citation.provider ? ` · ${citation.provider}` : ""}
-              {citation.publishedAt
-                ? ` · ${t("citationPublished")} ${formatCitationDate(citation.publishedAt, locale)}`
-                : ""}
-              {citation.accessedAt
-                ? ` · ${t("citationAccessed")} ${formatCitationDate(citation.accessedAt, locale)}`
-                : ""}
-            </span>
-          </li>
+              )}
+              <span suppressHydrationWarning>
+                {citation.sourceUri
+                  ? citationHost(citation.sourceUri, t("citationSourceLink"))
+                  : `${citation.documentId} · ${citation.chunkId}`}
+                {citation.provider ? ` · ${citation.provider}` : ""}
+                {citation.publishedAt
+                  ? ` · ${t("citationPublished")} ${formatCitationDate(citation.publishedAt, locale)}`
+                  : ""}
+                {citation.accessedAt
+                  ? ` · ${t("citationAccessed")} ${formatCitationDate(citation.accessedAt, locale)}`
+                  : ""}
+              </span>
+            </li>
           );
         })}
       </ol>

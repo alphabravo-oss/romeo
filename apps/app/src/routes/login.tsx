@@ -12,7 +12,13 @@ import LockKeyhole from "lucide-react/dist/esm/icons/lock-keyhole.mjs";
 import Moon from "lucide-react/dist/esm/icons/moon.mjs";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
 import Sun from "lucide-react/dist/esm/icons/sun.mjs";
-import { useState, useSyncExternalStore, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from "react";
 
 import {
   loginSessionQueryOptions,
@@ -22,7 +28,11 @@ import {
   verifyLocalMfa,
 } from "../features/auth";
 import { safeReturnTo } from "../lib/auth-navigation";
-import { useLocale, useLocaleNamespaces } from "../lib/i18n";
+import {
+  preloadRouteLocaleNamespaces,
+  useLocale,
+  useLocaleNamespaces,
+} from "../lib/i18n";
 import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { setTheme } from "../lib/theme";
 import loginCss from "../styles/login.css?url";
@@ -56,6 +66,8 @@ export const Route = createFileRoute("/login")({
     typeof search.returnTo === "string"
       ? { returnTo: safeReturnTo(search.returnTo) }
       : {},
+  loader: ({ context }) =>
+    preloadRouteLocaleNamespaces(context.locale, loginNamespaces),
   component: LoginPage,
 });
 
@@ -75,8 +87,27 @@ function LoginPage() {
   const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState<"local" | "oidc" | "saml">();
+  const emailRef = useRef<HTMLInputElement>(null);
+  const mfaRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const dark = useSyncExternalStore(subscribeToTheme, isDarkTheme, () => false);
   const sessionQuery = useQuery(loginSessionQueryOptions());
+
+  useEffect(() => {
+    if (!desktopFinePointer() || !documentHasRestorableFocus()) return;
+    const frame = window.requestAnimationFrame(() => {
+      (challengeToken === undefined ? emailRef.current : mfaRef.current)?.focus(
+        {
+          preventScroll: true,
+        },
+      );
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [challengeToken]);
+
+  useEffect(() => {
+    if (error !== undefined) errorRef.current?.focus({ preventScroll: true });
+  }, [error]);
 
   async function submitLocal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -276,9 +307,9 @@ function LoginPage() {
                       : t("loginAuthenticationCode")}
                   </span>
                   <Input
+                    ref={mfaRef}
                     name="mfaCode"
                     autoComplete="one-time-code"
-                    autoFocus
                     inputMode={useRecoveryCode ? "text" : "numeric"}
                     onChange={(event) => setMfaCode(event.currentTarget.value)}
                     placeholder={
@@ -314,9 +345,9 @@ function LoginPage() {
                 <label>
                   <span>{t("loginEmail")}</span>
                   <Input
+                    ref={emailRef}
                     name="email"
                     autoComplete="email"
-                    autoFocus
                     onChange={(event) => setEmail(event.currentTarget.value)}
                     placeholder="you@company.com"
                     required
@@ -373,7 +404,12 @@ function LoginPage() {
             )}
 
             {error ? (
-              <p className="rm-login-error" role="alert">
+              <p
+                className="rm-login-error"
+                ref={errorRef}
+                role="alert"
+                tabIndex={-1}
+              >
                 {error}
               </p>
             ) : null}
@@ -418,4 +454,19 @@ function LoginPage() {
 
 function loginError(error: unknown, fallback: string): string {
   return safeUserErrorMessage(error, fallback);
+}
+
+export function desktopFinePointer(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(min-width: 768px) and (pointer: fine)").matches
+  );
+}
+
+export function documentHasRestorableFocus(): boolean {
+  return (
+    typeof document !== "undefined" &&
+    (document.activeElement === null ||
+      document.activeElement === document.body)
+  );
 }

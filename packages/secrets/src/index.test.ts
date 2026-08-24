@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   AwsSecretsManagerResolver,
@@ -10,6 +10,75 @@ import {
 } from "./index";
 
 describe("managed secret SDK adapters", () => {
+  it("constructs each process-owned SDK client once across concurrent operations", async () => {
+    const awsFactory = vi.fn(() => ({
+      async describeSecret() {},
+      async getSecretValue() {
+        return "aws-value";
+      },
+    }));
+    const azureFactory = vi.fn(() => ({
+      async checkSecret() {},
+      async getSecretValue() {
+        return "azure-value";
+      },
+    }));
+    const gcpFactory = vi.fn(() => ({
+      async accessSecretValue() {
+        return "gcp-value";
+      },
+      async checkSecret() {},
+    }));
+    const vaultFactory = vi.fn(() => ({
+      async checkSecret() {},
+      async getSecretValue() {
+        return "vault-value";
+      },
+      async writeSecret() {},
+    }));
+    const resolvers = [
+      new AwsSecretsManagerResolver({
+        accessKeyId: "access-key",
+        clientFactory: awsFactory,
+        region: "us-east-1",
+        secretAccessKey: "secret-key",
+      }),
+      new AzureKeyVaultResolver({
+        accessToken: "access-token",
+        clientFactory: azureFactory,
+        vaultUrl: "https://romeo.vault.azure.net",
+      }),
+      new GcpSecretManagerResolver({
+        accessToken: "access-token",
+        clientFactory: gcpFactory,
+        projectId: "romeo-prod1",
+      }),
+      new VaultSecretResolver({
+        address: "https://vault.example.com",
+        clientFactory: vaultFactory,
+        token: "vault-token",
+      }),
+    ] as const;
+    const refs = [
+      "aws-sm://service/token",
+      "azure-kv://service-token",
+      "gcp-sm://service-token",
+      "vault://service/token",
+    ] as const;
+
+    await Promise.all(
+      resolvers.flatMap((resolver, index) => [
+        resolver.check(refs[index]!),
+        resolver.resolveValue(refs[index]!),
+      ]),
+    );
+
+    expect(awsFactory).toHaveBeenCalledOnce();
+    expect(azureFactory).toHaveBeenCalledOnce();
+    expect(gcpFactory).toHaveBeenCalledOnce();
+    expect(vaultFactory).toHaveBeenCalledOnce();
+  });
+
   it("routes AWS checks and value reads through one typed SDK boundary", async () => {
     const calls: string[] = [];
     const resolver = new AwsSecretsManagerResolver({

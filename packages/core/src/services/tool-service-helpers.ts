@@ -64,7 +64,7 @@ export function toolApprovalDecisionJob(
   decidedAt: string,
 ): BackgroundJob {
   return {
-    id: toolApprovalDecisionJobId(subject.orgId, approval.id, decision),
+    id: toolApprovalDecisionJobId(subject.orgId, approval.id),
     orgId: subject.orgId,
     workspaceId: approval.workspaceId,
     type: "tool.approval.decision",
@@ -89,12 +89,61 @@ export function toolApprovalDecisionJob(
 function toolApprovalDecisionJobId(
   orgId: string,
   approvalRequestId: string,
-  decision: ToolApprovalDecisionStatus,
 ): string {
   return `job_tool_approval_decision_${createHash("sha256")
-    .update(`${orgId}:${approvalRequestId}:${decision}`)
+    .update(`${orgId}:${approvalRequestId}`)
     .digest("hex")
     .slice(0, 32)}`;
+}
+
+export function toolOperationApprovalDecisionJob(
+  subject: AuthSubject,
+  approval: BackgroundJob,
+  decision: ToolApprovalDecisionStatus,
+  decidedAt: string,
+): BackgroundJob {
+  const payload = approval.payload;
+  return {
+    id: `job_tool_operation_approval_decision_${createHash("sha256")
+      .update(`${approval.orgId}:${approval.id}`)
+      .digest("hex")
+      .slice(0, 32)}`,
+    orgId: approval.orgId,
+    ...(approval.workspaceId === undefined
+      ? {}
+      : { workspaceId: approval.workspaceId }),
+    type: "tool.operation.approval.decision",
+    status: "completed",
+    payload: {
+      schemaVersion: "romeo.tool-operation-approval-decision.v1",
+      approvalRequestId: approval.id,
+      actorId: subject.id,
+      decision,
+      connectorId: payload.connectorId,
+      operationId: payload.operationId,
+      toolId:
+        stringPayloadOptional(payload, "toolId") ??
+        `operation:${stringPayload(payload, "connectorId")}:${stringPayload(
+          payload,
+          "operationId",
+        )}`,
+      ...(stringPayloadOptional(payload, "agentId") === undefined
+        ? {}
+        : { agentId: payload.agentId }),
+      ...(stringPayloadOptional(payload, "runId") === undefined
+        ? {}
+        : { runId: payload.runId }),
+      ...(stringPayloadOptional(payload, "workspaceId") === undefined
+        ? {}
+        : { workspaceId: payload.workspaceId }),
+      requestDigest: payload.requestDigest,
+      [toolApprovalDecisionTimestampKey(decision)]: decidedAt,
+      [toolApprovalDecisionActorKey(decision)]: subject.id,
+    },
+    createdAt: decidedAt,
+    updatedAt: decidedAt,
+    completedAt: decidedAt,
+  };
 }
 
 function toolApprovalDecisionStatus(
@@ -184,32 +233,34 @@ export function operationApprovalExpired(job: BackgroundJob): boolean {
   return Date.now() - new Date(job.createdAt).getTime() > TOOL_APPROVAL_TTL_MS;
 }
 
-export function operationApprovalConsumed(job: BackgroundJob): boolean {
-  return typeof job.payload.consumedAt === "string";
-}
-
 export function operationApprovalDecision(
   job: BackgroundJob,
+  jobs: BackgroundJob[] = [],
 ): ToolApprovalDecisionStatus | undefined {
-  if (typeof job.payload.approvedAt === "string") return "approved";
-  if (typeof job.payload.cancelledAt === "string") return "cancelled";
-  if (typeof job.payload.rejectedAt === "string") return "rejected";
-  return toolApprovalDecisionStatus(job.payload.decision);
+  const decisionJob = jobs.find(
+    (candidate) =>
+      candidate.type === "tool.operation.approval.decision" &&
+      candidate.status === "completed" &&
+      candidate.payload.approvalRequestId === job.id,
+  );
+  const payload = decisionJob?.payload ?? job.payload;
+  if (typeof payload.approvedAt === "string") return "approved";
+  if (typeof payload.cancelledAt === "string") return "cancelled";
+  if (typeof payload.rejectedAt === "string") return "rejected";
+  return toolApprovalDecisionStatus(payload.decision);
 }
 
-export function toolApprovalConsumed(
-  approval: ToolCallRecord,
-  calls: ToolCallRecord[],
-): boolean {
-  return calls.some(
-    (call) =>
-      call.id !== approval.id &&
-      call.actorId === approval.actorId &&
-      call.agentId === approval.agentId &&
-      call.toolId === approval.toolId &&
-      call.runId === approval.runId &&
-      call.completedAt >= approval.completedAt &&
-      call.status === "success",
+export function operationApprovalDecisionRecord(
+  job: BackgroundJob,
+  jobs: BackgroundJob[],
+): BackgroundJob {
+  return (
+    jobs.find(
+      (candidate) =>
+        candidate.type === "tool.operation.approval.decision" &&
+        candidate.status === "completed" &&
+        candidate.payload.approvalRequestId === job.id,
+    ) ?? job
   );
 }
 
@@ -301,8 +352,7 @@ export function assertRunToolExecutionAllowed(
 ): void {
   if (run === undefined || run.status === "running") return;
   if (run.status === "waiting_tool_approval") {
-    if (options.approved === true && options.approvalRequestId !== undefined)
-      return;
+    if (options.approvalRequestId !== undefined) return;
     throw new ApiError(
       "run_tool_execution_waiting_approval",
       "Run-scoped tool execution is waiting for the pending approval request.",

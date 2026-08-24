@@ -33,6 +33,8 @@ describe("policy bundle dual approval", () => {
       "enabled",
     );
     expect(compute).toBe("compute");
+    if (compute === undefined)
+      throw new Error("expected compute publication class");
     expect(
       evaluatePolicyBundlePublication({
         changes: [

@@ -1,4 +1,5 @@
 import * as appQueryKeys from "../../lib/app-query-keys";
+import { invalidateInventoriedTablePages } from "../../lib/inventoried-table-cache";
 import { serverMutationOptions } from "../../lib/server-mutation-options";
 import { createEvalSuite, rateEvalResult, runEvalSuite } from "./mutations";
 import type {
@@ -12,7 +13,7 @@ export function createEvalSuiteMutationOptions() {
   return serverMutationOptions({
     resource: "evalSuite.create",
     mutationFn: createEvalSuite,
-    reconcile: (client, created) => {
+    reconcile: async (client, created) => {
       client.setQueryData<EvalSuite[]>(
         appQueryKeys.evalSuites(created.suite.agentId),
         (current) =>
@@ -23,6 +24,10 @@ export function createEvalSuiteMutationOptions() {
                 created.suite,
               ],
       );
+      await invalidateInventoriedTablePages(client, {
+        parentId: created.suite.agentId,
+        resource: "eval_suites",
+      });
     },
     invalidations: (_created, variables) => [
       { exact: true, queryKey: appQueryKeys.evalSuites(variables.agentId) },

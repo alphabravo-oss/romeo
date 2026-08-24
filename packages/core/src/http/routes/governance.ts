@@ -9,6 +9,7 @@ import {
   exportComplianceReportCsvRoute,
   getAccessReviewReportRoute,
   getComplianceReportRoute,
+  getDataExportPackageRoute,
   getDataRightsCoverageRoute,
   getIdentityLifecyclePolicyRoute,
   getRetentionPolicyRoute,
@@ -34,6 +35,15 @@ export function registerGovernanceRoutes(app: RomeoApi): void {
     return context.json({ data }, 200);
   });
 
+  app.openapi(getDataExportPackageRoute, async (context) => {
+    const subject = context.get("subject");
+    const data = await context.get("services").governance.getDataExportPackage({
+      subject,
+      packageId: context.req.valid("param").packageId,
+    });
+    return context.json({ data }, 200);
+  });
+
   app.openapi(updateRetentionPolicyRoute, async (context) => {
     const subject = context.get("subject");
     const body = context.req.valid("json");
@@ -42,7 +52,9 @@ export function registerGovernanceRoutes(app: RomeoApi): void {
       .governance.updateRetentionPolicy({
         subject,
         auditLogRetentionDays: body.auditLogRetentionDays,
-        runEventRetentionDays: body.runEventRetentionDays,
+        ...(body.runEventRetentionDays === undefined
+          ? {}
+          : { runEventRetentionDays: body.runEventRetentionDays }),
         ...(body.fileRetentionDays === undefined
           ? {}
           : { fileRetentionDays: body.fileRetentionDays }),
@@ -84,7 +96,9 @@ export function registerGovernanceRoutes(app: RomeoApi): void {
       resourceId: body.resourceId,
       confirmResourceId: body.confirmResourceId,
     });
-    return context.json({ data }, 200);
+    return data.schema === "romeo.data-deletion-pending-result.v1"
+      ? context.json({ data }, 202)
+      : context.json({ data }, 200);
   });
 
   app.openapi(getDataRightsCoverageRoute, async (context) => {
@@ -145,7 +159,7 @@ export function registerGovernanceRoutes(app: RomeoApi): void {
         subject,
         request: dataExportRequest(body),
       });
-    return context.json({ data }, 200);
+    return context.json({ data }, 202);
   });
 
   app.openapi(deleteDataExportPackageRoute, async (context) => {
@@ -169,15 +183,15 @@ export function registerGovernanceRoutes(app: RomeoApi): void {
         subject,
         packageId: context.req.valid("param").packageId,
       });
-    context.header("cache-control", "private, max-age=300");
+    context.header("cache-control", "private, no-store");
     context.header(
       "content-disposition",
       `attachment; filename="${data.fileName.replace(/"/gu, "")}"`,
     );
-    context.header("content-length", String(data.bytes.byteLength));
-    context.header("content-type", `${data.contentType}; charset=utf-8`);
+    context.header("content-length", String(data.sizeBytes));
+    context.header("content-type", data.contentType);
     context.header("x-content-type-options", "nosniff");
-    return context.body(new TextDecoder().decode(data.bytes), 200);
+    return context.body(data.body, 200);
   });
 
   app.openapi(getComplianceReportRoute, async (context) => {

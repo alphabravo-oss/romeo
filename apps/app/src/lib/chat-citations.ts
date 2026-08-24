@@ -33,7 +33,9 @@ export const citationHrefPrefix = "#romeo-citation-";
  * external URLs, so anything relative or non-http is dropped rather than
  * resolved.
  */
-export function safeCitationHref(value: string | undefined): string | undefined {
+export function safeCitationHref(
+  value: string | undefined,
+): string | undefined {
   if (value === undefined || value.length === 0) return undefined;
   try {
     const parsed = new URL(value);

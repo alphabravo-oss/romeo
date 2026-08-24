@@ -14,6 +14,14 @@ spec:
   policyTypes:
     - Egress
   egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "romeo.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: app
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
     {{- if .Values.workers.browserAutomation.networkPolicy.egress }}
     {{- toYaml .Values.workers.browserAutomation.networkPolicy.egress | nindent 4 }}
     {{- else }}

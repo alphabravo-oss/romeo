@@ -248,7 +248,13 @@ async function authForConnector(input: DispatchToolOperationInput): Promise<{
     const accessToken = await resolveOAuthClientCredentialsAccessToken({
       connector: input.connector,
       fetchImpl: input.fetchImpl,
+      ...(input.hostLookup === undefined
+        ? {}
+        : { hostLookup: input.hostLookup }),
       maxBytes: input.maxBytes,
+      ...(input.pinnedFetchImpl === undefined
+        ? {}
+        : { pinnedFetchImpl: input.pinnedFetchImpl }),
       secretResolver: input.secretResolver,
       timeoutMs: input.timeoutMs,
     });

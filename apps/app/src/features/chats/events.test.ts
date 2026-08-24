@@ -54,4 +54,28 @@ describe("chat event subscription", () => {
     ]);
     expect(close).toHaveBeenCalledOnce();
   });
+
+  it("closes once on page teardown even if React later cleans up", () => {
+    const lifecycleListeners = new Map<string, EventListener>();
+    const removedLifecycle: string[] = [];
+    const close = vi.fn();
+    const unsubscribe = subscribeToChatEvents("workspace_1", vi.fn(), {
+      createEventSource: () => ({
+        addEventListener: vi.fn(),
+        close,
+        removeEventListener: vi.fn(),
+      }),
+      lifecycleTarget: {
+        addEventListener: (type, listener) =>
+          lifecycleListeners.set(type, listener),
+        removeEventListener: (type) => removedLifecycle.push(type),
+      },
+    });
+
+    lifecycleListeners.get("pagehide")?.(new Event("pagehide"));
+    unsubscribe();
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(removedLifecycle).toEqual(["pagehide"]);
+  });
 });

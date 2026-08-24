@@ -1,5 +1,3 @@
-import type { UseQueryResult } from "@tanstack/react-query";
-
 import type {
   KnowledgeBase,
   KnowledgeSource,
@@ -9,6 +7,7 @@ import { useLocale } from "../lib/i18n";
 import { KnowledgeQueryTab } from "./KnowledgeQueryTab";
 import { KnowledgeSourcesTab } from "./KnowledgeSourcesTab";
 import { Tabs } from "./Tabs";
+import type { ServerTableState } from "./DataTable";
 
 export function KnowledgeWorkspaceTabs(props: {
   activeAgent: Agent | undefined;
@@ -25,7 +24,8 @@ export function KnowledgeWorkspaceTabs(props: {
   onExtract: (sourceId: string) => void;
   onQuery: (query: string) => Promise<void>;
   onReindex: (sourceId: string) => void;
-  sourcesQuery: UseQueryResult<KnowledgeSource[], unknown>;
+  sources: KnowledgeSource[];
+  tableState: ServerTableState;
 }) {
   const { t } = useLocale();
   return (
@@ -46,7 +46,8 @@ export function KnowledgeWorkspaceTabs(props: {
               onDelete={props.onDelete}
               onExtract={props.onExtract}
               onReindex={props.onReindex}
-              sourcesQuery={props.sourcesQuery}
+              sources={props.sources}
+              tableState={props.tableState}
             />
           ),
         },

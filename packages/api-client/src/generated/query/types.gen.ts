@@ -13,6 +13,101 @@ export type ClientOptions = {
     | (string & {});
 };
 
+export type TypedRunEvent =
+  | {
+      id: string;
+      runId: string;
+      sequence: number;
+      schemaVersion: 1;
+      legId?: string;
+      channel?: string;
+      createdAt: string;
+      type: "reasoning.summary.delta";
+      data: ReasoningSummaryDeltaEventData;
+    }
+  | {
+      id: string;
+      runId: string;
+      sequence: number;
+      schemaVersion: 1;
+      legId?: string;
+      channel?: string;
+      createdAt: string;
+      type: "reasoning.summary.completed";
+      data: ReasoningSummaryCompletedEventData;
+    }
+  | {
+      id: string;
+      runId: string;
+      sequence: number;
+      schemaVersion: 1;
+      legId?: string;
+      channel?: string;
+      createdAt: string;
+      type: "run.continuing";
+      data: RunContinuingEventData;
+    }
+  | {
+      id: string;
+      runId: string;
+      sequence: number;
+      schemaVersion: 1;
+      legId?: string;
+      channel?: string;
+      createdAt: string;
+      type:
+        | "run.started"
+        | "message.started"
+        | "message.delta"
+        | "message.reasoning"
+        | "message.completed"
+        | "retrieval.completed"
+        | "tool.requested"
+        | "tool.started"
+        | "tool.approval_required"
+        | "tool.completed"
+        | "tool.failed"
+        | "run.cancelled"
+        | "run.completed"
+        | "run.failed"
+        | "run.waiting_tool_approval"
+        | "run.waiting_tool_dispatch"
+        | "output.part.ready";
+      data: {
+        [key: string]: unknown;
+      };
+    };
+
+export type ReasoningSummaryDeltaEventData = {
+  classification: "provider_safe_summary";
+  contentPolicyApplied: true;
+  text: string;
+};
+
+export type ReasoningSummaryCompletedEventData =
+  | {
+      classification: "provider_safe_summary";
+      status: "completed";
+      characterCount?: number;
+      durationMs?: number;
+      reasoningTokens?: number;
+    }
+  | {
+      classification: "hidden_reasoning_omitted";
+      status: "discarded";
+      durationMs?: number;
+      reasoningTokens?: number;
+    };
+
+export type RunContinuingEventData = {
+  reason: "tool_approval" | "tool_dispatch";
+  toolId: string;
+  approvalRequestId?: string;
+  jobId?: string;
+  outcome?: "completed" | "failed";
+  errorCode?: string;
+};
+
 export type AdminUserPage = {
   data: Array<AdminUser>;
   meta: {
@@ -240,42 +335,7 @@ export type ApiKeySummary = {
   userId?: string;
   serviceAccountId?: string;
   name: string;
-  scopes: Array<
-    | "me:read"
-    | "organizations:read"
-    | "workspaces:read"
-    | "providers:read"
-    | "providers:write"
-    | "models:read"
-    | "models:use"
-    | "agents:read"
-    | "agents:create"
-    | "agents:write"
-    | "agents:run"
-    | "chats:read"
-    | "chats:write"
-    | "runs:read"
-    | "runs:create"
-    | "runs:cancel"
-    | "files:read"
-    | "files:write"
-    | "knowledge:read"
-    | "knowledge:write"
-    | "knowledge:query"
-    | "audit:read"
-    | "usage:read"
-    | "webhooks:read"
-    | "webhooks:write"
-    | "voices:use"
-    | "voices:manage"
-    | "tools:use"
-    | "tools:manage"
-    | "capabilities:read"
-    | "capabilities:manage"
-    | "capabilities:approve"
-    | "admin:read"
-    | "admin:write"
-  >;
+  scopes: Array<string>;
   revokedAt?: string;
   createdAt: string;
 };
@@ -341,42 +401,7 @@ export type ServiceAccount = {
   id: string;
   orgId: string;
   name: string;
-  scopes: Array<
-    | "me:read"
-    | "organizations:read"
-    | "workspaces:read"
-    | "providers:read"
-    | "providers:write"
-    | "models:read"
-    | "models:use"
-    | "agents:read"
-    | "agents:create"
-    | "agents:write"
-    | "agents:run"
-    | "chats:read"
-    | "chats:write"
-    | "runs:read"
-    | "runs:create"
-    | "runs:cancel"
-    | "files:read"
-    | "files:write"
-    | "knowledge:read"
-    | "knowledge:write"
-    | "knowledge:query"
-    | "audit:read"
-    | "usage:read"
-    | "webhooks:read"
-    | "webhooks:write"
-    | "voices:use"
-    | "voices:manage"
-    | "tools:use"
-    | "tools:manage"
-    | "capabilities:read"
-    | "capabilities:manage"
-    | "capabilities:approve"
-    | "admin:read"
-    | "admin:write"
-  >;
+  scopes: Array<string>;
   createdBy: string;
   disabledAt?: string;
   createdAt: string;
@@ -1197,7 +1222,7 @@ export type ApplyBillingPlanRequest = {
 };
 
 export type SyncExternalBillingEventRequest = {
-  eventId: string;
+  eventId?: string;
   provider: string;
   eventType:
     | "customer.updated"
@@ -1219,7 +1244,7 @@ export type SyncExternalBillingEventRequest = {
   };
   amountCents?: number;
   currency?: string;
-  occurredAt: string;
+  occurredAt?: string;
   planCode?: string;
   planName?: string;
   status?: "active" | "canceled" | "past_due" | "trialing";
@@ -1961,6 +1986,9 @@ export type User = {
 };
 
 export type BootstrapDeployment = {
+  billingEnabled: boolean;
+  malwareScanEnabled: boolean;
+  qdrantConfigured: boolean;
   tenancyMode: "single" | "multi";
 };
 
@@ -3672,6 +3700,58 @@ export type PostgresOperationalPostureReport = {
   >;
 };
 
+export type RuntimeKeyRotationPostureReport = {
+  schema: "romeo.runtime-key-rotation-posture.v1";
+  generatedAt: string;
+  aggregationScope: "all_organizations";
+  status: "attention_required" | "ready";
+  delegatedOAuth: RuntimeKeyRotationSurfacePosture;
+  webhookSigning: RuntimeKeyRotationSurfacePosture;
+  redaction: {
+    ciphertextReturned: false;
+    connectionIdsReturned: false;
+    deliveryIdsReturned: false;
+    keyMaterialReturned: false;
+    payloadsReturned: false;
+    rawSignaturesReturned: false;
+    secretValuesReturned: false;
+  };
+};
+
+export type RuntimeKeyRotationSurfacePosture = {
+  configuration: {
+    activeKeyConfigured: boolean;
+    previousKeyAccepted: boolean;
+    previousKeyConfigured: boolean;
+  };
+  removalStatus: "blocked" | "not_configured" | "safe";
+  safeToRemovePrevious: boolean;
+  blockers: Array<RuntimeKeyRotationBlocker>;
+  usage: RuntimeKeyUsageCounts;
+};
+
+export type RuntimeKeyRotationBlocker = {
+  action: string;
+  code:
+    | "active_key_not_configured"
+    | "corrupt_records_present"
+    | "legacy_unversioned_records_present"
+    | "previous_key_invalid"
+    | "previous_key_matches_active"
+    | "previous_key_usage_present"
+    | "unknown_key_version_records_present";
+  count: number;
+};
+
+export type RuntimeKeyUsageCounts = {
+  active: number;
+  corrupt: number;
+  legacyUnversioned: number;
+  previous: number;
+  total: number;
+  unknown: number;
+};
+
 export type ProviderCapabilityReport = {
   providerId: string;
   kind:
@@ -3925,23 +4005,10 @@ export type ProviderCatalogSyncJob = {
 
 export type ProviderOperationalSummary = {
   alerts: Array<{
-    code:
-      | "fallback_unavailable"
-      | "no_available_providers"
-      | "provider_circuit_open"
-      | "provider_disabled"
-      | "provider_kill_switch"
-      | "provider_without_enabled_models"
-      | "object_store_failures_recent"
-      | "provider_errors_recent"
-      | "queue_wait_high"
-      | "sse_disconnects_recent"
-      | "sse_heartbeat_failures_recent"
-      | "sse_notifier_lag_high"
-      | "sse_notifier_unavailable_recent"
-      | "sse_slow_consumers_recent"
-      | "sse_terminal_close_slow"
-      | "time_to_first_token_high";
+    /**
+     * Operational alert code. Clients must tolerate future alert codes.
+     */
+    code: string;
     id: string;
     modelId?: string;
     providerId?: string;
@@ -4024,11 +4091,7 @@ export type ProviderOperationalSummary = {
       observationScope: "process";
       total: number;
       resolutions: Array<{
-        capabilityId:
-          | "image_generation"
-          | "reasoning_policy"
-          | "voice_processing"
-          | "web_retrieval";
+        capabilityId: CapabilityId;
         status:
           | "enabled"
           | "disabled"
@@ -4084,6 +4147,20 @@ export type ProviderOperationalSummary = {
   };
   status: "critical" | "degraded" | "healthy";
 };
+
+export type CapabilityId =
+  | "image_generation"
+  | "reasoning_policy"
+  | "voice_processing"
+  | "web_retrieval"
+  | "content_firewall"
+  | "knowledge_acl"
+  | "realtime_voice"
+  | "image_editing"
+  | "secure_compute"
+  | "multi_model_compare"
+  | "tenant_encryption"
+  | "data_export";
 
 export type PromptTemplateCatalog = {
   data: Array<PromptTemplate>;
@@ -4532,6 +4609,21 @@ export type ReadinessCheck = {
   };
 };
 
+export type InternalReadinessReport = {
+  status: "ready" | "unready";
+  generatedAt: string;
+  checks: Array<{
+    id:
+      | "configuration"
+      | "database"
+      | "migrations"
+      | "object_storage"
+      | "scheduled_operations"
+      | "valkey";
+    status: "pass" | "fail";
+  }>;
+};
+
 export type RunContextPreview = {
   routing: {
     mode: "selected" | "economy";
@@ -4763,6 +4855,7 @@ export type RunRecord = {
   createdBy: string;
   createdAt: string;
   completedAt?: string;
+  inputMessageId?: string;
 };
 
 export type QueuedChatTurn = {
@@ -4792,10 +4885,6 @@ export type EnqueueChatTurnRequest = {
   idempotencyKey?: string;
 };
 
-export type StartedRunRecord = RunRecord & {
-  inputMessageId: string;
-};
-
 export type IdempotencyKey = string;
 
 export type StartRunRequest = {
@@ -4822,99 +4911,23 @@ export type StartRunRequest = {
   idempotencyKey?: string;
 };
 
-export type RunEvent =
-  | {
-      id: string;
-      runId: string;
-      sequence: number;
-      schemaVersion: 1;
-      legId?: string;
-      channel?: string;
-      createdAt: string;
-      type: "reasoning.summary.delta";
-      data: ReasoningSummaryDeltaEventData;
-    }
-  | {
-      id: string;
-      runId: string;
-      sequence: number;
-      schemaVersion: 1;
-      legId?: string;
-      channel?: string;
-      createdAt: string;
-      type: "reasoning.summary.completed";
-      data: ReasoningSummaryCompletedEventData;
-    }
-  | {
-      id: string;
-      runId: string;
-      sequence: number;
-      schemaVersion: 1;
-      legId?: string;
-      channel?: string;
-      createdAt: string;
-      type: "run.continuing";
-      data: RunContinuingEventData;
-    }
-  | {
-      id: string;
-      runId: string;
-      sequence: number;
-      schemaVersion: 1;
-      legId?: string;
-      channel?: string;
-      createdAt: string;
-      type:
-        | "run.started"
-        | "message.started"
-        | "message.delta"
-        | "message.reasoning"
-        | "message.completed"
-        | "retrieval.completed"
-        | "tool.requested"
-        | "tool.started"
-        | "tool.approval_required"
-        | "tool.completed"
-        | "tool.failed"
-        | "run.cancelled"
-        | "run.completed"
-        | "run.failed"
-        | "run.waiting_tool_approval"
-        | "run.waiting_tool_dispatch"
-        | "output.part.ready";
-      data: {
+export type RunEvent = {
+  id: string;
+  runId: string;
+  sequence: number;
+  /**
+   * Run event type. Clients must preserve and tolerate future event types.
+   */
+  type: string;
+  data:
+    | RunContinuingEventData
+    | {
         [key: string]: unknown;
       };
-    };
-
-export type ReasoningSummaryDeltaEventData = {
-  classification: "provider_safe_summary";
-  contentPolicyApplied: true;
-  text: string;
-};
-
-export type ReasoningSummaryCompletedEventData =
-  | {
-      classification: "provider_safe_summary";
-      status: "completed";
-      characterCount?: number;
-      durationMs?: number;
-      reasoningTokens?: number;
-    }
-  | {
-      classification: "hidden_reasoning_omitted";
-      status: "discarded";
-      durationMs?: number;
-      reasoningTokens?: number;
-    };
-
-export type RunContinuingEventData = {
-  reason: "tool_approval" | "tool_dispatch";
-  toolId: string;
-  approvalRequestId?: string;
-  jobId?: string;
-  outcome?: "completed" | "failed";
-  errorCode?: string;
+  schemaVersion?: 1;
+  legId?: string;
+  channel?: string;
+  createdAt: string;
 };
 
 export type SsoSettingsReport = {
@@ -5293,6 +5306,7 @@ export type ImageRefMessagePart = {
     sha256?: string;
     createdAt?: string;
   };
+  retainedInContext?: boolean;
 };
 
 export type AudioRefMessagePart = {
@@ -5318,6 +5332,7 @@ export type AudioRefMessagePart = {
     sha256?: string;
     createdAt?: string;
   };
+  retainedInContext?: boolean;
 };
 
 export type VideoRefMessagePart = {
@@ -5367,6 +5382,7 @@ export type DocumentRefMessagePart = {
     sha256?: string;
     createdAt?: string;
   };
+  retainedInContext?: boolean;
 };
 
 export type ToolResultRefMessagePart = {
@@ -5823,6 +5839,7 @@ export type CapabilityDefinition = {
   defaultConfiguration: CapabilityConfiguration;
   merge: {
     boolean: "deny_dominates";
+    booleans: Array<string>;
     maxima: Array<string>;
     allowlists: Array<string>;
   };
@@ -5945,6 +5962,7 @@ export type EffectiveCapability = {
 export type CapabilityReason = {
   code:
     | "platform_disabled"
+    | "default_disabled"
     | "not_configured"
     | "not_entitled"
     | "organization_policy"
@@ -6234,6 +6252,7 @@ export type CapabilityImpactPreview = {
   reasons: Array<{
     code:
       | "platform_disabled"
+      | "default_disabled"
       | "not_configured"
       | "not_entitled"
       | "organization_policy"
@@ -6610,6 +6629,7 @@ export type ContentPolicyApproval = {
   id: string;
   runId: string;
   decisionId: string;
+  policyVersionId: string;
   state: "pending" | "approved" | "denied" | "expired";
   expiresAt: string;
   createdAt: string;
@@ -6638,10 +6658,6 @@ export type DataConnectorPostureReport = {
       | "website-fetch"
       | "github-fetch"
       | "s3-fetch"
-      | "atlassian-fetch"
-      | "notion-fetch"
-      | "linear-fetch"
-      | "slack-fetch"
       | "managed-fetch";
     egressPolicy: "allow_public" | "require_allowlist";
     managedFetchEnabled: boolean;
@@ -6691,8 +6707,8 @@ export type DataConnectorPostureReport = {
       rss?: number;
       confluence?: number;
       jira?: number;
-      notion?: number;
       linear?: number;
+      notion?: number;
       slack?: number;
     };
   };
@@ -6797,8 +6813,8 @@ export type DataConnectorType =
   | "rss"
   | "confluence"
   | "jira"
-  | "notion"
   | "linear"
+  | "notion"
   | "slack";
 
 export type CreateDataConnectorRequest = {
@@ -6818,10 +6834,6 @@ export type DataConnectorCatalogReport = {
     | "website-fetch"
     | "github-fetch"
     | "s3-fetch"
-    | "atlassian-fetch"
-    | "notion-fetch"
-    | "linear-fetch"
-    | "slack-fetch"
     | "managed-fetch";
   egressPolicy: "allow_public" | "require_allowlist";
   allowedHostRuleCount: number;
@@ -7012,42 +7024,7 @@ export type DeviceAuthorization = {
   orgId: string;
   userId: string;
   name: string;
-  scopes: Array<
-    | "me:read"
-    | "organizations:read"
-    | "workspaces:read"
-    | "providers:read"
-    | "providers:write"
-    | "models:read"
-    | "models:use"
-    | "agents:read"
-    | "agents:create"
-    | "agents:write"
-    | "agents:run"
-    | "chats:read"
-    | "chats:write"
-    | "runs:read"
-    | "runs:create"
-    | "runs:cancel"
-    | "files:read"
-    | "files:write"
-    | "knowledge:read"
-    | "knowledge:write"
-    | "knowledge:query"
-    | "audit:read"
-    | "usage:read"
-    | "webhooks:read"
-    | "webhooks:write"
-    | "voices:use"
-    | "voices:manage"
-    | "tools:use"
-    | "tools:manage"
-    | "capabilities:read"
-    | "capabilities:manage"
-    | "capabilities:approve"
-    | "admin:read"
-    | "admin:write"
-  >;
+  scopes: Array<string>;
   accessApiKeyId: string;
   expiresAt: string;
   createdAt: string;
@@ -7130,6 +7107,9 @@ export type EdgeSecurityPostureReport = {
   };
   ingress: {
     allowedOriginRuleCount: number;
+    desiredWafMode: "disabled" | "monitor" | "block";
+    observedWafEnforcement: "unknown" | "failed" | "block";
+    observedWafAt?: string;
     wafMode: "disabled" | "monitor" | "block";
   };
   limits: {
@@ -7311,6 +7291,32 @@ export type TrustPosture = {
     | "not_applicable";
   dlp: "verified" | "failed" | "stale" | "not_configured" | "not_applicable";
   acl: "verified" | "failed" | "stale" | "not_configured" | "not_applicable";
+  auditExport: {
+    customerSiem: {
+      ageMs?: number;
+      lagSequences: number;
+      lastSuccessAt?: string;
+      state:
+        | "dead_letter"
+        | "not_configured"
+        | "pending"
+        | "retrying"
+        | "running"
+        | "verified";
+    };
+    wormCompatible: {
+      ageMs?: number;
+      lagSequences: number;
+      lastSuccessAt?: string;
+      state:
+        | "dead_letter"
+        | "not_configured"
+        | "pending"
+        | "retrying"
+        | "running"
+        | "verified";
+    };
+  };
   syntheticGreen: false;
 };
 
@@ -7334,8 +7340,14 @@ export type ImageJobDecision = {
 export type ServerTableSavedView = {
   id: string;
   resource: string;
+  parentId?: string;
   name: string;
   source: "server" | "local_fallback";
+  schemaVersion: number;
+  visibility: "private" | "workspace";
+  isDefault: boolean;
+  canEdit: boolean;
+  version: number;
   query: {
     sort: Array<{
       field: string;
@@ -7344,6 +7356,7 @@ export type ServerTableSavedView = {
     filters: Array<{
       field: string;
       operator: string;
+      value?: unknown;
     }>;
     search?: string;
     pageSize: number;
@@ -7362,6 +7375,9 @@ export type TableExportJob = {
   jobId?: string;
   state?: "queued" | "running" | "artifact_ready" | "failed" | "expired";
   percent?: number;
+  processedRows?: number;
+  attemptCount?: number;
+  errorCode?: string;
   artifactId?: string;
   expiresAt?: string;
 };
@@ -7705,18 +7721,10 @@ export type FileObject = {
     | "note"
     | "web_source"
     | "voice_artifact";
-  status:
-    | "uploading"
-    | "quarantined"
-    | "scanning"
-    | "extracting"
-    | "transcoding"
-    | "ready"
-    | "attached"
-    | "retained"
-    | "failed"
-    | "deleted"
-    | "available";
+  /**
+   * File lifecycle state. Clients must tolerate future lifecycle states.
+   */
+  status: string;
   lifecycle: FileLifecycle;
   metadata: {
     [key: string]: unknown;
@@ -7730,18 +7738,10 @@ export type FileObject = {
 
 export type FileLifecycle = {
   schemaVersion: 1;
-  state:
-    | "uploading"
-    | "quarantined"
-    | "scanning"
-    | "extracting"
-    | "transcoding"
-    | "ready"
-    | "attached"
-    | "retained"
-    | "failed"
-    | "deleted"
-    | "available";
+  /**
+   * File lifecycle state. Clients must tolerate future lifecycle states.
+   */
+  state: string;
   version: number;
   attempts: number;
   retryable: boolean;
@@ -7869,7 +7869,7 @@ export type RetentionPolicy = {
 
 export type UpdateRetentionPolicyRequest = {
   auditLogRetentionDays: number;
-  runEventRetentionDays: number;
+  runEventRetentionDays?: number;
   fileRetentionDays?: number | null;
   workspaceFileRetentionDays?: {
     [key: string]: number | null;
@@ -7895,6 +7895,15 @@ export type RetentionEnforcementResult = {
   deletedFileObjectCount?: number;
   missingFileObjectCount?: number;
   deletedFileObjectBytes?: number;
+  fileRetentionBacklogRemaining?: boolean;
+  fileRetentionCursor?: {
+    id: string;
+    updatedAt: string;
+  };
+  fileRetentionLegalHoldSkippedCount?: number;
+  fileRetentionMetadataFailureCount?: number;
+  fileRetentionOldestCandidateAgeSeconds?: number;
+  fileRetentionScannedFileObjectCount?: number;
   deletedAuditLogCount: number;
   deletedRunEventCount: number;
   runEventCompactionLimitReached: boolean;
@@ -7904,6 +7913,23 @@ export type RetentionEnforcementResult = {
 export type PreviewDataDeletionRequest = {
   resourceType: "chat" | "file_object" | "knowledge_source";
   resourceId: string;
+};
+
+export type DataDeletionPendingResult = {
+  schema: "romeo.data-deletion-pending-result.v1";
+  orgId: string;
+  workspaceId: string;
+  resourceType: "chat" | "file_object" | "knowledge_source";
+  resourceId: string;
+  knowledgeBaseId?: string;
+  legalHold?: {
+    until: string;
+    reason?: string;
+  };
+  counts: DataDeletionCounts;
+  status: "pending";
+  operationId: string;
+  deletionRequestedAt: string;
 };
 
 export type ExecuteDataDeletionRequest = PreviewDataDeletionRequest & {
@@ -8177,7 +8203,10 @@ export type DataExportPackageList = {
     warnings: Array<string>;
     exclusions: Array<string>;
     artifact: {
-      contentType: "application/json";
+      /**
+       * Export artifact media type. Clients must tolerate future stream-safe formats.
+       */
+      contentType: string;
       sizeBytes: number;
       sha256: string;
       downloadUrl: string;
@@ -8189,6 +8218,7 @@ export type DataExportPackageList = {
     };
     createdAt: string;
   }>;
+  jobs: Array<DataExportPackageJob>;
   redaction: {
     packageContentReturned: false;
     rawObjectKeysReturned: false;
@@ -8196,8 +8226,8 @@ export type DataExportPackageList = {
   generatedAt: string;
 };
 
-export type DataExportPackage = {
-  schema: "romeo.data-export-package.v1";
+export type DataExportPackageJob = {
+  schema: "romeo.data-export-package-job.v1";
   packageId: string;
   orgId: string;
   request: {
@@ -8234,8 +8264,15 @@ export type DataExportPackage = {
   };
   warnings: Array<string>;
   exclusions: Array<string>;
-  artifact: {
-    contentType: "application/json";
+  state: "queued" | "running" | "artifact_ready" | "failed" | "expired";
+  percent: number;
+  processedRows: number;
+  attemptCount: number;
+  artifact?: {
+    /**
+     * Export artifact media type. Clients must tolerate future stream-safe formats.
+     */
+    contentType: string;
     sizeBytes: number;
     sha256: string;
     downloadUrl: string;
@@ -8245,7 +8282,11 @@ export type DataExportPackage = {
       rawObjectKeyReturned: false;
     };
   };
+  errorCode?: string;
   createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  expiresAt?: string;
 };
 
 export type DataExportPackageDeleteResult = {
@@ -8334,42 +8375,7 @@ export type AccessReviewReport = {
   serviceAccounts: Array<{
     id: string;
     name: string;
-    scopes: Array<
-      | "me:read"
-      | "organizations:read"
-      | "workspaces:read"
-      | "providers:read"
-      | "providers:write"
-      | "models:read"
-      | "models:use"
-      | "agents:read"
-      | "agents:create"
-      | "agents:write"
-      | "agents:run"
-      | "chats:read"
-      | "chats:write"
-      | "runs:read"
-      | "runs:create"
-      | "runs:cancel"
-      | "files:read"
-      | "files:write"
-      | "knowledge:read"
-      | "knowledge:write"
-      | "knowledge:query"
-      | "audit:read"
-      | "usage:read"
-      | "webhooks:read"
-      | "webhooks:write"
-      | "voices:use"
-      | "voices:manage"
-      | "tools:use"
-      | "tools:manage"
-      | "capabilities:read"
-      | "capabilities:manage"
-      | "capabilities:approve"
-      | "admin:read"
-      | "admin:write"
-    >;
+    scopes: Array<string>;
     createdBy: string;
     disabledAt?: string;
     activeApiKeyCount: number;
@@ -8402,17 +8408,7 @@ export type AccessReviewReport = {
       id: string;
       workspaceId: string;
       knowledgeBaseId: string;
-      type:
-        | "local_import"
-        | "github"
-        | "s3"
-        | "website"
-        | "rss"
-        | "confluence"
-        | "jira"
-        | "notion"
-        | "linear"
-        | "slack";
+      type: "local_import" | "github" | "s3" | "website" | "rss";
       status: string;
       createdBy: string;
       configKeys: Array<string>;
@@ -8429,17 +8425,7 @@ export type AccessReviewReport = {
       workspaceId: string;
       userId: string;
       providerId: "github";
-      connectorType:
-        | "local_import"
-        | "github"
-        | "s3"
-        | "website"
-        | "rss"
-        | "confluence"
-        | "jira"
-        | "notion"
-        | "linear"
-        | "slack";
+      connectorType: "local_import" | "github" | "s3" | "website" | "rss";
       providerAccountLoginConfigured: boolean;
       providerAccountLoginHash?: string;
       scopeCount: number;
@@ -8606,7 +8592,10 @@ export type KnowledgeSource = {
   fileName: string;
   mimeType: string;
   sizeBytes: number;
-  status: "pending" | "indexed" | "failed";
+  /**
+   * Knowledge extraction/indexing state. Clients must tolerate future states.
+   */
+  status: string;
   objectKey?: string;
   metadata: {
     [key: string]: unknown;
@@ -10272,6 +10261,50 @@ export type ApproveWorkflowRunRequest = {
   comment?: string;
 };
 
+export type WorkerBrokerClaimResponse = {
+  audience: "tool_dispatch" | "browser_automation" | "knowledge_extraction";
+  claim?: {
+    [key: string]: unknown;
+  };
+  claimed: boolean;
+  claimToken?: string;
+};
+
+export type WorkerBrokerClaimRequest = {
+  leaseSeconds?: number;
+  payloadStorage?:
+    | "external_worker_secret_store_required"
+    | "managed_encrypted_object_store";
+  workerId: string;
+};
+
+export type WorkerBrokerRenewRequest = {
+  claimToken: string;
+  leaseSeconds?: number;
+  workerId: string;
+};
+
+export type WorkerBrokerCompleteRequest = {
+  claimToken: string;
+  errorCode?: string;
+  response?: {
+    bodyBytes: number;
+    contentType?: string;
+    ok: boolean;
+    schemaValidation: {
+      errorCode?: string;
+      status: "failed" | "passed";
+    };
+    status: number;
+    truncated: boolean;
+  };
+  result?: {
+    [key: string]: unknown;
+  };
+  success: boolean;
+  workerId: string;
+};
+
 export type WorkspaceContentItem = {
   id: string;
   workspaceId: string;
@@ -10284,6 +10317,11 @@ export type WorkspaceContentItem = {
   ownerId: string;
   expiresAt?: string;
   expired: boolean;
+  /**
+   * File lifecycle state. Clients must tolerate future lifecycle states.
+   */
+  lifecycleStatus: string;
+  ready: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -15569,7 +15607,7 @@ export type ManagedModelsListVersionsResponse =
   ManagedModelsListVersionsResponses[keyof ManagedModelsListVersionsResponses];
 
 export type ManagedModelsPublishData = {
-  body: PublishManagedModelRequest;
+  body?: PublishManagedModelRequest;
   path: {
     agentId: string;
   };
@@ -17194,7 +17232,10 @@ export type OperationalGovernanceExportAuditLogsResponse =
 export type OperationalGovernanceListUsageEventsData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    from?: string;
+    to?: string;
+  };
   url: "/usage/events";
 };
 
@@ -17300,7 +17341,10 @@ export type OperationalGovernanceListUsageMetricDefinitionsResponse =
 export type OperationalGovernanceExportUsageEventsData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    from?: string;
+    to?: string;
+  };
   url: "/usage/events.csv";
 };
 
@@ -17351,7 +17395,10 @@ export type OperationalGovernanceExportUsageEventsResponse =
 export type OperationalGovernanceGetUsageSummaryData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    from?: string;
+    to?: string;
+  };
   url: "/usage/summary";
 };
 
@@ -17828,6 +17875,59 @@ export type OperationalPostureGetPostgresResponses = {
 
 export type OperationalPostureGetPostgresResponse =
   OperationalPostureGetPostgresResponses[keyof OperationalPostureGetPostgresResponses];
+
+export type OperationalPostureGetRuntimeKeyRotationData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/admin/runtime-key-rotation/posture";
+};
+
+export type OperationalPostureGetRuntimeKeyRotationErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type OperationalPostureGetRuntimeKeyRotationError =
+  OperationalPostureGetRuntimeKeyRotationErrors[keyof OperationalPostureGetRuntimeKeyRotationErrors];
+
+export type OperationalPostureGetRuntimeKeyRotationResponses = {
+  /**
+   * Runtime key-rotation posture
+   */
+  200: {
+    data: RuntimeKeyRotationPostureReport;
+  };
+};
+
+export type OperationalPostureGetRuntimeKeyRotationResponse =
+  OperationalPostureGetRuntimeKeyRotationResponses[keyof OperationalPostureGetRuntimeKeyRotationResponses];
 
 export type ProvidersGetCapabilityReportData = {
   body?: never;
@@ -18368,7 +18468,9 @@ export type ProvidersDeleteOllamaModelData = {
     providerId: string;
     model: string;
   };
-  query?: never;
+  query?: {
+    modelId?: string;
+  };
   url: "/providers/{providerId}/ollama/models/{model}";
 };
 
@@ -19778,6 +19880,41 @@ export type ReadinessGetReportResponses = {
 export type ReadinessGetReportResponse =
   ReadinessGetReportResponses[keyof ReadinessGetReportResponses];
 
+export type HealthGetInternalReadinessData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/readyz";
+};
+
+export type HealthGetInternalReadinessErrors = {
+  /**
+   * Not available outside the internal transport
+   */
+  404: unknown;
+  /**
+   * Runtime is not ready
+   */
+  503: {
+    data: InternalReadinessReport;
+  };
+};
+
+export type HealthGetInternalReadinessError =
+  HealthGetInternalReadinessErrors[keyof HealthGetInternalReadinessErrors];
+
+export type HealthGetInternalReadinessResponses = {
+  /**
+   * Runtime is ready
+   */
+  200: {
+    data: InternalReadinessReport;
+  };
+};
+
+export type HealthGetInternalReadinessResponse =
+  HealthGetInternalReadinessResponses[keyof HealthGetInternalReadinessResponses];
+
 export type RunsInspectContextData = {
   body: InspectRunContextRequest;
   path?: never;
@@ -20121,7 +20258,7 @@ export type RunsStartResponses = {
    * Started run
    */
   202: {
-    data: StartedRunRecord;
+    data: RunRecord;
   };
 };
 
@@ -28738,7 +28875,10 @@ export type TrustCryptoShredPreviewResponses = {
   200: {
     data: {
       outcome: "accepted" | "denied";
+      executed?: false;
       externalCopiesClaimed?: false;
+      keysDestroyed?: false;
+      preview?: true;
     };
   };
 };
@@ -28748,9 +28888,10 @@ export type TrustCryptoShredPreviewResponse =
 
 export type TrustAuditSegmentsSealData = {
   body: {
-    eventIds: Array<string>;
+    eventIds?: Array<string>;
+    maxRecords?: number;
     previousHash?: string;
-    signingKeyVersion: string;
+    signingKeyVersion?: string;
   };
   path?: never;
   query?: never;
@@ -28802,6 +28943,13 @@ export type TrustAuditSegmentsSealResponses = {
       segmentHash?: string;
       previousHash?: string;
       eventCount?: number;
+      checkpointId?: string;
+      fromSequence?: number;
+      toSequence?: number;
+      rootHash?: string;
+      algorithm?: "hmac-sha256";
+      keyVersion?: string;
+      signature?: string;
     };
   };
 };
@@ -28811,12 +28959,17 @@ export type TrustAuditSegmentsSealResponse =
 
 export type TrustSiemExportCheckpointData = {
   body: {
-    attempt: number;
+    attempt?: number;
     destination: "customer_siem" | "worm_compatible";
+    idempotencyKey?: string;
+    checkpointHash?: string;
     priorReceiptHash?: string;
     receiptHash?: string;
-    sealedAt: string;
-    segmentHash: string;
+    sealedAt?: string;
+    segmentHash?: string;
+  };
+  headers?: {
+    "idempotency-key"?: IdempotencyKey;
   };
   path?: never;
   query?: never;
@@ -28863,9 +29016,17 @@ export type TrustSiemExportCheckpointResponses = {
    */
   200: {
     data: {
-      state: "duplicate" | "exported" | "failed" | "in_flight" | "pending";
+      state:
+        | "duplicate"
+        | "dead_letter"
+        | "exported"
+        | "failed"
+        | "in_flight"
+        | "pending";
       lagMs: number;
       destination: "customer_siem" | "worm_compatible";
+      duplicate?: boolean;
+      jobId?: string;
     };
   };
 };
@@ -28926,8 +29087,10 @@ export type TrustBreakGlassAuthorizeResponses = {
   200: {
     data: {
       outcome: "accepted" | "denied";
-      alerted?: true;
+      alerted?: false;
+      executed?: false;
       expiresAt?: string;
+      preview?: true;
       code?:
         | "break_glass_mandatory_control"
         | "break_glass_reason_required"
@@ -29603,6 +29766,7 @@ export type TableViewsListData = {
   body: {
     workspaceId: string;
     resource: string;
+    parentId?: string;
     localViews?: Array<{
       name: string;
       globalFilter?: string;
@@ -29614,6 +29778,11 @@ export type TableViewsListData = {
       sorting?: Array<{
         id: string;
         desc: boolean;
+      }>;
+      filters?: Array<{
+        field: string;
+        operator: string;
+        value?: unknown;
       }>;
     }>;
   };
@@ -29672,7 +29841,12 @@ export type TableViewsReplaceData = {
   body: {
     workspaceId: string;
     resource: string;
+    parentId?: string;
     name: string;
+    viewId?: string;
+    expectedVersion?: number;
+    visibility?: "private" | "workspace";
+    isDefault?: boolean;
     globalFilter?: string;
     pageSize?: number;
     density?: "comfortable" | "compact";
@@ -29682,6 +29856,11 @@ export type TableViewsReplaceData = {
     sorting?: Array<{
       id: string;
       desc: boolean;
+    }>;
+    filters?: Array<{
+      field: string;
+      operator: string;
+      value?: unknown;
     }>;
   };
   path?: never;
@@ -29735,12 +29914,266 @@ export type TableViewsReplaceResponses = {
 export type TableViewsReplaceResponse =
   TableViewsReplaceResponses[keyof TableViewsReplaceResponses];
 
-export type TableExportsCreateData = {
+export type TableViewsDeleteData = {
   body: {
     workspaceId: string;
     resource: string;
+    parentId?: string;
+    expectedVersion?: number;
+    requestToken?: string;
+  };
+  path: {
+    viewId: string;
+  };
+  query?: never;
+  url: "/admin/table-views/{viewId}";
+};
+
+export type TableViewsDeleteErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type TableViewsDeleteError =
+  TableViewsDeleteErrors[keyof TableViewsDeleteErrors];
+
+export type TableViewsDeleteResponses = {
+  /**
+   * Deleted saved view
+   */
+  200: {
+    data: {
+      deleted: boolean;
+      undoToken?: string;
+      undoExpiresAt?: string;
+      version?: number;
+    };
+  };
+};
+
+export type TableViewsDeleteResponse =
+  TableViewsDeleteResponses[keyof TableViewsDeleteResponses];
+
+export type TableViewsRestoreData = {
+  body: {
+    workspaceId: string;
+    resource: string;
+    parentId?: string;
+    expectedVersion?: number;
+    requestToken?: string;
+    undoToken: string;
+  };
+  path: {
+    viewId: string;
+  };
+  query?: never;
+  url: "/admin/table-views/{viewId}/restore";
+};
+
+export type TableViewsRestoreErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type TableViewsRestoreError =
+  TableViewsRestoreErrors[keyof TableViewsRestoreErrors];
+
+export type TableViewsRestoreResponses = {
+  /**
+   * Restored saved view
+   */
+  200: {
+    data: ServerTableSavedView;
+  };
+};
+
+export type TableViewsRestoreResponse =
+  TableViewsRestoreResponses[keyof TableViewsRestoreResponses];
+
+export type TableViewsSetDefaultData = {
+  body: {
+    workspaceId: string;
+    resource: string;
+    parentId?: string;
+    expectedVersion?: number;
+    requestToken?: string;
+    isDefault: boolean;
+  };
+  path: {
+    viewId: string;
+  };
+  query?: never;
+  url: "/admin/table-views/{viewId}/default";
+};
+
+export type TableViewsSetDefaultErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type TableViewsSetDefaultError =
+  TableViewsSetDefaultErrors[keyof TableViewsSetDefaultErrors];
+
+export type TableViewsSetDefaultResponses = {
+  /**
+   * Saved view
+   */
+  200: {
+    data: ServerTableSavedView;
+  };
+};
+
+export type TableViewsSetDefaultResponse =
+  TableViewsSetDefaultResponses[keyof TableViewsSetDefaultResponses];
+
+export type TableViewsShareData = {
+  body: {
+    workspaceId: string;
+    resource: string;
+    parentId?: string;
+    expectedVersion?: number;
+    requestToken?: string;
+    visibility: "private" | "workspace";
+  };
+  path: {
+    viewId: string;
+  };
+  query?: never;
+  url: "/admin/table-views/{viewId}/share";
+};
+
+export type TableViewsShareErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type TableViewsShareError =
+  TableViewsShareErrors[keyof TableViewsShareErrors];
+
+export type TableViewsShareResponses = {
+  /**
+   * Saved view
+   */
+  200: {
+    data: ServerTableSavedView;
+  };
+};
+
+export type TableViewsShareResponse =
+  TableViewsShareResponses[keyof TableViewsShareResponses];
+
+export type TableExportsCreateData = {
+  body: {
+    workspaceId: string;
+    parentId?: string;
+    resource: string;
     mode?: "browser_csv" | "async_artifact";
     estimatedRows: number;
+    search?: string;
     sort?: Array<{
       field: string;
       direction: "asc" | "desc";
@@ -29748,6 +30181,7 @@ export type TableExportsCreateData = {
     filters?: Array<{
       field: string;
       operator: string;
+      value?: unknown;
     }>;
   };
   path?: never;
@@ -29794,6 +30228,12 @@ export type TableExportsCreateResponses = {
    * Table export job
    */
   200: {
+    data: TableExportJob;
+  };
+  /**
+   * Table export job accepted
+   */
+  202: {
     data: TableExportJob;
   };
 };
@@ -29856,6 +30296,63 @@ export type TableExportsRunResponses = {
 export type TableExportsRunResponse =
   TableExportsRunResponses[keyof TableExportsRunResponses];
 
+export type TableExportsDeleteData = {
+  body?: never;
+  path: {
+    jobId: string;
+  };
+  query?: never;
+  url: "/admin/table-exports/{jobId}";
+};
+
+export type TableExportsDeleteErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type TableExportsDeleteError =
+  TableExportsDeleteErrors[keyof TableExportsDeleteErrors];
+
+export type TableExportsDeleteResponses = {
+  /**
+   * Deleted table export
+   */
+  200: {
+    data: {
+      deleted: true;
+    };
+  };
+};
+
+export type TableExportsDeleteResponse =
+  TableExportsDeleteResponses[keyof TableExportsDeleteResponses];
+
 export type TableExportsGetData = {
   body?: never;
   path: {
@@ -29910,6 +30407,59 @@ export type TableExportsGetResponses = {
 
 export type TableExportsGetResponse =
   TableExportsGetResponses[keyof TableExportsGetResponses];
+
+export type TableExportsDownloadArtifactData = {
+  body?: never;
+  path: {
+    jobId: string;
+  };
+  query?: never;
+  url: "/admin/table-exports/{jobId}/artifact";
+};
+
+export type TableExportsDownloadArtifactErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type TableExportsDownloadArtifactError =
+  TableExportsDownloadArtifactErrors[keyof TableExportsDownloadArtifactErrors];
+
+export type TableExportsDownloadArtifactResponses = {
+  /**
+   * CSV export artifact
+   */
+  200: string;
+};
+
+export type TableExportsDownloadArtifactResponse =
+  TableExportsDownloadArtifactResponses[keyof TableExportsDownloadArtifactResponses];
 
 export type TablePagesQueryData = {
   body: {
@@ -31605,6 +32155,12 @@ export type GovernanceExecuteDataDeletionResponses = {
   200: {
     data: DataDeletionResult;
   };
+  /**
+   * Durable data deletion accepted for verified asynchronous processing
+   */
+  202: {
+    data: DataDeletionPendingResult;
+  };
 };
 
 export type GovernanceExecuteDataDeletionResponse =
@@ -31865,10 +32421,10 @@ export type GovernanceCreateDataExportPackageError =
 
 export type GovernanceCreateDataExportPackageResponses = {
   /**
-   * Data-export package
+   * Accepted data-export package job
    */
-  200: {
-    data: DataExportPackage;
+  202: {
+    data: DataExportPackageJob;
   };
 };
 
@@ -31929,6 +32485,61 @@ export type GovernanceDeleteDataExportPackageResponses = {
 
 export type GovernanceDeleteDataExportPackageResponse =
   GovernanceDeleteDataExportPackageResponses[keyof GovernanceDeleteDataExportPackageResponses];
+
+export type GovernanceGetDataExportPackageData = {
+  body?: never;
+  path: {
+    packageId: string;
+  };
+  query?: never;
+  url: "/governance/data-exports/packages/{packageId}";
+};
+
+export type GovernanceGetDataExportPackageErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type GovernanceGetDataExportPackageError =
+  GovernanceGetDataExportPackageErrors[keyof GovernanceGetDataExportPackageErrors];
+
+export type GovernanceGetDataExportPackageResponses = {
+  /**
+   * Data-export package job
+   */
+  200: {
+    data: DataExportPackageJob;
+  };
+};
+
+export type GovernanceGetDataExportPackageResponse =
+  GovernanceGetDataExportPackageResponses[keyof GovernanceGetDataExportPackageResponses];
 
 export type GovernanceReadDataExportPackageData = {
   body?: never;
@@ -36547,6 +37158,18 @@ export type VoicesListErrors = {
    * Stable Romeo API error response
    */
   500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  504: ApiError;
 };
 
 export type VoicesListError = VoicesListErrors[keyof VoicesListErrors];
@@ -36598,6 +37221,18 @@ export type VoicesCreateErrors = {
    * Stable Romeo API error response
    */
   500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  504: ApiError;
 };
 
 export type VoicesCreateError = VoicesCreateErrors[keyof VoicesCreateErrors];
@@ -36650,6 +37285,18 @@ export type VoicesSyncCatalogErrors = {
    * Stable Romeo API error response
    */
   500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  504: ApiError;
 };
 
 export type VoicesSyncCatalogError =
@@ -36707,6 +37354,18 @@ export type VoicesPreviewErrors = {
    * Stable Romeo API error response
    */
   500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  504: ApiError;
 };
 
 export type VoicesPreviewError = VoicesPreviewErrors[keyof VoicesPreviewErrors];
@@ -36763,6 +37422,18 @@ export type VoicesGenerateMessageSpeechErrors = {
    * Stable Romeo API error response
    */
   500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  504: ApiError;
 };
 
 export type VoicesGenerateMessageSpeechError =
@@ -36816,6 +37487,18 @@ export type VoicesTranscribeErrors = {
    * Stable Romeo API error response
    */
   500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  504: ApiError;
 };
 
 export type VoicesTranscribeError =
@@ -36871,6 +37554,18 @@ export type VoicesDeleteArtifactErrors = {
    * Stable Romeo API error response
    */
   500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  504: ApiError;
 };
 
 export type VoicesDeleteArtifactError =
@@ -36926,6 +37621,18 @@ export type VoicesReadArtifactErrors = {
    * Stable Romeo API error response
    */
   500: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  502: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  503: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  504: ApiError;
 };
 
 export type VoicesReadArtifactError =
@@ -37428,6 +38135,173 @@ export type WorkflowsResumeRunResponses = {
 
 export type WorkflowsResumeRunResponse =
   WorkflowsResumeRunResponses[keyof WorkflowsResumeRunResponses];
+
+export type WorkerBrokerClaimData = {
+  body: WorkerBrokerClaimRequest;
+  path: {
+    audience: "tool_dispatch" | "browser_automation" | "knowledge_extraction";
+  };
+  query?: never;
+  url: "/internal/worker-broker/{audience}/claims";
+};
+
+export type WorkerBrokerClaimErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type WorkerBrokerClaimError =
+  WorkerBrokerClaimErrors[keyof WorkerBrokerClaimErrors];
+
+export type WorkerBrokerClaimResponses = {
+  /**
+   * Worker claim
+   */
+  200: {
+    data: WorkerBrokerClaimResponse;
+  };
+};
+
+export type WorkerBrokerClaimResponse2 =
+  WorkerBrokerClaimResponses[keyof WorkerBrokerClaimResponses];
+
+export type WorkerBrokerRenewData = {
+  body: WorkerBrokerRenewRequest;
+  path: {
+    audience: "tool_dispatch" | "browser_automation" | "knowledge_extraction";
+  };
+  query?: never;
+  url: "/internal/worker-broker/{audience}/claims/renew";
+};
+
+export type WorkerBrokerRenewErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type WorkerBrokerRenewError =
+  WorkerBrokerRenewErrors[keyof WorkerBrokerRenewErrors];
+
+export type WorkerBrokerRenewResponses = {
+  /**
+   * Renewed worker claim
+   */
+  200: {
+    data: WorkerBrokerClaimResponse;
+  };
+};
+
+export type WorkerBrokerRenewResponse =
+  WorkerBrokerRenewResponses[keyof WorkerBrokerRenewResponses];
+
+export type WorkerBrokerCompleteData = {
+  body: WorkerBrokerCompleteRequest;
+  path: {
+    audience: "tool_dispatch" | "browser_automation" | "knowledge_extraction";
+  };
+  query?: never;
+  url: "/internal/worker-broker/{audience}/claims/complete";
+};
+
+export type WorkerBrokerCompleteErrors = {
+  /**
+   * Stable Romeo API error response
+   */
+  400: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  401: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  403: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  404: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  409: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  429: ApiError;
+  /**
+   * Stable Romeo API error response
+   */
+  500: ApiError;
+};
+
+export type WorkerBrokerCompleteError =
+  WorkerBrokerCompleteErrors[keyof WorkerBrokerCompleteErrors];
+
+export type WorkerBrokerCompleteResponses = {
+  /**
+   * Worker completion result
+   */
+  200: {
+    data: {
+      [key: string]: unknown;
+    };
+  };
+};
+
+export type WorkerBrokerCompleteResponse =
+  WorkerBrokerCompleteResponses[keyof WorkerBrokerCompleteResponses];
 
 export type WorkspaceContentListMemoriesData = {
   body?: never;

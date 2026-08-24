@@ -1,162 +1,15 @@
-import type { ResourceGrant } from "@romeo/auth";
 import { defaultProviderCapabilities } from "@romeo/providers";
 import type { BaseModel, ProviderInstance } from "@romeo/providers";
 
-import type { DelegatedOAuthConnection } from "../domain/delegated-oauth";
-import type {
-  Agent,
-  AgentKnowledgeBinding,
-  AgentToolBinding,
-  AgentVersion,
-  ApiKey,
-  AuditLog,
-  BackgroundJob,
-  BillingPlan,
-  BillingEventReceipt,
-  CapabilityAssignment,
-  Chat,
-  ChatComment,
-  ChatTag,
-  ChatTagAssignment,
-  DataConnector,
-  DataConnectorSync,
-  DeviceAuthorization,
-  EvalCase,
-  EvalResultHumanRating,
-  EvalRun,
-  EvalRunResult,
-  EvalSuite,
-  FileObject,
-  Group,
-  GroupMembership,
-  KnowledgeBase,
-  KnowledgeChunk,
-  KnowledgeChunkEmbedding,
-  KnowledgeSource,
-  LocalMfaFactor,
-  LocalMfaChallenge,
-  LocalPasswordCredential,
-  SamlAuthRequest,
-  ManagedModelCustomizationPolicyRecord,
-  ManagedModelPreferenceRecord,
-  Message,
-  MessageFileReference,
-  MessagePart,
-  NotificationDelivery,
-  NotificationDeliveryChannel,
-  CollaborationChannel,
-  CollaborationChannelMember,
-  Organization,
-  PromptTemplate,
-  QuotaBucket,
-  QueuedChatTurn,
-  ResourceFavorite,
-  RetentionPolicy,
-  RunRecord,
-  ServiceAccount,
-  SsoOidcSettings,
-  SystemSetting,
-  ToolCallRecord,
-  ToolConnector,
-  ToolOperation,
-  UsageEvent,
-  User,
-  UserNotification,
-  UserSession,
-  VoiceProfile,
-  WebhookDelivery,
-  WebhookSubscription,
-  WorkspaceFolder,
-  WorkspaceFolderItem,
-  WorkflowDefinition,
-  WorkflowRun,
-  Workspace,
-} from "../domain/entities";
-import type { OrganizationCapabilityFlag } from "../domain/capability-flags";
-import type { IdempotencyReceipt } from "../domain/idempotency";
+import type { AgentVersion } from "../domain/entities";
 import {
   createKnowledgeBinding,
   createSeedGrants,
   createToolBinding,
 } from "./seed-data-builders";
+import type { SeedData } from "./seed-data-contract";
 
-export interface SeedData {
-  organizations: Organization[];
-  workspaces: Workspace[];
-  users: User[];
-  groups: Group[];
-  groupMemberships: GroupMembership[];
-  ssoOidcSettings: SsoOidcSettings[];
-  systemSettings: SystemSetting[];
-  apiKeys: ApiKey[];
-  deviceAuthorizations: DeviceAuthorization[];
-  userSessions: UserSession[];
-  localPasswordCredentials: LocalPasswordCredential[];
-  samlAuthRequests: SamlAuthRequest[];
-  localMfaFactors: LocalMfaFactor[];
-  localMfaChallenges: LocalMfaChallenge[];
-  serviceAccounts: ServiceAccount[];
-  providers: ProviderInstance[];
-  models: BaseModel[];
-  agents: Agent[];
-  agentKnowledgeBindings: AgentKnowledgeBinding[];
-  agentToolBindings: AgentToolBinding[];
-  agentVersions: AgentVersion[];
-  managedModelCustomizationPolicies: ManagedModelCustomizationPolicyRecord[];
-  managedModelPreferences: ManagedModelPreferenceRecord[];
-  evalSuites: EvalSuite[];
-  evalCases: EvalCase[];
-  evalRuns: EvalRun[];
-  evalRunResults: EvalRunResult[];
-  evalResultHumanRatings: EvalResultHumanRating[];
-  chats: Chat[];
-  queuedChatTurns: QueuedChatTurn[];
-  messages: Message[];
-  messageParts: MessagePart[];
-  messageFileReferences: MessageFileReference[];
-  /** Internal rollout marker; absent entries are legacy/read-both rows. */
-  messagePartSchemaVersions: Record<string, 1>;
-  fileObjects: FileObject[];
-  chatComments: ChatComment[];
-  chatTags: ChatTag[];
-  chatTagAssignments: ChatTagAssignment[];
-  collaborationChannels: CollaborationChannel[];
-  collaborationChannelMembers: CollaborationChannelMember[];
-  userNotifications: UserNotification[];
-  notificationDeliveryChannels: NotificationDeliveryChannel[];
-  notificationDeliveries: NotificationDelivery[];
-  knowledgeBases: KnowledgeBase[];
-  knowledgeSources: KnowledgeSource[];
-  knowledgeChunks: KnowledgeChunk[];
-  knowledgeChunkEmbeddings: KnowledgeChunkEmbedding[];
-  dataConnectors: DataConnector[];
-  dataConnectorSyncs: DataConnectorSync[];
-  delegatedOAuthConnections: DelegatedOAuthConnection[];
-  voiceProfiles: VoiceProfile[];
-  auditLogs: AuditLog[];
-  usageEvents: UsageEvent[];
-  billingPlans: BillingPlan[];
-  billingEventReceipts: BillingEventReceipt[];
-  capabilityAssignments: CapabilityAssignment[];
-  organizationCapabilityFlags: OrganizationCapabilityFlag[];
-  idempotencyReceipts: IdempotencyReceipt[];
-  backgroundJobs: BackgroundJob[];
-  webhookSubscriptions: WebhookSubscription[];
-  webhookDeliveries: WebhookDelivery[];
-  workflowDefinitions: WorkflowDefinition[];
-  workflowRuns: WorkflowRun[];
-  retentionPolicies: RetentionPolicy[];
-  quotaBuckets: QuotaBucket[];
-  runs: RunRecord[];
-  toolCalls: ToolCallRecord[];
-  toolConnectors: ToolConnector[];
-  toolOperations: ToolOperation[];
-  grants: ResourceGrant[];
-  promptTemplates: PromptTemplate[];
-  resourceFavorites: ResourceFavorite[];
-  workspaceFolders: WorkspaceFolder[];
-  workspaceFolderItems: WorkspaceFolderItem[];
-}
+export type { SeedData } from "./seed-data-contract";
 
 export function createSeedData(now = new Date().toISOString()): SeedData {
   const providers: ProviderInstance[] = [
@@ -166,7 +19,7 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
       type: "openai-compatible",
       name: "OpenAI-compatible",
       baseUrl: "https://api.openai.com/v1",
-      modelIds: ["gpt-compatible"],
+      modelIds: ["gpt-compatible", "text-embedding-3-small"],
       enabled: true,
       capabilities: defaultProviderCapabilities("openai-compatible"),
     },
@@ -190,6 +43,22 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
       enabled: true,
       capabilities: providers[0]!.capabilities,
       contextWindow: 128000,
+    },
+    {
+      id: "model_openai_compatible_embeddings_default",
+      providerId: "provider_openai_compatible",
+      name: "text-embedding-3-small",
+      displayName: "OpenAI-compatible embeddings default",
+      enabled: true,
+      capabilities: {
+        ...providers[0]!.capabilities,
+        streaming: false,
+        toolCalling: false,
+        structuredJson: false,
+        temperature: false,
+        modalities: ["embeddings"],
+      },
+      contextWindow: 8191,
     },
     {
       id: "model_ollama_default",
@@ -350,6 +219,7 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
     messageFileReferences: [],
     messagePartSchemaVersions: {},
     fileObjects: [],
+    contentDeletionOperations: [],
     chatComments: [],
     chatTags: [],
     chatTagAssignments: [],
@@ -393,6 +263,13 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
       },
     ],
     auditLogs: [],
+    auditIntegrityRecords: [],
+    auditIntegrityTenantHeads: [],
+    auditIntegrityCheckpoints: [],
+    auditExportDestinations: [],
+    auditExportJobs: [],
+    auditExportAttempts: [],
+    auditExportIdempotencyReceipts: [],
     usageEvents: [],
     billingPlans: [],
     billingEventReceipts: [],
@@ -400,10 +277,13 @@ export function createSeedData(now = new Date().toISOString()): SeedData {
     organizationCapabilityFlags: [],
     idempotencyReceipts: [],
     backgroundJobs: [],
+    governanceExportJobs: [],
+    governanceExportArtifacts: [],
+    contentPolicyDecisions: [],
+    contentPolicyApprovals: [],
+    serverTableSavedViews: [],
     webhookSubscriptions: [],
     webhookDeliveries: [],
-    workflowDefinitions: [],
-    workflowRuns: [],
     retentionPolicies: [
       {
         orgId: "org_default",

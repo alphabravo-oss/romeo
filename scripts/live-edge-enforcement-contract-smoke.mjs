@@ -218,8 +218,6 @@ function runEdgeSmoke(baseUrl, evidencePath, options = {}) {
         repoPath("scripts/live-edge-enforcement-smoke.mjs"),
         "--base-url",
         baseUrl,
-        "--api-key",
-        apiKey,
         "--require-admin-posture",
         "--require-waf-block-mode",
         "--body-limit-bytes",
@@ -241,6 +239,7 @@ function runEdgeSmoke(baseUrl, evidencePath, options = {}) {
       ],
       {
         cwd: root,
+        env: { ...process.env, ROMEO_API_KEY: apiKey },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );

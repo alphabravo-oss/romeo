@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
@@ -54,6 +55,10 @@ export const runs = pgTable(
       .default(0),
   },
   (table) => ({
+    runsOrgIdIdUnique: uniqueIndex("runs_org_id_id_uidx").on(
+      table.orgId,
+      table.id,
+    ),
     runsChatCreatedIdx: index("runs_chat_created_idx").on(
       table.chatId,
       table.createdAt,
@@ -140,6 +145,31 @@ export const toolCalls = pgTable(
     toolCallsOrgStartedIdx: index("tool_calls_org_started_idx").on(
       table.orgId,
       table.startedAt,
+    ),
+    toolCallsPageStartedIdx: index("tool_calls_org_agent_started_id_idx").on(
+      table.orgId,
+      table.agentId,
+      table.startedAt,
+      table.id,
+    ),
+    toolCallsPageCompletedIdx: index(
+      "tool_calls_org_agent_completed_id_idx",
+    ).on(table.orgId, table.agentId, table.completedAt, table.id),
+    toolCallsPageStatusIdx: index("tool_calls_org_agent_status_id_idx").on(
+      table.orgId,
+      table.agentId,
+      table.status,
+      table.id,
+    ),
+    toolCallsPageToolIdx: index("tool_calls_org_agent_tool_id_idx").on(
+      table.orgId,
+      table.agentId,
+      table.toolId,
+      table.id,
+    ),
+    toolCallsSearchIdx: index("tool_calls_search_trgm_idx").using(
+      "gin",
+      sql`(lower(coalesce(${table.id}, '') || chr(31) || coalesce(${table.toolId}, '') || chr(31) || coalesce(${table.runId}, '') || chr(31) || coalesce(${table.errorCode}, ''))) gin_trgm_ops`,
     ),
     toolCallsRunIdx: index("tool_calls_run_idx").on(table.runId),
   }),

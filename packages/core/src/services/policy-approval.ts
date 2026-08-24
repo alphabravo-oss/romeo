@@ -1,21 +1,14 @@
-export interface PolicyApprovalRecord {
-  id: string;
-  orgId: string;
-  runId: string;
-  decisionId: string;
-  actorId: string;
-  state: "pending" | "approved" | "denied" | "expired";
-  expiresAt: string;
-  createdAt: string;
-  resolvedAt?: string;
-  resolvedBy?: string;
-}
+import type { PolicyApprovalRecord } from "../domain/content-policy";
+
+export type { PolicyApprovalRecord } from "../domain/content-policy";
 
 export function requestPolicyApproval(input: {
   id: string;
   orgId: string;
   runId: string;
   decisionId: string;
+  policyVersionId?: string;
+  executionJobId?: string;
   actorId: string;
   expiresAt: string;
   now: string;
@@ -24,7 +17,9 @@ export function requestPolicyApproval(input: {
   | { outcome: "paused"; approval: PolicyApprovalRecord }
   | {
       outcome: "denied";
-      code: "content_policy_approval_expired" | "content_policy_approval_required";
+      code:
+        | "content_policy_approval_expired"
+        | "content_policy_approval_required";
     } {
   if (input.matchTextPresent)
     return { outcome: "denied", code: "content_policy_approval_required" };
@@ -37,6 +32,10 @@ export function requestPolicyApproval(input: {
       orgId: input.orgId,
       runId: input.runId,
       decisionId: input.decisionId,
+      policyVersionId: input.policyVersionId ?? "legacy_unbound",
+      ...(input.executionJobId === undefined
+        ? {}
+        : { executionJobId: input.executionJobId }),
       actorId: input.actorId,
       state: "pending",
       expiresAt: input.expiresAt,
@@ -55,10 +54,15 @@ export function resolvePolicyApproval(input: {
   | { outcome: "approved" | "denied"; approval: PolicyApprovalRecord }
   | {
       outcome: "denied";
-      code: "content_policy_approval_expired" | "content_policy_approval_scope_mismatch";
+      code:
+        | "content_policy_approval_expired"
+        | "content_policy_approval_scope_mismatch";
     } {
   if (input.approval.runId !== input.runId)
-    return { outcome: "denied", code: "content_policy_approval_scope_mismatch" };
+    return {
+      outcome: "denied",
+      code: "content_policy_approval_scope_mismatch",
+    };
   if (
     input.approval.state !== "pending" ||
     Date.parse(input.approval.expiresAt) <= Date.parse(input.now)
@@ -81,9 +85,12 @@ export function publicPolicyApproval(approval: PolicyApprovalRecord) {
     id: approval.id,
     runId: approval.runId,
     decisionId: approval.decisionId,
+    policyVersionId: approval.policyVersionId,
     state: approval.state,
     expiresAt: approval.expiresAt,
     createdAt: approval.createdAt,
-    ...(approval.resolvedAt === undefined ? {} : { resolvedAt: approval.resolvedAt }),
+    ...(approval.resolvedAt === undefined
+      ? {}
+      : { resolvedAt: approval.resolvedAt }),
   };
 }

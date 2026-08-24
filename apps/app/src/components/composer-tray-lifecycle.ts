@@ -17,15 +17,22 @@ export type TrayLifecycleEvent =
   | "cancel"
   | "retry";
 
-const transitions: Record<TrayLifecycle, Partial<Record<TrayLifecycleEvent, TrayLifecycle>>> =
-  {
-    queued: { upload: "uploading", cancel: "cancelled" },
-    uploading: { scan: "scanning", succeed: "ready", fail: "failed", cancel: "cancelled" },
-    scanning: { succeed: "ready", fail: "failed", cancel: "cancelled" },
-    ready: { retry: "uploading" },
-    failed: { retry: "uploading", cancel: "cancelled" },
-    cancelled: { retry: "uploading" },
-  };
+const transitions: Record<
+  TrayLifecycle,
+  Partial<Record<TrayLifecycleEvent, TrayLifecycle>>
+> = {
+  queued: { upload: "uploading", cancel: "cancelled" },
+  uploading: {
+    scan: "scanning",
+    succeed: "ready",
+    fail: "failed",
+    cancel: "cancelled",
+  },
+  scanning: { succeed: "ready", fail: "failed", cancel: "cancelled" },
+  ready: { retry: "uploading" },
+  failed: { retry: "uploading", cancel: "cancelled" },
+  cancelled: { retry: "uploading" },
+};
 
 export function advanceTrayLifecycle(
   current: TrayLifecycle,
@@ -95,9 +102,9 @@ export function readyImages<T extends { status?: TrayLifecycle }>(
   );
 }
 
-export function readyDocuments<T extends { fileId?: string; status?: TrayLifecycle }>(
-  attachments: readonly T[],
-): Array<T & { fileId: string }> {
+export function readyDocuments<
+  T extends { fileId?: string; status?: TrayLifecycle },
+>(attachments: readonly T[]): Array<T & { fileId: string }> {
   return attachments.filter(
     (attachment): attachment is T & { fileId: string } =>
       trayIsSendReady(attachment.status ?? "ready") &&
@@ -106,10 +113,39 @@ export function readyDocuments<T extends { fileId?: string; status?: TrayLifecyc
   );
 }
 
-export function trayAnnouncement(input: {
-  fileName: string;
-  percent: number;
-  status: TrayLifecycle;
-}): string {
-  return `${input.fileName}: ${input.status} ${input.percent}%`;
+export function trayAnnouncement(
+  input: {
+    count: number;
+    fileName: string;
+    formattedPercent: string;
+    position: number;
+    status: TrayLifecycle;
+  },
+  translate: (
+    key: MessageKey,
+    values?: Record<string, boolean | number | string>,
+  ) => string,
+): string {
+  return translate("trayAttachmentAnnouncement", {
+    count: input.count,
+    fileName: input.fileName,
+    position: input.position,
+    progress: input.formattedPercent,
+    status: translate(trayLifecycleMessageKeys[input.status]),
+  });
 }
+
+export const trayLifecycleMessageKeys = {
+  cancelled: "trayLifecycleCancelled",
+  failed: "trayLifecycleFailed",
+  queued: "trayLifecycleQueued",
+  ready: "trayLifecycleReady",
+  scanning: "trayLifecycleScanning",
+  uploading: "trayLifecycleUploading",
+} as const satisfies Record<TrayLifecycle, MessageKey>;
+
+export function meaningfulTrayProgress(percent: number): number {
+  const bounded = Math.max(0, Math.min(100, percent));
+  return Math.floor(bounded / 25) * 25;
+}
+import type { MessageKey } from "../lib/i18n";

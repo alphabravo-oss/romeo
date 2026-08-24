@@ -81,6 +81,12 @@ describe("notification repository mappers", () => {
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
       updatedAt: new Date("2026-06-27T00:01:00.000Z"),
       deliveredAt: null,
+      leaseExpiresAt: null,
+      leaseOwner: null,
+      leaseToken: null,
+      providerIdempotencyKey: null,
+      deliveryFence: 0,
+      leaseAttempts: 0,
     });
 
     expect(channel.type).toBe("webhook");

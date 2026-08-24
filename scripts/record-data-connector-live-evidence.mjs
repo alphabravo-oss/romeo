@@ -1,6 +1,19 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+if (process.argv.includes("--help")) {
+  process.stdout.write(
+    "Usage: node scripts/record-data-connector-live-evidence.mjs --output <path> [evidence options]\n       node scripts/record-data-connector-live-evidence.mjs --dry-run\n",
+  );
+  process.exit(0);
+}
+if (process.argv.includes("--dry-run")) {
+  process.stdout.write(
+    '{"schemaVersion":"romeo.data-connector-live-evidence-plan.v1","writesEvidence":false}\n',
+  );
+  process.exit(0);
+}
+
 const requiredChecks = [
   "managed_connector_sync_exercised",
   "worker_cni_egress_enforced",

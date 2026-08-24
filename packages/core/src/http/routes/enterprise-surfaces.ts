@@ -29,15 +29,17 @@ import { evaluateAclFreshness } from "../../services/knowledge-acl-lifecycle";
 import { authorizeRealtimeSession } from "../../services/realtime-session-policy";
 import { selectRealtimeAdapter } from "../../services/realtime-voice-contracts";
 import { authorizeCryptoShred } from "../../services/tenant-crypto-lifecycle";
-import {
-  checkpointSiemExport,
-  sealAuditSegment,
-} from "../../services/audit-integrity";
 import { authorizeBreakGlass } from "../../services/break-glass";
+import { createId } from "../../ids";
 import { CONTENT_POLICY_DETECTOR_CODES } from "../../services/content-policy-service";
 import { assertCapabilityFlagEnabled } from "../../services/capability-flag-enforcement";
 import { resolveIdempotencyKey } from "../../services/idempotency-service";
 import { applyIdempotencyHeaders } from "../idempotency-response";
+import {
+  authorizeGenericCapability,
+  capabilityDeniesOperation,
+  singletonWorkspaceContext,
+} from "../../services/capability-consumer-enforcement";
 
 export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
   app.openapi(createRealtimeSessionRoute, async (context) => {
@@ -51,7 +53,8 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
     });
     const data = authorizeRealtimeSession({
       platformDisabled:
-        effective.status === "disabled" || flag.effectiveState !== "enabled",
+        capabilityDeniesOperation(effective) ||
+        flag.effectiveState !== "enabled",
       gatewayInstalled: false,
       retention: body.retention,
       durationSeconds: body.durationSeconds,
@@ -59,7 +62,6 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
     });
     return context.json({ data }, 200);
   });
-
   app.openapi(createComputeJobRoute, async (context) => {
     const key = resolveIdempotencyKey(
       context.req.header("idempotency-key") ?? undefined,
@@ -78,15 +80,14 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
             context.get("subject"),
             "compute_artifacts_v1",
           );
-        const effective = await context
-          .get("services")
-          .capabilities.resolve({
-            subject: context.get("subject"),
-            capabilityId: "secure_compute",
-          });
+        const effective = await context.get("services").capabilities.resolve({
+          subject: context.get("subject"),
+          capabilityId: "secure_compute",
+        });
         return authorizeComputeJob({
           platformDisabled:
-            effective.status === "disabled" || flag.effectiveState !== "enabled",
+            capabilityDeniesOperation(effective) ||
+            flag.effectiveState !== "enabled",
           runtime: "uninstalled",
           jobId: "compute_uninstalled",
         });
@@ -95,7 +96,6 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
     applyIdempotencyHeaders(context, result.idempotency);
     return context.json({ data: result.value }, 200);
   });
-
   app.openapi(createCompareSessionRoute, async (context) => {
     const subject = context.get("subject");
     const body = context.req.valid("json");
@@ -124,7 +124,8 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
         });
         return preflightCompareSession({
           platformDisabled:
-            effective.status === "disabled" || flag.effectiveState !== "enabled",
+            capabilityDeniesOperation(effective) ||
+            flag.effectiveState !== "enabled",
           maxLegs: 8,
           maxAggregateMicroUsd: body.maxAggregateMicroUsd,
           legs: await context
@@ -136,11 +137,16 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
     applyIdempotencyHeaders(context, result.idempotency);
     return context.json({ data: result.value }, 200);
   });
-
   app.openapi(evaluateFirewallOutputRoute, async (context) => {
     await context
       .get("services")
       .capabilityFlags.resolve(context.get("subject"), "content_firewall_v2");
+    await authorizeGenericCapability(
+      context.get("services").capabilities,
+      context.get("subject"),
+      "content_firewall",
+      singletonWorkspaceContext(context.get("subject").workspaceIds),
+    );
     const body = context.req.valid("json");
     const buffer = new OutputPolicyBuffer({
       mode: body.mode,
@@ -181,6 +187,12 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
       "knowledge_acl_v2",
     );
     const body = context.req.valid("json");
+    await authorizeGenericCapability(
+      context.get("services").capabilities,
+      context.get("subject"),
+      "knowledge_acl",
+      { workspaceId: body.workspaceId },
+    );
     const decision = prefilterKnowledgeCandidates({
       candidates: body.documentIds.map((documentId) => ({
         sourceId: body.workspaceId,
@@ -212,6 +224,9 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
     await context
       .get("services")
       .capabilityFlags.resolve(context.get("subject"), "trust_plane_v1");
+    const auditExport = await context
+      .get("services")
+      .auditIntegrity.exportPosture(context.get("subject"));
     return context.json(
       {
         data: {
@@ -219,6 +234,7 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
           residency: "not_configured" as const,
           dlp: "not_applicable" as const,
           acl: "not_configured" as const,
+          auditExport,
           syntheticGreen: false as const,
         },
       },
@@ -252,7 +268,7 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
           subject: context.get("subject"),
           workspaceId: body.workspaceId,
           kind: body.kind,
-          platformDisabled: effective.status === "disabled",
+          platformDisabled: capabilityDeniesOperation(effective),
           ...(body.sourceFileId === undefined
             ? {}
             : { sourceFileId: body.sourceFileId }),
@@ -297,6 +313,11 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
 
   app.openapi(previewRealtimeAdapterRoute, async (context) => {
     const body = context.req.valid("json");
+    await authorizeGenericCapability(
+      context.get("services").capabilities,
+      context.get("subject"),
+      "realtime_voice",
+    );
     const data = selectRealtimeAdapter(body);
     return context.json(
       {
@@ -312,6 +333,12 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
 
   app.openapi(previewCompareSynthesisRoute, async (context) => {
     const body = context.req.valid("json");
+    await authorizeGenericCapability(
+      context.get("services").capabilities,
+      context.get("subject"),
+      "multi_model_compare",
+      singletonWorkspaceContext(context.get("subject").workspaceIds),
+    );
     const data = authorizeCompareSynthesis({
       candidateIds: body.candidateIds,
       candidateHashes: body.candidateHashes,
@@ -331,6 +358,12 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
 
   app.openapi(evaluateKnowledgeAclFreshnessRoute, async (context) => {
     const body = context.req.valid("json");
+    await authorizeGenericCapability(
+      context.get("services").capabilities,
+      context.get("subject"),
+      "knowledge_acl",
+      singletonWorkspaceContext(context.get("subject").workspaceIds),
+    );
     const data = evaluateAclFreshness(body);
     return context.json(
       {
@@ -346,6 +379,11 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
 
   app.openapi(previewCryptoShredRoute, async (context) => {
     const body = context.req.valid("json");
+    await authorizeGenericCapability(
+      context.get("services").capabilities,
+      context.get("subject"),
+      "tenant_encryption",
+    );
     const data = authorizeCryptoShred({
       legalHold: body.legalHold,
       backupChecked: body.backupChecked,
@@ -357,7 +395,12 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
         data: {
           outcome: data.outcome,
           ...(data.outcome === "accepted"
-            ? { externalCopiesClaimed: false as const }
+            ? {
+                executed: false as const,
+                externalCopiesClaimed: false as const,
+                keysDestroyed: false as const,
+                preview: true as const,
+              }
             : {}),
         },
       },
@@ -365,25 +408,32 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
     );
   });
 
-  app.openapi(sealAuditSegmentRoute, (context) => {
+  app.openapi(sealAuditSegmentRoute, async (context) => {
     const body = context.req.valid("json");
-    const sealed = sealAuditSegment({
-      eventIds: body.eventIds,
-      now: new Date().toISOString(),
-      signingKeyVersion: body.signingKeyVersion,
-      ...(body.previousHash === undefined
-        ? {}
-        : { previousHash: body.previousHash }),
+    const sealed = await context.get("services").auditIntegrity.seal({
+      subject: context.get("subject"),
+      ...(body.maxRecords === undefined
+        ? body.eventIds === undefined
+          ? {}
+          : { maxRecords: Math.max(1, body.eventIds.length) }
+        : { maxRecords: body.maxRecords }),
     });
     return context.json(
       {
         data:
           sealed.outcome === "accepted"
             ? {
-                eventCount: sealed.segment.eventCount,
+                algorithm: sealed.checkpoint.algorithm,
+                checkpointId: sealed.checkpoint.id,
+                eventCount: sealed.checkpoint.recordCount,
+                fromSequence: sealed.checkpoint.fromSequence,
+                keyVersion: sealed.checkpoint.keyVersion,
                 outcome: "accepted" as const,
-                previousHash: sealed.segment.previousHash,
-                segmentHash: sealed.segment.segmentHash,
+                previousHash: sealed.checkpoint.previousCheckpointHash,
+                rootHash: sealed.checkpoint.rootHash,
+                segmentHash: sealed.checkpoint.checkpointHash,
+                signature: sealed.checkpoint.signature,
+                toSequence: sealed.checkpoint.toSequence,
               }
             : { code: sealed.code, outcome: "denied" as const },
       },
@@ -391,23 +441,25 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
     );
   });
 
-  app.openapi(checkpointSiemExportRoute, (context) => {
+  app.openapi(checkpointSiemExportRoute, async (context) => {
     const body = context.req.valid("json");
-    const data = checkpointSiemExport({
-      attempt: body.attempt,
+    const key = resolveIdempotencyKey(
+      context.req.header("idempotency-key") ?? undefined,
+      body.idempotencyKey,
+    );
+    const checkpointHash = body.checkpointHash ?? body.segmentHash;
+    const data = await context.get("services").auditIntegrity.checkpointExport({
       destination: body.destination,
-      now: new Date().toISOString(),
-      sealedAt: body.sealedAt,
-      segmentHash: body.segmentHash,
-      ...(body.priorReceiptHash === undefined
-        ? {}
-        : { priorReceiptHash: body.priorReceiptHash }),
-      ...(body.receiptHash === undefined ? {} : { receiptHash: body.receiptHash }),
+      idempotencyKey: key ?? createId("audit_export_legacy"),
+      subject: context.get("subject"),
+      ...(checkpointHash === undefined ? {} : { checkpointHash }),
     });
     return context.json(
       {
         data: {
           destination: data.destination,
+          duplicate: data.duplicate,
+          jobId: data.jobId,
           lagMs: data.lagMs,
           state: data.state,
         },
@@ -431,9 +483,11 @@ export function registerEnterpriseSurfaceRoutes(app: RomeoApi): void {
         data:
           data.outcome === "accepted"
             ? {
-                alerted: true as const,
+                alerted: false as const,
+                executed: false as const,
                 expiresAt: data.expiresAt,
                 outcome: "accepted" as const,
+                preview: true as const,
               }
             : { code: data.code, outcome: "denied" as const },
       },

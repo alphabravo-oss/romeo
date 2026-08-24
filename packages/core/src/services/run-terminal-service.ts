@@ -14,6 +14,7 @@ import type { RunEventSequencer } from "./run-event-sequencer";
 import type { RunKnowledgeCitation } from "./run-knowledge";
 import { isTerminalRunStatus } from "./run-recovery-service";
 import type { RunServiceOptions } from "./run-service-contracts";
+import type { PersistedOutputPartRef } from "./persist-output-parts";
 import { appendRunCitations } from "./run-knowledge";
 import { providerUsageFromEvent } from "./run-stream-service";
 import {
@@ -129,6 +130,7 @@ export class RunTerminalService {
     model: BaseModel,
     citations: RunKnowledgeCitation[],
     subject: AuthSubject,
+    outputParts: PersistedOutputPartRef[] = [],
   ): Promise<void> {
     const terminalEventType = runTerminalEventType(event);
     const status =
@@ -150,6 +152,7 @@ export class RunTerminalService {
       model,
       ...(providerUsage === undefined ? {} : { providerUsage }),
       ...(citations.length === 0 ? {} : { citations }),
+      ...(outputParts.length === 0 ? {} : { outputParts }),
       ...(error === undefined ? {} : { error }),
       terminalEvent: {
         type: terminalEventType,
@@ -180,14 +183,14 @@ export class RunTerminalService {
     subject: AuthSubject,
   ): Promise<ToolOperationDispatchPayloadStoreReference[]> {
     const now = new Date().toISOString();
-    const jobs = (await repository.listBackgroundJobs(run.orgId)).filter(
-      (job) =>
-        job.type === "tool.operation.dispatch_request" &&
-        job.payload.runContinuation === "model_tool_dispatch" &&
-        job.payload.runId === run.id &&
-        (job.status === "queued" || job.status === "running"),
-    );
+    const jobs = await repository.listBackgroundJobs(run.orgId, {
+      limit: 1_000,
+      payloadEquals: { runId: run.id },
+      statuses: ["queued", "running"],
+      type: "tool.operation.dispatch_request",
+    });
     for (const job of jobs) {
+      if (job.payload.runContinuation !== "model_tool_dispatch") continue;
       await repository.updateBackgroundJob({
         ...job,
         status: "failed",

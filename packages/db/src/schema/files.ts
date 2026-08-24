@@ -77,9 +77,16 @@ export const objectRecords = pgTable(
       table.updatedAt,
       table.id,
     ),
+    objectRecordsFileLifecycleOpsIdx: index(
+      "object_records_file_lifecycle_ops_idx",
+    )
+      .on(table.orgId, table.status, table.lifecycleAttempts, table.createdAt)
+      .where(
+        sql`${table.status} IN ('quarantined', 'scanning', 'extracting', 'transcoding', 'failed')`,
+      ),
     objectRecordsStatusCheck: check(
       "object_records_status_check",
-      sql`${table.status} IN ('uploading','quarantined','scanning','extracting','transcoding','ready','attached','retained','failed','deleted','available')`,
+      sql`${table.status} IN ('uploading','quarantined','scanning','extracting','transcoding','ready','attached','retained','failed','deletion_pending','deleted','available')`,
     ),
     objectRecordsLifecycleAttemptsCheck: check(
       "object_records_lifecycle_attempts_check",

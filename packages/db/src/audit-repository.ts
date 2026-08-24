@@ -1,6 +1,13 @@
 import {
   assertValidAuditLog,
+  type AuditExportAttempt,
+  type AuditExportDestination,
+  type AuditExportIdempotencyReceipt,
+  type AuditExportJob,
+  type AuditIntegrityCheckpoint,
+  type AuditIntegrityRecord,
   type AuditLogQueryResult,
+  type AuditRetentionExportGate,
   type QueryAuditLogsInput,
 } from "@romeo/core";
 import {
@@ -21,10 +28,18 @@ import {
   type SQLWrapper,
 } from "drizzle-orm";
 
+import { PgAuditExportRepository } from "./audit-export-repository";
+import {
+  appendAuditIntegrityRecord,
+  lockAuditChain,
+  PgAuditIntegrityRepository,
+} from "./audit-integrity-repository";
+import { toAuditLogInsert, toAuditLogRecord } from "./audit-log-record-mapping";
 import type { RomeoDatabase } from "./client";
-import type { AuditLogRecord, AuditOutcomeRecord } from "./operational-records";
-import { toIsoString } from "./repository-mapping";
+import type { AuditLogRecord } from "./operational-records";
 import { auditLogs } from "./schema";
+
+export { toAuditLogRecord } from "./audit-log-record-mapping";
 
 const maxAuditQueryLimit = 200;
 const auditNoiseActions: string[] = [
@@ -41,7 +56,13 @@ const auditNoiseActions: string[] = [
 const auditSortColumns = { createdAt: auditLogs.createdAt } as const;
 
 export class PgAuditRepository {
-  constructor(protected readonly db: RomeoDatabase) {}
+  private readonly exports: PgAuditExportRepository;
+  private readonly integrity: PgAuditIntegrityRepository;
+
+  constructor(protected readonly db: RomeoDatabase) {
+    this.exports = new PgAuditExportRepository(db);
+    this.integrity = new PgAuditIntegrityRepository(db);
+  }
 
   async listAuditLogs(orgId: string): Promise<AuditLogRecord[]> {
     const rows = await this.db
@@ -105,62 +126,140 @@ export class PgAuditRepository {
 
   async createAuditLog(log: AuditLogRecord): Promise<AuditLogRecord> {
     assertValidAuditLog(log);
-    const [row] = await this.db
-      .insert(auditLogs)
-      .values(toAuditLogInsert(log))
-      .returning();
-    return row === undefined ? log : toAuditLogRecord(row);
+    return this.db.transaction(async (tx) => {
+      const database = tx as unknown as RomeoDatabase;
+      await lockAuditChain(database, log.orgId);
+      const [row] = await database
+        .insert(auditLogs)
+        .values(toAuditLogInsert(log))
+        .returning();
+      await appendAuditIntegrityRecord(database, log);
+      return row === undefined ? log : toAuditLogRecord(row);
+    });
+  }
+
+  ensureAuditIntegrityRecords(orgId: string): Promise<number> {
+    return this.integrity.ensure(orgId);
   }
 
   async deleteAuditLogsBefore(orgId: string, before: string): Promise<number> {
-    const rows = await this.db
-      .delete(auditLogs)
-      .where(
-        and(
-          eq(auditLogs.orgId, orgId),
-          lt(auditLogs.createdAt, new Date(before)),
-        ),
-      )
-      .returning({ id: auditLogs.id });
-    return rows.length;
+    return this.db.transaction(async (tx) => {
+      const database = tx as unknown as RomeoDatabase;
+      const gate = await new PgAuditExportRepository(database).retentionGate(
+        orgId,
+        before,
+      );
+      if (!gate.deletable)
+        throw new Error("audit_retention_export_confirmation_required");
+      await tx.execute(
+        sql`select set_config('romeo.audit_integrity_mutation', 'authorized', true)`,
+      );
+      const rows = await tx
+        .delete(auditLogs)
+        .where(
+          and(
+            eq(auditLogs.orgId, orgId),
+            lt(auditLogs.createdAt, new Date(before)),
+          ),
+        )
+        .returning({ id: auditLogs.id });
+      return rows.length;
+    });
+  }
+
+  listAuditIntegrityRecords(orgId: string): Promise<AuditIntegrityRecord[]> {
+    return this.integrity.listRecords(orgId);
+  }
+
+  listAuditIntegrityCheckpoints(
+    orgId: string,
+  ): Promise<AuditIntegrityCheckpoint[]> {
+    return this.integrity.listCheckpoints(orgId);
+  }
+
+  getAuditIntegrityCheckpoint(orgId: string, checkpointId: string) {
+    return this.integrity.getCheckpoint(orgId, checkpointId);
+  }
+
+  getAuditIntegrityCheckpointByHash(orgId: string, checkpointHash: string) {
+    return this.integrity.getCheckpointByHash(orgId, checkpointHash);
+  }
+
+  createAuditIntegrityCheckpoint(checkpoint: AuditIntegrityCheckpoint) {
+    return this.integrity.createCheckpoint(checkpoint);
+  }
+
+  getAuditExportDestination(
+    orgId: string,
+    kind: AuditExportDestination["kind"],
+  ) {
+    return this.exports.getDestination(orgId, kind);
+  }
+
+  upsertAuditExportDestination(destination: AuditExportDestination) {
+    return this.exports.upsertDestination(destination);
+  }
+
+  getAuditExportJob(orgId: string, jobId: string) {
+    return this.exports.getJob(orgId, jobId);
+  }
+
+  listAuditExportJobs(orgId: string, destinationId?: string) {
+    return this.exports.listJobs(orgId, destinationId);
+  }
+
+  getAuditExportJobByIdempotencyHash(
+    orgId: string,
+    idempotencyKeyHash: string,
+  ) {
+    return this.exports.getJobByIdempotencyHash(orgId, idempotencyKeyHash);
+  }
+
+  createAuditExportJob(job: AuditExportJob) {
+    return this.exports.createJob(job);
+  }
+
+  claimAuditExportJob(input: {
+    jobId: string;
+    leaseSeconds: number;
+    leaseToken: string;
+    now: string;
+    orgId: string;
+  }) {
+    return this.exports.claimJob(input);
+  }
+
+  completeAuditExportAttempt(input: {
+    attempt: AuditExportAttempt;
+    job: AuditExportJob;
+    leaseToken: string;
+  }) {
+    return this.exports.completeAttempt(input);
+  }
+
+  listAuditExportAttempts(orgId: string, jobId: string) {
+    return this.exports.listAttempts(orgId, jobId);
+  }
+
+  getAuditExportIdempotencyReceipt(orgId: string, idempotencyKeyHash: string) {
+    return this.exports.getReceipt(orgId, idempotencyKeyHash);
+  }
+
+  createAuditExportIdempotencyReceipt(receipt: AuditExportIdempotencyReceipt) {
+    return this.exports.createReceipt(receipt);
+  }
+
+  auditRetentionExportGate(
+    orgId: string,
+    before: string,
+  ): Promise<AuditRetentionExportGate> {
+    return this.exports.retentionGate(orgId, before);
   }
 }
 
 function normalizeAuditQueryLimit(value: number): number {
   if (!Number.isSafeInteger(value) || value < 1) return 1;
   return Math.min(value, maxAuditQueryLimit);
-}
-
-export function toAuditLogRecord(
-  row: typeof auditLogs.$inferSelect,
-): AuditLogRecord {
-  return {
-    id: row.id,
-    orgId: row.orgId,
-    actorId: row.actorId,
-    action: row.action,
-    resourceType: row.resourceType,
-    resourceId: row.resourceId,
-    outcome: asAuditOutcome(row.outcome),
-    metadata: asJsonRecord(row.metadata),
-    createdAt: toIsoString(row.createdAt),
-  };
-}
-
-function toAuditLogInsert(
-  record: AuditLogRecord,
-): typeof auditLogs.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    actorId: record.actorId,
-    action: record.action,
-    resourceType: record.resourceType,
-    resourceId: record.resourceId,
-    outcome: record.outcome,
-    metadata: record.metadata,
-    createdAt: new Date(record.createdAt),
-  };
 }
 
 function positionPredicate(input: QueryAuditLogsInput): SQL | undefined {
@@ -199,9 +298,6 @@ function noisePredicate(input: QueryAuditLogsInput): SQL | undefined {
 function searchPredicate(search: string | undefined): SQL | undefined {
   if (search === undefined) return undefined;
   return and(
-    // The trigram expression is a candidate prefilter. Keep the individual
-    // predicates below as the source of truth so delimiter-spanning input and
-    // literal LIKE wildcard characters retain the legacy search semantics.
     sql`${auditSearchDocument()} like ('%' || lower(${escapedLikeLiteral(search)}) || '%')`,
     or(
       containsLiteral(auditLogs.action, search),
@@ -288,14 +384,4 @@ function runCategoryPredicate(): SQL {
     like(auditLogs.action, "web_search.query%"),
     like(auditLogs.action, "web_url.%"),
   )!;
-}
-
-function asAuditOutcome(value: string): AuditOutcomeRecord {
-  return value === "failure" || value === "success" ? value : "failure";
-}
-
-function asJsonRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return {};
-  return value as Record<string, unknown>;
 }

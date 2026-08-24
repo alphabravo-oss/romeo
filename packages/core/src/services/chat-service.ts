@@ -9,7 +9,7 @@ import { disabledObjectStore, type ObjectStore } from "@romeo/storage";
 import type {
   Chat,
   DataDeletionPreview,
-  DataDeletionResult,
+  DataDeletionCompletedResult,
   Message,
   MessageFeedbackState,
 } from "../domain/entities";
@@ -356,7 +356,7 @@ export class ChatService {
     chatId: string;
     confirmChatId: string;
     subject: AuthSubject;
-  }): Promise<DataDeletionResult> {
+  }): Promise<DataDeletionCompletedResult> {
     return this.lifecycle.delete(input);
   }
 

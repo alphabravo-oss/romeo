@@ -3,11 +3,17 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { Button, type ButtonProps } from "./button";
 import { cn } from "./lib/cn";
 
-let pendingMenuDialogOpener: HTMLElement | null = null;
+export interface OverlayOpenerRef {
+  current: HTMLElement | null;
+}
+
+export function useOverlayOpenerRef(): OverlayOpenerRef {
+  return useRef<HTMLElement | null>(null);
+}
 
 function menuTriggerForElement(element: Element): HTMLElement | null {
   const menu = element.closest<HTMLElement>('[role="menu"][aria-labelledby]');
@@ -16,9 +22,11 @@ function menuTriggerForElement(element: Element): HTMLElement | null {
   return triggerElement instanceof HTMLElement ? triggerElement : null;
 }
 
-function activeOverlayOpener(): HTMLElement | null {
-  const pendingOpener = pendingMenuDialogOpener;
-  pendingMenuDialogOpener = null;
+function activeOverlayOpener(
+  pendingRef?: OverlayOpenerRef,
+): HTMLElement | null {
+  const pendingOpener = pendingRef?.current ?? null;
+  if (pendingRef !== undefined) pendingRef.current = null;
   if (pendingOpener?.isConnected === true) return pendingOpener;
   if (
     typeof document === "undefined" ||
@@ -30,14 +38,24 @@ function activeOverlayOpener(): HTMLElement | null {
   return menuTriggerForElement(activeElement) ?? activeElement;
 }
 
+function canRestoreOverlayOpener(
+  element: HTMLElement | null,
+): element is HTMLElement {
+  return (
+    element?.isConnected === true &&
+    element.closest("[hidden],[inert],[aria-hidden='true']") === null
+  );
+}
+
 export interface DialogProps {
   children: ReactNode;
   className?: string;
-  closeLabel?: string;
+  closeLabel: string;
   description?: ReactNode;
   footer?: ReactNode;
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
+  openerRef?: OverlayOpenerRef;
   title: ReactNode;
   trigger?: ReactNode;
 }
@@ -45,27 +63,29 @@ export interface DialogProps {
 export function Dialog({
   children,
   className,
-  closeLabel = "Close",
+  closeLabel,
   description,
   footer,
   onOpenChange,
   open,
+  openerRef: ownedOpenerRef,
   title,
   trigger,
 }: DialogProps) {
   const openerRef = useRef<HTMLElement | null>(null);
-  const previousOpenRef = useRef(open);
-  if (
-    open === true &&
-    previousOpenRef.current !== true &&
-    typeof document !== "undefined"
-  ) {
-    openerRef.current = activeOverlayOpener();
-  }
-  previousOpenRef.current = open;
+  const wasOpenRef = useRef(open === true);
+  useLayoutEffect(() => {
+    if (open === true && !wasOpenRef.current) {
+      openerRef.current ??= activeOverlayOpener(ownedOpenerRef);
+    }
+    wasOpenRef.current = open === true;
+  }, [open, ownedOpenerRef]);
   return (
     <DialogPrimitive.Root
-      {...(onOpenChange ? { onOpenChange } : {})}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) openerRef.current ??= activeOverlayOpener(ownedOpenerRef);
+        onOpenChange?.(nextOpen);
+      }}
       {...(open === undefined ? {} : { open })}
     >
       {trigger ? (
@@ -78,12 +98,13 @@ export function Dialog({
           onCloseAutoFocus={(event) => {
             const opener = openerRef.current;
             openerRef.current = null;
-            if (opener?.isConnected !== true) return;
             event.preventDefault();
-            opener.focus();
+            queueMicrotask(() => {
+              if (canRestoreOverlayOpener(opener)) opener.focus();
+            });
           }}
           onOpenAutoFocus={() => {
-            openerRef.current ??= activeOverlayOpener();
+            openerRef.current ??= activeOverlayOpener(ownedOpenerRef);
           }}
         >
           <div className="rm-ui-dialog__header">
@@ -124,42 +145,70 @@ export function Sheet({
 }
 
 export interface AlertDialogProps {
-  actionLabel?: string;
+  actionLabel: string;
   actionProps?: ButtonProps;
-  cancelLabel?: string;
+  cancelLabel: string;
   children: ReactNode;
   onConfirm: () => void | Promise<void>;
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
+  openerRef?: OverlayOpenerRef;
+  failureMessage: ReactNode;
   title: ReactNode;
   trigger?: ReactNode;
 }
 
 export function AlertDialog({
-  actionLabel = "Continue",
+  actionLabel,
   actionProps,
-  cancelLabel = "Cancel",
+  cancelLabel,
   children,
+  failureMessage,
   onConfirm,
   onOpenChange,
   open,
+  openerRef: ownedOpenerRef,
   title,
   trigger,
 }: AlertDialogProps) {
   const openerRef = useRef<HTMLElement | null>(null);
-  const previousOpenRef = useRef(open);
-  if (
-    open === true &&
-    previousOpenRef.current !== true &&
-    typeof document !== "undefined"
-  ) {
-    openerRef.current = activeOverlayOpener();
+  const [internalOpen, setInternalOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const resolvedOpen = open ?? internalOpen;
+
+  function commitOpenChange(nextOpen: boolean) {
+    if (open === undefined) setInternalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
   }
-  previousOpenRef.current = open;
+
+  function requestOpenChange(nextOpen: boolean) {
+    if (!nextOpen && pending) return;
+    if (nextOpen) {
+      openerRef.current ??= activeOverlayOpener(ownedOpenerRef);
+      setFailed(false);
+    }
+    commitOpenChange(nextOpen);
+  }
+
+  async function confirm() {
+    if (pending || actionProps?.disabled === true) return;
+    setPending(true);
+    setFailed(false);
+    try {
+      await onConfirm();
+      commitOpenChange(false);
+    } catch {
+      setFailed(true);
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <AlertDialogPrimitive.Root
-      {...(onOpenChange ? { onOpenChange } : {})}
-      {...(open === undefined ? {} : { open })}
+      onOpenChange={requestOpenChange}
+      open={resolvedOpen}
     >
       {trigger ? (
         <AlertDialogPrimitive.Trigger asChild>
@@ -170,15 +219,19 @@ export function AlertDialog({
         <AlertDialogPrimitive.Overlay className="rm-ui-overlay" />
         <AlertDialogPrimitive.Content
           className="rm-ui-alert-dialog"
+          onEscapeKeyDown={(event) => {
+            if (pending) event.preventDefault();
+          }}
           onCloseAutoFocus={(event) => {
             const opener = openerRef.current;
             openerRef.current = null;
-            if (opener?.isConnected !== true) return;
             event.preventDefault();
-            opener.focus();
+            queueMicrotask(() => {
+              if (canRestoreOverlayOpener(opener)) opener.focus();
+            });
           }}
           onOpenAutoFocus={() => {
-            openerRef.current ??= activeOverlayOpener();
+            openerRef.current ??= activeOverlayOpener(ownedOpenerRef);
           }}
         >
           <AlertDialogPrimitive.Title className="rm-ui-dialog__title">
@@ -190,18 +243,27 @@ export function AlertDialog({
           >
             <div>{children}</div>
           </AlertDialogPrimitive.Description>
+          {failed ? (
+            <div className="rm-ui-dialog__error" role="alert">
+              {failureMessage}
+            </div>
+          ) : null}
           <div className="rm-ui-dialog__footer">
             <AlertDialogPrimitive.Cancel asChild>
-              <Button>{cancelLabel}</Button>
+              <Button disabled={pending}>{cancelLabel}</Button>
             </AlertDialogPrimitive.Cancel>
             <AlertDialogPrimitive.Action asChild>
               <Button
                 variant="danger"
                 {...actionProps}
+                disabled={pending || actionProps?.disabled === true}
                 onClick={(event) => {
                   actionProps?.onClick?.(event);
-                  if (!event.defaultPrevented) void onConfirm();
+                  if (event.defaultPrevented) return;
+                  event.preventDefault();
+                  void confirm();
                 }}
+                pending={pending || actionProps?.pending === true}
               >
                 {actionLabel}
               </Button>
@@ -252,10 +314,12 @@ export interface DropdownMenuItem {
 export function DropdownMenu({
   align = "end",
   items,
+  openerRef,
   trigger,
 }: {
   align?: "center" | "end" | "start";
   items: readonly DropdownMenuItem[];
+  openerRef?: OverlayOpenerRef;
   trigger: ReactNode;
 }) {
   const closedByEscapeRef = useRef(false);
@@ -299,16 +363,13 @@ export function DropdownMenu({
                 {...(item.onSelect
                   ? {
                       onSelect: (event) => {
-                        const currentTarget = event.currentTarget;
-                        pendingMenuDialogOpener =
-                          currentTarget instanceof Element
-                            ? menuTriggerForElement(currentTarget)
-                            : null;
-                        const pendingOpener = pendingMenuDialogOpener;
-                        queueMicrotask(() => {
-                          if (pendingMenuDialogOpener === pendingOpener)
-                            pendingMenuDialogOpener = null;
-                        });
+                        if (openerRef !== undefined) {
+                          const currentTarget = event.currentTarget;
+                          openerRef.current =
+                            currentTarget instanceof Element
+                              ? menuTriggerForElement(currentTarget)
+                              : null;
+                        }
                         item.onSelect?.();
                       },
                     }

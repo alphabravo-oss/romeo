@@ -62,6 +62,8 @@ const validationPath = join(backupDir, "restored-postgres-validation.json");
 const drillPath = join(backupDir, "romeo-dr-drill.json");
 const objectManifestPath = join(backupDir, "object-store", "manifest.json");
 const objectDrillPath = join(backupDir, "romeo-object-store-dr-drill.json");
+const backupSetId = `compose-${Date.now()}`;
+const backupCheckpointAt = new Date().toISOString();
 
 let adminToken;
 let records;
@@ -111,8 +113,16 @@ try {
     dumpContainerPath,
     "--manifest-output",
     manifestContainerPath,
+    "--durability-mode",
+    "local-persistent",
     "--retention-days",
     "30",
+    "--local-persistence-evidence",
+    "development-bind-mounted-backup-directory",
+    "--backup-set-id",
+    backupSetId,
+    "--checkpoint-at",
+    backupCheckpointAt,
   ]);
 
   const manifest = readJson(manifestPath);
@@ -144,8 +154,23 @@ try {
     "/smoke-backups/object-store",
     "--manifest-output",
     objectManifestContainerPath,
+    "--allow-unverified-development-destination",
+    "--backup-set-id",
+    backupSetId,
+    "--checkpoint-at",
+    backupCheckpointAt,
   ]);
   const objectManifest = readJson(objectManifestPath);
+  if (
+    manifest.backupSetId !== backupSetId ||
+    objectManifest.backupSetId !== backupSetId ||
+    manifest.checkpointAt !== backupCheckpointAt ||
+    objectManifest.checkpointAt !== backupCheckpointAt
+  ) {
+    throw new Error(
+      "Database/object backup manifests are not checkpoint-bound.",
+    );
+  }
   if (
     !Array.isArray(objectManifest.objects) ||
     objectManifest.objects.length === 0

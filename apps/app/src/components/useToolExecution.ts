@@ -42,6 +42,7 @@ export function useToolExecution(
       setToolResult(String(result.result));
     } catch (caught) {
       onError(safeUserErrorMessage(caught, "Unable to execute tool."));
+      throw caught;
     }
   }
 
@@ -78,6 +79,7 @@ export function useToolExecution(
         return;
       }
       onError(safeUserErrorMessage(caught, "Unable to execute tool."));
+      throw caught;
     }
   }
 

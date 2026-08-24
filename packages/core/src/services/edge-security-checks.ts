@@ -117,11 +117,11 @@ export function edgeSecurityChecks(input: {
   );
   checks.push(
     input.wafMode === "block"
-      ? pass("waf", "Ingress WAF policy is configured for blocking mode.", {
-          wafMode: input.wafMode,
+      ? pass("waf_desired", "Desired ingress WAF mode is blocking.", {
+          desiredWafMode: input.wafMode,
         })
-      : warn("waf", "Ingress WAF policy is not in blocking mode.", {
-          wafMode: input.wafMode,
+      : warn("waf_desired", "Desired ingress WAF mode is not blocking.", {
+          desiredWafMode: input.wafMode,
           required: "EDGE_WAF_MODE=block after monitor-mode burn-in",
         }),
   );

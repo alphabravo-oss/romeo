@@ -23,6 +23,9 @@ import {
   generateScaleFixtures,
   summarizeScaleFixtures,
 } from "./lib/scale-fixtures.mjs";
+import { assertNoSecretArgv, readSecretInput } from "./lib/secret-input.mjs";
+
+assertNoSecretArgv();
 
 const outputPath = argValue("--output");
 const dryRun = process.argv.includes("--dry-run");
@@ -70,7 +73,7 @@ const servicePort = parsePositiveInteger(
   3000,
   "KUBERNETES_LOAD_SOAK_SERVICE_PORT",
 );
-const apiKey = argValue("--api-key") ?? process.env.ROMEO_API_KEY;
+const apiKey = readSecretInput({ environment: "ROMEO_API_KEY" });
 const baseUrl = argOrEnv("--base-url", "KUBERNETES_LOAD_SOAK_BASE_URL");
 const tempDir = mkdtempSync(join(tmpdir(), "romeo-k8s-load-soak-"));
 
@@ -124,7 +127,7 @@ async function liveEvidence() {
     throw new Error("--namespace or ROMEO_NAMESPACE is required.");
   }
   if (apiKey === undefined || apiKey.length === 0) {
-    throw new Error("--api-key or ROMEO_API_KEY is required.");
+    throw new Error("ROMEO_API_KEY or ROMEO_API_KEY_FILE is required.");
   }
   if (tier === "local") {
     throw new Error(

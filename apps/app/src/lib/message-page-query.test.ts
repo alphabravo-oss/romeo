@@ -211,13 +211,11 @@ describe("active message page query", () => {
       pages: [page([message("m4")], { branchLeafMessageId: "m4" })],
     };
     const previousQuery = {
-      queryKey: [
-        { _id: "chatsListMessagePage", path: { chatId: "chat-1" } },
-      ],
+      queryKey: [{ _id: "chatsListMessagePage", path: { chatId: "chat-1" } }],
     };
-    expect(
-      keepPreviousMessagePages("chat-1")(previous, previousQuery),
-    ).toBe(previous);
+    expect(keepPreviousMessagePages("chat-1")(previous, previousQuery)).toBe(
+      previous,
+    );
     expect(
       keepPreviousMessagePages("chat-2")(previous, previousQuery),
     ).toBeUndefined();

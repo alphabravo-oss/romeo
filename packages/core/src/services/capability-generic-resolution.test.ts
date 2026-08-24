@@ -121,6 +121,46 @@ describe("generic capability layer matrix", () => {
     });
   });
 
+  it("keeps preview capabilities disabled until an assignment enables them", () => {
+    const definition = getCapabilityDefinition("tenant_encryption")!;
+    const disabled = resolveGenericCapability({
+      assignments: [],
+      definition,
+      now: "2026-08-14T10:00:00.000Z",
+      platformDisabled: false,
+    }).effective;
+    expect(disabled).toMatchObject({
+      status: "not_allowed",
+      dimensions: { allowed: "no" },
+      reasons: [{ code: "default_disabled", layer: "platform" }],
+    });
+
+    const enabled = resolveGenericCapability({
+      assignments: [
+        {
+          ...assignment(
+            "organization",
+            "org_default",
+            1,
+            "enabled",
+            1,
+            "10:01",
+          ),
+          capabilityId: "tenant_encryption",
+          configuration: {},
+        },
+      ],
+      definition,
+      now: "2026-08-14T10:00:00.000Z",
+      platformDisabled: false,
+    }).effective;
+    expect(enabled).toMatchObject({
+      status: "enabled",
+      dimensions: { allowed: "yes" },
+      reasons: [],
+    });
+  });
+
   it("keeps a required parent above a child disable", () => {
     const effective = resolveGenericCapability({
       assignments: [

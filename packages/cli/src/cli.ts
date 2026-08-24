@@ -26,13 +26,16 @@ export interface RunCliInput {
 export async function runCli(input: RunCliInput = {}): Promise<number> {
   const parsed = parseArgs(input.argv ?? process.argv.slice(2));
   const io = input.io ?? processIo;
+  const env = input.env ?? process.env;
 
   try {
-    const config = resolveConfig(parsed, input.env ?? process.env);
+    const config = resolveConfig(parsed, env);
     const generatedClient = createGeneratedApiClient(config);
     return await executeCommand({
+      baseUrl: config.baseUrl,
       generatedClient,
       dnsLookup: input.dnsLookup ?? nodeDnsLookup,
+      env,
       fetchImpl: input.fetchImpl ?? fetch,
       io,
       ...(input.pinnedFetchImpl !== undefined

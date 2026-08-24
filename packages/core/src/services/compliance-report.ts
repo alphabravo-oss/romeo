@@ -6,6 +6,7 @@ import type {
   RetentionPolicy,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import { iterateBackgroundJobs } from "./background-job-query";
 
 export async function buildComplianceReport(
   repository: RomeoRepository,
@@ -20,14 +21,11 @@ export async function buildComplianceReport(
     apiKeys,
     serviceAccounts,
     usageEvents,
-    jobs,
     dataConnectors,
     dataConnectorSyncs,
     toolCalls,
     webhookSubscriptions,
     webhookDeliveries,
-    workflowDefinitions,
-    workflowRuns,
     quotaBuckets,
     billingPlan,
   ] = await Promise.all([
@@ -37,17 +35,20 @@ export async function buildComplianceReport(
     repository.listApiKeys(subject.orgId),
     repository.listServiceAccounts(subject.orgId),
     repository.listUsageEvents(subject.orgId),
-    repository.listBackgroundJobs(subject.orgId),
     repository.listDataConnectors(subject.orgId),
     repository.listDataConnectorSyncs(subject.orgId),
     repository.listToolCalls(subject.orgId),
     repository.listWebhookSubscriptions(subject.orgId),
     repository.listWebhookDeliveries(subject.orgId),
-    repository.listWorkflowDefinitions(subject.orgId),
-    repository.listWorkflowRuns(subject.orgId),
     repository.listQuotaBuckets(subject.orgId),
     repository.getBillingPlan(subject.orgId),
   ]);
+  let backgroundJobCount = 0;
+  let failedBackgroundJobCount = 0;
+  for await (const job of iterateBackgroundJobs(repository, subject.orgId)) {
+    backgroundJobCount += 1;
+    if (job.status === "failed") failedBackgroundJobCount += 1;
+  }
   const workspaceCounts = await workspaceAggregateCounts(
     repository,
     workspaces.map((workspace) => workspace.id),
@@ -134,10 +135,8 @@ export async function buildComplianceReport(
         "Automation and tooling",
         "informational",
         {
-          backgroundJobCount: jobs.length,
-          failedBackgroundJobCount: jobs.filter(
-            (job) => job.status === "failed",
-          ).length,
+          backgroundJobCount,
+          failedBackgroundJobCount,
           toolCallCount: toolCalls.length,
           failedToolCallCount: toolCalls.filter(
             (call) => call.status === "failure",
@@ -159,11 +158,9 @@ export async function buildComplianceReport(
         },
       ),
       control("workflow_governance", "Workflow governance", "informational", {
-        workflowDefinitionCount: workflowDefinitions.length,
-        workflowRunCount: workflowRuns.length,
-        waitingWorkflowRunCount: workflowRuns.filter(
-          (run) => run.status === "waiting_approval",
-        ).length,
+        workflowDefinitionCount: 0,
+        workflowRunCount: 0,
+        waitingWorkflowRunCount: 0,
       }),
       control(
         "billing_controls",

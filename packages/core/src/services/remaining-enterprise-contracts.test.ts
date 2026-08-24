@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { authorizeCompareSynthesis, promoteCompareEvalCase, summarizeCompareCost } from "./compare-synthesis";
+import {
+  authorizeCompareSynthesis,
+  promoteCompareEvalCase,
+  summarizeCompareCost,
+} from "./compare-synthesis";
 import {
   authorizeImageAdapter,
   authorizeImageArtifactGovernance,
@@ -34,7 +38,10 @@ import {
 describe("remaining enterprise source contracts", () => {
   it("selects realtime adapters, barge-in, DLP, tool pause, quality, and usage", () => {
     expect(
-      selectRealtimeAdapter({ nativeAvailable: false, pipelineAvailable: true }),
+      selectRealtimeAdapter({
+        nativeAvailable: false,
+        pipelineAvailable: true,
+      }),
     ).toEqual({ outcome: "accepted", adapter: "pipeline" });
     expect(
       authorizeVadInterruption({
@@ -60,12 +67,14 @@ describe("remaining enterprise source contracts", () => {
       outcome: "denied",
       code: "content_policy_approval_required",
     });
-    expect(negotiateRealtimeQuality({
-      noiseSuppression: true,
-      echoCancellation: true,
-      sampleRateHz: 12_000,
-      captions: true,
-    }).sampleRateHz).toBe(16_000);
+    expect(
+      negotiateRealtimeQuality({
+        noiseSuppression: true,
+        echoCancellation: true,
+        sampleRateHz: 12_000,
+        captions: true,
+      }).sampleRateHz,
+    ).toBe(16_000);
     expect(
       meterRealtimeUsage({
         inputSeconds: 3,
@@ -76,6 +85,47 @@ describe("remaining enterprise source contracts", () => {
         modelMicroUsd: 40,
       }).interruptionWasteSeconds,
     ).toBe(1);
+  });
+
+  it("normalizes VAD sensitivity into the runtime and audit contract", () => {
+    for (const [requested, expected] of [
+      [-0.5, 0],
+      [0.4, 0.4],
+      [1.5, 1],
+    ] as const) {
+      expect(
+        authorizeVadInterruption({
+          mode: "server",
+          sensitivity: requested,
+          bargeIn: true,
+          rawAudioRetained: false,
+        }),
+      ).toMatchObject({
+        outcome: "accepted",
+        cancelTts: true,
+        sensitivity: expected,
+        audit: { vadMode: "server", vadSensitivity: expected },
+      });
+    }
+    expect(
+      authorizeVadInterruption({
+        mode: "client",
+        sensitivity: 0.5,
+        bargeIn: false,
+        rawAudioRetained: false,
+      }),
+    ).toMatchObject({ outcome: "accepted", cancelTts: false });
+    expect(
+      authorizeVadInterruption({
+        mode: "server",
+        sensitivity: 0.5,
+        bargeIn: true,
+        rawAudioRetained: true,
+      }),
+    ).toEqual({
+      outcome: "denied",
+      code: "realtime_runtime_uninstalled",
+    });
   });
 
   it("governs image adapters, processing, accessible edit, chat parts, and shred", () => {
@@ -112,8 +162,7 @@ describe("remaining enterprise source contracts", () => {
       costMicroUsd: 12,
     });
     expect(part.outcome).toBe("accepted");
-    if (part.outcome === "accepted")
-      expect(part.part.type).toBe("image_ref");
+    if (part.outcome === "accepted") expect(part.part.type).toBe("image_ref");
     expect(
       authorizeImageArtifactGovernance({
         legalHold: true,
@@ -157,10 +206,9 @@ describe("remaining enterprise source contracts", () => {
       grantVersion: "gr1",
       aclVersion: "a1",
     });
-    expect(invalidateAclCaches({ revoked: true, caches: ["result", "citation"] })).toEqual([
-      "result",
-      "citation",
-    ]);
+    expect(
+      invalidateAclCaches({ revoked: true, caches: ["result", "citation"] }),
+    ).toEqual(["result", "citation"]);
     expect(key).toContain("user_1");
     expect(
       evaluateAclFreshness({
@@ -172,7 +220,15 @@ describe("remaining enterprise source contracts", () => {
     expect(
       planKnowledgeTombstone({
         legalHold: false,
-        surfaces: ["primary", "vector", "keyword", "cache", "snippet", "summary", "retrieval"],
+        surfaces: [
+          "primary",
+          "vector",
+          "keyword",
+          "cache",
+          "snippet",
+          "summary",
+          "retrieval",
+        ],
       }).outcome,
     ).toBe("accepted");
     expect(
@@ -210,7 +266,12 @@ describe("remaining enterprise source contracts", () => {
         actorId: "user_admin",
       }).outcome,
     ).toBe("accepted");
-    expect(decideSearchVectorStrategy({ dataClass: "restricted", customerHeldKey: true })).toEqual({
+    expect(
+      decideSearchVectorStrategy({
+        dataClass: "restricted",
+        customerHeldKey: true,
+      }),
+    ).toEqual({
       mode: "disabled",
     });
     expect(

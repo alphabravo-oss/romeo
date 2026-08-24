@@ -23,8 +23,6 @@ import UserCog from "lucide-react/dist/esm/icons/user-cog.mjs";
 import Users from "lucide-react/dist/esm/icons/users.mjs";
 import UsersRound from "lucide-react/dist/esm/icons/users-round.mjs";
 import Webhook from "lucide-react/dist/esm/icons/webhook.mjs";
-import Workflow from "lucide-react/dist/esm/icons/workflow.mjs";
-
 import type { MessageKey } from "../lib/i18n";
 
 export const ADMIN_GROUPS: Array<{
@@ -97,7 +95,6 @@ export const ADMIN_GROUPS: Array<{
   {
     labelKey: "navAutomation",
     items: [
-      { key: "workflows", labelKey: "navWorkflows", icon: Workflow },
       { key: "webhooks", labelKey: "navWebhooks", icon: Webhook },
       {
         key: "notification-channels",
@@ -188,10 +185,6 @@ export const ADMIN_META: Record<
   impersonation: {
     titleKey: "navImpersonation",
     descriptionKey: "adminImpersonationDescription",
-  },
-  workflows: {
-    titleKey: "navWorkflows",
-    descriptionKey: "adminWorkflowsDescription",
   },
   webhooks: {
     titleKey: "navWebhooks",

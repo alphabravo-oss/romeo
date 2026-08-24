@@ -109,7 +109,7 @@ export function withTelemetryObjectStore(
   objectStore: ObjectStore,
 ): ObjectStore {
   const traced = <T>(
-    operation: "delete" | "get" | "head" | "presign_put" | "put",
+    operation: "delete" | "get" | "head" | "presign_put" | "put" | "readiness",
     execute: () => Promise<T>,
   ): Promise<T> => traceObjectStoreOperation(operation, execute);
   return {
@@ -126,11 +126,17 @@ export function withTelemetryObjectStore(
       traced("delete", () => objectStore.deleteObject(key)),
     createPresignedUpload: (input) =>
       traced("presign_put", () => objectStore.createPresignedUpload(input)),
+    ...(objectStore.checkReadiness === undefined
+      ? {}
+      : {
+          checkReadiness: () =>
+            traced("readiness", () => objectStore.checkReadiness!()),
+        }),
   };
 }
 
 async function traceObjectStoreOperation<T>(
-  operation: "delete" | "get" | "head" | "presign_put" | "put",
+  operation: "delete" | "get" | "head" | "presign_put" | "put" | "readiness",
   execute: () => Promise<T>,
 ): Promise<T> {
   const startedAt = Date.now();
@@ -145,7 +151,7 @@ async function traceObjectStoreOperation<T>(
 }
 
 function publishObjectStoreSpan(
-  operation: "delete" | "get" | "head" | "presign_put" | "put",
+  operation: "delete" | "get" | "head" | "presign_put" | "put" | "readiness",
   startedAt: number,
   outcome: MetadataTraceSpan["outcome"],
 ): void {

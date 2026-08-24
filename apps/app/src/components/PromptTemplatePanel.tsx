@@ -8,7 +8,6 @@ import {
   createPromptTemplateMutationOptions,
   deletePromptTemplateMutationOptions,
   promptMarketplaceQueryOptions,
-  promptTemplatesQueryOptions,
 } from "../features/prompts";
 import type {
   CreatePromptTemplateInput,
@@ -18,6 +17,7 @@ import type {
 import { PanelState } from "../lib/panel-state";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { useEventCallback } from "../lib/use-event-callback";
 import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
@@ -37,17 +37,17 @@ const marketplaceCol = createColumnHelper<PromptTemplate>();
 export function PromptTemplatePanel() {
   const { t } = useLocale();
   const { workspaceId } = useWorkspace();
-  const inventoriedTable = useInventoriedServerTable<any>("prompt_templates", {
-    enabled: workspaceId !== undefined,
-    workspaceId,
-  });
+  const inventoriedTable = useInventoriedServerTable(
+    "prompt_templates",
+    workspaceId === undefined ? { enabled: false } : { workspaceId },
+  );
   const { ask, dialog } = useConfirm();
-  const templatesQuery = useQuery(promptTemplatesQueryOptions(workspaceId));
   const marketplaceQuery = useQuery(promptMarketplaceQueryOptions(workspaceId));
   const createMutation = useMutation(createPromptTemplateMutationOptions());
   const deleteMutation = useMutation(deletePromptTemplateMutationOptions());
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<PromptTemplate | null>(null);
+  const onDelete = useEventCallback(handleDelete);
 
   const form = useForm({
     defaultValues: {
@@ -113,7 +113,7 @@ export function PromptTemplatePanel() {
             </Button>
             <Button
               disabled={deleteMutation.isPending}
-              onClick={() => void handleDelete(c.row.original.id)}
+              onClick={() => void onDelete(c.row.original.id)}
               type="button"
             >
               {t("delete")}
@@ -122,8 +122,7 @@ export function PromptTemplatePanel() {
         ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [deleteMutation.isPending, t],
+    [deleteMutation.isPending, onDelete, t],
   );
 
   const marketplaceColumns = useMemo<ColumnDef<PromptTemplate, any>[]>(
@@ -173,7 +172,7 @@ export function PromptTemplatePanel() {
           section repeating it produced two competing headings. */}
       <Section
         actions={
-          (templatesQuery.data?.length ?? 0) > 0 ? (
+          inventoriedTable.estimatedTotal > 0 ? (
             <AddButton onClick={() => setAddOpen(true)}>
               {t("promptAddTemplate")}
             </AddButton>
@@ -329,7 +328,12 @@ export function PromptTemplatePanel() {
           />
         ) : null}
         <PanelState
-          query={templatesQuery}
+          query={inventoriedTable.query}
+          isEmpty={() =>
+            inventoriedTable.rows.length === 0 &&
+            inventoriedTable.isFirstPage &&
+            inventoriedTable.search.trim() === ""
+          }
           empty={t("promptNoTemplates")}
           emptyAction={
             <AddButton onClick={() => setAddOpen(true)}>
@@ -339,16 +343,19 @@ export function PromptTemplatePanel() {
           emptyDescription={t("promptNoTemplatesDescription")}
           emptyIcon={<FileText aria-hidden size={24} />}
         >
-          {(rows) => (
+          {() => (
             <>
               <StatRow
                 items={[
-                  { label: t("promptTotalTemplates"), value: rows.length },
+                  {
+                    label: t("promptTotalTemplates"),
+                    value:
+                      inventoriedTable.summary.total ??
+                      inventoriedTable.estimatedTotal,
+                  },
                   {
                     label: t("promptMarketplace"),
-                    value: rows.filter(
-                      (row) => row.visibility === "marketplace",
-                    ).length,
+                    value: inventoriedTable.summary.marketplaceTotal ?? 0,
                   },
                 ]}
               />
@@ -373,6 +380,7 @@ export function PromptTemplatePanel() {
         <PanelState
           query={marketplaceQuery}
           empty={t("promptNoMarketplaceTemplates")}
+          emptyDescription={t("promptNoMarketplaceTemplatesDescription")}
           emptyIcon={<FileText aria-hidden size={24} />}
         >
           {(rows) => <DataTable columns={marketplaceColumns} data={rows} />}

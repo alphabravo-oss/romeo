@@ -1,4 +1,4 @@
-import { Dialog } from "@romeo/ui";
+import { Dialog, type OverlayOpenerRef } from "@romeo/ui";
 import { useLocale } from "../lib/i18n";
 
 /**
@@ -18,11 +18,13 @@ export function FormDialog(props: {
   title: string;
   description?: string;
   className?: string;
+  openerRef?: OverlayOpenerRef;
   onClose: () => void;
   children: React.ReactNode;
 }): React.ReactNode {
   const { t } = useLocale();
-  const { open, title, description, className, onClose, children } = props;
+  const { open, title, description, className, openerRef, onClose, children } =
+    props;
   return (
     <Dialog
       closeLabel={t("close")}
@@ -32,6 +34,7 @@ export function FormDialog(props: {
         if (!nextOpen) onClose();
       }}
       open={open}
+      {...(openerRef === undefined ? {} : { openerRef })}
       title={title}
     >
       {children}

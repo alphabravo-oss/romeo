@@ -3,7 +3,6 @@ import { createRoute, z } from "@hono/zod-openapi";
 import {
   authenticationSecurity,
   dataEnvelope,
-  errorResponse,
   jsonResponse,
   standardErrorResponses,
 } from "./common";

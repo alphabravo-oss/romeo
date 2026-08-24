@@ -31,7 +31,10 @@ export interface WorkspaceTurnActionsOptions {
   isStreaming: boolean;
   knowledgeBaseIdsOverride?: string[];
   messages: Message[];
-  onBranchSelection?: (chatId: string, leafMessageId: string) => void;
+  onBranchSelection?: (
+    chatId: string,
+    leafMessageId: string | undefined,
+  ) => void;
   onChatCreated?: (chatId: string) => void;
   queryClient: QueryClient;
   refreshUsageControls: () => Promise<void>;

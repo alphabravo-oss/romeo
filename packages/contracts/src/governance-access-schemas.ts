@@ -64,11 +64,6 @@ export const DataConnectorTypeSchema = z.enum([
   "s3",
   "website",
   "rss",
-  "confluence",
-  "jira",
-  "notion",
-  "linear",
-  "slack",
 ]);
 export const AccessReviewReportSchema = z
   .strictObject({
@@ -102,7 +97,13 @@ export const AccessReviewReportSchema = z
       z.strictObject({
         id: identifier,
         name: z.string(),
-        scopes: z.array(z.enum(scopeValues)),
+        scopes: z.array(
+          z.string().openapi({
+            description:
+              "Authorization scope. Clients must tolerate future scopes.",
+            "x-extensible-enum": scopeValues,
+          }),
+        ),
         createdBy: identifier,
         disabledAt: timestamp.optional(),
         activeApiKeyCount: count,

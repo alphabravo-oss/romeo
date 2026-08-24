@@ -30,7 +30,7 @@ export function fileObjectStoredObjectCount(
     : 1;
 }
 
-function fileObjectStoredObjectKeys(file: FileObject): string[] {
+export function fileObjectStoredObjectKeys(file: FileObject): string[] {
   const keys = isResumableUploadFile(file)
     ? partNumbers(resumablePlanFromFile(file).partCount).map((partNumber) =>
         resumablePartObjectKey(file.objectKey, partNumber),

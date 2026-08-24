@@ -20,7 +20,7 @@ export async function readStoredRagPolicy(
   repository: RomeoRepository,
   orgId: string,
 ): Promise<StoredRagPolicy | undefined> {
-  const setting = await repository.getSystemSetting(settingKey(orgId));
+  const setting = await repository.getSystemSetting(settingKey(orgId), orgId);
   if (setting === undefined) return undefined;
   return parseStoredPolicy(setting.value, orgId);
 }
@@ -31,6 +31,7 @@ export async function readStoredRagPolicyChangeRequest(
 ): Promise<RagPolicyChangeRequest | null> {
   const setting = await repository.getSystemSetting(
     changeRequestSettingKey(orgId),
+    orgId,
   );
   if (setting === undefined) return null;
   return parseStoredChangeRequest(setting.value, orgId);

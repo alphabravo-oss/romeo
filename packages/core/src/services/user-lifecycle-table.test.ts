@@ -104,10 +104,7 @@ describe("UserLifecycleService server table", () => {
       service.queryTable(admin, request({ cursor: "not-a-cursor" })),
     ).rejects.toMatchObject({ code: "invalid_page_cursor", status: 400 });
     await expect(
-      service.queryTable(
-        { ...admin, scopes: ["me:read"] },
-        request(),
-      ),
+      service.queryTable({ ...admin, scopes: ["me:read"] }, request()),
     ).rejects.toBeDefined();
   });
 });

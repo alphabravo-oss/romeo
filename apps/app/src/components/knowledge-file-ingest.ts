@@ -2,7 +2,7 @@ import {
   completeKnowledgeUpload,
   createKnowledgeUpload,
   extractKnowledgeSource,
-} from "../features";
+} from "../features/knowledge";
 import type { KnowledgeSource } from "../features/types";
 import {
   canInlineUpload,

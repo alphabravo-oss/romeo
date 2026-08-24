@@ -26,7 +26,85 @@ export interface ApiDeprecationDefinition {
  * here until the operation is removed; historical evidence then remains in
  * docs/api/deprecation-ledger.json only.
  */
-export const apiDeprecationRegistry: readonly ApiDeprecationDefinition[] = [];
+const retiredWorkflowDeprecation = {
+  deprecatedAt: "2026-08-23T00:00:00.000Z",
+  documentationUrl: "https://docs.romeo.ai/api/workflow-retirement",
+  replacementOperationId: null,
+  sinceVersion: "0.1.0",
+  sunsetAt: "2027-02-23T00:00:00.000Z",
+  telemetryMetric: "romeo_api_deprecated_requests_total",
+  zeroUsageDaysRequired: 90,
+} as const;
+
+export const apiDeprecationRegistry = [
+  {
+    deprecatedAt: "2026-08-23T00:00:00.000Z",
+    documentationUrl:
+      "https://docs.romeo.ai/api/content-policy-approval-authority",
+    method: "post",
+    operationId: "contentPolicy.approvals.request",
+    path: "/api/v1/admin/content-policy/approvals",
+    replacementOperationId: null,
+    sinceVersion: "0.1.0",
+    sunsetAt: "2027-02-23T00:00:00.000Z",
+    telemetryMetric: "romeo_api_deprecated_requests_total",
+    zeroUsageDaysRequired: 90,
+  },
+  {
+    ...retiredWorkflowDeprecation,
+    method: "get",
+    operationId: "workflows.listTemplates",
+    path: "/api/v1/workflow-templates",
+  },
+  {
+    ...retiredWorkflowDeprecation,
+    method: "post",
+    operationId: "workflows.createFromTemplate",
+    path: "/api/v1/workflow-templates/{templateId}/create",
+  },
+  {
+    ...retiredWorkflowDeprecation,
+    method: "get",
+    operationId: "workflows.list",
+    path: "/api/v1/workflows",
+  },
+  {
+    ...retiredWorkflowDeprecation,
+    method: "post",
+    operationId: "workflows.create",
+    path: "/api/v1/workflows",
+  },
+  {
+    ...retiredWorkflowDeprecation,
+    method: "post",
+    operationId: "workflows.runDueSchedules",
+    path: "/api/v1/workflows/schedules/run-due",
+  },
+  {
+    ...retiredWorkflowDeprecation,
+    method: "get",
+    operationId: "workflows.listRuns",
+    path: "/api/v1/workflows/{workflowId}/runs",
+  },
+  {
+    ...retiredWorkflowDeprecation,
+    method: "post",
+    operationId: "workflows.startRun",
+    path: "/api/v1/workflows/{workflowId}/runs",
+  },
+  {
+    ...retiredWorkflowDeprecation,
+    method: "post",
+    operationId: "workflows.approveRun",
+    path: "/api/v1/workflow-runs/{workflowRunId}/approve",
+  },
+  {
+    ...retiredWorkflowDeprecation,
+    method: "post",
+    operationId: "workflows.resumeRun",
+    path: "/api/v1/workflow-runs/{workflowRunId}/resume",
+  },
+] as const satisfies readonly ApiDeprecationDefinition[];
 
 export function applyApiDeprecationsToOpenApiDocument(
   document: Record<string, unknown>,

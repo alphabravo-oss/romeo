@@ -26,11 +26,17 @@ function stableOptions<T>(
 }
 
 export const dataExportPackagesQueryOptions = () =>
-  stableOptions(
-    "dataExportPackages",
-    appQueryKeys.dataExportPackages(),
-    listDataExportPackages,
-  );
+  queryOptions({
+    ...serverQueryPolicy("stable", "dataExportPackages"),
+    queryKey: appQueryKeys.dataExportPackages(),
+    queryFn: ({ signal }) => abortableQuery(signal, listDataExportPackages),
+    refetchInterval: (query) =>
+      query.state.data?.jobs.some(
+        (job) => job.state === "queued" || job.state === "running",
+      )
+        ? 1_000
+        : false,
+  });
 export const dataRightsCoverageQueryOptions = () =>
   stableOptions(
     "dataRightsCoverage",

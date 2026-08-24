@@ -9,12 +9,16 @@ import {
   createChatRepositoryFragment,
   createChatTagRepositoryFragment,
   createCollaborationRepositoryFragment,
+  createContentPolicyRepositoryFragment,
+  createContentDeletionRepositoryFragment,
   createDataConnectorRepositoryFragment,
   createDataDeletionRepositoryFragment,
+  createDelegatedOAuthRepositoryFragment,
   createFileRepositoryFragment,
   createGovernanceBillingRepositoryFragment,
   createKnowledgeEmbeddingRepositoryFragment,
   createKnowledgeRepositoryFragment,
+  createInventoriedTablePageRepositoryFragment,
   createNotificationRepositoryFragment,
   createCollaborationChannelRepositoryFragment,
   createOperationalRepositoryFragment,
@@ -24,10 +28,40 @@ import {
   createToolConnectorRepositoryFragment,
   createVoiceRepositoryFragment,
   createWebhookRepositoryFragment,
-  createWorkflowRepositoryFragment,
 } from "./repository-fragments";
 
 describe("repository fragment composition", () => {
+  it("exposes fenced content-deletion outbox methods", () => {
+    const fragment = createContentDeletionRepositoryFragment({} as never);
+    expect(Object.keys(fragment).sort()).toEqual([
+      "claimContentDeletionOperation",
+      "createContentDeletionOperation",
+      "getActiveContentDeletionOperation",
+      "getContentDeletionOperation",
+      "renewContentDeletionOperationLease",
+      "updateContentDeletionOperationWithLease",
+    ]);
+  });
+
+  it("exposes normalized content-policy lifecycle methods", () => {
+    const fragment = createContentPolicyRepositoryFragment({} as never);
+    expect(Object.keys(fragment).sort()).toEqual([
+      "createContentPolicyApproval",
+      "createContentPolicyDecision",
+      "getContentPolicyApproval",
+      "getContentPolicyDecision",
+      "listContentPolicyApprovals",
+      "listContentPolicyDecisions",
+      "listPendingContentPolicyApprovalsDue",
+      "transitionContentPolicyApproval",
+    ]);
+  });
+
+  it("exposes native inventoried-table paging as a composable fragment", () => {
+    const fragment = createInventoriedTablePageRepositoryFragment({} as never);
+    expect(Object.keys(fragment)).toEqual(["queryInventoriedTableRows"]);
+  });
+
   it("exposes the pgvector knowledge embedding methods as a composable fragment", () => {
     const fragment = createKnowledgeEmbeddingRepositoryFragment({} as never);
 
@@ -43,15 +77,19 @@ describe("repository fragment composition", () => {
     const fragment = createKnowledgeRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "claimKnowledgeSourceExtraction",
       "createKnowledgeBase",
       "createKnowledgeChunks",
       "createKnowledgeSource",
       "deleteKnowledgeChunksForSource",
       "deleteKnowledgeSource",
+      "finishKnowledgeSourceExtraction",
       "getKnowledgeBase",
+      "getKnowledgeSource",
       "listKnowledgeBases",
       "listKnowledgeChunks",
       "listKnowledgeSources",
+      "renewKnowledgeSourceExtractionLease",
       "updateKnowledgeBase",
       "updateKnowledgeSource",
     ]);
@@ -250,9 +288,11 @@ describe("repository fragment composition", () => {
       "claimNextFileLifecycle",
       "createFileObject",
       "finishFileLifecycleLease",
+      "getFileLifecycleQueueSummary",
       "getFileObject",
       "listAuthorizedFileObjectsPage",
       "listFileObjects",
+      "listFileRetentionCandidates",
       "renewFileLifecycleLease",
       "updateFileObject",
     ]);
@@ -313,13 +353,29 @@ describe("repository fragment composition", () => {
     const fragment = createDataConnectorRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "claimDataConnectorSync",
       "createDataConnector",
       "createDataConnectorSync",
+      "finishDataConnectorSync",
       "getDataConnector",
       "listDataConnectorSyncs",
       "listDataConnectors",
+      "renewDataConnectorSyncLease",
       "updateDataConnector",
       "updateDataConnectorSync",
+    ]);
+  });
+
+  it("exposes delegated OAuth key-usage inventory as a composable fragment", () => {
+    const fragment = createDelegatedOAuthRepositoryFragment({} as never);
+
+    expect(Object.keys(fragment).sort()).toEqual([
+      "countDelegatedOAuthTokenKeyUsage",
+      "createDelegatedOAuthConnection",
+      "getDelegatedOAuthConnection",
+      "getDelegatedOAuthConnectionByProviderAccount",
+      "listDelegatedOAuthConnections",
+      "updateDelegatedOAuthConnection",
     ]);
   });
 
@@ -327,12 +383,30 @@ describe("repository fragment composition", () => {
     const fragment = createOperationalRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "auditRetentionExportGate",
+      "claimAuditExportJob",
       "claimBackgroundJob",
+      "completeAuditExportAttempt",
+      "createAuditExportIdempotencyReceipt",
+      "createAuditExportJob",
+      "createAuditIntegrityCheckpoint",
       "createAuditLog",
       "createBackgroundJob",
       "createUsageEvent",
       "deleteAuditLogsBefore",
+      "ensureAuditIntegrityRecords",
+      "getAuditExportDestination",
+      "getAuditExportIdempotencyReceipt",
+      "getAuditExportJob",
+      "getAuditExportJobByIdempotencyHash",
+      "getAuditIntegrityCheckpoint",
+      "getAuditIntegrityCheckpointByHash",
+      "getBackgroundJob",
       "getSystemSetting",
+      "listAuditExportAttempts",
+      "listAuditExportJobs",
+      "listAuditIntegrityCheckpoints",
+      "listAuditIntegrityRecords",
       "listAuditLogs",
       "listBackgroundJobs",
       "listSystemSettings",
@@ -343,6 +417,7 @@ describe("repository fragment composition", () => {
       "updateBackgroundJob",
       "updateBackgroundJobWithLease",
       "updateUsageEvent",
+      "upsertAuditExportDestination",
       "upsertSystemSetting",
     ]);
   });
@@ -354,6 +429,7 @@ describe("repository fragment composition", () => {
       "claimDueWebhookDeliveries",
       "claimWebhookDelivery",
       "completeWebhookDeliveryAttempt",
+      "countWebhookSigningKeyUsage",
       "createWebhookDelivery",
       "createWebhookSubscription",
       "getWebhookSubscription",
@@ -362,21 +438,6 @@ describe("repository fragment composition", () => {
       "listWebhookSubscriptions",
       "updateWebhookDelivery",
       "updateWebhookSubscription",
-    ]);
-  });
-
-  it("exposes the workflow definition and run methods as a composable fragment", () => {
-    const fragment = createWorkflowRepositoryFragment({} as never);
-
-    expect(Object.keys(fragment).sort()).toEqual([
-      "createWorkflowDefinition",
-      "createWorkflowRun",
-      "getWorkflowDefinition",
-      "getWorkflowRun",
-      "listWorkflowDefinitions",
-      "listWorkflowRuns",
-      "updateWorkflowDefinition",
-      "updateWorkflowRun",
     ]);
   });
 
@@ -390,6 +451,7 @@ describe("repository fragment composition", () => {
       "deleteQuotaBucket",
       "getBillingEventReceipt",
       "getBillingPlan",
+      "getBillingPlanByExternalCustomerId",
       "getRetentionPolicy",
       "listQuotaBuckets",
       "updateQuotaBucket",
@@ -402,9 +464,11 @@ describe("repository fragment composition", () => {
     const fragment = createNotificationRepositoryFragment({} as never);
 
     expect(Object.keys(fragment).sort()).toEqual([
+      "claimDueNotificationDeliveries",
       "createNotificationDelivery",
       "createNotificationDeliveryChannel",
       "createUserNotification",
+      "finishNotificationDeliveryLease",
       "listFailedNotificationDeliveries",
       "listNotificationDeliveries",
       "listNotificationDeliveryChannels",

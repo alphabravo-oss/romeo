@@ -76,7 +76,7 @@ describe("record-bound secret envelopes", () => {
     expect(vault.decrypt(migrated, context)).toBe(plaintext);
   });
 
-  it("binds delegated OAuth v2 ciphertext to every connection identity field", () => {
+  it("binds delegated OAuth v3 ciphertext and key version to every connection identity field", () => {
     const vault = new DelegatedOAuthTokenVault(encryptionKey);
     const context: DelegatedOAuthTokenContext = {
       connectionId: "delegated_connection_primary",
@@ -89,7 +89,11 @@ describe("record-bound secret envelopes", () => {
     const token = delegatedToken();
     const encrypted = vault.encrypt(token, context);
 
-    expect(encrypted).toMatchObject({ v: 2, alg: "A256GCM" });
+    expect(encrypted).toMatchObject({
+      v: 3,
+      alg: "A256GCM",
+      keyVersion: vault.activeKeyVersion,
+    });
     expect(vault.decrypt(encrypted, context)).toEqual(token);
 
     const swappedContexts: DelegatedOAuthTokenContext[] = [
@@ -112,7 +116,7 @@ describe("record-bound secret envelopes", () => {
     ).toThrow(/.+/u);
   });
 
-  it("reads legacy delegated OAuth v1 ciphertext and rewraps it as bound v2", () => {
+  it("reads legacy delegated OAuth v1 ciphertext and rewraps it as versioned bound v3", () => {
     const vault = new DelegatedOAuthTokenVault(encryptionKey);
     const context: DelegatedOAuthTokenContext = {
       connectionId: "delegated_connection_legacy",
@@ -132,7 +136,10 @@ describe("record-bound secret envelopes", () => {
     const migrated = vault.encrypt(plaintext, context);
 
     expect(plaintext).toEqual(token);
-    expect(migrated).toMatchObject({ v: 2 });
+    expect(migrated).toMatchObject({
+      v: 3,
+      keyVersion: vault.activeKeyVersion,
+    });
     expect(vault.decrypt(migrated, context)).toEqual(token);
   });
 
@@ -171,7 +178,7 @@ describe("record-bound secret envelopes", () => {
       connection.id,
     );
     if (migrated === undefined) throw new Error("Migrated connection missing.");
-    expect(migrated.token.v).toBe(2);
+    expect(migrated.token.v).toBe(3);
     expect(
       new DelegatedOAuthTokenVault(encryptionKey).decrypt(
         migrated.token,

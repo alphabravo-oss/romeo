@@ -1,45 +1,52 @@
 import { assertScope, hasWorkspaceAccess, type AuthSubject } from "@romeo/auth";
 
-import type { RomeoRepository } from "../domain/repository";
-import { notFound } from "../errors";
+import type {
+  RomeoRepository,
+  ServerTableSavedViewRecord,
+} from "../domain/repository";
+import type { AuditAction } from "../audit-taxonomy";
+import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
+import { inventoriedTableResource } from "./inventoried-table-resources";
 import {
   mergeSavedViews,
   migrateLocalSavedView,
-  SAVED_VIEW_SCHEMA,
+  SAVED_VIEW_SCHEMA_VERSION,
   type LocalSavedViewV1,
   type ServerTableSavedView,
 } from "./server-table-saved-view";
+import {
+  allowedSavedViewFields as allowedFields,
+  constantTimeSavedViewTokenEqual as constantTimeEqual,
+  normalizedSavedViewName as normalizedName,
+  publicSavedViewRecord as publicRecord,
+  restorableSavedViewBy as restorableBy,
+  sameSavedViewScope as sameScope,
+  savedViewConflict,
+  savedViewUndoTokenHash as undoTokenHash,
+  type SavedViewScope,
+} from "./server-table-view-support";
 
-const SCHEMA = "romeo.server-table-view-store.v2";
-
-export const TABLE_VIEW_ALLOWED_FIELDS: Record<string, readonly string[]> = {
-  audit_logs: ["createdAt", "action", "category", "outcome"],
-  usage_events: ["createdAt", "metric"],
-};
-
-const DEFAULT_TABLE_FIELDS = ["createdAt", "id", "name"] as const;
+const UNDO_WINDOW_MS = 5_000;
 
 export class ServerTableViewService {
   constructor(private readonly repository: RomeoRepository) {}
 
-  async list(input: {
-    subject: AuthSubject;
-    workspaceId: string;
-    resource: string;
-    localFallback?: LocalSavedViewV1[];
-  }): Promise<ServerTableSavedView[]> {
-    await this.assertWorkspace(input.subject, input.workspaceId);
-    const server = await this.read(
-      input.subject.orgId,
-      input.workspaceId,
-      input.subject.id,
-      input.resource,
-    );
-    const allowed = new Set(
-      TABLE_VIEW_ALLOWED_FIELDS[input.resource] ?? DEFAULT_TABLE_FIELDS,
-    );
+  async list(
+    input: SavedViewScope & {
+      subject: AuthSubject;
+      localFallback?: LocalSavedViewV1[];
+    },
+  ): Promise<ServerTableSavedView[]> {
+    const allowed = await this.assertAuthority(input);
+    const records = await this.repository.listServerTableSavedViews({
+      orgId: input.subject.orgId,
+      ownerUserId: input.subject.id,
+      workspaceId: input.workspaceId,
+      resource: input.resource,
+      ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+    });
     const localFallback = (input.localFallback ?? []).flatMap((local) => {
       const migrated = migrateLocalSavedView({
         local,
@@ -50,20 +57,38 @@ export class ServerTableViewService {
         allowedFields: allowed,
         now: new Date().toISOString(),
       });
-      return "outcome" in migrated ? [] : [migrated];
+      if ("outcome" in migrated) return [];
+      return [
+        {
+          ...migrated,
+          ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+        },
+      ];
     });
-    return mergeSavedViews({ server, localFallback });
+    return mergeSavedViews({
+      server: records.flatMap((record) =>
+        record.schemaVersion > SAVED_VIEW_SCHEMA_VERSION
+          ? []
+          : [publicRecord(record)],
+      ),
+      localFallback,
+    });
   }
 
-  async replace(input: {
-    subject: AuthSubject;
-    workspaceId: string;
-    resource: string;
-    view: LocalSavedViewV1;
-  }): Promise<
+  async replace(
+    input: SavedViewScope & {
+      subject: AuthSubject;
+      expectedVersion?: number;
+      view: LocalSavedViewV1 & {
+        viewId?: string;
+        visibility?: "private" | "workspace";
+        isDefault?: boolean;
+      };
+    },
+  ): Promise<
     ServerTableSavedView | { outcome: "rejected"; code: "saved_view_invalid" }
   > {
-    await this.assertWorkspace(input.subject, input.workspaceId);
+    const allowed = await this.assertAuthority(input);
     const now = new Date().toISOString();
     const migrated = migrateLocalSavedView({
       local: input.view,
@@ -71,126 +96,310 @@ export class ServerTableViewService {
       workspaceId: input.workspaceId,
       ownerUserId: input.subject.id,
       resource: input.resource,
-      allowedFields: new Set(
-        TABLE_VIEW_ALLOWED_FIELDS[input.resource] ?? DEFAULT_TABLE_FIELDS,
-      ),
+      allowedFields: allowed,
       now,
     });
     if ("outcome" in migrated) return migrated;
-    const stored: ServerTableSavedView = {
+    if (input.view.visibility === "workspace")
+      assertScope(input.subject, "admin:write");
+    const existing = await this.findOwned(input, migrated.name);
+    if (input.view.viewId !== undefined && existing === undefined)
+      throw notFound("Saved view");
+    const record: ServerTableSavedViewRecord = {
       ...migrated,
-      id: createId("saved_view"),
-      source: "server",
+      id: existing?.id ?? createId("saved_view"),
+      ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+      nameNormalized: normalizedName(migrated.name),
+      visibility: input.view.visibility ?? existing?.visibility ?? "private",
+      isDefault: input.view.isDefault ?? existing?.isDefault ?? false,
+      schemaVersion: SAVED_VIEW_SCHEMA_VERSION,
+      version: (existing?.version ?? 0) + 1,
+      createdAt: existing?.createdAt ?? migrated.createdAt,
     };
-    const current = await this.read(
-      input.subject.orgId,
-      input.workspaceId,
-      input.subject.id,
+    const result = await this.repository.transaction((repository) =>
+      repository.writeServerTableSavedView({
+        view: record,
+        ...(input.expectedVersion === undefined
+          ? existing === undefined
+            ? {}
+            : { expectedVersion: existing.version }
+          : { expectedVersion: input.expectedVersion }),
+      }),
+    );
+    if (result.outcome === "conflict") throw savedViewConflict();
+    await this.audit(
+      input.subject,
+      "admin.table_view.replace",
+      record.id,
       input.resource,
     );
-    const next = [
-      ...current.filter((view) => view.name !== stored.name),
-      stored,
-    ];
-    await this.save(
+    return publicRecord(result.view);
+  }
+
+  async remove(
+    input: SavedViewScope & {
+      subject: AuthSubject;
+      viewId: string;
+      expectedVersion?: number;
+      requestToken?: string;
+      now?: string;
+    },
+  ): Promise<{
+    deleted: boolean;
+    undoToken?: string;
+    undoExpiresAt?: string;
+    version?: number;
+  }> {
+    await this.assertAuthority(input);
+    const current = await this.repository.getServerTableSavedView(
       input.subject.orgId,
-      input.workspaceId,
-      input.subject.id,
-      input.resource,
-      next,
-      now,
+      input.viewId,
     );
-    await writeAuditLog(this.repository, {
-      subject: input.subject,
-      action: "admin.table_view.replace",
-      resourceType: "table_view",
-      resourceId: stored.id,
-      metadata: { resource: input.resource, source: "server" },
+    if (
+      current === undefined ||
+      current.ownerUserId !== input.subject.id ||
+      !sameScope(current, input)
+    )
+      return { deleted: false };
+    if (current.deletedAt !== undefined) {
+      if (
+        input.requestToken === undefined ||
+        current.deleteTokenHash === undefined ||
+        current.deleteTokenExpiresAt === undefined
+      )
+        return { deleted: false };
+      const replayHash = undoTokenHash({
+        token: input.requestToken,
+        orgId: input.subject.orgId,
+        ownerUserId: input.subject.id,
+        viewId: input.viewId,
+        version: current.version,
+      });
+      if (!constantTimeEqual(replayHash, current.deleteTokenHash))
+        throw savedViewConflict();
+      return {
+        deleted: true,
+        undoToken: input.requestToken,
+        undoExpiresAt: current.deleteTokenExpiresAt,
+        version: current.version,
+      };
+    }
+    const now = input.now ?? new Date().toISOString();
+    const undoToken = input.requestToken ?? createId("saved_view_undo");
+    const undoExpiresAt = new Date(
+      Date.parse(now) + UNDO_WINDOW_MS,
+    ).toISOString();
+    const result = await this.repository.deleteServerTableSavedView({
+      orgId: input.subject.orgId,
+      ownerUserId: input.subject.id,
+      viewId: input.viewId,
+      deletedAt: now,
+      deleteTokenHash: undoTokenHash({
+        token: undoToken,
+        orgId: input.subject.orgId,
+        ownerUserId: input.subject.id,
+        viewId: input.viewId,
+        version: current.version + 1,
+      }),
+      deleteTokenExpiresAt: undoExpiresAt,
+      expectedVersion: input.expectedVersion ?? current.version,
     });
-    return stored;
-  }
-
-  async remove(input: {
-    subject: AuthSubject;
-    workspaceId: string;
-    resource: string;
-    viewId: string;
-  }): Promise<void> {
-    await this.assertWorkspace(input.subject, input.workspaceId);
-    const current = await this.read(
-      input.subject.orgId,
-      input.workspaceId,
-      input.subject.id,
+    if (result.outcome === "conflict") throw savedViewConflict();
+    if (result.outcome === "not_found") return { deleted: false };
+    await this.audit(
+      input.subject,
+      "admin.table_view.delete",
+      input.viewId,
       input.resource,
     );
-    const remaining = current.filter((view) => view.id !== input.viewId);
-    if (remaining.length === current.length) throw notFound("Saved view");
-    await this.save(
+    return {
+      deleted: true,
+      undoToken,
+      undoExpiresAt,
+      version: result.view.version,
+    };
+  }
+
+  async restore(
+    input: SavedViewScope & {
+      subject: AuthSubject;
+      viewId: string;
+      undoToken: string;
+      expectedVersion?: number;
+      now?: string;
+    },
+  ): Promise<ServerTableSavedView> {
+    await this.assertAuthority(input);
+    const current = await this.repository.getServerTableSavedView(
       input.subject.orgId,
-      input.workspaceId,
-      input.subject.id,
+      input.viewId,
+    );
+    if (current === undefined || !restorableBy(current, input))
+      throw notFound("Saved view");
+    const now = input.now ?? new Date().toISOString();
+    if (Date.parse(current.deleteTokenExpiresAt) < Date.parse(now))
+      throw savedViewConflict();
+    const candidateHash = undoTokenHash({
+      token: input.undoToken,
+      orgId: input.subject.orgId,
+      ownerUserId: input.subject.id,
+      viewId: input.viewId,
+      version: current.version,
+    });
+    if (!constantTimeEqual(candidateHash, current.deleteTokenHash))
+      throw savedViewConflict();
+    const result = await this.repository.restoreServerTableSavedView({
+      orgId: input.subject.orgId,
+      ownerUserId: input.subject.id,
+      viewId: input.viewId,
+      deleteTokenHash: candidateHash,
+      restoredAt: now,
+      expectedVersion: input.expectedVersion ?? current.version,
+    });
+    if (result.outcome !== "restored") throw savedViewConflict();
+    await this.audit(
+      input.subject,
+      "admin.table_view.restore",
+      input.viewId,
       input.resource,
-      remaining,
-      new Date().toISOString(),
+    );
+    return publicRecord(result.view);
+  }
+
+  async setDefault(
+    input: SavedViewScope & {
+      subject: AuthSubject;
+      viewId: string;
+      isDefault: boolean;
+      expectedVersion?: number;
+    },
+  ): Promise<ServerTableSavedView> {
+    return this.updateOwned(
+      input,
+      (view) => ({ ...view, isDefault: input.isDefault }),
+      "admin.table_view.default",
     );
   }
 
-  private async assertWorkspace(subject: AuthSubject, workspaceId: string) {
-    assertScope(subject, "workspaces:read");
-    const workspace = await this.repository.getWorkspace(workspaceId);
+  async share(
+    input: SavedViewScope & {
+      subject: AuthSubject;
+      viewId: string;
+      visibility: "private" | "workspace";
+      expectedVersion?: number;
+    },
+  ): Promise<ServerTableSavedView> {
+    assertScope(input.subject, "admin:write");
+    return this.updateOwned(
+      input,
+      (view) => ({ ...view, visibility: input.visibility }),
+      "admin.table_view.share",
+    );
+  }
+
+  private async updateOwned(
+    input: SavedViewScope & {
+      subject: AuthSubject;
+      viewId: string;
+      expectedVersion?: number;
+    },
+    update: (view: ServerTableSavedViewRecord) => ServerTableSavedViewRecord,
+    action: Extract<AuditAction, `admin.table_view.${string}`>,
+  ): Promise<ServerTableSavedView> {
+    await this.assertAuthority(input);
+    const found = await this.ownedRecord(input);
+    if (found === undefined) throw notFound("Saved view");
+    const now = new Date().toISOString();
+    const result = await this.repository.transaction((repository) =>
+      repository.writeServerTableSavedView({
+        view: {
+          ...update(found),
+          version: found.version + 1,
+          updatedAt: now,
+        },
+        expectedVersion: input.expectedVersion ?? found.version,
+      }),
+    );
+    if (result.outcome === "conflict") throw savedViewConflict();
+    await this.audit(input.subject, action, input.viewId, input.resource);
+    return publicRecord(result.view);
+  }
+
+  private async assertAuthority(
+    input: SavedViewScope & { subject: AuthSubject },
+  ) {
+    assertScope(input.subject, "workspaces:read");
+    const workspace = await this.repository.getWorkspace(input.workspaceId);
     if (
       workspace === undefined ||
-      workspace.orgId !== subject.orgId ||
-      !hasWorkspaceAccess(subject, workspaceId)
+      workspace.orgId !== input.subject.orgId ||
+      !hasWorkspaceAccess(input.subject, input.workspaceId)
     )
       throw notFound("Workspace");
+    const definition = inventoriedTableResource(input.resource);
+    const expectsParent = definition?.requiresParent === true;
+    if (
+      definition === undefined ||
+      expectsParent !== (input.parentId !== undefined)
+    )
+      throw new ApiError(
+        "invalid_request",
+        "The table resource or parent scope is invalid.",
+        400,
+      );
+    return allowedFields(definition);
   }
 
-  private async read(
-    orgId: string,
-    workspaceId: string,
-    ownerUserId: string,
-    resource: string,
-  ): Promise<ServerTableSavedView[]> {
-    const value = (
-      await this.repository.getSystemSetting(
-        storeKey(orgId, workspaceId, ownerUserId, resource),
-      )
-    )?.value;
-    if (value === null || typeof value !== "object" || Array.isArray(value))
-      return [];
-    const candidate = value as Record<string, unknown>;
-    if (candidate.schema !== SCHEMA || !Array.isArray(candidate.views))
-      return [];
-    return candidate.views.filter(
-      (view): view is ServerTableSavedView =>
-        typeof view === "object" &&
-        view !== null &&
-        (view as ServerTableSavedView).schema === SAVED_VIEW_SCHEMA,
+  private async findOwned(
+    input: SavedViewScope & { subject: AuthSubject; view: { viewId?: string } },
+    name: string,
+  ): Promise<ServerTableSavedViewRecord | undefined> {
+    if (input.view.viewId !== undefined)
+      return this.ownedRecord({ ...input, viewId: input.view.viewId });
+    return (
+      await this.repository.listServerTableSavedViews({
+        orgId: input.subject.orgId,
+        ownerUserId: input.subject.id,
+        workspaceId: input.workspaceId,
+        resource: input.resource,
+        ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+      })
+    ).find(
+      (view) =>
+        view.ownerUserId === input.subject.id &&
+        view.nameNormalized === normalizedName(name),
     );
   }
 
-  private async save(
-    orgId: string,
-    workspaceId: string,
-    ownerUserId: string,
+  private async ownedRecord(
+    input: SavedViewScope & { subject: AuthSubject; viewId: string },
+  ) {
+    const record = await this.repository.getServerTableSavedView(
+      input.subject.orgId,
+      input.viewId,
+    );
+    return record?.ownerUserId === input.subject.id &&
+      record.deletedAt === undefined &&
+      sameScope(record, input)
+      ? record
+      : undefined;
+  }
+
+  private audit(
+    subject: AuthSubject,
+    action: Extract<AuditAction, `admin.table_view.${string}`>,
+    viewId: string,
     resource: string,
-    views: ServerTableSavedView[],
-    updatedAt: string,
-  ): Promise<void> {
-    await this.repository.upsertSystemSetting({
-      key: storeKey(orgId, workspaceId, ownerUserId, resource),
-      value: { schema: SCHEMA, orgId, views },
-      updatedAt,
+  ) {
+    return writeAuditLog(this.repository, {
+      subject,
+      action,
+      resourceType: "table_view",
+      resourceId: viewId,
+      metadata: {
+        resource,
+        ...(action === "admin.table_view.replace" ? { source: "server" } : {}),
+      },
     });
   }
-}
-
-function storeKey(
-  orgId: string,
-  workspaceId: string,
-  ownerUserId: string,
-  resource: string,
-): string {
-  return `table_view.v2:${orgId}:${workspaceId}:${ownerUserId}:${resource}`;
 }

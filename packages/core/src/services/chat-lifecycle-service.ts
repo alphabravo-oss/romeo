@@ -10,7 +10,7 @@ import {
 import type {
   Chat,
   DataDeletionPreview,
-  DataDeletionResult,
+  DataDeletionCompletedResult,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
@@ -257,7 +257,7 @@ export class ChatLifecycleService {
     chatId: string;
     confirmChatId: string;
     subject: AuthSubject;
-  }): Promise<DataDeletionResult> {
+  }): Promise<DataDeletionCompletedResult> {
     const chat = await this.writableChat(input.chatId, input.subject);
     if (input.confirmChatId !== chat.id) {
       throw new ApiError(

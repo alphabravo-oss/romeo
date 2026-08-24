@@ -174,6 +174,42 @@ describe("run registry", () => {
     unsubscribeCache();
   });
 
+  it("keeps the composer busy until terminal reconciliation settles", async () => {
+    const queryClient = loadedChat("chat_reconcile");
+    let release!: () => void;
+    const reconciliation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let observedStreaming = false;
+    trackRun({
+      chatId: "chat_reconcile",
+      runId: "run_reconcile",
+      queryClient,
+      t: (key) => key,
+      onSettled: async () => {
+        observedStreaming =
+          getActiveRun("chat_reconcile")?.isStreaming === true;
+        await reconciliation;
+      },
+    });
+
+    await emit({
+      type: "run.completed",
+      runId: "run_reconcile",
+      sequence: 1,
+      data: {},
+    });
+    const ended = emit(null);
+    await vi.waitFor(() => expect(observedStreaming).toBe(true));
+    expect(getActiveRun("chat_reconcile")?.isStreaming).toBe(true);
+
+    release();
+    await ended;
+    await vi.waitFor(() =>
+      expect(getActiveRun("chat_reconcile")?.isStreaming).toBe(false),
+    );
+  });
+
   // The server has no assistant message until the run finishes, so any
   // transcript refresh that lands mid-answer comes back without the row being
   // streamed. Losing it would silently drop every remaining delta.

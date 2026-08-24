@@ -143,4 +143,19 @@ describe("query cache diagnostics", () => {
       ),
     ).toEqual([]);
   });
+
+  it("does not flag sentinel dimensions on an explicitly disabled query", () => {
+    expect(
+      diagnoseQuery(
+        {
+          meta: queryDiagnosticMeta("queuedTurns", { chatId: undefined }),
+          options: { enabled: false },
+          queryHash: "queued-turns-disabled",
+          queryKey: ["queuedTurns", undefined],
+          state: idleState,
+        } as never,
+        new Map(),
+      ),
+    ).toEqual([]);
+  });
 });

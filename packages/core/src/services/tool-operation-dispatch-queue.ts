@@ -29,13 +29,19 @@ import type {
   EnqueueToolOperationDispatchInput,
 } from "./tool-operation-dispatch-types";
 import { reportCleanupFailure } from "./telemetry-context";
+import {
+  consumeOperationApproval,
+  dispatchApprovalRequestDigest,
+  operationApprovalConsumed,
+} from "./tool-approval-integrity";
+import { operationApprovalDecision } from "./tool-service-helpers";
 
 export async function assertDispatchApproval(
   input: DispatchToolOperationInput,
   auditAction: DispatchAuditAction,
 ): Promise<void> {
   if (input.operation.approvalPolicy === "never") return;
-  if (input.approved !== true) {
+  if (input.approvalRequestId === undefined) {
     const approvalRequest = await createDispatchApprovalRequest(input);
     const errorCode = "tool_operation_approval_required";
     await auditApprovalFailure(
@@ -55,25 +61,29 @@ export async function assertDispatchApproval(
       },
     );
   }
-  if (input.approvalRequestId === undefined) {
-    const errorCode = "tool_operation_approval_request_required";
-    await auditApprovalFailure(input, errorCode, auditAction);
-    throw new ApiError(
-      errorCode,
-      "Approved tool operation dispatch requires an approval request ID.",
-      409,
-      {
-        approvalPolicy: input.operation.approvalPolicy,
-        riskLevel: input.operation.riskLevel,
-      },
-    );
-  }
-  const approvalRequest = (
-    await input.repository.listBackgroundJobs(input.subject.orgId)
-  ).find((job) => job.id === input.approvalRequestId);
+  const [approvalRequest, decisionJobs, consumptionJobs] = await Promise.all([
+    input.repository.getBackgroundJob(
+      input.subject.orgId,
+      input.approvalRequestId,
+    ),
+    input.repository.listBackgroundJobs(input.subject.orgId, {
+      limit: 1,
+      payloadEquals: { approvalRequestId: input.approvalRequestId },
+      statuses: ["completed"],
+      type: "tool.operation.approval.decision",
+    }),
+    input.repository.listBackgroundJobs(input.subject.orgId, {
+      limit: 1,
+      payloadEquals: { approvalRequestId: input.approvalRequestId },
+      statuses: ["completed"],
+      type: "tool.operation.approval.consumption",
+    }),
+  ]);
+  const jobs = [...decisionJobs, ...consumptionJobs];
   const validationError = validateDispatchApprovalRequest(
     input,
     approvalRequest,
+    jobs,
   );
   if (validationError !== undefined) {
     await auditApprovalFailure(
@@ -93,12 +103,18 @@ export async function assertDispatchApproval(
     );
   }
   if (approvalRequest !== undefined)
-    await consumeDispatchApprovalRequest(input, approvalRequest);
+    await consumeOperationApproval({
+      approval: approvalRequest,
+      repository: input.repository,
+      requestDigest: dispatchApprovalRequestDigest(input),
+      subject: input.subject,
+    });
 }
 
 async function createDispatchApprovalRequest(
   input: DispatchToolOperationInput,
 ): Promise<BackgroundJob> {
+  const runContext = "runContext" in input ? input.runContext : undefined;
   const job = await startBackgroundJob(input.repository, {
     orgId: input.subject.orgId,
     type: "tool.operation.approval_request",
@@ -112,25 +128,12 @@ async function createDispatchApprovalRequest(
       riskLevel: input.operation.riskLevel,
       parameterKeys: sortedKeys(input.parameters),
       bodyKeys: sortedKeys(input.body),
+      requestDigest: dispatchApprovalRequestDigest(input),
+      digestAlgorithm: "sha256",
+      ...(runContext === undefined ? {} : runContext),
     },
   });
   return completeBackgroundJob(input.repository, job);
-}
-
-function consumeDispatchApprovalRequest(
-  input: DispatchToolOperationInput,
-  approvalRequest: BackgroundJob,
-): Promise<BackgroundJob> {
-  const now = new Date().toISOString();
-  return input.repository.updateBackgroundJob({
-    ...approvalRequest,
-    payload: {
-      ...approvalRequest.payload,
-      consumedAt: now,
-      consumedBy: input.subject.id,
-    },
-    updatedAt: now,
-  });
 }
 
 async function auditApprovalFailure(
@@ -205,12 +208,13 @@ export async function findIdempotentDispatchRequest(
   input: EnqueueToolOperationDispatchInput,
   keyHash: string,
 ): Promise<BackgroundJob | undefined> {
-  const match = (
-    await input.repository.listBackgroundJobs(input.subject.orgId)
-  ).find(
-    (job) =>
-      job.type === "tool.operation.dispatch_request" &&
-      job.payload.idempotencyKeyHash === keyHash,
+  const [match] = await input.repository.listBackgroundJobs(
+    input.subject.orgId,
+    {
+      limit: 1,
+      payloadEquals: { idempotencyKeyHash: keyHash },
+      type: "tool.operation.dispatch_request",
+    },
   );
   if (match === undefined) return undefined;
   if (!sameDispatchRequestShape(input, match)) {
@@ -361,6 +365,7 @@ function sameDispatchRequestShape(
     payload.host === dispatchBaseHost(input.connector) &&
     payload.approvalPolicy === input.operation.approvalPolicy &&
     payload.riskLevel === input.operation.riskLevel &&
+    payload.requestDigest === dispatchApprovalRequestDigest(input) &&
     payload.runId === (input.runContext?.runId ?? payload.runId) &&
     payload.toolId === (input.runContext?.toolId ?? payload.toolId) &&
     sameStringArray(payload.parameterKeys, sortedKeys(input.parameters)) &&
@@ -400,6 +405,7 @@ export function dispatchRequestIdempotency(
 function validateDispatchApprovalRequest(
   input: DispatchToolOperationInput,
   approvalRequest: BackgroundJob | undefined,
+  jobs: BackgroundJob[],
 ): string | undefined {
   if (
     approvalRequest === undefined ||
@@ -414,12 +420,14 @@ function validateDispatchApprovalRequest(
   )
     return "tool_operation_approval_request_expired";
   const payload = approvalRequest.payload;
-  if (typeof payload.consumedAt === "string")
-    return "invalid_tool_operation_approval_request";
-  if (typeof payload.cancelledAt === "string")
+  if (operationApprovalConsumed(approvalRequest, jobs))
+    return "tool_operation_approval_request_consumed";
+  const decision = operationApprovalDecision(approvalRequest, jobs);
+  if (decision === "cancelled")
     return "tool_operation_approval_request_cancelled";
-  if (typeof payload.rejectedAt === "string")
+  if (decision === "rejected")
     return "tool_operation_approval_request_rejected";
+  if (decision !== "approved") return "invalid_tool_operation_approval_request";
   if (
     payload.actorId !== input.subject.id ||
     payload.connectorId !== input.connector.id ||
@@ -428,6 +436,7 @@ function validateDispatchApprovalRequest(
     payload.path !== input.operation.path ||
     payload.approvalPolicy !== input.operation.approvalPolicy ||
     payload.riskLevel !== input.operation.riskLevel ||
+    payload.requestDigest !== dispatchApprovalRequestDigest(input) ||
     !sameStringArray(payload.parameterKeys, sortedKeys(input.parameters)) ||
     !sameStringArray(payload.bodyKeys, sortedKeys(input.body))
   ) {

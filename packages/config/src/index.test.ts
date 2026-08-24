@@ -2,6 +2,52 @@ import { describe, expect, it } from "vitest";
 
 import { readEnv } from "./index";
 
+function hardenedProductionEnv(
+  overrides: Record<string, string | undefined> = {},
+): Record<string, string | undefined> {
+  return {
+    ROMEO_ENV: "production",
+    APP_ORIGIN: "https://romeo.prod.invalid",
+    REPOSITORY_DRIVER: "postgres",
+    DATABASE_URL:
+      "postgres://romeo:database-credential@db.prod.invalid/romeo?sslmode=verify-full",
+    OBJECT_STORE_DRIVER: "s3",
+    S3_ENDPOINT: "https://objects.prod.invalid",
+    S3_ACCESS_KEY_ID: "prod-object-access-id",
+    S3_SECRET_ACCESS_KEY: "S3-prod-credential-4hQ8wZ2m",
+    HTTP_RATE_LIMIT_DRIVER: "valkey",
+    REALTIME_EVENT_DRIVER: "valkey",
+    QUOTA_COORDINATION_DRIVER: "valkey",
+    VALKEY_URL:
+      "rediss://romeo-app:vK-4hQ8wZ2mN7cR5tY9p@cache.prod.invalid:6379/0",
+    EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
+    EDGE_TRUSTED_PROXY_CIDRS: "10.42.0.0/16,2001:db8:42::/48",
+    FILE_MALWARE_SCAN_ENABLED: "true",
+    FILE_MALWARE_SCAN_POLICY: "required",
+    CLAMAV_ADDRESS: "tcp://clamav.security.svc:3310",
+    BILLING_ENABLED: "false",
+    DEV_SEEDED_LOGIN: "false",
+    SESSION_SECRET: "Sess!on-7mQ2vK9xR4tY8pW3cN6bL1dF",
+    LOCAL_AUTH_SECRET_ENCRYPTION_KEY: "Loc4l-Auth!8pW3cN6bL1dF7mQ2vK9xR5tY",
+    MANAGED_SECRET_ENCRYPTION_KEY: "Man4ged!2vK9xR5tY8pW3cN6bL1dF7mQ",
+    WEBHOOK_SIGNING_KEY: "Webh00k!5tY8pW3cN6bL1dF7mQ2vK9xR",
+    ...overrides,
+  };
+}
+
+function exceptionExpiry(days = 30): string {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function reviewedException(prefix: string): Record<string, string> {
+  return {
+    [`${prefix}_ENABLED`]: "true",
+    [`${prefix}_OWNER`]: "platform-security",
+    [`${prefix}_REASON`]: "Reviewed temporary in-cluster deployment exception.",
+    [`${prefix}_EXPIRES_AT`]: exceptionExpiry(),
+  };
+}
+
 describe("Romeo config", () => {
   it("strictly parses the bounded platform capability kill-switch list", () => {
     const allHighRiskCapabilities = [
@@ -45,42 +91,421 @@ describe("Romeo config", () => {
   it("fails closed when production uses development infrastructure or secrets", () => {
     expect(() => readEnv({ ROMEO_ENV: "production" })).toThrow(/APP_ORIGIN/);
     expect(() =>
-      readEnv({
-        ROMEO_ENV: "production",
-        APP_ORIGIN: "https://romeo.example.com",
-        REPOSITORY_DRIVER: "postgres",
-        HTTP_RATE_LIMIT_DRIVER: "valkey",
-        EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
-        FILE_MALWARE_SCAN_POLICY: "required",
-        DEV_SEEDED_LOGIN: "false",
-      }),
+      readEnv(hardenedProductionEnv({ SESSION_SECRET: "dev-shared-key" })),
     ).toThrow(/SESSION_SECRET/);
   });
 
   it("accepts an explicitly hardened production environment", () => {
-    const env = readEnv({
-      ROMEO_ENV: "production",
-      APP_ORIGIN: "https://romeo.example.com",
-      REPOSITORY_DRIVER: "postgres",
-      HTTP_RATE_LIMIT_DRIVER: "valkey",
-      EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
-      EDGE_TRUSTED_PROXY_HOPS: "2",
-      FILE_MALWARE_SCAN_POLICY: "required",
-      DEV_SEEDED_LOGIN: "false",
-      SESSION_SECRET: "production-session-secret-32-bytes-minimum",
-      MANAGED_SECRET_ENCRYPTION_KEY:
-        "production-managed-secret-32-bytes-minimum",
-      WEBHOOK_SIGNING_KEY: "production-webhook-secret-32-bytes-minimum",
-    });
+    const env = readEnv(
+      hardenedProductionEnv({ EDGE_TRUSTED_PROXY_HOPS: "2" }),
+    );
 
     expect(env.ROMEO_ENV).toBe("production");
     expect(env.EDGE_TRUSTED_PROXY_HOPS).toBe(2);
+  });
+
+  it("requires bounded evidence for external scheduled-work ownership", () => {
+    expect(() =>
+      readEnv(
+        hardenedProductionEnv({ SCHEDULED_TENANT_WORK_OWNER: "external" }),
+      ),
+    ).toThrow(/SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_PATH/);
+    const env = readEnv(
+      hardenedProductionEnv({
+        SCHEDULED_TENANT_WORK_OWNER: "external",
+        SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_PATH:
+          "/var/run/romeo/external-scheduler-evidence.json",
+        SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_MAX_AGE_SECONDS: "600",
+      }),
+    );
+    expect(env.SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_MAX_AGE_SECONDS).toBe(
+      600,
+    );
+    expect(() =>
+      readEnv({
+        SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_MAX_AGE_SECONDS: "59",
+      }),
+    ).toThrow(/SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_MAX_AGE_SECONDS/);
+  });
+
+  it("requires independent rotatable broker credentials for external workers", () => {
+    const external = {
+      SCHEDULED_TENANT_WORK_OWNER: "external",
+      SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_PATH:
+        "/var/run/romeo/external-scheduler-evidence.json",
+      TOOL_DISPATCH_WORKER_ENABLED: "true",
+      BROWSER_AUTOMATION_WORKER_ENABLED: "true",
+      KNOWLEDGE_EXTRACTION_WORKER_ENABLED: "true",
+    };
+    expect(() => readEnv(hardenedProductionEnv(external))).toThrow(
+      /TOOL_DISPATCH_BROKER_TOKEN/,
+    );
+    const credentials = {
+      TOOL_DISPATCH_BROKER_TOKEN: "Tool-Dispatch!4hQ8wZ2mN7cR5tY9pL6dF3kS",
+      TOOL_DISPATCH_BROKER_TOKEN_PREVIOUS:
+        "Tool-Previous!7mQ2vK9xR4tY8pW3cN6bL1dF",
+      BROWSER_AUTOMATION_BROKER_TOKEN:
+        "Browser-Current!8pW3cN6bL1dF7mQ2vK9xR5tY",
+      BROWSER_AUTOMATION_BROKER_TOKEN_PREVIOUS:
+        "Browser-Previous!2vK9xR5tY8pW3cN6bL1dF7mQ",
+      KNOWLEDGE_EXTRACTION_BROKER_TOKEN:
+        "Knowledge-Current!5tY8pW3cN6bL1dF7mQ2vK9xR",
+      KNOWLEDGE_EXTRACTION_BROKER_TOKEN_PREVIOUS:
+        "Knowledge-Previous!3cN6bL1dF7mQ2vK9xR5tY8pW",
+    };
+    const env = readEnv(hardenedProductionEnv({ ...external, ...credentials }));
+    expect(env.KNOWLEDGE_EXTRACTION_BROKER_TOKEN).toBe(
+      credentials.KNOWLEDGE_EXTRACTION_BROKER_TOKEN,
+    );
+    expect(() =>
+      readEnv(
+        hardenedProductionEnv({
+          ...external,
+          ...credentials,
+          BROWSER_AUTOMATION_BROKER_TOKEN:
+            credentials.TOOL_DISPATCH_BROKER_TOKEN,
+        }),
+      ),
+    ).toThrow(/independent from every other worker broker credential/);
+    expect(() =>
+      readEnv(
+        hardenedProductionEnv({
+          ...external,
+          ...credentials,
+          TOOL_DISPATCH_BROKER_TOKEN_PREVIOUS:
+            credentials.TOOL_DISPATCH_BROKER_TOKEN,
+        }),
+      ),
+    ).toThrow(/must be independent/);
+  });
+
+  it("requires normalized trusted-proxy source networks in production", () => {
+    for (const value of [
+      "",
+      "10.42.0.0",
+      "10.42.0.0/33",
+      "2001:db8::/129",
+      "10.42.0.0/16, 2001:db8::/48",
+      "10.42.0.0/16,10.42.0.0/16",
+    ]) {
+      expect(() =>
+        readEnv(hardenedProductionEnv({ EDGE_TRUSTED_PROXY_CIDRS: value })),
+      ).toThrow(/EDGE_TRUSTED_PROXY_CIDRS/);
+    }
+    expect(
+      readEnv(
+        hardenedProductionEnv({
+          EDGE_TRUSTED_PROXY_CIDRS: "10.42.0.0/16,2001:db8:42::/48",
+        }),
+      ).EDGE_TRUSTED_PROXY_CIDRS,
+    ).toBe("10.42.0.0/16,2001:db8:42::/48");
+  });
+
+  it("requires live S3 encryption, versioning, and lifecycle posture in production", () => {
+    for (const field of [
+      "S3_READINESS_REQUIRE_ENCRYPTION",
+      "S3_READINESS_REQUIRE_VERSIONING",
+      "S3_READINESS_REQUIRE_LIFECYCLE",
+    ]) {
+      expect(() =>
+        readEnv(hardenedProductionEnv({ [field]: "false" })),
+      ).toThrow(field);
+    }
+    expect(
+      readEnv(
+        hardenedProductionEnv({ S3_READINESS_REQUIRE_REPLICATION: "true" }),
+      ).S3_READINESS_REQUIRE_REPLICATION,
+    ).toBe(true);
+  });
+
+  it("accepts narrowly scoped active exceptions for in-cluster TLS and malware scanning", () => {
+    const env = readEnv(
+      hardenedProductionEnv({
+        DATABASE_URL: "postgres://romeo:db-credential@postgres/romeo",
+        ...reviewedException("POSTGRES_TLS_EXCEPTION"),
+        POSTGRES_TLS_EXCEPTION_SCOPE: "in_cluster",
+        VALKEY_URL: "redis://romeo-app:vK-4hQ8wZ2mN7cR5tY9p@valkey:6379/0",
+        ...reviewedException("VALKEY_SECURITY_EXCEPTION"),
+        VALKEY_SECURITY_EXCEPTION_SCOPE: "in_cluster",
+        VALKEY_IN_CLUSTER_NETWORK_POLICY_ENABLED: "true",
+        FILE_MALWARE_SCAN_ENABLED: "false",
+        FILE_MALWARE_SCAN_POLICY: "off",
+        CLAMAV_ADDRESS: "",
+        ...reviewedException("FILE_MALWARE_SCAN_EXCEPTION"),
+      }),
+    );
+
+    expect(env.POSTGRES_TLS_EXCEPTION_SCOPE).toBe("in_cluster");
+    expect(env.VALKEY_IN_CLUSTER_NETWORK_POLICY_ENABLED).toBe(true);
+    expect(env.FILE_MALWARE_SCAN_EXCEPTION_ENABLED).toBe(true);
+  });
+
+  it("accepts a credential-complete production capability profile", () => {
+    const env = readEnv(
+      hardenedProductionEnv({
+        BILLING_ENABLED: "true",
+        BILLING_STRIPE_WEBHOOK_SECRET: "whsec_prod_4hQ8wZ2mN7cR5tY9p",
+        BILLING_GENERIC_WEBHOOK_SECRET: "generic_prod_9pT3dF6kL2sV8xC4m",
+        DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-prod-app",
+        DELEGATED_OAUTH_GITHUB_CLIENT_SECRET: "gh-client-4hQ8wZ2mN7cR5tY9p",
+        DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY:
+          "Deleg4ted!3cN6bL1dF7mQ2vK9xR5tY8pW",
+        EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
+        QDRANT_URL: "https://vectors.prod.invalid",
+        QDRANT_API_KEY_REF: "romeo-secret://qdrant/api-key",
+        VECTOR_NAMESPACE_POLICY: "org",
+        VECTOR_ISOLATION_MODE: "external_namespace_per_org",
+        SECRET_RESOLVER_DRIVER: "vault",
+        VAULT_ADDR: "https://vault.prod.invalid",
+        VAULT_TOKEN: "vault-prod-4hQ8wZ2mN7cR5tY9p",
+        TOOL_DISPATCH_PAYLOAD_STORE_DRIVER: "object-store",
+        TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY:
+          "T00l-Payload!6bL1dF7mQ2vK9xR5tY8pW3cN",
+        VOICE_PROVIDER_DRIVER: "openai-compatible",
+        VOICE_OPENAI_BASE_URL: "https://voice.prod.invalid/v1",
+        VOICE_OPENAI_API_KEY: "voice-prod-7mQ2vK9xR4tY8pW3c",
+        NOTIFICATION_DELIVERY_DRIVER: "configured",
+        NOTIFICATION_EMAIL_DELIVERY_DRIVER: "resend",
+        NOTIFICATION_EMAIL_FROM: "notify@prod.invalid",
+        NOTIFICATION_RESEND_API_KEY: "resend-prod-8pW3cN6bL1dF7mQ2",
+        NOTIFICATION_FCM_PROJECT_ID: "romeo-prod",
+        NOTIFICATION_FCM_SERVICE_ACCOUNT_REF:
+          "romeo-secret://notifications/fcm-service-account",
+        NOTIFICATION_WEBHOOK_EGRESS_POLICY: "require_allowlist",
+        NOTIFICATION_WEBHOOK_ALLOWED_HOSTS:
+          "events.pagerduty.com,hooks.slack.com,*.webhook.office.com,hooks.prod.invalid",
+      }),
+    );
+
+    expect(env.SECRET_RESOLVER_DRIVER).toBe("vault");
+    expect(env.EXTERNAL_VECTOR_STORE_DRIVER).toBe("qdrant");
+    expect(env.NOTIFICATION_DELIVERY_DRIVER).toBe("configured");
+  });
+
+  it.each([
+    ["REPOSITORY_DRIVER", "memory", /REPOSITORY_DRIVER/],
+    ["OBJECT_STORE_DRIVER", "memory", /OBJECT_STORE_DRIVER/],
+    ["HTTP_RATE_LIMIT_DRIVER", "memory", /HTTP_RATE_LIMIT_DRIVER/],
+    ["REALTIME_EVENT_DRIVER", "memory", /REALTIME_EVENT_DRIVER/],
+    ["QUOTA_COORDINATION_DRIVER", "disabled", /QUOTA_COORDINATION_DRIVER/],
+  ])("rejects unsafe production driver %s=%s", (field, value, message) => {
+    expect(() => readEnv(hardenedProductionEnv({ [field]: value }))).toThrow(
+      message,
+    );
+  });
+
+  it.each([
+    ["SESSION_SECRET"],
+    ["LOCAL_AUTH_SECRET_ENCRYPTION_KEY"],
+    ["MANAGED_SECRET_ENCRYPTION_KEY"],
+    ["WEBHOOK_SIGNING_KEY"],
+  ])("rejects placeholder or low-entropy production key %s", (field) => {
+    expect(() =>
+      readEnv(hardenedProductionEnv({ [field]: "a".repeat(40) })),
+    ).toThrow(new RegExp(field));
+  });
+
+  it("rejects key reuse across production signing and encryption purposes", () => {
+    const shared = "Shared!7mQ2vK9xR4tY8pW3cN6bL1dF";
+    expect(() =>
+      readEnv(
+        hardenedProductionEnv({
+          SESSION_SECRET: shared,
+          WEBHOOK_SIGNING_KEY: shared,
+        }),
+      ),
+    ).toThrow(/WEBHOOK_SIGNING_KEY.*independent/);
+  });
+
+  it.each([
+    ["postgres://romeo:cred@db.prod.invalid/romeo", /sslmode=verify-full/],
+    [
+      "postgres://romeo:cred@db.prod.invalid/romeo?sslmode=require",
+      /sslmode=verify-full/,
+    ],
+    [
+      "postgres://romeo:cred@db.prod.invalid/romeo?sslmode=verify-ca",
+      /sslmode=verify-full/,
+    ],
+  ])("rejects unverifiable production Postgres URL %s", (url, message) => {
+    expect(() => readEnv(hardenedProductionEnv({ DATABASE_URL: url }))).toThrow(
+      message,
+    );
+  });
+
+  it("rejects remote, expired, overlong, and incomplete Postgres TLS exceptions", () => {
+    const base = {
+      DATABASE_URL: "postgres://romeo:cred@postgres/romeo",
+      ...reviewedException("POSTGRES_TLS_EXCEPTION"),
+      POSTGRES_TLS_EXCEPTION_SCOPE: "in_cluster",
+    };
+    for (const override of [
+      { POSTGRES_TLS_EXCEPTION_OWNER: "" },
+      { POSTGRES_TLS_EXCEPTION_REASON: "short" },
+      { POSTGRES_TLS_EXCEPTION_EXPIRES_AT: "2020-01-01T00:00:00.000Z" },
+      { POSTGRES_TLS_EXCEPTION_EXPIRES_AT: exceptionExpiry(91) },
+      { POSTGRES_TLS_EXCEPTION_SCOPE: "" },
+      { DATABASE_URL: "postgres://romeo:cred@db.prod.invalid/romeo" },
+    ]) {
+      expect(() =>
+        readEnv(hardenedProductionEnv({ ...base, ...override })),
+      ).toThrow(/POSTGRES_TLS_EXCEPTION|sslmode=verify-full/);
+    }
+  });
+
+  it.each([
+    ["redis://romeo-app:abcdefghijklmnop@cache.prod.invalid:6379", /rediss/],
+    ["rediss://cache.prod.invalid:6379", /ACL/],
+    ["rediss://:abcdefghijklmnop@cache.prod.invalid:6379", /ACL/],
+    ["rediss://romeo-app:short@cache.prod.invalid:6379", /ACL/],
+    ["rediss://romeo-app:%61%62%63%64%65%66@cache.prod.invalid:6379", /ACL/],
+  ])("rejects unsafe production Valkey URL %s", (url, message) => {
+    expect(() => readEnv(hardenedProductionEnv({ VALKEY_URL: url }))).toThrow(
+      message,
+    );
+  });
+
+  it("rejects exceptions when the corresponding production control is hardened", () => {
+    for (const prefix of [
+      "POSTGRES_TLS_EXCEPTION",
+      "VALKEY_SECURITY_EXCEPTION",
+      "FILE_MALWARE_SCAN_EXCEPTION",
+    ]) {
+      expect(() =>
+        readEnv(
+          hardenedProductionEnv({
+            ...reviewedException(prefix),
+            ...(prefix === "POSTGRES_TLS_EXCEPTION"
+              ? { POSTGRES_TLS_EXCEPTION_SCOPE: "in_cluster" }
+              : {}),
+            ...(prefix === "VALKEY_SECURITY_EXCEPTION"
+              ? {
+                  VALKEY_SECURITY_EXCEPTION_SCOPE: "in_cluster",
+                  VALKEY_IN_CLUSTER_NETWORK_POLICY_ENABLED: "true",
+                }
+              : {}),
+          }),
+        ),
+      ).toThrow(new RegExp(`${prefix}_ENABLED`));
+    }
+  });
+
+  it("rejects plaintext Valkey exceptions without scope, NetworkPolicy, or valid approval", () => {
+    const base = {
+      VALKEY_URL: "redis://romeo-app:abcdefghijklmnop@valkey:6379",
+      ...reviewedException("VALKEY_SECURITY_EXCEPTION"),
+      VALKEY_SECURITY_EXCEPTION_SCOPE: "in_cluster",
+      VALKEY_IN_CLUSTER_NETWORK_POLICY_ENABLED: "true",
+    };
+    for (const override of [
+      { VALKEY_SECURITY_EXCEPTION_SCOPE: "" },
+      { VALKEY_IN_CLUSTER_NETWORK_POLICY_ENABLED: "false" },
+      { VALKEY_SECURITY_EXCEPTION_EXPIRES_AT: "2020-01-01T00:00:00.000Z" },
+      { VALKEY_SECURITY_EXCEPTION_OWNER: "" },
+      { VALKEY_URL: "redis://romeo-app:abcdefghijklmnop@cache.prod.invalid" },
+    ]) {
+      expect(() =>
+        readEnv(hardenedProductionEnv({ ...base, ...override })),
+      ).toThrow(/VALKEY_SECURITY_EXCEPTION|rediss/);
+    }
+  });
+
+  it("requires ClamAV or a complete, active malware-scanning exception", () => {
+    expect(() =>
+      readEnv(
+        hardenedProductionEnv({
+          FILE_MALWARE_SCAN_ENABLED: "true",
+          FILE_MALWARE_SCAN_POLICY: "required",
+          CLAMAV_ADDRESS: "",
+        }),
+      ),
+    ).toThrow(/CLAMAV_ADDRESS/);
+    for (const override of [
+      {},
+      {
+        ...reviewedException("FILE_MALWARE_SCAN_EXCEPTION"),
+        FILE_MALWARE_SCAN_EXCEPTION_OWNER: "",
+      },
+      {
+        ...reviewedException("FILE_MALWARE_SCAN_EXCEPTION"),
+        FILE_MALWARE_SCAN_EXCEPTION_EXPIRES_AT: "2020-01-01T00:00:00.000Z",
+      },
+    ]) {
+      expect(() =>
+        readEnv(
+          hardenedProductionEnv({
+            FILE_MALWARE_SCAN_ENABLED: "false",
+            FILE_MALWARE_SCAN_POLICY: "off",
+            CLAMAV_ADDRESS: "",
+            ...override,
+          }),
+        ),
+      ).toThrow(/FILE_MALWARE_SCAN_EXCEPTION|malware scanning/);
+    }
+  });
+
+  it("requires provider-specific credentials for enabled production capabilities", () => {
+    for (const [override, message] of [
+      [{ VOICE_PROVIDER_DRIVER: "openai-compatible" }, /VOICE_OPENAI_API_KEY/],
+      [
+        { DELEGATED_OAUTH_GITHUB_CLIENT_ID: "github-app" },
+        /DELEGATED_OAUTH_GITHUB_CLIENT_SECRET/,
+      ],
+      [{ SECRET_RESOLVER_DRIVER: "vault" }, /VAULT_ADDR/],
+      [{ SECRET_RESOLVER_DRIVER: "aws-sm" }, /AWS_REGION/],
+      [{ SECRET_RESOLVER_DRIVER: "gcp-sm" }, /GCP_SECRET_MANAGER_PROJECT/],
+      [{ SECRET_RESOLVER_DRIVER: "azure-kv" }, /AZURE_KEY_VAULT_URL/],
+      [{ EXTERNAL_VECTOR_STORE_DRIVER: "qdrant" }, /QDRANT_URL/],
+      [{ BILLING_ENABLED: "true" }, /BILLING_STRIPE_WEBHOOK_SECRET/],
+      [
+        { NOTIFICATION_DELIVERY_DRIVER: "resend-email" },
+        /NOTIFICATION_EMAIL_FROM/,
+      ],
+      [
+        { NOTIFICATION_DELIVERY_DRIVER: "fcm-mobile-push" },
+        /NOTIFICATION_FCM_PROJECT_ID/,
+      ],
+    ] as const) {
+      expect(() => readEnv(hardenedProductionEnv(override))).toThrow(message);
+    }
+  });
+
+  it("requires normalized notification webhook egress allowlists", () => {
+    expect(() =>
+      readEnv(
+        hardenedProductionEnv({ NOTIFICATION_DELIVERY_DRIVER: "webhook" }),
+      ),
+    ).toThrow(/NOTIFICATION_WEBHOOK_EGRESS_POLICY/);
+    expect(() =>
+      readEnv(
+        hardenedProductionEnv({
+          NOTIFICATION_DELIVERY_DRIVER: "webhook",
+          NOTIFICATION_WEBHOOK_EGRESS_POLICY: "require_allowlist",
+          NOTIFICATION_WEBHOOK_ALLOWED_HOSTS: "Hooks.Prod.Invalid",
+        }),
+      ),
+    ).toThrow(/unique, lowercase/);
+    expect(
+      readEnv(
+        hardenedProductionEnv({
+          NOTIFICATION_DELIVERY_DRIVER: "webhook",
+          NOTIFICATION_WEBHOOK_EGRESS_POLICY: "require_allowlist",
+          NOTIFICATION_WEBHOOK_ALLOWED_HOSTS:
+            "hooks.prod.invalid,*.notifications.prod.invalid",
+        }),
+      ).NOTIFICATION_WEBHOOK_ALLOWED_HOSTS,
+    ).toBe("hooks.prod.invalid,*.notifications.prod.invalid");
   });
 
   it("parses OIDC mapping configuration with safe empty defaults", () => {
     const env = readEnv({
       OIDC_ISSUER_URL: "https://keycloak.example.com/realms/romeo",
       OIDC_CLIENT_ID: "romeo",
+      OIDC_ENDPOINT_ALLOWED_ORIGINS:
+        "https://keys.example.com,https://login.example.net:8443",
+      OIDC_FETCH_MAX_BYTES: "131072",
+      OIDC_FETCH_TIMEOUT_MS: "5000",
+      OIDC_CACHE_TTL_MS: "600000",
       OIDC_GROUP_CLAIM: "groups",
       OIDC_ADMIN_GROUPS: "/romeo/admins,romeo-admin",
       OIDC_GROUP_MAP: "/romeo/users=group_users",
@@ -247,6 +672,12 @@ describe("Romeo config", () => {
       "https://keycloak.example.com/realms/romeo",
     );
     expect(env.OIDC_CLIENT_ID).toBe("romeo");
+    expect(env.OIDC_ENDPOINT_ALLOWED_ORIGINS).toBe(
+      "https://keys.example.com,https://login.example.net:8443",
+    );
+    expect(env.OIDC_FETCH_MAX_BYTES).toBe(131_072);
+    expect(env.OIDC_FETCH_TIMEOUT_MS).toBe(5_000);
+    expect(env.OIDC_CACHE_TTL_MS).toBe(600_000);
     expect(env.OIDC_GROUP_CLAIM).toBe("groups");
     expect(env.OIDC_ADMIN_GROUPS).toContain("/romeo/admins");
     expect(env.OIDC_GROUP_MAP).toBe("/romeo/users=group_users");
@@ -443,6 +874,28 @@ describe("Romeo config", () => {
     );
     expect(env.SCIM_ENABLED).toBe(true);
     expect(env.DEV_SEEDED_LOGIN).toBe(false);
+  });
+
+  it("rejects unsafe OIDC endpoint allowlists and unbounded fetch policy", () => {
+    for (const value of [
+      "http://keys.example.com",
+      "https://user:secret@keys.example.com",
+      "https://keys.example.com/path",
+      "https://keys.example.com, https://login.example.com",
+    ]) {
+      expect(() => readEnv({ OIDC_ENDPOINT_ALLOWED_ORIGINS: value })).toThrow(
+        /exact HTTPS origins/,
+      );
+    }
+    expect(() => readEnv({ OIDC_FETCH_MAX_BYTES: "1048577" })).toThrow(
+      "OIDC_FETCH_MAX_BYTES",
+    );
+    expect(() => readEnv({ OIDC_FETCH_TIMEOUT_MS: "30001" })).toThrow(
+      "OIDC_FETCH_TIMEOUT_MS",
+    );
+    expect(() => readEnv({ OIDC_CACHE_TTL_MS: "3600001" })).toThrow(
+      "OIDC_CACHE_TTL_MS",
+    );
   });
 
   it("requires a strong dispatch payload encryption key when object-store storage is enabled", () => {

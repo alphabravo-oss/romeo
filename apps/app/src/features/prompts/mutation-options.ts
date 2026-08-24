@@ -9,6 +9,7 @@ import {
   updatePromptTemplate,
 } from "./mutations";
 import type { UpdatePromptTemplateInput } from "./types";
+import { invalidateInventoriedTablePages } from "../../lib/inventoried-table-cache";
 
 export function createPromptTemplateMutationOptions() {
   return serverMutationOptions({
@@ -47,10 +48,10 @@ async function refreshPromptViews(
   workspaceId: string,
 ) {
   await Promise.all([
-    invalidateCachedResourceExactly(
-      client,
-      appQueryKeys.promptTemplates(workspaceId),
-    ),
+    invalidateInventoriedTablePages(client, {
+      resource: "prompt_templates",
+      workspaceId,
+    }),
     invalidateCachedResourceExactly(client, appQueryKeys.promptMarketplace()),
   ]);
 }

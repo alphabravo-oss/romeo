@@ -1,8 +1,9 @@
 import { Button, InlineError, StatusBadge } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
+import ScrollText from "lucide-react/dist/esm/icons/scroll-text.mjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { exportAuditLogsCsv } from "../features";
+import { exportAuditLogsCsv } from "../features/operational-governance";
 import type { AuditLog, AuditLogFilter } from "../features/types";
 import { downloadCsv } from "../lib/csv";
 import { useLocale, type MessageKey } from "../lib/i18n";
@@ -343,6 +344,12 @@ export function AuditPanel({
             ? t("auditNoMatches")
             : t("auditNoEvents")
         }
+        emptyDescription={
+          hasAuditFilters(filterInput)
+            ? t("auditNoMatchesDescription")
+            : t("auditNoEventsDescription")
+        }
+        emptyIcon={<ScrollText aria-hidden size={24} />}
         isEmpty={(page) => page.items.length === 0}
       >
         {(page) => {

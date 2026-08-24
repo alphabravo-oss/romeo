@@ -36,7 +36,9 @@ export function persistReasoningSummary(input: {
       kind: "reasoning_summary",
       classification: "provider_safe_summary",
       characterCount: input.text.length,
-      ...(input.durationMs === undefined ? {} : { durationMs: input.durationMs }),
+      ...(input.durationMs === undefined
+        ? {}
+        : { durationMs: input.durationMs }),
       ...(input.reasoningTokens === undefined
         ? {}
         : { reasoningTokens: input.reasoningTokens }),

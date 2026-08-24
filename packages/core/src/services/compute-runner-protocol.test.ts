@@ -75,9 +75,7 @@ describe("compute runner protocol", () => {
         now: "2026-08-14T09:59:00.000Z",
       }),
     ).toEqual({ outcome: "accepted", jobId: "job_1" });
-    expect(
-      computeHasAmbientSecrets({ OPENAI_API_KEY: "sk-test" }),
-    ).toBe(true);
+    expect(computeHasAmbientSecrets({ OPENAI_API_KEY: "sk-test" })).toBe(true);
     expect(computeHasAmbientSecrets({})).toBe(false);
   });
 });

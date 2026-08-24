@@ -19,23 +19,20 @@ import {
   podLogs,
   randomKubernetesName,
   startPortForward,
-  waitForCondition,
   waitForJobComplete,
   waitForKubectlRollout,
 } from "./lib/kubernetes-smoke-support.mjs";
 import {
   assertNoSensitiveLeak,
   assertWorkerOutput,
-  assertWorkflowResumeWorkerOutput,
-  assertWorkflowRunStatus,
   composeWorkerCommands,
-  createSmokeAgent,
-  createWorkflowResumePendingRun,
   kubernetesCoreWorkerSpecs,
   parseWorkerOutput,
   workerApiKeyScopes,
-  workflowRuns,
 } from "./lib/worker-smoke-support.mjs";
+import { assertNoSecretArgv, readSecretInput } from "./lib/secret-input.mjs";
+
+assertNoSecretArgv();
 
 const keepJobs = hasFlag("--keep-jobs");
 const applyWorkerApiKeySecret = hasFlag("--apply-worker-api-key-secret");
@@ -46,9 +43,9 @@ const serviceName = argValue("--service") ?? appName;
 const workerApiKeySecret = parseSecretRef(
   argValue("--worker-api-key-secret") ?? "romeo-worker-api-key:ROMEO_API_KEY",
 );
-const adminToken = argValue("--api-key") ?? process.env.ROMEO_API_KEY;
+const adminToken = readSecretInput({ environment: "ROMEO_API_KEY" });
 if (typeof adminToken !== "string" || adminToken.length === 0) {
-  throw new Error("--api-key or ROMEO_API_KEY is required.");
+  throw new Error("ROMEO_API_KEY or ROMEO_API_KEY_FILE is required.");
 }
 const timeoutMs = parsePositiveInteger("--timeout-ms", 300000);
 const jobPrefix = dnsName(
@@ -56,17 +53,12 @@ const jobPrefix = dnsName(
 );
 const appPort = await freePort();
 const harness = { appPort, timeoutMs };
-const rawWorkerPromptSentinel = `k8s_worker_prompt_${randomBytes(16).toString("hex")}`;
-const crashWorkerPromptSentinel = `k8s_worker_crash_${randomBytes(16).toString("hex")}`;
 const rawContentSentinel = `k8s_worker_content_${randomBytes(16).toString("hex")}`;
 const createdJobs = [];
 const jobLogEntries = [];
 
 let portForward;
 let workerToken;
-let smokeAgent;
-let controlledWorkflow;
-let crashWorkflow;
 
 assertClusterAvailable();
 
@@ -95,60 +87,22 @@ try {
     rawContentSentinel,
   );
 
-  smokeAgent = await createSmokeAgent(harness, adminToken, {
-    name: "Kubernetes worker smoke agent",
-  });
-  controlledWorkflow = await createWorkflowResumePendingRun(
-    harness,
-    adminToken,
-    {
-      name: "Kubernetes worker controlled resume",
-      agentId: smokeAgent.id,
-      prompt: `Kubernetes worker raw prompt redaction ${rawWorkerPromptSentinel}`,
-    },
-  );
-
   const results = [];
   for (const worker of workers) {
     const result = await runCronJobWorker(worker);
-    if (worker.name === "workflow_resume") {
-      assertWorkflowResumeWorkerOutput(result.output, controlledWorkflow);
-      await assertWorkflowRunStatus(
-        harness,
-        adminToken,
-        controlledWorkflow,
-        "waiting_approval",
-      );
-    }
     results.push(result.evidence);
   }
-
-  crashWorkflow = await createWorkflowResumePendingRun(harness, adminToken, {
-    name: "Kubernetes worker crash resume",
-    agentId: smokeAgent.id,
-    prompt: `Kubernetes worker crash prompt redaction ${crashWorkerPromptSentinel}`,
-  });
-  const crashRecovery =
-    await runWorkflowResumePodCrashRecoverySmoke(crashWorkflow);
 
   const podLogEntries = podLogs(namespace);
   const allPodLogs = podLogEntries.map((entry) => entry.text).join("\n");
   const allJobLogs = jobLogEntries.map((entry) => entry.text).join("\n");
-  const rawPromptSentinels = [
-    rawWorkerPromptSentinel,
-    crashWorkerPromptSentinel,
-  ];
   const rawContentSentinels = [rawContentSentinel];
   const generatedSecrets = [
     adminToken,
     ...(typeof workerToken === "string" ? [workerToken] : []),
     webhookReadback.signingSecret,
   ];
-  const forbiddenValues = [
-    ...generatedSecrets,
-    ...rawPromptSentinels,
-    ...rawContentSentinels,
-  ];
+  const forbiddenValues = [...generatedSecrets, ...rawContentSentinels];
   assertTextDoesNotContain(
     "Kubernetes worker pod logs",
     allPodLogs,
@@ -181,12 +135,6 @@ try {
     },
     workerCount: results.length,
     workers: results,
-    controlledWorkflowResume: {
-      workflowId: controlledWorkflow.workflowId,
-      workflowRunId: controlledWorkflow.workflowRunId,
-      linkedRunId: controlledWorkflow.linkedRunId,
-    },
-    crashRecovery,
     webhookDeliveryId: webhookReadback.deliveryId,
     logRedaction: {
       status: "passed",
@@ -197,7 +145,6 @@ try {
       workerApiKeySecretValueKnown: typeof workerToken === "string",
       webhookSigningSecretChecked: true,
       generatedSecretValuesChecked: generatedSecrets.length,
-      rawPromptSentinelsChecked: rawPromptSentinels.length,
       rawContentSentinelsChecked: rawContentSentinels.length,
     },
     checks: [
@@ -210,9 +157,6 @@ try {
       "worker_output_json_valid",
       "worker_output_secret_redaction",
       "worker_output_raw_content_redaction",
-      "workflow_resume_controlled_pending_work",
-      "workflow_resume_pod_crash_recovery",
-      "workflow_resume_crash_no_duplicate_linked_run",
       "worker_logs_redacted",
       "pod_logs_redacted",
     ],
@@ -342,8 +286,6 @@ async function runCronJobWorker(worker, suffix = worker.component) {
   assertNoSensitiveLeak(worker.name, logs, [
     adminToken,
     workerToken,
-    rawWorkerPromptSentinel,
-    crashWorkerPromptSentinel,
     rawContentSentinel,
   ]);
   const output = parseWorkerOutput(worker.name, logs);
@@ -362,167 +304,6 @@ async function runCronJobWorker(worker, suffix = worker.component) {
       ),
     },
   };
-}
-
-async function runWorkflowResumePodCrashRecoverySmoke(workflow) {
-  const worker = requiredWorkerSpec("workflow_resume");
-  const crashJobName = uniqueJobName("workflow-crash");
-  createdJobs.push(crashJobName);
-  kubectl([
-    "delete",
-    "job",
-    crashJobName,
-    "-n",
-    namespace,
-    "--ignore-not-found=true",
-    "--wait=true",
-  ]);
-  const cronJob = kubectlJson([
-    "get",
-    "cronjob",
-    cronJobName(worker),
-    "-n",
-    namespace,
-  ]);
-  applyResources(namespace, [crashJobFromCronJob(cronJob, crashJobName)]);
-  const podName = await waitForRunningJobPod(crashJobName);
-  const iterationLogs = await waitForJobLogsContain(
-    crashJobName,
-    '"iteration"',
-  );
-  assertNoSensitiveLeak("workflow_resume crash job", iterationLogs, [
-    adminToken,
-    workerToken,
-    crashWorkerPromptSentinel,
-    rawContentSentinel,
-  ]);
-  kubectl([
-    "delete",
-    "pod",
-    podName,
-    "-n",
-    namespace,
-    "--grace-period=0",
-    "--force",
-  ]);
-  kubectl(
-    [
-      "wait",
-      "--for=condition=failed",
-      `job/${crashJobName}`,
-      "-n",
-      namespace,
-      "--timeout",
-      `${Math.ceil(timeoutMs / 1000)}s`,
-    ],
-    { allowFailure: true },
-  );
-  readJobLogs(crashJobName);
-
-  const recovery = await runCronJobWorker(worker, "workflow-recovery");
-  const recovered = await assertWorkflowRunStatus(
-    harness,
-    adminToken,
-    workflow,
-    "waiting_approval",
-  );
-  const step = recovered.steps.find((item) => item.stepId === "step_1");
-  if (step?.output?.runId !== workflow.linkedRunId) {
-    throw new Error(
-      "Kubernetes workflow resume crash recovery created a duplicate linked run.",
-    );
-  }
-  const runs = await workflowRuns(harness, adminToken, workflow.workflowId);
-  if (runs.filter((item) => item.id === workflow.workflowRunId).length !== 1) {
-    throw new Error(
-      "Kubernetes workflow resume crash recovery duplicated the workflow run.",
-    );
-  }
-  return {
-    component: worker.component,
-    crashJobName,
-    killedPodName: podName,
-    termination: "forced_pod_delete",
-    recoveryJobName: recovery.evidence.jobName,
-    workflowId: workflow.workflowId,
-    workflowRunId: workflow.workflowRunId,
-    linkedRunId: workflow.linkedRunId,
-    recoveredStatus: recovered.status,
-  };
-}
-
-function crashJobFromCronJob(cronJob, jobName) {
-  const template = JSON.parse(
-    JSON.stringify(cronJob.spec?.jobTemplate?.spec?.template),
-  );
-  const container = template?.spec?.containers?.[0];
-  if (container === undefined) {
-    throw new Error(
-      "workflow-resume CronJob did not contain a worker container.",
-    );
-  }
-  container.command = [
-    "pnpm",
-    "--filter",
-    "@romeo/cli",
-    "start",
-    "--",
-    "workers",
-    "workflow-resume",
-    "--workspace",
-    "workspace_default",
-    "--interval-ms",
-    "15000",
-    "--max-iterations",
-    "2",
-    "--max-workflows",
-    "1",
-    "--max-runs",
-    "1",
-  ];
-  delete container.args;
-  return {
-    apiVersion: "batch/v1",
-    kind: "Job",
-    metadata: {
-      name: jobName,
-      labels: {
-        "app.kubernetes.io/name": "romeo",
-        "app.kubernetes.io/component": "workflow-resume-crash-smoke",
-      },
-    },
-    spec: {
-      backoffLimit: 0,
-      activeDeadlineSeconds: 120,
-      template,
-    },
-  };
-}
-
-async function waitForRunningJobPod(jobName) {
-  return waitForCondition(`running pod for ${jobName}`, timeoutMs, () => {
-    const pods = kubectlJson([
-      "get",
-      "pods",
-      "-n",
-      namespace,
-      "-l",
-      `job-name=${jobName}`,
-    ]).items;
-    const running = pods.find((pod) => pod.status?.phase === "Running");
-    return running?.metadata?.name;
-  });
-}
-
-async function waitForJobLogsContain(jobName, needle) {
-  return waitForCondition(
-    `${jobName} logs to contain ${needle}`,
-    timeoutMs,
-    () => {
-      const logs = readJobLogs(jobName, { allowFailure: true });
-      return logs.includes(needle) ? logs : false;
-    },
-  );
 }
 
 function readJobLogs(jobName, options = {}) {

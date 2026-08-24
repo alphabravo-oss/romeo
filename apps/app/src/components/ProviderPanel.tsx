@@ -8,6 +8,7 @@ import type {
   ProviderVerification,
 } from "../features/providers/types";
 import { useLocale } from "../lib/i18n";
+import { localizedStatus } from "../lib/localized-status";
 import { toast } from "../lib/toast";
 import { AddButton, IdentityCell, Section, StatRow } from "./console";
 import { ConnectionDialog } from "./ProviderConnectionDialog";
@@ -209,7 +210,7 @@ export function ProviderPanel({
                         : "danger"
                 }
               >
-                {status}
+                {localizedStatus(status, t)}
               </StatusBadge>
             );
           },
@@ -411,7 +412,7 @@ export function ProviderPanel({
       />
 
       {providers.length === 0 ? (
-        <EmptyState title={t("connectEndpoint")}>
+        <EmptyState headingLevel={2} title={t("connectEndpoint")}>
           {t("connectionsDescription")}
         </EmptyState>
       ) : (

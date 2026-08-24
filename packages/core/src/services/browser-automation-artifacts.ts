@@ -1,10 +1,10 @@
 import { ApiError } from "../errors";
-import { publicBrowserAutomationArtifact } from "./workflow-browser-tasks";
+import { publicBrowserAutomationArtifact } from "./browser-automation-tasks";
 import type {
   BrowserAutomationArtifactSummary,
   BrowserAutomationCompletionResult,
   BrowserAutomationStoredArtifact,
-} from "./workflow-browser-tasks";
+} from "./browser-automation-tasks";
 
 export const browserAutomationArtifactUploadTtlSeconds = 900;
 export const browserAutomationArtifactMaxBytes = 50 * 1024 * 1024;

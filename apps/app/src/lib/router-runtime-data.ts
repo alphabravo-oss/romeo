@@ -13,6 +13,7 @@ import { bootstrapQueryOptions } from "./api-query-options";
 import { queryCacheProfiles } from "./query-cache-policy";
 import { devQueryDiagnosticMeta } from "./query-cache-diagnostics";
 import type { Locale } from "./i18n";
+import { throwIfSignalAborted } from "./abort-signal";
 
 export interface RouterSessionSnapshot {
   locale: Locale;
@@ -21,6 +22,7 @@ export interface RouterSessionSnapshot {
     kind: "api_key" | "session" | "unknown";
   };
   subject: {
+    displayLabel: string;
     id: string;
     isAdmin: boolean;
     orgId: string;
@@ -57,6 +59,7 @@ export function sanitizeRouterSession(
             : "unknown",
     },
     subject: {
+      displayLabel: subject.name ?? subject.email ?? subject.id,
       id: subject.id,
       isAdmin: subject.isAdmin === true,
       orgId: subject.orgId,
@@ -93,7 +96,7 @@ export function routerSessionQueryOptions(
       // Leave its exact request alive when only this projection is cancelled;
       // the outer signal still prevents a late sanitized snapshot commit.
       const bootstrap = await queryClient.fetchQuery(bootstrapOptions);
-      signal.throwIfAborted();
+      throwIfSignalAborted(signal);
       return sanitizeRouterSession(bootstrap, locale);
     },
     queryKey: appQueryKeys.routerSession(locale),

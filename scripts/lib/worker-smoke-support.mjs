@@ -25,31 +25,6 @@ export const composeWorkerCommands = [
     numericChecks: ["candidateCount", "syncedCount", "failedCount"],
   },
   {
-    name: "workflow_resume",
-    profile: "workers",
-    service: "workflow-resume-worker",
-    component: "workflow-resume",
-    command: [
-      "pnpm",
-      "--filter",
-      "@romeo/cli",
-      "start",
-      "--",
-      "workers",
-      "workflow-resume",
-      "--workspace",
-      "workspace_default",
-      "--once",
-      "--interval-ms",
-      "0",
-      "--max-workflows",
-      "1",
-      "--max-runs",
-      "1",
-    ],
-    numericChecks: ["workflowCount", "candidateCount", "resumedCount"],
-  },
-  {
     name: "webhook_retry",
     profile: "workers",
     service: "webhook-retry-worker",
@@ -199,11 +174,6 @@ export const kubernetesCoreWorkerSpecs = composeWorkerCommands.filter(
 
 export const composeLoopRestartWorkers = [
   {
-    name: "workflow_resume",
-    profile: "workers",
-    service: "workflow-resume-worker",
-  },
-  {
     name: "webhook_retry",
     profile: "workers",
     service: "webhook-retry-worker",
@@ -279,36 +249,6 @@ export function assertNoSensitiveLeak(label, text, values) {
   }
 }
 
-export function assertWorkflowResumeWorkerOutput(output, workflow) {
-  if (output.candidateCount < 1 || output.resumedCount < 1) {
-    throw new Error(
-      "workflow_resume worker did not process the controlled pending workflow run.",
-    );
-  }
-  const run = output.runs?.find((item) => item.id === workflow.workflowRunId);
-  if (run === undefined) {
-    throw new Error(
-      "workflow_resume worker output did not include the controlled run summary.",
-    );
-  }
-  if (run.input !== undefined) {
-    throw new Error(
-      "workflow_resume worker output included raw workflow input.",
-    );
-  }
-  const agentStep = run.steps?.find((step) => step.stepId === "step_1");
-  if (agentStep?.output !== undefined) {
-    throw new Error(
-      "workflow_resume worker output included raw step output values.",
-    );
-  }
-  if (!agentStep?.outputKeys?.includes("runId")) {
-    throw new Error(
-      "workflow_resume worker summary did not include step output key metadata.",
-    );
-  }
-}
-
 export async function createSmokeAgent(harness, token, options = {}) {
   const response = await apiJson(harness, "/api/v1/agents", {
     method: "POST",
@@ -343,70 +283,6 @@ export async function createSmokeAgent(harness, token, options = {}) {
   return { ...response.data, publishedVersionId: published.data.id };
 }
 
-export async function createWorkflowResumePendingRun(harness, token, input) {
-  const workflow = await apiJson(harness, "/api/v1/workflows", {
-    method: "POST",
-    token,
-    body: {
-      workspaceId: "workspace_default",
-      name: input.name,
-      steps: [
-        { type: "agent_run", name: "Draft", agentId: input.agentId },
-        {
-          type: "approval",
-          name: "Review",
-          approvalPrompt: "Approve the worker smoke draft.",
-        },
-      ],
-    },
-    expectedStatus: 201,
-  });
-  const run = await startWorkflowRunWithReadback(
-    harness,
-    token,
-    workflow.data.id,
-    input.prompt,
-  );
-  const linkedRunId = run.steps?.[0]?.output?.runId;
-  if (typeof linkedRunId !== "string" || linkedRunId.length === 0) {
-    throw new Error(
-      "Controlled workflow run did not start a linked model run.",
-    );
-  }
-  await waitForRunStatus(harness, token, linkedRunId, "completed");
-  return {
-    workflowId: workflow.data.id,
-    workflowRunId: run.id,
-    linkedRunId,
-  };
-}
-
-export async function assertWorkflowRunStatus(
-  harness,
-  token,
-  workflow,
-  status,
-) {
-  const deadline = Date.now() + harness.timeoutMs;
-  let lastStatus = "unknown";
-  while (Date.now() < deadline) {
-    try {
-      const run = (
-        await workflowRuns(harness, token, workflow.workflowId)
-      ).find((item) => item.id === workflow.workflowRunId);
-      lastStatus = run?.status ?? "missing";
-      if (run?.status === status) return run;
-    } catch (error) {
-      if (!isFetchFailure(error)) throw error;
-      lastStatus = "transient_fetch_failure";
-    }
-    await sleep(1000);
-  }
-  throw new Error(
-    `Timed out waiting for workflow run ${workflow.workflowRunId} to reach ${status}; last status ${lastStatus}.`,
-  );
-}
-
 export async function waitForRunStatus(harness, token, runId, status) {
   const deadline = Date.now() + harness.timeoutMs;
   let lastStatus = "unknown";
@@ -423,70 +299,6 @@ export async function waitForRunStatus(harness, token, runId, status) {
   }
   throw new Error(
     `Timed out waiting for run ${runId} to reach ${status}; last status ${lastStatus}.`,
-  );
-}
-
-export async function workflowRuns(harness, token, workflowId) {
-  let lastFetchFailure;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      const response = await apiJson(
-        harness,
-        `/api/v1/workflows/${workflowId}/runs`,
-        { token },
-      );
-      if (!Array.isArray(response.data)) {
-        throw new Error("Workflow runs response was not an array.");
-      }
-      return response.data;
-    } catch (error) {
-      if (!isFetchFailure(error)) throw error;
-      lastFetchFailure = error;
-      await sleep(1000);
-    }
-  }
-  throw lastFetchFailure;
-}
-
-async function startWorkflowRunWithReadback(
-  harness,
-  token,
-  workflowId,
-  prompt,
-) {
-  try {
-    const response = await apiJson(
-      harness,
-      `/api/v1/workflows/${workflowId}/runs`,
-      {
-        method: "POST",
-        token,
-        body: { input: { prompt } },
-        expectedStatus: 201,
-      },
-    );
-    return response.data;
-  } catch (error) {
-    if (!isFetchFailure(error)) throw error;
-    return waitForWorkflowRunByPrompt(harness, token, workflowId, prompt);
-  }
-}
-
-async function waitForWorkflowRunByPrompt(harness, token, workflowId, prompt) {
-  const deadline = Date.now() + harness.timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const run = (await workflowRuns(harness, token, workflowId)).find(
-        (item) => item.input?.prompt === prompt,
-      );
-      if (run !== undefined) return run;
-    } catch (error) {
-      if (!isFetchFailure(error)) throw error;
-    }
-    await sleep(1000);
-  }
-  throw new Error(
-    `Timed out reading back workflow run for workflow ${workflowId}.`,
   );
 }
 

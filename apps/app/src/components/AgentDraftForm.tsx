@@ -27,6 +27,7 @@ import type { AgentDraftFormProps } from "./agent-draft-types";
 import { agentPromptPresets } from "./agent-draft-presets";
 import { findAgentDraftModel } from "./agent-draft-selection";
 import { safeUserErrorMessage } from "../lib/safe-user-error";
+import { useEventCallback } from "../lib/use-event-callback";
 
 export function AgentDraftForm({
   activeAgent,
@@ -170,36 +171,32 @@ export function AgentDraftForm({
     () => findAgentDraftModel(modelGroups, baseModelId),
     [baseModelId, modelGroups],
   );
+  const resetDraftFromAuthoritativeAgent = useEventCallback(
+    (agentChanged: boolean) => {
+      if (
+        !shouldResetDraftForm({
+          isDirty: form.state.isDirty,
+          agentChanged,
+        })
+      )
+        return;
+      form.reset(buildDefaults(activeAgent));
+    },
+  );
 
   useEffect(() => {
     onDirtyChange(isDirty);
   }, [isDirty, onDirtyChange]);
 
   useEffect(() => {
-    if (
-      !shouldResetDraftForm({
-        isDirty: form.state.isDirty,
-        agentChanged: true,
-      })
-    )
-      return;
-    form.reset(buildDefaults(activeAgent));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeAgent?.id]);
+    resetDraftFromAuthoritativeAgent(true);
+  }, [activeAgent?.id, resetDraftFromAuthoritativeAgent]);
 
   useEffect(() => {
     // Re-seeding from the server is correct when the user switches assistants,
     // and destructive when they are mid-edit: publish/rollback both bump
     // updatedAt, which used to fire this reset and wipe the open form.
-    if (
-      !shouldResetDraftForm({
-        isDirty: form.state.isDirty,
-        agentChanged: false,
-      })
-    )
-      return;
-    form.reset(buildDefaults(activeAgent));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    resetDraftFromAuthoritativeAgent(false);
   }, [
     activeAgent?.systemPrompt,
     activeAgent?.name,
@@ -210,6 +207,7 @@ export function AgentDraftForm({
     activeAgent?.promptSuggestions,
     activeAgent?.tags,
     activeAgent?.updatedAt,
+    resetDraftFromAuthoritativeAgent,
   ]);
 
   return (

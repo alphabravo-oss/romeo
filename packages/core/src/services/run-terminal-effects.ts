@@ -8,6 +8,9 @@ import { advanceChatLeaf, runUserMessage } from "./run-command-service";
 import { enforceContentPolicyText } from "./content-policy-service";
 import type { RunEventSequencer } from "./run-event-sequencer";
 import type { RunKnowledgeCitation } from "./run-knowledge";
+import type { PersistedOutputPartRef } from "./persist-output-parts";
+import { parseMessagePartV1 } from "./message-part-v1";
+import { createId } from "../ids";
 import { recordRunTerminalUsage } from "./run-usage";
 import {
   continueTelemetryContextFromPayload,
@@ -33,6 +36,7 @@ export interface PersistTerminalRunInput {
   model?: BaseModel;
   providerUsage?: ProviderTokenUsage;
   citations?: RunKnowledgeCitation[];
+  outputParts?: PersistedOutputPartRef[];
   /** Inline error shown as the assistant turn when the model run fails. */
   error?: {
     code: string;
@@ -131,7 +135,11 @@ export async function persistTerminalRunInRepository(
   const error = terminalRunError(input);
   // Failures and cancels always mint an assistant row so the transcript keeps
   // an inline error in place of the missing answer, even when no tokens arrived.
-  if (input.assistantContent.length > 0 || error !== undefined) {
+  if (
+    input.assistantContent.length > 0 ||
+    error !== undefined ||
+    (input.outputParts?.length ?? 0) > 0
+  ) {
     // The parent is the run's own user message, never the chat's leaf pointer: switching variants
     // while this run streams would otherwise graft the answer onto the branch the reader is looking
     // at rather than the one that asked the question.
@@ -153,6 +161,22 @@ export async function persistTerminalRunInRepository(
       ...(parent === undefined ? {} : { parentId: parent.id }),
       createdAt: completedAt,
     });
+    if (input.outputParts !== undefined && input.outputParts.length > 0) {
+      await repository.createMessageParts(
+        input.outputParts.map((part, index) =>
+          outputMessagePart(part, {
+            createdAt: completedAt,
+            messageId: assistantId,
+            modelId: finalized.modelId,
+            position: index,
+          }),
+        ),
+      );
+      await repository.reconcileChatFileReferences(
+        finalized.chatId,
+        completedAt,
+      );
+    }
     await advanceChatLeaf(repository, finalized.chatId, assistantId);
   }
   const eventType = terminalWebhookEventType(input.status);
@@ -183,6 +207,65 @@ export async function persistTerminalRunInRepository(
     updatedAt: completedAt,
   });
   return { run: finalized, events };
+}
+
+function outputMessagePart(
+  part: PersistedOutputPartRef,
+  input: {
+    createdAt: string;
+    messageId: string;
+    modelId: string;
+    position: number;
+  },
+) {
+  const common = {
+    createdAt: input.createdAt,
+    id: createId("msg_part"),
+    messageId: input.messageId,
+    position: input.position,
+    provenance: { modelId: input.modelId, source: "provider" as const },
+    schemaVersion: 1 as const,
+  };
+  if (
+    part.type === "image_ref" &&
+    part.fileId !== undefined &&
+    part.mediaType !== undefined
+  )
+    return parseMessagePartV1({
+      ...common,
+      altText: "Provider-generated image",
+      fileId: part.fileId,
+      mediaType: part.mediaType,
+      type: "image_ref",
+    });
+  if (
+    part.type === "audio_ref" &&
+    part.fileId !== undefined &&
+    part.mediaType !== undefined &&
+    part.durationMs !== undefined
+  )
+    return parseMessagePartV1({
+      ...common,
+      durationMs: part.durationMs,
+      fileId: part.fileId,
+      mediaType: part.mediaType,
+      type: "audio_ref",
+    });
+  if (
+    part.type === "citation_ref" &&
+    part.sourceId !== undefined &&
+    part.documentId !== undefined &&
+    part.title !== undefined
+  )
+    return parseMessagePartV1({
+      ...common,
+      sourceId: part.sourceId,
+      documentId: part.documentId,
+      ...(part.chunkId === undefined ? {} : { chunkId: part.chunkId }),
+      title: part.title,
+      type: "citation_ref",
+    });
+  throw new Error("provider_output_part_not_persistable");
 }
 
 export async function drainRunTerminalOutbox(input: {

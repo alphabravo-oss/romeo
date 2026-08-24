@@ -7,6 +7,7 @@ import {
   freezeTableExportSnapshot,
   tableExportProgressEvent,
   TABLE_EXPORT_SNAPSHOT_SCHEMA,
+  type TableExportJob,
 } from "./server-table-export-job";
 
 describe("server table export jobs", () => {
@@ -52,10 +53,10 @@ describe("server table export jobs", () => {
       estimatedRows: 80,
       now: "2026-08-14T12:00:00.000Z",
     });
-    let job = {
+    let job: TableExportJob = {
       id: "export_job_1",
       snapshot,
-      state: "queued" as const,
+      state: "queued",
       percent: 0,
     };
     job = advanceTableExportJob(job, { type: "start" });
@@ -70,9 +71,9 @@ describe("server table export jobs", () => {
       artifactId: "file_export_1",
       percent: 100,
     });
-    expect(
-      expireTableExportArtifact(job, "2027-08-14T13:00:00.000Z"),
-    ).toMatchObject({ state: "expired", artifactId: undefined });
+    const expired = expireTableExportArtifact(job, "2027-08-14T13:00:00.000Z");
+    expect(expired).toMatchObject({ state: "expired" });
+    expect(expired).not.toHaveProperty("artifactId");
     const progress = tableExportProgressEvent({
       jobId: job.id,
       sequence: 2,

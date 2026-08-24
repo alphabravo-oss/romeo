@@ -43,6 +43,7 @@ const outputPath = repoPath(
 );
 const generatedAt = argValue("--generated-at") ?? new Date().toISOString();
 const stdout = hasFlag("--stdout");
+const dryRun = hasFlag("--dry-run");
 const requireChecklistPassed = hasFlag("--require-checklist-passed");
 const requireReadbackValidation =
   hasFlag("--require-readback-validation") || requireChecklistPassed;
@@ -303,6 +304,17 @@ function validateReleaseEvidence() {
     approval.json?.schemaVersion === "romeo.release-approval.v1" &&
       approval.json?.status === "passed",
     { code: "release_approval_not_passed" },
+  );
+  check(
+    "release approval authenticity posture is valid",
+    dryRun
+      ? approval.json?.mode === "dry_run" &&
+          approval.json?.authentic === false &&
+          approval.json?.promotable === false
+      : approval.json?.mode === "protected_environment" &&
+          approval.json?.authentic === true &&
+          approval.json?.promotable === true,
+    { code: "release_approval_authenticity_invalid" },
   );
   check(
     "release approval version matches manifest",

@@ -2,6 +2,7 @@ import { MutationObserver } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiQueryKeys } from "../../lib/api-query-options";
+import * as appQueryKeys from "../../lib/app-query-keys";
 import { completeMutationNetworkRevalidation } from "../../lib/connectivity";
 import { advanceMutationSessionBoundary } from "../../lib/mutation-session-boundary";
 import { createRomeoQueryClient } from "../../lib/query-client";
@@ -95,11 +96,27 @@ describe("provider mutation policies", () => {
       apiQueryKeys.providerModelCapabilityReport("model-2");
     const providerReportKey =
       apiQueryKeys.providerCapabilityReport("provider-1");
+    const tableKey = appQueryKeys.tablePages({
+      filters: [],
+      limit: 25,
+      parentId: "provider-1",
+      resource: "provider_models",
+      sort: [],
+    });
+    const otherProviderTableKey = appQueryKeys.tablePages({
+      filters: [],
+      limit: 25,
+      parentId: "provider-2",
+      resource: "provider_models",
+      sort: [],
+    });
     for (const key of [
       modelKey,
       modelReportKey,
       otherModelReportKey,
       providerReportKey,
+      tableKey,
+      otherProviderTableKey,
     ]) {
       client.setQueryData(key as readonly unknown[], { data: {} });
     }
@@ -118,6 +135,10 @@ describe("provider mutation policies", () => {
     expect(client.getQueryState(modelReportKey)?.isInvalidated).toBe(true);
     expect(client.getQueryState(providerReportKey)?.isInvalidated).toBe(true);
     expect(client.getQueryState(otherModelReportKey)?.isInvalidated).toBe(
+      false,
+    );
+    expect(client.getQueryState(tableKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(otherProviderTableKey)?.isInvalidated).toBe(
       false,
     );
   });

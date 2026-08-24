@@ -27,7 +27,8 @@ export const createRealtimeSessionRoute = createRoute({
   method: "post",
   path: "/api/v1/realtime/sessions",
   operationId: "realtime.createSession",
-  summary: "Create an authenticated realtime voice session or fail closed",
+  summary:
+    "Preview realtime session policy. This does not start a live gateway session.",
   request: {
     body: {
       required: true,
@@ -89,7 +90,10 @@ export const createComputeJobRoute = createRoute({
     },
   },
   responses: {
-    200: jsonResponse("Compute job decision", dataEnvelope(ComputeJobDecisionSchema)),
+    200: jsonResponse(
+      "Compute job decision",
+      dataEnvelope(ComputeJobDecisionSchema),
+    ),
     ...standardErrorResponses,
   },
 });
@@ -226,7 +230,13 @@ export const prefilterKnowledgeAclRoute = createRoute({
 
 export const TrustPostureSchema = z
   .strictObject({
-    keys: z.enum(["verified", "failed", "stale", "not_configured", "not_applicable"]),
+    keys: z.enum([
+      "verified",
+      "failed",
+      "stale",
+      "not_configured",
+      "not_applicable",
+    ]),
     residency: z.enum([
       "verified",
       "failed",
@@ -234,8 +244,48 @@ export const TrustPostureSchema = z
       "not_configured",
       "not_applicable",
     ]),
-    dlp: z.enum(["verified", "failed", "stale", "not_configured", "not_applicable"]),
-    acl: z.enum(["verified", "failed", "stale", "not_configured", "not_applicable"]),
+    dlp: z.enum([
+      "verified",
+      "failed",
+      "stale",
+      "not_configured",
+      "not_applicable",
+    ]),
+    acl: z.enum([
+      "verified",
+      "failed",
+      "stale",
+      "not_configured",
+      "not_applicable",
+    ]),
+    auditExport: z.strictObject({
+      customerSiem: z.strictObject({
+        ageMs: z.number().int().nonnegative().optional(),
+        lagSequences: z.number().int().nonnegative(),
+        lastSuccessAt: z.iso.datetime().optional(),
+        state: z.enum([
+          "dead_letter",
+          "not_configured",
+          "pending",
+          "retrying",
+          "running",
+          "verified",
+        ]),
+      }),
+      wormCompatible: z.strictObject({
+        ageMs: z.number().int().nonnegative().optional(),
+        lagSequences: z.number().int().nonnegative(),
+        lastSuccessAt: z.iso.datetime().optional(),
+        state: z.enum([
+          "dead_letter",
+          "not_configured",
+          "pending",
+          "retrying",
+          "running",
+          "verified",
+        ]),
+      }),
+    }),
     syntheticGreen: z.literal(false),
   })
   .openapi("TrustPosture");
@@ -246,7 +296,8 @@ export const getTrustPostureRoute = createRoute({
   method: "get",
   path: "/api/v1/admin/trust/posture",
   operationId: "trust.getPosture",
-  summary: "Report key, residency, DLP, and ACL posture without synthetic green",
+  summary:
+    "Report key, residency, DLP, and ACL posture without synthetic green",
   responses: {
     200: jsonResponse("Trust posture", dataEnvelope(TrustPostureSchema)),
     ...standardErrorResponses,
@@ -300,7 +351,10 @@ export const createImageJobRoute = createRoute({
     },
   },
   responses: {
-    200: jsonResponse("Image job decision", dataEnvelope(ImageJobDecisionSchema)),
+    200: jsonResponse(
+      "Image job decision",
+      dataEnvelope(ImageJobDecisionSchema),
+    ),
     ...standardErrorResponses,
   },
 });
@@ -314,7 +368,10 @@ export const cancelImageJobRoute = createRoute({
   summary: "Cancel a durable image job",
   request: { params: z.strictObject({ jobId: identifier }) },
   responses: {
-    200: jsonResponse("Image job decision", dataEnvelope(ImageJobDecisionSchema)),
+    200: jsonResponse(
+      "Image job decision",
+      dataEnvelope(ImageJobDecisionSchema),
+    ),
     ...standardErrorResponses,
   },
 });

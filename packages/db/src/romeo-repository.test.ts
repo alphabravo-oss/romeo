@@ -7,6 +7,8 @@ import {
   parseMessagePartV1,
   createServices,
   createRomeoApi,
+  AuditIntegrityService,
+  VersionedHmacAuditCheckpointSigner,
   transitionFileLifecycle,
   type RomeoServices,
   type RomeoRepository,
@@ -35,6 +37,17 @@ interface RepositoryFixture {
   repository: RomeoRepository;
   close?: () => Promise<void>;
 }
+
+const auditConformanceSubject = {
+  id: "user_dev_admin",
+  type: "user",
+  orgId: "org_default",
+  workspaceIds: ["workspace_default"],
+  groupIds: ["group_admins"],
+  scopes: ["admin:read", "admin:write"],
+  isAdmin: true,
+  adminRole: "global_admin",
+} satisfies Parameters<AuditIntegrityService["seal"]>[0]["subject"];
 
 interface RepositorySubject {
   name: string;
@@ -90,6 +103,197 @@ describe("RomeoRepository conformance", () => {
 
   for (const subject of subjects) {
     describe(`${subject.name}`, () => {
+      it("composes every specialized repository surface into the shared contract", async () => {
+        await withRepository(subject, async (repository) => {
+          // Lease fencing and mutation semantics are asserted in their focused
+          // repository suites. This shared guard makes both complete repository
+          // implementations expose those tested fragments through the same API.
+          const specializedMethods = {
+            getFileLifecycleQueueSummary:
+              repository.getFileLifecycleQueueSummary,
+            listFileRetentionCandidates: repository.listFileRetentionCandidates,
+            claimDueNotificationDeliveries:
+              repository.claimDueNotificationDeliveries,
+            finishNotificationDeliveryLease:
+              repository.finishNotificationDeliveryLease,
+            getKnowledgeSource: repository.getKnowledgeSource,
+            claimKnowledgeSourceExtraction:
+              repository.claimKnowledgeSourceExtraction,
+            renewKnowledgeSourceExtractionLease:
+              repository.renewKnowledgeSourceExtractionLease,
+            finishKnowledgeSourceExtraction:
+              repository.finishKnowledgeSourceExtraction,
+            claimDataConnectorSync: repository.claimDataConnectorSync,
+            renewDataConnectorSyncLease: repository.renewDataConnectorSyncLease,
+            finishDataConnectorSync: repository.finishDataConnectorSync,
+            createContentDeletionOperation:
+              repository.createContentDeletionOperation,
+            getContentDeletionOperation: repository.getContentDeletionOperation,
+            getActiveContentDeletionOperation:
+              repository.getActiveContentDeletionOperation,
+            claimContentDeletionOperation:
+              repository.claimContentDeletionOperation,
+            updateContentDeletionOperationWithLease:
+              repository.updateContentDeletionOperationWithLease,
+            renewContentDeletionOperationLease:
+              repository.renewContentDeletionOperationLease,
+            createGovernanceExportJob: repository.createGovernanceExportJob,
+            getGovernanceExportJob: repository.getGovernanceExportJob,
+            listGovernanceExportJobs: repository.listGovernanceExportJobs,
+            claimGovernanceExportJob: repository.claimGovernanceExportJob,
+            updateGovernanceExportJobWithLease:
+              repository.updateGovernanceExportJobWithLease,
+            updateGovernanceExportJob: repository.updateGovernanceExportJob,
+            createGovernanceExportArtifact:
+              repository.createGovernanceExportArtifact,
+            getGovernanceExportArtifact: repository.getGovernanceExportArtifact,
+            updateGovernanceExportArtifact:
+              repository.updateGovernanceExportArtifact,
+            getContentPolicyDecision: repository.getContentPolicyDecision,
+            listContentPolicyApprovals: repository.listContentPolicyApprovals,
+            listPendingContentPolicyApprovalsDue:
+              repository.listPendingContentPolicyApprovalsDue,
+            listAuditIntegrityCheckpoints:
+              repository.listAuditIntegrityCheckpoints,
+            getAuditIntegrityCheckpoint: repository.getAuditIntegrityCheckpoint,
+            getAuditIntegrityCheckpointByHash:
+              repository.getAuditIntegrityCheckpointByHash,
+            createAuditIntegrityCheckpoint:
+              repository.createAuditIntegrityCheckpoint,
+            getAuditExportDestination: repository.getAuditExportDestination,
+            upsertAuditExportDestination:
+              repository.upsertAuditExportDestination,
+            listAuditExportJobs: repository.listAuditExportJobs,
+            getAuditExportJobByIdempotencyHash:
+              repository.getAuditExportJobByIdempotencyHash,
+            createAuditExportJob: repository.createAuditExportJob,
+            claimAuditExportJob: repository.claimAuditExportJob,
+            completeAuditExportAttempt: repository.completeAuditExportAttempt,
+            listAuditExportAttempts: repository.listAuditExportAttempts,
+            createAuditExportIdempotencyReceipt:
+              repository.createAuditExportIdempotencyReceipt,
+            auditRetentionExportGate: repository.auditRetentionExportGate,
+            getBackgroundJob: repository.getBackgroundJob,
+            queryInventoriedTableRows: repository.queryInventoriedTableRows,
+            listServerTableSavedViews: repository.listServerTableSavedViews,
+            getServerTableSavedView: repository.getServerTableSavedView,
+            writeServerTableSavedView: repository.writeServerTableSavedView,
+            deleteServerTableSavedView: repository.deleteServerTableSavedView,
+            restoreServerTableSavedView: repository.restoreServerTableSavedView,
+          } satisfies Record<string, (...args: never[]) => Promise<unknown>>;
+
+          expect(Object.keys(specializedMethods)).toHaveLength(50);
+          expect(
+            Object.values(specializedMethods).every(
+              (method) => typeof method === "function",
+            ),
+          ).toBe(true);
+          await expect(
+            repository.getFileLifecycleQueueSummary("org_default"),
+          ).resolves.toMatchObject({
+            deadLettered: expect.any(Number),
+            queued: expect.any(Number),
+          });
+          await expect(
+            repository.listFileRetentionCandidates({
+              limit: 10,
+              orgId: "org_default",
+            }),
+          ).resolves.toEqual(expect.any(Array));
+        });
+      });
+
+      it("persists normalized content-policy approvals with one CAS resolution winner", async () => {
+        await withRepository(subject, async (repository) => {
+          const now = "2026-08-23T12:00:00.000Z";
+          await repository.createRun({
+            id: "run_content_policy_approval_conformance",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            chatId: "chat_welcome",
+            agentId: "agent_default",
+            agentVersionId: "agent_version_default_v1",
+            modelId: "model_openai_compatible_default",
+            providerId: "provider_openai_compatible",
+            status: "waiting_tool_approval",
+            createdBy: "user_dev_admin",
+            createdAt: now,
+          });
+          const job = await repository.createBackgroundJob({
+            id: "job_content_policy_approval_conformance",
+            orgId: "org_default",
+            workspaceId: "workspace_default",
+            type: "run.execution:run_content_policy_approval_conformance",
+            status: "queued",
+            payload: {
+              runId: "run_content_policy_approval_conformance",
+              checkpointKey: "run-policy-checkpoint.json",
+              assistantOutputStarted: true,
+              lastEventSequence: 1,
+              contentPolicyApprovalId: "approval_content_policy_conformance",
+            },
+            createdAt: now,
+            updatedAt: now,
+          });
+          const decision = await repository.createContentPolicyDecision({
+            id: "decision_content_policy_conformance",
+            orgId: "org_default",
+            policyVersionId: "version_content_policy_conformance",
+            surface: "run_output",
+            action: "block",
+            detectors: [{ action: "block", code: "api_token", count: 1 }],
+            runId: "run_content_policy_approval_conformance",
+            executionJobId: job.id,
+            decidedAt: now,
+          });
+          const approval = await repository.createContentPolicyApproval({
+            id: "approval_content_policy_conformance",
+            orgId: "org_default",
+            runId: "run_content_policy_approval_conformance",
+            decisionId: decision.id,
+            policyVersionId: decision.policyVersionId,
+            executionJobId: job.id,
+            actorId: "user_dev_admin",
+            state: "pending",
+            expiresAt: "2026-08-23T13:00:00.000Z",
+            createdAt: now,
+          });
+          expect(
+            await repository.listContentPolicyDecisions("org_default", 10),
+          ).toEqual([decision]);
+          expect(
+            await repository.getContentPolicyApproval(
+              "org_default",
+              approval.id,
+            ),
+          ).toEqual(approval);
+          const transitions = await Promise.all([
+            repository.transitionContentPolicyApproval({
+              approvalId: approval.id,
+              expectedState: "pending",
+              nextState: "approved",
+              orgId: approval.orgId,
+              resolvedAt: "2026-08-23T12:01:00.000Z",
+              resolvedBy: "user_dev_admin",
+            }),
+            repository.transitionContentPolicyApproval({
+              approvalId: approval.id,
+              expectedState: "pending",
+              nextState: "denied",
+              orgId: approval.orgId,
+              resolvedAt: "2026-08-23T12:01:00.000Z",
+              resolvedBy: "user_dev_admin",
+            }),
+          ]);
+          expect(
+            transitions.filter((transition) => transition !== undefined),
+          ).toHaveLength(1);
+          expect(
+            transitions.filter((transition) => transition === undefined),
+          ).toHaveLength(1);
+        });
+      });
+
       it("tracks durable message file references through attach, hold, release, and detach", async () => {
         await withRepository(subject, async (repository) => {
           const file = await repository.createFileObject({
@@ -227,6 +431,27 @@ describe("RomeoRepository conformance", () => {
             lifecycleAttempts: 2,
           });
           expect(
+            await repository.renewFileLifecycleLease({
+              fileId: failed.id,
+              leaseOwner: "worker_a",
+              leaseToken: "wrong_token",
+              now: "2026-08-14T12:00:10.000Z",
+              leaseExpiresAt: "2026-08-14T12:02:00.000Z",
+            }),
+          ).toBeUndefined();
+          const renewed = await repository.renewFileLifecycleLease({
+            fileId: failed.id,
+            leaseOwner: "worker_a",
+            leaseToken: "token_a",
+            now: "2026-08-14T12:00:10.000Z",
+            leaseExpiresAt: "2026-08-14T12:02:00.000Z",
+          });
+          expect(renewed).toMatchObject({
+            lifecycleLeaseExpiresAt: "2026-08-14T12:02:00.000Z",
+            lifecycleLeaseOwner: "worker_a",
+            lifecycleVersion: 5,
+          });
+          expect(
             await repository.claimNextFileLifecycle({
               leaseOwner: "worker_b",
               leaseToken: "token_b",
@@ -235,7 +460,7 @@ describe("RomeoRepository conformance", () => {
             }),
           ).toBeUndefined();
           const scanning = transitionFileLifecycle(
-            first!,
+            renewed!,
             "scanning",
             "2026-08-14T12:00:01.000Z",
           );
@@ -271,6 +496,37 @@ describe("RomeoRepository conformance", () => {
             lifecycleAttempts: 3,
             lifecycleLeaseOwner: "worker_b",
           });
+        });
+      });
+
+      it("backfills legacy message text parts in bounded idempotent batches", async () => {
+        await withRepository(subject, async (repository) => {
+          const first = await repository.backfillLegacyMessageTextParts({
+            maxMessages: 500,
+            maxPartRows: 10_000,
+          });
+          expect(first).toMatchObject({
+            blockedMessages: expect.any(Number),
+            messagesCompleted: expect.any(Number),
+            remainingMessages: expect.any(Number),
+            textPartsCreated: expect.any(Number),
+          });
+          await expect(
+            repository.backfillLegacyMessageTextParts({
+              maxMessages: 500,
+              maxPartRows: 10_000,
+            }),
+          ).resolves.toMatchObject({
+            messagesCompleted: 0,
+            remainingMessages: 0,
+            textPartsCreated: 0,
+          });
+          await expect(
+            repository.backfillLegacyMessageTextParts({
+              maxMessages: 0,
+              maxPartRows: 10_000,
+            }),
+          ).rejects.toThrow("maxMessages");
         });
       });
 
@@ -720,6 +976,47 @@ describe("RomeoRepository conformance", () => {
             outcome: "replay",
             receipt: { responseBody: { runId: "run_conformance" } },
           });
+          const failure = {
+            ...base,
+            id: "idempotency_receipt_failure_conformance",
+            keyHash: "7".repeat(64),
+            requestHash: "6".repeat(64),
+            leaseToken: "failure_lease",
+          };
+          await expect(
+            repository.claimIdempotencyReceipt({
+              receipt: failure,
+              now: "2026-08-14T11:02:30.000Z",
+            }),
+          ).resolves.toMatchObject({ outcome: "owner" });
+          await expect(
+            repository.failIdempotencyReceipt({
+              id: failure.id,
+              orgId: failure.orgId,
+              leaseToken: "wrong_lease",
+              errorCode: "controlled_failure",
+              now: "2026-08-14T11:02:31.000Z",
+            }),
+          ).resolves.toBeUndefined();
+          await expect(
+            repository.failIdempotencyReceipt({
+              id: failure.id,
+              orgId: failure.orgId,
+              leaseToken: failure.leaseToken,
+              errorCode: "controlled_failure",
+              now: "2026-08-14T11:02:32.000Z",
+            }),
+          ).resolves.toMatchObject({
+            state: "failed",
+            errorCode: "controlled_failure",
+            leaseToken: undefined,
+          });
+          await expect(
+            repository.claimIdempotencyReceipt({
+              receipt: failure,
+              now: "2026-08-14T11:02:33.000Z",
+            }),
+          ).resolves.toMatchObject({ outcome: "failed" });
           expect(
             await repository.claimIdempotencyReceipt({
               receipt: {
@@ -1478,11 +1775,14 @@ describe("RomeoRepository conformance", () => {
             createdAt: "2026-06-30T10:06:00.000Z",
             updatedAt: "2026-06-30T10:06:00.000Z",
           });
-          await repository.upsertSystemSetting({
-            key: lifecycleKey,
-            updatedAt: "2026-06-30T10:06:01.000Z",
-            value: { orgId, status: "requested" },
-          });
+          await repository.upsertSystemSetting(
+            {
+              key: lifecycleKey,
+              updatedAt: "2026-06-30T10:06:01.000Z",
+              value: { orgId, status: "requested" },
+            },
+            orgId,
+          );
 
           const result = await repository.purgeTenantData(orgId);
 
@@ -1499,7 +1799,7 @@ describe("RomeoRepository conformance", () => {
           expect(await repository.getCurrentUser(userId)).toBeUndefined();
           expect(await repository.getSsoOidcSettings(orgId)).toBeUndefined();
           expect(
-            await repository.getSystemSetting(lifecycleKey),
+            await repository.getSystemSetting(lifecycleKey, orgId),
           ).toBeUndefined();
         });
       });
@@ -3271,6 +3571,30 @@ describe("RomeoRepository conformance", () => {
           expect(await repository.listToolCalls("org_default")).toContainEqual(
             toolCall,
           );
+          expect(
+            await repository.listToolCallsForRun(
+              "org_default",
+              "workspace_default",
+              run.id,
+              10,
+            ),
+          ).toEqual([toolCall]);
+          expect(
+            await repository.listToolCallsForRun(
+              "org_default",
+              "workspace_research",
+              run.id,
+              10,
+            ),
+          ).toEqual([]);
+          expect(
+            await repository.listToolCallsForRun(
+              "org_other",
+              "workspace_default",
+              run.id,
+              10,
+            ),
+          ).toEqual([]);
 
           const connector = await repository.createToolConnector({
             id: "tool_connector_conformance",
@@ -3339,95 +3663,6 @@ describe("RomeoRepository conformance", () => {
           ).toMatchObject({
             enabled: false,
             name: "Post message disabled",
-          });
-
-          const workflow = await repository.createWorkflowDefinition({
-            id: "workflow_definition_conformance",
-            orgId: "org_default",
-            workspaceId: "workspace_default",
-            name: "Run agent",
-            description: "Conformance workflow",
-            steps: [
-              {
-                id: "workflow_step_agent",
-                type: "agent_run",
-                name: "Run agent",
-                agentId: runtime.agentId,
-              },
-            ],
-            schedule: {
-              enabled: true,
-              intervalMinutes: 60,
-              nextRunAt: "2026-06-30T13:15:00.000Z",
-            },
-            enabled: true,
-            createdBy: "user_dev_admin",
-            createdAt: "2026-06-30T12:16:00.000Z",
-            updatedAt: "2026-06-30T12:16:00.000Z",
-          });
-          expect(await repository.getWorkflowDefinition(workflow.id)).toEqual(
-            workflow,
-          );
-          expect(
-            await repository.listWorkflowDefinitions(
-              "org_default",
-              "workspace_default",
-            ),
-          ).toEqual([workflow]);
-          expect(
-            await repository.updateWorkflowDefinition({
-              ...workflow,
-              enabled: false,
-              updatedAt: "2026-06-30T12:17:00.000Z",
-            }),
-          ).toMatchObject({ enabled: false });
-
-          const workflowRun = await repository.createWorkflowRun({
-            id: "workflow_run_conformance",
-            orgId: "org_default",
-            workspaceId: "workspace_default",
-            workflowId: workflow.id,
-            status: "waiting_run",
-            input: { prompt: "Summarize" },
-            steps: [
-              {
-                stepId: "workflow_step_agent",
-                type: "agent_run",
-                status: "waiting_run",
-                output: {},
-              },
-            ],
-            currentStepId: "workflow_step_agent",
-            createdBy: "user_dev_admin",
-            createdAt: "2026-06-30T12:18:00.000Z",
-            updatedAt: "2026-06-30T12:18:00.000Z",
-          });
-          expect(await repository.getWorkflowRun(workflowRun.id)).toEqual(
-            workflowRun,
-          );
-          expect(
-            await repository.listWorkflowRuns("org_default", workflow.id),
-          ).toEqual([workflowRun]);
-          expect(
-            await repository.updateWorkflowRun({
-              ...workflowRun,
-              status: "completed",
-              steps: [
-                {
-                  stepId: "workflow_step_agent",
-                  type: "agent_run",
-                  status: "completed",
-                  output: { runId: run.id },
-                  completedAt: "2026-06-30T12:19:00.000Z",
-                },
-              ],
-              currentStepId: undefined,
-              completedAt: "2026-06-30T12:19:00.000Z",
-              updatedAt: "2026-06-30T12:19:00.000Z",
-            }),
-          ).toMatchObject({
-            completedAt: "2026-06-30T12:19:00.000Z",
-            status: "completed",
           });
         });
       });
@@ -3838,21 +4073,25 @@ describe("RomeoRepository conformance", () => {
           expect(
             await repository.getSystemSetting(
               "auth_provider_settings.global.v1",
+              null,
             ),
           ).toBeUndefined();
-          const createdSetting = await repository.upsertSystemSetting({
-            key: "auth_provider_settings.global.v1",
-            value: {
-              version: 1,
-              providers: {
-                keycloak: {
-                  enabled: true,
-                  secretRef: "env://KEYCLOAK_CLIENT_SECRET",
+          const createdSetting = await repository.upsertSystemSetting(
+            {
+              key: "auth_provider_settings.global.v1",
+              value: {
+                version: 1,
+                providers: {
+                  keycloak: {
+                    enabled: true,
+                    secretRef: "env://KEYCLOAK_CLIENT_SECRET",
+                  },
                 },
               },
+              updatedAt: "2026-07-01T00:00:00.000Z",
             },
-            updatedAt: "2026-07-01T00:00:00.000Z",
-          });
+            null,
+          );
           expect(createdSetting).toMatchObject({
             key: "auth_provider_settings.global.v1",
             value: {
@@ -3866,19 +4105,22 @@ describe("RomeoRepository conformance", () => {
             },
           });
           expect(
-            await repository.upsertSystemSetting({
-              key: createdSetting.key,
-              value: {
-                version: 1,
-                providers: {
-                  keycloak: {
-                    enabled: true,
-                    orgOverridesAllowed: true,
+            await repository.upsertSystemSetting(
+              {
+                key: createdSetting.key,
+                value: {
+                  version: 1,
+                  providers: {
+                    keycloak: {
+                      enabled: true,
+                      orgOverridesAllowed: true,
+                    },
                   },
                 },
+                updatedAt: "2026-07-01T00:01:00.000Z",
               },
-              updatedAt: "2026-07-01T00:01:00.000Z",
-            }),
+              null,
+            ),
           ).toMatchObject({
             key: "auth_provider_settings.global.v1",
             updatedAt: "2026-07-01T00:01:00.000Z",
@@ -3893,7 +4135,7 @@ describe("RomeoRepository conformance", () => {
             },
           });
           expect(
-            await repository.getSystemSetting(createdSetting.key),
+            await repository.getSystemSetting(createdSetting.key, null),
           ).toMatchObject({
             updatedAt: "2026-07-01T00:01:00.000Z",
             value: {
@@ -3907,7 +4149,7 @@ describe("RomeoRepository conformance", () => {
             },
           });
           expect(
-            (await repository.listSystemSettings()).some(
+            (await repository.listSystemSettings(null)).some(
               (setting) => setting.key === createdSetting.key,
             ),
           ).toBe(true);
@@ -4149,6 +4391,79 @@ describe("RomeoRepository conformance", () => {
         });
       });
 
+      it("persists canonical audit chains, checkpoints, export receipts, and tenant isolation", async () => {
+        await withRepository(subject, async (repository) => {
+          for (const [id, minute] of [
+            ["audit_integrity_conformance_1", "10"],
+            ["audit_integrity_conformance_2", "11"],
+          ] as const) {
+            await repository.createAuditLog({
+              action: "local_auth.login",
+              actorId: "user_dev_admin",
+              createdAt: `2026-08-23T12:${minute}:00.000Z`,
+              id,
+              metadata: {},
+              orgId: "org_default",
+              outcome: "success",
+              resourceId: `session_${id}`,
+              resourceType: "session",
+            });
+          }
+          expect(
+            await repository.ensureAuditIntegrityRecords("org_default"),
+          ).toBe(0);
+          const records = (
+            await repository.listAuditIntegrityRecords("org_default")
+          ).filter((record) =>
+            record.auditEventId.startsWith("audit_integrity_conformance_"),
+          );
+          expect(records).toHaveLength(2);
+          expect(records[1]!.sequence).toBe(records[0]!.sequence + 1);
+          expect(records[1]!.previousHash).toBe(records[0]!.recordHash);
+          expect(
+            await repository.listAuditIntegrityRecords("org_other"),
+          ).toEqual([]);
+
+          const integrity = new AuditIntegrityService(
+            repository,
+            new VersionedHmacAuditCheckpointSigner({
+              activeKeyVersion: "audit-key.conformance",
+              keys: {
+                "audit-key.conformance":
+                  "audit-conformance-signing-key-material-at-least-32-bytes",
+              },
+            }),
+          );
+          const sealed = await integrity.seal({
+            subject: auditConformanceSubject,
+          });
+          expect(sealed.outcome).toBe("accepted");
+          if (sealed.outcome !== "accepted") return;
+          expect(
+            await integrity.verifyCheckpoint({ checkpoint: sealed.checkpoint }),
+          ).toEqual({ outcome: "accepted" });
+          const exported = await integrity.checkpointExport({
+            checkpointHash: sealed.checkpoint.checkpointHash,
+            destination: "customer_siem",
+            idempotencyKey: "audit-conformance-export",
+            subject: auditConformanceSubject,
+          });
+          expect(exported.state).toBe("pending");
+          expect(
+            await repository.getAuditExportJob("org_default", exported.jobId),
+          ).toMatchObject({ status: "queued" });
+          expect(
+            await repository.getAuditExportIdempotencyReceipt(
+              "org_default",
+              (await repository.getAuditExportJob(
+                "org_default",
+                exported.jobId,
+              ))!.idempotencyKeyHash,
+            ),
+          ).toMatchObject({ jobId: exported.jobId });
+        });
+      });
+
       it("preserves audit keyset query parity across intervening mutations", async () => {
         await withRepository(subject, async (repository) => {
           for (const [id, minute] of [
@@ -4302,6 +4617,51 @@ describe("RomeoRepository conformance", () => {
         });
       });
 
+      it("aggregates runtime key usage globally while retaining an explicit tenant filter", async () => {
+        await withRepository(subject, async (repository) => {
+          await seedRuntimeKeyUsageCensus(repository);
+          const query = {
+            activeVersion: "aaaaaaaaaaaaaaaa",
+            previousVersion: "bbbbbbbbbbbbbbbb",
+          };
+          const expectedGlobal = {
+            active: 1,
+            corrupt: 1,
+            legacyUnversioned: 1,
+            previous: 1,
+            total: 5,
+            unknown: 1,
+          };
+          const expectedTenant = {
+            active: 1,
+            corrupt: 0,
+            legacyUnversioned: 0,
+            previous: 0,
+            total: 1,
+            unknown: 0,
+          };
+
+          await expect(
+            repository.countDelegatedOAuthTokenKeyUsage(query),
+          ).resolves.toEqual(expectedGlobal);
+          await expect(
+            repository.countWebhookSigningKeyUsage(query),
+          ).resolves.toEqual(expectedGlobal);
+          await expect(
+            repository.countDelegatedOAuthTokenKeyUsage({
+              ...query,
+              orgId: "org_default",
+            }),
+          ).resolves.toEqual(expectedTenant);
+          await expect(
+            repository.countWebhookSigningKeyUsage({
+              ...query,
+              orgId: "org_default",
+            }),
+          ).resolves.toEqual(expectedTenant);
+        });
+      });
+
       it("keyset-pages and exclusively claims webhook retries across workers", async () => {
         await withRepository(subject, async (repository) => {
           const subscription = await repository.createWebhookSubscription({
@@ -4444,6 +4804,7 @@ describe("RomeoRepository conformance", () => {
             name: "Enterprise",
             status: "trialing",
             source: "manual",
+            externalCustomerId: "customer_repository_conformance",
             quotaTemplates: [
               { metric: "run.started", limit: 1000, resetInterval: "monthly" },
             ],
@@ -4455,6 +4816,19 @@ describe("RomeoRepository conformance", () => {
             code: "enterprise",
             metadata: { salesAssisted: true },
           });
+          expect(
+            await repository.getBillingPlanByExternalCustomerId(
+              " customer_repository_conformance ",
+            ),
+          ).toEqual(billingPlan);
+          expect(
+            await repository.getBillingPlanByExternalCustomerId(
+              "customer_unknown",
+            ),
+          ).toBeUndefined();
+          expect(
+            await repository.getBillingPlanByExternalCustomerId("   "),
+          ).toBeUndefined();
           await expect(
             repository.acquireBillingSyncLock("org_default"),
           ).resolves.toBeUndefined();
@@ -4977,6 +5351,154 @@ async function withRepository(
     await test(fixture.repository);
   } finally {
     await fixture.close?.();
+  }
+}
+
+async function seedRuntimeKeyUsageCensus(
+  repository: RomeoRepository,
+): Promise<void> {
+  const otherOrgId = "org_runtime_key_census_other";
+  const otherWorkspaceId = "workspace_runtime_key_census_other";
+  const otherUserId = "user_runtime_key_census_other";
+  const now = "2026-08-23T12:00:00.000Z";
+  await repository.createOrganization({
+    id: otherOrgId,
+    name: "Runtime key census other",
+    slug: "runtime-key-census-other",
+  });
+  await repository.createWorkspace({
+    id: otherWorkspaceId,
+    orgId: otherOrgId,
+    name: "Runtime key census other",
+    slug: "runtime-key-census-other",
+  });
+  await repository.createUser({
+    id: otherUserId,
+    orgId: otherOrgId,
+    email: "runtime-key-census-other@romeo.local",
+    name: "Runtime key census other",
+  });
+
+  const envelopeFields = {
+    alg: "A256GCM" as const,
+    ciphertext: "ciphertext",
+    createdAt: now,
+    iv: "iv",
+    tag: "tag",
+  };
+  const oauthRows = [
+    {
+      name: "active",
+      orgId: "org_default",
+      token: {
+        ...envelopeFields,
+        keyVersion: "aaaaaaaaaaaaaaaa",
+        v: 3 as const,
+      },
+      userId: "user_dev_admin",
+      workspaceId: "workspace_default",
+    },
+    {
+      name: "previous",
+      orgId: otherOrgId,
+      token: {
+        ...envelopeFields,
+        keyVersion: "bbbbbbbbbbbbbbbb",
+        v: 3 as const,
+      },
+      userId: otherUserId,
+      workspaceId: otherWorkspaceId,
+    },
+    {
+      name: "legacy",
+      orgId: otherOrgId,
+      token: { ...envelopeFields, v: 2 as const },
+      userId: otherUserId,
+      workspaceId: otherWorkspaceId,
+    },
+    {
+      name: "unknown",
+      orgId: otherOrgId,
+      token: {
+        ...envelopeFields,
+        keyVersion: "cccccccccccccccc",
+        v: 3 as const,
+      },
+      userId: otherUserId,
+      workspaceId: otherWorkspaceId,
+    },
+    {
+      name: "corrupt",
+      orgId: otherOrgId,
+      token: {
+        ...envelopeFields,
+        keyVersion: "corrupt",
+        v: 3 as const,
+      },
+      userId: otherUserId,
+      workspaceId: otherWorkspaceId,
+    },
+  ];
+  for (const row of oauthRows) {
+    await repository.createDelegatedOAuthConnection({
+      id: `delegated_oauth_runtime_key_census_${row.name}`,
+      orgId: row.orgId,
+      workspaceId: row.workspaceId,
+      userId: row.userId,
+      providerId: "github",
+      connectorType: "github",
+      providerAccountId: `runtime_key_census_${row.name}`,
+      scopes: ["repo"],
+      status: "active",
+      token: row.token,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  const subscriptions = [
+    {
+      createdBy: "user_dev_admin",
+      id: "webhook_runtime_key_census_default",
+      orgId: "org_default",
+    },
+    {
+      createdBy: otherUserId,
+      id: "webhook_runtime_key_census_other",
+      orgId: otherOrgId,
+    },
+  ];
+  for (const subscription of subscriptions) {
+    await repository.createWebhookSubscription({
+      ...subscription,
+      url: "https://hooks.example.com/runtime-key-census",
+      eventTypes: ["webhook.test"],
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  for (const [name, signatureKeyVersion] of [
+    ["active", "aaaaaaaaaaaaaaaa"],
+    ["previous", "bbbbbbbbbbbbbbbb"],
+    ["legacy", undefined],
+    ["unknown", "cccccccccccccccc"],
+    ["corrupt", "corrupt"],
+  ] as const) {
+    const isActive = name === "active";
+    await repository.createWebhookDelivery({
+      id: `webhook_delivery_runtime_key_census_${name}`,
+      orgId: isActive ? "org_default" : otherOrgId,
+      subscriptionId: isActive
+        ? "webhook_runtime_key_census_default"
+        : "webhook_runtime_key_census_other",
+      eventType: "webhook.test",
+      payload: { census: name },
+      status: "delivered",
+      attemptCount: 1,
+      ...(signatureKeyVersion === undefined ? {} : { signatureKeyVersion }),
+      createdAt: now,
+      updatedAt: now,
+    });
   }
 }
 

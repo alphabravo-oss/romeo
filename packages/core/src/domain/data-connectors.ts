@@ -1,14 +1,11 @@
+import type { WorkLease } from "./work-leases";
+
 export const dataConnectorTypes = [
   "local_import",
   "github",
   "s3",
   "website",
   "rss",
-  "confluence",
-  "jira",
-  "notion",
-  "linear",
-  "slack",
 ] as const;
 
 export type DataConnectorType = (typeof dataConnectorTypes)[number];
@@ -30,6 +27,7 @@ export interface DataConnector {
   createdAt: string;
   updatedAt: string;
   lastSyncAt?: string;
+  syncLease?: WorkLease;
 }
 
 export interface DataConnectorSync {
@@ -46,6 +44,8 @@ export interface DataConnectorSync {
   errorCode?: string;
   startedAt: string;
   completedAt?: string;
+  fencingToken?: number;
+  leaseToken?: string;
 }
 
 export interface LocalImportSyncItem {

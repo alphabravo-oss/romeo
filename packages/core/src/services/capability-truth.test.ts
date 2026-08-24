@@ -1,5 +1,5 @@
 import { seededSubject } from "@romeo/auth";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../errors";
 import { InMemoryRomeoRepository } from "../repositories/in-memory";
@@ -116,6 +116,77 @@ describe("capability truth on CapabilityService", () => {
         })
       )[0],
     ).toMatchObject({ state: "enabled", actorId: "user_security" });
+    await expect(
+      capabilities.approvePublication({
+        subject: { ...seededSubject, id: "user_security_two" },
+        bundleId,
+        reason: "Published bundles cannot be approved twice",
+      }),
+    ).rejects.toMatchObject({
+      code: "policy_bundle_not_pending",
+      message: "The policy bundle could not be approved.",
+      status: 409,
+    });
+  });
+
+  it("rolls back publication when the approved assignment cannot commit", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const capabilities = new CapabilityService(repository);
+    const proposed = await capabilities.publishAssignment({
+      subject: seededSubject,
+      capabilityId: "secure_compute",
+      scope: { scopeType: "organization", scopeId: "org_default" },
+      state: "enabled",
+      configuration: {},
+      reason: "Enable isolated compute atomically",
+      expectedVersion: 0,
+    });
+    if (!("publicationRequired" in proposed))
+      throw new Error("Expected a pending policy bundle");
+    vi.spyOn(repository, "replaceCapabilityAssignment").mockRejectedValueOnce(
+      new Error("injected assignment persistence failure"),
+    );
+    const approver = { ...seededSubject, id: "user_security_atomic" };
+
+    await expect(
+      capabilities.approvePublication({
+        subject: approver,
+        bundleId: proposed.id,
+        reason: "Approve atomic publication",
+      }),
+    ).rejects.toThrow("injected assignment persistence failure");
+
+    const stored = await repository.getSystemSetting(
+      `policy_bundle.v1:org_default:${proposed.id}`,
+      "org_default",
+    );
+    expect(
+      (stored?.value as { bundle?: { state?: string } } | undefined)?.bundle
+        ?.state,
+    ).toBe("pending_approval");
+    expect(
+      await repository.listActiveCapabilityAssignments({
+        orgId: "org_default",
+        scopes: [{ scopeType: "organization", scopeId: "org_default" }],
+        capabilityIds: ["secure_compute"],
+        at: new Date().toISOString(),
+      }),
+    ).toEqual([]);
+    expect(
+      (await repository.listAuditLogs("org_default")).some(
+        (log) =>
+          log.action === "admin.policy_bundle.approve" &&
+          log.resourceId === proposed.id,
+      ),
+    ).toBe(false);
+
+    await expect(
+      capabilities.approvePublication({
+        subject: approver,
+        bundleId: proposed.id,
+        reason: "Retry atomic publication",
+      }),
+    ).resolves.toMatchObject({ state: "published" });
   });
 
   it("hits the versioned resolution cache and misses after an assignment write", async () => {

@@ -23,7 +23,7 @@ describe("device and voice commands", () => {
     const deviceCases = [
       ["devices", "list"],
       ["devices", "create", "--name", "Laptop", "--scopes", "me:read"],
-      ["devices", "refresh", "--refresh-token", "refresh_1"],
+      ["devices", "refresh"],
       ["devices", "revoke", "--device", "device_1"],
     ];
 
@@ -31,6 +31,7 @@ describe("device and voice commands", () => {
       await expect(
         executeDeviceCommand(args[0]!, args[1], {
           generatedClient,
+          env: { ROMEO_DEVICE_REFRESH_TOKEN: "refresh_1" },
           io,
           parsed: parseArgs(args),
         }),

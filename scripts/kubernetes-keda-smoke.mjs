@@ -17,6 +17,13 @@ import {
   startPortForward,
   waitForCondition,
 } from "./lib/kubernetes-smoke-support.mjs";
+import {
+  assertNoSecretArgv,
+  readSecretInput,
+  splitSecretLines,
+} from "./lib/secret-input.mjs";
+
+assertNoSecretArgv();
 
 const outputPath = argValue("--output");
 const dryRun = hasFlag("--dry-run");
@@ -42,8 +49,10 @@ const postgresSecret = parseSecretRef(
 );
 const timeoutMs = parsePositiveInteger("--timeout-ms", 420000);
 const dueBufferMs = parsePositiveInteger("--due-buffer-ms", 5000);
-const adminToken = argValue("--api-key") ?? process.env.ROMEO_API_KEY;
-const extraSecretSentinels = repeatedArgValues("--secret-sentinel");
+const adminToken = readSecretInput({ environment: "ROMEO_API_KEY" });
+const extraSecretSentinels = splitSecretLines(
+  readSecretInput({ environment: "KUBERNETES_KEDA_SECRET_SENTINELS" }),
+);
 const webhookPayloadSentinel = `keda_webhook_payload_${randomBytes(16).toString("hex")}`;
 const webhookUrlSentinel = `keda_webhook_url_${randomBytes(16).toString("hex")}`;
 const appPort = await freePort();
@@ -94,7 +103,7 @@ async function liveEvidence() {
     throw new Error("--namespace or ROMEO_NAMESPACE is required.");
   }
   if (typeof adminToken !== "string" || adminToken.length === 0) {
-    throw new Error("--api-key or ROMEO_API_KEY is required.");
+    throw new Error("ROMEO_API_KEY or ROMEO_API_KEY_FILE is required.");
   }
 
   kubectl(["cluster-info"]);
@@ -458,20 +467,6 @@ function writeEvidence(value) {
   const absolute = resolve(process.cwd(), outputPath);
   mkdirSync(dirname(absolute), { recursive: true });
   writeFileSync(absolute, serialized, "utf8");
-}
-
-function repeatedArgValues(name) {
-  const values = [];
-  for (let index = 0; index < process.argv.length; index += 1) {
-    if (process.argv[index] === name) {
-      const value = process.argv[index + 1];
-      if (typeof value !== "string" || value.length === 0) {
-        throw new Error(`${name} requires a non-empty value.`);
-      }
-      values.push(value);
-    }
-  }
-  return values;
 }
 
 function hasFlag(name) {

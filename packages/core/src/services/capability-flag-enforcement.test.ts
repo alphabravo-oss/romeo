@@ -24,11 +24,7 @@ describe("capability flag consumer enforcement", () => {
       expectedVersion: 0,
     });
     await expect(
-      assertCapabilityFlagEnabled(
-        flags,
-        seededSubject,
-        "compute_artifacts_v1",
-      ),
+      assertCapabilityFlagEnabled(flags, seededSubject, "compute_artifacts_v1"),
     ).rejects.toMatchObject({
       code: "capability_not_allowed",
       status: 403,
@@ -41,11 +37,7 @@ describe("capability flag consumer enforcement", () => {
       { disabledCapabilityIds: ["secure_compute"] },
     );
     await expect(
-      assertCapabilityFlagEnabled(
-        flags,
-        seededSubject,
-        "compute_artifacts_v1",
-      ),
+      assertCapabilityFlagEnabled(flags, seededSubject, "compute_artifacts_v1"),
     ).rejects.toMatchObject({
       code: "capability_platform_disabled",
     });

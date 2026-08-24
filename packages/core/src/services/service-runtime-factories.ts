@@ -37,6 +37,7 @@ import {
   DiscoveryOidcAuthenticator,
   type OidcAuthenticator,
 } from "./oidc-auth-service";
+import type { OidcRuntimeCache } from "./oidc-client";
 import {
   createDisabledQuotaCoordinator,
   type QuotaCoordinator,
@@ -74,12 +75,12 @@ export function createOidcAuthenticator(
   repository: RomeoRepository,
   env: RomeoEnv,
   fetchImpl: typeof fetch | undefined,
+  runtimeCache?: OidcRuntimeCache,
 ): OidcAuthenticator {
-  return new DiscoveryOidcAuthenticator(
-    repository,
-    env,
-    fetchImpl === undefined ? {} : { fetchImpl },
-  );
+  return new DiscoveryOidcAuthenticator(repository, env, {
+    ...(fetchImpl === undefined ? {} : { fetchImpl }),
+    ...(runtimeCache === undefined ? {} : { runtimeCache }),
+  });
 }
 
 export function createObjectStore(env: RomeoEnv): ObjectStore {
@@ -90,6 +91,13 @@ export function createObjectStore(env: RomeoEnv): ObjectStore {
       region: env.S3_REGION,
       accessKeyId: env.S3_ACCESS_KEY_ID,
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+      readiness: {
+        timeoutMs: env.S3_READINESS_TIMEOUT_MS,
+        requireEncryption: env.S3_READINESS_REQUIRE_ENCRYPTION,
+        requireLifecycle: env.S3_READINESS_REQUIRE_LIFECYCLE,
+        requireReplication: env.S3_READINESS_REQUIRE_REPLICATION,
+        requireVersioning: env.S3_READINESS_REQUIRE_VERSIONING,
+      },
     });
   }
   return memoryObjectStore;
@@ -142,11 +150,12 @@ export function createToolDispatchPayloadStore(
 
 export function createKnowledgeExtractor(
   env: RomeoEnv,
+  fileOcrProvider: FileOcrProvider = createFileOcrProvider(env),
 ): KnowledgeBinaryExtractor {
   if (env.KNOWLEDGE_EXTRACTION_DRIVER === "disabled") {
     return disabledKnowledgeBinaryExtractor;
   }
-  const ocr = createFileOcrProvider(env);
+  const ocr = fileOcrProvider;
   const pdf = {
     commandPath: env.PDFTOTEXT_PATH,
     maxBytes: env.KNOWLEDGE_EXTRACTION_MAX_BYTES,

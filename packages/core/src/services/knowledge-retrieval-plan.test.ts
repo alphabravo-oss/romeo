@@ -204,31 +204,34 @@ describe("knowledge retrieval plan", () => {
       scopes: ["knowledge:query"],
       isAdmin: false,
     };
-    await repository.upsertSystemSetting({
-      key: "rag_policy.org.v1:org_default",
-      updatedAt: now,
-      value: {
-        version: 1,
-        orgId: "org_default",
-        enabledTiers: ["workspace"],
-        defaultMaxResultsPerTier: {
-          user_private: 3,
-          workspace: 3,
-          org: 3,
-          shared: 3,
-        },
-        maxResultsPerTier: {
-          user_private: 3,
-          workspace: 2,
-          org: 3,
-          shared: 3,
-        },
-        allowedEmbeddingProviderModels: [],
-        dataResidencyTags: [],
+    await repository.upsertSystemSetting(
+      {
+        key: "rag_policy.org.v1:org_default",
         updatedAt: now,
-        updatedBy: "user_admin",
+        value: {
+          version: 1,
+          orgId: "org_default",
+          enabledTiers: ["workspace"],
+          defaultMaxResultsPerTier: {
+            user_private: 3,
+            workspace: 3,
+            org: 3,
+            shared: 3,
+          },
+          maxResultsPerTier: {
+            user_private: 3,
+            workspace: 2,
+            org: 3,
+            shared: 3,
+          },
+          allowedEmbeddingProviderModels: [],
+          dataResidencyTags: [],
+          updatedAt: now,
+          updatedBy: "user_admin",
+        },
       },
-    });
+      "org_default",
+    );
     await repository.createKnowledgeBase({
       id: "kb_policy_private",
       orgId: "org_default",
@@ -297,35 +300,38 @@ describe("knowledge retrieval plan", () => {
       scopes: ["knowledge:query"],
       isAdmin: false,
     };
-    await repository.upsertSystemSetting({
-      key: "rag_policy.org.v1:org_default",
-      updatedAt: now,
-      value: {
-        version: 1,
-        orgId: "org_default",
-        enabledTiers: ["workspace", "org", "shared"],
-        defaultMaxResultsPerTier: {
-          user_private: 3,
-          workspace: 3,
-          org: 4,
-          shared: 5,
-        },
-        maxResultsPerTier: {
-          user_private: 3,
-          workspace: 3,
-          org: 4,
-          shared: 5,
-        },
-        allowedEmbeddingProviderModels: [],
-        knowledgeBaseTierAssignments: {
-          org: ["kb_org_policy_plan"],
-          shared: ["kb_shared_policy_plan"],
-        },
-        dataResidencyTags: [],
+    await repository.upsertSystemSetting(
+      {
+        key: "rag_policy.org.v1:org_default",
         updatedAt: now,
-        updatedBy: "user_admin",
+        value: {
+          version: 1,
+          orgId: "org_default",
+          enabledTiers: ["workspace", "org", "shared"],
+          defaultMaxResultsPerTier: {
+            user_private: 3,
+            workspace: 3,
+            org: 4,
+            shared: 5,
+          },
+          maxResultsPerTier: {
+            user_private: 3,
+            workspace: 3,
+            org: 4,
+            shared: 5,
+          },
+          allowedEmbeddingProviderModels: [],
+          knowledgeBaseTierAssignments: {
+            org: ["kb_org_policy_plan"],
+            shared: ["kb_shared_policy_plan"],
+          },
+          dataResidencyTags: [],
+          updatedAt: now,
+          updatedBy: "user_admin",
+        },
       },
-    });
+      "org_default",
+    );
     await Promise.all([
       repository.createKnowledgeBase({
         id: "kb_workspace_policy_plan",
@@ -432,38 +438,41 @@ describe("knowledge retrieval plan", () => {
       name: "Library",
       slug: "library",
     });
-    await repository.upsertSystemSetting({
-      key: "rag_policy.org.v1:org_default",
-      updatedAt: now,
-      value: {
-        version: 1,
-        orgId: "org_default",
-        enabledTiers: ["workspace", "org", "shared"],
-        defaultMaxResultsPerTier: {
-          user_private: 3,
-          workspace: 3,
-          org: 3,
-          shared: 7,
-        },
-        maxResultsPerTier: {
-          user_private: 3,
-          workspace: 3,
-          org: 3,
-          shared: 7,
-        },
-        allowedEmbeddingProviderModels: [],
-        knowledgeBaseTierAssignments: {
-          org: [],
-          shared: [
-            "kb_cross_org_shared_granted",
-            "kb_cross_org_shared_ungranted",
-          ],
-        },
-        dataResidencyTags: [],
+    await repository.upsertSystemSetting(
+      {
+        key: "rag_policy.org.v1:org_default",
         updatedAt: now,
-        updatedBy: "user_admin",
+        value: {
+          version: 1,
+          orgId: "org_default",
+          enabledTiers: ["workspace", "org", "shared"],
+          defaultMaxResultsPerTier: {
+            user_private: 3,
+            workspace: 3,
+            org: 3,
+            shared: 7,
+          },
+          maxResultsPerTier: {
+            user_private: 3,
+            workspace: 3,
+            org: 3,
+            shared: 7,
+          },
+          allowedEmbeddingProviderModels: [],
+          knowledgeBaseTierAssignments: {
+            org: [],
+            shared: [
+              "kb_cross_org_shared_granted",
+              "kb_cross_org_shared_ungranted",
+            ],
+          },
+          dataResidencyTags: [],
+          updatedAt: now,
+          updatedBy: "user_admin",
+        },
       },
-    });
+      "org_default",
+    );
     await Promise.all([
       repository.createKnowledgeBase({
         id: "kb_cross_org_shared_granted",

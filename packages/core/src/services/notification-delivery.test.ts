@@ -239,6 +239,89 @@ describe("notification delivery senders", () => {
     });
   });
 
+  it("applies the shared private-network boundary before every webhook adapter sends", async () => {
+    const fetchImpl = vi.fn(async () => new Response("unexpected"));
+    const privateLookup = vi.fn(async () => [
+      { address: "10.42.0.9", family: 4 as const },
+    ]);
+    const repository = new InMemoryRomeoRepository();
+    const networkOptions = {
+      fetchImpl,
+      hostLookup: privateLookup,
+      pinnedFetchImpl: vi.fn(async () => new Response("unexpected")),
+    };
+    const secretResolver = {
+      check: vi.fn(),
+      resolveValue: vi.fn(async () => ({
+        available: true as const,
+        scheme: "env",
+        value: "pagerduty-secret-routing-key",
+      })),
+    };
+    const cases = [
+      {
+        channel: channel({
+          id: "channel_private_webhook",
+          type: "webhook",
+          config: { url: "https://webhook.example.com/hook" },
+        }),
+        sender: new WebhookNotificationDeliverySender({
+          ...networkOptions,
+          signingKey: "test-signing-key",
+        }),
+      },
+      {
+        channel: channel({
+          id: "channel_private_slack",
+          type: "slack",
+          config: { url: "https://slack.example.com/hook" },
+        }),
+        sender: new SlackWebhookNotificationDeliverySender(networkOptions),
+      },
+      {
+        channel: channel({
+          id: "channel_private_teams",
+          type: "teams",
+          config: { url: "https://teams.example.com/hook" },
+        }),
+        sender: new TeamsWebhookNotificationDeliverySender(networkOptions),
+      },
+      {
+        channel: channel({
+          id: "channel_private_pagerduty",
+          type: "pagerduty",
+          config: {
+            routingKeyRef: "env://PAGERDUTY_ROUTING_KEY",
+            severity: "critical",
+          },
+        }),
+        sender: new PagerDutyEventsNotificationDeliverySender({
+          ...networkOptions,
+          eventsUrl: "https://pagerduty.example.com/v2/enqueue",
+          secretResolver,
+        }),
+      },
+    ];
+
+    const deliveries = await Promise.all(
+      cases.map(({ channel: notificationChannel, sender }) =>
+        sender.createDelivery({
+          repository,
+          notification,
+          channel: notificationChannel,
+        }),
+      ),
+    );
+
+    expect(deliveries).toHaveLength(4);
+    expect(deliveries.every((delivery) => delivery.status === "failed")).toBe(
+      true,
+    );
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(networkOptions.pinnedFetchImpl).not.toHaveBeenCalled();
+    expect(privateLookup).toHaveBeenCalledTimes(4);
+  });
+
   it("sends Teams-compatible notifications with ID-only message cards", async () => {
     const fetchImpl = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
@@ -538,6 +621,14 @@ describe("notification delivery senders", () => {
       to: "target@example.com",
       subject: "Romeo notification: chat_mention",
       text: expect.stringContaining("notification_test"),
+      messageId: expect.stringMatching(
+        /^<notification_delivery_[a-z0-9]+@romeo\.invalid>$/u,
+      ),
+      headers: {
+        "X-Romeo-Idempotency-Key": expect.stringMatching(
+          /^notification_delivery_[a-z0-9]+$/u,
+        ),
+      },
     });
     expect(delivery).toMatchObject({
       status: "sent",

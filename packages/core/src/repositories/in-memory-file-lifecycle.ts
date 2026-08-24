@@ -1,14 +1,50 @@
 import type { FileObject } from "../domain/entities";
 import type {
   ClaimFileLifecycleInput,
+  FileLifecycleQueueSummary,
   FinishFileLifecycleLeaseInput,
   RenewFileLifecycleLeaseInput,
 } from "../domain/repository-content";
-import { assertFileLifecycleTransition } from "../services/file-lifecycle";
+import {
+  assertFileLifecycleTransition,
+  fileLifecycleMaxAttempts,
+} from "../services/file-lifecycle";
 import { replaceById } from "./collection-helpers";
 import type { SeedData } from "./seed-data";
 
 type FileData = Pick<SeedData, "fileObjects">;
+
+export function summarizeInMemoryFileLifecycleQueue(
+  data: FileData,
+  orgId: string,
+): FileLifecycleQueueSummary {
+  const pending = data.fileObjects.filter(
+    (file) =>
+      file.orgId === orgId &&
+      [
+        "quarantined",
+        "scanning",
+        "extracting",
+        "transcoding",
+        "failed",
+      ].includes(file.status) &&
+      (file.lifecycleAttempts ?? 0) < fileLifecycleMaxAttempts,
+  );
+  const deadLettered = data.fileObjects.filter(
+    (file) =>
+      file.orgId === orgId &&
+      file.status === "failed" &&
+      (file.lifecycleAttempts ?? 0) >= fileLifecycleMaxAttempts,
+  ).length;
+  const oldestQueuedAt = pending
+    .map((file) => file.createdAt)
+    .sort((left, right) => left.localeCompare(right))[0];
+  return {
+    deadLettered,
+    queued: pending.length,
+    ...(oldestQueuedAt === undefined ? {} : { oldestQueuedAt }),
+  };
+}
 
 export function claimNextInMemoryFileLifecycle(
   data: FileData,
@@ -77,7 +113,7 @@ function isClaimable(now: string) {
     ["quarantined", "scanning", "extracting", "transcoding", "failed"].includes(
       file.status,
     ) &&
-    (file.lifecycleAttempts ?? 0) < 100 &&
+    (file.lifecycleAttempts ?? 0) < fileLifecycleMaxAttempts &&
     (file.lifecycleNextAttemptAt === undefined ||
       file.lifecycleNextAttemptAt <= now) &&
     (file.lifecycleLeaseExpiresAt === undefined ||

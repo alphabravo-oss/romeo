@@ -1,17 +1,59 @@
 import type { RomeoRepository } from "../domain/repository";
 import {
   configurationKey,
+  healthKey,
   normalizeDomains,
   normalizeEndpoint,
   type StoredWebSearchConfiguration,
+  type WebSearchProviderHealth,
 } from "./web-search-support";
+
+export async function readWebSearchProviderHealth(
+  repository: RomeoRepository,
+  orgId: string,
+): Promise<WebSearchProviderHealth> {
+  const value =
+    (await repository.getSystemSetting(healthKey(orgId), orgId))?.value ?? {};
+  const status =
+    value.status === "healthy" || value.status === "degraded"
+      ? value.status
+      : "unknown";
+  return {
+    status,
+    ...(typeof value.lastCheckedAt === "string"
+      ? { lastCheckedAt: value.lastCheckedAt }
+      : {}),
+    ...(typeof value.latencyMs === "number"
+      ? { latencyMs: value.latencyMs }
+      : {}),
+    ...(typeof value.lastErrorCode === "string"
+      ? { lastErrorCode: value.lastErrorCode }
+      : {}),
+  };
+}
+
+export async function writeWebSearchProviderHealth(
+  repository: RomeoRepository,
+  orgId: string,
+  health: WebSearchProviderHealth,
+): Promise<void> {
+  await repository.upsertSystemSetting(
+    {
+      key: healthKey(orgId),
+      value: { ...health },
+      updatedAt: new Date().toISOString(),
+    },
+    orgId,
+  );
+}
 
 export async function readStoredWebSearchConfiguration(
   repository: RomeoRepository,
   orgId: string,
 ): Promise<StoredWebSearchConfiguration> {
   const value =
-    (await repository.getSystemSetting(configurationKey(orgId)))?.value ?? {};
+    (await repository.getSystemSetting(configurationKey(orgId), orgId))
+      ?.value ?? {};
   return {
     orgId,
     enabled: value.enabled === true,

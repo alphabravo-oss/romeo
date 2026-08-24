@@ -1,4 +1,5 @@
 import * as appQueryKeys from "../../lib/app-query-keys";
+import { invalidateInventoriedTablePages } from "../../lib/inventoried-table-cache";
 import { invalidateCachedResourceExactly } from "../../lib/server-mutation-options";
 
 type QueryClient = Parameters<typeof invalidateCachedResourceExactly>[0];
@@ -14,6 +15,14 @@ export async function refreshToolActivityQueries(
     invalidateCachedResourceExactly(client, appQueryKeys.usageAlerts()),
     invalidateCachedResourceExactly(client, appQueryKeys.quotas()),
     invalidateCachedResourceExactly(client, appQueryKeys.toolCalls(agentId)),
+    ...(agentId === undefined
+      ? []
+      : [
+          invalidateInventoriedTablePages(client, {
+            parentId: agentId,
+            resource: "tool_trace_calls",
+          }),
+        ]),
     invalidateCachedResourceExactly(client, appQueryKeys.auditLogs()),
   ]);
 }

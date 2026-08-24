@@ -32,7 +32,8 @@ export function normalizeUploadedMedia(input: {
   if (!input.signatureMatches)
     return { outcome: "denied", code: "file_mime_mismatch" };
   const extension = fileExtension(input.fileName);
-  const expectedMime = extension === undefined ? undefined : extensionMimeTypes[extension];
+  const expectedMime =
+    extension === undefined ? undefined : extensionMimeTypes[extension];
   if (expectedMime !== undefined && expectedMime !== input.mimeType)
     return { outcome: "denied", code: "file_mime_mismatch" };
   if (!input.stripMetadata) {
@@ -50,7 +51,8 @@ export function normalizeUploadedMedia(input: {
     bytes: stripped,
     originalPreserved: input.retentionPermitsOriginal,
     metadataStripped: stripped.byteLength !== input.bytes.byteLength,
-    transcodeRequested: input.mimeType === "image/gif" || input.mimeType === "image/webp",
+    transcodeRequested:
+      input.mimeType === "image/gif" || input.mimeType === "image/webp",
   };
 }
 

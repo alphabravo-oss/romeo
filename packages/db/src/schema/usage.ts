@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   doublePrecision,
   index,
@@ -48,6 +49,20 @@ export const usageEvents = pgTable(
       table.orgId,
       table.metric,
       table.createdAt,
+    ),
+    usageEventsPageCreatedIdx: index("usage_events_org_created_id_idx").on(
+      table.orgId,
+      table.createdAt,
+      table.id,
+    ),
+    usageEventsPageMetricIdx: index("usage_events_org_metric_id_idx").on(
+      table.orgId,
+      table.metric,
+      table.id,
+    ),
+    usageEventsSearchIdx: index("usage_events_search_trgm_idx").using(
+      "gin",
+      sql`(lower(coalesce(${table.id}, '') || chr(31) || coalesce(${table.metric}, ''))) gin_trgm_ops`,
     ),
   }),
 );

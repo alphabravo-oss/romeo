@@ -16,6 +16,8 @@ export const authenticationSecurity = [
   { sessionCookie: [] as string[] },
 ];
 
+export const workerBrokerSecurity = [{ workerBrokerBearer: [] as string[] }];
+
 export const securitySchemes = {
   bearerAuth: {
     type: "http",
@@ -28,6 +30,13 @@ export const securitySchemes = {
     in: "cookie",
     name: "romeo_session",
     description: "HTTP-only Romeo browser session cookie.",
+  },
+  workerBrokerBearer: {
+    type: "http",
+    scheme: "bearer",
+    bearerFormat: "Audience-specific worker broker credential",
+    description:
+      "Dedicated credential for one internal worker audience. This credential never authorizes general Romeo API operations.",
   },
 } as const;
 

@@ -6,7 +6,10 @@ export function authorizeImageAdapter(input: {
   workflowAllowlisted: boolean;
 }):
   | { outcome: "accepted"; kind: ImageAdapterKind }
-  | { outcome: "denied"; code: "capability_platform_disabled" | "compute_egress_denied" } {
+  | {
+      outcome: "denied";
+      code: "capability_platform_disabled" | "compute_egress_denied";
+    } {
   if (!input.egressAllowed)
     return { outcome: "denied", code: "compute_egress_denied" };
   if (input.kind === "comfyui" && !input.workflowAllowlisted)
@@ -24,8 +27,15 @@ export function authorizeImageProcessing(input: {
   watermarkApplied: boolean;
 }):
   | { outcome: "accepted" }
-  | { outcome: "denied"; code: "file_image_dimensions_exceeded" | "file_malware_detected" } {
-  if (input.pixels > 100_000_000 || input.frames > 1 || input.memoryBytes > 256_000_000)
+  | {
+      outcome: "denied";
+      code: "file_image_dimensions_exceeded" | "file_malware_detected";
+    } {
+  if (
+    input.pixels > 100_000_000 ||
+    input.frames > 1 ||
+    input.memoryBytes > 256_000_000
+  )
     return { outcome: "denied", code: "file_image_dimensions_exceeded" };
   if (!input.malwareClean)
     return { outcome: "denied", code: "file_malware_detected" };
@@ -96,7 +106,13 @@ export function authorizeImageArtifactGovernance(input: {
   accessAuthorized: boolean;
 }):
   | { outcome: "accepted"; shred: boolean }
-  | { outcome: "denied"; code: "chat_delete_legal_hold" | "content_policy_blocked" | "file_part_access_denied" } {
+  | {
+      outcome: "denied";
+      code:
+        | "chat_delete_legal_hold"
+        | "content_policy_blocked"
+        | "file_part_access_denied";
+    } {
   if (input.legalHold)
     return { outcome: "denied", code: "chat_delete_legal_hold" };
   if (input.dlpBlocked)

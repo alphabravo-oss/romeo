@@ -20,6 +20,8 @@ import { LocalMfaSecretVault } from "./services/local-mfa-secret-vault";
 import { ManagedSecretService } from "./services/managed-secret-service";
 import { EnvironmentSecretResolver } from "./services/secret-resolver";
 import { oidcUserId } from "./services/oidc-client";
+import { FileService } from "./services/file-service";
+import { ContentDeletionService } from "./services/content-deletion-service";
 import type {
   LdapClientFactory,
   LdapDirectoryClient,
@@ -36,6 +38,38 @@ function openWebUiBridgeEnv(overrides: Record<string, string> = {}) {
     OPENWEBUI_COMPATIBILITY_ENABLED: "true",
     ...overrides,
   });
+}
+
+function browserMutationHeaders(
+  cookie: string,
+  extra: Record<string, string> = {},
+) {
+  return { cookie, origin: "http://localhost:3000", ...extra };
+}
+
+async function drainFileContentDeletions(
+  repository: InMemoryRomeoRepository,
+  objectStore: MemoryObjectStore,
+) {
+  const worker = new ContentDeletionService(repository, objectStore);
+  for (let iteration = 0; iteration < 20; iteration += 1) {
+    const result = await worker.runOnce({
+      subject: {
+        type: "user",
+        id: "user_dev_admin",
+        orgId: "org_default",
+        workspaceIds: ["workspace_default"],
+        scopes: [...scopeValues],
+        groupIds: ["group_admins"],
+        isAdmin: true,
+      },
+      workerId: "api_test_content_deletion",
+    });
+    if (result.outcome === "idle") return;
+    if (result.outcome !== "completed")
+      throw new Error(`Content deletion did not converge: ${result.outcome}`);
+  }
+  throw new Error("Content deletion queue did not drain within 20 operations.");
 }
 
 function createOoxmlTestZip(
@@ -314,7 +348,8 @@ describe("Open WebUI-class governed chat extensions", () => {
 
   it("creates, controls, and exposes retained memory in context inspection", async () => {
     const objectStore = new MemoryObjectStore();
-    const api = createRomeoApi(new InMemoryRomeoRepository(), { objectStore });
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, { objectStore });
     // Memory rides in the system prompt, which bare mode withholds wholesale.
     await enableAssistants(api);
     const createdResponse = await api.request("/api/v1/memories", {
@@ -328,6 +363,22 @@ describe("Open WebUI-class governed chat extensions", () => {
       }),
     });
     const created = await createdResponse.json();
+    const pendingUpdateResponse = await api.request(
+      `/api/v1/memories/${created.data.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pinned: true }),
+      },
+    );
+    expect(created.data).toMatchObject({
+      lifecycleStatus: "quarantined",
+      ready: false,
+    });
+    expect(pendingUpdateResponse.status).toBe(404);
+    await new FileService(repository, objectStore).processLifecycleJob({
+      workerId: "memory_context",
+    });
     await api.request("/api/v1/agents/agent_default/customization-policy", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -377,6 +428,10 @@ describe("Open WebUI-class governed chat extensions", () => {
     ).toBe(true);
     expect(disabledResponse.status).toBe(200);
     expect(listed.data[0].enabled).toBe(false);
+    expect(listed.data[0]).toMatchObject({
+      lifecycleStatus: "ready",
+      ready: true,
+    });
   });
 
   it("purges file-backed note content through the governed tombstone path", async () => {
@@ -401,6 +456,7 @@ describe("Open WebUI-class governed chat extensions", () => {
       `/api/v1/notes/${created.data.id}`,
       { method: "DELETE" },
     );
+    await drainFileContentDeletions(repository, objectStore);
     const tombstone = await repository.getFileObject(created.data.id);
 
     expect(deletedResponse.status).toBe(200);
@@ -506,6 +562,22 @@ describe("Open WebUI-class governed chat extensions", () => {
       }),
     });
     const body = await response.json();
+    await new FileService(
+      repository,
+      objectStore,
+      undefined,
+      {},
+      { policy: "off" },
+      { extract: vi.fn() },
+      {
+        recognize: async () => ({
+          confidence: 1,
+          content: "generated image",
+          pageCount: 1,
+          provider: "test-ocr",
+        }),
+      },
+    ).processLifecycleJob({ workerId: "generated_image_listing" });
     const filesResponse = await api.request(
       "/api/v1/files?workspaceId=workspace_default",
     );
@@ -752,6 +824,7 @@ describe("Open WebUI-class governed chat extensions", () => {
       }),
     });
     const body = await response.json();
+    await drainFileContentDeletions(repository, objectStore);
     const generatedFiles = (
       await repository.listFileObjects("org_default", "workspace_default")
     ).filter((file) => file.purpose === "generated_image");
@@ -2675,7 +2748,17 @@ describe("Romeo API thin slice", () => {
     expect(spec.components.schemas.ToolApprovalDecision).toBeDefined();
     expect(spec.components.schemas.RunEvent).toBeDefined();
     expect(
-      spec.components.schemas.RunEvent.oneOf.flatMap(
+      spec.components.schemas.RunEvent.properties.type["x-extensible-enum"],
+    ).toEqual(
+      expect.arrayContaining([
+        "run.continuing",
+        "reasoning.summary.delta",
+        "reasoning.summary.completed",
+      ]),
+    );
+    expect(spec.components.schemas.TypedRunEvent).toBeDefined();
+    expect(
+      spec.components.schemas.TypedRunEvent.oneOf.flatMap(
         (eventSchema: { properties?: { type?: { enum?: string[] } } }) =>
           eventSchema.properties?.type?.enum ?? [],
       ),
@@ -2715,7 +2798,7 @@ describe("Romeo API thin slice", () => {
       spec.paths["/runs/{runId}/events"].get.responses[200].content[
         "text/event-stream"
       ]["x-romeo-event-schema"].$ref,
-    ).toBe("#/components/schemas/RunEvent");
+    ).toBe("#/components/schemas/TypedRunEvent");
     expect(
       spec.paths["/chats"].get.responses[200].content["application/json"].schema
         .properties.data.items.$ref,
@@ -2728,7 +2811,7 @@ describe("Romeo API thin slice", () => {
     expect(
       spec.paths["/runs"].post.responses[202].content["application/json"].schema
         .properties.data.$ref,
-    ).toBe("#/components/schemas/StartedRunRecord");
+    ).toBe("#/components/schemas/RunRecord");
     expect(
       spec.paths["/access-review/report"].get.responses[200].content[
         "application/json"
@@ -2830,7 +2913,7 @@ describe("Romeo API thin slice", () => {
       "/governance/data-exports/packages/{packageId}/content",
     );
     expect(spec.components.schemas.DataExportDocument).toBeDefined();
-    expect(spec.components.schemas.DataExportPackage).toBeDefined();
+    expect(spec.components.schemas.DataExportPackageJob).toBeDefined();
     expect(spec.components.schemas.DataExportPackageList).toBeDefined();
     expect(spec.components.schemas.DataExportPackageDeleteResult).toBeDefined();
     expect(
@@ -2842,13 +2925,27 @@ describe("Romeo API thin slice", () => {
         .content["application/json"].schema.properties.data.$ref,
     ).toBe("#/components/schemas/DataExportPackageList");
     expect(
-      spec.paths["/governance/data-exports/packages"].post.responses[200]
+      spec.paths["/governance/data-exports/packages"].post.responses[202]
         .content["application/json"].schema.properties.data.$ref,
-    ).toBe("#/components/schemas/DataExportPackage");
+    ).toBe("#/components/schemas/DataExportPackageJob");
+    expect(
+      spec.paths["/governance/data-exports/packages/{packageId}"].get
+        .responses[200].content["application/json"].schema.properties.data.$ref,
+    ).toBe("#/components/schemas/DataExportPackageJob");
     expect(
       spec.paths["/governance/data-exports/packages/{packageId}"].delete
         .responses[200].content["application/json"].schema.properties.data.$ref,
     ).toBe("#/components/schemas/DataExportPackageDeleteResult");
+    expect(
+      Object.keys(
+        spec.paths["/governance/data-exports/packages/{packageId}/content"].get
+          .responses[200].content,
+      ),
+    ).toEqual([
+      "application/octet-stream",
+      "application/json",
+      "application/x-ndjson",
+    ]);
     expect(Object.keys(spec.paths)).toContain("/governance/compliance-report");
     expect(Object.keys(spec.paths)).toContain(
       "/governance/compliance-report.csv",
@@ -2963,19 +3060,11 @@ describe("Romeo API thin slice", () => {
     expect(Object.keys(spec.paths)).toContain("/webhooks/{webhookId}/test");
     expect(Object.keys(spec.paths)).toContain("/webhook-deliveries");
     expect(Object.keys(spec.paths)).toContain("/webhook-deliveries/retry-due");
-    expect(Object.keys(spec.paths)).toContain("/workflow-templates");
-    expect(Object.keys(spec.paths)).toContain(
-      "/workflow-templates/{templateId}/create",
-    );
     expect(Object.keys(spec.paths)).toContain("/workflows");
-    expect(Object.keys(spec.paths)).toContain("/workflows/schedules/run-due");
-    expect(Object.keys(spec.paths)).toContain("/workflows/{workflowId}/runs");
-    expect(Object.keys(spec.paths)).toContain(
-      "/workflow-runs/{workflowRunId}/approve",
-    );
-    expect(Object.keys(spec.paths)).toContain(
-      "/workflow-runs/{workflowRunId}/resume",
-    );
+    expect(spec.paths["/workflows"].get).toMatchObject({
+      deprecated: true,
+      operationId: "workflows.list",
+    });
     expect(Object.keys(spec.paths)).toContain(
       "/browser-automation-tasks/claim",
     );
@@ -3293,6 +3382,11 @@ describe("Romeo API thin slice", () => {
     expect(body.data.tls.termination).toBe("ingress");
     expect(body.data.proxy.forwardedHeadersTrusted).toBe(true);
     expect(body.data.ingress.allowedOriginRuleCount).toBe(2);
+    expect(body.data.ingress.desiredWafMode).toBe("block");
+    expect(body.data.ingress.observedWafEnforcement).toBe("block");
+    expect(body.data.ingress.observedWafAt).toBe(
+      body.data.liveEvidence.generatedAt,
+    );
     expect(body.data.ingress.wafMode).toBe("block");
     expect(body.data.limits.requestBodyMaxBytes).toBe(75000000);
     expect(body.data.limits.files).toEqual({
@@ -3454,6 +3548,13 @@ describe("Romeo API thin slice", () => {
       expect(response.status).toBe(200);
       expect(body.data.status).toBe("attention_required");
       expect(body.data.liveEvidence.status).toBe("failed");
+      expect(body.data.ingress.desiredWafMode).toBe("block");
+      expect(body.data.ingress.observedWafEnforcement).toBe(
+        testCase.failureCode.includes("waf") ? "failed" : "block",
+      );
+      expect(body.data.ingress.observedWafAt).toBe(
+        body.data.liveEvidence.generatedAt,
+      );
       expect(body.data.liveEvidence.failureCodes).toContain(
         testCase.failureCode,
       );
@@ -3841,8 +3942,8 @@ describe("Romeo API thin slice", () => {
         usernameReturned: false,
       },
     });
-    expect(body.data.queryPlanReview.reviewedPathCount).toBe(21);
-    expect(body.data.queryPlanReview.requiredIndexCount).toBe(22);
+    expect(body.data.queryPlanReview.reviewedPathCount).toBe(19);
+    expect(body.data.queryPlanReview.requiredIndexCount).toBe(20);
     expect(body.data.queryPlanReview.categories).toContain("retrieval");
     expect(body.data.queryPlanReview.categories).toContain("billing");
     expect(body.data.warnings).toContain(
@@ -5019,6 +5120,7 @@ describe("Romeo API thin slice", () => {
       env: testEnv({
         DEV_SEEDED_LOGIN: "false",
         EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
+        EDGE_TRUSTED_PROXY_CIDRS: "10.42.0.0/16",
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
       }),
@@ -5032,15 +5134,20 @@ describe("Romeo API thin slice", () => {
       headers: { authorization: `Bearer ${apiKey.data.token}` },
     });
     const authenticated = await authenticatedResponse.json();
-    const sessionResponse = await secureApi.request("/api/v1/sessions", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey.data.token}`,
-        "content-type": "application/json",
-        "x-forwarded-proto": "https",
+    const sessionResponse = await secureApi.request(
+      "/api/v1/sessions",
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey.data.token}`,
+          "content-type": "application/json",
+          "x-forwarded-for": "198.51.100.20",
+          "x-forwarded-proto": "https",
+        },
+        body: JSON.stringify({ name: "Browser session", ttlHours: 1 }),
       },
-      body: JSON.stringify({ name: "Browser session", ttlHours: 1 }),
-    });
+      { requestPeerAddress: "10.42.2.4" },
+    );
     const session = await sessionResponse.json();
     const sessionCookie = sessionResponse.headers.get("set-cookie") ?? "";
     const cookieHeader = sessionCookie.split(";")[0] ?? "";
@@ -5056,7 +5163,7 @@ describe("Romeo API thin slice", () => {
       "/api/v1/sessions/current",
       {
         method: "DELETE",
-        headers: { cookie: cookieHeader },
+        headers: browserMutationHeaders(cookieHeader),
       },
     );
     const revokedSession = await revokeSessionResponse.json();
@@ -5136,6 +5243,14 @@ describe("Romeo API thin slice", () => {
       },
     );
     const rejected = await rejectedResponse.json();
+    const missingProofResponse = await secureApi.request(
+      "/api/v1/sessions/revoke-others",
+      {
+        method: "POST",
+        headers: { cookie: cookieHeader ?? "" },
+      },
+    );
+    const missingProof = await missingProofResponse.json();
     const allowedResponse = await secureApi.request(
       "/api/v1/sessions/revoke-others",
       {
@@ -5151,7 +5266,22 @@ describe("Romeo API thin slice", () => {
     expect(sessionResponse.status).toBe(201);
     expect(rejectedResponse.status).toBe(403);
     expect(rejected.error.code).toBe("csrf_origin_mismatch");
+    expect(missingProofResponse.status).toBe(403);
+    expect(missingProof.error.code).toBe("csrf_origin_mismatch");
+    expect(missingProof.error.details.source).toBe("missing_origin_proof");
     expect(allowedResponse.status).toBe(200);
+
+    const bearerResponse = await secureApi.request(
+      "/api/v1/sessions/revoke-others",
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey.data.token}`,
+          origin: "https://evil.example",
+        },
+      },
+    );
+    expect(bearerResponse.status).toBe(200);
   });
 
   it("honors forwarded protocol for cookies only in trusted-proxy mode", async () => {
@@ -5169,18 +5299,24 @@ describe("Romeo API thin slice", () => {
           APP_ORIGIN: "http://localhost:3000",
           DEV_SEEDED_LOGIN: "false",
           EDGE_TRUSTED_PROXY_MODE: mode,
+          EDGE_TRUSTED_PROXY_CIDRS: "10.42.0.0/16",
           SESSION_SECRET: "prod-session-secret-32-bytes-long",
           WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
         }),
-      }).request("/api/v1/sessions", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${key.data.token}`,
-          "content-type": "application/json",
-          "x-forwarded-proto": "https",
+      }).request(
+        "/api/v1/sessions",
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${key.data.token}`,
+            "content-type": "application/json",
+            "x-forwarded-for": "198.51.100.12",
+            "x-forwarded-proto": "https",
+          },
+          body: JSON.stringify({ name: mode, ttlHours: 1 }),
         },
-        body: JSON.stringify({ name: mode, ttlHours: 1 }),
-      });
+        { requestPeerAddress: "10.42.1.8" },
+      );
 
     const direct = await createSession("direct");
     const trusted = await createSession("trusted_proxy");
@@ -5200,7 +5336,12 @@ describe("Romeo API thin slice", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.deployment).toEqual({ tenancyMode: "multi" });
+    expect(body.deployment).toEqual({
+      billingEnabled: true,
+      malwareScanEnabled: false,
+      qdrantConfigured: false,
+      tenancyMode: "multi",
+    });
   });
 
   it("serves optional SCIM v2 users and groups with deactivation safeguards", async () => {
@@ -5456,7 +5597,9 @@ describe("Romeo API thin slice", () => {
     );
     const updateResponse = await secureApi.request("/api/v1/me", {
       method: "PATCH",
-      headers: { cookie: adminCookie, "content-type": "application/json" },
+      headers: browserMutationHeaders(adminCookie, {
+        "content-type": "application/json",
+      }),
       body: JSON.stringify({
         email: "New.Admin@Romeo.Local",
         name: "Renamed Admin",
@@ -5465,7 +5608,9 @@ describe("Romeo API thin slice", () => {
     const updated = await updateResponse.json();
     const conflictResponse = await secureApi.request("/api/v1/me", {
       method: "PATCH",
-      headers: { cookie: adminCookie, "content-type": "application/json" },
+      headers: browserMutationHeaders(adminCookie, {
+        "content-type": "application/json",
+      }),
       body: JSON.stringify({ email: "OTHER@romeo.local" }),
     });
     const conflict = await conflictResponse.json();
@@ -5604,10 +5749,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/admin/auth-providers/settings",
       {
         method: "PATCH",
-        headers: {
-          cookie: adminCookie,
+        headers: browserMutationHeaders(adminCookie, {
           "content-type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           global: {
             providers: [
@@ -5638,10 +5782,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/admin/auth-providers/settings",
       {
         method: "PATCH",
-        headers: {
-          cookie: adminCookie,
+        headers: browserMutationHeaders(adminCookie, {
           "content-type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           global: {
             providers: [
@@ -5664,10 +5807,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/admin/auth-providers/settings",
       {
         method: "PATCH",
-        headers: {
-          cookie: adminCookie,
+        headers: browserMutationHeaders(adminCookie, {
           "content-type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           global: { providers: [{ providerId: "local", enabled: false }] },
         }),
@@ -5679,10 +5821,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/auth/local/mfa/totp/enroll",
       {
         method: "POST",
-        headers: {
-          cookie: adminCookie,
+        headers: browserMutationHeaders(adminCookie, {
           "content-type": "application/json",
-        },
+        }),
         body: JSON.stringify({ name: "Primary authenticator" }),
       },
     );
@@ -5698,10 +5839,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/auth/local/mfa/totp/confirm",
       {
         method: "POST",
-        headers: {
-          cookie: adminCookie,
+        headers: browserMutationHeaders(adminCookie, {
           "content-type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           factorId: enrollment.data.factor.id,
           code: totpCode,
@@ -5767,7 +5907,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/auth/local/mfa/recovery-codes/generate",
       {
         method: "POST",
-        headers: { cookie: mfaCookie, "content-type": "application/json" },
+        headers: browserMutationHeaders(mfaCookie, {
+          "content-type": "application/json",
+        }),
         body: JSON.stringify({ totpCode }),
       },
     );
@@ -5822,7 +5964,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/users/user_ops/role",
       {
         method: "PATCH",
-        headers: { cookie: mfaCookie, "content-type": "application/json" },
+        headers: browserMutationHeaders(mfaCookie, {
+          "content-type": "application/json",
+        }),
         body: JSON.stringify({
           confirmUserId: "user_ops",
           role: "org_admin",
@@ -5834,7 +5978,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/users/user_ops/local-password",
       {
         method: "POST",
-        headers: { cookie: mfaCookie, "content-type": "application/json" },
+        headers: browserMutationHeaders(mfaCookie, {
+          "content-type": "application/json",
+        }),
         body: JSON.stringify({
           confirmUserId: "user_ops",
           newPassword: "local-ops-password-123",
@@ -5864,10 +6010,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/admin/auth-providers/settings",
       {
         method: "PATCH",
-        headers: {
-          cookie: mfaCookie,
+        headers: browserMutationHeaders(mfaCookie, {
           "content-type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           confirmDisableLocalFallback: true,
           global: { providers: [{ providerId: "local", enabled: false }] },
@@ -5879,7 +6024,9 @@ describe("Romeo API thin slice", () => {
       `/api/v1/auth/local/mfa/factors/${enrollment.data.factor.id}/disable`,
       {
         method: "POST",
-        headers: { cookie: mfaCookie, "content-type": "application/json" },
+        headers: browserMutationHeaders(mfaCookie, {
+          "content-type": "application/json",
+        }),
         body: JSON.stringify({}),
       },
     );
@@ -6258,12 +6405,12 @@ describe("Romeo API thin slice", () => {
       },
     );
     const update = await updateResponse.json();
-    const secretId = String(secret.data.secretRef).replace(
-      "romeo-secret://",
-      "",
-    );
+    const secretId = new URL(String(secret.data.secretRef)).pathname
+      .split("/")
+      .at(-1)!;
     const stored = await repository.getSystemSetting(
       `managed_secret.v1:${secretId}`,
+      "org_default",
     );
     const audits = await repository.listAuditLogs("org_default");
     const serializedStored = JSON.stringify(stored);
@@ -6278,7 +6425,9 @@ describe("Romeo API thin slice", () => {
       secretRefScheme: "romeo-secret",
       valueStored: true,
     });
-    expect(secret.data.secretRef).toMatch(/^romeo-secret:\/\/secret_/);
+    expect(secret.data.secretRef).toMatch(
+      /^romeo-secret:\/\/org_default\/secret_/,
+    );
     expect(updateResponse.status).toBe(200);
     expect(update.data.global.providers).toContainEqual(
       expect.objectContaining({
@@ -6512,6 +6661,7 @@ describe("Romeo API thin slice", () => {
     );
     const stored = await repository.getSystemSetting(
       `managed_secret.v1:${secretAudit?.resourceId ?? "missing"}`,
+      "org_default",
     );
     const serializedAudit = JSON.stringify(audits);
 
@@ -6564,10 +6714,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/admin/impersonation/sessions",
       {
         method: "POST",
-        headers: {
-          cookie: adminCookie,
+        headers: browserMutationHeaders(adminCookie, {
           "content-type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           targetUserId: "user_support_target",
           confirmTargetUserId: "user_support_target",
@@ -6635,7 +6784,7 @@ describe("Romeo API thin slice", () => {
       `/api/v1/admin/impersonation/sessions/${support.data.session.id}/revoke`,
       {
         method: "POST",
-        headers: { cookie: adminCookie },
+        headers: browserMutationHeaders(adminCookie),
       },
     );
     const revoked = await revokeResponse.json();
@@ -6836,10 +6985,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/admin/impersonation/requests",
       {
         method: "POST",
-        headers: {
-          cookie: requesterCookie,
+        headers: browserMutationHeaders(requesterCookie, {
           "content-type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           targetUserId: "user_support_target",
           confirmTargetUserId: "user_support_target",
@@ -6854,10 +7002,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/admin/impersonation/requests",
       {
         method: "POST",
-        headers: {
-          cookie: disabledRequesterCookie,
+        headers: browserMutationHeaders(disabledRequesterCookie, {
           "content-type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           targetUserId: "user_support_target",
           confirmTargetUserId: "user_support_target",
@@ -6881,7 +7028,7 @@ describe("Romeo API thin slice", () => {
       `/api/v1/admin/impersonation/requests/${disabledRequesterRequest.data.id}/approve`,
       {
         method: "POST",
-        headers: { cookie: approverCookie },
+        headers: browserMutationHeaders(approverCookie),
       },
     );
     const disabledRequesterApprove =
@@ -6890,14 +7037,14 @@ describe("Romeo API thin slice", () => {
       `/api/v1/admin/impersonation/requests/${request.data.id}/approve`,
       {
         method: "POST",
-        headers: { cookie: requesterCookie },
+        headers: browserMutationHeaders(requesterCookie),
       },
     );
     const approveResponse = await secureApi.request(
       `/api/v1/admin/impersonation/requests/${request.data.id}/approve`,
       {
         method: "POST",
-        headers: { cookie: approverCookie },
+        headers: browserMutationHeaders(approverCookie),
       },
     );
     const approved = await approveResponse.json();
@@ -6911,10 +7058,9 @@ describe("Romeo API thin slice", () => {
       "/api/v1/admin/impersonation/requests",
       {
         method: "POST",
-        headers: {
-          cookie: requesterCookie,
+        headers: browserMutationHeaders(requesterCookie, {
           "content-type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           targetUserId: "user_support_target",
           confirmTargetUserId: "user_support_target",
@@ -6928,7 +7074,7 @@ describe("Romeo API thin slice", () => {
       `/api/v1/admin/impersonation/requests/${rejectRequest.data.id}/reject`,
       {
         method: "POST",
-        headers: { cookie: approverCookie },
+        headers: browserMutationHeaders(approverCookie),
       },
     );
     const rejected = await rejectResponse.json();
@@ -8535,7 +8681,10 @@ describe("Romeo API thin slice", () => {
       createdAt: new Date().toISOString(),
     });
     const api = createRomeoApi(repository, {
-      env: testEnv({ EDGE_TRUSTED_PROXY_MODE: "trusted_proxy" }),
+      env: testEnv({
+        EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
+        EDGE_TRUSTED_PROXY_CIDRS: "10.42.0.0/16",
+      }),
       samlClientFactory,
       secretResolver: new EnvironmentSecretResolver({
         SAML_IDP_CERT: rawCert,
@@ -8587,7 +8736,13 @@ describe("Romeo API thin slice", () => {
     const metadata = await metadataResponse.text();
     const startResponse = await api.request(
       "/api/v1/auth/saml/start?returnTo=/app",
-      { headers: { "x-forwarded-proto": "https" } },
+      {
+        headers: {
+          "x-forwarded-for": "198.51.100.20",
+          "x-forwarded-proto": "https",
+        },
+      },
+      { requestPeerAddress: "10.42.2.4" },
     );
     const start = await startResponse.json();
     const startUrl = new URL(start.data.authorizationUrl);
@@ -8596,18 +8751,23 @@ describe("Romeo API thin slice", () => {
       startResponse.headers.get("set-cookie") ?? "",
       "romeo_saml_state",
     );
-    const callbackResponse = await api.request("/api/v1/auth/saml/callback", {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        cookie: stateCookie,
-        "x-forwarded-proto": "https",
+    const callbackResponse = await api.request(
+      "/api/v1/auth/saml/callback",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: stateCookie,
+          "x-forwarded-for": "198.51.100.20",
+          "x-forwarded-proto": "https",
+        },
+        body: new URLSearchParams({
+          RelayState: relayState,
+          SAMLResponse: "signed-saml-response",
+        }).toString(),
       },
-      body: new URLSearchParams({
-        RelayState: relayState,
-        SAMLResponse: "signed-saml-response",
-      }).toString(),
-    });
+      { requestPeerAddress: "10.42.2.4" },
+    );
     const callbackSetCookie = callbackResponse.headers.get("set-cookie") ?? "";
     const sessionCookie = cookiePair(callbackSetCookie, "romeo_session");
     const replayResponse = await api.request("/api/v1/auth/saml/callback", {
@@ -10028,6 +10188,12 @@ describe("Romeo API thin slice", () => {
     expect(body.data).toEqual([
       {
         id: "gpt-compatible",
+        object: "model",
+        created: 0,
+        owned_by: "openai-compatible",
+      },
+      {
+        id: "text-embedding-3-small",
         object: "model",
         created: 0,
         owned_by: "openai-compatible",
@@ -11921,7 +12087,12 @@ describe("Romeo API thin slice", () => {
       }),
     });
     const uploaded = await uploadResponse.json();
-
+    const pendingContentResponse = await api.request(
+      `/api/v1/files/${uploaded.data.id}/content`,
+    );
+    await new FileService(repository, objectStore).processLifecycleJob({
+      workerId: "file_api_acceptance",
+    });
     const listResponse = await api.request("/api/v1/files");
     const listed = await listResponse.json();
     const getResponse = await api.request(`/api/v1/files/${uploaded.data.id}`);
@@ -11937,40 +12108,48 @@ describe("Romeo API thin slice", () => {
       },
     );
     const deleted = await deleteResponse.json();
+    expect(deleted.data.status).toBe("deletion_pending");
+    await drainFileContentDeletions(repository, objectStore);
     const missingContentResponse = await api.request(
       `/api/v1/files/${uploaded.data.id}/content`,
     );
+    const deletedFile = await repository.getFileObject(uploaded.data.id);
 
     expect(uploadResponse.status).toBe(201);
     expect(uploaded.data.fileName).toBe("Quarterly_Notes.txt");
-    expect(uploaded.data.contentUrl).toBe(
-      `/api/v1/files/${encodeURIComponent(uploaded.data.id)}/content`,
-    );
+    expect(uploaded.data.status).toBe("quarantined");
+    expect(uploaded.data.contentUrl).toBeNull();
+    expect(pendingContentResponse.status).toBe(409);
     expect(uploaded.data.sha256).toBe(
       "6e5bc8df28cfac06658769974f895070db24676563ebc1ae17fb961f5da4d5e9",
     );
     expect(uploaded.data.extraction).toMatchObject({
-      status: "succeeded",
-      quality: "high",
+      status: "pending",
+      quality: "unknown",
       method: "utf8-text",
-      attempts: 1,
-      characterCount: 11,
+      attempts: 0,
+      characterCount: null,
       failureCode: null,
     });
     expect(JSON.stringify(uploaded.data)).not.toContain("objectKey");
     expect(listed.data.map((file: { id: string }) => file.id)).toContain(
       uploaded.data.id,
     );
-    expect(fetched.data).toEqual(uploaded.data);
+    expect(fetched.data).toMatchObject({
+      id: uploaded.data.id,
+      status: "ready",
+      contentUrl: `/api/v1/files/${encodeURIComponent(uploaded.data.id)}/content`,
+      extraction: { status: "succeeded", attempts: 1 },
+    });
     expect(contentResponse.status).toBe(200);
     expect(contentResponse.headers.get("x-content-type-options")).toBe(
       "nosniff",
     );
     expect(content).toBe("hello files");
     expect(deleteResponse.status).toBe(200);
-    expect(deleted.data.status).toBe("deleted");
+    expect(deletedFile?.status).toBe("deleted");
     expect(deleted.data.contentUrl).toBeNull();
-    expect(deleted.data).toMatchObject({
+    expect(deletedFile).toMatchObject({
       fileName: "deleted",
       mimeType: "application/octet-stream",
       sizeBytes: 0,
@@ -11991,20 +12170,22 @@ describe("Romeo API thin slice", () => {
 
   it("persists sanitized extraction failures and supports authorized retries", async () => {
     const objectStore = new MemoryObjectStore();
+    const repository = new InMemoryRomeoRepository();
     let shouldFail = true;
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+    const extractor = {
+      extract: async () => {
+        if (shouldFail)
+          throw new Error("private extractor host and stack must not leak");
+        return {
+          content: "Recovered PDF text",
+          metadata: { extractor: "test-pdf-text" },
+        };
+      },
+    };
+    const api = createRomeoApi(repository, {
       env: testEnv({ FILE_OCR_DRIVER: "disabled" }),
       objectStore,
-      knowledgeExtractor: {
-        extract: async () => {
-          if (shouldFail)
-            throw new Error("private extractor host and stack must not leak");
-          return {
-            content: "Recovered PDF text",
-            metadata: { extractor: "test-pdf-text" },
-          };
-        },
-      },
+      knowledgeExtractor: extractor,
     });
     const bytes = new TextEncoder().encode("%PDF-1.4\nsynthetic test PDF");
     const uploadResponse = await api.request("/api/v1/files", {
@@ -12021,8 +12202,23 @@ describe("Romeo API thin slice", () => {
     const uploaded = await uploadResponse.json();
 
     expect(uploadResponse.status).toBe(201);
-    expect(uploaded.data.status).toBe("ready");
-    expect(uploaded.data.extraction).toMatchObject({
+    expect(uploaded.data.status).toBe("quarantined");
+    const worker = new FileService(
+      repository,
+      objectStore,
+      undefined,
+      {},
+      { policy: "off" },
+      extractor,
+    );
+    await expect(
+      worker.processLifecycleJob({ workerId: "extraction_failure" }),
+    ).resolves.toMatchObject({ outcome: "failed", state: "failed" });
+    const failedResponse = await api.request(
+      `/api/v1/files/${uploaded.data.id}`,
+    );
+    const failed = await failedResponse.json();
+    expect(failed.data.extraction).toMatchObject({
       status: "failed",
       quality: "unknown",
       method: "pdftotext",
@@ -12032,9 +12228,14 @@ describe("Romeo API thin slice", () => {
     expect(JSON.stringify(uploaded)).not.toContain("private extractor host");
 
     shouldFail = false;
+    await expect(
+      worker.processLifecycleJob({
+        workerId: "extraction_recovery",
+        now: failed.data.lifecycle.nextAttemptAt,
+      }),
+    ).resolves.toMatchObject({ outcome: "completed", state: "ready" });
     const retryResponse = await api.request(
-      `/api/v1/files/${uploaded.data.id}/extraction/retry`,
-      { method: "POST" },
+      `/api/v1/files/${uploaded.data.id}`,
     );
     const retried = await retryResponse.json();
 
@@ -12051,6 +12252,7 @@ describe("Romeo API thin slice", () => {
 
   it("records OCR provenance for scanned images and PDF fallback", async () => {
     const objectStore = new MemoryObjectStore();
+    const repository = new InMemoryRomeoRepository();
     const recognize = vi.fn(async (input: { mimeType: string }) => ({
       content:
         input.mimeType === "application/pdf"
@@ -12060,14 +12262,16 @@ describe("Romeo API thin slice", () => {
       pageCount: input.mimeType === "application/pdf" ? 2 : 1,
       confidence: 0.94,
     }));
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      objectStore,
-      fileOcrProvider: { recognize },
-      knowledgeExtractor: {
-        extract: async () => {
-          throw new Error("no embedded PDF text");
-        },
+    const extractor = {
+      extract: async () => {
+        throw new Error("no embedded PDF text");
       },
+    };
+    const ocr = { recognize };
+    const api = createRomeoApi(repository, {
+      objectStore,
+      fileOcrProvider: ocr,
+      knowledgeExtractor: extractor,
     });
     const imageBytes = new Uint8Array(
       Buffer.from(
@@ -12091,8 +12295,26 @@ describe("Romeo API thin slice", () => {
 
     const imageResponse = await upload("scan.png", "image/png", imageBytes);
     const pdfResponse = await upload("scan.pdf", "application/pdf", pdfBytes);
-    const image = await imageResponse.json();
-    const pdf = await pdfResponse.json();
+    const acceptedImage = await imageResponse.json();
+    const acceptedPdf = await pdfResponse.json();
+    expect(recognize).not.toHaveBeenCalled();
+    const worker = new FileService(
+      repository,
+      objectStore,
+      undefined,
+      {},
+      { policy: "off" },
+      extractor,
+      ocr,
+    );
+    await worker.processLifecycleJob({ workerId: "ocr_image" });
+    await worker.processLifecycleJob({ workerId: "ocr_pdf" });
+    const image = await (
+      await api.request(`/api/v1/files/${acceptedImage.data.id}`)
+    ).json();
+    const pdf = await (
+      await api.request(`/api/v1/files/${acceptedPdf.data.id}`)
+    ).json();
 
     expect(imageResponse.status).toBe(201);
     expect(pdfResponse.status).toBe(201);
@@ -12171,7 +12393,7 @@ describe("Romeo API thin slice", () => {
     ).toEqual([]);
   });
 
-  it("fails closed when required malware scanning is unavailable", async () => {
+  it("accepts quarantine then fails closed in the worker when scanning is unavailable", async () => {
     const objectStore = new MemoryObjectStore();
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, {
@@ -12193,9 +12415,21 @@ describe("Romeo API thin slice", () => {
     });
     const body = await response.json();
 
-    expect(response.status).toBe(503);
-    expect(body.error.code).toBe("file_malware_scan_unavailable");
+    expect(response.status).toBe(201);
+    expect(body.data).toMatchObject({
+      status: "quarantined",
+      contentUrl: null,
+    });
     expect(JSON.stringify(body)).not.toContain("unscanned content sentinel");
+    await expect(
+      new FileService(
+        repository,
+        objectStore,
+        undefined,
+        {},
+        { policy: "required" },
+      ).processLifecycleJob({ workerId: "required_scanner" }),
+    ).resolves.toMatchObject({ outcome: "failed", state: "failed" });
     const [failed] = await repository.listFileObjects(
       "org_default",
       "workspace_default",
@@ -12218,7 +12452,7 @@ describe("Romeo API thin slice", () => {
     });
   });
 
-  it("rejects malicious inline files before governed object persistence", async () => {
+  it("quarantines uploads and lets the worker purge malicious inline files", async () => {
     const objectStore = new MemoryObjectStore();
     const repository = new InMemoryRomeoRepository();
     const scan = vi.fn(async () => ({ verdict: "malicious" as const }));
@@ -12242,8 +12476,18 @@ describe("Romeo API thin slice", () => {
     });
     const body = await response.json();
 
-    expect(response.status).toBe(422);
-    expect(body.error.code).toBe("file_malware_detected");
+    expect(response.status).toBe(201);
+    expect(body.data.status).toBe("quarantined");
+    expect(scan).not.toHaveBeenCalled();
+    await expect(
+      new FileService(
+        repository,
+        objectStore,
+        undefined,
+        {},
+        { policy: "required", scanner: { scan } },
+      ).processLifecycleJob({ workerId: "malware_scanner" }),
+    ).resolves.toMatchObject({ outcome: "rejected", state: "deleted" });
     expect(scan).toHaveBeenCalledOnce();
     const [deleted] = await repository.listFileObjects(
       "org_default",
@@ -12264,8 +12508,9 @@ describe("Romeo API thin slice", () => {
 
   it("marks same-owner reusable files with duplicate content provenance", async () => {
     const repository = new InMemoryRomeoRepository();
+    const objectStore = new MemoryObjectStore();
     const api = createRomeoApi(repository, {
-      objectStore: new MemoryObjectStore(),
+      objectStore,
     });
     const bytes = new TextEncoder().encode("duplicate file content sentinel");
     const request = (fileName: string) =>
@@ -12283,6 +12528,9 @@ describe("Romeo API thin slice", () => {
 
     const firstResponse = await request("first.txt");
     const first = await firstResponse.json();
+    await new FileService(repository, objectStore).processLifecycleJob({
+      workerId: "duplicate_baseline",
+    });
     const secondResponse = await request("second.txt");
     const second = await secondResponse.json();
 
@@ -12345,7 +12593,8 @@ describe("Romeo API thin slice", () => {
 
   it("creates and completes direct file upload sessions", async () => {
     const objectStore = new MemoryObjectStore();
-    const api = createRomeoApi(new InMemoryRomeoRepository(), { objectStore });
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, { objectStore });
     const bytes = new TextEncoder().encode("hello direct upload");
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const createResponse = await api.request("/api/v1/files/uploads", {
@@ -12379,6 +12628,12 @@ describe("Romeo API thin slice", () => {
       { method: "POST" },
     );
     const completed = await completeResponse.json();
+    const pendingContentResponse = await api.request(
+      `/api/v1/files/${created.data.file.id}/content`,
+    );
+    await new FileService(repository, objectStore).processLifecycleJob({
+      workerId: "direct_upload_worker",
+    });
     const contentResponse = await api.request(
       `/api/v1/files/${created.data.file.id}/content`,
     );
@@ -12401,6 +12656,11 @@ describe("Romeo API thin slice", () => {
       { method: "DELETE" },
     );
     const cancelled = await cancelledResponse.json();
+    expect(cancelled.data.status).toBe("deletion_pending");
+    await drainFileContentDeletions(repository, objectStore);
+    const cancelledFile = await repository.getFileObject(
+      cancelSession.data.file.id,
+    );
 
     expect(createResponse.status).toBe(201);
     expect(created.data.file.status).toBe("uploading");
@@ -12416,30 +12676,28 @@ describe("Romeo API thin slice", () => {
     expect(refreshResponse.status).toBe(200);
     expect(beforeCompleteContentResponse.status).toBe(409);
     expect(completeResponse.status).toBe(200);
-    expect(completed.data.status).toBe("ready");
+    expect(completed.data.status).toBe("quarantined");
     expect(completed.data.extraction).toMatchObject({
-      status: "succeeded",
+      status: "pending",
       method: "utf8-text",
-      attempts: 1,
+      attempts: 0,
     });
-    expect(completed.data.contentUrl).toBe(
-      `/api/v1/files/${encodeURIComponent(created.data.file.id)}/content`,
-    );
+    expect(completed.data.contentUrl).toBeNull();
+    expect(pendingContentResponse.status).toBe(409);
     expect(contentResponse.status).toBe(200);
     expect(content).toBe("hello direct upload");
     expect(cancelledResponse.status).toBe(200);
-    expect(cancelled.data.status).toBe("deleted");
+    expect(cancelledFile?.status).toBe("deleted");
     expect(cancelled.data.contentUrl).toBeNull();
   });
 
   it("deletes a direct-upload object when required scanning detects malware", async () => {
     const objectStore = new MemoryObjectStore();
     const repository = new InMemoryRomeoRepository();
+    const scan = vi.fn(async () => ({ verdict: "malicious" as const }));
     const api = createRomeoApi(repository, {
       env: testEnv({ FILE_MALWARE_SCAN_POLICY: "required" }),
-      fileMalwareScanner: {
-        scan: async () => ({ verdict: "malicious" }),
-      },
+      fileMalwareScanner: { scan },
       objectStore,
     });
     const bytes = new TextEncoder().encode("malicious direct upload sentinel");
@@ -12470,8 +12728,22 @@ describe("Romeo API thin slice", () => {
     const completed = await completeResponse.json();
 
     expect(createResponse.status).toBe(201);
-    expect(completeResponse.status).toBe(422);
-    expect(completed.error.code).toBe("file_malware_detected");
+    expect(completeResponse.status).toBe(200);
+    expect(completed.data.status).toBe("quarantined");
+    expect(scan).not.toHaveBeenCalled();
+    await expect(
+      new FileService(
+        repository,
+        objectStore,
+        undefined,
+        {},
+        {
+          policy: "required",
+          scanner: { scan },
+        },
+      ).processLifecycleJob({ workerId: "direct_malware_worker" }),
+    ).resolves.toMatchObject({ outcome: "rejected", state: "deleted" });
+    expect(scan).toHaveBeenCalledOnce();
     expect(await objectStore.getObject(objectKey)).toBeUndefined();
     expect(await repository.getFileObject(created.data.file.id)).toMatchObject({
       status: "deleted",
@@ -12519,12 +12791,16 @@ describe("Romeo API thin slice", () => {
 
   it("creates, refreshes, completes, and cancels resumable file upload sessions", async () => {
     const objectStore = new MemoryObjectStore();
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+    const repository = new InMemoryRomeoRepository();
+    const scan = vi.fn(async () => ({ verdict: "clean" as const }));
+    const api = createRomeoApi(repository, {
       objectStore,
       env: testEnv({
         FILE_DIRECT_UPLOAD_MAX_BYTES: "8",
+        FILE_MALWARE_SCAN_POLICY: "required",
         FILE_RESUMABLE_UPLOAD_MAX_BYTES: "64",
       }),
+      fileMalwareScanner: { scan },
     });
     const bytes = new TextEncoder().encode("hello resumable upload");
     const sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -12568,6 +12844,17 @@ describe("Romeo API thin slice", () => {
       { method: "POST" },
     );
     const completed = await completeResponse.json();
+    const pendingContentResponse = await api.request(
+      `/api/v1/files/${fileId}/content`,
+    );
+    expect(scan).not.toHaveBeenCalled();
+    await new FileService(
+      repository,
+      objectStore,
+      undefined,
+      {},
+      { policy: "required", scanner: { scan } },
+    ).processLifecycleJob({ workerId: "resumable_upload_worker" });
     const contentResponse = await api.request(
       `/api/v1/files/${fileId}/content`,
     );
@@ -12600,6 +12887,11 @@ describe("Romeo API thin slice", () => {
       { method: "DELETE" },
     );
     const cancelled = await cancelledResponse.json();
+    expect(cancelled.data.status).toBe("deletion_pending");
+    await drainFileContentDeletions(repository, objectStore);
+    const cancelledFile = await repository.getFileObject(
+      cancelSession.data.file.id,
+    );
 
     expect(createResponse.status).toBe(201);
     expect(created.data.file.status).toBe("uploading");
@@ -12624,19 +12916,21 @@ describe("Romeo API thin slice", () => {
     expect(refreshResponse.status).toBe(200);
     expect(refreshed.data.upload.parts).toHaveLength(4);
     expect(completeResponse.status).toBe(200);
-    expect(completed.data.status).toBe("ready");
+    expect(completed.data.status).toBe("quarantined");
     expect(completed.data.extraction).toMatchObject({
-      status: "succeeded",
+      status: "pending",
       method: "utf8-text",
-      attempts: 1,
+      attempts: 0,
     });
+    expect(pendingContentResponse.status).toBe(409);
+    expect(scan).toHaveBeenCalledOnce();
     expect(contentResponse.status).toBe(200);
     expect(content).toBe("hello resumable upload");
     expect(
       await objectStore.getObject(`${objectKey}.parts/000001`),
     ).toBeUndefined();
     expect(cancelledResponse.status).toBe(200);
-    expect(cancelled.data.status).toBe("deleted");
+    expect(cancelledFile?.status).toBe("deleted");
     expect(
       await objectStore.getObject(`${cancelObjectKey}.parts/000001`),
     ).toBeUndefined();
@@ -13043,6 +13337,55 @@ describe("Romeo API thin slice", () => {
     );
   });
 
+  it("governs transcription output and preserves safe voice provider failure semantics", async () => {
+    const privateTranscript = "Contact private@example.com";
+    const providerFailure = "upstream secret diagnostics";
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      voiceProvider: {
+        listVoices: async () => [],
+        transcribe: async () => ({ text: privateTranscript, language: "en" }),
+        synthesize: async () => {
+          throw new Error(providerFailure);
+        },
+      },
+    });
+    const policyResponse = await api.request("/api/v1/admin/content-policy", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ detectors: { email_address: "redact" } }),
+    });
+    const transcriptionResponse = await api.request(
+      "/api/v1/voice/transcriptions",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          audioBase64: "AQIDBA==",
+          contentType: "audio/wav",
+        }),
+      },
+    );
+    const transcription = await transcriptionResponse.json();
+    const previewResponse = await api.request(
+      "/api/v1/voices/voice_default/preview",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: "Generate a safe preview." }),
+      },
+    );
+    const preview = await previewResponse.json();
+
+    expect(policyResponse.status).toBe(200);
+    expect(transcriptionResponse.status).toBe(200);
+    expect(transcription.data.text).toBe("Contact [REDACTED:EMAIL_ADDRESS]");
+    expect(JSON.stringify(transcription)).not.toContain(privateTranscript);
+    expect(previewResponse.status).toBe(502);
+    expect(preview.error.code).toBe("provider_unexpected_failure");
+    expect(JSON.stringify(preview)).not.toContain(providerFailure);
+    expect(preview.error.code).not.toBe("voice_not_configured");
+  });
+
   it("generates speech for assistant messages without storing message text in usage metadata", async () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       voiceProvider: new DevVoiceProvider(),
@@ -13265,18 +13608,7 @@ describe("Romeo API thin slice", () => {
     );
     const missingApprovalRequest = await missingApprovalRequestResponse.json();
     const approvalRequestId = approval.error.details.approvalRequestId;
-    const approveDecisionResponse = await api.request(
-      `/api/v1/tool-approvals/${approvalRequestId}/approve`,
-      { method: "POST" },
-    );
-    const approveDecision = await approveDecisionResponse.json();
-    const afterApproveDecisionQueueResponse = await api.request(
-      "/api/v1/tool-approvals?agentId=agent_default",
-    );
-    const afterApproveDecisionQueue =
-      await afterApproveDecisionQueueResponse.json();
-
-    const approvedResponse = await api.request(
+    const callerAssertedApprovalResponse = await api.request(
       "/api/v1/tools/tool_datetime/execute",
       {
         method: "POST",
@@ -13289,7 +13621,52 @@ describe("Romeo API thin slice", () => {
         }),
       },
     );
-    const approved = await approvedResponse.json();
+    const callerAssertedApproval = await callerAssertedApprovalResponse.json();
+    const approveDecisionResponse = await api.request(
+      `/api/v1/tool-approvals/${approvalRequestId}/approve`,
+      { method: "POST" },
+    );
+    const approveDecision = await approveDecisionResponse.json();
+    const afterApproveDecisionQueueResponse = await api.request(
+      "/api/v1/tool-approvals?agentId=agent_default",
+    );
+    const afterApproveDecisionQueue =
+      await afterApproveDecisionQueueResponse.json();
+    const mismatchedValueResponse = await api.request(
+      "/api/v1/tools/tool_datetime/execute",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agentId: "agent_default",
+          approved: true,
+          approvalRequestId,
+          input: { timeZone: "America/New_York" },
+        }),
+      },
+    );
+    const mismatchedValue = await mismatchedValueResponse.json();
+    const concurrentResponses = await Promise.all(
+      [0, 1].map(() =>
+        api.request("/api/v1/tools/tool_datetime/execute", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            agentId: "agent_default",
+            approved: true,
+            approvalRequestId,
+            input: { timeZone: "UTC" },
+          }),
+        }),
+      ),
+    );
+    const concurrentPayloads = await Promise.all(
+      concurrentResponses.map((response) => response.json()),
+    );
+    const approvedIndex = concurrentResponses.findIndex(
+      (response) => response.status === 200,
+    );
+    const approved = concurrentPayloads[approvedIndex];
     const afterApprovalQueueResponse = await api.request(
       "/api/v1/tool-approvals?agentId=agent_default",
     );
@@ -13300,6 +13677,7 @@ describe("Romeo API thin slice", () => {
     const usage = await usageResponse.json();
     const callsResponse = await api.request("/api/v1/tool-calls");
     const calls = await callsResponse.json();
+    const jobs = await (await api.request("/api/v1/jobs")).json();
     const statuses = calls.data.map((call: { status: string }) => call.status);
 
     expect(cloneResponse.status).toBe(201);
@@ -13337,6 +13715,10 @@ describe("Romeo API thin slice", () => {
     expect(missingApprovalRequest.error.code).toBe(
       "tool_approval_request_required",
     );
+    expect(callerAssertedApprovalResponse.status).toBe(409);
+    expect(callerAssertedApproval.error.code).toBe(
+      "invalid_tool_approval_request",
+    );
     expect(approveDecisionResponse.status).toBe(200);
     expect(approveDecision.data).toMatchObject({
       approvalRequestId,
@@ -13351,8 +13733,24 @@ describe("Romeo API thin slice", () => {
     expect(
       afterApproveDecisionQueue.data.map((call: { id: string }) => call.id),
     ).not.toContain(approvalRequestId);
-    expect(approvedResponse.status).toBe(200);
+    expect(mismatchedValueResponse.status).toBe(409);
+    expect(mismatchedValue.error.code).toBe("invalid_tool_approval_request");
+    expect(
+      concurrentResponses.map((response) => response.status).sort(),
+    ).toEqual([200, 409]);
+    expect(
+      concurrentPayloads.some(
+        (payload) => payload.error?.code === "tool_approval_request_consumed",
+      ),
+    ).toBe(true);
     expect(approved.data.timeZone).toBe("UTC");
+    expect(
+      jobs.data.filter(
+        (job: { payload: Record<string, unknown>; type: string }) =>
+          job.type === "tool.approval.consumption" &&
+          job.payload.approvalRequestId === approvalRequestId,
+      ),
+    ).toHaveLength(1);
     expect(
       afterApprovalQueue.data.map((call: { id: string }) => call.id),
     ).not.toContain(approvalRequestId);
@@ -13392,6 +13790,7 @@ describe("Romeo API thin slice", () => {
     );
     expect(JSON.stringify(calls.data)).not.toContain("1 + 1");
     expect(JSON.stringify(calls.data)).not.toContain("UTC");
+    expect(JSON.stringify(jobs.data)).not.toContain("UTC");
   });
 
   it("cancels pending tool approvals with metadata-only audit state", async () => {
@@ -15861,6 +16260,23 @@ describe("Romeo API thin slice", () => {
     );
     const dispatch = await dispatchResponse.json();
     const approvalRequestId = dispatch.error.details.approvalRequestId;
+    const callerAssertedApprovalResponse = await api.request(
+      `/api/v1/tool-connectors/${imported.connectorId}/operations/${imported.operationId}/dispatch`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          approved: true,
+          approvalRequestId,
+          ...dispatchBody,
+        }),
+      },
+    );
+    const callerAssertedApproval = await callerAssertedApprovalResponse.json();
+    const approveResponse = await api.request(
+      `/api/v1/tool-approvals/${approvalRequestId}/approve`,
+      { method: "POST" },
+    );
     const mismatchedApprovalResponse = await api.request(
       `/api/v1/tool-connectors/${imported.connectorId}/operations/${imported.operationId}/dispatch`,
       {
@@ -15869,7 +16285,7 @@ describe("Romeo API thin slice", () => {
         body: JSON.stringify({
           approved: true,
           approvalRequestId,
-          body: { title: "SECRET-WRITE-TITLE", priority: "high" },
+          body: { title: "A-DIFFERENT-SECRET-WRITE-TITLE" },
         }),
       },
     );
@@ -15905,6 +16321,11 @@ describe("Romeo API thin slice", () => {
       approvalRequestId,
     });
     expect(approvalRequestId).toMatch(/^job_/);
+    expect(callerAssertedApprovalResponse.status).toBe(409);
+    expect(callerAssertedApproval.error.code).toBe(
+      "invalid_tool_operation_approval_request",
+    );
+    expect(approveResponse.status).toBe(200);
     expect(mismatchedApprovalResponse.status).toBe(409);
     expect(mismatchedApproval.error.code).toBe(
       "invalid_tool_operation_approval_request",
@@ -15932,8 +16353,8 @@ describe("Romeo API thin slice", () => {
     expect(
       jobs.data.some(
         (job: { id: string; payload: Record<string, unknown>; type: string }) =>
-          job.id === approvalRequestId &&
-          job.type === "tool.operation.approval_request" &&
+          job.payload.approvalRequestId === approvalRequestId &&
+          job.type === "tool.operation.approval.consumption" &&
           typeof job.payload.consumedAt === "string",
       ),
     ).toBe(true);
@@ -16111,6 +16532,70 @@ describe("Romeo API thin slice", () => {
     }
   });
 
+  it("records exactly one terminal operation approval decision under concurrency", async () => {
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      env: testEnv({ TOOL_OPERATION_EXECUTION_DRIVER: "http-fetch" }),
+    });
+    const imported = await importWriteIssueConnector(api);
+    await enableImportedIssueOperation(
+      api,
+      imported.connectorId,
+      imported.operationId,
+    );
+    const blocked = await (
+      await api.request(
+        `/api/v1/tool-connectors/${imported.connectorId}/operations/${imported.operationId}/dispatch`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ body: { title: "CONCURRENT-DECISION" } }),
+        },
+      )
+    ).json();
+    const approvalRequestId = blocked.error.details.approvalRequestId;
+    const responses = await Promise.all(
+      ["approve", "reject"].map((decision) =>
+        api.request(`/api/v1/tool-approvals/${approvalRequestId}/${decision}`, {
+          method: "POST",
+        }),
+      ),
+    );
+    const payloads = await Promise.all(
+      responses.map((response) => response.json()),
+    );
+    const jobs = await (await api.request("/api/v1/jobs")).json();
+    const audit = await (await api.request("/api/v1/audit-logs")).json();
+
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 409,
+    ]);
+    expect(
+      payloads.filter((payload) =>
+        ["approved", "rejected"].includes(payload.data?.status),
+      ),
+    ).toHaveLength(1);
+    expect(
+      payloads.some(
+        (payload) =>
+          payload.error?.code ===
+          "tool_operation_approval_request_already_decided",
+      ),
+    ).toBe(true);
+    expect(
+      jobs.data.filter(
+        (job: { payload: Record<string, unknown>; type: string }) =>
+          job.type === "tool.operation.approval.decision" &&
+          job.payload.approvalRequestId === approvalRequestId,
+      ),
+    ).toHaveLength(1);
+    expect(
+      audit.data.filter((log: { action: string }) =>
+        log.action.startsWith("tool.operation.approval."),
+      ),
+    ).toHaveLength(1);
+    expect(JSON.stringify(jobs.data)).not.toContain("CONCURRENT-DECISION");
+  });
+
   it("requires approval before queueing imported OpenAPI operation dispatch requests", async () => {
     const fetchCalls: unknown[] = [];
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
@@ -16138,7 +16623,7 @@ describe("Romeo API thin slice", () => {
     );
     const blocked = await blockedResponse.json();
     const approvalRequestId = blocked.error.details.approvalRequestId;
-    const queuedResponse = await api.request(
+    const callerAssertedApprovalResponse = await api.request(
       `/api/v1/tool-connectors/${imported.connectorId}/operations/${imported.operationId}/dispatch-requests`,
       {
         method: "POST",
@@ -16150,7 +16635,37 @@ describe("Romeo API thin slice", () => {
         }),
       },
     );
-    const queued = await queuedResponse.json();
+    const callerAssertedApproval = await callerAssertedApprovalResponse.json();
+    const approveResponse = await api.request(
+      `/api/v1/tool-approvals/${approvalRequestId}/approve`,
+      { method: "POST" },
+    );
+    const concurrentResponses = await Promise.all(
+      [0, 1].map(() =>
+        api.request(
+          `/api/v1/tool-connectors/${imported.connectorId}/operations/${imported.operationId}/dispatch-requests`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              approved: true,
+              approvalRequestId,
+              ...dispatchBody,
+            }),
+          },
+        ),
+      ),
+    );
+    const concurrentPayloads = await Promise.all(
+      concurrentResponses.map((response) => response.json()),
+    );
+    const queuedIndex = concurrentResponses.findIndex(
+      (response) => response.status === 200,
+    );
+    const queuedResponse = concurrentResponses[queuedIndex];
+    const queued = concurrentPayloads[queuedIndex];
+    if (queuedResponse === undefined)
+      throw new Error("Expected one approved dispatch request winner");
     const auditResponse = await api.request("/api/v1/audit-logs");
     const audit = await auditResponse.json();
     const jobsResponse = await api.request("/api/v1/jobs");
@@ -16163,6 +16678,20 @@ describe("Romeo API thin slice", () => {
       riskLevel: "medium",
       approvalRequestId,
     });
+    expect(callerAssertedApprovalResponse.status).toBe(409);
+    expect(callerAssertedApproval.error.code).toBe(
+      "invalid_tool_operation_approval_request",
+    );
+    expect(approveResponse.status).toBe(200);
+    expect(
+      concurrentResponses.map((response) => response.status).sort(),
+    ).toEqual([200, 409]);
+    expect(
+      concurrentPayloads.some(
+        (payload) =>
+          payload.error?.code === "tool_operation_approval_request_consumed",
+      ),
+    ).toBe(true);
     expect(queuedResponse.status).toBe(200);
     expect(queued.data).toMatchObject({
       job: { type: "tool.operation.dispatch_request", status: "queued" },
@@ -16202,11 +16731,24 @@ describe("Romeo API thin slice", () => {
     expect(
       jobs.data.some(
         (job: { id: string; payload: Record<string, unknown>; type: string }) =>
-          job.id === approvalRequestId &&
-          job.type === "tool.operation.approval_request" &&
+          job.payload.approvalRequestId === approvalRequestId &&
+          job.type === "tool.operation.approval.consumption" &&
           typeof job.payload.consumedAt === "string",
       ),
     ).toBe(true);
+    expect(
+      jobs.data.filter(
+        (job: { payload: Record<string, unknown>; type: string }) =>
+          job.type === "tool.operation.approval.consumption" &&
+          job.payload.approvalRequestId === approvalRequestId,
+      ),
+    ).toHaveLength(1);
+    expect(
+      jobs.data.filter(
+        (job: { type: string }) =>
+          job.type === "tool.operation.dispatch_request",
+      ),
+    ).toHaveLength(1);
     for (const serialized of [
       JSON.stringify(blocked),
       JSON.stringify(queued.data),
@@ -18140,6 +18682,10 @@ describe("Romeo API thin slice", () => {
     if (approvalRequestId === undefined) {
       throw new Error("Expected imported operation approval request ID");
     }
+    const approveResponse = await api.request(
+      `/api/v1/tool-approvals/${approvalRequestId}/approve`,
+      { method: "POST" },
+    );
     const waitingRun = await (
       await api.request(`/api/v1/runs/${run.data.id}`)
     ).json();
@@ -18164,6 +18710,7 @@ describe("Romeo API thin slice", () => {
     if (dispatchJobId === undefined) {
       throw new Error("Expected approved dispatch job ID");
     }
+    expect(approveResponse.status).toBe(200);
     const queuedRun = await (
       await api.request(`/api/v1/runs/${run.data.id}`)
     ).json();
@@ -18347,6 +18894,10 @@ describe("Romeo API thin slice", () => {
     if (approvalRequestId === undefined) {
       throw new Error("Expected approval request ID in run event stream");
     }
+    const approveResponse = await api.request(
+      `/api/v1/tool-approvals/${approvalRequestId}/approve`,
+      { method: "POST" },
+    );
     const waitingRunResponse = await api.request(`/api/v1/runs/${run.data.id}`);
     const waitingRun = await waitingRunResponse.json();
     const toolCallsResponse = await api.request("/api/v1/tool-calls");
@@ -18387,6 +18938,7 @@ describe("Romeo API thin slice", () => {
     expect(eventStream).toContain("event: run.waiting_tool_approval");
     expect(eventStream).toContain('"errorCode":"tool_approval_required"');
     expect(approvalRequestId).toMatch(/^tool_call_/);
+    expect(approveResponse.status).toBe(200);
     expect(eventStream).not.toContain("call_provider_datetime_approval");
     expect(eventStream).not.toContain("UTC");
     expect(
@@ -18968,6 +19520,9 @@ describe("Romeo API thin slice", () => {
       }),
     });
     const file = await fileResponse.json();
+    await new FileService(repository, objectStore).processLifecycleJob({
+      workerId: "run_context",
+    });
     const chatResponse = await api.request("/api/v1/chats", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -18992,10 +19547,12 @@ describe("Romeo API thin slice", () => {
       | {
           id: string;
           parts?: Array<{
+            id: string;
             type: string;
             fileId?: string;
             fileName: string;
             mediaType: string;
+            retainedInContext?: boolean;
           }>;
         }
       | undefined;
@@ -19043,6 +19600,53 @@ describe("Romeo API thin slice", () => {
         (message: { content: string }) => message.content === "",
       ),
     ).toBe(true);
+
+    const documentPart = user?.parts?.find(
+      (part) => part.type === "document_ref",
+    );
+    const retentionResponse = await api.request(
+      `/api/v1/chats/${chat.data.id}/messages/${user!.id}/attachments/${documentPart!.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ retainedInContext: false }),
+      },
+    );
+    const retention = await retentionResponse.json();
+    const releasedMessages = await (
+      await api.request(`/api/v1/chats/${chat.data.id}/messages`)
+    ).json();
+    const releasedUser = releasedMessages.data.find(
+      (message: { id: string }) => message.id === user!.id,
+    );
+    const releasedPreviewResponse = await api.request(
+      "/api/v1/runs/context-preview",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          chatId: chat.data.id,
+          agentId: "agent_default",
+          content: "Do not reuse the released attachment.",
+        }),
+      },
+    );
+    const releasedPreview = await releasedPreviewResponse.json();
+
+    expect(retentionResponse.status).toBe(200);
+    expect(retention.data).toMatchObject({
+      id: documentPart!.id,
+      messageId: user!.id,
+      retainedInContext: false,
+    });
+    expect(releasedUser.attachments[0]).toMatchObject({
+      id: documentPart!.id,
+      retainedInContext: false,
+    });
+    expect(releasedPreviewResponse.status).toBe(200);
+    expect(releasedPreview.data.attachments.retainedDocuments).not.toContain(
+      "release-policy.txt",
+    );
   });
 
   it("retrieves enabled agent knowledge during runs and persists citations", async () => {

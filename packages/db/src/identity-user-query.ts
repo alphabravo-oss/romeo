@@ -1,4 +1,4 @@
-import type { QueryUsersInput, UserTableQueryResult } from "@romeo/core";
+import type { QueryUsersInput, User, UserTableQueryResult } from "@romeo/core";
 import {
   and,
   asc,
@@ -102,18 +102,20 @@ function userSearchDocument() {
   return sql<string>`lower(${users.name} || chr(31) || ${users.email})`;
 }
 
-function toUserRecord(row: typeof users.$inferSelect) {
+function toUserRecord(row: typeof users.$inferSelect): User {
+  const disabledAt = optionalIsoString(row.disabledAt);
+  const role =
+    row.role === "org_admin" ||
+    row.role === "global_admin" ||
+    row.role === "user"
+      ? row.role
+      : ("user" as const);
   return {
     id: row.id,
     orgId: row.orgId,
     email: row.email,
     name: row.name,
-    role:
-      row.role === "org_admin" || row.role === "global_admin"
-        ? row.role
-        : ("user" as const),
-    ...(optionalIsoString(row.disabledAt) === undefined
-      ? {}
-      : { disabledAt: optionalIsoString(row.disabledAt) }),
+    role,
+    ...(disabledAt === undefined ? {} : { disabledAt }),
   };
 }

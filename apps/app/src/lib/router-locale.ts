@@ -2,6 +2,7 @@ import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 
 import type { Locale } from "./i18n";
+import { localeCookieName } from "./locale-storage";
 
 const supportedLocales = new Set<Locale>(["en", "es", "fr"]);
 
@@ -41,6 +42,19 @@ export function localeFromAcceptLanguage(header: string | null): Locale {
   return "en";
 }
 
+export function localeFromCookie(header: string | null): Locale | undefined {
+  if (header === null) return undefined;
+  for (const part of header.split(";")) {
+    const [rawName, ...rawValue] = part.trim().split("=");
+    if (rawName !== localeCookieName) continue;
+    const value = decodeURIComponent(rawValue.join("="));
+    return value === "en" || value === "es" || value === "fr"
+      ? value
+      : undefined;
+  }
+  return undefined;
+}
+
 export const getRouterLocale = createIsomorphicFn()
   // The server-rendered <html lang> is the hydration contract. A stored user
   // preference is applied by LocaleProvider after hydration, avoiding a
@@ -48,6 +62,8 @@ export const getRouterLocale = createIsomorphicFn()
   .client(() =>
     normalizeRouterLocale(globalThis.document?.documentElement.lang),
   )
-  .server(() =>
-    localeFromAcceptLanguage(getRequest().headers.get("accept-language")),
+  .server(
+    () =>
+      localeFromCookie(getRequest().headers.get("cookie")) ??
+      localeFromAcceptLanguage(getRequest().headers.get("accept-language")),
   );

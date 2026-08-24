@@ -1,57 +1,67 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Button } from "@romeo/ui";
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
+
+import {
+  COMMAND_PALETTE_INTENT_EVENT,
+  COMMAND_PALETTE_OPEN_EVENT,
+} from "../lib/command-palette-events";
+import { useLocale } from "../lib/i18n";
 
 const loadCommandPalette = () => import("./CommandPalette");
 const loadShortcutsModal = () => import("./ShortcutsModal");
-const LazyCommandPalette = lazy(async () => ({
-  default: (await loadCommandPalette()).CommandPalette,
-}));
 const LazyShortcutsModal = lazy(async () => ({
   default: (await loadShortcutsModal()).ShortcutsModal,
 }));
 
 /**
  * Keeps global overlay implementations out of the initial route shell while a
- * tiny launcher retains first-keystroke behavior. Once loaded, each overlay
- * resumes ownership of its existing keyboard/event listeners.
+ * tiny launcher retains first-keystroke behavior and is the sole owner of
+ * global keyboard/event listeners.
  */
 export function LazyGlobalOverlays() {
+  const { t } = useLocale();
   const [commandRequested, setCommandRequested] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandLoadAttempt, setCommandLoadAttempt] = useState(0);
+  const [commandModuleReady, setCommandModuleReady] = useState(false);
   const [shortcutsRequested, setShortcutsRequested] = useState(false);
+  const LazyCommandPalette = useMemo(() => {
+    void commandLoadAttempt;
+    void commandModuleReady;
+    return lazy(async () => ({
+      default: (await loadCommandPalette()).CommandPalette,
+    }));
+  }, [commandLoadAttempt, commandModuleReady]);
 
   useEffect(() => {
-    const preload = () => {
-      void loadCommandPalette();
-      void loadShortcutsModal();
+    const preloadCommand = () => {
+      void loadCommandPalette()
+        .then(() => setCommandModuleReady(true))
+        .catch(() => undefined);
     };
-    const idleWindow = window as Window & {
-      cancelIdleCallback?: (id: number) => void;
-      requestIdleCallback?: (
-        callback: () => void,
-        options?: { timeout: number },
-      ) => number;
+    const requestCommand = () => {
+      preloadCommand();
+      setCommandRequested(true);
+      setCommandOpen(true);
     };
-    if (idleWindow.requestIdleCallback !== undefined) {
-      const idleId = idleWindow.requestIdleCallback(preload, {
-        timeout: 4_000,
-      });
-      return () => idleWindow.cancelIdleCallback?.(idleId);
-    }
-    const timer = globalThis.setTimeout(preload, 2_000);
-    return () => globalThis.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        !commandRequested &&
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === "k"
-      ) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        preloadCommand();
         setCommandRequested(true);
+        setCommandOpen((current) => !current);
         return;
       }
-      if (shortcutsRequested || event.key !== "?") return;
+      if (event.key !== "?") return;
       const element = document.activeElement as HTMLElement | null;
       const typing =
         element?.tagName === "INPUT" ||
@@ -62,21 +72,61 @@ export function LazyGlobalOverlays() {
         setShortcutsRequested(true);
       }
     };
-    const onShortcuts = () => {
-      if (!shortcutsRequested) setShortcutsRequested(true);
-    };
+    const onIntent = preloadCommand;
+    const onShortcuts = () => setShortcutsRequested(true);
     window.addEventListener("keydown", onKeyDown);
+    window.addEventListener(COMMAND_PALETTE_OPEN_EVENT, requestCommand);
+    window.addEventListener(COMMAND_PALETTE_INTENT_EVENT, onIntent);
     window.addEventListener("rm-shortcuts", onShortcuts);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener(COMMAND_PALETTE_OPEN_EVENT, requestCommand);
+      window.removeEventListener(COMMAND_PALETTE_INTENT_EVENT, onIntent);
       window.removeEventListener("rm-shortcuts", onShortcuts);
     };
-  }, [commandRequested, shortcutsRequested]);
+  }, []);
 
   return (
     <Suspense fallback={null}>
-      {commandRequested ? <LazyCommandPalette initialOpen /> : null}
+      {commandRequested ? (
+        <LazyOverlayErrorBoundary
+          fallback={
+            <div className="rm-table-empty" role="alert">
+              <p>{t("tableError")}</p>
+              <Button
+                onClick={() => setCommandLoadAttempt((attempt) => attempt + 1)}
+                variant="secondary"
+              >
+                {t("tableRetry")}
+              </Button>
+            </div>
+          }
+          key={commandLoadAttempt}
+        >
+          <LazyCommandPalette
+            onOpenChange={setCommandOpen}
+            open={commandOpen}
+          />
+        </LazyOverlayErrorBoundary>
+      ) : null}
       {shortcutsRequested ? <LazyShortcutsModal initialOpen /> : null}
     </Suspense>
   );
+}
+
+class LazyOverlayErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  componentDidCatch(_error: unknown, _info: ErrorInfo): void {}
+
+  render(): ReactNode {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
 }

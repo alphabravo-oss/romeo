@@ -33,9 +33,8 @@ import {
   normalizeFileMetadataInput,
   sha256Hex,
 } from "./file-upload-normalization";
-import { normalizeUploadedMedia } from "./media-normalization";
 import type { QuotaCoordinator } from "./quota-coordination";
-import { isFileReadyForUse } from "./file-lifecycle";
+import { isFileReadyForUse, transitionFileLifecycle } from "./file-lifecycle";
 import { assertWorkspaceActive } from "./workspace-guard";
 
 const uploadUrlExpiresInSeconds = 900;
@@ -172,6 +171,9 @@ export class FileDirectUploadService {
       "files:write",
       "write",
     );
+    if (file.status !== "uploading" && !isResumableUploadFile(file)) {
+      return publicFileObject(file);
+    }
     const metadata = await this.objectStore.headObject?.(file.objectKey);
     const protocol = await completeDirectUploadProtocol({
       alreadyReady: isFileReadyForUse(file),
@@ -231,23 +233,6 @@ export class FileDirectUploadService {
             : 400,
       );
     }
-    const normalized = normalizeUploadedMedia({
-      bytes: protocol.bytes,
-      fileName: file.fileName,
-      mimeType: file.mimeType,
-      stripMetadata: true,
-      retentionPermitsOriginal: file.purpose !== "ephemeral",
-      signatureMatches: true,
-    });
-    if (normalized.outcome === "denied") {
-      await this.objectStore.deleteObject(file.objectKey);
-      throw new ApiError(
-        normalized.code,
-        "File bytes do not match the declared MIME type.",
-        415,
-      );
-    }
-    const bytes = normalized.bytes;
     const duplicateMetadata = await this.pipeline.duplicateContentMetadata({
       subject,
       workspaceId: file.workspaceId,
@@ -255,31 +240,26 @@ export class FileDirectUploadService {
       purpose: file.purpose,
       excludeFileId: file.id,
     });
-    const completed = await this.pipeline.processFileLifecycle({
-      subject,
-      file,
-      bytes,
-      objectKeys: [file.objectKey],
-      metadata: duplicateMetadata,
-    });
-    try {
-      await this.repository.transaction((repository) =>
-        this.pipeline.audit(
-          repository,
-          subject,
-          "file.upload_session.complete",
-          completed,
-          {
-            purpose: completed.purpose,
-            sizeBytes: completed.sizeBytes,
-            mimeType: completed.mimeType,
-          },
-        ),
+    const completed = await this.repository.transaction(async (repository) => {
+      const queued = await repository.updateFileObject(
+        transitionFileLifecycle(file, "quarantined", new Date().toISOString(), {
+          lifecycleAttempts: 0,
+          metadata: { ...file.metadata, ...duplicateMetadata },
+        }),
       );
-    } catch (error) {
-      await this.pipeline.failFileLifecycle(completed, error);
-      throw error;
-    }
+      await this.pipeline.audit(
+        repository,
+        subject,
+        "file.upload_session.complete",
+        queued,
+        {
+          purpose: queued.purpose,
+          sizeBytes: queued.sizeBytes,
+          mimeType: queued.mimeType,
+        },
+      );
+      return queued;
+    });
     await this.pipeline.recordUploadPipeline(
       subject,
       completed,

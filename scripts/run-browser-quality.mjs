@@ -1,9 +1,10 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const port = Number(process.env.ROMEO_QUALITY_PORT ?? "12049");
 const baseUrl = `http://127.0.0.1:${port}`;
+cleanupRomeoBrowserSessions();
 const server = spawn(
   "corepack",
   [
@@ -21,13 +22,25 @@ const server = spawn(
   ],
   {
     cwd: root,
-    env: { ...process.env, DEV_SEEDED_LOGIN: "true" },
+    // Browser acceptance owns its repository state. Never inherit a developer
+    // or CI database target from a local .env file, because that makes the
+    // suite destructive, non-repeatable, and dependent on migration posture.
+    env: {
+      ...process.env,
+      DEV_SEEDED_LOGIN: "true",
+      REPOSITORY_DRIVER: "memory",
+      ROMEO_ENV: "development",
+    },
     stdio: ["ignore", "inherit", "inherit"],
   },
 );
 
 try {
   await waitForHealth(`${baseUrl}/api/v1/health`, 30_000);
+  // Visual baselines describe the canonical seeded product, so capture them
+  // before acceptance creates chats, fixtures, and provider/audit activity.
+  // Every later suite still shares the same isolated in-memory server.
+  await runBrowserScript("scripts/browser-visual-baselines.mjs", baseUrl);
   await runBrowserScript("scripts/browser-chat-acceptance.mjs", baseUrl);
   await runBrowserScript("scripts/browser-engine-matrix.mjs", baseUrl, {
     ROMEO_BROWSER_ENGINES:
@@ -38,7 +51,6 @@ try {
       process.env.ROMEO_BROWSER_ENGINES ?? "chromium,firefox,webkit",
   });
   await runBrowserScript("scripts/admin-console-audit.mjs", baseUrl);
-  await runBrowserScript("scripts/browser-visual-baselines.mjs", baseUrl);
 } finally {
   server.kill("SIGTERM");
   await Promise.race([
@@ -46,6 +58,30 @@ try {
     new Promise((resolveTimeout) => setTimeout(resolveTimeout, 2_000)),
   ]);
   if (server.exitCode === null) server.kill("SIGKILL");
+  cleanupRomeoBrowserSessions();
+}
+
+function cleanupRomeoBrowserSessions() {
+  const listed = spawnSync("agent-browser", ["session", "list"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (listed.status !== 0) return;
+  const names = `${listed.stdout}\n${listed.stderr}`
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^romeo-[A-Za-z0-9._-]+$/u.test(line));
+  for (const name of names) {
+    // Only suite-owned names are eligible; unrelated developer browser
+    // sessions remain intact. A second attempt handles a daemon busy edge.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const closed = spawnSync("agent-browser", ["--session", name, "close"], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      if (closed.status === 0) break;
+    }
+  }
 }
 
 async function waitForHealth(url, timeoutMs) {

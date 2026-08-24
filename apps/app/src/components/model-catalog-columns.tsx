@@ -1,7 +1,7 @@
 import { StatusBadge, Switch } from "@romeo/ui";
 import { useMemo } from "react";
 
-import type { BaseModel, Provider } from "../features/providers/types";
+import type { Provider } from "../features/providers/types";
 import {
   catalogUnavailableReason,
   modelCatalogSurface,
@@ -264,7 +264,11 @@ function SupportBadge({
   return (
     <StatusBadge
       tone={
-        level === "native" ? "success" : level === "emulated" ? "warning" : "neutral"
+        level === "native"
+          ? "success"
+          : level === "emulated"
+            ? "warning"
+            : "neutral"
       }
     >
       {label}: {t(supportLevelKey(level))}
@@ -278,9 +282,7 @@ function supportLevelKey(level: CatalogSupportLevel): MessageKey {
   return "catalogSupportUnsupported";
 }
 
-function probeFreshnessKey(
-  freshness: "fresh" | "never" | "stale",
-): MessageKey {
+function probeFreshnessKey(freshness: "fresh" | "never" | "stale"): MessageKey {
   if (freshness === "fresh") return "catalogProbeFresh";
   if (freshness === "stale") return "catalogProbeStale";
   return "catalogProbeNever";

@@ -7,7 +7,12 @@ import { prefetchPrimaryRouteData } from "./route-data";
 import { RouteWorkspaceSelectionError } from "./route-workspace-selection";
 
 const bootstrap = {
-  deployment: { tenancyMode: "single" as const },
+  deployment: {
+    billingEnabled: false,
+    malwareScanEnabled: false,
+    qdrantConfigured: false,
+    tenancyMode: "single" as const,
+  },
   organizations: [],
   subject: {
     groupIds: [],
@@ -42,10 +47,11 @@ function createContext(
   const fetchQuery = vi.fn((options: { queryKey: readonly unknown[] }) =>
     queryOperationId(options) === "routeWorkspaceSelection"
       ? selectionResult
-      : Promise.resolve(bootstrap),
+      : Promise.resolve(bootstrapResult),
   );
   const prefetchQuery = vi.fn(() => Promise.resolve());
   const prefetchInfiniteQuery = vi.fn(() => Promise.resolve());
+  const cancelQueries = vi.fn(() => Promise.resolve());
   const apiClient = {
     getConfig: () => ({ baseUrl: "https://romeo.example/api/v1" }),
   } as GeneratedQueryClient;
@@ -54,12 +60,14 @@ function createContext(
       apiClient,
       locale: "fr" as const,
       queryClient: {
+        cancelQueries,
         fetchQuery,
         getQueryData: () => bootstrapResult,
         prefetchInfiniteQuery,
         prefetchQuery,
       } as unknown as QueryClient,
     } satisfies RomeoRouterContext,
+    cancelQueries,
     fetchQuery,
     prefetchInfiniteQuery,
     prefetchQuery,
@@ -89,7 +97,7 @@ describe("primary route data prefetch", () => {
     expect(operationIds(prefetchQuery)).toContain("managedModelsList");
     expect(operationIds(prefetchQuery)).toContain("routerSession");
     expect(operationIds(prefetchQuery)).toContain("workspaceCapabilities");
-    expect(operationIds(prefetchInfiniteQuery)).toEqual(["chats"]);
+    expect(operationIds(prefetchInfiniteQuery)).toEqual([]);
   });
 
   it("passes selected chat/workspace dimensions to the authorization query", async () => {
@@ -129,10 +137,36 @@ describe("primary route data prefetch", () => {
     expect(route.prefetchInfiniteQuery).not.toHaveBeenCalled();
   });
 
+  it("cancels unobserved route work when navigation aborts", async () => {
+    let resolveSelection!: (value: typeof selection) => void;
+    const pendingSelection = new Promise<typeof selection>((resolve) => {
+      resolveSelection = resolve;
+    });
+    const route = createContext(pendingSelection);
+    const abortController = new AbortController();
+
+    const loading = prefetchPrimaryRouteData(
+      "workspace",
+      route.context,
+      "navigation",
+      {},
+      abortController.signal,
+    );
+    abortController.abort();
+    resolveSelection(selection);
+
+    await expect(loading).resolves.toBeUndefined();
+    expect(route.cancelQueries).toHaveBeenCalledOnce();
+  });
+
   it("prefetches draft models for admin and keeps settings bounded", async () => {
     const admin = createContext();
     await prefetchPrimaryRouteData("admin", admin.context);
+    expect(
+      admin.fetchQuery.mock.calls.map(([options]) => queryOperationId(options)),
+    ).toEqual(["routeWorkspaceSelection", "identityGetCurrentPrincipal"]);
     expect(operationIds(admin.prefetchQuery)).toContain("managedModelsList");
+    expect(admin.prefetchInfiniteQuery).not.toHaveBeenCalled();
 
     const settings = createContext();
     await prefetchPrimaryRouteData("settings", settings.context);
@@ -140,6 +174,18 @@ describe("primary route data prefetch", () => {
       "interfacePreferencesGetCurrent",
       "routerSession",
     ]);
+  });
+
+  it("loads chat sessions only for the chat route", async () => {
+    const chat = createContext();
+    await prefetchPrimaryRouteData("chat", chat.context);
+    expect(operationIds(chat.prefetchInfiniteQuery)).toEqual(["chats"]);
+
+    for (const routeName of ["admin", "settings", "workspace"] as const) {
+      const route = createContext();
+      await prefetchPrimaryRouteData(routeName, route.context);
+      expect(route.prefetchInfiniteQuery).not.toHaveBeenCalled();
+    }
   });
 
   it("denies a non-admin before privileged admin prefetch begins", async () => {
@@ -159,6 +205,11 @@ describe("primary route data prefetch", () => {
       "interfacePreferencesGetCurrent",
       "routerSession",
     ]);
+    expect(
+      nonAdmin.fetchQuery.mock.calls.map(([options]) =>
+        queryOperationId(options),
+      ),
+    ).toEqual(["routeWorkspaceSelection", "identityGetCurrentPrincipal"]);
     expect(nonAdmin.prefetchInfiniteQuery).not.toHaveBeenCalled();
   });
 

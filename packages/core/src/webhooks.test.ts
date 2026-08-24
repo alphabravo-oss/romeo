@@ -13,7 +13,10 @@ interface FetchCall {
   init?: RequestInit;
 }
 
-const env = testEnv({ WEBHOOK_SIGNING_KEY: "test-webhook-signing-key" });
+const env = testEnv({
+  WEBHOOK_SIGNING_KEY: "test-webhook-signing-key",
+  WEBHOOK_SIGNING_KEY_PREVIOUS: "previous-test-webhook-signing-key",
+});
 
 describe("webhook API", () => {
   it("rejects unsafe webhook targets", async () => {
@@ -207,6 +210,7 @@ describe("webhook API", () => {
     expect(delivery.data.status).toBe("delivered");
     expect(delivery.data.attemptCount).toBe(1);
     expect(delivery.data.responseStatus).toBe(204);
+    expect(delivery.data.signatureKeyVersion).toMatch(/^[a-f0-9]{16}$/u);
     expect(delivery.data.payload).toEqual({
       redacted: true,
       keyCount: 4,
@@ -229,6 +233,13 @@ describe("webhook API", () => {
       | Record<string, string>
       | undefined;
     expect(String(requestHeaders?.["x-romeo-signature"])).toMatch(/^v1=/);
+    expect(requestHeaders?.["x-romeo-signature-version"]).toMatch(
+      /^[a-f0-9]{16}$/u,
+    );
+    expect(requestHeaders?.["x-romeo-signature-previous"]).toMatch(/^v1=/);
+    expect(requestHeaders?.["x-romeo-signature-previous-version"]).toMatch(
+      /^[a-f0-9]{16}$/u,
+    );
     expect(JSON.parse(String(calls[0]?.init?.body))).toMatchObject({
       id: delivery.data.id,
       type: "webhook.test",

@@ -59,6 +59,16 @@ export const platformEnvShape = {
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  SCHEDULED_TENANT_WORK_OWNER: z
+    .enum(["internal", "external"])
+    .default("internal"),
+  SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_PATH: z.string().default(""),
+  SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_MAX_AGE_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(86_400)
+    .default(900),
   DATA_CONNECTOR_NETWORK_POLICY_ENABLED: z
     .enum(["true", "false"])
     .default("false")
@@ -67,12 +77,22 @@ export const platformEnvShape = {
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  TOOL_DISPATCH_BROKER_TOKEN: z.string().default(""),
+  TOOL_DISPATCH_BROKER_TOKEN_PREVIOUS: z.string().default(""),
   TOOL_DISPATCH_NETWORK_POLICY_ENABLED: z
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
   BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH: z.string().default(""),
   BROWSER_AUTOMATION_WORKER_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  BROWSER_AUTOMATION_BROKER_TOKEN: z.string().default(""),
+  BROWSER_AUTOMATION_BROKER_TOKEN_PREVIOUS: z.string().default(""),
+  KNOWLEDGE_EXTRACTION_BROKER_TOKEN: z.string().default(""),
+  KNOWLEDGE_EXTRACTION_BROKER_TOKEN_PREVIOUS: z.string().default(""),
+  KNOWLEDGE_EXTRACTION_WORKER_ENABLED: z
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),

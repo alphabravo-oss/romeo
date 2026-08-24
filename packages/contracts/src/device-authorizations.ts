@@ -10,7 +10,11 @@ import {
 
 const id = z.string().trim().min(1).max(300);
 const timestamp = z.iso.datetime();
-const scope = z.enum(scopeValues);
+const requestScope = z.enum(scopeValues);
+const responseScope = z.string().openapi({
+  description: "Authorization scope. Clients must tolerate future scopes.",
+  "x-extensible-enum": scopeValues,
+});
 
 export const DeviceAuthorizationSchema = z
   .strictObject({
@@ -18,7 +22,7 @@ export const DeviceAuthorizationSchema = z
     orgId: id,
     userId: id,
     name: z.string(),
-    scopes: z.array(scope),
+    scopes: z.array(responseScope),
     accessApiKeyId: id,
     expiresAt: timestamp,
     createdAt: timestamp,
@@ -42,7 +46,7 @@ export const CreatedDeviceAuthorizationSchema = z
 export const CreateDeviceAuthorizationSchema = z
   .strictObject({
     name: z.string().min(1).max(120),
-    scopes: z.array(scope).min(1).max(32),
+    scopes: z.array(requestScope).min(1).max(32),
     ttlDays: z.number().int().min(1).max(365).optional(),
   })
   .openapi("CreateDeviceAuthorizationRequest");

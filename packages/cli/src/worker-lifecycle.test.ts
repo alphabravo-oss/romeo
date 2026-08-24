@@ -17,7 +17,6 @@ import {
 } from "./tool-dispatch-worker";
 import { runVoiceCatalogSyncWorker } from "./voice-worker";
 import { runWebhookRetryWorker } from "./webhook-worker";
-import { runWorkflowResumeWorker } from "./workflow-worker";
 import type { CliIo } from "./io";
 
 describe("worker lifecycle controls", () => {
@@ -1304,103 +1303,6 @@ describe("worker lifecycle controls", () => {
     expect(stdout()).toContain('"iteration": 1');
   });
 
-  it("exits the workflow resume loop after an abort without entering the next sleep", async () => {
-    const { io, stdout } = createOutput();
-    const controller = new AbortController();
-    let listCalls = 0;
-    let slept = false;
-
-    const exitCode = await runWorkflowResumeWorker({
-      client: {
-        workflows: {
-          list: async () => {
-            listCalls += 1;
-            controller.abort();
-            return [{ id: "workflow_1", enabled: true }];
-          },
-          resumeRun: async () => ({
-            id: "workflow_run_1",
-            status: "completed",
-          }),
-          runs: async () => [],
-        },
-      } as never,
-      intervalMs: 60_000,
-      io,
-      signal: controller.signal,
-      sleep: async () => {
-        slept = true;
-      },
-    });
-
-    expect(exitCode).toBe(0);
-    expect(listCalls).toBe(1);
-    expect(slept).toBe(false);
-    expect(stdout()).toContain('"iteration": 1');
-  });
-
-  it("keeps raw workflow run input out of workflow-resume worker output", async () => {
-    const { io, stdout } = createOutput();
-    const sentinel = "worker-raw-prompt-sentinel";
-
-    const exitCode = await runWorkflowResumeWorker({
-      client: {
-        workflows: {
-          list: async () => [{ id: "workflow_1", enabled: true }],
-          resumeRun: async () => ({
-            id: "workflow_run_1",
-            orgId: "org_default",
-            workspaceId: "workspace_default",
-            workflowId: "workflow_1",
-            status: "waiting_approval",
-            input: { prompt: sentinel },
-            steps: [
-              {
-                stepId: "step_1",
-                type: "agent_run",
-                status: "completed",
-                output: { runId: "run_1", raw: sentinel },
-                completedAt: new Date(0).toISOString(),
-              },
-            ],
-            currentStepId: "step_2",
-            createdBy: "user_dev_admin",
-            createdAt: new Date(0).toISOString(),
-            updatedAt: new Date(0).toISOString(),
-          }),
-          runs: async () => [
-            {
-              id: "workflow_run_1",
-              status: "waiting_run",
-            },
-          ],
-        },
-      } as never,
-      intervalMs: 60_000,
-      io,
-      maxIterations: 1,
-    });
-
-    const output = stdout();
-    const parsed = JSON.parse(output);
-    expect(exitCode).toBe(0);
-    expect(output).not.toContain(sentinel);
-    expect(parsed.runs[0]).toMatchObject({
-      id: "workflow_run_1",
-      status: "waiting_approval",
-      stepCount: 1,
-      steps: [
-        {
-          stepId: "step_1",
-          status: "completed",
-          outputKeys: ["raw", "runId"],
-        },
-      ],
-    });
-    expect(parsed.runs[0].input).toBeUndefined();
-    expect(parsed.runs[0].steps[0].output).toBeUndefined();
-  });
-
   it("runs browser automation claims through an external runner without printing raw tasks", async () => {
     const { io, stdout } = createOutput();
     const sentinel = "browser-worker-raw-task-sentinel";
@@ -1410,7 +1312,7 @@ describe("worker lifecycle controls", () => {
 
     const exitCode = await runBrowserAutomationWorker({
       client: {
-        workflows: {
+        browserAutomation: {
           claimBrowserTask: async (input) => {
             claimInputs.push(input);
             return {
@@ -1579,26 +1481,20 @@ describe("worker lifecycle controls", () => {
   it("exits the knowledge extraction loop after an abort without entering the next sleep", async () => {
     const { io, stdout } = createOutput();
     const controller = new AbortController();
-    let listCalls = 0;
+    let claimCalls = 0;
     let slept = false;
 
     const exitCode = await runKnowledgeExtractionWorker({
       client: {
-        knowledge: {
-          extractUpload: async () => ({
-            source: { id: "source_1", status: "indexed" },
-            extractedTextBytes: 0,
-          }),
-          listSources: async () => {
-            listCalls += 1;
-            controller.abort();
-            return [];
-          },
+        claimExtraction: async () => {
+          claimCalls += 1;
+          controller.abort();
+          return { claimed: false };
         },
+        completeExtraction: async () => undefined,
       } as never,
       intervalMs: 60_000,
       io,
-      knowledgeBaseId: "kb_default",
       signal: controller.signal,
       sleep: async () => {
         slept = true;
@@ -1606,7 +1502,7 @@ describe("worker lifecycle controls", () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(listCalls).toBe(1);
+    expect(claimCalls).toBe(1);
     expect(slept).toBe(false);
     expect(stdout()).toContain('"iteration": 1');
   });

@@ -40,12 +40,11 @@ export function AgentVersionPanel({
   versions,
 }: AgentVersionPanelProps) {
   const { locale, t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<AgentVersion>(
+  const inventoriedTable = useInventoriedServerTable(
     "agent_versions",
-    {
-      enabled: activeAgent !== undefined,
-      parentId: activeAgent?.id,
-    },
+    activeAgent === undefined
+      ? { enabled: false }
+      : { parentId: activeAgent.id },
   );
   const productionVersion = versions.find(
     (version) => version.id === activeAgent?.publishedVersionId,

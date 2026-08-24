@@ -14,5 +14,11 @@ export function queuedTurnsQueryOptions(chatId?: string) {
     queryFn: ({ signal }) =>
       abortableQuery(signal, () => listQueuedTurns(chatId!)),
     enabled: chatId !== undefined,
+    refetchInterval: (query) =>
+      query.state.data?.some(
+        (turn) => turn.status === "queued" || turn.status === "leased",
+      ) === true
+        ? 250
+        : false,
   });
 }

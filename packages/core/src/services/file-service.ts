@@ -169,7 +169,7 @@ export class FileService {
     });
     const fileId = createId("file");
     const objectKey = `files/${subject.orgId}/${input.workspaceId}/${fileId}/${normalized.fileName}`;
-    await this.pipeline.traceObjectStore(
+    const stored = await this.pipeline.traceObjectStore(
       subject,
       input.workspaceId,
       fileId,
@@ -181,6 +181,13 @@ export class FileService {
           contentType: normalized.mimeType,
         }),
     );
+    if (
+      stored.key !== objectKey ||
+      stored.sizeBytes !== normalized.bytes.byteLength
+    ) {
+      await this.objectStore.deleteObject(objectKey).catch(() => undefined);
+      throw new Error("Object storage did not durably acknowledge the upload.");
+    }
     const now = new Date().toISOString();
     const pending = await this.repository
       .transaction(async (repository) => {
@@ -206,8 +213,9 @@ export class FileService {
           sha256,
           objectKey,
           purpose: input.purpose ?? "general",
-          status: "uploading",
-          lifecycleVersion: 0,
+          status: "quarantined",
+          lifecycleVersion: 1,
+          lifecycleAttempts: 0,
           metadata: {
             ...input.metadata,
             ...duplicateMetadata,
@@ -236,20 +244,13 @@ export class FileService {
           .catch(() => {});
         throw error;
       });
-    const file = await this.pipeline.processFileLifecycle({
-      subject,
-      file: pending,
-      bytes: normalized.bytes,
-      objectKeys: [objectKey],
-      metadata: duplicateMetadata,
-    });
     await this.pipeline.recordUploadPipeline(
       subject,
-      file,
+      pending,
       "inline",
       pipelineStartedAt,
     );
-    return publicFileObject(file);
+    return publicFileObject(pending);
   }
 
   createUploadSession(
@@ -319,6 +320,7 @@ export class FileService {
     workerId: string;
     leaseMs?: number;
     now?: string;
+    signal?: AbortSignal;
   }): Promise<FileLifecycleWorkerResult> {
     return new FileLifecycleWorker(
       this.repository,

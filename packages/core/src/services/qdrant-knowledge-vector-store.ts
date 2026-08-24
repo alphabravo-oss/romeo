@@ -1,7 +1,4 @@
-import { createHash } from "node:crypto";
-
 import {
-  QdrantClient,
   QdrantClientResourceExhaustedError,
   QdrantClientTimeoutError,
   QdrantClientUnexpectedResponseError,
@@ -14,63 +11,51 @@ import type {
 } from "../domain/entities";
 import { ApiError } from "../errors";
 import type { SecretResolver } from "./secret-resolver";
+import {
+  defaultQdrantSdkClientFactory,
+  BoundedQdrantSdkClientPool,
+  type QdrantSdkClient,
+  type QdrantSdkClientFactory,
+  type QdrantSdkClientProvider,
+} from "./qdrant-sdk-client";
 import type {
   KnowledgeVectorStore,
   KnowledgeVectorStoreReadinessProbe,
   KnowledgeVectorStoreReadinessReport,
   KnowledgeVectorStoreSearchInput,
 } from "./knowledge-vector-store";
-import { vectorScopeToken } from "./vector-namespace";
+import {
+  boundedQdrantLimit,
+  fieldCondition,
+  qdrantPointIdForChunkId,
+  qdrantPayload,
+  qdrantScopeConditions,
+  qdrantSearchFilter,
+  qdrantSearchHits,
+} from "./qdrant-vector-mapping";
+export { qdrantPointIdForChunkId } from "./qdrant-vector-mapping";
 import {
   type VectorNamespacePolicy,
   vectorStoreDeploymentFromEnv,
 } from "./vector-store-deployment";
 
-type QdrantValue = boolean | number | string;
+type QdrantOperation =
+  | "delete"
+  | "health"
+  | "query"
+  | "upsert"
+  | "verify_delete";
 
-interface QdrantFieldCondition {
-  key: string;
-  match: { any: QdrantValue[] } | { value: QdrantValue };
-}
-
-interface QdrantFilter {
-  must: QdrantFieldCondition[];
-}
-
-interface QdrantPoint {
-  id: string;
-  payload: Record<string, QdrantValue>;
-  vector: number[];
-}
-
-type QdrantOperation = "delete" | "health" | "query" | "upsert";
-
-export type QdrantSdkClient = Pick<
-  QdrantClient,
-  "delete" | "getCollection" | "query" | "upsert"
->;
-export interface QdrantSdkClientOptions {
-  apiKey: string;
-  timeoutMs: number;
-  url: string;
-}
-export type QdrantSdkClientFactory = (
-  options: QdrantSdkClientOptions,
-) => QdrantSdkClient;
-
-const defaultQdrantSdkClientFactory: QdrantSdkClientFactory = (options) =>
-  new QdrantClient({
-    apiKey: options.apiKey,
-    checkCompatibility: false,
-    timeout: options.timeoutMs,
-    url: options.url,
-  });
+export type {
+  QdrantSdkClient,
+  QdrantSdkClientFactory,
+} from "./qdrant-sdk-client";
 
 export class QdrantKnowledgeVectorStore
   implements KnowledgeVectorStore, KnowledgeVectorStoreReadinessProbe
 {
   private readonly collection: string;
-  private readonly clientFactory: QdrantSdkClientFactory;
+  private readonly clientProvider: QdrantSdkClientProvider;
   private readonly namespacePolicy: VectorNamespacePolicy;
   private readonly partitioningPolicy: VectorNamespacePolicy;
   private readonly timeoutMs: number;
@@ -79,6 +64,7 @@ export class QdrantKnowledgeVectorStore
   constructor(options: {
     apiKeyRef: string;
     clientFactory?: QdrantSdkClientFactory;
+    clientProvider?: QdrantSdkClientProvider;
     collection: string;
     namespacePolicy: VectorNamespacePolicy;
     partitioningPolicy: VectorNamespacePolicy;
@@ -87,7 +73,11 @@ export class QdrantKnowledgeVectorStore
     url: string;
   }) {
     this.collection = options.collection;
-    this.clientFactory = options.clientFactory ?? defaultQdrantSdkClientFactory;
+    this.clientProvider =
+      options.clientProvider ??
+      new BoundedQdrantSdkClientPool(
+        options.clientFactory ?? defaultQdrantSdkClientFactory,
+      );
     this.namespacePolicy = options.namespacePolicy;
     this.partitioningPolicy = options.partitioningPolicy;
     this.timeoutMs = options.timeoutMs;
@@ -104,17 +94,15 @@ export class QdrantKnowledgeVectorStore
     await this.withClient("upsert", (client) =>
       client.upsert(this.collection, {
         wait: true,
-        points: embeddings.map(
-          (embedding): QdrantPoint => ({
-            id: qdrantPointIdForChunkId(embedding.chunkId),
-            vector: embedding.embedding,
-            payload: qdrantPayload(
-              embedding,
-              this.namespacePolicy,
-              this.partitioningPolicy,
-            ),
-          }),
-        ),
+        points: embeddings.map((embedding) => ({
+          id: qdrantPointIdForChunkId(embedding.chunkId),
+          vector: embedding.embedding,
+          payload: qdrantPayload(
+            embedding,
+            this.namespacePolicy,
+            this.partitioningPolicy,
+          ),
+        })),
       }),
     );
   }
@@ -131,12 +119,23 @@ export class QdrantKnowledgeVectorStore
           this.namespacePolicy,
           this.partitioningPolicy,
         ),
-        limit: boundedLimit(input.maxResults),
+        limit: boundedQdrantLimit(input.maxResults),
         with_payload: true,
         with_vector: false,
       }),
     );
     return qdrantSearchHits(response);
+  }
+
+  async deleteEmbeddingsForOrg(input: { orgId: string }): Promise<void> {
+    await this.withClient("delete", (client) =>
+      client.delete(this.collection, {
+        wait: true,
+        filter: {
+          must: [fieldCondition("orgId", input.orgId)],
+        },
+      }),
+    );
   }
 
   async deleteEmbeddingsForSource(input: {
@@ -165,6 +164,35 @@ export class QdrantKnowledgeVectorStore
     );
   }
 
+  async verifyEmbeddingsAbsentForSource(input: {
+    knowledgeBaseId: string;
+    orgId: string;
+    sourceId: string;
+    workspaceId: string;
+  }): Promise<boolean> {
+    const response = await this.withClient("verify_delete", (client) =>
+      client.scroll(this.collection, {
+        filter: {
+          must: [
+            ...qdrantScopeConditions(
+              input,
+              this.namespacePolicy,
+              this.partitioningPolicy,
+            ),
+            fieldCondition("orgId", input.orgId),
+            fieldCondition("workspaceId", input.workspaceId),
+            fieldCondition("knowledgeBaseId", input.knowledgeBaseId),
+            fieldCondition("sourceId", input.sourceId),
+          ],
+        },
+        limit: 1,
+        with_payload: false,
+        with_vector: false,
+      }),
+    );
+    return response.points.length === 0;
+  }
+
   async checkReadiness(): Promise<KnowledgeVectorStoreReadinessReport> {
     try {
       const result = await this.withClient("health", (client) =>
@@ -187,7 +215,7 @@ export class QdrantKnowledgeVectorStore
     const apiKey = await this.resolveApiKey(operation);
     try {
       return await execute(
-        this.clientFactory({
+        this.clientProvider.client({
           apiKey,
           timeoutMs: this.timeoutMs,
           url: this.url,
@@ -220,12 +248,14 @@ export function createQdrantKnowledgeVectorStore(
   env: RomeoEnv,
   secretResolver: SecretResolver,
   clientFactory?: QdrantSdkClientFactory,
+  clientProvider?: QdrantSdkClientProvider,
 ): (KnowledgeVectorStore & KnowledgeVectorStoreReadinessProbe) | undefined {
   const deployment = vectorStoreDeploymentFromEnv(env);
   if (!deployment.externalVectorStore.configured) return undefined;
   return new QdrantKnowledgeVectorStore({
     apiKeyRef: env.QDRANT_API_KEY_REF,
     ...(clientFactory === undefined ? {} : { clientFactory }),
+    ...(clientProvider === undefined ? {} : { clientProvider }),
     collection: env.QDRANT_COLLECTION,
     namespacePolicy: deployment.externalVectorStore.namespacePolicy,
     partitioningPolicy: deployment.externalVectorStore.partitioningPolicy,
@@ -233,169 +263,6 @@ export function createQdrantKnowledgeVectorStore(
     timeoutMs: env.QDRANT_TIMEOUT_MS,
     url: env.QDRANT_URL,
   });
-}
-
-export function qdrantPointIdForChunkId(chunkId: string): string {
-  const bytes = createHash("sha256").update(`romeo-qdrant:${chunkId}`).digest();
-  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x50;
-  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
-  const hex = bytes.subarray(0, 16).toString("hex");
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20, 32),
-  ].join("-");
-}
-
-function qdrantPayload(
-  embedding: KnowledgeChunkEmbedding,
-  namespacePolicy: VectorNamespacePolicy,
-  partitioningPolicy: VectorNamespacePolicy,
-): Record<string, QdrantValue> {
-  const payload: Record<string, QdrantValue> = {
-    chunkId: embedding.chunkId,
-    dimensions: embedding.dimensions,
-    embeddingModel: embedding.embeddingModel,
-    embeddingProvider: embedding.embeddingProvider,
-    knowledgeBaseId: embedding.knowledgeBaseId,
-    orgId: embedding.orgId,
-    sourceId: embedding.sourceId,
-    workspaceId: embedding.workspaceId,
-  };
-  const namespace = vectorScopeToken(namespacePolicy, embedding);
-  if (namespace !== undefined) payload.romeoNamespace = namespace;
-  const partition = vectorScopeToken(partitioningPolicy, embedding);
-  if (partition !== undefined) payload.romeoPartition = partition;
-  return payload;
-}
-
-function qdrantSearchFilter(
-  input: KnowledgeVectorStoreSearchInput,
-  namespacePolicy: VectorNamespacePolicy,
-  partitioningPolicy: VectorNamespacePolicy,
-): QdrantFilter {
-  return {
-    must: [
-      ...qdrantScopeConditions(input, namespacePolicy, partitioningPolicy),
-      fieldCondition("orgId", input.orgId),
-      fieldCondition("workspaceId", input.workspaceId),
-      fieldCondition("knowledgeBaseId", input.knowledgeBaseId),
-      fieldCondition("embeddingProvider", input.embeddingProvider),
-      fieldCondition("embeddingModel", input.embeddingModel),
-      fieldCondition("dimensions", input.dimensions),
-      {
-        key: "sourceId",
-        match: { any: input.sourceIds },
-      },
-    ],
-  };
-}
-
-function qdrantScopeConditions(
-  input: {
-    knowledgeBaseId: string;
-    orgId: string;
-    workspaceId: string;
-  },
-  namespacePolicy: VectorNamespacePolicy,
-  partitioningPolicy: VectorNamespacePolicy,
-): QdrantFieldCondition[] {
-  const conditions: QdrantFieldCondition[] = [];
-  const namespace = vectorScopeToken(namespacePolicy, input);
-  if (namespace !== undefined)
-    conditions.push(fieldCondition("romeoNamespace", namespace));
-  const partition = vectorScopeToken(partitioningPolicy, input);
-  if (partition !== undefined)
-    conditions.push(fieldCondition("romeoPartition", partition));
-  return conditions;
-}
-
-function fieldCondition(key: string, value: QdrantValue): QdrantFieldCondition {
-  return { key, match: { value } };
-}
-
-function qdrantSearchHits(
-  response: unknown,
-): KnowledgeChunkEmbeddingSearchHit[] {
-  const rawPoints = asRecord(response)?.points;
-  const points: unknown[] = Array.isArray(rawPoints) ? rawPoints : [];
-  return points.flatMap((point): KnowledgeChunkEmbeddingSearchHit[] => {
-    const record = asRecord(point);
-    const payload = asRecord(record?.payload);
-    const chunkId = stringPayload(payload, "chunkId");
-    const knowledgeBaseId = stringPayload(payload, "knowledgeBaseId");
-    const sourceId = stringPayload(payload, "sourceId");
-    const orgId = stringPayload(payload, "orgId");
-    const workspaceId = stringPayload(payload, "workspaceId");
-    const embeddingProvider = stringPayload(payload, "embeddingProvider");
-    const embeddingModel = stringPayload(payload, "embeddingModel");
-    const dimensions = numberPayload(payload, "dimensions");
-    const score = typeof record?.score === "number" ? record.score : undefined;
-    if (
-      chunkId === undefined ||
-      knowledgeBaseId === undefined ||
-      sourceId === undefined ||
-      orgId === undefined ||
-      workspaceId === undefined ||
-      embeddingProvider === undefined ||
-      embeddingModel === undefined ||
-      dimensions === undefined ||
-      score === undefined
-    ) {
-      return [];
-    }
-    const now = new Date(0).toISOString();
-    return [
-      {
-        embedding: {
-          id: `qdrant_${qdrantPointIdForChunkId(chunkId)}`,
-          knowledgeBaseId,
-          sourceId,
-          chunkId,
-          orgId,
-          workspaceId,
-          embeddingProvider,
-          embeddingModel,
-          dimensions,
-          embedding: [],
-          metadata: { externalVectorStore: "qdrant" },
-          createdAt: now,
-          updatedAt: now,
-        },
-        score,
-      },
-    ];
-  });
-}
-
-function boundedLimit(limit: number): number {
-  return Math.min(Math.max(Math.trunc(limit), 1), 100);
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function stringPayload(
-  payload: Record<string, unknown> | undefined,
-  key: string,
-): string | undefined {
-  const value = payload?.[key];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function numberPayload(
-  payload: Record<string, unknown> | undefined,
-  key: string,
-): number | undefined {
-  const value = payload?.[key];
-  return typeof value === "number" && Number.isInteger(value) && value > 0
-    ? value
-    : undefined;
 }
 
 function stringDetail(
@@ -407,6 +274,12 @@ function stringDetail(
   return typeof value === "string" && value.length > 0
     ? { [targetKey]: value }
     : {};
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 function numberDetail(

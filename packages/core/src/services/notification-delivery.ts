@@ -11,6 +11,10 @@ import type {
   UserNotification,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import {
+  hardenedWebhookFetch,
+  type HardenedWebhookFetchOptions,
+} from "./hardened-webhook-fetch";
 import { deriveWebhookSecret, signWebhookPayload } from "./webhook-signing";
 import { normalizeWebhookUrl } from "./webhook-url";
 import {
@@ -35,7 +39,9 @@ export type ResendEmailClientFactory = (
 
 export class WebhookNotificationDeliverySender implements NotificationDeliverySender {
   constructor(
-    private readonly options: { fetchImpl?: typeof fetch; signingKey: string },
+    private readonly options: HardenedWebhookFetchOptions & {
+      signingKey: string;
+    },
   ) {}
 
   async createDelivery(input: {
@@ -114,18 +120,23 @@ export class WebhookNotificationDeliverySender implements NotificationDeliverySe
     const signature = await signWebhookPayload(secret, timestamp, body);
 
     try {
-      const response = await (this.options.fetchImpl ?? fetch)(url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "user-agent": "Romeo-Notifications/0.1",
-          "x-romeo-delivery": delivery.id,
-          "x-romeo-event": `notification.${notification.type}`,
-          "x-romeo-signature": signature,
-          "x-romeo-timestamp": timestamp,
+      const response = await hardenedWebhookFetch(
+        url,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "user-agent": "Romeo-Notifications/0.1",
+            "idempotency-key": delivery.providerIdempotencyKey ?? delivery.id,
+            "x-romeo-delivery": delivery.id,
+            "x-romeo-event": `notification.${notification.type}`,
+            "x-romeo-signature": signature,
+            "x-romeo-timestamp": timestamp,
+          },
+          body,
         },
-        body,
-      });
+        this.options,
+      );
       return repository.updateNotificationDelivery(
         response.ok
           ? sentDelivery(delivery, { responseStatus: response.status })
@@ -238,12 +249,15 @@ export class ResendEmailNotificationDeliverySender implements NotificationDelive
 
     try {
       const response = await withNotificationTimeout(
-        this.client.emails.send({
-          from: this.options.from.trim(),
-          to: [to],
-          subject: `Romeo notification: ${notification.type}`,
-          text: notificationText(notification),
-        }),
+        this.client.emails.send(
+          {
+            from: this.options.from.trim(),
+            to: [to],
+            subject: `Romeo notification: ${notification.type}`,
+            text: notificationText(notification),
+          },
+          { idempotencyKey: delivery.providerIdempotencyKey ?? delivery.id },
+        ),
         this.timeoutMs,
       );
       return repository.updateNotificationDelivery(
@@ -283,12 +297,7 @@ export class ResendEmailNotificationDeliverySender implements NotificationDelive
 }
 
 export class SlackWebhookNotificationDeliverySender implements NotificationDeliverySender {
-  constructor(
-    private readonly options: {
-      fetchImpl?: typeof fetch;
-      timeoutMs?: number;
-    } = {},
-  ) {}
+  constructor(private readonly options: HardenedWebhookFetchOptions = {}) {}
 
   async createDelivery(input: {
     repository: RomeoRepository;
@@ -346,15 +355,21 @@ export class SlackWebhookNotificationDeliverySender implements NotificationDeliv
     }
 
     try {
+      const slackFetch: SlackFetchFunction = async (target, init = {}) =>
+        hardenedWebhookFetch(target, init as RequestInit, this.options);
       const webhook = new IncomingWebhook(url, {
-        ...(this.options.fetchImpl === undefined
-          ? {}
-          : {
-              fetch: this.options.fetchImpl as unknown as SlackFetchFunction,
-            }),
+        fetch: slackFetch,
         timeout: this.options.timeoutMs ?? 10_000,
       });
-      await webhook.send({ text: notificationText(notification) });
+      await webhook.send({
+        text: notificationText(notification),
+        metadata: {
+          event_type: "romeo_notification_delivery",
+          event_payload: {
+            idempotencyKey: delivery.providerIdempotencyKey ?? delivery.id,
+          },
+        },
+      });
       return repository.updateNotificationDelivery(
         sentDelivery(delivery, {
           provider: "slack",

@@ -5,6 +5,75 @@ import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { summarizeBackgroundJobs } from "./services/job-service";
 
 describe("Romeo background job operations", () => {
+  it("gets and bounds jobs within the requested tenant and query", async () => {
+    const repository = new InMemoryRomeoRepository();
+    for (const [id, orgId, status] of [
+      ["job_old", "org_default", "queued"],
+      ["job_new", "org_default", "running"],
+      ["job_foreign", "org_other", "running"],
+    ] as const) {
+      await repository.createBackgroundJob({
+        id,
+        orgId,
+        type: "bounded.test",
+        status,
+        payload: { resourceId: id },
+        createdAt:
+          id === "job_old"
+            ? "2026-06-29T00:00:00.000Z"
+            : "2026-06-30T00:00:00.000Z",
+        updatedAt: "2026-06-30T00:00:00.000Z",
+      });
+    }
+
+    await expect(
+      repository.getBackgroundJob("org_default", "job_foreign"),
+    ).resolves.toBeUndefined();
+    await expect(
+      repository.getBackgroundJob("org_default", "job_new"),
+    ).resolves.toMatchObject({ id: "job_new", orgId: "org_default" });
+    await expect(
+      repository.listBackgroundJobs("org_default", {
+        limit: 1,
+        payloadEquals: { resourceId: "job_new" },
+        statuses: ["running"],
+        type: "bounded.test",
+      }),
+    ).resolves.toMatchObject([{ id: "job_new" }]);
+  });
+
+  it("paginates equal-timestamp jobs without gaps or duplicates", async () => {
+    const repository = new InMemoryRomeoRepository();
+    for (const id of ["job_c", "job_a", "job_b"]) {
+      await repository.createBackgroundJob({
+        id,
+        orgId: "org_default",
+        type: "cursor.test",
+        status: "queued",
+        payload: {},
+        createdAt: "2026-08-23T12:00:00.000Z",
+        updatedAt: "2026-08-23T12:00:00.000Z",
+      });
+    }
+    const first = await repository.listBackgroundJobs("org_default", {
+      limit: 2,
+      order: "asc",
+      type: "cursor.test",
+    });
+    const last = first.at(-1)!;
+    const second = await repository.listBackgroundJobs("org_default", {
+      cursor: { createdAt: last.createdAt, id: last.id },
+      limit: 2,
+      order: "asc",
+      type: "cursor.test",
+    });
+    expect([...first, ...second].map((job) => job.id)).toEqual([
+      "job_a",
+      "job_b",
+      "job_c",
+    ]);
+  });
+
   it("claims, renews, and reclaims background jobs through leases", async () => {
     const repository = new InMemoryRomeoRepository();
     await repository.createBackgroundJob({
@@ -236,6 +305,63 @@ describe("Romeo background job operations", () => {
       ]),
     );
     expect(JSON.stringify(body)).not.toContain("RAW_API_JOB_SECRET_SENTINEL");
+  });
+
+  it("reports file lifecycle queue lag and dead letters without file identifiers", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const oldDate = new Date(Date.now() - 20 * 60 * 1_000).toISOString();
+    for (const [id, status, attempts] of [
+      ["file_private_pending", "quarantined", 0],
+      ["file_private_dead_letter", "failed", 5],
+    ] as const) {
+      await repository.createFileObject({
+        id,
+        orgId: "org_default",
+        workspaceId: "workspace_default",
+        ownerType: "user",
+        ownerId: "user_dev_admin",
+        fileName: "private.txt",
+        mimeType: "text/plain",
+        sizeBytes: 7,
+        sha256: "a".repeat(64),
+        objectKey: `files/org_default/workspace_default/${id}`,
+        purpose: "general",
+        status,
+        lifecycleVersion: 1,
+        lifecycleAttempts: attempts,
+        metadata: {},
+        createdAt: oldDate,
+        updatedAt: oldDate,
+      });
+    }
+
+    const response = await createRomeoApi(repository).request(
+      "/api/v1/jobs/operational-summary",
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.data.byType).toContainEqual(
+      expect.objectContaining({
+        type: "file.lifecycle",
+        queued: 1,
+        failed: 1,
+        deadLettered: 1,
+        oldestQueuedAgeSeconds: expect.any(Number),
+      }),
+    );
+    expect(body.data.alerts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metric: "queued_lag_seconds",
+          type: "file.lifecycle",
+        }),
+        expect.objectContaining({
+          metric: "dead_letter_jobs",
+          type: "file.lifecycle",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(body)).not.toContain("file_private");
   });
 
   it("aggregates run execution instances under a bounded job type", () => {

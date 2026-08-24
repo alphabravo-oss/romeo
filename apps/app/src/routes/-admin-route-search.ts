@@ -13,6 +13,9 @@ export interface AdminSearch extends AuditRouteSearchFields {
   query?: string;
   section?: string;
   sort?: string;
+  subtab?: string;
+  tab?: string;
+  table?: string;
   toolConnector?: string;
   view?: string;
   workspace?: string;
@@ -68,8 +71,44 @@ export function validateAdminSearch(
     ...(typeof search.toolConnector === "string"
       ? { toolConnector: search.toolConnector }
       : {}),
+    ...(isAdminTab(search.tab) ? { tab: search.tab } : {}),
+    ...(isAdminSubtab(search.subtab) ? { subtab: search.subtab } : {}),
+    ...(typeof search.table === "string" && search.table.length <= 2_048
+      ? { table: search.table }
+      : {}),
     ...(typeof search.page === "number" && Number.isInteger(search.page)
       ? { page: Math.max(0, search.page) }
       : {}),
   };
+}
+
+const adminTabs = new Set([
+  "plan",
+  "external-events",
+  "entitlements",
+  "lifecycle",
+  "retention",
+  "exports",
+  "rights",
+  "reports",
+  "setup",
+  "health",
+  "governance",
+  "channels",
+  "policy",
+  "controls",
+  "edge",
+  "content",
+  "ga",
+  "postgres",
+  "jobs",
+  "quotas",
+]);
+
+function isAdminTab(value: unknown): value is string {
+  return typeof value === "string" && adminTabs.has(value);
+}
+
+function isAdminSubtab(value: unknown): value is string {
+  return value === "change-requests" || value === "replay";
 }

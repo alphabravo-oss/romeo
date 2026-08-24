@@ -4,7 +4,6 @@ import {
   type BaseModel,
   type ModelPricing,
   type ProviderInstance,
-  type ProviderKind,
 } from "@romeo/providers";
 
 import type { ModelCatalogQuery, RomeoRepository } from "../domain/repository";
@@ -38,20 +37,15 @@ import {
   pullProviderRuntimeModel,
   verifyProviderConnection,
 } from "./provider-runtime-operations";
+import type {
+  CreateProviderInput,
+  UpdateProviderInput,
+} from "./provider-service-inputs";
 
-export interface CreateProviderInput {
-  subject: AuthSubject;
-  type: ProviderKind;
-  name: string;
-  baseUrl: string;
-  auth?: string;
-  credentialRef?: string;
-  deployment?: string;
-  modelIds?: string[];
-  project?: string;
-  region?: string;
-  target?: string;
-}
+export type {
+  CreateProviderInput,
+  UpdateProviderInput,
+} from "./provider-service-inputs";
 
 export class ProviderService {
   private readonly catalogSync: ProviderCatalogSyncCoordinator;
@@ -252,7 +246,22 @@ export class ProviderService {
 
   async create(input: CreateProviderInput): Promise<ProviderInstance> {
     assertScope(input.subject, "providers:write");
-    const accepted = requireAcceptedProviderConnection(input);
+    const accepted = requireAcceptedProviderConnection({
+      kind: input.type,
+      name: input.name,
+      baseUrl: input.baseUrl,
+      ...(input.auth === undefined ? {} : { auth: input.auth }),
+      ...(input.credentialRef === undefined
+        ? {}
+        : { credentialRef: input.credentialRef }),
+      ...(input.deployment === undefined
+        ? {}
+        : { deployment: input.deployment }),
+      ...(input.modelIds === undefined ? {} : { modelIds: input.modelIds }),
+      ...(input.project === undefined ? {} : { project: input.project }),
+      ...(input.region === undefined ? {} : { region: input.region }),
+      ...(input.target === undefined ? {} : { target: input.target }),
+    });
     return this.repository.transaction(async (repository) => {
       const provider = await repository.createProvider({
         id: createId("provider"),
@@ -263,7 +272,9 @@ export class ProviderService {
         ...(accepted.credentialRef === undefined
           ? {}
           : { credentialRef: accepted.credentialRef }),
-        ...(accepted.modelIds === undefined ? {} : { modelIds: accepted.modelIds }),
+        ...(accepted.modelIds === undefined
+          ? {}
+          : { modelIds: accepted.modelIds }),
         enabled: true,
         capabilities: defaultProviderCapabilities(input.type),
         catalogSync: { status: "never", modelCount: 0 },
@@ -289,36 +300,28 @@ export class ProviderService {
     });
   }
 
-  async update(input: {
-    subject: AuthSubject;
-    providerId: string;
-    auth?: string;
-    name?: string;
-    baseUrl?: string;
-    credentialRef?: string;
-    deployment?: string;
-    modelIds?: string[];
-    enabled?: boolean;
-    project?: string;
-    region?: string;
-    target?: string;
-  }): Promise<ProviderInstance> {
+  async update(input: UpdateProviderInput): Promise<ProviderInstance> {
     assertScope(input.subject, "providers:write");
     const current = await this.repository.getProvider(input.providerId);
     if (!current || !canAccessOrg(input.subject, current.orgId))
       throw notFound("Provider");
+    const nextModelIds = input.modelIds ?? current.modelIds;
     const accepted = requireAcceptedProviderConnection({
-      auth: input.auth,
       baseUrl: input.baseUrl ?? current.baseUrl,
       credentialAlreadyConfigured: current.credentialRef !== undefined,
-      credentialRef: input.credentialRef,
-      deployment: input.deployment,
       kind: current.type,
-      modelIds: input.modelIds ?? current.modelIds,
       name: input.name ?? current.name,
-      project: input.project,
-      region: input.region,
-      target: input.target,
+      ...(input.auth === undefined ? {} : { auth: input.auth }),
+      ...(input.credentialRef === undefined
+        ? {}
+        : { credentialRef: input.credentialRef }),
+      ...(input.deployment === undefined
+        ? {}
+        : { deployment: input.deployment }),
+      ...(nextModelIds === undefined ? {} : { modelIds: nextModelIds }),
+      ...(input.project === undefined ? {} : { project: input.project }),
+      ...(input.region === undefined ? {} : { region: input.region }),
+      ...(input.target === undefined ? {} : { target: input.target }),
     });
     const catalogConfigurationChanged =
       (input.baseUrl !== undefined && input.baseUrl !== current.baseUrl) ||
@@ -334,7 +337,9 @@ export class ProviderService {
         ...(input.credentialRef === undefined
           ? {}
           : { credentialRef: accepted.credentialRef }),
-        ...(input.modelIds === undefined ? {} : { modelIds: accepted.modelIds }),
+        ...(input.modelIds === undefined
+          ? {}
+          : { modelIds: accepted.modelIds }),
         ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
         ...(catalogConfigurationChanged
           ? {
@@ -435,7 +440,29 @@ export class ProviderService {
     });
   }
 
-  async deleteModel(subject: AuthSubject, providerId: string, model: string) {
+  async deleteModel(
+    subject: AuthSubject,
+    providerId: string,
+    model: string,
+    modelId?: string,
+  ) {
+    assertScope(subject, "providers:write");
+    const provider = await this.repository.getProvider(providerId);
+    if (provider?.orgId !== subject.orgId) throw notFound("Provider");
+    const catalogModel =
+      modelId === undefined
+        ? (await this.repository.listModels(subject.orgId)).find(
+            (candidate) =>
+              candidate.providerId === providerId && candidate.name === model,
+          )
+        : await this.repository.getModel(modelId);
+    if (
+      catalogModel === undefined ||
+      catalogModel.providerId !== providerId ||
+      catalogModel.name !== model
+    ) {
+      throw notFound("Model");
+    }
     const result = await deleteProviderRuntimeModel({
       model,
       providerId,

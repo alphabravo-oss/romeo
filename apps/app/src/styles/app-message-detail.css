@@ -114,7 +114,7 @@
 }
 
 a.rm-citation-marker:hover {
-  background: var(--rm-accent);
+  background: var(--rm-accent-solid);
   color: #ffffff;
 }
 

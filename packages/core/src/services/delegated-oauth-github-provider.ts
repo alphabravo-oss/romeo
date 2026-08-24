@@ -2,6 +2,7 @@ import { Octokit, OAuthApp, RequestError } from "octokit";
 
 import { ApiError } from "../errors";
 import { requirePublicApiErrorCode } from "../public-api-error-registry";
+import { SecretBearingEgressClient } from "./secret-bearing-egress";
 
 export interface DelegatedOAuthProviderExchangeInput {
   clientId: string;
@@ -31,6 +32,8 @@ export type DelegatedOAuthProviderRefreshedToken = Omit<
 
 const providerTimeoutMs = 10_000;
 const maxProviderResponseBytes = 64 * 1024;
+const githubApiOrigin = "https://api.github.com";
+const githubTokenUrl = "https://github.com/login/oauth/access_token";
 
 export async function exchangeGitHubDelegatedOAuth(
   input: DelegatedOAuthProviderExchangeInput,
@@ -63,15 +66,19 @@ export async function refreshGitHubDelegatedOAuth(
     client_secret: input.clientSecret,
     refresh_token: input.refreshToken,
   });
-  const response = await fetchProvider(input.tokenUrl, fetchImpl, {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/x-www-form-urlencoded",
-      "user-agent": "Romeo",
+  const response = await fetchProvider(
+    input.tokenUrl,
+    githubTokenFetch(fetchImpl),
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": "Romeo",
+      },
+      body,
     },
-    body,
-  });
+  );
   if (!response.ok) {
     throw new ApiError(
       "delegated_oauth_token_refresh_failed",
@@ -94,7 +101,7 @@ export async function revokeGitHubDelegatedOAuth(
   },
   fetchImpl: typeof fetch,
 ): Promise<void> {
-  const SdkOctokit = githubOctokitClass(fetchImpl);
+  const SdkOctokit = githubOctokitClass(githubResourceFetch(fetchImpl));
   const app = new OAuthApp({
     clientId: input.clientId,
     clientSecret: input.clientSecret,
@@ -127,15 +134,19 @@ async function exchangeCode(
     redirect_uri: input.redirectUri,
     code_verifier: input.codeVerifier,
   });
-  const response = await fetchProvider(input.tokenUrl, fetchImpl, {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/x-www-form-urlencoded",
-      "user-agent": "Romeo",
+  const response = await fetchProvider(
+    input.tokenUrl,
+    githubTokenFetch(fetchImpl),
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": "Romeo",
+      },
+      body,
     },
-    body,
-  });
+  );
   if (!response.ok) {
     throw new ApiError(
       "delegated_oauth_token_exchange_failed",
@@ -201,7 +212,9 @@ async function fetchGitHubAccount(
   accessToken: string,
   fetchImpl: typeof fetch,
 ): Promise<{ id: string; login?: string }> {
-  const client = new (githubOctokitClass(fetchImpl))({ auth: accessToken });
+  const client = new (githubOctokitClass(githubResourceFetch(fetchImpl)))({
+    auth: accessToken,
+  });
   try {
     const { data } = await client.rest.users.getAuthenticated();
     return { id: String(data.id), login: data.login };
@@ -228,6 +241,24 @@ function githubOctokitClass(fetchImpl: typeof fetch) {
     },
     userAgent: "Romeo",
   });
+}
+
+function githubTokenFetch(fetchImpl: typeof fetch): typeof fetch {
+  return new SecretBearingEgressClient({
+    allowedUrls: [githubTokenUrl],
+    fetchImpl,
+    maxResponseBytes: maxProviderResponseBytes,
+    timeoutMs: providerTimeoutMs,
+  }).fetch;
+}
+
+function githubResourceFetch(fetchImpl: typeof fetch): typeof fetch {
+  return new SecretBearingEgressClient({
+    allowedOrigins: [githubApiOrigin],
+    fetchImpl,
+    maxResponseBytes: maxProviderResponseBytes,
+    timeoutMs: providerTimeoutMs,
+  }).fetch;
 }
 
 async function boundedSdkFetch(

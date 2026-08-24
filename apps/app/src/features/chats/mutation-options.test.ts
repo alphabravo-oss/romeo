@@ -13,6 +13,7 @@ import { createRomeoQueryClient } from "../../lib/query-client";
 import { clearRouteDataForLogout } from "../../lib/route-intent";
 import {
   archiveWorkspaceChatMutationOptions,
+  updateAttachmentRetentionMutationOptions,
   updateMessageFeedbackMutationOptions,
   updateChatLegalHoldMutationOptions,
   updateWorkspaceChatMutationOptions,
@@ -77,6 +78,73 @@ describe("chat mutation policies", () => {
     rejectUpdate(new Error("version_conflict"));
     await expect(mutation).rejects.toThrow("version_conflict");
     expect(client.getQueryData(appQueryKeys.chat(before.id))).toEqual(before);
+  });
+
+  it("optimistically updates attachment retention and rolls back failures", async () => {
+    const client = createRomeoQueryClient();
+    const queryKey = [
+      {
+        _id: "chatsListMessagePage",
+        _infinite: true,
+        path: { chatId: "chat-1" },
+      },
+    ] as const;
+    client.setQueryData(queryKey, {
+      pageParams: [{}],
+      pages: [
+        {
+          data: [
+            {
+              attachments: [
+                {
+                  fileName: "fixture.txt",
+                  id: "attachment-1",
+                  kind: "document",
+                  messageId: "message-1",
+                  mimeType: "text/plain",
+                  retainedInContext: true,
+                  sizeBytes: 7,
+                },
+              ],
+              chatId: "chat-1",
+              content: "fixture",
+              createdAt: "2026-08-14T00:00:00.000Z",
+              id: "message-1",
+              role: "user",
+            },
+          ],
+        },
+      ],
+    });
+    let rejectUpdate!: (error: Error) => void;
+    mutationMocks.updateAttachmentRetention.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectUpdate = reject;
+      }),
+    );
+    const observer = new MutationObserver(
+      client,
+      updateAttachmentRetentionMutationOptions(),
+    );
+    const mutation = observer.mutate({
+      attachmentId: "attachment-1",
+      chatId: "chat-1",
+      messageId: "message-1",
+      retainedInContext: false,
+    });
+    const retention = () =>
+      client.getQueryData<{
+        pages: Array<{
+          data: Array<{
+            attachments?: Array<{ retainedInContext: boolean }>;
+          }>;
+        }>;
+      }>(queryKey)?.pages[0]?.data[0]?.attachments?.[0]?.retainedInContext;
+
+    await vi.waitFor(() => expect(retention()).toBe(false));
+    rejectUpdate(new Error("retention_conflict"));
+    await expect(mutation).rejects.toThrow("retention_conflict");
+    expect(retention()).toBe(true);
   });
 
   it("invalidates only the exact chat list variants after success", async () => {

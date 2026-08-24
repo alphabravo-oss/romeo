@@ -1,4 +1,5 @@
-import { Button, LinkButton, StatusBadge } from "@romeo/ui";
+import { Button, StatusBadge } from "@romeo/ui";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -268,13 +269,19 @@ function AnalyticsSummaryView({
       id: "open",
       header: t("analyticsDetails"),
       cell: (cell) => (
-        <LinkButton
-          href={`/admin?section=providers&view=base-models&model=${encodeURIComponent(cell.row.original.modelId)}`}
-          size="sm"
-          variant="outline"
-        >
-          {t("analyticsOpenModel")}
-        </LinkButton>
+        <Button asChild size="sm" variant="outline">
+          <Link
+            search={(previous) => ({
+              ...previous,
+              model: cell.row.original.modelId,
+              section: "providers",
+              view: "base-models",
+            })}
+            to="/admin"
+          >
+            {t("analyticsOpenModel")}
+          </Link>
+        </Button>
       ),
     }),
   ];

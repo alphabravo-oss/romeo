@@ -247,11 +247,9 @@ export class RunContinuationService {
     orgId: string,
     jobId: string,
   ): Promise<BackgroundJob> {
-    const job = (await this.repository.listBackgroundJobs(orgId)).find(
-      (item) =>
-        item.id === jobId && item.type === "tool.operation.dispatch_request",
-    );
-    if (job === undefined) throw notFound("Tool operation dispatch request");
+    const job = await this.repository.getBackgroundJob(orgId, jobId);
+    if (job === undefined || job.type !== "tool.operation.dispatch_request")
+      throw notFound("Tool operation dispatch request");
     return job;
   }
 }

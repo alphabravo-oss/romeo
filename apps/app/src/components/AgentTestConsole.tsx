@@ -4,7 +4,7 @@ import { useStore } from "@tanstack/react-store";
 import { Button, Field, InlineError, Textarea } from "@romeo/ui";
 import { useState } from "react";
 
-import { createChat } from "../features";
+import { createChat } from "../features/chats";
 import type { Agent } from "../features/managed-models";
 import { startRun, streamRunEvents } from "../features/runs";
 import { refreshAgentTestRunQueries } from "../features/runs/mutation-options";
@@ -50,10 +50,16 @@ export function AgentTestConsole({
       setRunId(undefined);
       setStatus("running");
 
+      const abort = new AbortController();
+      const timeout = window.setTimeout(
+        () => abort.abort("agent test timeout"),
+        60_000,
+      );
       try {
         const chat = await createChat({
           workspaceId,
           title: `${t("agentTestTitlePrefix")} ${content.slice(0, 48)}`,
+          temporary: true,
         });
         const run = await startRun({
           chatId: chat.id,
@@ -61,18 +67,32 @@ export function AgentTestConsole({
           content,
         });
         setRunId(run.id);
-        for await (const event of streamRunEvents(run.id)) {
+        let terminal: "completed" | "failed" | undefined;
+        for await (const event of streamRunEvents(run.id, abort.signal)) {
           if (event.type === "retrieval.completed")
             setCitations(readCitations(event.data));
           if (event.type === "message.delta")
             appendDelta((event.data as { text?: string }).text ?? "");
-          if (event.type === "run.failed") setStatus("failed");
-          if (event.type === "run.completed") setStatus("completed");
+          if (event.type === "run.failed") {
+            terminal = "failed";
+            break;
+          }
+          if (event.type === "run.completed") {
+            terminal = "completed";
+            break;
+          }
+        }
+        setStatus(terminal ?? (abort.signal.aborted ? "failed" : "completed"));
+        if (terminal === undefined && abort.signal.aborted) {
+          setError(t("agentUnableRunTest"));
         }
         await refreshAgentTestRunQueries(queryClient, workspaceId);
       } catch (caught) {
         setError(safeUserErrorMessage(caught, t("agentUnableRunTest")));
         setStatus("failed");
+      } finally {
+        window.clearTimeout(timeout);
+        abort.abort();
       }
     },
   });

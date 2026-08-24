@@ -1,6 +1,19 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+if (process.argv.includes("--help")) {
+  process.stdout.write(
+    "Usage: node scripts/record-data-rights-retention-evidence.mjs --control operational_logs|backups --retention-days <days> --output <path> [evidence options]\n       node scripts/record-data-rights-retention-evidence.mjs --dry-run\n",
+  );
+  process.exit(0);
+}
+if (process.argv.includes("--dry-run")) {
+  process.stdout.write(
+    '{"schemaVersion":"romeo.data-rights-retention-evidence-plan.v1","writesEvidence":false}\n',
+  );
+  process.exit(0);
+}
+
 const output = argValue("--output");
 if (output === undefined || output.length === 0) {
   throw new Error("--output is required.");

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createApiKeyToken, hashApiKey } from "@romeo/auth";
+import { createApiKeyToken, hashApiKey, scopeValues } from "@romeo/auth";
 import { testEnv } from "./test-support/env";
 import { MemoryObjectStore } from "@romeo/storage";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createRomeoApi } from "./api";
+import { createRomeoApi, createRomeoApiRuntime } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { EnvironmentSecretResolver } from "./services/secret-resolver";
 import { qdrantSdkClientFactoryFromFetch } from "./test-support/qdrant-sdk-client.test-helper";
@@ -257,35 +257,38 @@ describe("Romeo knowledge ingestion", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await repository.upsertSystemSetting({
-      key: "rag_policy.org.v1:org_default",
-      updatedAt: now,
-      value: {
-        version: 1,
-        orgId: "org_default",
-        enabledTiers: ["user_private", "workspace", "org", "shared"],
-        defaultMaxResultsPerTier: {
-          user_private: 1,
-          workspace: 1,
-          org: 1,
-          shared: 1,
-        },
-        maxResultsPerTier: {
-          user_private: 1,
-          workspace: 1,
-          org: 1,
-          shared: 1,
-        },
-        allowedEmbeddingProviderModels: [],
-        knowledgeBaseTierAssignments: {
-          org: ["kb_org_controls"],
-          shared: ["kb_shared_controls"],
-        },
-        dataResidencyTags: [],
+    await repository.upsertSystemSetting(
+      {
+        key: "rag_policy.org.v1:org_default",
         updatedAt: now,
-        updatedBy: "user_dev_admin",
+        value: {
+          version: 1,
+          orgId: "org_default",
+          enabledTiers: ["user_private", "workspace", "org", "shared"],
+          defaultMaxResultsPerTier: {
+            user_private: 1,
+            workspace: 1,
+            org: 1,
+            shared: 1,
+          },
+          maxResultsPerTier: {
+            user_private: 1,
+            workspace: 1,
+            org: 1,
+            shared: 1,
+          },
+          allowedEmbeddingProviderModels: [],
+          knowledgeBaseTierAssignments: {
+            org: ["kb_org_controls"],
+            shared: ["kb_shared_controls"],
+          },
+          dataResidencyTags: [],
+          updatedAt: now,
+          updatedBy: "user_dev_admin",
+        },
       },
-    });
+      "org_default",
+    );
     await Promise.all([
       repository.createResourceGrant({
         id: "grant_private_viewer_use",
@@ -2075,7 +2078,7 @@ describe("Romeo knowledge ingestion", () => {
     }> = [];
     let qdrantPayload: Record<string, unknown> | undefined;
 
-    const api = createRomeoApi(repository, {
+    const runtime = createRomeoApiRuntime(repository, {
       env: testEnv({
         EXTERNAL_VECTOR_STORE_DRIVER: "qdrant",
         QDRANT_URL: "https://qdrant.internal.example",
@@ -2168,6 +2171,7 @@ describe("Romeo knowledge ingestion", () => {
         },
       ),
     });
+    const api = runtime.app;
 
     const sourceResponse = await api.request(
       "/api/v1/knowledge-bases/kb_default/sources",
@@ -2238,6 +2242,10 @@ describe("Romeo knowledge ingestion", () => {
       `/api/v1/knowledge-bases/kb_default/sources/${source.data.id}`,
       { method: "DELETE" },
     );
+    await runtime.services.knowledge.processContentDeletionJob({
+      subject: contentDeletionSubject(),
+      workerId: "qdrant_delete_test",
+    });
     const upsertCall = qdrantCalls.find((call) => call.method === "PUT");
     const queryCall = qdrantCalls.find((call) =>
       call.url.endsWith("/points/query"),
@@ -2562,7 +2570,7 @@ describe("Romeo knowledge ingestion", () => {
   it("deletes sources, objects, and provider embeddings without leaking raw content", async () => {
     const repository = new InMemoryRomeoRepository();
     const objectStore = new MemoryObjectStore();
-    const api = createRomeoApi(repository, {
+    const runtime = createRomeoApiRuntime(repository, {
       objectStore,
       embeddingFetch: async (_input, init) => {
         const body = JSON.parse(String(init?.body)) as {
@@ -2581,6 +2589,7 @@ describe("Romeo knowledge ingestion", () => {
         );
       },
     });
+    const api = runtime.app;
     const content =
       "Romeo retention controls remove indexed chunks, stored objects, and provider embeddings.";
     const sourceResponse = await api.request(
@@ -2617,6 +2626,10 @@ describe("Romeo knowledge ingestion", () => {
       `/api/v1/knowledge-bases/kb_default/sources/${source.data.id}`,
       { method: "DELETE" },
     );
+    await runtime.services.knowledge.processContentDeletionJob({
+      subject: contentDeletionSubject(),
+      workerId: "knowledge_delete_test",
+    });
     const queryResponse = await api.request(
       "/api/v1/knowledge-bases/kb_default/query",
       {
@@ -2874,6 +2887,18 @@ function vectorForEmbeddingText(text: string): number[] {
     vector[0] = 1;
   else vector[1] = 1;
   return vector;
+}
+
+function contentDeletionSubject() {
+  return {
+    type: "user" as const,
+    id: "user_dev_admin",
+    orgId: "org_default",
+    workspaceIds: ["workspace_default"],
+    scopes: [...scopeValues],
+    groupIds: ["group_admins"],
+    isAdmin: true,
+  };
 }
 
 function hybridVectorForEmbeddingText(text: string): number[] {

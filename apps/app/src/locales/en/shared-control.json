@@ -41,7 +41,9 @@
   "tableComfortable": "Comfortable",
   "tableCompact": "Compact",
   "tableDensity": "Density",
+  "tableError": "Could not load this table.",
   "tableExportCsv": "Export CSV",
+  "tableExportFileStem": "table",
   "tableLoading": "Loading…",
   "tableNextPage": "Next",
   "tableNoMatches": "No matches",
@@ -51,6 +53,7 @@
   "tablePage": "page",
   "tablePreviousPage": "Previous",
   "tableResetView": "Reset table view",
+  "tableRetry": "Retry",
   "tableResults": "results",
   "tableRowsPerPage": "Rows per page",
   "tableSearch": "Search table",
@@ -58,6 +61,12 @@
   "tableSelectAllRows": "Select all rows",
   "tableSelected": "selected",
   "tableSelectRow": "Select row",
+  "tableDeselectRow": "Deselect row",
+  "tableDefaultView": "Default view",
+  "tableShareView": "Share view",
+  "tableUnshareView": "Stop sharing view",
+  "tableServerAuthorityUnavailable": "Saved views and exports are unavailable right now.",
+  "tableOperationFailed": "The table operation failed. Try again.",
   "tableShown": "shown",
   "tableSavedViews": "Saved views",
   "tableSaveView": "Save",
@@ -73,5 +82,6 @@
   "accessGrantRevoked": "Access revoked",
   "accessRevoke": "Revoke",
   "accessRevokeFailed": "Could not revoke access",
-  "accessNoGrants": "No grants yet."
+  "accessNoGrants": "No grants yet.",
+  "accessPrincipal": "Person or group"
 }

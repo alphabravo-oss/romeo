@@ -5,6 +5,7 @@ import {
 } from "../../lib/server-mutation-options";
 import { createDataConnector, syncLocalDataConnector } from "./mutations";
 import type { DataConnector, DataConnectorSync } from "./types";
+import { invalidateInventoriedTablePages } from "../../lib/inventoried-table-cache";
 
 export function createDataConnectorMutationOptions() {
   return serverMutationOptions({
@@ -18,7 +19,10 @@ export function createDataConnectorMutationOptions() {
       );
       await Promise.all([
         invalidateCachedResourceExactly(client, appQueryKeys.auditLogs()),
-        invalidateCachedResourceExactly(client, appQueryKeys.tablePages()),
+        invalidateInventoriedTablePages(client, {
+          resource: "data_connectors",
+          workspaceId: connector.workspaceId,
+        }),
       ]);
     },
     invalidations: (connector) => [
@@ -46,6 +50,18 @@ export function syncLocalDataConnectorMutationOptions() {
         invalidateCachedResourceExactly(client, appQueryKeys.usageSummary()),
         invalidateCachedResourceExactly(client, appQueryKeys.usageAlerts()),
         invalidateCachedResourceExactly(client, appQueryKeys.auditLogs()),
+        invalidateInventoriedTablePages(client, {
+          parentId: sync.connectorId,
+          resource: "data_connector_sync_runs",
+        }),
+        invalidateInventoriedTablePages(client, {
+          resource: "data_connectors",
+          workspaceId: sync.workspaceId,
+        }),
+        invalidateInventoriedTablePages(client, {
+          parentId: sync.knowledgeBaseId,
+          resource: "knowledge_sources",
+        }),
       ]);
     },
     invalidations: (sync) => [

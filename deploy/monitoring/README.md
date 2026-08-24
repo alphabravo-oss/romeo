@@ -26,7 +26,7 @@ ROMEO_API_KEY="$ROMEO_API_KEY" docker compose -f deploy/compose/compose.yml --pr
 
 Use `operational-exporter.deployment.example.yaml` as the Kubernetes starting point. It expects a scoped monitoring API key in `romeo-monitoring-api-key` and serves `/metrics` on port `9464`. `/health` is process liveness only; `/ready` performs a bounded authenticated read of both operational-summary sources and fails closed with `503` when either source is unavailable. Prometheus Operator users can apply `prometheus-rules.yaml`; plain Prometheus users can copy `spec.groups` into their rule files.
 
-The rule file includes provider, background-job queue, dead-letter, and Postgres backup job alerts. `RomeoPostgresBackupJobFailed` uses kube-state-metrics `kube_job_status_failed`, so Kubernetes installs must scrape kube-state-metrics for backup alert evidence.
+The rule file includes provider, background-job queue, dead-letter, and Postgres backup alerts. `RomeoPostgresBackupJobFailed` uses kube-state-metrics `kube_job_status_failed`. Managed backup Jobs exit successfully only after dump, manifest, and status readback verification, so `romeo_postgres_backup_last_success_timestamp_seconds`, `romeo_postgres_backup_age_seconds`, and `RomeoPostgresBackupMissingOrStale` expose the last verified success and alert when it is absent or older than 36 hours. Kubernetes installs must scrape kube-state-metrics for this evidence. Externally managed backup mode must provide equivalent platform-native last-success, age, failure, and restore-test alert evidence referenced by the Helm values.
 
 Run-stream monitoring also exports active streams, reconnect replay rows,
 cursor-query counts and rows, notifier lag/fallback, bounded-buffer high-water,

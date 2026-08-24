@@ -9,7 +9,8 @@ export const IDEMPOTENT_OPERATIONS = [
   "media.jobs.create",
   "table.exports.create",
 ] as const;
-export type ExtendedIdempotentOperation = (typeof IDEMPOTENT_OPERATIONS)[number];
+export type ExtendedIdempotentOperation =
+  (typeof IDEMPOTENT_OPERATIONS)[number];
 
 export type CommandCheckpointStage =
   | "claimed"
@@ -46,7 +47,9 @@ export function recordCommandCheckpoint(
     throw new Error("Checkpoint effect reference cannot change.");
   return {
     ...next,
-    ...(current?.effectRef === undefined ? {} : { effectRef: current.effectRef }),
+    ...(current?.effectRef === undefined
+      ? {}
+      : { effectRef: current.effectRef }),
   };
 }
 
@@ -62,7 +65,10 @@ export function recoverIdempotentCheckpoint(input: {
     if (effectRef === undefined) return { action: "conflict" };
     return { action: "replay", effectRef };
   }
-  if (input.checkpoint?.stage === "side_effect_completed" && input.checkpoint.effectRef)
+  if (
+    input.checkpoint?.stage === "side_effect_completed" &&
+    input.checkpoint.effectRef
+  )
     return { action: "replay", effectRef: input.checkpoint.effectRef };
   if (
     input.checkpoint?.stage === "side_effect_started" &&

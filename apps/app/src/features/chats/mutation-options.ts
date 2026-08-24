@@ -1,7 +1,10 @@
 import type { Chat, MessageFeedbackState } from "./types";
+import type { ChatsListMessagePageResponse } from "@romeo/api-client/generated/query";
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 
 import * as appQueryKeys from "../../lib/app-query-keys";
 import { currentMutationSessionVersion } from "../../lib/mutation-session-boundary";
+import { isActiveMessagePageQuery } from "../../lib/message-page-query";
 import {
   invalidateCachedResourceExactly,
   serverMutationOptions,
@@ -120,10 +123,85 @@ export function updateAttachmentRetentionMutationOptions() {
     resource: "chat.attachment.retention.update",
     mutationFn: (input: Parameters<typeof updateAttachmentRetention>[0]) =>
       updateAttachmentRetention(input),
+    optimistic: {
+      snapshot: async (client, { chatId }) => {
+        const queries = activeMessagePageQueries(client, chatId);
+        await Promise.all(
+          queries.map(({ queryKey }) =>
+            client.cancelQueries({ exact: true, queryKey }),
+          ),
+        );
+        return queries.map(
+          ({ queryKey }) =>
+            [queryKey, client.getQueryData<MessagePageData>(queryKey)] as const,
+        );
+      },
+      update: (client, input) => {
+        updateAttachmentRetentionCaches(client, input);
+      },
+      rollback: (client, snapshots) => {
+        for (const [queryKey, snapshot] of snapshots) {
+          client.setQueryData(queryKey, snapshot);
+        }
+      },
+    },
+    reconcile: (client, attachment, input) => {
+      updateAttachmentRetentionCaches(client, {
+        ...input,
+        retainedInContext: attachment.retainedInContext,
+      });
+    },
     invalidations: (_attachment, { chatId }) => [
       { exact: true, queryKey: appQueryKeys.chat(chatId) },
     ],
   });
+}
+
+type MessagePageData = InfiniteData<ChatsListMessagePageResponse>;
+
+function activeMessagePageQueries(client: QueryClient, chatId: string) {
+  return client
+    .getQueryCache()
+    .findAll({ predicate: (query) => isActiveMessagePageQuery(query, chatId) });
+}
+
+function updateAttachmentRetentionCaches(
+  client: QueryClient,
+  input: {
+    attachmentId: string;
+    chatId: string;
+    messageId: string;
+    retainedInContext: boolean;
+  },
+): void {
+  for (const { queryKey } of activeMessagePageQueries(client, input.chatId)) {
+    client.setQueryData<MessagePageData>(queryKey, (current) =>
+      current === undefined
+        ? current
+        : {
+            ...current,
+            pages: current.pages.map((page) => ({
+              ...page,
+              data: page.data.map((message) =>
+                message.id !== input.messageId ||
+                message.attachments === undefined
+                  ? message
+                  : {
+                      ...message,
+                      attachments: message.attachments.map((attachment) =>
+                        attachment.id === input.attachmentId
+                          ? {
+                              ...attachment,
+                              retainedInContext: input.retainedInContext,
+                            }
+                          : attachment,
+                      ),
+                    },
+              ),
+            })),
+          },
+    );
+  }
 }
 
 export function updateWorkspaceChatMutationOptions() {

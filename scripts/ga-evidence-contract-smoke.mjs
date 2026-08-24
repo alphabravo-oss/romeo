@@ -577,15 +577,12 @@ try {
     gateId: "phase20.compose_product_smoke",
     failure: "compose_smoke_missing_check:postgres_restart_readback",
   });
-  runCase(checks, "Compose workers smoke requires crash recovery", {
+  runCase(checks, "Compose workers smoke requires loop restarts", {
     mutate: (evidence) => {
-      evidence["dist/ci/compose-workers-smoke.json"].crashRecovery = {
-        signal: "SIGKILL",
-        recoveredStatus: "running",
-      };
+      evidence["dist/ci/compose-workers-smoke.json"].loopRestartCount = 0;
     },
     gateId: "phase20.compose_workers_smoke",
-    failure: "compose_workers_crash_recovery_incomplete",
+    failure: "compose_workers_loop_restart_count_low",
   });
   runCase(
     checks,
@@ -599,16 +596,13 @@ try {
       failure: "compose_backup_restore_projects_not_isolated",
     },
   );
-  runCase(checks, "Kubernetes render evidence requires KEDA examples", {
+  runCase(checks, "Kubernetes render evidence rejects retired KEDA workers", {
     mutate: (evidence) => {
       const render = evidence["dist/ci/kubernetes-render-smoke.json"];
-      render.kedaExamples.resources = render.kedaExamples.resources.filter(
-        (resource) => resource.kind !== "ScaledJob",
-      );
+      render.kedaExamples.retired = false;
     },
     gateId: "phase21.kubernetes_render_contract",
-    failure:
-      "kubernetes_render_missing_keda_example:keda.sh/v1alpha1:ScaledJob:romeo-webhook-retry",
+    failure: "kubernetes_render_retired_keda_worker_present",
   });
   runCase(checks, "Kubernetes live dry-run shape is rejected", {
     mutate: (evidence) => {
@@ -676,16 +670,15 @@ try {
     gateId: "phase25.kubernetes_workers_smoke",
     failure: "kubernetes_workers_not_live",
   });
-  runCase(checks, "Kubernetes worker evidence requires crash recovery", {
+  runCase(checks, "Kubernetes worker evidence requires cronjobs", {
     mutate: (evidence) => {
       const workers = evidence["dist/ci/kubernetes-workers-smoke.json"];
       workers.checks = workers.checks.filter(
-        (check) => check !== "workflow_resume_pod_crash_recovery",
+        (check) => check !== "worker_cronjobs_present",
       );
     },
     gateId: "phase25.kubernetes_workers_smoke",
-    failure:
-      "kubernetes_workers_missing_check:workflow_resume_pod_crash_recovery",
+    failure: "kubernetes_workers_missing_check:worker_cronjobs_present",
   });
   runCase(checks, "Kubernetes worker evidence requires log redaction", {
     mutate: (evidence) => {
@@ -696,15 +689,15 @@ try {
   });
   runCase(
     checks,
-    "Kubernetes worker evidence requires prompt redaction proof",
+    "Kubernetes worker evidence requires content redaction proof",
     {
       mutate: (evidence) => {
         evidence[
           "dist/ci/kubernetes-workers-smoke.json"
-        ].logRedaction.rawPromptSentinelsChecked = 0;
+        ].logRedaction.rawContentSentinelsChecked = 0;
       },
       gateId: "phase25.kubernetes_workers_smoke",
-      failure: "kubernetes_workers_log_redaction_missing_prompt_sentinels",
+      failure: "kubernetes_workers_log_redaction_missing_content_sentinels",
     },
   );
   runCase(checks, "Kubernetes NetworkPolicy dry-run shape is rejected", {
@@ -2820,18 +2813,7 @@ function validDataConnectorAcceptance() {
       "connector_acceptance_evidence_omits_raw_config_and_content",
     ],
     catalog: {
-      connectorTypes: [
-        "confluence",
-        "github",
-        "jira",
-        "linear",
-        "local_import",
-        "notion",
-        "rss",
-        "s3",
-        "slack",
-        "website",
-      ],
+      connectorTypes: ["github", "local_import", "rss", "s3", "website"],
       executionDriver: "managed-fetch",
       egressPolicy: "require_allowlist",
       allowedHostRuleCount: 2,
@@ -2855,16 +2837,6 @@ function validDataConnectorAcceptance() {
       privateDnsSyncStatus: 403,
       privateDnsSyncCode: "connector_private_network_host_blocked",
       privateDnsFetchAttemptCount: 0,
-      confluenceCreationStatus: 201,
-      confluenceSyncStatus: "completed",
-      jiraCreationStatus: 201,
-      jiraSyncStatus: "completed",
-      notionCreationStatus: 201,
-      notionSyncStatus: "completed",
-      linearCreationStatus: 201,
-      linearSyncStatus: "completed",
-      slackCreationStatus: 201,
-      slackSyncStatus: "completed",
     },
     redaction: {
       rawAllowedHostsReturned: false,
@@ -3340,7 +3312,7 @@ function validBrowserAutomationContract() {
     schemaVersion: "romeo.browser-automation-contract-smoke.v1",
     status: "passed",
     checks: [
-      "browser_task_approval_metadata_redaction",
+      "browser_task_claim_exposes_raw_task",
       "stale_running_browser_task_reclaimed",
       "external_runner_completion",
       "worker_stdout_redaction",
@@ -3349,7 +3321,7 @@ function validBrowserAutomationContract() {
       "browser_artifact_retention_cleanup",
       "retention_metadata_redaction",
     ],
-    workflow: {
+    job: {
       finalStatus: "completed",
     },
     worker: {
@@ -3366,10 +3338,9 @@ function validBrowserAutomationContract() {
       retentionDeletedCount: 1,
     },
     redaction: {
-      approvalReadback: "passed",
+      claimReadback: "passed",
       workerStdout: "passed",
       workerStderr: "passed",
-      workflowReadback: "passed",
       retentionEvidence: "passed",
     },
   };
@@ -4203,7 +4174,6 @@ function validComposeSmoke() {
 function validComposeWorkersSmoke() {
   const requiredWorkers = [
     "data_connector_sync",
-    "workflow_resume",
     "webhook_retry",
     "notification_retry",
     "retention_enforce",
@@ -4222,14 +4192,8 @@ function validComposeWorkersSmoke() {
       iteration: 1,
       checks: {},
     })),
-    loopRestartCount: 3,
+    loopRestartCount: 2,
     loopRestarts: [
-      {
-        name: "workflow_resume",
-        service: "workflow-resume-worker",
-        beforeRestartIterations: 1,
-        afterRestartIterations: 2,
-      },
       {
         name: "webhook_retry",
         service: "webhook-retry-worker",
@@ -4243,18 +4207,6 @@ function validComposeWorkersSmoke() {
         afterRestartIterations: 2,
       },
     ],
-    controlledWorkflowResume: {
-      workflowId: "workflow_contract",
-      workflowRunId: "workflow_run_contract",
-      linkedRunId: "run_contract",
-    },
-    crashRecovery: {
-      service: "workflow-resume-worker",
-      signal: "SIGKILL",
-      afterKillBaselineIterations: 2,
-      afterCrashIterations: 3,
-      recoveredStatus: "waiting_approval",
-    },
     checks: [
       "compose_build_and_start",
       "migration_service",
@@ -4264,11 +4216,7 @@ function validComposeWorkersSmoke() {
       "worker_commands_ran_once",
       "worker_output_json_valid",
       "worker_output_secret_redaction",
-      "worker_output_raw_content_redaction",
-      "workflow_resume_controlled_pending_work",
       "loop_workers_emit_after_restart",
-      "workflow_resume_sigkill_recovery",
-      "workflow_resume_crash_no_duplicate_linked_run",
       "compose_logs_redacted",
     ],
   };
@@ -4359,10 +4307,9 @@ function validKubernetesRenderSmoke() {
       },
       {
         name: "external_postgres",
-        kinds: { Deployment: 1, Job: 1, CronJob: 8 },
+        kinds: { Deployment: 1, Job: 1, CronJob: 7 },
         workerCronJobs: [
           "romeo-data-connector-sync",
-          "romeo-workflow-resume",
           "romeo-webhook-retry",
           "romeo-notification-retry",
           "romeo-retention-enforce",
@@ -4372,10 +4319,9 @@ function validKubernetesRenderSmoke() {
       },
       {
         name: "cloudnativepg",
-        kinds: { Deployment: 1, Job: 1, CronJob: 7 },
+        kinds: { Deployment: 1, Job: 1, CronJob: 6 },
         workerCronJobs: [
           "romeo-data-connector-sync",
-          "romeo-workflow-resume",
           "romeo-webhook-retry",
           "romeo-notification-retry",
           "romeo-retention-enforce",
@@ -4438,20 +4384,7 @@ function validKubernetesRenderSmoke() {
         },
       ],
     },
-    kedaExamples: {
-      resources: [
-        {
-          apiVersion: "keda.sh/v1alpha1",
-          kind: "ScaledJob",
-          name: "romeo-webhook-retry",
-        },
-        {
-          apiVersion: "keda.sh/v1alpha1",
-          kind: "TriggerAuthentication",
-          name: "romeo-webhook-retry-postgres",
-        },
-      ],
-    },
+    kedaExamples: { retired: true, resourceCount: 0, resources: [] },
   };
 }
 
@@ -4581,6 +4514,9 @@ function validReleaseApproval() {
   return {
     schemaVersion: "romeo.release-approval.v1",
     status: "passed",
+    mode: "protected_environment",
+    authentic: true,
+    promotable: true,
     release: {
       name: "romeo",
       version: "0.0.0-contract",
@@ -4607,6 +4543,7 @@ function validReleaseApproval() {
       secretValuesReturned: false,
       fileBodiesReturned: false,
       rawProvenanceReturned: false,
+      rawAttestationReturned: false,
       environmentReturned: false,
     },
   };
@@ -4913,7 +4850,6 @@ function validTenantIsolationNegativeSuite() {
     "src/device-authorizations.test.ts",
     "src/knowledge.test.ts",
     "src/quota.test.ts",
-    "src/workflows.test.ts",
     "src/vector-isolation.test.ts",
     "src/api.test.ts",
   ];
@@ -5225,6 +5161,7 @@ function validOperationalMonitoringValidation() {
       "RomeoBackgroundJobQueuedLag",
       "RomeoBackgroundJobDeadLetters",
       "RomeoPostgresBackupJobFailed",
+      "RomeoPostgresBackupMissingOrStale",
     ],
     referencedMetricNames: [
       "romeo_background_job_alert",
@@ -5247,12 +5184,31 @@ function validBackupUploadFailureSmoke() {
     schemaVersion: "romeo.postgres-backup-upload-failure-smoke.v1",
     status: "passed",
     checks: [
+      "missing_destination_exits_nonzero_before_dump",
+      "missing_local_persistence_evidence_exits_nonzero_before_dump",
       "upload_http_failure_exits_nonzero",
       "upload_timeout_exits_nonzero",
+      "credential_denial_exits_nonzero",
+      "digest_mismatch_exits_nonzero",
+      "partial_object_exits_nonzero",
       "failed_upload_does_not_write_manifest",
+      "successful_backup_manifest_status_readback_verified",
+      "local_artifacts_deleted_remote_objects_remain",
       "upload_failure_output_redacts_presigned_secret",
     ],
     cases: [
+      {
+        name: "missing_destination",
+        exitStatus: 1,
+        dumpWritten: false,
+        requestReceived: false,
+      },
+      {
+        name: "missing_local_persistence_evidence",
+        exitStatus: 1,
+        dumpWritten: false,
+        requestReceived: false,
+      },
       {
         name: "http_503",
         exitStatus: 1,
@@ -5266,6 +5222,26 @@ function validBackupUploadFailureSmoke() {
         manifestWritten: false,
         requestReceived: true,
         redactedUploadUrl: "http://127.0.0.1:3000/timeout?redacted=true",
+      },
+      ...["credential_denial", "digest_mismatch", "partial_object"].map(
+        (name) => ({
+          name,
+          exitStatus: 1,
+          manifestWritten:
+            name === "digest_mismatch" || name === "partial_object",
+          requestReceived: true,
+          redactedUploadUrl: `http://127.0.0.1:3000/${name}?redacted=true`,
+        }),
+      ),
+      {
+        name: "successful_readback",
+        exitStatus: 0,
+        backupVerified: true,
+        manifestVerified: true,
+        statusVerified: true,
+        localArtifactsDeleted: true,
+        remoteObjectsRemain: true,
+        lastSuccessAtPresent: true,
       },
     ],
     requestCount: 2,
@@ -5650,28 +5626,15 @@ function validKubernetesWorkersSmoke() {
       appName: "romeo",
       workerApiKeySecretMode: "preexisting",
     },
-    workerCount: 7,
+    workerCount: 6,
     workers: [
       "data_connector_sync",
-      "workflow_resume",
       "webhook_retry",
       "notification_retry",
       "retention_enforce",
       "billing_entitlement_reconcile",
       "billing_lifecycle_enforce",
     ].map((name) => ({ name, iteration: 1 })),
-    controlledWorkflowResume: {
-      workflowId: "workflow_contract",
-      workflowRunId: "workflow_run_contract",
-      linkedRunId: "run_contract",
-    },
-    crashRecovery: {
-      termination: "forced_pod_delete",
-      recoveredStatus: "waiting_approval",
-      workflowId: "workflow_contract_crash",
-      workflowRunId: "workflow_run_contract_crash",
-      linkedRunId: "run_contract_crash",
-    },
     checks: [
       "cluster_reachable",
       "app_deployment_rollout_ready",
@@ -5682,9 +5645,6 @@ function validKubernetesWorkersSmoke() {
       "worker_output_json_valid",
       "worker_output_secret_redaction",
       "worker_output_raw_content_redaction",
-      "workflow_resume_controlled_pending_work",
-      "workflow_resume_pod_crash_recovery",
-      "workflow_resume_crash_no_duplicate_linked_run",
       "worker_logs_redacted",
       "pod_logs_redacted",
     ],
@@ -5697,7 +5657,6 @@ function validKubernetesWorkersSmoke() {
       workerApiKeySecretValueKnown: false,
       webhookSigningSecretChecked: true,
       generatedSecretValuesChecked: 2,
-      rawPromptSentinelsChecked: 2,
       rawContentSentinelsChecked: 1,
     },
   };

@@ -5,6 +5,13 @@ import {
   agentModels,
   agentVersions,
   apiKeys,
+  auditExportAttempts,
+  auditExportDestinations,
+  auditExportIdempotencyReceipts,
+  auditExportJobs,
+  auditIntegrityCheckpoints,
+  auditIntegrityRecords,
+  auditIntegrityTenantHeads,
   auditLogs,
   backgroundJobs,
   baseModels,
@@ -41,11 +48,14 @@ import {
   objectRecords,
   collaborationChannelMembers,
   collaborationChannels,
+  contentPolicyApprovals,
+  contentPolicyDecisions,
   organizations,
   providerInstances,
   promptTemplates,
   quotaBuckets,
   resourceGrants,
+  serverTableSavedViews,
   resourceFavorites,
   runEvents,
   runs,
@@ -66,6 +76,67 @@ import {
 } from "./schema";
 
 describe("durable baseline schema contract", () => {
+  it("keeps content-policy decisions and approvals normalized and tenant indexed", () => {
+    expect(columnNames(contentPolicyDecisions)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "org_id",
+        "policy_version_id",
+        "surface",
+        "action",
+        "detectors",
+        "run_id",
+        "execution_job_id",
+        "decided_at",
+      ]),
+    );
+    expect(indexNames(contentPolicyDecisions)).toEqual(
+      expect.arrayContaining([
+        "content_policy_decisions_org_decided_idx",
+        "content_policy_decisions_org_run_idx",
+      ]),
+    );
+    expect(columnNames(contentPolicyApprovals)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "org_id",
+        "run_id",
+        "decision_id",
+        "policy_version_id",
+        "execution_job_id",
+        "state",
+        "expires_at",
+        "resolved_at",
+      ]),
+    );
+    expect(indexNames(contentPolicyApprovals)).toEqual(
+      expect.arrayContaining([
+        "content_policy_approvals_org_state_expiry_idx",
+        "content_policy_approvals_org_run_idx",
+      ]),
+    );
+    expect(uniqueIndexNames(contentPolicyApprovals)).toContain(
+      "content_policy_approvals_org_decision_uidx",
+    );
+    expect(foreignKeyNames(contentPolicyDecisions)).toEqual(
+      expect.arrayContaining([
+        "content_policy_decisions_org_run_fk",
+        "content_policy_decisions_org_job_fk",
+      ]),
+    );
+    expect(foreignKeyNames(contentPolicyApprovals)).toEqual(
+      expect.arrayContaining([
+        "content_policy_approvals_org_decision_fk",
+        "content_policy_approvals_org_run_fk",
+        "content_policy_approvals_org_job_fk",
+      ]),
+    );
+    expect(uniqueIndexNames(runs)).toContain("runs_org_id_id_uidx");
+    expect(uniqueIndexNames(backgroundJobs)).toContain(
+      "background_jobs_org_id_id_uidx",
+    );
+  });
+
   it("keeps capability assignment history versioned and bounded", () => {
     expect(columnNames(capabilityAssignments)).toEqual(
       expect.arrayContaining([
@@ -318,7 +389,7 @@ describe("durable baseline schema contract", () => {
       expect.arrayContaining([
         "data_connectors_workspace_created_idx",
         "data_connectors_kb_idx",
-        "data_connectors_due_sync_idx",
+        "data_connectors_due_sync_lease_idx",
       ]),
     );
     expect(uniqueIndexNames(dataConnectors)).toContain(
@@ -361,6 +432,9 @@ describe("durable baseline schema contract", () => {
         "audit_logs_resource_idx",
         "audit_logs_actor_created_idx",
         "audit_logs_search_trgm_idx",
+        "audit_logs_support_request_created_idx",
+        "audit_logs_support_decision_idx",
+        "audit_logs_support_session_created_idx",
       ]),
     );
     expect(indexNames(usageEvents)).toEqual(
@@ -380,6 +454,43 @@ describe("durable baseline schema contract", () => {
     );
   });
 
+  it("keeps audit chains, protected checkpoints, and durable exports tenant-scoped", () => {
+    expect(columnNames(auditIntegrityTenantHeads)).toEqual([
+      "org_id",
+      "last_sequence",
+      "last_record_hash",
+      "updated_at",
+    ]);
+    expect(uniqueIndexNames(auditIntegrityRecords)).toEqual(
+      expect.arrayContaining([
+        "audit_integrity_records_org_sequence_uidx",
+        "audit_integrity_records_org_event_uidx",
+        "audit_integrity_records_org_hash_uidx",
+      ]),
+    );
+    expect(uniqueIndexNames(auditIntegrityCheckpoints)).toEqual(
+      expect.arrayContaining([
+        "audit_integrity_checkpoints_org_range_uidx",
+        "audit_integrity_checkpoints_org_hash_uidx",
+      ]),
+    );
+    expect(uniqueIndexNames(auditExportDestinations)).toContain(
+      "audit_export_destinations_org_kind_uidx",
+    );
+    expect(indexNames(auditExportJobs)).toEqual(
+      expect.arrayContaining([
+        "audit_export_jobs_due_idx",
+        "audit_export_jobs_destination_range_idx",
+      ]),
+    );
+    expect(uniqueIndexNames(auditExportAttempts)).toContain(
+      "audit_export_attempts_job_attempt_uidx",
+    );
+    expect(uniqueIndexNames(auditExportIdempotencyReceipts)).toContain(
+      "audit_export_idempotency_receipts_org_key_uidx",
+    );
+  });
+
   it("keeps webhook subscription, delivery, and retry indexes explicit", () => {
     expect(indexNames(webhookSubscriptions)).toContain(
       "webhook_subscriptions_org_created_idx",
@@ -396,7 +507,7 @@ describe("durable baseline schema contract", () => {
     );
   });
 
-  it("keeps workflow definition, schedule, and run indexes explicit", () => {
+  it("keeps retired workflow data indexed for lifecycle and export operations", () => {
     expect(columnNames(workflowDefinitions)).toContain("next_scheduled_run_at");
     expect(indexNames(workflowDefinitions)).toEqual(
       expect.arrayContaining([
@@ -459,7 +570,7 @@ describe("durable baseline schema contract", () => {
       expect.arrayContaining([
         "notification_delivery_notification_idx",
         "notification_delivery_user_idx",
-        "notification_delivery_status_idx",
+        "notification_delivery_status_lease_idx",
       ]),
     );
   });
@@ -607,6 +718,93 @@ describe("durable baseline schema contract", () => {
     expect(
       indexColumnNames(baseModels, "base_models_org_created_id_idx"),
     ).toEqual(["org_id", "created_at", "id"]);
+  });
+
+  it("keeps saved views normalized, tenant-bound, and concurrency indexed", () => {
+    expect(columnNames(serverTableSavedViews)).toEqual(
+      expect.arrayContaining([
+        "org_id",
+        "workspace_id",
+        "owner_user_id",
+        "resource",
+        "parent_scope_key",
+        "schema_version",
+        "version",
+        "delete_token_hash",
+        "delete_token_expires_at",
+      ]),
+    );
+    expect(foreignKeyNames(serverTableSavedViews)).toEqual(
+      expect.arrayContaining([
+        "server_table_saved_views_org_workspace_fk",
+        "server_table_saved_views_org_owner_fk",
+      ]),
+    );
+    expect(indexNames(serverTableSavedViews)).toEqual(
+      expect.arrayContaining([
+        "server_table_saved_views_list_idx",
+        "server_table_saved_views_active_owner_name_uidx",
+        "server_table_saved_views_active_owner_default_uidx",
+      ]),
+    );
+  });
+
+  it("indexes every native table-page sort and search predicate", () => {
+    const expected = [
+      [
+        backgroundJobs,
+        [
+          "background_jobs_org_created_id_idx",
+          "background_jobs_org_status_id_idx",
+          "background_jobs_org_type_id_idx",
+          "background_jobs_search_trgm_idx",
+        ],
+      ],
+      [
+        dataConnectorSyncs,
+        [
+          "data_connector_syncs_org_connector_started_id_idx",
+          "data_connector_syncs_org_connector_status_id_idx",
+          "data_connector_syncs_search_trgm_idx",
+        ],
+      ],
+      [
+        notificationDeliveries,
+        [
+          "notification_deliveries_org_user_created_id_idx",
+          "notification_deliveries_org_user_status_id_idx",
+          "notification_deliveries_search_trgm_idx",
+        ],
+      ],
+      [
+        userNotifications,
+        [
+          "user_notifications_org_user_created_id_idx",
+          "user_notifications_org_user_type_id_idx",
+          "user_notifications_search_trgm_idx",
+        ],
+      ],
+      [
+        toolCalls,
+        [
+          "tool_calls_org_agent_started_id_idx",
+          "tool_calls_org_agent_completed_id_idx",
+          "tool_calls_org_agent_status_id_idx",
+          "tool_calls_org_agent_tool_id_idx",
+          "tool_calls_search_trgm_idx",
+        ],
+      ],
+      [
+        usageEvents,
+        [
+          "usage_events_org_created_id_idx",
+          "usage_events_org_metric_id_idx",
+          "usage_events_search_trgm_idx",
+        ],
+      ],
+    ] as const;
+    for (const [table, names] of expected)
+      expect(indexNames(table)).toEqual(expect.arrayContaining([...names]));
   });
 });
 

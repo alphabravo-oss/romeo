@@ -1,5 +1,5 @@
 import type { Chat, Message } from "../features/types";
-import { listMessages } from "../features";
+import { listMessages } from "../features/chats";
 import { downloadText } from "../lib/download";
 
 export const portableChatImportLimits = {

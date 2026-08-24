@@ -22,6 +22,7 @@ export {
   runProviderCatalogSyncJobRoute,
 } from "./provider-catalog-sync-routes";
 export { ProviderCatalogSyncJobSchema } from "./provider-catalog-schemas";
+export { ProviderOperationalSummarySchema } from "./provider-operational-schema";
 import { ProviderOperationalSummarySchema } from "./provider-operational-schema";
 import {
   ProviderCapabilitiesSchema,
@@ -301,6 +302,7 @@ export const deleteOllamaModelRoute = createRoute({
   summary: "Delete a model from an Ollama connection",
   request: {
     params: z.strictObject({ providerId: identifier, model: identifier }),
+    query: z.strictObject({ modelId: identifier.optional() }),
   },
   responses: {
     200: jsonResponse(

@@ -15,6 +15,7 @@ import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { useEventCallback } from "../lib/use-event-callback";
 import { Section } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
@@ -26,13 +27,10 @@ const sessionCol = createColumnHelper<ImpersonationSession>();
 
 export function ImpersonationPanel() {
   const { t } = useLocale();
-  const requestTable = useInventoriedServerTable<ImpersonationRequest>(
-    "support_access_requests",
-    { filters: [{ field: "status", operator: "eq", value: "pending" }] },
-  );
-  const sessionTable = useInventoriedServerTable<
-    ImpersonationSession & { id: string }
-  >("support_sessions", {
+  const requestTable = useInventoriedServerTable("support_access_requests", {
+    filters: [{ field: "status", operator: "eq", value: "pending" }],
+  });
+  const sessionTable = useInventoriedServerTable("support_sessions", {
     filters: [{ field: "status", operator: "eq", value: "active" }],
   });
   const { ask, dialog } = useConfirm();
@@ -48,6 +46,9 @@ export function ImpersonationPanel() {
   const revokeMutation = useMutation(
     revokeImpersonationSessionMutationOptions(),
   );
+  const onApprove = useEventCallback(handleApprove);
+  const onReject = useEventCallback(handleReject);
+  const onRevoke = useEventCallback(handleRevoke);
 
   const userLabels = useMemo(
     () =>
@@ -106,14 +107,14 @@ export function ImpersonationPanel() {
           <span className="flex gap-2">
             <Button
               disabled={approveMutation.isPending || rejectMutation.isPending}
-              onClick={() => void handleApprove(c.row.original)}
+              onClick={() => void onApprove(c.row.original)}
               type="button"
             >
               {t("impersonationApprove")}
             </Button>
             <Button
               disabled={approveMutation.isPending || rejectMutation.isPending}
-              onClick={() => void handleReject(c.row.original.id)}
+              onClick={() => void onReject(c.row.original.id)}
               type="button"
             >
               {t("impersonationReject")}
@@ -122,8 +123,14 @@ export function ImpersonationPanel() {
         ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [approveMutation.isPending, rejectMutation.isPending, t, userLabels],
+    [
+      approveMutation.isPending,
+      onApprove,
+      onReject,
+      rejectMutation.isPending,
+      t,
+      userLabels,
+    ],
   );
 
   const sessionColumns = useMemo<ColumnDef<ImpersonationSession, any>[]>(
@@ -177,7 +184,7 @@ export function ImpersonationPanel() {
         cell: (c) => (
           <Button
             disabled={revokeMutation.isPending}
-            onClick={() => void handleRevoke(c.row.original.session.id)}
+            onClick={() => void onRevoke(c.row.original.session.id)}
             type="button"
           >
             {t("impersonationRevoke")}
@@ -185,8 +192,7 @@ export function ImpersonationPanel() {
         ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [revokeMutation.isPending, t],
+    [onRevoke, revokeMutation.isPending, t],
   );
 
   async function handleApprove(request: ImpersonationRequest) {

@@ -1,6 +1,5 @@
 import {
   type ColumnDef,
-  type OnChangeFn,
   type PaginationState,
   type RowSelectionState,
   type SortingState,
@@ -11,34 +10,36 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import type React from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Checkbox } from "./forms";
+import { Button } from "./button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DataTableControls } from "./data-table-controls";
 import { columnPreferenceIds } from "./data-table-columns";
 import { DataTableGrid } from "./data-table-grid";
+import { createSelectionColumn } from "./data-table-selection-column";
 import { ClientTablePager, ServerTablePager } from "./data-table-pagination";
 import { downloadCsv, serializeTableCsv } from "./table-csv";
 import {
   defaultTablePreferences,
   readTablePreferences,
-  readTableSavedViews,
   removeTablePreferences,
   type TableSavedView,
   tablePreferenceIdentity,
   writeTablePreferences,
-  writeTableSavedViews,
 } from "./table-preferences";
+import { useDataTableAuthority } from "./use-data-table-authority";
 import {
   serverPaginationChangeHandler,
   serverPaginationFromState,
-  type ServerPagination,
-  type ServerTableState,
 } from "./server-table-state";
+import type { DataTableProps } from "./advanced-data-table-types";
 
 export { createColumnHelper };
 export type { ColumnDef };
+export type {
+  DataTableLabels,
+  DataTableProps,
+} from "./advanced-data-table-types";
 
 /**
  * Server-driven pagination. When passed, the internal client-side paginator is
@@ -46,68 +47,6 @@ export type { ColumnDef };
  * optional `onPrevPage` control the nav buttons; `isFetching` disables them
  * mid-request. `pageSize` is used only for display sizing hints.
  */
-export interface DataTableLabels {
-  columns: string;
-  comfortable: string;
-  compact: string;
-  density: string;
-  exportCsv: string;
-  loading: string;
-  nextPage: string;
-  noMatches: string;
-  noRecords: string;
-  of: string;
-  options: string;
-  page: string;
-  previousPage: string;
-  resetView: string;
-  results: string;
-  rowsPerPage: string;
-  search: string;
-  searchPlaceholder: string;
-  selectAllRows: string;
-  selected: string;
-  selectRow: string;
-  shown: string;
-  savedViews: string;
-  saveView: string;
-  viewName: string;
-  deleteView: string;
-  total: string;
-}
-
-export interface DataTableProps<T> {
-  bulkActions?: (
-    selectedIds: string[],
-    clearSelection: () => void,
-  ) => React.ReactNode;
-  columns: ColumnDef<T, any>[];
-  data: T[];
-  empty?: string;
-  enableRowSelection?: boolean;
-  exportFileName?: false | string;
-  formatNumber?: (value: number) => React.ReactNode;
-  getRowId?: (row: T, index: number) => string;
-  labels: DataTableLabels;
-  globalFilter?: string;
-  manualFiltering?: boolean;
-  manualSorting?: boolean;
-  maxBodyHeight?: number;
-  minTableWidth?: number;
-  onGlobalFilterChange?: OnChangeFn<string>;
-  onPaginationChange?: OnChangeFn<PaginationState>;
-  onRowActivate?: (row: T) => void;
-  onSortingChange?: OnChangeFn<SortingState>;
-  pagination?: PaginationState;
-  pageSize?: number;
-  preferenceKey?: string;
-  rowAriaLabel?: (row: T) => string;
-  searchVisibility?: "auto" | "always" | "hidden";
-  serverPagination?: ServerPagination;
-  serverState?: ServerTableState;
-  sorting?: SortingState;
-}
-
 /**
  * Headless TanStack Table v8, styled Linear-dense: sticky header, hairline
  * rows, click-to-sort. Auto-adds a global search when there are enough rows,
@@ -122,10 +61,11 @@ export interface DataTableProps<T> {
  *   pass `getRowId` if the row objects don't have an `id` field.
  */
 export function DataTable<T>({
+  authority,
   columns,
   data,
   empty,
-  exportFileName = "romeo-table.csv",
+  exportFileName,
   maxBodyHeight,
   minTableWidth,
   globalFilter: controlledGlobalFilter,
@@ -139,6 +79,7 @@ export function DataTable<T>({
   pageSize = 25,
   preferenceKey,
   rowAriaLabel,
+  rowHref,
   searchVisibility = "auto",
   serverPagination,
   serverState,
@@ -197,13 +138,19 @@ export function DataTable<T>({
     ? serverPaginationChangeHandler(serverState)
     : (onPaginationChange ?? setInternalPagination);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [savedViews, setSavedViews] = useState<TableSavedView[]>(() =>
-    readTableSavedViews(
-      resolvedPreferenceKey,
-      new Set(preferenceColumnIds),
-      pageSize,
-    ),
+  const validColumnIds = useMemo(
+    () => new Set(preferenceColumnIds),
+    [preferenceColumnIds],
   );
+  const tableAuthority = useDataTableAuthority({
+    authority,
+    initialPageSize: pageSize,
+    operationFailureMessage: labels.operationFailed,
+    preferenceKey: resolvedPreferenceKey,
+    serverAuthorityUnavailableMessage: labels.serverAuthorityUnavailable,
+    validColumnIds,
+  });
+  const resolvedExportFileName = exportFileName ?? labels.defaultExportFileName;
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualize = maxBodyHeight !== undefined;
   // Server pagination is authoritative: the parent owns page state, so the
@@ -214,6 +161,10 @@ export function DataTable<T>({
   const clientPaginate = !virtualize && !resolvedServerPagination;
 
   useEffect(() => {
+    setRowSelection({});
+  }, [serverState?.scopeKey]);
+
+  useEffect(() => {
     writeTablePreferences(resolvedPreferenceKey, {
       columnVisibility,
       density,
@@ -221,41 +172,37 @@ export function DataTable<T>({
     });
   }, [columnVisibility, density, pagination.pageSize, resolvedPreferenceKey]);
 
-  const selectionColumn: ColumnDef<T, any> = {
-    id: "__select__",
-    enableSorting: false,
-    enableHiding: false,
-    size: 36,
-    header: ({ table }) => (
-      <Checkbox
-        aria-label={labels.selectAllRows}
-        checked={
-          table.getIsAllRowsSelected()
-            ? true
-            : table.getIsSomeRowsSelected()
-              ? "indeterminate"
-              : false
-        }
-        className="rm-table-select"
-        onCheckedChange={(checked) =>
-          table.toggleAllRowsSelected(checked === true)
-        }
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        aria-label={labels.selectRow}
-        checked={row.getIsSelected()}
-        className="rm-table-select"
-        disabled={!row.getCanSelect()}
-        onCheckedChange={(checked) => row.toggleSelected(checked === true)}
-      />
-    ),
-  };
+  const { deselectRow, selectAllRows, selectRow } = labels;
+  const selectionColumn = useMemo(
+    () =>
+      createSelectionColumn({
+        labels: { deselectRow, selectAllRows, selectRow },
+        rowAriaLabel,
+      }),
+    [deselectRow, rowAriaLabel, selectAllRows, selectRow],
+  );
 
-  const resolvedColumns = enableRowSelection
-    ? [selectionColumn, ...columns]
-    : columns;
+  const serverColumns = useMemo(
+    () =>
+      serverState?.sortFieldByColumnId === undefined
+        ? columns
+        : columns.map((column) => {
+            const id = columnDefinitionId(column);
+            return {
+              ...column,
+              enableSorting:
+                column.enableSorting !== false &&
+                id !== undefined &&
+                serverState.sortFieldByColumnId?.[id] !== undefined,
+            };
+          }),
+    [columns, serverState?.sortFieldByColumnId],
+  );
+  const resolvedColumns = useMemo(
+    () =>
+      enableRowSelection ? [selectionColumn, ...serverColumns] : serverColumns,
+    [enableRowSelection, selectionColumn, serverColumns],
+  );
 
   const table = useReactTable({
     columns: resolvedColumns,
@@ -301,7 +248,10 @@ export function DataTable<T>({
   const selectedIds = selectedRows.map((r) => r.id);
   const clearSelection = () => table.resetRowSelection();
   const showBulkToolbar =
-    enableRowSelection && bulkActions != null && selectedIds.length > 0;
+    enableRowSelection &&
+    bulkActions != null &&
+    selectedIds.length > 0 &&
+    (serverState === undefined || serverState.status === "success");
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -323,7 +273,7 @@ export function DataTable<T>({
       (column) => column.id !== "__select__" && column.accessorFn !== undefined,
     );
   const canExport =
-    exportFileName !== false &&
+    resolvedExportFileName !== false &&
     exportableColumns.length > 0 &&
     filteredRows.length > 0;
 
@@ -340,7 +290,7 @@ export function DataTable<T>({
       })),
       exportRows,
     );
-    downloadCsv(csv, exportFileName);
+    downloadCsv(csv, resolvedExportFileName);
   }
 
   function resetView() {
@@ -355,25 +305,19 @@ export function DataTable<T>({
     setRowSelection({});
   }
 
-  function saveView(name: string) {
+  function currentView(name: string): TableSavedView {
     const savedView: TableSavedView = {
       columnVisibility,
       density,
+      filters: [
+        ...(serverState?.requestedFilters ?? serverState?.filters ?? []),
+      ],
       globalFilter,
       name,
       pageSize: pagination.pageSize,
       sorting,
     };
-    setSavedViews((current) => {
-      const next = [
-        ...current.filter(
-          (view) => view.name.toLocaleLowerCase() !== name.toLocaleLowerCase(),
-        ),
-        savedView,
-      ].sort((left, right) => left.name.localeCompare(right.name));
-      writeTableSavedViews(resolvedPreferenceKey, next);
-      return next;
-    });
+    return savedView;
   }
 
   function applySavedView(view: TableSavedView) {
@@ -382,15 +326,8 @@ export function DataTable<T>({
     updateGlobalFilter(view.globalFilter);
     updateSorting(view.sorting);
     updatePagination({ pageIndex: 0, pageSize: view.pageSize });
+    serverState?.onFiltersChange?.(view.filters ?? []);
     setRowSelection({});
-  }
-
-  function deleteSavedView(name: string) {
-    setSavedViews((current) => {
-      const next = current.filter((view) => view.name !== name);
-      writeTableSavedViews(resolvedPreferenceKey, next);
-      return next;
-    });
   }
 
   const summary = [
@@ -407,9 +344,21 @@ export function DataTable<T>({
   ]
     .filter(Boolean)
     .join(" · ");
+  const accessibleTotal = serverState?.total ?? {
+    mode: "exact" as const,
+    value: filteredRows.length,
+  };
+  const totalSummary =
+    accessibleTotal.mode === "unknown"
+      ? undefined
+      : `${accessibleTotal.mode === "estimated" ? `${labels.approximate} ` : ""}${formatNumber(accessibleTotal.value)} ${labels.total}`;
 
   return (
     <div
+      aria-busy={
+        serverState?.status === "loading" ||
+        serverState?.isScopeTransition === true
+      }
       className="rm-table-block"
       data-page-size={pagination.pageSize}
       data-row-count={data.length}
@@ -417,29 +366,57 @@ export function DataTable<T>({
       data-virtualized={virtualize}
     >
       <DataTableControls
-        canExport={canExport}
+        canExport={canExport && !tableAuthority.pending}
         showPageSize={clientPaginate || serverState !== undefined}
         density={density}
         globalFilter={globalFilter}
         labels={labels}
-        onExport={exportRows}
+        authorityError={tableAuthority.error}
+        authorityPending={tableAuthority.pending}
+        onExport={() => {
+          if (authority === undefined) exportRows();
+          else
+            void tableAuthority.exportView(
+              currentView("export"),
+              serverState?.total.mode === "unknown"
+                ? filteredRows.length
+                : (serverState?.total.value ?? filteredRows.length),
+            );
+        }}
         onApplySavedView={applySavedView}
-        onDeleteSavedView={deleteSavedView}
+        onDeleteSavedView={(view) => void tableAuthority.deleteView(view)}
         onReset={resetView}
-        onSaveView={saveView}
+        onSaveView={(name) => tableAuthority.saveView(currentView(name))}
+        onSetDefaultView={(view, isDefault) =>
+          void tableAuthority.setDefaultView(view, isDefault)
+        }
+        onSetViewVisibility={(view, visibility) =>
+          void tableAuthority.setViewVisibility(view, visibility)
+        }
+        onUndoDeleteSavedView={tableAuthority.undoDeleteView}
         pageSize={pagination.pageSize}
         setDensity={setDensity}
-        savedViews={savedViews}
-        showExport={exportFileName !== false && serverState === undefined}
+        savedViews={tableAuthority.savedViews}
+        pendingDeletedView={tableAuthority.pendingDeletedView}
+        showExport={
+          resolvedExportFileName !== false &&
+          (serverState === undefined || authority !== undefined)
+        }
         showSearch={showSearch}
         table={table}
       />
       <span aria-live="polite" className="sr-only" role="status">
-        {summary}
+        {[summary, totalSummary, tableAuthority.statusMessage]
+          .filter(Boolean)
+          .join(" · ")}
       </span>
 
       {showBulkToolbar ? (
-        <div className="rm-table-bulk" role="toolbar">
+        <div
+          aria-label={labels.bulkActions}
+          className="rm-table-bulk"
+          role="toolbar"
+        >
           <span className="rm-table-bulk-count">
             {formatNumber(selectedIds.length)} {labels.selected}
           </span>
@@ -449,23 +426,47 @@ export function DataTable<T>({
         </div>
       ) : null}
 
-      <DataTableGrid
-        density={density}
-        empty={resolvedEmpty}
-        globalFilter={globalFilter}
-        maxBodyHeight={maxBodyHeight}
-        minTableWidth={minTableWidth}
-        noMatches={labels.noMatches}
-        onRowActivate={onRowActivate}
-        padBottom={padBottom}
-        padTop={padTop}
-        rowAriaLabel={rowAriaLabel}
-        rows={rows}
-        scrollRef={scrollRef}
-        table={table}
-        virtualItems={virtualItems}
-        virtualize={virtualize}
-      />
+      {serverState?.status === "error" ? (
+        <div className="rm-table-empty" role="alert">
+          <p>{labels.error}</p>
+          {serverState.retry ? (
+            <Button onClick={serverState.retry} variant="secondary">
+              {labels.retry}
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <DataTableGrid
+          density={density}
+          empty={
+            serverState?.status === "loading" ||
+            serverState?.isScopeTransition === true
+              ? labels.loading
+              : resolvedEmpty
+          }
+          globalFilter={globalFilter}
+          maxBodyHeight={maxBodyHeight}
+          minTableWidth={minTableWidth}
+          noMatches={labels.noMatches}
+          onRowActivate={
+            serverState === undefined || serverState.status === "success"
+              ? onRowActivate
+              : undefined
+          }
+          padBottom={padBottom}
+          padTop={padTop}
+          rowAriaLabel={rowAriaLabel}
+          rowHref={rowHref}
+          rows={rows}
+          pageIndex={pagination.pageIndex}
+          pageSize={pagination.pageSize}
+          scrollRef={scrollRef}
+          table={table}
+          virtualItems={virtualItems}
+          virtualize={virtualize}
+          total={accessibleTotal}
+        />
+      )}
 
       {showPager ? (
         <ClientTablePager
@@ -475,7 +476,7 @@ export function DataTable<T>({
         />
       ) : null}
 
-      {resolvedServerPagination ? (
+      {resolvedServerPagination && serverState?.status !== "error" ? (
         <ServerTablePager
           dataLength={data.length}
           formatNumber={formatNumber}
@@ -488,3 +489,11 @@ export function DataTable<T>({
 }
 
 function ignoreChange(): void {}
+
+function columnDefinitionId<T>(column: ColumnDef<T, any>): string | undefined {
+  if ("id" in column && typeof column.id === "string") return column.id;
+  if ("accessorKey" in column && typeof column.accessorKey === "string") {
+    return column.accessorKey;
+  }
+  return undefined;
+}

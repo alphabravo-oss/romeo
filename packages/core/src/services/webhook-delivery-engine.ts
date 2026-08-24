@@ -10,41 +10,38 @@ import type {
 } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
-import {
-  assertConnectorHostAllowed,
-  isRedirectResponse,
-  type WebsiteConnectorHostLookup,
-} from "./data-connector-network-policy";
-import { dnsPinnedFetch, type DnsPinnedFetch } from "./dns-pinned-fetch";
+import type { WebsiteConnectorHostLookup } from "./data-connector-network-policy";
+import type { DnsPinnedFetch } from "./dns-pinned-fetch";
+import { hardenedWebhookFetch } from "./hardened-webhook-fetch";
 import {
   nextRetryAt,
   publicWebhookDelivery,
   summarizeWebhookPayload,
 } from "./webhook-service-helpers";
-import { deriveWebhookSecret, signWebhookPayload } from "./webhook-signing";
+import { WebhookSigningKeyring } from "./webhook-signing-keyring";
 
 export interface WebhookDeliveryEngineOptions {
   fetchImpl?: typeof fetch;
   hostLookup?: WebsiteConnectorHostLookup;
   pinnedFetchImpl?: DnsPinnedFetch;
   signingKey: string;
+  signingKeyPrevious?: string;
   timeoutMs?: number;
   retryLeaseMs?: number;
 }
 
 export class WebhookDeliveryEngine {
-  private readonly fetchImpl: typeof fetch;
-  private readonly pinnedFetchImpl: DnsPinnedFetch | undefined;
+  private readonly signingKeyring: WebhookSigningKeyring;
 
   constructor(
     private readonly repository: RomeoRepository,
     private readonly options: WebhookDeliveryEngineOptions,
     private readonly retryWorkerId: string,
   ) {
-    this.fetchImpl = options.fetchImpl ?? fetch;
-    this.pinnedFetchImpl =
-      options.pinnedFetchImpl ??
-      (options.fetchImpl === undefined ? dnsPinnedFetch : undefined);
+    this.signingKeyring = new WebhookSigningKeyring({
+      active: options.signingKey,
+      previous: options.signingKeyPrevious,
+    });
   }
 
   async deliver(
@@ -110,11 +107,12 @@ export class WebhookDeliveryEngine {
       createdAt: delivery.createdAt,
       data: payload,
     });
-    const secret = await deriveWebhookSecret(
-      this.options.signingKey,
+    const signatures = await this.signingKeyring.sign(
       subscription.id,
+      timestamp,
+      body,
     );
-    const signature = await signWebhookPayload(secret, timestamp, body);
+    attempt.signatureKeyVersion = signatures.active.version;
 
     try {
       const response = await this.fetchWebhook(subscription.url, {
@@ -124,7 +122,15 @@ export class WebhookDeliveryEngine {
           "user-agent": romeoUserAgent("Webhooks"),
           "x-romeo-delivery": delivery.id,
           "x-romeo-event": delivery.eventType,
-          "x-romeo-signature": signature,
+          "x-romeo-signature": signatures.active.signature,
+          "x-romeo-signature-version": signatures.active.version,
+          ...(signatures.previous === undefined
+            ? {}
+            : {
+                "x-romeo-signature-previous": signatures.previous.signature,
+                "x-romeo-signature-previous-version":
+                  signatures.previous.version,
+              }),
           "x-romeo-timestamp": timestamp,
         },
         body,
@@ -191,68 +197,20 @@ export class WebhookDeliveryEngine {
     target: string,
     init: RequestInit,
   ): Promise<{ ok: boolean; status: number }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort("webhook_delivery_timeout"),
-      this.options.timeoutMs ?? 10_000,
-    );
-    timeout.unref?.();
-    let currentUrl = new URL(target);
-    try {
-      for (let redirectCount = 0; ; redirectCount += 1) {
-        const approvedAddresses = await assertConnectorHostAllowed(
-          currentUrl,
-          this.options.hostLookup === undefined
-            ? {}
-            : { hostLookup: this.options.hostLookup },
-        );
-        const requestInit: RequestInit = {
-          ...init,
-          redirect: "manual",
-          signal: controller.signal,
-        };
-        const response =
-          this.pinnedFetchImpl === undefined || approvedAddresses.length === 0
-            ? await this.fetchImpl(currentUrl.toString(), requestInit)
-            : await this.pinnedFetchImpl(
-                currentUrl,
-                requestInit,
-                approvedAddresses,
-              );
-        if (!isRedirectResponse(response)) {
-          const result = { ok: response.ok, status: response.status };
-          await cancelResponseBody(response);
-          return result;
-        }
-
-        const location = response.headers.get("location");
-        await cancelResponseBody(response);
-        if (location === null) return { ok: false, status: response.status };
-        if (redirectCount >= 5)
-          throw new ApiError(
-            "webhook_redirect_limit_exceeded",
-            "Webhook delivery exceeded the redirect limit.",
-            502,
-          );
-        const redirected = new URL(location, currentUrl);
-        if (redirected.protocol !== "https:")
-          throw new ApiError(
-            "invalid_webhook_url",
-            "Webhook redirects must use HTTPS.",
-            400,
-          );
-        currentUrl = redirected;
-      }
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-}
-
-async function cancelResponseBody(response: Response): Promise<void> {
-  try {
-    await response.body?.cancel();
-  } catch {
-    // Delivery status is already known; body disposal is best-effort cleanup.
+    const response = await hardenedWebhookFetch(target, init, {
+      ...(this.options.fetchImpl === undefined
+        ? {}
+        : { fetchImpl: this.options.fetchImpl }),
+      ...(this.options.hostLookup === undefined
+        ? {}
+        : { hostLookup: this.options.hostLookup }),
+      ...(this.options.pinnedFetchImpl === undefined
+        ? {}
+        : { pinnedFetchImpl: this.options.pinnedFetchImpl }),
+      ...(this.options.timeoutMs === undefined
+        ? {}
+        : { timeoutMs: this.options.timeoutMs }),
+    });
+    return { ok: response.ok, status: response.status };
   }
 }

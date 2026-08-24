@@ -2,7 +2,7 @@ import { testEnv } from "../test-support/env";
 import { describe, expect, it, vi } from "vitest";
 
 import { InMemoryRomeoRepository } from "../repositories/in-memory";
-import { OidcClient } from "./oidc-client";
+import { createOidcRuntimeCache, OidcClient } from "./oidc-client";
 import type { ResolvedSsoOidcConfig } from "./sso-config";
 
 const issuer = "https://identity.example.com";
@@ -31,6 +31,80 @@ function discoveryResponse(): Response {
 }
 
 describe("OidcClient configuration cache", () => {
+  it("single-flights discovery across repository-scoped client instances", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      await gate;
+      return discoveryResponse();
+    });
+    const runtimeCache = createOidcRuntimeCache();
+    const clients = [
+      new OidcClient(new InMemoryRomeoRepository(), testEnv(), {
+        fetchImpl,
+        runtimeCache,
+      }),
+      new OidcClient(new InMemoryRomeoRepository(), testEnv(), {
+        fetchImpl,
+        runtimeCache,
+      }),
+    ];
+    const configurations = clients.map((client) =>
+      client.configuredWithConfig("org-a", config("app-a")),
+    );
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+    release?.();
+
+    await expect(Promise.all(configurations)).resolves.toHaveLength(2);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("rejects discovery metadata for a different issuer", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        issuer: "https://attacker.example.net",
+        jwks_uri: `${issuer}/keys`,
+      }),
+    );
+    const client = new OidcClient(new InMemoryRomeoRepository(), testEnv(), {
+      fetchImpl,
+    });
+
+    await expect(
+      client.configuredWithConfig("org-a", config("app-a")),
+    ).rejects.toThrow(
+      "discovered metadata issuer does not match the expected issuer",
+    );
+  });
+
+  it("rejects a cross-origin JWKS URI unless its exact origin is allowed", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        issuer,
+        authorization_endpoint: `${issuer}/authorize`,
+        token_endpoint: `${issuer}/token`,
+        jwks_uri: "https://keys.example.net/jwks",
+      }),
+    );
+    const blocked = new OidcClient(new InMemoryRomeoRepository(), testEnv(), {
+      fetchImpl,
+    });
+    await expect(
+      blocked.configuredWithConfig("org-a", config("app-a")),
+    ).rejects.toThrow("oidc_endpoint_origin_blocked");
+
+    const allowed = new OidcClient(
+      new InMemoryRomeoRepository(),
+      testEnv({ OIDC_ENDPOINT_ALLOWED_ORIGINS: "https://keys.example.net" }),
+      { fetchImpl },
+    );
+    await expect(
+      allowed.configuredWithConfig("org-a", config("app-a")),
+    ).resolves.toMatchObject({ orgId: "org-a" });
+  });
+
   it("does not share an issuer configuration across tenant client IDs", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => discoveryResponse());
     const client = new OidcClient(new InMemoryRomeoRepository(), testEnv(), {
@@ -83,6 +157,62 @@ describe("OidcClient configuration cache", () => {
     await client.configuredWithConfig("org-a", config("app-a"));
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("caps caller-provided cache TTLs at the deployment maximum", async () => {
+    let now = 1_000;
+    const fetchImpl = vi.fn<typeof fetch>(async () => discoveryResponse());
+    const client = new OidcClient(new InMemoryRomeoRepository(), testEnv(), {
+      cacheTtlMs: Number.MAX_SAFE_INTEGER,
+      fetchImpl,
+      now: () => now,
+    });
+
+    await client.configuredWithConfig("org-a", config("app-a"));
+    now += 60 * 60 * 1000 + 1;
+    await client.configuredWithConfig("org-a", config("app-a"));
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("expires JWKS cache entries and fetches current keys again", async () => {
+    const key = await createRsaKeyPair("cache-key");
+    let now = Date.now();
+    let jwksFetches = 0;
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = input instanceof URL ? input.toString() : String(input);
+      if (url === `${issuer}/keys`) {
+        jwksFetches += 1;
+        return Response.json({ keys: [key.publicJwk] });
+      }
+      return discoveryResponse();
+    });
+    const client = new OidcClient(new InMemoryRomeoRepository(), testEnv(), {
+      cacheTtlMs: 100,
+      fetchImpl,
+      now: () => now,
+    });
+    const token = await signJwt(key.privateKey, "cache-key", {
+      iss: issuer,
+      sub: "cache-user",
+      aud: "app-a",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      email: "cache-user@example.com",
+      name: "Cache User",
+      groups: [],
+    });
+
+    await client.authenticateJwtWithConfig(token, {
+      config: config("app-a"),
+      orgId: "org_default",
+    });
+    now += 101;
+    await client.authenticateJwtWithConfig(token, {
+      config: config("app-a"),
+      orgId: "org_default",
+    });
+
+    expect(jwksFetches).toBe(2);
   });
 
   it("refreshes JWKS once for an unknown kid and rate limits repeated misses", async () => {

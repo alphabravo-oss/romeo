@@ -110,7 +110,7 @@ build-backend = "setuptools.build_meta"
 function readme(spec, operationCount) {
   return `# Romeo Python Client
 
-This SDK is generated from ${spec.info.title} ${spec.info.version}. It uses only the Python standard library and exposes a generic OpenAPI operation caller plus small convenience methods for common workflows.
+This SDK is generated from ${spec.info.title} ${spec.info.version}. It uses only the Python standard library and exposes a generic OpenAPI operation caller plus small convenience methods for common operations.
 
 ## Generate
 
@@ -132,11 +132,6 @@ chat = client.create_chat("workspace_default", "Python check")
 run = client.start_run(chat["id"], agents[0]["id"], "Hello Romeo")
 device = client.create_device_authorization("MacBook", ["me:read", "chats:read"], ttl_days=90)
 rotated = client.refresh_device_authorization(device["refreshToken"])
-workflow = client.create_workflow(
-    "workspace_default",
-    "Review flow",
-    [{"type": "agent_run", "name": "Draft", "agentId": agents[0]["id"]}, {"type": "approval", "name": "Review"}],
-)
 \`\`\`
 `;
 }
@@ -453,25 +448,6 @@ class RomeoClient:
     def revoke_device_authorization(self, device_authorization_id: str) -> Any:
         path = "/api/v1/device-authorizations/" + quote(device_authorization_id, safe="") + "/revoke"
         return self.data("POST", path)
-
-    def list_workflows(self, workspace_id: str | None = None) -> Any:
-        return self.data("GET", "/api/v1/workflows", query={"workspaceId": workspace_id})
-
-    def create_workflow(self, workspace_id: str, name: str, steps: list[dict[str, Any]], description: str | None = None) -> Any:
-        body = {"workspaceId": workspace_id, "name": name, "steps": steps}
-        if description is not None:
-            body["description"] = description
-        return self.data("POST", "/api/v1/workflows", json_body=body)
-
-    def start_workflow_run(self, workflow_id: str, run_input: dict[str, Any] | None = None) -> Any:
-        path = "/api/v1/workflows/" + quote(workflow_id, safe="") + "/runs"
-        body = {} if run_input is None else {"input": run_input}
-        return self.data("POST", path, json_body=body)
-
-    def approve_workflow_run(self, workflow_run_id: str, comment: str | None = None) -> Any:
-        path = "/api/v1/workflow-runs/" + quote(workflow_run_id, safe="") + "/approve"
-        body = {} if comment is None else {"comment": comment}
-        return self.data("POST", path, json_body=body)
 
     def claim_browser_automation_task(self, lease_seconds: int | None = None) -> Any:
         body = {} if lease_seconds is None else {"leaseSeconds": lease_seconds}

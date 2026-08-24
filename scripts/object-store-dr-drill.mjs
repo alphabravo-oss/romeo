@@ -60,7 +60,12 @@ if (!confirmed) {
 const startedAt = new Date();
 const restoreResult = spawnSync(
   process.execPath,
-  ["scripts/object-store-restore.mjs", "--manifest", manifestPath, "--confirm"],
+  [
+    "scripts/object-store-restore.mjs",
+    "--manifest",
+    manifestPath,
+    "--confirm-isolated-target",
+  ],
   {
     cwd: resolveRepoPath("."),
     env: process.env,

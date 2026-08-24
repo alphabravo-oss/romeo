@@ -78,6 +78,19 @@ function matchesDeclaredMimeType(bytes: Uint8Array, mimeType: string): boolean {
       bytes.length >= 12 &&
       asciiAt(bytes, 8, 4) === "WEBP"
     );
+  if (mimeType === "audio/flac") return startsWithAscii(bytes, "fLaC");
+  if (mimeType === "audio/ogg") return startsWithAscii(bytes, "OggS");
+  if (mimeType === "audio/wav")
+    return startsWithAscii(bytes, "RIFF") && asciiAt(bytes, 8, 4) === "WAVE";
+  if (mimeType === "audio/webm")
+    return startsWithBytes(bytes, [0x1a, 0x45, 0xdf, 0xa3]);
+  if (mimeType === "audio/mp4" || mimeType === "audio/m4a")
+    return bytes.length >= 12 && asciiAt(bytes, 4, 4) === "ftyp";
+  if (mimeType === "audio/mpeg")
+    return (
+      startsWithAscii(bytes, "ID3") ||
+      (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1]! & 0xe0) === 0xe0)
+    );
   if (ooxmlMimeTypes.has(mimeType))
     return startsWithBytes(bytes, [0x50, 0x4b, 0x03, 0x04]);
   if (mimeType === "application/json") return isJsonText(bytes);

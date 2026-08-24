@@ -188,7 +188,7 @@
   place-items: center;
   background: linear-gradient(
     135deg,
-    var(--rm-accent),
+    var(--rm-accent-solid),
     var(--rm-accent-secondary)
   );
   color: var(--rm-on-accent);
@@ -325,7 +325,7 @@
   border: 2px solid var(--rm-sidebar);
   border-radius: 999px;
   padding: 0 2px;
-  background: var(--rm-accent);
+  background: var(--rm-accent-solid);
   color: var(--rm-on-accent);
   font-size: 8px;
   font-weight: 700;

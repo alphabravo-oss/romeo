@@ -2,9 +2,7 @@ import { getDataConnectorCatalogEntry } from "../domain/data-connector-catalog";
 import type { DataConnector, DataConnectorType } from "../domain/entities";
 import { ApiError } from "../errors";
 import {
-  boundedString,
   isSafeGitHubPathPart,
-  normalizeApiPath,
   normalizeExternalHttpsUrl,
   normalizePathPrefix,
 } from "./data-connector-config-paths";
@@ -29,28 +27,6 @@ export function normalizeConnectorConfig(
     return withOptionalSourceAccessMode(normalizeGitHubConfig(config), config);
   if (type === "s3")
     return withOptionalSourceAccessMode(normalizeS3Config(config), config);
-  if (type === "confluence")
-    return withOptionalSourceAccessMode(
-      normalizeAtlassianConfig(config, {
-        apiPath: "/wiki/rest/api/content/search",
-        queryKey: "cql",
-      }),
-      config,
-    );
-  if (type === "jira")
-    return withOptionalSourceAccessMode(
-      normalizeAtlassianConfig(config, {
-        apiPath: "/rest/api/3/search/jql",
-        queryKey: "jql",
-      }),
-      config,
-    );
-  if (type === "notion")
-    return withOptionalSourceAccessMode(normalizeNotionConfig(config), config);
-  if (type === "linear")
-    return withOptionalSourceAccessMode(normalizeLinearConfig(config), config);
-  if (type === "slack")
-    return withOptionalSourceAccessMode(normalizeSlackConfig(config), config);
   if (type === "website") {
     return withOptionalSourceAccessMode(
       {
@@ -79,143 +55,6 @@ function unsupportedConnectorType(type: never): never {
     400,
     { type },
   );
-}
-
-function normalizeAtlassianConfig(
-  config: Record<string, unknown>,
-  defaults: { apiPath: string; queryKey: "cql" | "jql" },
-): Record<string, unknown> {
-  return withRequiredSecretRef(
-    {
-      baseUrl: normalizeExternalHttpsUrl(requiredString(config, "baseUrl")),
-      apiPath: normalizeApiPath(
-        optionalString(config, "apiPath") ?? defaults.apiPath,
-      ),
-      [defaults.queryKey]: boundedString(
-        requiredString(config, defaults.queryKey),
-        1_000,
-        defaults.queryKey,
-      ),
-      maxItems: boundedInt(config.maxItems, 1, 100, 25, "maxItems"),
-    },
-    config,
-  );
-}
-
-function normalizeNotionConfig(
-  config: Record<string, unknown>,
-): Record<string, unknown> {
-  return withRequiredSecretRef(
-    {
-      apiUrl: normalizeExternalHttpsUrl(
-        optionalString(config, "apiUrl") ?? "https://api.notion.com",
-      ),
-      apiVersion: normalizeDateVersion(
-        optionalString(config, "apiVersion") ?? "2026-03-11",
-        "apiVersion",
-      ),
-      query: boundedString(requiredString(config, "query"), 500, "query"),
-      maxItems: boundedInt(config.maxItems, 1, 100, 25, "maxItems"),
-      maxBlocksPerPage: boundedInt(
-        config.maxBlocksPerPage,
-        1,
-        100,
-        25,
-        "maxBlocksPerPage",
-      ),
-    },
-    config,
-  );
-}
-
-function normalizeLinearConfig(
-  config: Record<string, unknown>,
-): Record<string, unknown> {
-  const query = optionalString(config, "query");
-  return withRequiredSecretRef(
-    {
-      apiUrl: normalizeExternalHttpsUrl(
-        optionalString(config, "apiUrl") ?? "https://api.linear.app/graphql",
-      ),
-      ...(query === undefined
-        ? {}
-        : { query: boundedString(query, 500, "query") }),
-      maxItems: boundedInt(config.maxItems, 1, 100, 25, "maxItems"),
-    },
-    config,
-  );
-}
-
-function normalizeSlackConfig(
-  config: Record<string, unknown>,
-): Record<string, unknown> {
-  return withRequiredSecretRef(
-    {
-      apiUrl: normalizeExternalHttpsUrl(
-        optionalString(config, "apiUrl") ?? "https://slack.com/api",
-      ),
-      channelIds: requiredSlackChannelIds(config.channelIds),
-      maxItemsPerChannel: boundedInt(
-        config.maxItemsPerChannel,
-        1,
-        100,
-        50,
-        "maxItemsPerChannel",
-      ),
-      ...optionalSlackTimestamp(config, "oldest"),
-      ...optionalSlackTimestamp(config, "latest"),
-    },
-    config,
-  );
-}
-
-function requiredSlackChannelIds(value: unknown): string[] {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 50) {
-    throw new ApiError(
-      "invalid_connector_config",
-      "Slack connector channelIds must be a non-empty array of at most 50 channel IDs.",
-      400,
-    );
-  }
-  const channelIds = value.map((item) => {
-    if (typeof item !== "string" || !/^[A-Z0-9]{2,32}$/u.test(item.trim())) {
-      throw new ApiError(
-        "invalid_connector_config",
-        "Slack connector channelIds must contain Slack channel IDs.",
-        400,
-      );
-    }
-    return item.trim();
-  });
-  return [...new Set(channelIds)];
-}
-
-function optionalSlackTimestamp(
-  config: Record<string, unknown>,
-  key: "latest" | "oldest",
-): Record<string, unknown> {
-  const value = optionalString(config, key);
-  if (value === undefined) return {};
-  if (!/^\d{10}(?:\.\d{1,6})?$/u.test(value)) {
-    throw new ApiError(
-      "invalid_connector_config",
-      `Slack connector ${key} must be a Slack timestamp.`,
-      400,
-    );
-  }
-  return { [key]: value };
-}
-
-function normalizeDateVersion(value: string, key: string): string {
-  const normalized = value.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/u.test(normalized)) {
-    throw new ApiError(
-      "invalid_connector_config",
-      `Connector config ${key} must use YYYY-MM-DD format.`,
-      400,
-    );
-  }
-  return normalized;
 }
 
 function withRequiredSecretRef(
@@ -317,7 +156,7 @@ function normalizeS3Config(
       400,
     );
   }
-  return withOptionalSecretRef(
+  return withRequiredSecretRef(
     {
       bucket,
       prefix: optionalString(config, "prefix") ?? "",
@@ -326,16 +165,6 @@ function normalizeS3Config(
     },
     config,
   );
-}
-
-function withOptionalSecretRef(
-  base: Record<string, unknown>,
-  config: Record<string, unknown>,
-): Record<string, unknown> {
-  const secretRef = optionalString(config, "secretRef");
-  if (secretRef === undefined) return base;
-  assertManagedSecretRef(secretRef);
-  return { ...base, secretRef };
 }
 
 function withOptionalCredentialSource(
@@ -351,6 +180,13 @@ function withOptionalCredentialSource(
     throw new ApiError(
       "invalid_connector_config",
       "GitHub connector can use secretRef or delegatedOAuthConnectionId, not both.",
+      400,
+    );
+  }
+  if (secretRef === undefined && delegatedOAuthConnectionId === undefined) {
+    throw new ApiError(
+      "connector_github_credentials_required",
+      "GitHub connector requires secretRef or delegatedOAuthConnectionId.",
       400,
     );
   }

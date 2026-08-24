@@ -28,6 +28,7 @@
   "usersDisableConfirmBody": "They are signed out and cannot sign in again until you re-enable them. Their conversations and files are kept.",
   "usersDisableConfirmTitle": "Disable this member?",
   "usersLastAdminHint": "You cannot disable the last admin.",
+  "usersScheduledWorkerName": "System worker — {operation}",
   "userUpdateRole": "Update role",
   "userUser": "User",
   "userDirectory": "Directory",

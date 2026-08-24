@@ -1,10 +1,9 @@
 import { Button, StatusBadge } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   usageAlertsQueryOptions,
-  usageEventsQueryOptions,
   usageSummaryQueryOptions,
 } from "../features/operational-governance/query-options";
 import { exportUsageEventsCsv } from "../features/operational-governance/queries";
@@ -153,26 +152,42 @@ function eventColumns(t: Translate): ColumnDef<UsageEvent, any>[] {
 
 export function UsagePanel() {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<any>("usage_events");
   const [range, setRange] = useState<RangePreset>("7d");
-  const usageQuery = useQuery(usageEventsQueryOptions(range));
-  const summaryQuery = useQuery(usageSummaryQueryOptions());
+  const interval = useMemo(() => {
+    const bounds = rangeToBounds(range, new Date());
+    return {
+      ...(bounds.from === undefined ? {} : { from: bounds.from.toISOString() }),
+      to: bounds.to.toISOString(),
+    };
+  }, [range]);
+  const inventoriedTable = useInventoriedServerTable("usage_events", {
+    filters: [
+      ...(interval.from === undefined
+        ? []
+        : [
+            {
+              field: "createdAt" as const,
+              operator: "gte" as const,
+              value: interval.from,
+            },
+          ]),
+      { field: "createdAt", operator: "lt", value: interval.to },
+    ],
+  });
+  const summaryQuery = useQuery(usageSummaryQueryOptions(interval));
   const alertsQuery = useQuery(usageAlertsQueryOptions());
   const metricDefinitionsQuery = useQuery(usageMetricDefinitionsQueryOptions());
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string>();
   const alerts = alertsQuery.data ?? [];
-  const bounds = rangeToBounds(range, new Date());
-  // ponytail: client-side range filter; move to a server parameter when the
-  // usage dataset outgrows the unpaginated endpoint response.
-  const events = (usageQuery.data ?? []).filter((event) =>
-    isWithinBounds(event.createdAt, bounds),
-  );
   const totals = summaryQuery.data?.totals ?? [];
   const runCount = metricQuantity(totals, (metric) => metric === "run.started");
   const toolCallCount = metricQuantity(
     totals,
-    (metric) => metric === "tool.call",
+    (metric) =>
+      metric === "tool.call" ||
+      metric === "tool.call.success" ||
+      metric === "tool.call.failure",
   );
   const tokenCount = tokenQuantity(totals);
   const estimatedCost = totals.reduce(
@@ -187,7 +202,7 @@ export function UsagePanel() {
         <div className="flex flex-wrap gap-2">
           <DateRangeSelect onChange={setRange} value={range} />
           <Button
-            disabled={isExporting || events.length === 0}
+            disabled={isExporting || inventoriedTable.estimatedTotal === 0}
             onClick={() => void exportCsv()}
             type="button"
           >
@@ -197,7 +212,7 @@ export function UsagePanel() {
             onRefresh={() => void refresh()}
             refreshLabel={t("usageRefresh")}
             refreshing={
-              usageQuery.isFetching ||
+              inventoriedTable.query.isFetching ||
               summaryQuery.isFetching ||
               alertsQuery.isFetching ||
               metricDefinitionsQuery.isFetching
@@ -205,6 +220,15 @@ export function UsagePanel() {
           />
         </div>
       </div>
+      <p className="mb-3 text-xs text-muted" role="status">
+        {t("usageAppliedInterval")}:{" "}
+        {interval.from ? (
+          <LocalizedDateTime value={interval.from} />
+        ) : (
+          t("usageAllTime")
+        )}{" "}
+        – <LocalizedDateTime value={interval.to} /> ({t("usageToExclusive")})
+      </p>
       {exportError ? (
         <div className="rm-composer-error mb-3" role="alert">
           {exportError}
@@ -248,6 +272,7 @@ export function UsagePanel() {
         columns={eventColumns(t)}
         data={inventoriedTable.rows}
         empty={t("usageNoEvents")}
+        preferenceKey={`usage-events-${range}`}
         serverState={inventoriedTable.serverState}
       />
       <UsageMetricCatalogSection query={metricDefinitionsQuery} t={t} />
@@ -256,7 +281,7 @@ export function UsagePanel() {
 
   async function refresh() {
     await Promise.all([
-      usageQuery.refetch(),
+      inventoriedTable.query.refetch(),
       summaryQuery.refetch(),
       alertsQuery.refetch(),
       metricDefinitionsQuery.refetch(),
@@ -267,7 +292,7 @@ export function UsagePanel() {
     setExportError(undefined);
     setIsExporting(true);
     try {
-      const csv = await exportUsageEventsCsv();
+      const csv = await exportUsageEventsCsv(interval);
       downloadCsv(csv, "romeo-usage-events.csv");
     } catch (caught) {
       setExportError(safeUserErrorMessage(caught, t("usageUnableExport")));
@@ -344,18 +369,6 @@ function humanizeMetric(metric: string): string {
   const words = metric.replace(/[._]+/gu, " ").trim();
   if (words.length === 0) return "";
   return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function isWithinBounds(
-  value: string,
-  bounds: { from: Date | undefined; to: Date },
-): boolean {
-  const instant = new Date(value).getTime();
-  return (
-    Number.isFinite(instant) &&
-    instant <= bounds.to.getTime() &&
-    (bounds.from === undefined || instant >= bounds.from.getTime())
-  );
 }
 
 function usageSeverityMessageKey(severity: UsageAlert["severity"]): MessageKey {

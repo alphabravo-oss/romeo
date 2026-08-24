@@ -6,18 +6,23 @@ import {
 } from "@romeo/api-client/generated/sdk";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
-import type {
-  EnqueueChatTurnRequest,
-  StartedRunRecord,
-} from "@romeo/api-client/generated/sdk";
-import type { QueuedChatTurn, RunRecord } from "./types";
+import type { EnqueueChatTurnRequest } from "@romeo/api-client/generated/sdk";
+import type { QueuedChatTurn, RunRecord, StartedRunRecord } from "./types";
 
 export async function startRun(
   input: Parameters<typeof runsStart>[0]["body"],
 ): Promise<StartedRunRecord> {
   configureBrowserApiClients();
   const response = await runsStart({ body: input, throwOnError: true });
-  return response.data.data;
+  const run = response.data.data;
+  if (
+    !("inputMessageId" in run) ||
+    typeof run.inputMessageId !== "string" ||
+    run.inputMessageId.length === 0
+  ) {
+    throw new TypeError("Run start response is missing inputMessageId.");
+  }
+  return run as StartedRunRecord;
 }
 
 export async function cancelRun(runId: string): Promise<RunRecord> {

@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { Toaster as SonnerToaster, toast } from "sonner";
-import { type HTMLAttributes, type ReactNode } from "react";
+import { createElement, type HTMLAttributes, type ReactNode } from "react";
 import { cn } from "./lib/cn";
 
 export function EmptyState({
@@ -8,18 +8,24 @@ export function EmptyState({
   children,
   className,
   icon,
+  headingLevel,
   title,
 }: {
   action?: ReactNode;
   children?: ReactNode;
   className?: string;
   icon?: ReactNode;
+  headingLevel: 2 | 3 | 4 | 5 | 6;
   title: ReactNode;
 }) {
   return (
     <div className={cn("rm-ui-empty", className)}>
       {icon ? <div className="rm-ui-empty__icon">{icon}</div> : null}
-      <h2 className="rm-ui-empty__title">{title}</h2>
+      {createElement(
+        `h${headingLevel}`,
+        { className: "rm-ui-empty__title" },
+        title,
+      )}
       {children ? (
         <div className="rm-ui-empty__description">{children}</div>
       ) : null}

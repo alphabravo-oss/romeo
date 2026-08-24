@@ -6,6 +6,7 @@ import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down.mjs";
 import type { RefObject } from "react";
 
 import { Button } from "./button";
+import type { ServerTableTotal } from "./server-table-state";
 
 export function DataTableGrid<T>({
   density,
@@ -15,12 +16,16 @@ export function DataTableGrid<T>({
   minTableWidth,
   noMatches,
   onRowActivate,
+  pageIndex,
+  pageSize,
   padBottom,
   padTop,
   rowAriaLabel,
+  rowHref,
   rows,
   scrollRef,
   table,
+  total,
   virtualItems,
   virtualize,
 }: {
@@ -31,48 +36,85 @@ export function DataTableGrid<T>({
   minTableWidth: number | undefined;
   noMatches: string;
   onRowActivate: ((row: T) => void) | undefined;
+  pageIndex: number;
+  pageSize: number;
   padBottom: number;
   padTop: number;
   rowAriaLabel: ((row: T) => string) | undefined;
+  rowHref: ((row: T) => string) | undefined;
   rows: Row<T>[];
   scrollRef: RefObject<HTMLDivElement | null>;
   table: Table<T>;
+  total: ServerTableTotal;
   virtualItems: VirtualItem[];
   virtualize: boolean;
 }) {
-  const renderRow = (row: Row<T>) => (
-    <tr
-      aria-label={onRowActivate ? rowAriaLabel?.(row.original) : undefined}
-      className={onRowActivate ? "rm-table-row-action" : undefined}
-      key={row.id}
-      onClick={
-        onRowActivate
-          ? (event) => {
-              if (isInteractiveTarget(event.target)) return;
-              onRowActivate(row.original);
-            }
-          : undefined
-      }
-      onKeyDown={
-        onRowActivate
-          ? (event) => {
-              if (event.key !== "Enter" && event.key !== " ") return;
-              if (isInteractiveTarget(event.target)) return;
-              event.preventDefault();
-              onRowActivate(row.original);
-            }
-          : undefined
-      }
-      role={onRowActivate ? "link" : undefined}
-      tabIndex={onRowActivate ? 0 : undefined}
-    >
-      {row.getVisibleCells().map((cell) => (
-        <td data-col={cell.column.id} key={cell.id}>
-          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-        </td>
-      ))}
-    </tr>
-  );
+  const renderRow = (row: Row<T>, visibleIndex: number) => {
+    const cells = row.getVisibleCells();
+    const primaryCellId = cells.find(
+      (cell) => cell.column.id !== "__select__",
+    )?.id;
+    const href = rowHref?.(row.original);
+    return (
+      <tr
+        aria-rowindex={pageIndex * pageSize + visibleIndex + 2}
+        className={onRowActivate || href ? "rm-table-row-action" : undefined}
+        key={row.id}
+        onClick={
+          onRowActivate
+            ? (event) => {
+                if (isInteractiveTarget(event.target)) return;
+                onRowActivate(row.original);
+              }
+            : undefined
+        }
+      >
+        {cells.map((cell) => {
+          const content = flexRender(
+            cell.column.columnDef.cell,
+            cell.getContext(),
+          );
+          return (
+            <td data-col={cell.column.id} key={cell.id}>
+              {href !== undefined && cell.id === primaryCellId ? (
+                <a
+                  aria-label={rowAriaLabel?.(row.original)}
+                  className="rm-table-row-link"
+                  href={href}
+                  onClick={(event) => {
+                    if (
+                      onRowActivate === undefined ||
+                      event.button !== 0 ||
+                      event.altKey ||
+                      event.ctrlKey ||
+                      event.metaKey ||
+                      event.shiftKey
+                    )
+                      return;
+                    event.preventDefault();
+                    onRowActivate(row.original);
+                  }}
+                >
+                  {content}
+                </a>
+              ) : onRowActivate !== undefined && cell.id === primaryCellId ? (
+                <Button
+                  aria-label={rowAriaLabel?.(row.original)}
+                  className="rm-table-row-button"
+                  onClick={() => onRowActivate(row.original)}
+                  variant="ghost"
+                >
+                  {content}
+                </Button>
+              ) : (
+                content
+              )}
+            </td>
+          );
+        })}
+      </tr>
+    );
+  };
 
   return (
     <div
@@ -83,7 +125,7 @@ export function DataTableGrid<T>({
       }
     >
       <table
-        aria-rowcount={rows.length + 1}
+        aria-rowcount={total.mode === "exact" ? total.value + 1 : undefined}
         className="rm-table"
         style={minTableWidth ? { minWidth: minTableWidth } : undefined}
       >
@@ -168,7 +210,7 @@ export function DataTableGrid<T>({
               ) : null}
               {virtualItems.map((item) => {
                 const row = rows[item.index];
-                return row ? renderRow(row) : null;
+                return row ? renderRow(row, item.index) : null;
               })}
               {padBottom > 0 ? (
                 <tr>

@@ -88,15 +88,14 @@ export class RunRecoveryCoordinator {
       (this.options.runRecoveryStaleMs ?? 120_000)
     )
       return;
-    const executionJob = (
-      await this.repository.listBackgroundJobs(running.orgId)
-    )
-      .filter(
-        (job) =>
-          job.type === runExecutionJobType(running.id) &&
-          (job.status === "queued" || job.status === "running"),
-      )
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+    const [executionJob] = await this.repository.listBackgroundJobs(
+      running.orgId,
+      {
+        limit: 1,
+        statuses: ["queued", "running"],
+        type: runExecutionJobType(running.id),
+      },
+    );
     const metadata =
       executionJob === undefined
         ? undefined
@@ -108,7 +107,8 @@ export class RunRecoveryCoordinator {
     if (
       metadata !== undefined &&
       checkpoint !== undefined &&
-      !metadata.assistantOutputStarted
+      (!metadata.assistantOutputStarted ||
+        metadata.contentPolicyApprovalId !== undefined)
     ) {
       const [model, provider] = await Promise.all([
         this.repository.getModel(running.modelId),
@@ -194,16 +194,20 @@ export class RunRecoveryCoordinator {
   private async reconcileSettledExecutions(runs: RunRecord[]): Promise<void> {
     const orgId = runs[0]?.orgId;
     if (orgId === undefined) return;
-    const jobs = await this.repository.listBackgroundJobs(orgId);
     for (const run of runs) {
       const outcome = await this.settledExecutionOutcome(run);
       if (outcome === undefined) continue;
-      const job = jobs.find(
-        (candidate) =>
-          candidate.type === runExecutionJobType(run.id) &&
-          (candidate.status === "queued" || candidate.status === "running"),
-      );
+      const [job] = await this.repository.listBackgroundJobs(orgId, {
+        limit: 1,
+        statuses: ["queued", "running"],
+        type: runExecutionJobType(run.id),
+      });
       if (job === undefined) continue;
+      if (
+        run.status === "waiting_tool_approval" &&
+        executionJobPayload(job)?.contentPolicyApprovalId !== undefined
+      )
+        continue;
       const claimed = await this.repository.claimBackgroundJob({
         orgId: run.orgId,
         type: runExecutionJobType(run.id),

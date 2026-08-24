@@ -40,7 +40,6 @@ export const namespaceNames = [
   "trust-compute",
   "user-admin",
   "web-search-admin",
-  "workflow-admin",
   "workspace-capability",
   "workspace-shell-and-connector",
 ] as const;
@@ -55,6 +54,11 @@ export const coreLocaleResources = {
 const localeLoaders = import.meta.glob<{
   default: Record<string, string>;
 }>("./{en,es,fr}/*.json");
+const localeNamespacePromises = new Map<
+  string,
+  Promise<Record<string, string>>
+>();
+const loadedLocaleNamespaces = new Map<string, Record<string, string>>();
 
 export async function loadLocaleNamespace(
   locale: string,
@@ -67,7 +71,45 @@ export async function loadLocaleNamespace(
   if (!loader) {
     throw new Error(`Missing locale namespace: ${locale}/${namespace}`);
   }
-  return (await loader()).default;
+  const key = `${locale}/${namespace}`;
+  const existing = localeNamespacePromises.get(key);
+  if (existing !== undefined) return existing;
+  const loading = loader()
+    .then((module) => {
+      loadedLocaleNamespaces.set(key, module.default);
+      return module.default;
+    })
+    .catch((error: unknown) => {
+      localeNamespacePromises.delete(key);
+      throw error;
+    });
+  localeNamespacePromises.set(key, loading);
+  return loading;
+}
+
+export async function preloadLocaleNamespaces(
+  locale: SupportedLocale,
+  namespaces: readonly LocaleNamespace[],
+): Promise<Record<string, Record<string, string>>> {
+  const unique = [...new Set(namespaces)];
+  const resources = await Promise.all(
+    unique.map(
+      async (namespace) =>
+        [namespace, await loadLocaleNamespace(locale, namespace)] as const,
+    ),
+  );
+  return Object.fromEntries(resources);
+}
+
+export function cachedLocaleNamespaces(
+  locale: SupportedLocale,
+): Record<string, Record<string, string>> {
+  return Object.fromEntries(
+    namespaceNames.flatMap((namespace) => {
+      const resource = loadedLocaleNamespaces.get(`${locale}/${namespace}`);
+      return resource === undefined ? [] : [[namespace, resource]];
+    }),
+  );
 }
 
 export function isSupportedLocale(value: string): value is SupportedLocale {
@@ -112,7 +154,6 @@ type EnglishMessages = typeof coreEN &
   typeof import("./en/trust-compute.json") &
   typeof import("./en/user-admin.json") &
   typeof import("./en/web-search-admin.json") &
-  typeof import("./en/workflow-admin.json") &
   typeof import("./en/workspace-capability.json") &
   typeof import("./en/workspace-shell-and-connector.json");
 

@@ -19,10 +19,10 @@ import {
   FcmMobilePushNotificationDeliverySender,
   type FcmMessagingClientFactory,
 } from "./notification-delivery-mobile";
+import type { HardenedWebhookFetchOptions } from "./hardened-webhook-fetch";
 import type { SecretResolver } from "./secret-resolver";
 
-export interface NotificationDeliveryFactoryOptions {
-  fetchImpl?: typeof fetch;
+export interface NotificationDeliveryFactoryOptions extends HardenedWebhookFetchOptions {
   fcmClientFactory?: FcmMessagingClientFactory;
   resendClientFactory?: ResendEmailClientFactory;
   secretResolver: SecretResolver;
@@ -34,33 +34,49 @@ export function createNotificationDeliverySender(
   env: RomeoEnv,
   options: NotificationDeliveryFactoryOptions,
 ): NotificationDeliverySender {
+  const deliveryOptions: NotificationDeliveryFactoryOptions = {
+    ...options,
+    ...notificationWebhookNetworkOptionsFromEnv(env),
+  };
   switch (env.NOTIFICATION_DELIVERY_DRIVER) {
     case "configured":
       return new RoutingNotificationDeliverySender({
-        email: createConfiguredEmailSender(env, options),
-        mobile_push: createFcmSender(env, options),
-        pagerduty: createPagerDutySender(env, options),
-        slack: createSlackSender(env, options),
-        teams: createTeamsSender(env, options),
-        webhook: createWebhookSender(options),
+        email: createConfiguredEmailSender(env, deliveryOptions),
+        mobile_push: createFcmSender(env, deliveryOptions),
+        pagerduty: createPagerDutySender(env, deliveryOptions),
+        slack: createSlackSender(env, deliveryOptions),
+        teams: createTeamsSender(env, deliveryOptions),
+        webhook: createWebhookSender(deliveryOptions),
       });
     case "fcm-mobile-push":
-      return createFcmSender(env, options);
+      return createFcmSender(env, deliveryOptions);
     case "resend-email":
-      return createResendSender(env, options);
+      return createResendSender(env, deliveryOptions);
     case "slack-webhook":
-      return createSlackSender(env, options);
+      return createSlackSender(env, deliveryOptions);
     case "smtp-email":
-      return createSmtpSender(env, options);
+      return createSmtpSender(env, deliveryOptions);
     case "teams-webhook":
-      return createTeamsSender(env, options);
+      return createTeamsSender(env, deliveryOptions);
     case "pagerduty-events":
-      return createPagerDutySender(env, options);
+      return createPagerDutySender(env, deliveryOptions);
     case "webhook":
-      return createWebhookSender(options);
+      return createWebhookSender(deliveryOptions);
     default:
       return disabledNotificationDeliverySender;
   }
+}
+
+export function notificationWebhookNetworkOptionsFromEnv(
+  env: RomeoEnv,
+): Pick<HardenedWebhookFetchOptions, "allowedHosts" | "egressPolicy"> {
+  return {
+    allowedHosts:
+      env.NOTIFICATION_WEBHOOK_ALLOWED_HOSTS.length === 0
+        ? []
+        : env.NOTIFICATION_WEBHOOK_ALLOWED_HOSTS.split(","),
+    egressPolicy: env.NOTIFICATION_WEBHOOK_EGRESS_POLICY,
+  };
 }
 
 function createConfiguredEmailSender(
@@ -107,42 +123,33 @@ function createSmtpSender(
 
 function createSlackSender(
   env: RomeoEnv,
-  options: Pick<NotificationDeliveryFactoryOptions, "fetchImpl">,
+  options: NotificationDeliveryFactoryOptions,
 ): NotificationDeliverySender {
   return new SlackWebhookNotificationDeliverySender({
+    ...webhookNetworkOptions(options),
     timeoutMs: env.NOTIFICATION_SLACK_TIMEOUT_MS,
-    ...(options.fetchImpl === undefined
-      ? {}
-      : { fetchImpl: options.fetchImpl }),
   });
 }
 
 function createTeamsSender(
   env: RomeoEnv,
-  options: Pick<NotificationDeliveryFactoryOptions, "fetchImpl">,
+  options: NotificationDeliveryFactoryOptions,
 ): NotificationDeliverySender {
   return new TeamsWebhookNotificationDeliverySender({
+    ...webhookNetworkOptions(options),
     timeoutMs: env.NOTIFICATION_TEAMS_TIMEOUT_MS,
-    ...(options.fetchImpl === undefined
-      ? {}
-      : { fetchImpl: options.fetchImpl }),
   });
 }
 
 function createPagerDutySender(
   env: RomeoEnv,
-  options: Pick<
-    NotificationDeliveryFactoryOptions,
-    "fetchImpl" | "secretResolver"
-  >,
+  options: NotificationDeliveryFactoryOptions,
 ): NotificationDeliverySender {
   return new PagerDutyEventsNotificationDeliverySender({
+    ...webhookNetworkOptions(options),
     eventsUrl: env.NOTIFICATION_PAGERDUTY_EVENTS_URL,
     secretResolver: options.secretResolver,
     timeoutMs: env.NOTIFICATION_PAGERDUTY_TIMEOUT_MS,
-    ...(options.fetchImpl === undefined
-      ? {}
-      : { fetchImpl: options.fetchImpl }),
   });
 }
 
@@ -165,7 +172,38 @@ function createFcmSender(
 }
 
 function createWebhookSender(
-  options: Pick<NotificationDeliveryFactoryOptions, "fetchImpl" | "signingKey">,
+  options: NotificationDeliveryFactoryOptions,
 ): NotificationDeliverySender {
-  return new WebhookNotificationDeliverySender(options);
+  return new WebhookNotificationDeliverySender({
+    ...webhookNetworkOptions(options),
+    signingKey: options.signingKey,
+  });
+}
+
+function webhookNetworkOptions(
+  options: NotificationDeliveryFactoryOptions,
+): HardenedWebhookFetchOptions {
+  return {
+    ...(options.allowedHosts === undefined
+      ? {}
+      : { allowedHosts: options.allowedHosts }),
+    ...(options.egressPolicy === undefined
+      ? {}
+      : { egressPolicy: options.egressPolicy }),
+    ...(options.fetchImpl === undefined
+      ? {}
+      : { fetchImpl: options.fetchImpl }),
+    ...(options.hostLookup === undefined
+      ? {}
+      : { hostLookup: options.hostLookup }),
+    ...(options.maxRedirects === undefined
+      ? {}
+      : { maxRedirects: options.maxRedirects }),
+    ...(options.maxResponseBytes === undefined
+      ? {}
+      : { maxResponseBytes: options.maxResponseBytes }),
+    ...(options.pinnedFetchImpl === undefined
+      ? {}
+      : { pinnedFetchImpl: options.pinnedFetchImpl }),
+  };
 }

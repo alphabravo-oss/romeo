@@ -202,25 +202,38 @@ export abstract class InMemoryIdentityRepository extends InMemoryRepositoryBase 
     return settings;
   }
 
-  async getSystemSetting(key: string): Promise<E.SystemSetting | undefined> {
-    return this.data.systemSettings.find((setting) => setting.key === key);
+  async getSystemSetting(
+    key: string,
+    orgId: string | null,
+  ): Promise<E.SystemSetting | undefined> {
+    return this.data.systemSettings.find(
+      (setting) =>
+        setting.key === key && (setting.orgId ?? null) === (orgId ?? null),
+    );
   }
 
-  async listSystemSettings(): Promise<E.SystemSetting[]> {
-    return [...this.data.systemSettings].sort((left, right) =>
-      left.key.localeCompare(right.key),
-    );
+  async listSystemSettings(orgId: string | null): Promise<E.SystemSetting[]> {
+    return this.data.systemSettings
+      .filter((setting) => (setting.orgId ?? null) === (orgId ?? null))
+      .sort((left, right) => left.key.localeCompare(right.key));
   }
 
   async upsertSystemSetting(
     setting: E.SystemSetting,
+    orgId: string | null,
   ): Promise<E.SystemSetting> {
+    assertSettingScope(setting, orgId);
+    const scoped = {
+      ...setting,
+      ...(orgId === null ? {} : { orgId }),
+    };
     const index = this.data.systemSettings.findIndex(
-      (item) => item.key === setting.key,
+      (item) =>
+        item.key === setting.key && (item.orgId ?? null) === (orgId ?? null),
     );
-    if (index < 0) return append(this.data.systemSettings, setting);
-    this.data.systemSettings[index] = setting;
-    return setting;
+    if (index < 0) return append(this.data.systemSettings, scoped);
+    this.data.systemSettings[index] = scoped;
+    return scoped;
   }
 
   async listOrganizations(orgId: string): Promise<E.Organization[]> {
@@ -276,6 +289,14 @@ export abstract class InMemoryIdentityRepository extends InMemoryRepositoryBase 
   async purgeTenantData(orgId: string): Promise<R.TenantDataPurgeResult> {
     return purgeTenantData(this.data, this.runEvents, orgId);
   }
+}
+
+function assertSettingScope(
+  setting: E.SystemSetting,
+  orgId: string | null,
+): void {
+  if (setting.orgId !== undefined && setting.orgId !== orgId)
+    throw new Error("system_setting_scope_mismatch");
 }
 
 function lexicalCompare(left: string, right: string): number {

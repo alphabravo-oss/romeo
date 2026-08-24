@@ -221,6 +221,85 @@ describe("temporary chat cleanup worker", () => {
     ).toBeUndefined();
     expect(await backingStore.getObject(objectKey)).toBeUndefined();
   });
+
+  it("bounds tenant fan-out, skips suspended tenants, and isolates tenant failures", async () => {
+    const backing = new InMemoryRomeoRepository();
+    for (const orgId of ["org_a", "org_b", "org_c"]) {
+      await backing.createOrganization({
+        id: orgId,
+        name: orgId,
+        slug: orgId,
+      });
+      await backing.createWorkspace({
+        id: `workspace_${orgId}`,
+        orgId,
+        name: orgId,
+        slug: orgId,
+      });
+      await backing.createChat({
+        id: `chat_${orgId}`,
+        orgId,
+        workspaceId: `workspace_${orgId}`,
+        title: "Expired",
+        temporary: true,
+        expiresAt: "2026-07-16T11:59:00.000Z", // deliberately-expired: multi-tenant cleanup target
+        createdBy: "worker",
+        updatedAt: "2026-07-16T11:00:00.000Z",
+      });
+    }
+    await backing.upsertSystemSetting(
+      {
+        key: "abuse_controls.org.v1:org_a",
+        value: {
+          version: 1,
+          orgId: "org_a",
+          suspension: { suspended: true },
+        },
+        updatedAt: "2026-07-16T12:00:00.000Z",
+      },
+      "org_a",
+    );
+    let failOrgB = true;
+    const repository = new Proxy(backing, {
+      get(target, property, receiver) {
+        if (property === "getBackgroundJob") {
+          return async (orgId: string, jobId: string) => {
+            if (orgId === "org_b" && failOrgB) {
+              failOrgB = false;
+              throw new Error("tenant database unavailable");
+            }
+            return target.getBackgroundJob(orgId, jobId);
+          };
+        }
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    const worker = new TemporaryChatCleanupWorker(
+      repository,
+      new ChatService(repository),
+      {
+        ...cleanupOptions("cleanup_worker_multi_tenant"),
+        maxTenantsPerRun: 2,
+        tenantConcurrency: 2,
+      },
+    );
+
+    await worker.runOnce("2026-07-16T12:00:00.000Z");
+    expect(await backing.getChat("chat_org_a")).toBeDefined();
+    expect(await backing.getChat("chat_org_b")).toBeDefined();
+    expect(
+      await backing.getSystemSetting(
+        "scheduled-work.temporary-chat-cleanup.v1",
+        null,
+      ),
+    ).toMatchObject({
+      value: { cursorOrgId: "org_b", failed: 1, skipped: 1 },
+    });
+
+    await worker.runOnce("2026-07-16T12:01:00.000Z");
+    expect(await backing.getChat("chat_org_c")).toBeUndefined();
+    expect(await backing.getChat("chat_org_a")).toBeDefined();
+  });
 });
 
 function cleanupOptions(workerId: string) {

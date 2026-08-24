@@ -12,89 +12,19 @@ import {
   optionalIsoString,
   toIsoString,
 } from "./repository-mapping";
+import type {
+  BillingEventReceiptRecord,
+  BillingPlanQuotaTemplateRecord,
+  BillingPlanRecord,
+  BillingPlanSourceRecord,
+  BillingPlanStatusRecord,
+  QuotaBucketRecord,
+  QuotaMetricRecord,
+  QuotaResetIntervalRecord,
+  RetentionPolicyRecord,
+} from "./governance-billing-records";
 
-export type QuotaMetricRecord =
-  | "image.cost.micro_usd"
-  | "image.generated"
-  | "web.search.request"
-  | "web.url.fetch"
-  | "run.started"
-  | "storage.byte"
-  | "tool.call";
-export type QuotaScopeTypeRecord =
-  | "agent"
-  | "api_key"
-  | "org"
-  | "provider"
-  | "user"
-  | "workspace";
-export type QuotaResetIntervalRecord = "daily" | "monthly" | "none";
-export type BillingPlanStatusRecord =
-  | "active"
-  | "canceled"
-  | "past_due"
-  | "trialing";
-export type BillingPlanSourceRecord = "external" | "manual";
-
-export interface RetentionPolicyRecord {
-  orgId: string;
-  auditLogRetentionDays: number;
-  runEventRetentionDays: number;
-  fileRetentionDays: number | null;
-  workspaceFileRetentionDays: Record<string, number | null>;
-  userFileRetentionDays: Record<string, number | null>;
-  updatedBy: string;
-  updatedAt: string;
-}
-
-export interface BillingPlanQuotaTemplateRecord {
-  metric: QuotaMetricRecord;
-  limit: number;
-  resetInterval: QuotaResetIntervalRecord;
-}
-
-export interface BillingPlanRecord {
-  id: string;
-  orgId: string;
-  code: string;
-  name: string;
-  status: BillingPlanStatusRecord;
-  source: BillingPlanSourceRecord;
-  quotaTemplates: BillingPlanQuotaTemplateRecord[];
-  metadata: Record<string, unknown>;
-  externalCustomerId?: string;
-  externalSubscriptionId?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface BillingEventReceiptRecord {
-  id: string;
-  orgId: string;
-  provider: string;
-  eventId: string;
-  eventType: string;
-  occurredAt: string;
-  result: {
-    plan: BillingPlanRecord;
-    quotas: QuotaBucketRecord[];
-  };
-  createdAt: string;
-}
-
-export interface QuotaBucketRecord {
-  id: string;
-  orgId: string;
-  scopeType: QuotaScopeTypeRecord;
-  scopeId: string;
-  metric: QuotaMetricRecord;
-  limit: number;
-  used: number;
-  resetInterval: QuotaResetIntervalRecord;
-  resetAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export * from "./governance-billing-records";
 
 export class PgGovernanceBillingRepository {
   constructor(private readonly db: RomeoDatabase) {}
@@ -195,6 +125,19 @@ export class PgGovernanceBillingRepository {
       .select()
       .from(billingPlans)
       .where(eq(billingPlans.orgId, orgId))
+      .limit(1);
+    return row === undefined ? undefined : toBillingPlanRecord(row);
+  }
+
+  async getBillingPlanByExternalCustomerId(
+    externalCustomerId: string,
+  ): Promise<BillingPlanRecord | undefined> {
+    const customerId = externalCustomerId.trim();
+    if (customerId.length === 0) return undefined;
+    const [row] = await this.db
+      .select()
+      .from(billingPlans)
+      .where(eq(billingPlans.externalCustomerId, customerId))
       .limit(1);
     return row === undefined ? undefined : toBillingPlanRecord(row);
   }

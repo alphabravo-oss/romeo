@@ -70,6 +70,7 @@ const defaultGcpClientFactory: GcpSecretManagerSdkClientFactory = (options) => {
 };
 
 export class GcpSecretManagerResolver implements SecretResolver {
+  private sdkClient: GcpSecretManagerSdkClient | undefined;
   private readonly clientFactory: GcpSecretManagerSdkClientFactory;
   private readonly timeoutMs: number;
 
@@ -111,10 +112,10 @@ export class GcpSecretManagerResolver implements SecretResolver {
   }
 
   private client(): GcpSecretManagerSdkClient {
-    return this.clientFactory({
+    return (this.sdkClient ??= this.clientFactory({
       accessToken: this.options.accessToken,
       projectId: this.options.projectId,
-    });
+    }));
   }
 
   private validate(parsed: ManagedSecretRef): SecretAvailability | undefined {

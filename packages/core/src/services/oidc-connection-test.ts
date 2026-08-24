@@ -1,6 +1,12 @@
+import type { RomeoEnv } from "@romeo/config";
+
 import { discoverOidcMetadata } from "./oidc-discovery";
 import {
-  assertTrustedMetadataUrl,
+  OidcEgressClient,
+  oidcEgressOptionsFromEnv,
+  type OidcEgressOptions,
+} from "./oidc-egress";
+import {
   normalizeIssuer,
   oidcConfigStatus,
   safeHost,
@@ -23,6 +29,8 @@ export interface OidcConnectionTestCheck {
 
 export async function testOidcConnection(input: {
   config: ResolvedSsoOidcConfig;
+  egressOptions?: OidcEgressOptions;
+  env: RomeoEnv;
   fetchImpl?: typeof fetch | undefined;
 }): Promise<OidcConnectionTestReport> {
   const status = oidcConfigStatus(input.config);
@@ -59,14 +67,18 @@ export async function testOidcConnection(input: {
 
   const issuer = normalizeIssuer(input.config.issuerUrl);
   try {
-    assertTrustedMetadataUrl(issuer);
+    const egress = new OidcEgressClient(issuer, {
+      ...oidcEgressOptionsFromEnv(input.env),
+      ...input.egressOptions,
+      ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl }),
+    });
     const discovery = await fetchDiscovery({
       clientId: input.config.clientId,
-      fetchImpl: input.fetchImpl,
+      egress,
       issuer,
     });
     const jwksKeyCount = await fetchJwks({
-      fetchImpl: input.fetchImpl,
+      egress,
       jwksUri: discovery.jwksUri,
     });
     return {
@@ -109,35 +121,36 @@ export async function testOidcConnection(input: {
 
 async function fetchDiscovery(input: {
   clientId: string;
-  fetchImpl?: typeof fetch | undefined;
+  egress: OidcEgressClient;
   issuer: string;
 }): Promise<{ jwksUri: string }> {
   try {
-    return await discoverOidcMetadata(
-      input.fetchImpl === undefined
-        ? { clientId: input.clientId, issuer: input.issuer }
-        : {
-            clientId: input.clientId,
-            fetchImpl: input.fetchImpl,
-            issuer: input.issuer,
-          },
-    );
+    return await discoverOidcMetadata({
+      clientId: input.clientId,
+      fetchImpl: input.egress.fetch,
+      issuer: input.issuer,
+      validateEndpoint: (value) => input.egress.assertMetadataEndpoint(value),
+    });
   } catch {
     throw new Error("oidc_discovery_failed");
   }
 }
 
 async function fetchJwks(input: {
-  fetchImpl?: typeof fetch | undefined;
+  egress: OidcEgressClient;
   jwksUri: string;
 }): Promise<number> {
-  const fetchImpl = input.fetchImpl ?? fetch;
-  const response = await fetchImpl(input.jwksUri, {
-    headers: { accept: "application/json" },
-  });
-  if (!response.ok) throw new Error("oidc_jwks_http_failed");
-  const jwks = (await response.json()) as { keys?: unknown };
-  if (!Array.isArray(jwks.keys) || jwks.keys.length === 0) {
+  let jwks: { keys?: unknown };
+  try {
+    jwks = (await input.egress.fetchJson(input.jwksUri)) as { keys?: unknown };
+  } catch {
+    throw new Error("oidc_jwks_http_failed");
+  }
+  if (
+    !Array.isArray(jwks.keys) ||
+    jwks.keys.length === 0 ||
+    jwks.keys.length > 100
+  ) {
     throw new Error("oidc_jwks_invalid");
   }
   const usableKeyCount = jwks.keys.filter(

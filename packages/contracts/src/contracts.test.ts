@@ -441,6 +441,11 @@ describe("Romeo HTTP contracts", () => {
       tags: ["System"],
       security: [],
     });
+    expect(document.paths?.["/api/v1/readyz"]?.get).toMatchObject({
+      operationId: "health.getInternalReadiness",
+      tags: ["Health"],
+      security: [],
+    });
     expect(
       document.paths?.["/api/v1/me/interface-preferences"]?.get,
     ).toMatchObject({
@@ -569,6 +574,12 @@ describe("Romeo HTTP contracts", () => {
       document.paths?.["/api/v1/admin/postgres/operational-posture"]?.get,
     ).toMatchObject({
       operationId: "operationalPosture.getPostgres",
+      tags: ["Operational posture"],
+    });
+    expect(
+      document.paths?.["/api/v1/admin/runtime-key-rotation/posture"]?.get,
+    ).toMatchObject({
+      operationId: "operationalPosture.getRuntimeKeyRotation",
       tags: ["Operational posture"],
     });
     expect(

@@ -7,13 +7,16 @@ import { PgCapabilityAssignmentRepository } from "./capability-assignment-reposi
 import { PgCapabilityFlagRepository } from "./capability-flag-repository";
 import { PgIdempotencyRepository } from "./idempotency-repository";
 import { PgCollaborationRepository } from "./collaboration-repository";
+export type { ContentPolicyRepositoryFragment } from "./content-policy-repository-fragment";
 import { PgDataConnectorRepository } from "./data-connector-repository";
 import { PgDataDeletionRepository } from "./data-deletion-repository";
 import { PgDelegatedOAuthRepository } from "./delegated-oauth-repository";
 import { PgEvalRepository } from "./eval-repository";
 import { PgFileRepository } from "./file-repository";
 import { PgGovernanceBillingRepository } from "./governance-billing-repository";
+import { PgGovernanceExportRepository } from "./governance-export-repository";
 import { PgIdentityRepository } from "./identity-repository";
+import { PgInventoriedTablePageRepository } from "./inventoried-table-page-repository";
 import { PgKnowledgeEmbeddingRepository } from "./knowledge-embedding-repository";
 import { PgKnowledgeRepository } from "./knowledge-repository";
 import { PgNotificationRepository } from "./notification-repository";
@@ -21,16 +24,34 @@ import { PgCollaborationChannelRepository } from "./collaboration-channel-reposi
 import { PgOperationalRepository } from "./operational-repository";
 import { PgProviderRepository } from "./provider-repository";
 import { PgRunRepository } from "./run-repository";
+import { PgServerTableRepository } from "./server-table-repository";
 import { PgTenantRepository } from "./tenant-repository";
 import { PgTenantPurgeRepository } from "./tenant-purge-repository";
 import { PgToolConnectorRepository } from "./tool-connector-repository";
 import { PgVoiceRepository } from "./voice-repository";
 import { PgWebhookRepository } from "./webhook-repository";
-import { PgWorkflowRepository } from "./workflow-repository";
 
 export type RepositoryFragment = Record<
   string,
   (...args: never[]) => Promise<unknown>
+>;
+
+export type InventoriedTablePageRepositoryFragment = Pick<
+  PgInventoriedTablePageRepository,
+  "queryInventoriedTableRows"
+>;
+
+export type GovernanceExportRepositoryFragment = Pick<
+  PgGovernanceExportRepository,
+  | "claimGovernanceExportJob"
+  | "createGovernanceExportArtifact"
+  | "createGovernanceExportJob"
+  | "getGovernanceExportArtifact"
+  | "getGovernanceExportJob"
+  | "listGovernanceExportJobs"
+  | "updateGovernanceExportArtifact"
+  | "updateGovernanceExportJob"
+  | "updateGovernanceExportJobWithLease"
 >;
 
 export type KnowledgeEmbeddingRepositoryFragment = Pick<
@@ -43,15 +64,19 @@ export type KnowledgeEmbeddingRepositoryFragment = Pick<
 
 export type KnowledgeRepositoryFragment = Pick<
   PgKnowledgeRepository,
+  | "claimKnowledgeSourceExtraction"
   | "createKnowledgeBase"
   | "createKnowledgeChunks"
   | "createKnowledgeSource"
   | "deleteKnowledgeChunksForSource"
   | "deleteKnowledgeSource"
   | "getKnowledgeBase"
+  | "getKnowledgeSource"
   | "listKnowledgeBases"
   | "listKnowledgeChunks"
   | "listKnowledgeSources"
+  | "finishKnowledgeSourceExtraction"
+  | "renewKnowledgeSourceExtractionLease"
   | "updateKnowledgeBase"
   | "updateKnowledgeSource"
 >;
@@ -236,7 +261,9 @@ export type FileRepositoryFragment = Pick<
   | "claimNextFileLifecycle"
   | "finishFileLifecycleLease"
   | "getFileObject"
+  | "getFileLifecycleQueueSummary"
   | "listFileObjects"
+  | "listFileRetentionCandidates"
   | "updateFileObject"
   | "listAuthorizedFileObjectsPage"
   | "renewFileLifecycleLease"
@@ -286,11 +313,14 @@ export type ToolConnectorRepositoryFragment = Pick<
 
 export type DataConnectorRepositoryFragment = Pick<
   PgDataConnectorRepository,
+  | "claimDataConnectorSync"
   | "createDataConnector"
   | "createDataConnectorSync"
   | "getDataConnector"
   | "listDataConnectors"
   | "listDataConnectorSyncs"
+  | "finishDataConnectorSync"
+  | "renewDataConnectorSyncLease"
   | "updateDataConnector"
   | "updateDataConnectorSync"
 >;
@@ -298,6 +328,7 @@ export type DataConnectorRepositoryFragment = Pick<
 export type DelegatedOAuthRepositoryFragment = Pick<
   PgDelegatedOAuthRepository,
   | "createDelegatedOAuthConnection"
+  | "countDelegatedOAuthTokenKeyUsage"
   | "getDelegatedOAuthConnection"
   | "getDelegatedOAuthConnectionByProviderAccount"
   | "listDelegatedOAuthConnections"
@@ -306,13 +337,31 @@ export type DelegatedOAuthRepositoryFragment = Pick<
 
 export type OperationalRepositoryFragment = Pick<
   PgOperationalRepository,
+  | "auditRetentionExportGate"
+  | "claimAuditExportJob"
+  | "completeAuditExportAttempt"
+  | "ensureAuditIntegrityRecords"
   | "createAuditLog"
+  | "createAuditExportIdempotencyReceipt"
+  | "createAuditExportJob"
+  | "createAuditIntegrityCheckpoint"
   | "createBackgroundJob"
   | "claimBackgroundJob"
   | "createUsageEvent"
   | "deleteAuditLogsBefore"
   | "getSystemSetting"
+  | "getAuditExportDestination"
+  | "getAuditExportIdempotencyReceipt"
+  | "getAuditExportJob"
+  | "getAuditExportJobByIdempotencyHash"
+  | "getAuditIntegrityCheckpoint"
+  | "getAuditIntegrityCheckpointByHash"
+  | "getBackgroundJob"
   | "listAuditLogs"
+  | "listAuditExportAttempts"
+  | "listAuditExportJobs"
+  | "listAuditIntegrityCheckpoints"
+  | "listAuditIntegrityRecords"
   | "queryAuditLogs"
   | "listBackgroundJobs"
   | "listSystemSettings"
@@ -321,8 +370,18 @@ export type OperationalRepositoryFragment = Pick<
   | "renewBackgroundJobLease"
   | "updateBackgroundJobWithLease"
   | "upsertSystemSetting"
+  | "upsertAuditExportDestination"
   | "updateBackgroundJob"
   | "updateUsageEvent"
+>;
+
+export type ServerTableRepositoryFragment = Pick<
+  PgServerTableRepository,
+  | "deleteServerTableSavedView"
+  | "getServerTableSavedView"
+  | "listServerTableSavedViews"
+  | "restoreServerTableSavedView"
+  | "writeServerTableSavedView"
 >;
 
 export type WebhookRepositoryFragment = Pick<
@@ -332,24 +391,13 @@ export type WebhookRepositoryFragment = Pick<
   | "completeWebhookDeliveryAttempt"
   | "createWebhookDelivery"
   | "createWebhookSubscription"
+  | "countWebhookSigningKeyUsage"
   | "getWebhookSubscription"
   | "listWebhookDeliveries"
   | "listWebhookDeliveriesPage"
   | "listWebhookSubscriptions"
   | "updateWebhookDelivery"
   | "updateWebhookSubscription"
->;
-
-export type WorkflowRepositoryFragment = Pick<
-  PgWorkflowRepository,
-  | "createWorkflowDefinition"
-  | "createWorkflowRun"
-  | "getWorkflowDefinition"
-  | "getWorkflowRun"
-  | "listWorkflowDefinitions"
-  | "listWorkflowRuns"
-  | "updateWorkflowDefinition"
-  | "updateWorkflowRun"
 >;
 
 export type GovernanceBillingRepositoryFragment = Pick<
@@ -359,6 +407,7 @@ export type GovernanceBillingRepositoryFragment = Pick<
   | "createQuotaBucket"
   | "deleteQuotaBucket"
   | "getBillingPlan"
+  | "getBillingPlanByExternalCustomerId"
   | "getBillingEventReceipt"
   | "getRetentionPolicy"
   | "listQuotaBuckets"
@@ -369,6 +418,7 @@ export type GovernanceBillingRepositoryFragment = Pick<
 
 export type NotificationRepositoryFragment = Pick<
   PgNotificationRepository,
+  | "claimDueNotificationDeliveries"
   | "createNotificationDelivery"
   | "createNotificationDeliveryChannel"
   | "createUserNotification"
@@ -376,6 +426,7 @@ export type NotificationRepositoryFragment = Pick<
   | "listFailedNotificationDeliveries"
   | "listNotificationDeliveryChannels"
   | "listUserNotifications"
+  | "finishNotificationDeliveryLease"
   | "updateNotificationDelivery"
   | "updateUserNotification"
 >;

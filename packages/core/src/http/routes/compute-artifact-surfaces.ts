@@ -19,25 +19,44 @@ import {
   evaluateSandboxPosture,
   recordComputeProvenance,
   safeArtifactPreview,
+  type ComputeTrustDecision,
+  type ComputeTrustDenial,
 } from "../../services/compute-artifact-trust";
 
+type ComputeSurfaceAccepted = {
+  contentDisposition?: string;
+  currentVersion?: number;
+  outputHash?: string;
+  runtimeDigest?: string;
+  sandbox?: boolean;
+  version?: number;
+};
+
+type ComputeSurfaceDecision =
+  | { code: ComputeTrustDenial; outcome: "denied" }
+  | ({ outcome: "accepted" } & ComputeSurfaceAccepted);
+
 function trustBody(
-  data: { outcome: "accepted" | "denied" } & Record<string, unknown>,
-) {
-  if (data.outcome === "denied")
-    return { code: data.code, outcome: "denied" as const };
-  const body: Record<string, unknown> = { outcome: "accepted" };
-  for (const key of [
-    "version",
-    "currentVersion",
-    "contentDisposition",
-    "sandbox",
-    "runtimeDigest",
-    "outputHash",
-  ]) {
-    if (data[key] !== undefined) body[key] = data[key];
-  }
-  return body;
+  data: ComputeTrustDecision<ComputeSurfaceAccepted>,
+): ComputeSurfaceDecision {
+  if (data.outcome === "denied") return { code: data.code, outcome: "denied" };
+  return {
+    outcome: "accepted",
+    ...(typeof data.contentDisposition === "string"
+      ? { contentDisposition: data.contentDisposition }
+      : {}),
+    ...(typeof data.currentVersion === "number"
+      ? { currentVersion: data.currentVersion }
+      : {}),
+    ...(typeof data.outputHash === "string"
+      ? { outputHash: data.outputHash }
+      : {}),
+    ...(typeof data.runtimeDigest === "string"
+      ? { runtimeDigest: data.runtimeDigest }
+      : {}),
+    ...(typeof data.sandbox === "boolean" ? { sandbox: data.sandbox } : {}),
+    ...(typeof data.version === "number" ? { version: data.version } : {}),
+  };
 }
 
 export function registerComputeArtifactSurfaceRoutes(app: RomeoApi): void {

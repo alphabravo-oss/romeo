@@ -19,11 +19,17 @@ interface ChatEventSource {
 
 export type ChatEventSourceFactory = (url: string) => ChatEventSource;
 
+interface PageLifecycleTarget {
+  addEventListener(type: "pagehide", listener: EventListener): void;
+  removeEventListener(type: "pagehide", listener: EventListener): void;
+}
+
 export function subscribeToChatEvents(
   workspaceId: string,
   onChange: (event?: ChatChangedEvent) => void,
   options: {
     createEventSource?: ChatEventSourceFactory;
+    lifecycleTarget?: PageLifecycleTarget;
     onStatus?: (status: ChatEventStreamStatus) => void;
   } = {},
 ): () => void {
@@ -55,13 +61,27 @@ export function subscribeToChatEvents(
   source.addEventListener("chats:connected", onConnected);
   source.addEventListener("open", onOpen);
   source.addEventListener("error", onError);
-  return () => {
+  const lifecycleTarget =
+    options.lifecycleTarget ??
+    (typeof window === "undefined" ? undefined : window);
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    lifecycleTarget?.removeEventListener("pagehide", onPageHide);
     source.removeEventListener("chats:changed", onChanged);
     source.removeEventListener("chats:connected", onConnected);
     source.removeEventListener("open", onOpen);
     source.removeEventListener("error", onError);
     source.close();
   };
+  // React effect cleanup is not guaranteed to run when the browser tears down
+  // a whole document. Close the long-lived HTTP/1 stream synchronously so
+  // repeated reloads cannot accumulate EventSource connections and starve the
+  // next route's bootstrap or lazy-module requests.
+  const onPageHide: EventListener = () => stop();
+  lifecycleTarget?.addEventListener("pagehide", onPageHide);
+  return stop;
 }
 
 function parseChangedEvent(event: Event): ChatChangedEvent | undefined {

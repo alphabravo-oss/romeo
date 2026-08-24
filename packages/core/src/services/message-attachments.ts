@@ -246,7 +246,12 @@ function publicAttachment(
   chatId: string,
 ): MessageAttachment | undefined {
   const previewUrl = `/api/v1/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(part.messageId)}/attachments/${encodeURIComponent(part.id)}`;
-  if (isMessagePartV1(part) && (part.type === "image_ref" || part.type === "document_ref" || part.type === "audio_ref")) {
+  if (
+    isMessagePartV1(part) &&
+    (part.type === "image_ref" ||
+      part.type === "document_ref" ||
+      part.type === "audio_ref")
+  ) {
     const mimeType = part.mediaType;
     const fileName =
       part.type === "document_ref"
@@ -261,7 +266,7 @@ function publicAttachment(
       mimeType,
       sizeBytes: 0,
       kind: part.type === "image_ref" ? "image" : "document",
-      retainedInContext: true,
+      retainedInContext: part.retainedInContext !== false,
       previewUrl,
     };
   }

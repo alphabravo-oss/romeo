@@ -37,6 +37,7 @@ export function AuditTableFilters({
     <div className="mb-3 flex flex-wrap gap-2">
       <DateRangeSelect onChange={onRangeChange} value={range} />
       <Input
+        data-table-search="true"
         aria-describedby={searchTooShort ? "audit-search-guidance" : undefined}
         aria-invalid={searchTooShort}
         aria-label={t("auditFilterAction")}

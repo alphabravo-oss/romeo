@@ -1,4 +1,8 @@
-export type CapabilityProvenance = "advertised" | "detected" | "probed" | "override";
+export type CapabilityProvenance =
+  | "advertised"
+  | "detected"
+  | "probed"
+  | "override";
 
 export interface ProviderCapabilityRecord {
   value: unknown;
@@ -11,7 +15,10 @@ export function mergeProviderCapabilityRecords(input: {
   current?: ProviderCapabilityRecord;
   incoming: ProviderCapabilityRecord;
 }): ProviderCapabilityRecord {
-  if (input.current?.source === "override" && input.incoming.source !== "override")
+  if (
+    input.current?.source === "override" &&
+    input.incoming.source !== "override"
+  )
     return input.current;
   return input.incoming;
 }
@@ -19,12 +26,16 @@ export function mergeProviderCapabilityRecords(input: {
 export function evaluateProviderProbe(input: {
   advertised: boolean;
   probed: boolean;
-}): { outcome: "match" } | { outcome: "mismatch"; code: "provider_probe_mismatch" } {
+}):
+  | { outcome: "match" }
+  | { outcome: "mismatch"; code: "provider_probe_mismatch" } {
   if (input.advertised === input.probed) return { outcome: "match" };
   return { outcome: "mismatch", code: "provider_probe_mismatch" };
 }
 
-export function omitUnsupportedProviderKnobs<T extends Record<string, unknown>>(input: {
+export function omitUnsupportedProviderKnobs<
+  T extends Record<string, unknown>,
+>(input: {
   requested: T;
   supported: ReadonlySet<keyof T>;
 }): { effective: Partial<T>; omitted: Array<keyof T> } {

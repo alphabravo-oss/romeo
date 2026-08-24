@@ -16,6 +16,8 @@ import {
 
 export interface SmtpMailMessage {
   from: string;
+  headers?: Record<string, string>;
+  messageId?: string;
   to: string;
   subject: string;
   text: string;
@@ -24,6 +26,7 @@ export interface SmtpMailMessage {
 export type SmtpSendMail = (message: SmtpMailMessage) => Promise<unknown>;
 
 export class SmtpEmailNotificationDeliverySender implements NotificationDeliverySender {
+  private closeTransport: (() => void) | undefined;
   private readonly timeoutMs: number;
   private readonly sendMail: SmtpSendMail;
 
@@ -115,6 +118,11 @@ export class SmtpEmailNotificationDeliverySender implements NotificationDelivery
     try {
       await this.sendMail({
         from: this.options.from.trim(),
+        headers: {
+          "X-Romeo-Idempotency-Key":
+            delivery.providerIdempotencyKey ?? delivery.id,
+        },
+        messageId: `<${delivery.providerIdempotencyKey ?? delivery.id}@romeo.invalid>`,
         to,
         subject: `Romeo notification: ${notification.type}`,
         text: notificationText(notification),
@@ -151,6 +159,12 @@ export class SmtpEmailNotificationDeliverySender implements NotificationDelivery
           }
         : {}),
     });
+    this.closeTransport = () => transporter.close();
     return (message) => transporter.sendMail(message);
+  }
+
+  close(): void {
+    this.closeTransport?.();
+    this.closeTransport = undefined;
   }
 }

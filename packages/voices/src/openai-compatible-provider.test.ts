@@ -82,6 +82,25 @@ describe("OpenAI-compatible voice provider", () => {
         format: "mp3",
       }),
     ).rejects.toThrow("empty artifact");
+
+    const oversizedProvider = new OpenAICompatibleVoiceProvider({
+      apiKey: "voice-api-key",
+      baseUrl: "https://voice.example.com/v1",
+      model: "tts-model",
+      fetchImpl: async () =>
+        new Response(new Uint8Array([1]), {
+          status: 200,
+          headers: { "content-length": "50000001" },
+        }),
+    });
+    await expect(
+      oversizedProvider.synthesize({
+        orgId: "org_default",
+        voiceId: "alloy",
+        text: "hello",
+        format: "mp3",
+      }),
+    ).rejects.toThrow("exceeded the response limit");
   });
 
   it("sends transcription requests as multipart form data", async () => {

@@ -24,7 +24,7 @@ import { ContentPolicyTab } from "./ContentPolicyTab";
 import { bootstrapQueryOptions } from "../lib/api-query-options";
 import { useRouterApiClient } from "../lib/router-context";
 import { IdListEditor } from "./IdListEditor";
-import { Tabs } from "./Tabs";
+import { Tabs, type RoutedTabsState } from "./Tabs";
 import { AbusePolicySimulator } from "./AbusePolicySimulator";
 
 const billingStatuses: BillingStatus[] = [
@@ -73,11 +73,17 @@ function validateIdList(
   return undefined;
 }
 
-export function AbuseControlsPanel() {
+export function AbuseControlsPanel({
+  tabState,
+}: {
+  tabState?: RoutedTabsState;
+}) {
   const { t } = useLocale();
   return (
     <Section>
       <Tabs
+        activeId={tabState?.activeId}
+        onActiveIdChange={tabState?.onActiveIdChange}
         tabs={[
           {
             id: "controls",

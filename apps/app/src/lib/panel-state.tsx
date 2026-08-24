@@ -15,7 +15,7 @@ import { useLocale } from "./i18n";
  *
  * - `query.isPending` → a small shimmer skeleton (existing `rm-skeleton`).
  * - `query.isError` → an `rm-composer-error` box with the message + Retry.
- * - empty (`isEmpty(data)`) → `<div className="rm-empty">{empty}</div>`.
+ * - empty (`isEmpty(data)`) → the shared, accessible `EmptyState`.
  * - otherwise → `children(data)`.
  */
 export function PanelState<T, TError = Error>(props: {
@@ -74,7 +74,12 @@ export function PanelState<T, TError = Error>(props: {
 
   const data = query.data;
   const emptyState = (
-    <EmptyState action={emptyAction} icon={emptyIcon} title={empty}>
+    <EmptyState
+      action={emptyAction}
+      headingLevel={2}
+      icon={emptyIcon}
+      title={empty}
+    >
       {emptyDescription}
     </EmptyState>
   );

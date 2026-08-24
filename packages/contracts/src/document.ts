@@ -78,13 +78,17 @@ import { modelCapabilityProbeRoutes } from "./model-capability-probe";
 import { promptRoutes } from "./prompts";
 import { ragGovernanceRoutes } from "./rag-governance";
 import { readinessRoutes } from "./readiness";
+import { internalReadinessRoutes } from "./internal-readiness";
 import { runRoutes } from "./runs";
+import { RunEventSchema } from "./run-event-contracts";
 import { ssoAdministrationRoutes } from "./sso-administration";
 import { scimRoutes } from "./scim";
 import { webRoutes } from "./web";
 import { webhookRoutes } from "./webhooks";
 import { voiceRoutes } from "./voices";
 import { workflowRoutes } from "./workflows";
+import { workerBrokerRoutes } from "./worker-broker";
+
 import { workspaceContentRoutes } from "./workspace-content";
 import { ROMEO_PRODUCT_VERSION } from "./version";
 import { applyApiDeprecationsToOpenApiDocument } from "./api-deprecations";
@@ -129,6 +133,7 @@ export const contractRoutes = [
   ...promptRoutes,
   ...ragGovernanceRoutes,
   ...readinessRoutes,
+  ...internalReadinessRoutes,
   ...runRoutes,
   ...ssoAdministrationRoutes,
   ...scimRoutes,
@@ -165,6 +170,7 @@ export const contractRoutes = [
   ...webhookRoutes,
   ...voiceRoutes,
   ...workflowRoutes,
+  ...workerBrokerRoutes,
   ...workspaceContentRoutes,
 ] as const;
 
@@ -179,6 +185,7 @@ export function contractOpenApiDocument(
   for (const [name, schema] of Object.entries(securitySchemes)) {
     registry.openAPIRegistry.registerComponent("securitySchemes", name, schema);
   }
+  registry.openAPIRegistry.register("TypedRunEvent", RunEventSchema);
   const registeredOperations = new Set<string>();
   const registerRoute = (route: RouteConfig): void => {
     const operation = `${route.method.toUpperCase()} ${route.path}`;

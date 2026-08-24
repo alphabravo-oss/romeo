@@ -34,6 +34,7 @@ export type CapabilityLayer =
 
 export type CapabilityReasonCode =
   | "platform_disabled"
+  | "default_disabled"
   | "not_configured"
   | "not_entitled"
   | "organization_policy"

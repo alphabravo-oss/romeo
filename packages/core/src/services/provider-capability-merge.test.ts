@@ -32,7 +32,7 @@ describe("provider capability merge and probe", () => {
     expect(
       omitUnsupportedProviderKnobs({
         requested: { temperature: 0.2, seed: 7 },
-        supported: new Set(["temperature"]),
+        supported: new Set(["temperature"] as const),
       }),
     ).toEqual({ effective: { temperature: 0.2 }, omitted: ["seed"] });
   });

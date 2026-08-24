@@ -50,6 +50,7 @@ export function registerChatExperienceRoutes(app: RomeoApi): void {
     const body = context.req.valid("json");
     const completion = await services.openAiChatCompletions.complete({
       subject,
+      signal: context.req.raw.signal,
       request: {
         model: body.modelId,
         messages: [

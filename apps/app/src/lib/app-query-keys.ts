@@ -80,7 +80,7 @@ export const chats = (workspaceId?: string, view?: "collaboration") =>
       : (["chats", workspaceId, view] as const);
 export const chatsByTag = (tag?: string) => resourceKey("chatsByTag", tag);
 export const commandCatalog = (
-  resource: "agents" | "knowledge" | "prompts" | "tools" | "workflows",
+  resource: "agents" | "knowledge" | "prompts" | "tools",
   workspaceId?: string,
 ) =>
   workspaceId === undefined
@@ -146,6 +146,8 @@ export const jobs = () => ["jobs"] as const;
 export const jobsOperationalSummary = () => ["jobsOperationalSummary"] as const;
 export const knowledgeBases = (workspaceId?: string) =>
   resourceKey("knowledgeBases", workspaceId);
+export const knowledgeBase = (knowledgeBaseId?: string) =>
+  resourceKey("knowledgeBase", knowledgeBaseId);
 export const knowledgeIngestReadiness = () =>
   ["knowledgeIngestReadiness"] as const;
 export const knowledgeShares = (knowledgeBaseId?: string) =>
@@ -223,6 +225,13 @@ export const tablePages = (request?: {
   request === undefined
     ? (["tablePages"] as const)
     : (["tablePages", request] as const);
+export const tableExport = (jobId?: string) =>
+  ["tableExport", { jobId }] as const;
+export const tableViews = (
+  workspaceId?: string,
+  resource?: string,
+  parentId?: string,
+) => ["tableViews", { parentId, resource, workspaceId }] as const;
 export const sessions = () => ["sessions"] as const;
 export const shareTargets = (scope: ShareTargetScope) =>
   ["shareTargets", scope] as const;
@@ -234,12 +243,17 @@ export const toolConnectors = () => ["toolConnectors"] as const;
 export const toolOperations = (connectorId?: string) =>
   resourceKey("toolOperations", connectorId);
 export const usageAlerts = () => ["usageAlerts"] as const;
-export const usageEvents = (range?: string) =>
+type UsageIntervalKey =
+  | string
+  | { from?: string | undefined; to?: string | undefined };
+export const usageEvents = (range?: UsageIntervalKey) =>
   resourceKey("usageEvents", range);
-export const usageSummary = () => ["usageSummary"] as const;
+export const usageSummary = (interval?: UsageIntervalKey) =>
+  resourceKey("usageSummary", interval);
 export const users = (filters?: {
   direction: "asc" | "desc";
   page: number;
+  pageSize: number;
   query: string;
   sort: string;
 }) =>
@@ -251,6 +265,7 @@ export const users = (filters?: {
         filters.sort,
         filters.direction,
         filters.page,
+        filters.pageSize,
       ] as const);
 export const voices = () => ["voices"] as const;
 export const webSearchConfiguration = () => ["webSearchConfiguration"] as const;
@@ -265,12 +280,6 @@ export const webhookDeliveries = (
       : (["webhookDeliveries", webhookId, page] as const);
 export const webhooks = (workspaceId?: string) =>
   resourceKey("webhooks", workspaceId);
-export const workflowRuns = (workflowId?: string) =>
-  resourceKey("workflowRuns", workflowId);
-export const workflowTemplates = (workspaceId?: string) =>
-  resourceKey("workflowTemplates", workspaceId);
-export const workflows = (workspaceId?: string) =>
-  resourceKey("workflows", workspaceId);
 export const workspaceCapabilities = (workspaceId: string) =>
   ["workspaceCapabilities", workspaceId] as const;
 export const workspaceMembers = (workspaceId?: string) =>

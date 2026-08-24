@@ -108,14 +108,27 @@
 
 .rm-table-row-action {
   cursor: pointer;
-  outline: none;
 }
 
-.rm-table-row-action:focus-visible td {
-  background: color-mix(in srgb, var(--rm-accent) 9%, var(--rm-surface));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--rm-accent) 45%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--rm-accent) 45%, transparent);
+.rm-table-row-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.rm-table-row-button {
+  width: 100%;
+  min-height: 0;
+  justify-content: flex-start;
+  padding: 0;
+  text-align: start;
+  white-space: normal;
+}
+
+.rm-table-row-link:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--rm-accent);
+  outline-offset: 2px;
 }
 
 .rm-table-empty {
@@ -371,7 +384,7 @@
   font-size: 10px;
   font-weight: 510;
   letter-spacing: 0.04em;
-  color: var(--rm-muted);
+  color: color-mix(in srgb, var(--rm-muted) 85%, var(--rm-text));
   border: 1px solid var(--rm-border);
   border-radius: 5px;
   padding: 2px 6px;
@@ -413,11 +426,11 @@
 }
 
 .rm-cmdk-item.active {
-  background: var(--rm-accent);
+  background: var(--rm-accent-solid);
   color: var(--rm-on-accent);
 }
 
-.rm-cmdk-item.active svg {
+.rm-cmdk-item.active :where(span, svg) {
   color: var(--rm-on-accent);
 }
 
@@ -577,6 +590,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.rm-table-authority-error {
+  grid-column: 1 / -1;
+  color: var(--danger-text);
 }
 
 .rm-table-view {

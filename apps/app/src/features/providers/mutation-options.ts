@@ -1,6 +1,7 @@
 import { apiQueryKeyRoots, apiQueryKeys } from "../../lib/api-query-options";
 import * as appQueryKeys from "../../lib/app-query-keys";
 import { currentMutationSessionVersion } from "../../lib/mutation-session-boundary";
+import { invalidateInventoriedTablePages } from "../../lib/inventoried-table-cache";
 import {
   invalidateCachedResourceExactly,
   serverMutationOptions,
@@ -45,11 +46,8 @@ export function syncProviderModelsMutationOptions() {
   return serverMutationOptions({
     resource: "provider.models.sync",
     mutationFn: syncProviderModels,
-    reconcile: (client) =>
-      invalidateCachedResourceExactly(
-        client,
-        apiQueryKeyRoots.providerModelCapabilityReports(),
-      ),
+    reconcile: (client, _models, providerId) =>
+      refreshProviderModelProjections(client, providerId),
     invalidations: (_data, providerId) =>
       providerInventoryInvalidations(providerId),
   });
@@ -66,6 +64,11 @@ export function updateProviderModelMutationOptions() {
       "capabilities" in input
         ? updateModelCapabilities(input)
         : updateModelEnabled(input),
+    reconcile: (client, model) =>
+      invalidateInventoriedTablePages(client, {
+        parentId: model.providerId,
+        resource: "provider_models",
+      }),
     invalidations: (model, input) => [
       { exact: true, queryKey: apiQueryKeys.models() },
       {
@@ -114,11 +117,8 @@ export function pullProviderModelMutationOptions() {
       await syncProviderModels(input.providerId);
       return result;
     },
-    reconcile: (client) =>
-      invalidateCachedResourceExactly(
-        client,
-        apiQueryKeyRoots.providerModelCapabilityReports(),
-      ),
+    reconcile: (client, _result, input) =>
+      refreshProviderModelProjections(client, input.providerId),
     invalidations: (_data, input) =>
       providerInventoryInvalidations(input.providerId),
   });
@@ -128,14 +128,27 @@ export function deleteProviderModelMutationOptions() {
   return serverMutationOptions({
     resource: "provider.ollamaModel.delete",
     mutationFn: deleteOllamaProviderModel,
-    reconcile: (client) =>
-      invalidateCachedResourceExactly(
-        client,
-        apiQueryKeyRoots.providerModelCapabilityReports(),
-      ),
+    reconcile: (client, _result, input) =>
+      refreshProviderModelProjections(client, input.providerId),
     invalidations: (_data, input) =>
       providerInventoryInvalidations(input.providerId),
   });
+}
+
+async function refreshProviderModelProjections(
+  client: Parameters<typeof invalidateCachedResourceExactly>[0],
+  providerId: string,
+): Promise<void> {
+  await Promise.all([
+    invalidateCachedResourceExactly(
+      client,
+      apiQueryKeyRoots.providerModelCapabilityReports(),
+    ),
+    invalidateInventoriedTablePages(client, {
+      parentId: providerId,
+      resource: "provider_models",
+    }),
+  ]);
 }
 
 export function updateModelPricingMutationOptions() {

@@ -2,7 +2,7 @@
 
 .rm-message-edit-actions button.primary {
   border-color: var(--rm-accent);
-  background: var(--rm-accent);
+  background: var(--rm-accent-solid);
   color: white;
 }
 
@@ -321,7 +321,10 @@
   transition: width 160ms ease;
 }
 
-.reduce-motion .rm-tray-progress-bar,
+.reduce-motion .rm-tray-progress-bar {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rm-tray-progress-bar {
     transition: none;
@@ -620,11 +623,11 @@ html.dark .rm-composer-model-select:hover:not(:disabled) {
 }
 
 .rm-send-button:hover:not(:disabled) {
-  background: var(--rm-accent-hover);
+  background: var(--rm-accent-solid-hover);
 }
 
 .rm-send-button {
-  background: var(--rm-accent);
+  background: var(--rm-accent-solid);
   color: var(--rm-on-accent);
   border-radius: 9999px;
 }
@@ -907,6 +910,23 @@ html.dark .rm-send-button:disabled {
     width: 100%;
     max-width: 100vw;
     padding-inline: 10px;
+  }
+
+  /* The complete turn-mode toolbar is wider than a phone after localization.
+     Wrap at control boundaries so every 34px target remains fully exposed;
+     clipping or a partially visible horizontal scroller fails WCAG 2.2 target
+     sizing and makes the first hidden mode effectively undiscoverable. */
+  .rm-composer-actions {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .rm-composer-model-selector {
+    flex: 1 1 8rem;
+  }
+
+  .rm-composer-model-select {
+    max-width: 100%;
   }
 }
 

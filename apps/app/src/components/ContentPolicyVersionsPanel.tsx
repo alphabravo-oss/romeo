@@ -27,11 +27,19 @@ export function ContentPolicyVersionsPanel({
   const versionsQuery = useQuery(contentPolicyVersionsQueryOptions());
   const decisionsQuery = useQuery(contentPolicyDecisionsQueryOptions());
   const approvalsQuery = useQuery(contentPolicyApprovalsQueryOptions());
-  const createMutation = useMutation(createContentPolicyVersionMutationOptions());
-  const publishMutation = useMutation(publishContentPolicyVersionMutationOptions());
+  const createMutation = useMutation(
+    createContentPolicyVersionMutationOptions(),
+  );
+  const publishMutation = useMutation(
+    publishContentPolicyVersionMutationOptions(),
+  );
   const rollbackMutation = useMutation(rollbackContentPolicyMutationOptions());
-  const resolveMutation = useMutation(resolveContentPolicyApprovalMutationOptions());
-  const dryRunMutation = useMutation(dryRunContentPolicyVersionMutationOptions());
+  const resolveMutation = useMutation(
+    resolveContentPolicyApprovalMutationOptions(),
+  );
+  const dryRunMutation = useMutation(
+    dryRunContentPolicyVersionMutationOptions(),
+  );
   const [dryRunContent, setDryRunContent] = useState("");
   const versions = versionsQuery.data ?? [];
   const decisions = decisionsQuery.data ?? [];
@@ -138,7 +146,8 @@ export function ContentPolicyVersionsPanel({
                 ) : null}
                 <Button
                   disabled={
-                    dryRunMutation.isPending || dryRunContent.trim().length === 0
+                    dryRunMutation.isPending ||
+                    dryRunContent.trim().length === 0
                   }
                   onClick={() => void dryRun(version.id)}
                   type="button"
@@ -172,7 +181,8 @@ export function ContentPolicyVersionsPanel({
           <ul className="rm-plain-list">
             {decisions.map((decision) => (
               <li key={decision.id}>
-                {decision.action} · {decision.surface} · {decision.detectors.length}
+                {decision.action} · {decision.surface} ·{" "}
+                {decision.detectors.length}
               </li>
             ))}
           </ul>

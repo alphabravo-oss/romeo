@@ -43,7 +43,7 @@ export function promptTemplatePageQueryOptions(input: {
   return queryOptions({
     ...serverQueryPolicy("interactive", "promptTemplates", {
       page,
-      query: normalizedQuery,
+      ...(normalizedQuery === "" ? {} : { query: normalizedQuery }),
       workspaceId,
     }),
     queryKey: appQueryKeys.promptTemplates(workspaceId, {
@@ -56,7 +56,7 @@ export function promptTemplatePageQueryOptions(input: {
           workspaceId: workspaceId!,
           limit: pageSize,
           offset: page * pageSize,
-          ...(normalizedQuery === "" ? {} : { query }),
+          ...(normalizedQuery === "" ? {} : { query: normalizedQuery }),
         }),
       ),
     enabled: enabled && workspaceId !== undefined,
@@ -70,15 +70,16 @@ export function commandPromptTemplatesQueryOptions(input: {
   workspaceId: string | undefined;
 }) {
   const { enabled, limit, query, workspaceId } = input;
+  const normalizedQuery = query.trim();
   return queryOptions({
     ...serverQueryPolicy("interactive", "promptTemplates", {
       purpose: "command",
-      query,
+      ...(normalizedQuery === "" ? {} : { query: normalizedQuery }),
       workspaceId,
     }),
     queryKey: appQueryKeys.promptTemplates(workspaceId, {
       purpose: "command",
-      query,
+      query: normalizedQuery,
     }),
     queryFn: ({ signal }) =>
       abortableQuery(signal, () =>
@@ -86,7 +87,7 @@ export function commandPromptTemplatesQueryOptions(input: {
           workspaceId: workspaceId!,
           limit,
           offset: 0,
-          ...(query === "" ? {} : { query }),
+          ...(normalizedQuery === "" ? {} : { query: normalizedQuery }),
         }),
       ),
     enabled: enabled && workspaceId !== undefined,

@@ -1,10 +1,6 @@
 {
   "schemaVersion": 1,
-  "classifications": [
-    "bounded-client",
-    "virtualized-client",
-    "server-driven"
-  ],
+  "classifications": ["bounded-client", "virtualized-client", "server-driven"],
   "components": [
     {
       "file": "apps/app/src/components/AgentAccessPanel.tsx",
@@ -231,6 +227,10 @@
           "status": "implemented",
           "controller": "ServerTableState",
           "endpoint": "POST /api/v1/admin/table-pages",
+          "binding": {
+            "serverState": "serverState",
+            "rows": "data"
+          },
           "capabilities": [
             "opaque_cursor_history",
             "created_at_sort",
@@ -384,6 +384,10 @@
           "status": "implemented",
           "controller": "ServerTableState",
           "endpoint": "POST /api/v1/admin/table-pages",
+          "binding": {
+            "serverState": "tableState",
+            "rows": "knowledgeBases"
+          },
           "capabilities": [
             "opaque_cursor_history",
             "created_at_sort",
@@ -403,6 +407,10 @@
           "status": "implemented",
           "controller": "ServerTableState",
           "endpoint": "POST /api/v1/admin/table-pages",
+          "binding": {
+            "serverState": "tableState",
+            "rows": "sources"
+          },
           "capabilities": [
             "opaque_cursor_history",
             "created_at_sort",
@@ -804,35 +812,6 @@
         {
           "id": "webhook_deliveries",
           "classification": "server-driven",
-          "status": "implemented"
-        }
-      ]
-    },
-    {
-      "file": "apps/app/src/components/WorkflowsPanel.tsx",
-      "datasets": [
-        {
-          "id": "workflows",
-          "classification": "server-driven",
-          "status": "implemented",
-          "controller": "ServerTableState",
-          "endpoint": "POST /api/v1/admin/table-pages",
-          "capabilities": [
-            "opaque_cursor_history",
-            "created_at_sort",
-            "server_filters",
-            "page_size",
-            "estimated_total"
-          ]
-        },
-        {
-          "id": "workflow_templates",
-          "classification": "bounded-client",
-          "status": "implemented"
-        },
-        {
-          "id": "workflow_runs",
-          "classification": "bounded-client",
           "status": "implemented"
         }
       ]

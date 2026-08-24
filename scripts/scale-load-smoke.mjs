@@ -6,10 +6,13 @@ import {
   summarizeScaleFixtures,
   validateScaleFixtures,
 } from "./lib/scale-fixtures.mjs";
+import { assertNoSecretArgv, readSecretInput } from "./lib/secret-input.mjs";
+
+assertNoSecretArgv();
 
 const outputPath = argValue("--output");
 const baseUrl = argValue("--base-url");
-const apiKey = argValue("--api-key") ?? process.env.ROMEO_API_KEY;
+const apiKey = readSecretInput({ environment: "ROMEO_API_KEY" });
 const dryRun = process.argv.includes("--dry-run") || baseUrl === undefined;
 const fixtures = readFixtures();
 
@@ -81,7 +84,7 @@ function dryRunEvidence(input, plan) {
     operationCounts: plan.operationCounts,
     notes: [
       "Dry-run validates synthetic fixture safety and load-driver coverage without contacting a Romeo API.",
-      "Run with --base-url and --api-key to collect live latency and read/write evidence.",
+      "Run with --base-url and ROMEO_API_KEY or ROMEO_API_KEY_FILE to collect live latency and read/write evidence.",
     ],
   };
 }
@@ -91,7 +94,9 @@ async function liveEvidence(input, plan) {
     throw new Error("--base-url is required unless --dry-run is set.");
   }
   if (apiKey === undefined || apiKey.length === 0) {
-    throw new Error("--api-key or ROMEO_API_KEY is required for live mode.");
+    throw new Error(
+      "ROMEO_API_KEY or ROMEO_API_KEY_FILE is required for live mode.",
+    );
   }
 
   const metrics = [];

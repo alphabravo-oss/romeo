@@ -24,7 +24,10 @@ import type {
   FinishFileLifecycleLeaseInput,
   RenewFileLifecycleLeaseInput,
 } from "@romeo/core";
-import { assertFileLifecycleTransition } from "@romeo/core";
+import {
+  assertFileLifecycleTransition,
+  fileLifecycleMaxAttempts,
+} from "@romeo/core";
 
 import type { RomeoDatabase } from "./client";
 import {
@@ -86,6 +89,56 @@ export class PgFileRepository {
     return rows.map(toFileObjectRecord);
   }
 
+  async getFileLifecycleQueueSummary(orgId: string): Promise<{
+    deadLettered: number;
+    oldestQueuedAt?: string;
+    queued: number;
+  }> {
+    const [row] = await this.db
+      .select({
+        deadLettered: sql<number>`count(*) filter (where ${objectRecords.status} = 'failed' and ${objectRecords.lifecycleAttempts} >= ${fileLifecycleMaxAttempts})::int`,
+        oldestQueuedAt: sql<Date | null>`min(${objectRecords.createdAt}) filter (where ${objectRecords.status} in ('quarantined', 'scanning', 'extracting', 'transcoding', 'failed') and ${objectRecords.lifecycleAttempts} < ${fileLifecycleMaxAttempts})`,
+        queued: sql<number>`count(*) filter (where ${objectRecords.status} in ('quarantined', 'scanning', 'extracting', 'transcoding', 'failed') and ${objectRecords.lifecycleAttempts} < ${fileLifecycleMaxAttempts})::int`,
+      })
+      .from(objectRecords)
+      .where(eq(objectRecords.orgId, orgId));
+    const oldestQueuedAt = row?.oldestQueuedAt?.toISOString();
+    return {
+      deadLettered: row?.deadLettered ?? 0,
+      queued: row?.queued ?? 0,
+      ...(oldestQueuedAt === undefined ? {} : { oldestQueuedAt }),
+    };
+  }
+
+  async listFileRetentionCandidates(input: {
+    after?: { id: string; updatedAt: string };
+    limit: number;
+    orgId: string;
+  }): Promise<FileObjectRecord[]> {
+    const after = input.after;
+    const rows = await this.db
+      .select()
+      .from(objectRecords)
+      .where(
+        and(
+          eq(objectRecords.orgId, input.orgId),
+          ne(objectRecords.status, "deleted"),
+          after === undefined
+            ? undefined
+            : or(
+                gt(objectRecords.updatedAt, new Date(after.updatedAt)),
+                and(
+                  eq(objectRecords.updatedAt, new Date(after.updatedAt)),
+                  gt(objectRecords.id, after.id),
+                ),
+              ),
+        ),
+      )
+      .orderBy(asc(objectRecords.updatedAt), asc(objectRecords.id))
+      .limit(Math.max(1, Math.min(input.limit, 1_000)));
+    return rows.map(toFileObjectRecord);
+  }
+
   async listAuthorizedFileObjectsPage(
     input: AuthorizedFileCatalogQuery,
   ): Promise<{ items: FileObjectRecord[]; total: number }> {
@@ -135,7 +188,10 @@ export class PgFileRepository {
         : or(
             ilike(objectRecords.fileName, containsPattern(query)),
             ilike(objectRecords.mimeType, containsPattern(query)),
-            ilike(sql`${objectRecords.metadata}->>'title'`, containsPattern(query)),
+            ilike(
+              sql`${objectRecords.metadata}->>'title'`,
+              containsPattern(query),
+            ),
           ),
       input.isAdmin
         ? undefined
@@ -214,7 +270,7 @@ export class PgFileRepository {
               "transcoding",
               "failed",
             ]),
-            lte(objectRecords.lifecycleAttempts, 99),
+            lte(objectRecords.lifecycleAttempts, fileLifecycleMaxAttempts - 1),
             or(
               isNull(objectRecords.lifecycleNextAttemptAt),
               lte(objectRecords.lifecycleNextAttemptAt, now),

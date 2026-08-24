@@ -2,6 +2,13 @@ import type * as OAuth from "../domain/delegated-oauth";
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
 import {
+  accumulateRuntimeKeyUsage,
+  classifyDelegatedOAuthTokenEnvelope,
+  emptyRuntimeKeyUsageCounts,
+  type RuntimeKeyUsageCounts,
+  type RuntimeKeyUsageQuery,
+} from "../domain/runtime-key-usage";
+import {
   append,
   appendMany,
   removeById,
@@ -120,6 +127,12 @@ export abstract class InMemoryContentRepository extends InMemoryConversationRepo
     return this.data.knowledgeSources.filter(
       (source) => source.knowledgeBaseId === knowledgeBaseId,
     );
+  }
+
+  async getKnowledgeSource(
+    sourceId: string,
+  ): Promise<E.KnowledgeSource | undefined> {
+    return this.data.knowledgeSources.find((source) => source.id === sourceId);
   }
 
   async createKnowledgeSource(
@@ -306,6 +319,21 @@ export abstract class InMemoryContentRepository extends InMemoryConversationRepo
           right.updatedAt.localeCompare(left.updatedAt) ||
           left.id.localeCompare(right.id),
       );
+  }
+
+  async countDelegatedOAuthTokenKeyUsage(
+    input: RuntimeKeyUsageQuery,
+  ): Promise<RuntimeKeyUsageCounts> {
+    const counts = emptyRuntimeKeyUsageCounts();
+    for (const connection of this.data.delegatedOAuthConnections) {
+      if (input.orgId !== undefined && connection.orgId !== input.orgId)
+        continue;
+      accumulateRuntimeKeyUsage(
+        counts,
+        classifyDelegatedOAuthTokenEnvelope(connection.token, input),
+      );
+    }
+    return counts;
   }
 
   async getDelegatedOAuthConnection(

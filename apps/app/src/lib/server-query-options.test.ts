@@ -31,6 +31,7 @@ describe("server query option contracts", () => {
       locale: "en",
       session: { authenticated: true, kind: "session" },
       subject: {
+        displayLabel: "User 1",
         id: "user-1",
         isAdmin: false,
         orgId: "org-1",

@@ -3,6 +3,7 @@ import type * as R from "../domain/repository";
 import { ApiError } from "../errors";
 import type {
   ClaimFileLifecycleInput,
+  FileLifecycleQueueSummary as FileQueueSummary,
   FinishFileLifecycleLeaseInput,
   RenewFileLifecycleLeaseInput,
 } from "../domain/repository-content";
@@ -23,6 +24,7 @@ import {
 import {
   claimNextInMemoryFileLifecycle,
   renewInMemoryFileLifecycleLease,
+  summarizeInMemoryFileLifecycleQueue,
   writeClaimedInMemoryFileLifecycle,
 } from "./in-memory-file-lifecycle";
 import {
@@ -164,7 +166,10 @@ export abstract class InMemoryConversationRepository extends InMemoryChatReposit
     return updateMessagePartWithImmutableReferences(this.data, part);
   }
 
-  async reconcileChatFileReferences(chatId: string, now: string): Promise<E.FileObject[]> {
+  async reconcileChatFileReferences(
+    chatId: string,
+    now: string,
+  ): Promise<E.FileObject[]> {
     return reconcileChatFileReferencesInMemory(this.data, chatId, now);
   }
 
@@ -178,7 +183,9 @@ export abstract class InMemoryConversationRepository extends InMemoryChatReposit
   ): Promise<E.FileObject[]> {
     return listInMemoryFiles(this.data, orgId, workspaceId);
   }
-
+  async getFileLifecycleQueueSummary(orgId: string): Promise<FileQueueSummary> {
+    return summarizeInMemoryFileLifecycleQueue(this.data, orgId);
+  }
   async listAuthorizedFileObjectsPage(
     input: R.AuthorizedFileCatalogQuery,
   ): Promise<{ items: E.FileObject[]; total: number }> {

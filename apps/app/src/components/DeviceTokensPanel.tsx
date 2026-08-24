@@ -14,6 +14,7 @@ import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDate } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { useEventCallback } from "../lib/use-event-callback";
 import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
@@ -42,9 +43,7 @@ function authorizationStatus(
 
 export function DeviceTokensPanel() {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<DeviceAuthorization>(
-    "device_tokens",
-  );
+  const inventoriedTable = useInventoriedServerTable("device_tokens");
   const { ask, dialog } = useConfirm();
   const [addOpen, setAddOpen] = useState(false);
   const [created, setCreated] = useState<CreatedDeviceAuthorization>();
@@ -97,6 +96,8 @@ export function DeviceTokensPanel() {
     }
   }
 
+  const onRevoke = useEventCallback(handleRevoke);
+
   const columns = useMemo<ColumnDef<DeviceAuthorization, any>[]>(
     () => [
       col.accessor("name", {
@@ -146,7 +147,7 @@ export function DeviceTokensPanel() {
             disabled={
               c.row.original.revokedAt !== undefined || revokeMutation.isPending
             }
-            onClick={() => void handleRevoke(c.row.original.id)}
+            onClick={() => void onRevoke(c.row.original.id)}
             type="button"
           >
             {c.row.original.revokedAt
@@ -156,8 +157,7 @@ export function DeviceTokensPanel() {
         ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [revokeMutation.isPending, t],
+    [onRevoke, revokeMutation.isPending, t],
   );
 
   return (

@@ -588,10 +588,10 @@ try {
     );
   }
   if (
-    !kedaGate.command.includes("--api-key $ROMEO_API_KEY") ||
+    kedaGate.command.includes("--api-key") ||
     kedaGate.command.includes("SCOPED_ADMIN_OR_OPERATOR_KEY")
   ) {
-    throw new Error("KEDA preflight command did not use checked API key env.");
+    throw new Error("KEDA preflight command exposed an API key on argv.");
   }
   if (!kedaGate.checks.some((check) => check.name === "env:ROMEO_API_KEY")) {
     throw new Error("KEDA preflight gate did not check ROMEO_API_KEY.");
@@ -1339,9 +1339,8 @@ try {
     !readyQdrantGate.command.includes("--phase prepare-source") ||
     !readyQdrantGate.command.includes("--phase verify-restore") ||
     !readyQdrantGate.command.includes("--phase cleanup-source") ||
-    !readyQdrantGate.command.includes("--api-key $SOURCE_QDRANT_API_KEY") ||
-    !readyQdrantGate.command.includes("--api-key $RESTORE_QDRANT_API_KEY") ||
-    !readyQdrantGate.command.includes("--run-secret $QDRANT_DR_RUN_SECRET") ||
+    readyQdrantGate.command.includes("--api-key") ||
+    readyQdrantGate.command.includes("--run-secret") ||
     !readyQdrantGate.command.includes(
       "--source-evidence dist/ci/qdrant-dr-source.json",
     ) ||
@@ -1353,15 +1352,8 @@ try {
       "Qdrant preflight gate did not expose the runnable three-phase Qdrant DR commands.",
     );
   }
-  if (
-    readyQdrantGate.command.includes("then verify-restore") ||
-    readyQdrantGate.command.includes("QDRANT_DR_RUN_SECRET=") ||
-    readyQdrantGate.command.includes("SOURCE_QDRANT_API_KEY=") ||
-    readyQdrantGate.command.includes("RESTORE_QDRANT_API_KEY=")
-  ) {
-    throw new Error(
-      "Qdrant preflight gate used a placeholder or env-prefix secret handoff.",
-    );
+  if (readyQdrantGate.command.includes("then verify-restore")) {
+    throw new Error("Qdrant preflight gate used a placeholder secret handoff.");
   }
   for (const name of [
     "env:QDRANT_DR_RUN_SECRET",
@@ -1435,7 +1427,7 @@ try {
   const readyQdrantLiveGate = qdrantLiveGate(qdrantLiveReady);
   if (
     !readyQdrantLiveGate.command?.includes("pnpm smoke:qdrant:live") ||
-    !readyQdrantLiveGate.command.includes("--api-key $QDRANT_API_KEY") ||
+    readyQdrantLiveGate.command.includes("--api-key") ||
     !readyQdrantLiveGate.command.includes("--confirm-mutation") ||
     !readyQdrantLiveGate.command.includes(
       "--namespace-policy $VECTOR_NAMESPACE_POLICY",
@@ -1446,11 +1438,6 @@ try {
   ) {
     throw new Error(
       "Qdrant live preflight gate did not expose the live evidence command.",
-    );
-  }
-  if (readyQdrantLiveGate.command.includes("QDRANT_API_KEY=")) {
-    throw new Error(
-      "Qdrant live preflight gate used env-prefix API-key handoff.",
     );
   }
   for (const name of [
@@ -1779,7 +1766,7 @@ try {
     }
   }
   if (
-    !customWorkerGate.command.includes("--api-key $ROMEO_API_KEY") ||
+    customWorkerGate.command.includes("--api-key") ||
     !customWorkerGate?.command?.includes("--namespace romeo-prod") ||
     !customWorkerGate.command.includes("--release-name platform") ||
     !customWorkerGate.command.includes("--service platform-romeo")
@@ -1831,7 +1818,7 @@ try {
       "qdrant_dr_required_preflight_maps_to_three_phase_smoke",
       "qdrant_dr_preflight_emits_runnable_three_phase_commands",
       "qdrant_dr_preflight_requires_explicit_namespace_partition_policy",
-      "qdrant_live_preflight_uses_checked_api_key_argument",
+      "qdrant_live_preflight_uses_checked_api_key_environment",
       "qdrant_dr_preflight_rejects_unsafe_url",
       "qdrant_dr_preflight_redacts_target_secrets",
       "kubernetes_dr_preflight_requires_both_modes_and_cloudnativepg_secrets",
@@ -2721,7 +2708,7 @@ function assertTargetQualityPreflightReady(evidence) {
   }
   if (
     !gate.command?.includes("--require-eval-passed") ||
-    !gate.command.includes("--api-key $ROMEO_API_KEY") ||
+    gate.command.includes("--api-key") ||
     !gate.command.includes("TARGET_QUALITY_REQUIRE_VECTOR_COMPARISON") ||
     !gate.command.includes("--replay-file $TARGET_QUALITY_REPLAY_FILE") ||
     !gate.command.includes("--agent-ids $TARGET_QUALITY_AGENT_IDS") ||
@@ -3152,7 +3139,7 @@ function assertLoadSoakPreflightReady(evidence) {
   }
   if (
     !gate.command?.includes("pnpm smoke:kubernetes:load-soak") ||
-    !gate.command.includes("--api-key $ROMEO_API_KEY") ||
+    gate.command.includes("--api-key") ||
     !gate.command.includes("--tier $KUBERNETES_LOAD_SOAK_TIER") ||
     !gate.command.includes("--iterations $KUBERNETES_LOAD_SOAK_ITERATIONS") ||
     !gate.command.includes(
@@ -3271,7 +3258,7 @@ function assertEdgePreflightReady(evidence) {
   }
   if (
     !gate.command?.includes("pnpm smoke:edge:live") ||
-    !gate.command.includes("--api-key $ROMEO_API_KEY") ||
+    gate.command.includes("--api-key") ||
     !gate.command.includes("--require-admin-posture") ||
     !gate.command.includes("--require-waf-block-mode") ||
     !gate.command.includes(
@@ -3295,11 +3282,11 @@ function assertCommandUsesCheckedRomeoApiKey(gate) {
     throw new Error(`${gate.id} preflight did not expose a command.`);
   }
   if (
-    !gate.command.includes("--api-key $ROMEO_API_KEY") ||
+    gate.command.includes("--api-key") ||
     gate.command.includes("SCOPED_ADMIN_OR_OPERATOR_KEY")
   ) {
     throw new Error(
-      `${gate.id} preflight command did not use the checked ROMEO_API_KEY env.`,
+      `${gate.id} preflight command exposed the checked ROMEO_API_KEY on argv.`,
     );
   }
 }

@@ -30,6 +30,7 @@ import {
   type OAuth2PkceState,
 } from "./oauth2-pkce-helpers";
 import { oauth2UserId } from "./oauth2-user-id";
+import { SecretBearingEgressClient } from "./secret-bearing-egress";
 
 export { oauth2UserId } from "./oauth2-user-id";
 import type { SecretResolver } from "./secret-resolver";
@@ -260,6 +261,12 @@ export class OAuth2PkceService {
       token_endpoint: githubTokenEndpoint,
     };
     const client: oauth.Client = { client_id: input.clientId };
+    const tokenFetch = new SecretBearingEgressClient({
+      allowedUrls: [githubTokenEndpoint],
+      fetchImpl: this.fetchImpl,
+      maxResponseBytes: 64 * 1024,
+      timeoutMs: 10_000,
+    }).fetch;
     try {
       const callbackParameters = oauth.validateAuthResponse(
         as,
@@ -274,7 +281,7 @@ export class OAuth2PkceService {
         callbackParameters,
         input.redirectUri,
         input.codeVerifier,
-        { [oauth.customFetch]: this.fetchImpl },
+        { [oauth.customFetch]: tokenFetch },
       );
       const token = await oauth.processAuthorizationCodeResponse(
         as,

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -10,6 +11,11 @@ import {
   type BrowserAutomationWorkerClient,
 } from "../packages/cli/src/browser-automation-worker";
 import { MemoryObjectStore } from "../packages/storage/src/memory-object-store";
+import {
+  browserAutomationJobType,
+  browserAutomationPayloadSchemaVersion,
+  browserAutomationWorkerQueue,
+} from "../packages/core/src/services/browser-automation-task-types";
 
 const output = argValue("--output");
 const repository = new InMemoryRomeoRepository();
@@ -22,73 +28,40 @@ const api = createRomeoApi(repository, {
 const rawTaskSentinel = `RAW_BROWSER_TASK_SENTINEL_${process.pid}`;
 const rawRunnerSentinel = `RAW_BROWSER_RUNNER_SENTINEL_${process.pid}`;
 const artifactBytes = new TextEncoder().encode("browser screenshot bytes");
-
-const workflow = await apiJson<{
-  data: { id: string; steps: Array<{ id: string; type: string }> };
-}>(
-  "/api/v1/workflows",
-  {
-    method: "POST",
-    body: JSON.stringify({
-      workspaceId: "workspace_default",
-      name: "Browser Automation Contract Smoke",
-      steps: [
-        {
-          type: "browser_task",
-          name: "Inspect release metadata",
-          targetUrl: "https://example.com/releases",
-          task: `Open the release page and verify metadata. ${rawTaskSentinel}`,
-          approvalPrompt: "Approve browser automation smoke task.",
-        },
-      ],
-    }),
+const task = `Open the release page and verify metadata. ${rawTaskSentinel}`;
+const seededAt = new Date().toISOString();
+await repository.createBackgroundJob({
+  id: "job_browser_automation_smoke",
+  orgId: "org_default",
+  workspaceId: "workspace_default",
+  type: browserAutomationJobType,
+  status: "queued",
+  payload: {
+    approvedAt: seededAt,
+    approvedBy: "user_dev_admin",
+    sandboxPolicy: {
+      artifactCapture: "screenshots_and_traces",
+      downloadPolicy: "metadata_only",
+      executionDriver: "external_worker",
+      network: "target_origin_only",
+      uploadPolicy: "blocked",
+    },
+    schemaVersion: browserAutomationPayloadSchemaVersion,
+    stepId: "step_browser_1",
+    targetHost: "example.com",
+    targetOrigin: "https://example.com",
+    targetUrl: "https://example.com/releases",
+    task,
+    taskHash: createHash("sha256").update(task).digest("hex"),
+    taskLength: task.length,
+    workflowId: "workflow_browser_smoke",
+    workflowRunId: "workflow_run_browser_smoke",
+    workerQueue: browserAutomationWorkerQueue,
+    workspaceId: "workspace_default",
   },
-  201,
-);
-
-const run = await apiJson<{
-  data: {
-    id: string;
-    status: string;
-    steps: Array<{ output?: Record<string, unknown>; status: string }>;
-  };
-}>(
-  `/api/v1/workflows/${encodeURIComponent(workflow.data.id)}/runs`,
-  {
-    method: "POST",
-  },
-  201,
-);
-const runReadback = JSON.stringify(run);
-if (run.data.status !== "waiting_approval") {
-  throw new Error(`Expected waiting_approval run, got ${run.data.status}.`);
-}
-assertNotContains(
-  runReadback,
-  rawTaskSentinel,
-  "initial browser approval readback",
-);
-
-const approved = await apiJson<{
-  data: {
-    id: string;
-    status: string;
-    steps: Array<{ output?: Record<string, unknown>; status: string }>;
-  };
-}>(`/api/v1/workflow-runs/${encodeURIComponent(run.data.id)}/approve`, {
-  method: "POST",
-  body: JSON.stringify({ comment: "browser automation smoke approval" }),
+  createdAt: seededAt,
+  updatedAt: seededAt,
 });
-if (approved.data.status !== "waiting_run") {
-  throw new Error(
-    `Expected waiting_run after approval, got ${approved.data.status}.`,
-  );
-}
-assertNotContains(
-  JSON.stringify(approved),
-  rawTaskSentinel,
-  "approved browser task readback",
-);
 
 const firstClaim = await apiJson<{
   data: {
@@ -128,7 +101,7 @@ const workerClaims: unknown[] = [];
 const workerStdout: string[] = [];
 const workerStderr: string[] = [];
 const workerClient: BrowserAutomationWorkerClient = {
-  workflows: {
+  browserAutomation: {
     claimBrowserTask: async (input) => {
       const result = await apiData<unknown>(
         "/api/v1/browser-automation-tasks/claim",
@@ -140,7 +113,7 @@ const workerClient: BrowserAutomationWorkerClient = {
       workerClaims.push(result);
       return result as Awaited<
         ReturnType<
-          BrowserAutomationWorkerClient["workflows"]["claimBrowserTask"]
+          BrowserAutomationWorkerClient["browserAutomation"]["claimBrowserTask"]
         >
       >;
     },
@@ -151,7 +124,7 @@ const workerClient: BrowserAutomationWorkerClient = {
         pathParams: { jobId: input.jobId },
       })) as Awaited<
         ReturnType<
-          BrowserAutomationWorkerClient["workflows"]["completeBrowserTask"]
+          BrowserAutomationWorkerClient["browserAutomation"]["completeBrowserTask"]
         >
       >,
     failBrowserTask: async (input) =>
@@ -161,7 +134,7 @@ const workerClient: BrowserAutomationWorkerClient = {
         pathParams: { jobId: input.jobId },
       })) as Awaited<
         ReturnType<
-          BrowserAutomationWorkerClient["workflows"]["failBrowserTask"]
+          BrowserAutomationWorkerClient["browserAutomation"]["failBrowserTask"]
         >
       >,
   },
@@ -268,27 +241,12 @@ assertNotContains(workerStderr.join(""), rawTaskSentinel, "worker stderr");
 assertNotContains(workerStderr.join(""), rawRunnerSentinel, "worker stderr");
 assertNotContains(workerStderr.join(""), artifactKey, "worker stderr");
 
-const finalRuns = await apiJson<{
-  data: Array<{
-    id: string;
-    status: string;
-    steps: Array<{ output?: Record<string, unknown>; status: string }>;
-  }>;
-}>(`/api/v1/workflows/${encodeURIComponent(workflow.data.id)}/runs`);
-const finalRun = finalRuns.data.find(
-  (candidate) => candidate.id === run.data.id,
-);
-if (finalRun?.status !== "completed") {
-  throw new Error(`Expected completed workflow run, got ${finalRun?.status}.`);
+const completedBeforeRetention = await getJob(jobId);
+if (completedBeforeRetention.status !== "completed") {
+  throw new Error(
+    `Expected completed browser job, got ${completedBeforeRetention.status}.`,
+  );
 }
-const finalSerialized = JSON.stringify(finalRuns);
-assertNotContains(finalSerialized, rawTaskSentinel, "final workflow readback");
-assertNotContains(
-  finalSerialized,
-  rawRunnerSentinel,
-  "final workflow readback",
-);
-assertNotContains(finalSerialized, artifactKey, "final workflow readback");
 
 const artifactResponse = await api.request(artifactUrl);
 const artifactReadback = new Uint8Array(await artifactResponse.arrayBuffer());
@@ -370,7 +328,7 @@ const evidence = {
   generatedAt: new Date().toISOString(),
   status: "passed",
   checks: [
-    "browser_task_approval_metadata_redaction",
+    "browser_task_claim_exposes_raw_task",
     "stale_running_browser_task_reclaimed",
     "external_runner_completion",
     "worker_stdout_redaction",
@@ -379,10 +337,9 @@ const evidence = {
     "browser_artifact_retention_cleanup",
     "retention_metadata_redaction",
   ],
-  workflow: {
-    workflowId: workflow.data.id,
-    workflowRunId: run.data.id,
-    finalStatus: finalRun.status,
+  job: {
+    jobId,
+    finalStatus: completedBeforeRetention.status,
   },
   worker: {
     jobId,
@@ -397,10 +354,9 @@ const evidence = {
     retentionDeletedCount: retention.data.deletedBrowserAutomationArtifactCount,
   },
   redaction: {
-    approvalReadback: "passed",
+    claimReadback: "passed",
     workerStdout: "passed",
     workerStderr: "passed",
-    workflowReadback: "passed",
     retentionEvidence: "passed",
   },
 };

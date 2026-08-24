@@ -20,6 +20,7 @@ interface FieldContextValue {
   errorId?: string | undefined;
   invalid: boolean;
   inputId: string;
+  required: boolean;
 }
 
 const FieldContext = createContext<FieldContextValue | null>(null);
@@ -32,6 +33,7 @@ export function Field({
   id,
   label,
   required,
+  visualRequiredIndicator,
 }: {
   children: ReactNode | ((props: FieldContextValue) => ReactNode);
   className?: string;
@@ -40,21 +42,31 @@ export function Field({
   id?: string;
   label: ReactNode;
   required?: boolean;
+  /** Shows the required marker without adding validation semantics. */
+  visualRequiredIndicator?: boolean;
 }) {
   const generatedInputId = useId();
   const inputId = id ?? generatedInputId;
   const descriptionId = description ? `${inputId}-description` : undefined;
   const errorId = error ? `${inputId}-error` : undefined;
   const context = useMemo(
-    () => ({ descriptionId, errorId, inputId, invalid: Boolean(error) }),
-    [descriptionId, error, errorId, inputId],
+    () => ({
+      descriptionId,
+      errorId,
+      inputId,
+      invalid: Boolean(error),
+      required: required === true,
+    }),
+    [descriptionId, error, errorId, inputId, required],
   );
   return (
     <FieldContext.Provider value={context}>
       <div className={cn("rm-ui-field", className)}>
         <label className="rm-ui-field__label" htmlFor={inputId}>
           {label}
-          {required ? <span aria-hidden="true"> *</span> : null}
+          {required || visualRequiredIndicator ? (
+            <span aria-hidden="true"> *</span>
+          ) : null}
         </label>
         {typeof children === "function" ? children(context) : children}
         {description ? (
@@ -81,18 +93,24 @@ function useFieldProps(props: {
     | "spelling"
     | "true"
     | undefined;
+  "aria-required"?: boolean | "false" | "true" | undefined;
   id?: string | undefined;
+  required?: boolean | undefined;
 }) {
   const field = useContext(FieldContext);
   if (!field) return props;
+  const describedBy = normalizeAriaDescribedBy(
+    props["aria-describedby"],
+    field.descriptionId,
+    field.errorId,
+  );
   return {
     ...props,
-    "aria-describedby":
-      props["aria-describedby"] ??
-      [field.descriptionId, field.errorId].filter(Boolean).join(" ") ??
-      undefined,
+    "aria-describedby": describedBy,
     "aria-invalid": props["aria-invalid"] ?? field.invalid,
+    "aria-required": props["aria-required"] ?? (field.required || undefined),
     id: props.id ?? field.inputId,
+    required: props.required ?? field.required,
   };
 }
 
@@ -198,11 +216,13 @@ export interface SelectOption {
 export function Select({
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
   className,
   options,
   placeholder,
   ...props
 }: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root> & {
+  "aria-describedby"?: string;
   "aria-label"?: string;
   "aria-labelledby"?: string;
   className?: string;
@@ -211,15 +231,19 @@ export function Select({
 }) {
   const field = useContext(FieldContext);
   const groups = groupSelectOptions(options);
+  const describedBy = normalizeAriaDescribedBy(
+    ariaDescribedBy,
+    field?.descriptionId,
+    field?.errorId,
+  );
   return (
     <SelectPrimitive.Root {...props}>
       <SelectPrimitive.Trigger
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
-        aria-describedby={[field?.descriptionId, field?.errorId]
-          .filter(Boolean)
-          .join(" ")}
+        aria-describedby={describedBy}
         aria-invalid={field?.invalid || undefined}
+        aria-required={field?.required || undefined}
         className={cn("rm-ui-control rm-ui-select", className)}
         id={field?.inputId}
         type="button"
@@ -262,6 +286,21 @@ export function Select({
       </SelectPrimitive.Portal>
     </SelectPrimitive.Root>
   );
+}
+
+export function normalizeAriaDescribedBy(
+  ...values: Array<string | null | undefined | false>
+): string | undefined {
+  const ids = [
+    ...new Set(
+      values.flatMap((value) =>
+        typeof value === "string"
+          ? value.trim().split(/\s+/u).filter(Boolean)
+          : [],
+      ),
+    ),
+  ];
+  return ids.length === 0 ? undefined : ids.join(" ");
 }
 
 function groupSelectOptions(options: readonly SelectOption[]) {

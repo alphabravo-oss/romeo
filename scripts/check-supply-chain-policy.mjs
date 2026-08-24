@@ -44,6 +44,16 @@ for (const required of [
   "trivy@sha256:",
   "fs --scanners vuln,misconfig,secret",
   "docker build --target app-runtime",
+  "docker build --target ops-runtime",
+  "romeo:security-scan-app",
+  "romeo:security-scan-ops",
+  "--scanners vuln,secret,license --format json",
+  "bind-container-scan-report.mjs",
+  "release-container-scan-evidence",
+  "--container-image-manifest",
+  "--container-scan-file",
+  "--container-policy-exceptions",
+  "pnpm smoke:release:container-security",
   "image --scanners vuln,secret",
 ]) {
   assert(

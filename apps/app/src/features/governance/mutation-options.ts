@@ -23,7 +23,7 @@ import {
   exportComplianceReportCsv,
 } from "./downloads";
 import type {
-  DataExportPackage,
+  DataExportPackageJob,
   DataExportPackageList,
   DataExportRequest,
 } from "./types";
@@ -39,41 +39,23 @@ async function withinCurrentSession<T>(operation: () => Promise<T>) {
   return result;
 }
 
-function packageSummary(
-  created: DataExportPackage,
-): DataExportPackageList["packages"][number] {
-  return {
-    schema: "romeo.data-export-package-summary.v1",
-    packageId: created.packageId,
-    orgId: created.orgId,
-    request: created.request,
-    counts: created.counts,
-    limits: created.limits,
-    warnings: created.warnings,
-    exclusions: created.exclusions,
-    artifact: created.artifact,
-    createdAt: created.createdAt,
-  };
-}
-
-function upsertExportPackage(
+function upsertExportJob(
   client: QueryClient,
-  created: DataExportPackage,
+  created: DataExportPackageJob,
 ): void {
-  const summary = packageSummary(created);
   client.setQueryData<DataExportPackageList>(
     appQueryKeys.dataExportPackages(),
     (current) => {
       if (current === undefined) return undefined;
       return {
         ...current,
-        packages: current.packages.some(
-          (entry) => entry.packageId === summary.packageId,
+        jobs: current.jobs.some(
+          (entry) => entry.packageId === created.packageId,
         )
-          ? current.packages.map((entry) =>
-              entry.packageId === summary.packageId ? summary : entry,
+          ? current.jobs.map((entry) =>
+              entry.packageId === created.packageId ? created : entry,
             )
-          : [...current.packages, summary],
+          : [created, ...current.jobs],
       };
     },
   );
@@ -98,6 +80,7 @@ function removeExportPackage(client: QueryClient, packageId: string): void {
             packages: current.packages.filter(
               (entry) => entry.packageId !== packageId,
             ),
+            jobs: current.jobs.filter((entry) => entry.packageId !== packageId),
           },
   );
 }
@@ -182,8 +165,11 @@ export function createDataExportPackageMutationOptions() {
     mutationFn: (input: DataExportRequest) =>
       withinCurrentSession(() => createDataExportPackage(input)),
     reconcile: async (client, created) => {
-      upsertExportPackage(client, created);
-      await invalidateAuditVariants(client);
+      upsertExportJob(client, created);
+      await Promise.all([
+        invalidateAuditVariants(client),
+        invalidateCachedResourceExactly(client, appQueryKeys.tablePages()),
+      ]);
     },
     invalidations: () => [{ exact: true, queryKey }],
   });
@@ -212,7 +198,10 @@ export function deleteDataExportPackageMutationOptions() {
     },
     reconcile: async (client, result) => {
       removeExportPackage(client, result.packageId);
-      await invalidateAuditVariants(client);
+      await Promise.all([
+        invalidateAuditVariants(client),
+        invalidateCachedResourceExactly(client, appQueryKeys.tablePages()),
+      ]);
     },
     invalidations: () => [{ exact: true, queryKey }],
   });

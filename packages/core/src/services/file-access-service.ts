@@ -7,19 +7,20 @@ import {
 import type { ObjectStore } from "@romeo/storage";
 
 import type { FileObject, FileObjectPurpose } from "../domain/entities";
-import { tombstoneFileObject } from "../domain/file-tombstone";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import {
   canReadFile,
   hasFilePermission,
+  initialExtractionState,
   publicExtractionState,
   publicFileObject,
 } from "./file-object-state";
 import { FilePipelineSupport } from "./file-pipeline-support";
-import { deleteFileObjectStoredObjects } from "./file-resumable-helpers";
+import { ContentDeletionService } from "./content-deletion-service";
 import {
   assertFileReadyForUse,
+  fileLifecycleMaxAttempts,
   isFileReadyForUse,
   transitionFileLifecycle,
 } from "./file-lifecycle";
@@ -48,11 +49,15 @@ export interface FileListPageResponse {
 }
 
 export class FileAccessService {
+  private readonly deletions: ContentDeletionService;
+
   constructor(
     private readonly repository: RomeoRepository,
     private readonly objectStore: ObjectStore,
     private readonly pipeline: FilePipelineSupport,
-  ) {}
+  ) {
+    this.deletions = new ContentDeletionService(repository, objectStore);
+  }
 
   async list(
     subject: AuthSubject,
@@ -134,7 +139,10 @@ export class FileAccessService {
       file.workspaceId,
       file.id,
       "get_content",
-      () => this.objectStore.getObject(file.objectKey),
+      () =>
+        this.objectStore.getObject(file.objectKey, {
+          maxBytes: file.sizeBytes,
+        }),
     );
     if (bytes === undefined) {
       throw new ApiError(
@@ -183,41 +191,33 @@ export class FileAccessService {
         409,
       );
     }
-    const bytes = await this.pipeline.traceObjectStore(
-      subject,
-      file.workspaceId,
-      file.id,
-      "get_extraction",
-      () => this.objectStore.getObject(file.objectKey),
-    );
-    if (bytes === undefined) {
-      throw new ApiError(
-        "file_object_missing",
-        "The stored file object was not found.",
-        409,
-      );
-    }
-    const extraction = await this.pipeline.extractFile(
-      { bytes, fileName: file.fileName, mimeType: file.mimeType },
-      current.attempts + 1,
-      new Date().toISOString(),
-    );
     const updated = await this.repository.transaction(async (repository) => {
-      const result = await repository.updateFileObject({
-        ...file,
-        metadata: { ...file.metadata, extraction },
-        updatedAt: new Date().toISOString(),
-      });
+      const now = new Date().toISOString();
+      const failed = await repository.updateFileObject(
+        transitionFileLifecycle(file, "failed", now, {
+          lifecycleAttempts: 0,
+          lifecycleFailureCode: "file_extraction_failed",
+          lifecycleNextAttemptAt: now,
+          metadata: {
+            ...file.metadata,
+            extraction: initialExtractionState(file.mimeType),
+          },
+        }),
+      );
+      const queued = transitionFileLifecycle(failed, "quarantined", now);
+      delete queued.lifecycleFailureCode;
+      delete queued.lifecycleNextAttemptAt;
+      const result = await repository.updateFileObject(queued);
       await this.pipeline.audit(
         repository,
         subject,
         "file.extraction.retry",
         result,
         {
-          attempts: extraction.attempts,
-          extractionStatus: extraction.status,
-          failureCode: extraction.failureCode,
-          method: extraction.method,
+          attempts: current.attempts,
+          extractionStatus: "pending",
+          failureCode: null,
+          method: current.method,
         },
       );
       return result;
@@ -235,53 +235,10 @@ export class FileAccessService {
       "files:write",
       "write",
     );
-    if (file.status === "deleted") return publicFileObject(file);
-    if (file.status === "retained") {
-      throw new ApiError(
-        "data_deletion_legal_hold",
-        "The retained file cannot be deleted through the file lifecycle.",
-        409,
-      );
-    }
-    if ((await this.repository.countMessageFileReferences(file.id)) > 0) {
-      throw new ApiError(
-        "file_lifecycle_transition_invalid",
-        "A referenced file cannot be deleted before its message references are removed.",
-        409,
-      );
-    }
-    const deletionPlan = await this.repository.getDataDeletionPlan(
-      subject.orgId,
-      "file_object",
-      file.id,
-    );
-    if (deletionPlan?.legalHold !== undefined) {
-      throw new ApiError(
-        "data_deletion_legal_hold",
-        "The file is under legal hold and cannot be deleted.",
-        409,
-      );
-    }
-    const now = new Date().toISOString();
-    const deleted = await this.repository.transaction(async (repository) => {
-      const result = await repository.updateFileObject(
-        tombstoneFileObject(transitionFileLifecycle(file, "deleted", now), now),
-      );
-      await this.pipeline.audit(repository, subject, "file.delete", result, {
-        purpose: file.purpose,
-        sizeBytes: file.sizeBytes,
-        mimeType: file.mimeType,
-      });
-      return result;
-    });
-    await this.pipeline.traceObjectStore(
-      subject,
-      file.workspaceId,
-      file.id,
-      "delete",
-      () => deleteFileObjectStoredObjects(this.objectStore, file),
-    );
-    return publicFileObject(deleted);
+    await this.deletions.enqueueFile(subject, file);
+    const pending = await this.repository.getFileObject(file.id);
+    if (pending === undefined) throw notFound("File");
+    return publicFileObject(pending);
   }
 
   async retryLifecycle(
@@ -294,7 +251,10 @@ export class FileAccessService {
       "files:write",
       "write",
     );
-    if (file.status !== "failed" || (file.lifecycleAttempts ?? 0) >= 100) {
+    if (
+      file.status !== "failed" ||
+      (file.lifecycleAttempts ?? 0) >= fileLifecycleMaxAttempts
+    ) {
       throw new ApiError(
         "file_lifecycle_transition_invalid",
         "The file lifecycle cannot be retried from its current state.",

@@ -1,4 +1,5 @@
 export const SAVED_VIEW_SCHEMA = "romeo.server-table-saved-view.v2";
+export const SAVED_VIEW_SCHEMA_VERSION = 2;
 
 export interface LocalSavedViewV1 {
   name: string;
@@ -7,6 +8,7 @@ export interface LocalSavedViewV1 {
   density?: "comfortable" | "compact";
   columnVisibility?: Record<string, boolean>;
   sorting?: Array<{ id: string; desc: boolean }>;
+  filters?: Array<{ field: string; operator: string; value?: unknown }>;
 }
 
 export interface ServerTableSavedView {
@@ -16,10 +18,11 @@ export interface ServerTableSavedView {
   workspaceId: string;
   ownerUserId: string;
   resource: string;
+  parentId?: string;
   name: string;
   query: {
     sort: Array<{ field: string; direction: "asc" | "desc" }>;
-    filters: Array<{ field: string; operator: string }>;
+    filters: Array<{ field: string; operator: string; value?: unknown }>;
     search?: string;
     pageSize: number;
   };
@@ -28,6 +31,8 @@ export interface ServerTableSavedView {
     density: "comfortable" | "compact";
   };
   source: "server" | "local_fallback";
+  visibility: "private" | "workspace";
+  isDefault: boolean;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -43,7 +48,8 @@ export function migrateLocalSavedView(input: {
   now: string;
 }): ServerTableSavedView | { outcome: "rejected"; code: "saved_view_invalid" } {
   const name = input.local.name.trim().slice(0, 80);
-  if (name.length === 0) return { outcome: "rejected", code: "saved_view_invalid" };
+  if (name.length === 0)
+    return { outcome: "rejected", code: "saved_view_invalid" };
   const search = normalizeSavedSearch(input.local.globalFilter);
   if (search === "rejected")
     return { outcome: "rejected", code: "saved_view_invalid" };
@@ -69,7 +75,9 @@ export function migrateLocalSavedView(input: {
             ]
           : [],
       ),
-      filters: [],
+      filters: (input.local.filters ?? []).filter((filter) =>
+        input.allowedFields.has(filter.field),
+      ),
       ...(search === undefined ? {} : { search }),
       pageSize,
     },
@@ -80,10 +88,11 @@ export function migrateLocalSavedView(input: {
             input.allowedFields.has(field) && typeof visible === "boolean",
         ),
       ),
-      density:
-        input.local.density === "compact" ? "compact" : "comfortable",
+      density: input.local.density === "compact" ? "compact" : "comfortable",
     },
     source: "local_fallback",
+    visibility: "private",
+    isDefault: false,
     version: 1,
     createdAt: input.now,
     updatedAt: input.now,
@@ -102,7 +111,9 @@ export function mergeSavedViews(input: {
   );
 }
 
-function normalizeSavedSearch(value: string | undefined): string | undefined | "rejected" {
+function normalizeSavedSearch(
+  value: string | undefined,
+): string | undefined | "rejected" {
   if (value === undefined) return undefined;
   const search = value.trim().slice(0, 300);
   if (search.length === 0) return undefined;
@@ -112,5 +123,8 @@ function normalizeSavedSearch(value: string | undefined): string | undefined | "
 }
 
 function slug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
 }

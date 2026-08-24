@@ -9,7 +9,9 @@ import {
 describe("inventoried table query plans", () => {
   it("fails closed when representative volume misses the tenant-sort index", () => {
     const expected = inventoriedTablePlanExpectation("provider_models");
-    expect(expected).toEqual([...inventoriedTableIndexInventory.provider_models]);
+    expect(expected).toEqual([
+      ...inventoriedTableIndexInventory.provider_models,
+    ]);
     expect(
       reviewInventoriedTableQueryPlan({
         expectedIndexes: expected!,

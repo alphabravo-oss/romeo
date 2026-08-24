@@ -3,7 +3,14 @@ export type TenantResidency = "us" | "eu" | "unrestricted";
 const regionsByResidency: Record<TenantResidency, readonly string[]> = {
   us: ["us-east-1", "us-west-2", "us-central1"],
   eu: ["eu-west-1", "eu-central-1", "europe-west1"],
-  unrestricted: ["us-east-1", "us-west-2", "us-central1", "eu-west-1", "eu-central-1", "europe-west1"],
+  unrestricted: [
+    "us-east-1",
+    "us-west-2",
+    "us-central1",
+    "eu-west-1",
+    "eu-central-1",
+    "europe-west1",
+  ],
 };
 
 export function validateRegionalEndpoint(input: {
@@ -54,7 +61,10 @@ export function resolveCompatibilityProfile(input: {
 } {
   const probeOverrides = (
     ["reasoning", "tools", "structuredJson"] as const
-  ).filter((capability) => input.profile.advertised[capability] && !input.probed[capability]);
+  ).filter(
+    (capability) =>
+      input.profile.advertised[capability] && !input.probed[capability],
+  );
   return {
     profileId: input.profile.id,
     dialect: input.profile.dialect,

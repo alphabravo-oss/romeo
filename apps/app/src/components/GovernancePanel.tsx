@@ -5,19 +5,18 @@ import { useState } from "react";
 import {
   createDataExportPackageMutationOptions,
   deleteDataExportPackageMutationOptions,
-  downloadDataExportPackageMutationOptions,
   executeDataExportMutationOptions,
   previewDataExportMutationOptions,
-} from "../features";
+} from "../features/governance";
 import type {
-  DataExportPackageList,
   DataExportPreview,
   DataExportRequest,
   DataExportScope,
   Workspace,
 } from "../features/types";
-import { downloadCsv } from "../lib/csv";
 import { useLocale } from "../lib/i18n";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
+import type { InventoriedTableResourceRow } from "../lib/inventoried-table-resource-registry";
 import { toast } from "../lib/toast";
 import { LocalizedBytes, LocalizedDateTime } from "../lib/locale-format";
 import { Section, StatRow } from "./console";
@@ -26,30 +25,33 @@ import { ChatLifecyclePanel } from "./ChatLifecyclePanel";
 import { DataDeletionPanel } from "./DataDeletionPanel";
 import { DataRightsTab, GovernanceReportsTab } from "./GovernanceReportTabs";
 import { GovernanceRetentionTab } from "./GovernanceRetentionTab";
-import { Tabs } from "./Tabs";
+import { Tabs, type RoutedTabsState } from "./Tabs";
 import { WorkspaceLifecyclePanel } from "./WorkspaceLifecyclePanel";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { OverflowMenu } from "./OverflowMenu";
-import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 export function GovernancePanel({
   activeChatId,
   onChatArchived,
   onChatDeleted,
   onWorkspaceArchived,
+  tabState,
   workspace,
 }: {
   activeChatId: string | undefined;
   onChatArchived: (chatId: string) => Promise<void>;
   onChatDeleted: (chatId: string) => Promise<void>;
   onWorkspaceArchived: (workspaceId: string) => Promise<void>;
+  tabState?: RoutedTabsState;
   workspace: Workspace | undefined;
 }) {
   const { t } = useLocale();
   return (
     <Section>
       <Tabs
+        activeId={tabState?.activeId}
+        onActiveIdChange={tabState?.onActiveIdChange}
         tabs={[
           {
             id: "retention",
@@ -97,9 +99,10 @@ export function GovernancePanel({
 
 function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<
-    DataExportPackageRow & { id: string }
-  >("governance_export_packages");
+  const packagesTable = useInventoriedServerTable(
+    "governance_export_packages",
+    { refetchInterval: governanceExportRefetchInterval },
+  );
   const { ask, dialog } = useConfirm();
   const [scope, setScope] = useState<DataExportScope>("org");
   const [workspaceId, setWorkspaceId] = useState("");
@@ -122,9 +125,6 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
   const executeMutation = useMutation(executeDataExportMutationOptions());
   const createMutation = useMutation(createDataExportPackageMutationOptions());
   const deleteMutation = useMutation(deleteDataExportPackageMutationOptions());
-  const downloadMutation = useMutation(
-    downloadDataExportPackageMutationOptions(),
-  );
 
   async function handlePreview(request: DataExportRequest) {
     try {
@@ -153,7 +153,7 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
     try {
       const created = await createMutation.mutateAsync(request);
       toast(
-        `${t("govPackage")} ${created.packageId} ${t("govCreated")}`,
+        `${t("govPackage")} ${created.packageId} ${t("govQueued")}`,
         "success",
       );
     } catch {
@@ -173,26 +173,28 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
     }
   }
 
-  async function handleDownload(packageId: string) {
-    try {
-      const content = await downloadMutation.mutateAsync(packageId);
-      downloadCsv(content, `romeo-data-export-${packageId}.json`);
-    } catch {
-      toast(t("govCouldNotDownloadPackage"), "error");
-    } finally {
-      downloadMutation.reset();
-    }
-  }
-
-  const packages = inventoriedTable.rows;
+  const packages = packagesTable.rows;
   const columns: ColumnDef<DataExportPackageRow, any>[] = [
     exportPackageColumn.accessor("packageId", {
       header: t("govPackage"),
-      cell: (cell) => (
-        <span className="rm-mono font-medium" translate="no">
-          {cell.getValue()}
-        </span>
-      ),
+      cell: (cell) => {
+        const entry = cell.row.original;
+        return entry.state === "artifact_ready" &&
+          entry.artifact !== undefined ? (
+          <a
+            className="rm-mono font-medium underline underline-offset-2"
+            download
+            href={entry.artifact.downloadUrl}
+            translate="no"
+          >
+            {cell.getValue()}
+          </a>
+        ) : (
+          <span className="rm-mono font-medium" translate="no">
+            {cell.getValue()}
+          </span>
+        );
+      },
     }),
     exportPackageColumn.accessor("request.scope", {
       header: t("govScope"),
@@ -207,9 +209,18 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
         </span>
       ),
     }),
-    exportPackageColumn.accessor("artifact.sizeBytes", {
+    exportPackageColumn.accessor((entry) => entry.artifact?.sizeBytes ?? 0, {
+      id: "sizeBytes",
       header: t("govSize"),
       cell: (cell) => <LocalizedBytes value={cell.getValue()} />,
+    }),
+    exportPackageColumn.accessor("state", {
+      header: t("govStatus"),
+      cell: (cell) => (
+        <span aria-live="polite" role="status">
+          {exportJobStatus(cell.getValue(), cell.row.original.percent, t)}
+        </span>
+      ),
     }),
     exportPackageColumn.accessor("createdAt", {
       header: t("govCreatedAt"),
@@ -228,9 +239,10 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
             items={[
               {
                 label: t("govDownloadContent"),
-                disabled: downloadMutation.isPending,
+                disabled: entry.state !== "artifact_ready",
                 onClick: () => {
-                  void handleDownload(entry.packageId);
+                  if (entry.artifact !== undefined)
+                    window.location.assign(entry.artifact.downloadUrl);
                 },
               },
               {
@@ -262,22 +274,21 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
       {dialog}
       <StatRow
         items={[
-          { label: t("govPackages"), value: packages.length },
+          {
+            label: t("govPackages"),
+            value: packagesTable.summary.total ?? packagesTable.estimatedTotal,
+          },
           {
             label: t("govOrgScope"),
-            value: packages.filter((entry) => entry.request.scope === "org")
-              .length,
+            value: packagesTable.summary.orgScopeTotal ?? packages.length,
           },
           {
             label: t("govWorkspaceScope"),
-            value: packages.filter(
-              (entry) => entry.request.scope === "workspace",
-            ).length,
+            value: packagesTable.summary.workspaceScopeTotal ?? 0,
           },
           {
             label: t("govWithContent"),
-            value: packages.filter((entry) => entry.request.includeContent)
-              .length,
+            value: packagesTable.summary.withContentTotal ?? 0,
           },
         ]}
       />
@@ -375,21 +386,38 @@ function DataExportsTab({ workspace }: { workspace: Workspace | undefined }) {
       <div className="grid gap-2">
         <div className="font-medium">{t("govPackages")}</div>
         <DataTable
-          serverState={inventoriedTable.serverState}
           columns={columns}
-          data={inventoriedTable.rows}
-          empty={
-            inventoriedTable.query.isLoading
-              ? t("govLoading")
-              : t("govNoExportPackages")
-          }
+          data={packagesTable.rows}
+          empty={t("govNoExportPackages")}
           getRowId={(entry) => entry.packageId}
-          minTableWidth={780}
+          minTableWidth={880}
+          serverState={packagesTable.serverState}
         />
       </div>
     </div>
   );
 }
 
-type DataExportPackageRow = DataExportPackageList["packages"][number];
+type DataExportPackageRow =
+  InventoriedTableResourceRow<"governance_export_packages">;
 const exportPackageColumn = createColumnHelper<DataExportPackageRow>();
+
+function governanceExportRefetchInterval(
+  rows: DataExportPackageRow[] | undefined,
+): number | false {
+  return rows?.some((job) => job.state === "queued" || job.state === "running")
+    ? 1_000
+    : false;
+}
+
+function exportJobStatus(
+  state: DataExportPackageRow["state"],
+  percent: number,
+  t: ReturnType<typeof useLocale>["t"],
+): string {
+  if (state === "queued") return t("govQueued");
+  if (state === "running") return `${t("govRunning")} ${percent}%`;
+  if (state === "artifact_ready") return t("govReady");
+  if (state === "expired") return t("govExpired");
+  return t("govFailed");
+}

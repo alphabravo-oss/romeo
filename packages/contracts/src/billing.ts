@@ -79,7 +79,7 @@ export const ApplyBillingPlanSchema = z
   .openapi("ApplyBillingPlanRequest");
 export const SyncExternalBillingEventSchema = z
   .strictObject({
-    eventId: id,
+    eventId: id.optional(),
     provider: z.string().min(1).max(80),
     eventType: z.enum([
       "customer.updated",
@@ -99,7 +99,7 @@ export const SyncExternalBillingEventSchema = z
       .string()
       .regex(/^[A-Z]{3}$/u)
       .optional(),
-    occurredAt: time,
+    occurredAt: time.optional(),
     planCode: z.string().min(1).max(120).optional(),
     planName: z.string().min(1).max(200).optional(),
     status: status.optional(),

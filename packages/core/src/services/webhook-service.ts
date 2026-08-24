@@ -77,6 +77,7 @@ export interface WebhookServiceOptions {
   hostLookup?: WebsiteConnectorHostLookup;
   pinnedFetchImpl?: DnsPinnedFetch;
   signingKey: string;
+  signingKeyPrevious?: string;
   timeoutMs?: number;
   retryBatchSize?: number;
   retryConcurrency?: number;

@@ -10,10 +10,9 @@ import {
   evalReasoningComparisonQueryOptions,
   evalResultsQueryOptions,
   evalRunsQueryOptions,
-  evalSuitesQueryOptions,
   rateEvalResultMutationOptions,
   runEvalSuiteMutationOptions,
-} from "../features";
+} from "../features/evals";
 import { toast } from "../lib/toast";
 import { useLocale } from "../lib/i18n";
 import type {
@@ -29,8 +28,13 @@ import { EvalReasoningComparisonPanel } from "./EvalReasoningComparisonPanel";
 import { FormDialog } from "./FormDialog";
 import { ResourceRow } from "./ResourceRow";
 import { Section } from "./console";
-import { resolveActiveSuite } from "./eval-selection";
+import {
+  resolveActiveSuite,
+  selectedEvalIdWithinScope,
+  type ScopedEvalSelection,
+} from "./eval-selection";
 import { evalRatingKey, rubricFromInput } from "./eval-form-utils";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 import {
   EvalResultTable,
   EvalRunTable,
@@ -42,11 +46,14 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
   const agentId = activeAgent?.id;
   const [ratingComment, setRatingComment] = useState("");
   const [suiteDialogOpen, setSuiteDialogOpen] = useState(false);
-  const [selectedSuiteId, setSelectedSuiteId] = useState<string>();
+  const [suiteSelection, setSuiteSelection] = useState<ScopedEvalSelection>();
   const [selectedRunId, setSelectedRunId] = useState<string>();
   const [selectedResultId, setSelectedResultId] = useState<string>();
   const [reasoningVariant, setReasoningVariant] = useState("off");
-  const suitesQuery = useQuery(evalSuitesQueryOptions(agentId));
+  const suitesTable = useInventoriedServerTable(
+    "eval_suites",
+    agentId === undefined ? { enabled: false } : { parentId: agentId },
+  );
   const runsQuery = useQuery(evalRunsQueryOptions(agentId));
   const dashboardQuery = useQuery(evalDashboardQueryOptions(agentId));
   const activeRun = useMemo(
@@ -58,9 +65,10 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
   const createMutation = useMutation(createEvalSuiteMutationOptions());
   const runMutation = useMutation(runEvalSuiteMutationOptions(agentId));
   const rateMutation = useMutation(rateEvalResultMutationOptions());
+  const selectedSuiteId = selectedEvalIdWithinScope(suiteSelection, agentId);
   const activeSuite = useMemo(
-    () => resolveActiveSuite(suitesQuery.data ?? [], selectedSuiteId),
-    [selectedSuiteId, suitesQuery.data],
+    () => resolveActiveSuite(suitesTable.rows, selectedSuiteId),
+    [selectedSuiteId, suitesTable.rows],
   );
   const comparisonQuery = useQuery(
     evalReasoningComparisonQueryOptions(activeSuite?.id),
@@ -336,7 +344,7 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
           {(dashboard) => <EvalDashboardSummary dashboard={dashboard} />}
         </PanelState>
         <PanelState
-          query={suitesQuery}
+          query={suitesTable.query}
           empty={t("evalNoSuites")}
           emptyAction={
             <AddButton onClick={() => setSuiteDialogOpen(true)}>
@@ -344,11 +352,14 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
             </AddButton>
           }
         >
-          {(allSuites) => (
+          {() => (
             <div className="grid gap-4">
               <PanelStats
                 items={[
-                  { label: t("evalTotalSuites"), value: allSuites.length },
+                  {
+                    label: t("evalTotalSuites"),
+                    value: suitesTable.estimatedTotal,
+                  },
                   {
                     label: t("evalRuns"),
                     value: runsQuery.isError
@@ -357,7 +368,13 @@ export function EvalPanel({ activeAgent }: { activeAgent: Agent | undefined }) {
                   },
                 ]}
               />
-              <EvalSuiteTable data={allSuites} onSelect={setSelectedSuiteId} />
+              <EvalSuiteTable
+                data={suitesTable.rows}
+                onSelect={(selectedId) =>
+                  setSuiteSelection({ scopeId: activeAgent.id, selectedId })
+                }
+                serverState={suitesTable.serverState}
+              />
             </div>
           )}
         </PanelState>

@@ -56,15 +56,29 @@ async function handleChatCompletions(
   const subject = context.get("subject");
   const service = context.get("services").openAiChatCompletions;
   if (request.stream === true) {
-    return new Response(await service.stream({ subject, request }), {
-      headers: {
-        "content-type": "text/event-stream",
-        "cache-control": "no-store",
-        connection: "keep-alive",
+    return new Response(
+      await service.stream({
+        subject,
+        request,
+        signal: context.req.raw.signal,
+      }),
+      {
+        headers: {
+          "content-type": "text/event-stream",
+          "cache-control": "no-store",
+          connection: "keep-alive",
+        },
       },
-    });
+    );
   }
-  return context.json(await service.complete({ subject, request }), 200);
+  return context.json(
+    await service.complete({
+      subject,
+      request,
+      signal: context.req.raw.signal,
+    }),
+    200,
+  );
 }
 
 async function handleEmbeddings(
@@ -73,5 +87,12 @@ async function handleEmbeddings(
 ) {
   const subject = context.get("subject");
   const service = context.get("services").openAiEmbeddings;
-  return context.json(await service.create({ subject, request }), 200);
+  return context.json(
+    await service.create({
+      subject,
+      request,
+      signal: context.req.raw.signal,
+    }),
+    200,
+  );
 }

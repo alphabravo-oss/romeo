@@ -2,6 +2,13 @@ import { eq } from "drizzle-orm";
 
 import {
   agentModels,
+  auditExportAttempts,
+  auditExportDestinations,
+  auditExportIdempotencyReceipts,
+  auditExportJobs,
+  auditIntegrityCheckpoints,
+  auditIntegrityRecords,
+  auditIntegrityTenantHeads,
   auditLogs,
   backgroundJobs,
   baseModels,
@@ -128,6 +135,55 @@ export async function purgeTenantPhaseThree({
     "org_sso_oidc_settings",
     orgSsoOidcSettings,
     eq(orgSsoOidcSettings.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "audit_export_idempotency_receipts",
+    auditExportIdempotencyReceipts,
+    eq(auditExportIdempotencyReceipts.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "audit_export_attempts",
+    auditExportAttempts,
+    eq(auditExportAttempts.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "audit_export_jobs",
+    auditExportJobs,
+    eq(auditExportJobs.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "audit_export_destinations",
+    auditExportDestinations,
+    eq(auditExportDestinations.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "audit_integrity_checkpoints",
+    auditIntegrityCheckpoints,
+    eq(auditIntegrityCheckpoints.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "audit_integrity_records",
+    auditIntegrityRecords,
+    eq(auditIntegrityRecords.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "audit_integrity_tenant_heads",
+    auditIntegrityTenantHeads,
+    eq(auditIntegrityTenantHeads.orgId, orgId),
   );
   await deleteWhere(
     database,

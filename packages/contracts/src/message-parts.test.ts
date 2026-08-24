@@ -18,6 +18,7 @@ describe("typed multimodal message parts", () => {
         mediaType: "image/png",
         dimensions: { width: 1024, height: 768 },
         altText: "A diagram",
+        retainedInContext: false,
       },
       {
         schemaVersion: 1,
@@ -43,6 +44,7 @@ describe("typed multimodal message parts", () => {
         fileName: "report.pdf",
         mediaType: "application/pdf",
         pageSelection: { start: 2, end: 4 },
+        retainedInContext: false,
       },
       {
         schemaVersion: 1,

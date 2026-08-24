@@ -90,11 +90,14 @@ export class RagPolicyService {
         now,
         input.subject.id,
       );
-      await repository.upsertSystemSetting({
-        key: settingKey(input.subject.orgId),
-        value: serializeStoredPolicy(updated),
-        updatedAt: now,
-      });
+      await repository.upsertSystemSetting(
+        {
+          key: settingKey(input.subject.orgId),
+          value: serializeStoredPolicy(updated),
+          updatedAt: now,
+        },
+        input.subject.orgId,
+      );
       await writeAuditLog(repository, {
         subject: input.subject,
         action: "admin.rag_policy.update",
@@ -176,11 +179,14 @@ export class RagPolicyService {
         proposed,
         redaction: ragPolicyChangeRedaction(),
       };
-      await repository.upsertSystemSetting({
-        key: changeRequestSettingKey(input.subject.orgId),
-        value: serializeStoredChangeRequest(changeRequest),
-        updatedAt: now,
-      });
+      await repository.upsertSystemSetting(
+        {
+          key: changeRequestSettingKey(input.subject.orgId),
+          value: serializeStoredChangeRequest(changeRequest),
+          updatedAt: now,
+        },
+        input.subject.orgId,
+      );
       await writeAuditLog(repository, {
         subject: input.subject,
         action: "admin.rag_policy.change_request.create",
@@ -241,11 +247,14 @@ export class RagPolicyService {
         now,
         input.subject.id,
       );
-      await repository.upsertSystemSetting({
-        key: settingKey(input.subject.orgId),
-        value: serializeStoredPolicy(updatedStored),
-        updatedAt: now,
-      });
+      await repository.upsertSystemSetting(
+        {
+          key: settingKey(input.subject.orgId),
+          value: serializeStoredPolicy(updatedStored),
+          updatedAt: now,
+        },
+        input.subject.orgId,
+      );
       const applied = toReport(input.subject.orgId, updatedStored);
       const approved: RagPolicyChangeRequest = {
         ...pending,
@@ -254,11 +263,14 @@ export class RagPolicyService {
         reviewedAt: now,
         applied,
       };
-      await repository.upsertSystemSetting({
-        key: changeRequestSettingKey(input.subject.orgId),
-        value: serializeStoredChangeRequest(approved),
-        updatedAt: now,
-      });
+      await repository.upsertSystemSetting(
+        {
+          key: changeRequestSettingKey(input.subject.orgId),
+          value: serializeStoredChangeRequest(approved),
+          updatedAt: now,
+        },
+        input.subject.orgId,
+      );
       await writeAuditLog(repository, {
         subject: input.subject,
         action: "admin.rag_policy.change_request.approve",
@@ -306,11 +318,14 @@ export class RagPolicyService {
           ? {}
           : { rejectReasonCode: input.reasonCode }),
       };
-      await repository.upsertSystemSetting({
-        key: changeRequestSettingKey(input.subject.orgId),
-        value: serializeStoredChangeRequest(rejected),
-        updatedAt: now,
-      });
+      await repository.upsertSystemSetting(
+        {
+          key: changeRequestSettingKey(input.subject.orgId),
+          value: serializeStoredChangeRequest(rejected),
+          updatedAt: now,
+        },
+        input.subject.orgId,
+      );
       await writeAuditLog(repository, {
         subject: input.subject,
         action: "admin.rag_policy.change_request.reject",

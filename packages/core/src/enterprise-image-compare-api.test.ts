@@ -5,7 +5,7 @@ import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { testEnv } from "./test-support/env";
 
 describe("image job and compare HTTP", () => {
-  it("uses real file readiness for image jobs and only cancels a stored job", async () => {
+  it("fails async image jobs closed while no durable processor is deployed", async () => {
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository, { env: testEnv() });
     const ready = await repository.createFileObject({
@@ -55,9 +55,10 @@ describe("image job and compare HTTP", () => {
     });
     expect(generate.status).toBe(200);
     const generateBody = await generate.json();
-    expect(generateBody.data.outcome).toBe("accepted");
-    const jobId = generateBody.data.jobId as string;
-    expect(jobId).toMatch(/^image_job_/);
+    expect(generateBody.data).toEqual({
+      outcome: "denied",
+      code: "capability_platform_disabled",
+    });
 
     const unready = await api.request("/api/v1/images/jobs", {
       method: "POST",
@@ -69,7 +70,7 @@ describe("image job and compare HTTP", () => {
       }),
     });
     expect(await unready.json()).toMatchObject({
-      data: { outcome: "denied", code: "file_not_ready" },
+      data: { outcome: "denied", code: "capability_platform_disabled" },
     });
 
     const readyJob = await api.request("/api/v1/images/jobs", {
@@ -81,7 +82,9 @@ describe("image job and compare HTTP", () => {
         sourceFileId: ready.id,
       }),
     });
-    expect((await readyJob.json()).data.outcome).toBe("accepted");
+    expect(await readyJob.json()).toMatchObject({
+      data: { outcome: "denied", code: "capability_platform_disabled" },
+    });
 
     const missing = await api.request(
       "/api/v1/images/jobs/image_job_missing/cancel",
@@ -89,12 +92,11 @@ describe("image job and compare HTTP", () => {
     );
     expect(missing.status).toBe(404);
 
-    const cancelled = await api.request(`/api/v1/images/jobs/${jobId}/cancel`, {
-      method: "POST",
-    });
-    expect(await cancelled.json()).toMatchObject({
-      data: { outcome: "accepted", state: "cancelled" },
-    });
+    expect(
+      (await repository.listSystemSettings("org_default")).filter((setting) =>
+        setting.key.startsWith("image_job.v1:"),
+      ),
+    ).toEqual([]);
   });
 
   it("probes a model and previews turn compatibility", async () => {

@@ -61,9 +61,7 @@ const scopedKeyDimensions = new Map([
   ["users", ["filters"]],
   ["webhookDeliveries", ["webhookId", "page"]],
   ["webhooks", ["workspaceId"]],
-  ["workflowRuns", ["workflowId"]],
-  ["workflowTemplates", ["workspaceId"]],
-  ["workflows", ["workspaceId"]],
+
   ["workspaceCapabilities", ["workspaceId"]],
   ["workspaceMembers", ["workspaceId"]],
 ]);

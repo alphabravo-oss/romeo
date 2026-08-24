@@ -74,11 +74,26 @@ export const knowledgeSources = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    extractionLeaseOwner: text("extraction_lease_owner"),
+    extractionLeaseToken: text("extraction_lease_token"),
+    extractionLeaseExpiresAt: timestamp("extraction_lease_expires_at", {
+      withTimezone: true,
+    }),
+    extractionFence: integer("extraction_fence").notNull().default(0),
+    extractionAttempts: integer("extraction_attempts").notNull().default(0),
   },
   (table) => ({
     knowledgeSourcesKnowledgeBaseUpdatedIdx: index(
       "knowledge_sources_kb_updated_idx",
     ).on(table.knowledgeBaseId, table.updatedAt),
+    knowledgeSourcesExtractionClaimIdx: index(
+      "knowledge_sources_extraction_claim_idx",
+    ).on(
+      table.orgId,
+      table.status,
+      table.extractionLeaseExpiresAt,
+      table.updatedAt,
+    ),
   }),
 );
 

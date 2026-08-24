@@ -42,6 +42,8 @@ export function createKnowledgeRepositoryFragment(
 ): KnowledgeRepositoryFragment {
   const repository = new PgKnowledgeRepository(db);
   return {
+    claimKnowledgeSourceExtraction:
+      repository.claimKnowledgeSourceExtraction.bind(repository),
     createKnowledgeBase: repository.createKnowledgeBase.bind(repository),
     createKnowledgeChunks: repository.createKnowledgeChunks.bind(repository),
     createKnowledgeSource: repository.createKnowledgeSource.bind(repository),
@@ -49,9 +51,14 @@ export function createKnowledgeRepositoryFragment(
       repository.deleteKnowledgeChunksForSource.bind(repository),
     deleteKnowledgeSource: repository.deleteKnowledgeSource.bind(repository),
     getKnowledgeBase: repository.getKnowledgeBase.bind(repository),
+    getKnowledgeSource: repository.getKnowledgeSource.bind(repository),
+    finishKnowledgeSourceExtraction:
+      repository.finishKnowledgeSourceExtraction.bind(repository),
     listKnowledgeBases: repository.listKnowledgeBases.bind(repository),
     listKnowledgeChunks: repository.listKnowledgeChunks.bind(repository),
     listKnowledgeSources: repository.listKnowledgeSources.bind(repository),
+    renewKnowledgeSourceExtractionLease:
+      repository.renewKnowledgeSourceExtractionLease.bind(repository),
     updateKnowledgeBase: repository.updateKnowledgeBase.bind(repository),
     updateKnowledgeSource: repository.updateKnowledgeSource.bind(repository),
   };

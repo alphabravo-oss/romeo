@@ -5,6 +5,9 @@ export class ProviderEmbeddingError extends Error {
   }
 }
 
+const MAX_EMBEDDING_DIMENSIONS = 65_536;
+const MAX_EMBEDDING_VALUES = 1_000_000;
+
 export function assertEmbeddingInput(texts: string[]): void {
   if (texts.length === 0)
     throw new ProviderEmbeddingError(
@@ -38,6 +41,14 @@ export function parseEmbeddingMatrix(
     return item;
   });
   const dimensions = embeddings[0]?.length ?? 0;
+  if (
+    dimensions > MAX_EMBEDDING_DIMENSIONS ||
+    dimensions * embeddings.length > MAX_EMBEDDING_VALUES
+  ) {
+    throw new ProviderEmbeddingError(
+      "Provider returned embedding vectors above the response limit.",
+    );
+  }
   if (embeddings.some((embedding) => embedding.length !== dimensions)) {
     throw new ProviderEmbeddingError(
       "Provider returned embedding vectors with mixed dimensions.",

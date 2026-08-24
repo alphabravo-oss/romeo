@@ -74,7 +74,8 @@ export function recordCompareLegOutcome(input: {
   return {
     completedLegIds: [...input.completedLegIds],
     failedLegIds: input.failedLegId === undefined ? [] : [input.failedLegId],
-    partial: input.failedLegId !== undefined && input.completedLegIds.length > 0,
+    partial:
+      input.failedLegId !== undefined && input.completedLegIds.length > 0,
   };
 }
 

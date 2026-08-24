@@ -15,7 +15,10 @@ import {
 const SCHEMA = "romeo.image-job.v1";
 
 export class ImageJobStore {
-  constructor(private readonly repository: RomeoRepository) {}
+  constructor(
+    private readonly repository: RomeoRepository,
+    private readonly options: { runtimeAvailable?: boolean } = {},
+  ) {}
 
   async create(input: {
     subject: AuthSubject;
@@ -25,6 +28,11 @@ export class ImageJobStore {
     platformDisabled: boolean;
   }): Promise<ImageJobDecision> {
     assertScope(input.subject, "runs:create");
+    // The async image-job API must never mint a queued record unless a durable
+    // processor is deployed to claim and terminate it. Synchronous image
+    // generation remains available through its governed endpoint.
+    if (this.options.runtimeAvailable !== true)
+      return { outcome: "denied", code: "capability_platform_disabled" };
     const source = await this.resolveSource(input.subject, input.sourceFileId);
     const decision = authorizeImageJob({
       platformDisabled: input.platformDisabled,
@@ -65,22 +73,30 @@ export class ImageJobStore {
     };
   }
 
-  private async read(orgId: string, jobId: string): Promise<ImageJob | undefined> {
-    const value = (await this.repository.getSystemSetting(storeKey(orgId, jobId)))
-      ?.value;
+  private async read(
+    orgId: string,
+    jobId: string,
+  ): Promise<ImageJob | undefined> {
+    const value = (
+      await this.repository.getSystemSetting(storeKey(orgId, jobId), orgId)
+    )?.value;
     if (value === null || typeof value !== "object" || Array.isArray(value))
       return undefined;
     const candidate = value as Record<string, unknown>;
-    if (candidate.schema !== SCHEMA || candidate.orgId !== orgId) return undefined;
+    if (candidate.schema !== SCHEMA || candidate.orgId !== orgId)
+      return undefined;
     return candidate.job as ImageJob;
   }
 
   private async write(orgId: string, job: ImageJob): Promise<void> {
-    await this.repository.upsertSystemSetting({
-      key: storeKey(orgId, job.id),
-      value: { schema: SCHEMA, orgId, job },
-      updatedAt: new Date().toISOString(),
-    });
+    await this.repository.upsertSystemSetting(
+      {
+        key: storeKey(orgId, job.id),
+        value: { schema: SCHEMA, orgId, job },
+        updatedAt: new Date().toISOString(),
+      },
+      orgId,
+    );
   }
 }
 

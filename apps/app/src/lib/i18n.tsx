@@ -13,11 +13,18 @@ import { I18nextProvider, useTranslation } from "react-i18next";
 
 import {
   coreLocaleResources,
+  cachedLocaleNamespaces,
   loadLocaleNamespace,
   namespaceNames,
+  preloadLocaleNamespaces,
   type LocaleNamespace,
   type MessageKey,
 } from "../locales";
+import {
+  persistCachedLocale,
+  readCachedLocale,
+  subscribeToStoredLocale,
+} from "./locale-storage";
 
 export type Locale = "en" | "es" | "fr";
 export type { MessageKey };
@@ -61,7 +68,6 @@ export const localeNamespaceGroups = {
     "provider",
     "shared-control",
     "tool-connector-admin",
-    "workflow-admin",
     "workspace-capability",
     "workspace-shell-and-connector",
   ],
@@ -100,7 +106,11 @@ const adminSectionNamespaces: Record<string, readonly LocaleNamespace[]> = {
     adminCommonNamespaces,
     "integration-automation",
   ),
-  governance: withNamespaces(adminCommonNamespaces, "governance"),
+  governance: withNamespaces(
+    adminCommonNamespaces,
+    "governance",
+    "lifecycle-tool-voice",
+  ),
   groups: withNamespaces(adminCommonNamespaces, "group-organization"),
   impersonation: withNamespaces(adminCommonNamespaces, "device-impersonation"),
   "notification-channels": withNamespaces(
@@ -133,7 +143,6 @@ const adminSectionNamespaces: Record<string, readonly LocaleNamespace[]> = {
   users: withNamespaces(adminCommonNamespaces, "user-admin"),
   "web-search": withNamespaces(adminCommonNamespaces, "web-search-admin"),
   webhooks: withNamespaces(adminCommonNamespaces, "integration-automation"),
-  workflows: withNamespaces(adminCommonNamespaces, "workflow-admin"),
   "workspace-members": withNamespaces(
     adminCommonNamespaces,
     "group-organization",
@@ -225,6 +234,26 @@ function withNamespaces(
 }
 
 const LocaleControlContext = createContext((_locale: Locale) => {});
+const activeI18nInstances = new Set<ReturnType<typeof createInstance>>();
+
+export async function preloadRouteLocaleNamespaces(
+  locale: Locale,
+  namespaces: readonly LocaleNamespace[],
+): Promise<void> {
+  const resolvedLocale = activeRouteLocale(locale);
+  const resources = await preloadLocaleNamespaces(resolvedLocale, namespaces);
+  for (const instance of activeI18nInstances) {
+    for (const [namespace, messages] of Object.entries(resources)) {
+      instance.addResourceBundle(
+        resolvedLocale,
+        namespace,
+        messages,
+        true,
+        true,
+      );
+    }
+  }
+}
 
 export function LocaleProvider({
   children,
@@ -235,13 +264,25 @@ export function LocaleProvider({
 }) {
   const [instance] = useState(() => createRomeoI18n(initialLocale));
   useEffect(() => {
-    const stored = storedLocale(initialLocale);
-    document.documentElement.lang = stored;
-    void instance.changeLanguage(stored);
+    activeI18nInstances.add(instance);
+    const applyLocale = (next: Locale) => {
+      document.documentElement.lang = next;
+      void instance.changeLanguage(next);
+    };
+    const cachedLocale = readCachedLocale(initialLocale);
+    // Mirror the browser preference into a non-sensitive same-site cookie so
+    // the next SSR navigation renders the same language.
+    persistCachedLocale(cachedLocale);
+    applyLocale(cachedLocale);
+    const unsubscribe = subscribeToStoredLocale(applyLocale);
+    return () => {
+      unsubscribe();
+      activeI18nInstances.delete(instance);
+    };
   }, [initialLocale, instance]);
   const setLocale = useCallback(
     (next: Locale) => {
-      localStorage.setItem("romeo:locale", next);
+      persistCachedLocale(next);
       document.documentElement.lang = next;
       void instance.changeLanguage(next);
     },
@@ -279,33 +320,30 @@ export function useLocaleNamespaces(namespaces: readonly LocaleNamespace[]) {
   // useTranslation() changes useMemo dep length when the console section
   // changes, which React rejects and which left chrome labels on stale
   // catalogs.
-  const { i18n } = useTranslation("core");
-  const [, setRevision] = useState(0);
   const signature = namespaces.join("\0");
-  const fallback = [
-    "core",
-    ...namespaces.filter((namespace) => namespace !== "core"),
-  ];
-  if (!sameFallbackNamespaces(i18n.options.fallbackNS, fallback)) {
-    i18n.options.fallbackNS = fallback;
-  }
+  const requestedNamespaces = useMemo(
+    () => ["core", ...(signature.length === 0 ? [] : signature.split("\0"))],
+    [signature],
+  );
+  const { i18n } = useTranslation(requestedNamespaces, { useSuspense: true });
   useEffect(() => {
     let cancelled = false;
-    void i18n.loadNamespaces([...namespaces]).then(() => {
-      if (!cancelled) setRevision((value) => value + 1);
+    void preloadRouteLocaleNamespaces(
+      normalizeLocale(i18n.resolvedLanguage),
+      namespaces,
+    ).catch(() => {
+      if (!cancelled) void i18n.loadNamespaces(requestedNamespaces);
     });
     return () => {
       cancelled = true;
     };
-  }, [i18n, signature]);
+  }, [i18n, namespaces, requestedNamespaces]);
 }
 
-function sameFallbackNamespaces(
-  current: unknown,
-  next: readonly string[],
-): boolean {
-  if (!Array.isArray(current) || current.length !== next.length) return false;
-  return current.every((namespace, index) => namespace === next[index]);
+export function activeRouteLocale(fallback: Locale): Locale {
+  return typeof document === "undefined"
+    ? fallback
+    : normalizeLocale(document.documentElement.lang);
 }
 
 function createRomeoI18n(initialLocale: Locale) {
@@ -315,24 +353,20 @@ function createRomeoI18n(initialLocale: Locale) {
   void instance.init({
     defaultNS: "core",
     fallbackLng: "en",
-    fallbackNS: ["core"],
+    fallbackNS: namespaceNames,
     initImmediate: false,
     interpolation: { escapeValue: false },
     lng: initialLocale,
     ns: ["core"],
     partialBundledLanguages: true,
-    resources: coreLocaleResources,
+    resources: {
+      en: { ...coreLocaleResources.en, ...cachedLocaleNamespaces("en") },
+      es: { ...coreLocaleResources.es, ...cachedLocaleNamespaces("es") },
+      fr: { ...coreLocaleResources.fr, ...cachedLocaleNamespaces("fr") },
+    },
     returnNull: false,
   });
   return instance;
-}
-
-function storedLocale(fallback: Locale): Locale {
-  const value =
-    typeof localStorage === "undefined"
-      ? fallback
-      : localStorage.getItem("romeo:locale");
-  return normalizeLocale(value ?? fallback);
 }
 
 function normalizeLocale(value: string | undefined): Locale {

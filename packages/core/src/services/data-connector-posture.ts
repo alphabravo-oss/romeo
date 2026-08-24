@@ -2,11 +2,7 @@ import type { RomeoEnv } from "@romeo/config";
 import { readFile } from "node:fs/promises";
 
 import { listDataConnectorCatalogEntries } from "../domain/data-connector-catalog";
-import type {
-  DataConnector,
-  DataConnectorSync,
-  DataConnectorType,
-} from "../domain/entities";
+import type { DataConnector, DataConnectorSync } from "../domain/entities";
 import {
   dataConnectorLiveEvidenceSchema,
   dataConnectorRequiredLiveEvidenceChecks,
@@ -17,9 +13,16 @@ export function dataConnectorCounts(
   connectors: DataConnector[],
   nowMs: number,
 ): DataConnectorPostureReport["connectors"] {
-  const byType = Object.fromEntries(
-    listDataConnectorCatalogEntries().map((entry) => [entry.type, 0]),
-  ) as Record<DataConnectorType, number>;
+  const byType = {
+    confluence: 0,
+    jira: 0,
+    linear: 0,
+    notion: 0,
+    slack: 0,
+    ...Object.fromEntries(
+      listDataConnectorCatalogEntries().map((entry) => [entry.type, 0]),
+    ),
+  } as DataConnectorPostureReport["connectors"]["byType"];
   let active = 0;
   let disabled = 0;
   let due = 0;

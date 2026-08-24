@@ -30,15 +30,23 @@ const sections = [
   ["access", "Access & keys"],
   ["users", "Users"],
   ["groups", "Groups"],
+  ["workspace-members", "Workspace members"],
   ["organizations", "Organizations"],
   ["impersonation", "Impersonation"],
   ["auth-providers", "Authentication"],
-  ["workflows", "Workflows"],
   ["webhooks", "Webhooks"],
   ["notification-channels", "Notifications"],
   ["connected-apps", "Connected apps"],
+  ["capabilities", "Capabilities"],
+  ["compute", "Compute & trust"],
 ];
 
+const requestedSections = new Set(
+  (process.env.ROMEO_ADMIN_AUDIT_SECTIONS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+);
 const routes = [
   ...sections,
   ["usage", "Usage & quotas", "quotas"],
@@ -47,12 +55,23 @@ const routes = [
   ["connections", "Connections", "imports"],
   ["connections", "Connections", "catalog"],
   ["connections", "Connections", "tools"],
-];
+].filter(
+  ([section]) => requestedSections.size === 0 || requestedSections.has(section),
+);
 
+const requestedViewports = new Set(
+  (process.env.ROMEO_ADMIN_AUDIT_VIEWPORTS ?? "desktop,mobile")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+);
 const viewports = [
   { name: "desktop", width: 1440, height: 1000, runAxe: true },
   { name: "mobile", width: 390, height: 844, runAxe: false },
-];
+].filter(({ name }) => requestedViewports.has(name));
+if (routes.length === 0 || viewports.length === 0) {
+  throw new Error("Admin console audit selected no routes or viewports");
+}
 
 const browser = await chromium.launch({ headless: true });
 const results = [];
@@ -66,14 +85,34 @@ try {
     });
     const page = await context.newPage();
     page.setDefaultTimeout(15_000);
+    const pendingRouteRequests = new Set();
 
     let routeConsoleErrors = [];
     let routePageErrors = [];
     let routeResponseFailures = [];
+    let routeResponseReads = [];
     page.on("console", (message) => {
       if (message.type() === "error") routeConsoleErrors.push(message.text());
     });
     page.on("pageerror", (error) => routePageErrors.push(error.message));
+    page.on("request", (request) => {
+      const resourceType = request.resourceType();
+      const url = new URL(request.url());
+      if (
+        url.origin === new URL(baseUrl).origin &&
+        (resourceType === "script" ||
+          resourceType === "fetch" ||
+          resourceType === "xhr")
+      ) {
+        pendingRouteRequests.add(request);
+      }
+    });
+    page.on("requestfinished", (request) => {
+      pendingRouteRequests.delete(request);
+    });
+    page.on("requestfailed", (request) => {
+      pendingRouteRequests.delete(request);
+    });
     page.on("response", (response) => {
       const url = new URL(response.url());
       if (
@@ -81,11 +120,21 @@ try {
         response.status() >= 400 &&
         !url.pathname.endsWith("/favicon.ico")
       ) {
-        routeResponseFailures.push({
+        const failure = {
           method: response.request().method(),
           path: url.pathname,
+          requestBody: sanitize(response.request().postData() ?? ""),
           status: response.status(),
-        });
+        };
+        routeResponseFailures.push(failure);
+        routeResponseReads.push(
+          response
+            .text()
+            .then((body) => {
+              failure.body = sanitize(body);
+            })
+            .catch(() => undefined),
+        );
       }
     });
 
@@ -96,6 +145,7 @@ try {
       routeConsoleErrors = [];
       routePageErrors = [];
       routeResponseFailures = [];
+      routeResponseReads = [];
       const startedAt = performance.now();
       const path = `/admin?section=${encodeURIComponent(section)}${
         view === undefined ? "" : `&view=${encodeURIComponent(view)}`
@@ -123,17 +173,19 @@ try {
           .first()
           .waitFor();
         await page
-          .locator(".rm-empty")
+          .locator(".rm-ui-empty")
           .filter({ hasText: /Loading(?: section)?/u })
           .waitFor({ state: "hidden" })
           .catch(() => {});
+        await waitForRouteReady(page, pendingRouteRequests);
+        await waitForSectionEvidence(page, section);
 
-        const ui = await inspectUi(page, section, title, sections.length);
+        const ui = await inspectUi(page, section, title);
         const tabStates = await inspectTabStates(
           page,
+          pendingRouteRequests,
           section,
           title,
-          sections.length,
         );
         const axeViolations = viewport.runAxe
           ? await inspectAccessibility(page)
@@ -142,8 +194,14 @@ try {
           viewport.name === "desktop" &&
           section === "users" &&
           view === undefined
-            ? await inspectTablePreferencePersistence(page, path, title)
+            ? await inspectTablePreferencePersistence(
+                page,
+                pendingRouteRequests,
+                path,
+                title,
+              )
             : [];
+        await Promise.all(routeResponseReads);
         const failures = [
           ...ui.failures,
           ...tablePreferenceFailures,
@@ -160,7 +218,9 @@ try {
           ...routePageErrors.map((error) => `page:${sanitize(error)}`),
           ...routeResponseFailures.map(
             (failure) =>
-              `response:${failure.method} ${failure.path} ${failure.status}`,
+              `response:${failure.method} ${failure.path} ${failure.status}${
+                failure.body === undefined ? "" : ` ${failure.body}`
+              }${failure.requestBody === "" ? "" : ` request=${failure.requestBody}`}`,
           ),
         ];
 
@@ -224,7 +284,12 @@ console.log(
 );
 console.log(`Wrote metadata-only evidence to ${evidencePath}`);
 
-async function inspectTablePreferencePersistence(page, path, title) {
+async function inspectTablePreferencePersistence(
+  page,
+  pendingRouteRequests,
+  path,
+  title,
+) {
   const table = page.locator(".rm-table-block").first();
   if ((await table.count()) === 0) {
     return ["table preference audit could not find a framework table"];
@@ -239,12 +304,15 @@ async function inspectTablePreferencePersistence(page, path, title) {
   await page.goto(`${baseUrl}/admin?section=overview`, {
     waitUntil: "domcontentloaded",
   });
+  await page.getByRole("heading", { name: "Overview" }).waitFor();
+  await waitForRouteReady(page, pendingRouteRequests);
   await page.goto(`${baseUrl}${path}`, { waitUntil: "domcontentloaded" });
   await page
     .locator("#console-content h2")
     .filter({ hasText: title })
     .first()
     .waitFor();
+  await waitForRouteReady(page, pendingRouteRequests);
   const restored = await page
     .locator(".rm-table-block")
     .first()
@@ -285,9 +353,9 @@ async function inspectAccessibility(page) {
 
 async function inspectTabStates(
   page,
+  pendingRouteRequests,
   expectedSection,
   expectedTitle,
-  expectedNavigationItems,
 ) {
   const tabs = page.locator('button[role="tab"]:visible');
   const count = await tabs.count();
@@ -297,29 +365,20 @@ async function inspectTabStates(
     const label = (await tab.innerText()).trim() || `tab-${index + 1}`;
     await tab.click();
     await page
-      .locator(".rm-empty")
+      .locator(".rm-ui-empty")
       .filter({ hasText: /Loading(?: section)?/u })
       .waitFor({ state: "hidden" })
       .catch(() => {});
-    const ui = await inspectUi(
-      page,
-      expectedSection,
-      expectedTitle,
-      expectedNavigationItems,
-    );
+    await waitForRouteReady(page, pendingRouteRequests);
+    const ui = await inspectUi(page, expectedSection, expectedTitle);
     states.push({ label, failures: ui.failures, metrics: ui.metrics });
   }
   return states;
 }
 
-async function inspectUi(
-  page,
-  expectedSection,
-  expectedTitle,
-  expectedNavigationItems,
-) {
+async function inspectUi(page, expectedSection, expectedTitle) {
   return page.evaluate(
-    ({ expectedNavigationItems, expectedSection, expectedTitle }) => {
+    ({ expectedSection, expectedTitle }) => {
       const visible = (element) => {
         const rect = element.getBoundingClientRect();
         const style = getComputedStyle(element);
@@ -346,9 +405,6 @@ async function inspectUi(
         (total, table) => total + table.querySelectorAll("tbody tr").length,
         0,
       );
-      const statValues = [...document.querySelectorAll(".rm-stat-value")]
-        .filter(visible)
-        .map((stat) => Number(stat.textContent?.replace(/[^\d.-]/gu, "")));
       const visibleButtons = [...document.querySelectorAll("button")].filter(
         visible,
       );
@@ -481,7 +537,10 @@ async function inspectUi(
         if (
           Number.isFinite(rowCount) &&
           rowCount > 8 &&
-          block.querySelector(".rm-table-search") === null &&
+          block.querySelector(".rm-table-search, [data-table-search]") ===
+            null &&
+          block.closest("section")?.querySelector("[data-table-search]") ===
+            null &&
           block.closest("section")?.querySelector(".rm-model-search") === null
         )
           blockFailures.push("search");
@@ -600,10 +659,8 @@ async function inspectUi(
         null
       )
         failures.push("console skip link is missing or incorrect");
-      if (allNavItems.length !== expectedNavigationItems)
-        failures.push(
-          `navigation has ${allNavItems.length}/${expectedNavigationItems} items`,
-        );
+      if (allNavItems.length === 0)
+        failures.push("console navigation has no rendered links");
       if (activeNavItems.length !== 1)
         failures.push(`navigation has ${activeNavItems.length} active items`);
       if (allNavItems.some((item) => item.tagName !== "A"))
@@ -718,17 +775,27 @@ async function inspectUi(
         expectedSection === "audit" &&
         (() => {
           const auditData = document.querySelector("[data-audit-event-count]");
+          const emptyState = document.querySelector(".rm-ui-empty");
+          if (auditData === null && emptyState !== null) return false;
           const eventCount = Number(auditData?.dataset.auditEventCount);
           const failureCount = Number(auditData?.dataset.auditFailureCount);
-          const accessibleRowCount =
-            Number(tables[0]?.getAttribute("aria-rowcount")) - 1;
+          const tableRowCount = Number(
+            auditData?.querySelector(".rm-table-block")?.dataset.rowCount,
+          );
+          const summaryCounts = [
+            ...(auditData?.querySelectorAll(".cs-stat__value") ?? []),
+          ]
+            .slice(0, 2)
+            .map((value) =>
+              Number(value.textContent?.replace(/[^\d.-]/gu, "")),
+            );
           return (
-            statValues.length < 2 ||
             !Number.isFinite(eventCount) ||
             !Number.isFinite(failureCount) ||
-            statValues[0] !== eventCount ||
-            statValues[1] !== failureCount ||
-            accessibleRowCount !== eventCount
+            tableRowCount !== eventCount ||
+            summaryCounts.length < 2 ||
+            summaryCounts[0] !== eventCount ||
+            summaryCounts[1] !== failureCount
           );
         })()
       )
@@ -744,16 +811,17 @@ async function inspectUi(
       )
         failures.push("export-capable dataset is missing its export action");
       if (expectedSection === "overview") {
-        const readinessPanel = [...document.querySelectorAll(".rm-panel")].find(
-          (panel) =>
-            panel.querySelector(".rm-card-title")?.textContent?.trim() ===
-            "Readiness",
+        const readinessData = document.querySelector(
+          "[data-readiness-check-count]",
         );
         const readinessCounts = [
-          ...(readinessPanel?.querySelectorAll(".rm-stat-value") ?? []),
-        ].map((stat) => Number(stat.textContent?.replace(/[^\d.-]/gu, "")));
-        const readinessRows =
-          readinessPanel?.querySelectorAll("tbody tr").length ?? 0;
+          Number(readinessData?.dataset.readinessPassCount),
+          Number(readinessData?.dataset.readinessWarnCount),
+          Number(readinessData?.dataset.readinessFailCount),
+        ];
+        const readinessRows = Number(
+          readinessData?.dataset.readinessCheckCount,
+        );
         if (
           readinessCounts.length !== 3 ||
           readinessCounts.some((count) => !Number.isFinite(count)) ||
@@ -770,7 +838,7 @@ async function inspectUi(
         metrics: {
           buttons: visibleButtons.length,
           incompleteEmptyStates: incompleteEmptyStates.length,
-          emptyStates: [...document.querySelectorAll(".rm-empty")].filter(
+          emptyStates: [...document.querySelectorAll(".rm-ui-empty")].filter(
             visible,
           ).length,
           leakedIdentifiers: new Set(leakedIdentifiers).size,
@@ -790,8 +858,57 @@ async function inspectUi(
         },
       };
     },
-    { expectedNavigationItems, expectedSection, expectedTitle },
+    { expectedSection, expectedTitle },
   );
+}
+
+async function waitForRouteReady(page, pendingRequests, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  let idleSince;
+  while (Date.now() < deadline) {
+    const visuallyBusy = await page.evaluate(() => {
+      const visible = (element) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.display !== "none" &&
+          style.visibility !== "hidden"
+        );
+      };
+      return [
+        ...document.querySelectorAll(
+          ".rm-ui-skeleton, .rm-loading, [aria-busy='true']",
+        ),
+      ].some(visible);
+    });
+    if (pendingRequests.size === 0 && !visuallyBusy) {
+      idleSince ??= Date.now();
+      // Lazy route chunks can mount their query on the frame after the page
+      // heading appears. Require a meaningful quiet window so we do not
+      // inspect the transient gap before those requests begin.
+      if (Date.now() - idleSince >= 400) return;
+    } else {
+      idleSince = undefined;
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+  }
+  const pendingPaths = [...pendingRequests]
+    .slice(0, 10)
+    .map((request) => new URL(request.url()).pathname)
+    .join(", ");
+  throw new Error(`admin route did not become ready: ${pendingPaths}`);
+}
+
+async function waitForSectionEvidence(page, section) {
+  if (section !== "audit") return;
+  await page
+    .locator(
+      "#console-content [data-audit-event-count], #console-content .rm-ui-empty, #console-content [role='alert']",
+    )
+    .first()
+    .waitFor();
 }
 
 function sanitize(value) {

@@ -1,15 +1,30 @@
 import { useEffect, useRef } from "react";
 
 import { useTranscriptRowVisibility } from "./transcript-row-visibility";
+import { audioCaptionTrackUrl } from "./composer-tray-media";
 
-export function VisibilityAwareAudio({ src }: { src: string }) {
+export function VisibilityAwareAudio({
+  captions,
+  captionsLabel,
+  src,
+}: {
+  captions: string;
+  captionsLabel: string;
+  src: string;
+}) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const visible = useTranscriptRowVisibility();
   useEffect(() => {
     if (!visible) audioRef.current?.pause();
   }, [visible]);
-  // The adjacent assistant text is the alternative for generated speech.
-  // Metadata is deferred until the reader elects to play it.
-  // oxlint-disable-next-line jsx-a11y/media-has-caption
-  return <audio controls preload="none" ref={audioRef} src={src} />;
+  return (
+    <audio controls preload="none" ref={audioRef} src={src}>
+      <track
+        default
+        kind="captions"
+        label={captionsLabel}
+        src={audioCaptionTrackUrl(captions)}
+      />
+    </audio>
+  );
 }

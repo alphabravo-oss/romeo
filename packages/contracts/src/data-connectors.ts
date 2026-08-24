@@ -18,13 +18,24 @@ export const DataConnectorTypeSchema = z
     "s3",
     "website",
     "rss",
+    // Retained in the public contract for historical records and for clients
+    // migrating away from connector types that are no longer executable.
     "confluence",
     "jira",
-    "notion",
     "linear",
+    "notion",
     "slack",
   ])
   .openapi("DataConnectorType");
+
+export const ExecutableDataConnectorTypeSchema =
+  DataConnectorTypeSchema.extract([
+    "local_import",
+    "github",
+    "s3",
+    "website",
+    "rss",
+  ]);
 
 export const DataConnectorSchema = z
   .strictObject({
@@ -101,10 +112,6 @@ const ExecutionDriverSchema = z.enum([
   "website-fetch",
   "github-fetch",
   "s3-fetch",
-  "atlassian-fetch",
-  "notion-fetch",
-  "linear-fetch",
-  "slack-fetch",
   "managed-fetch",
 ]);
 const EgressPolicySchema = z.enum(["allow_public", "require_allowlist"]);

@@ -36,6 +36,9 @@
         "agent_models",
         "agent_tool_bindings",
         "agent_versions",
+        "audit_integrity_checkpoints",
+        "audit_integrity_records",
+        "audit_integrity_tenant_heads",
         "audit_logs",
         "background_jobs",
         "billing_event_receipts",
@@ -46,6 +49,8 @@
         "chats",
         "collaboration_channel_members",
         "collaboration_channels",
+        "content_policy_approvals",
+        "content_policy_decisions",
         "data_connector_syncs",
         "data_connectors",
         "eval_cases",
@@ -55,6 +60,7 @@
         "eval_suites",
         "group_memberships",
         "groups",
+        "governance_export_jobs",
         "knowledge_bases",
         "knowledge_chunk_embeddings",
         "knowledge_chunks",
@@ -98,16 +104,23 @@
       ],
       "restricted": [
         "api_keys",
+        "audit_export_attempts",
+        "audit_export_destinations",
+        "audit_export_idempotency_receipts",
+        "audit_export_jobs",
+        "content_deletion_operations",
         "delegated_oauth_connections",
         "device_authorizations",
         "idempotency_receipts",
         "identities",
+        "governance_export_artifacts",
         "local_mfa_challenges",
         "local_mfa_factors",
         "local_password_credentials",
         "org_sso_oidc_settings",
         "provider_credentials",
         "saml_auth_requests",
+        "server_table_saved_views",
         "sessions",
         "system_settings",
         "user_sessions",
@@ -118,6 +131,7 @@
       "authConfig",
       "credentialHash",
       "credentialRef",
+      "deleteTokenHash",
       "encodedCustomInstructions",
       "hashedRefreshToken",
       "hashedToken",
@@ -131,6 +145,7 @@
       "scopeSnapshot",
       "secretEncrypted",
       "secretRef",
+      "signatureKeyVersion",
       "token"
     ],
     "requirements": {
@@ -285,6 +300,24 @@
       ],
       "retentionAuthority": "audit retention and legal hold",
       "encryption": "database controls and future tenant-key policy; export is authorized and DLP-governed"
+    },
+    {
+      "id": "customer_audit_export_destinations",
+      "kind": "siem_and_worm_object_store",
+      "classification": "restricted",
+      "contains": [
+        "canonical audit records",
+        "signed tenant checkpoints",
+        "destination acknowledgements and immutable range evidence"
+      ],
+      "prohibited": [
+        "caller-asserted delivery receipts",
+        "unverified partial ranges",
+        "mutable WORM objects",
+        "exports without tenant authorization"
+      ],
+      "retentionAuthority": "customer destination policy with required readback and retention-lock evidence before source retention deletion",
+      "encryption": "authenticated encrypted transport and destination-managed encryption with customer-controlled access policy"
     },
     {
       "id": "browser_and_ssr_query_caches",

@@ -72,7 +72,13 @@ export function ReadinessPanel() {
             }),
           ];
           return (
-            <div className="grid gap-4">
+            <div
+              className="grid gap-4"
+              data-readiness-check-count={checks.length}
+              data-readiness-fail-count={summary.fail}
+              data-readiness-pass-count={summary.pass}
+              data-readiness-warn-count={summary.warn}
+            >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span
                   className={`rm-status ${

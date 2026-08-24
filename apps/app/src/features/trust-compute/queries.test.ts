@@ -103,12 +103,12 @@ describe("trust and compute generated surfaces", () => {
       code: "compute_public_package_install_denied",
       outcome: "denied",
     });
-    await expect(admitComputeArtifact(traversalArtifactPreview)).resolves.toEqual(
-      {
-        code: "compute_artifact_intake_denied",
-        outcome: "denied",
-      },
-    );
+    await expect(
+      admitComputeArtifact(traversalArtifactPreview),
+    ).resolves.toEqual({
+      code: "compute_artifact_intake_denied",
+      outcome: "denied",
+    });
     await expect(
       previewComputeOperations(unavailableOpsPreview),
     ).resolves.toMatchObject({

@@ -28,6 +28,7 @@
   "usersDisableConfirmBody": "Il est déconnecté et ne pourra plus se connecter jusqu'à réactivation. Ses conversations et fichiers sont conservés.",
   "usersDisableConfirmTitle": "Désactiver ce membre ?",
   "usersLastAdminHint": "Vous ne pouvez pas désactiver le dernier administrateur.",
+  "usersScheduledWorkerName": "Processus système — {operation}",
   "userUpdateRole": "Mettre à jour le rôle",
   "userUser": "Utilisateur",
   "userDirectory": "Répertoire",

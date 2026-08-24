@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { MemoryObjectStore, type ObjectStore } from "@romeo/storage";
 
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
@@ -69,7 +70,10 @@ describe("readiness API", () => {
       body: JSON.stringify({ name: "Readiness check", scopes: ["admin:read"] }),
     });
     const key = await keyResponse.json();
-    const api = createRomeoApi(repository, { env });
+    const api = createRomeoApi(repository, {
+      env,
+      objectStore: liveReadyObjectStore(),
+    });
     const response = await api.request("/api/v1/admin/readiness", {
       headers: { authorization: `Bearer ${key.data.token}` },
     });
@@ -177,6 +181,7 @@ describe("readiness API", () => {
     });
     const key = await keyResponse.json();
     const api = createRomeoApi(repository, {
+      objectStore: liveReadyObjectStore(),
       env: testEnv({
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         LOCAL_AUTH_SECRET_ENCRYPTION_KEY: "prod-local-auth-secret-key-32-bytes",
@@ -691,6 +696,7 @@ describe("readiness API", () => {
     });
     const key = await keyResponse.json();
     const api = createRomeoApi(repository, {
+      objectStore: liveReadyObjectStore(),
       env: testEnv({
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -744,6 +750,7 @@ describe("readiness API", () => {
     });
     const key = await keyResponse.json();
     const api = createRomeoApi(repository, {
+      objectStore: liveReadyObjectStore(),
       env: testEnv({
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         SESSION_SECRET_PREVIOUS: "prod-session-secret-32-bytes-long",
@@ -817,6 +824,7 @@ describe("readiness API", () => {
     });
     const key = await keyResponse.json();
     const api = createRomeoApi(repository, {
+      objectStore: liveReadyObjectStore(),
       env: testEnv({
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -860,6 +868,7 @@ describe("readiness API", () => {
     });
     const repository = new InMemoryRomeoRepository(seed);
     const api = createRomeoApi(repository, {
+      objectStore: liveReadyObjectStore(),
       env: testEnv({
         SESSION_SECRET: "prod-session-secret-32-bytes-long",
         WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
@@ -1347,22 +1356,25 @@ describe("readiness API", () => {
 
   it("fails readiness when persisted auth-provider secret refs are invalid", async () => {
     const repository = new InMemoryRomeoRepository();
-    await repository.upsertSystemSetting({
-      key: "auth_provider_settings.global.v1",
-      value: {
-        version: 1,
-        providers: {
-          local: {
-            enabled: true,
-            loginOrder: 0,
-            allowedEmailDomains: [],
-            orgOverridesAllowed: true,
-            secretRef: "literal-secret",
+    await repository.upsertSystemSetting(
+      {
+        key: "auth_provider_settings.global.v1",
+        value: {
+          version: 1,
+          providers: {
+            local: {
+              enabled: true,
+              loginOrder: 0,
+              allowedEmailDomains: [],
+              orgOverridesAllowed: true,
+              secretRef: "literal-secret",
+            },
           },
         },
+        updatedAt: new Date().toISOString(),
       },
-      updatedAt: new Date().toISOString(),
-    });
+      null,
+    );
     const api = createRomeoApi(repository);
     const response = await api.request("/api/v1/admin/readiness");
     const body = await response.json();
@@ -1541,6 +1553,25 @@ function writeQdrantLiveEvidence(input: {
     "utf8",
   );
   return path;
+}
+
+function liveReadyObjectStore(): ObjectStore {
+  return Object.assign(new MemoryObjectStore(), {
+    async checkReadiness() {
+      return {
+        authenticated: true,
+        deleteVerified: true,
+        encryptionConfigured: true,
+        lifecycleConfigured: true,
+        readAfterWriteVerified: true,
+        ready: true,
+        replicationConfigured: false,
+        tlsEnabled: true,
+        versioningEnabled: true,
+        writeVerified: true,
+      };
+    },
+  });
 }
 
 class DurableTestRepository extends InMemoryRomeoRepository {

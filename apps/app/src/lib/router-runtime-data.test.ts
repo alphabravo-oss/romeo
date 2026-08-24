@@ -16,7 +16,12 @@ import {
 } from "./router-runtime-data";
 
 const secretBootstrap: BootstrapResponse = {
-  deployment: { tenancyMode: "multi" },
+  deployment: {
+    billingEnabled: false,
+    malwareScanEnabled: false,
+    qdrantConfigured: false,
+    tenancyMode: "multi",
+  },
   organizations: [],
   subject: {
     apiKeyId: "key-secret",
@@ -88,6 +93,7 @@ describe("sanitized router runtime data", () => {
     const dehydrated = dehydrate(queryClient, routeDehydrateOptions);
     const serialized = JSON.stringify(dehydrated);
     expect(serialized).toContain("subject-a");
+    expect(serialized).toContain('"displayLabel":"subject-a"');
     expect(serialized).toContain('"locale":"fr"');
     expect(serialized).toContain("workspace-a");
     expect(serialized).not.toContain("workspace-ungranted");

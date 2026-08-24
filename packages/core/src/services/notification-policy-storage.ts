@@ -18,7 +18,10 @@ export async function readNotificationPolicy(
   repository: RomeoRepository,
   orgId: string,
 ): Promise<NotificationPolicyReport> {
-  const setting = await repository.getSystemSetting(policySettingKey(orgId));
+  const setting = await repository.getSystemSetting(
+    policySettingKey(orgId),
+    orgId,
+  );
   const value = setting?.value;
   const policy = normalizeStoredNotificationPolicy(value);
   return toNotificationPolicyReport(

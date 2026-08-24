@@ -34,13 +34,19 @@ import { RagPolicyTab } from "./RagPolicyTab";
 import { RagPostureTab } from "./RagPostureTab";
 import { RagReplayTab } from "./RagReplayTab";
 import { RagValidateTab } from "./RagValidateTab";
-import { Tabs } from "./Tabs";
+import { Tabs, type RoutedTabsState } from "./Tabs";
 
-export function RagGovernancePanel() {
+export function RagGovernancePanel({
+  tabState,
+}: {
+  tabState?: RoutedTabsState;
+}) {
   const { t } = useLocale();
   return (
     <Section>
       <Tabs
+        activeId={tabState?.activeId}
+        onActiveIdChange={tabState?.onActiveIdChange}
         tabs={[
           {
             id: "setup",
@@ -62,6 +68,8 @@ export function RagGovernancePanel() {
             label: t("ragGovernanceTab"),
             content: (
               <Tabs
+                activeId={tabState?.secondaryActiveId}
+                onActiveIdChange={tabState?.onSecondaryActiveIdChange}
                 tabs={[
                   {
                     id: "change-requests",
@@ -240,7 +248,7 @@ function ChangeRequestTab() {
       >
         {(request) =>
           request === null ? (
-            <EmptyState title={t("noChangeRequest")} />
+            <EmptyState headingLevel={3} title={t("noChangeRequest")} />
           ) : (
             <ChangeRequestView
               request={request}

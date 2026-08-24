@@ -84,7 +84,10 @@ export class DelegatedOAuthConfiguration {
         409,
       );
     }
-    new DelegatedOAuthTokenVault(this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY);
+    new DelegatedOAuthTokenVault({
+      active: this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
+      previous: this.env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS,
+    });
   }
 
   isProviderReady(providerId: DelegatedOAuthProviderId): boolean {

@@ -7,7 +7,21 @@ import {
 } from "../../lib/server-query-options";
 import { getAgenticRagSettings } from "./agentic";
 import { getKnowledgeIngestReadiness } from "./ingest-readiness";
-import { listKnowledgeBases, listKnowledgeSources } from "./queries";
+import {
+  getKnowledgeBase,
+  listKnowledgeBases,
+  listKnowledgeSources,
+} from "./queries";
+
+export function knowledgeBaseQueryOptions(knowledgeBaseId?: string) {
+  return queryOptions({
+    ...serverQueryPolicy("interactive", "knowledgeBase", { knowledgeBaseId }),
+    queryKey: appQueryKeys.knowledgeBase(knowledgeBaseId),
+    queryFn: ({ signal }) =>
+      abortableQuery(signal, () => getKnowledgeBase(knowledgeBaseId!)),
+    enabled: knowledgeBaseId !== undefined,
+  });
+}
 
 export function knowledgeBasesQueryOptions(
   workspaceId: string | undefined,

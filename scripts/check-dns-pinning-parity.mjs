@@ -21,6 +21,28 @@ const copies = [
   { label: "cli", path: "packages/cli/src/dns-pinned-fetch.ts" },
 ];
 
+const webhookBoundary = {
+  path: "packages/core/src/services/hardened-webhook-fetch.ts",
+  source: readFileSync(
+    resolve(root, "packages/core/src/services/hardened-webhook-fetch.ts"),
+    "utf8",
+  ),
+};
+const webhookConsumers = [
+  {
+    label: "native webhook delivery",
+    path: "packages/core/src/services/webhook-delivery-engine.ts",
+  },
+  {
+    label: "webhook and Slack notifications",
+    path: "packages/core/src/services/notification-delivery.ts",
+  },
+  {
+    label: "Teams and PagerDuty notifications",
+    path: "packages/core/src/services/notification-delivery-enterprise.ts",
+  },
+];
+
 /**
  * Each invariant is a security-relevant behaviour, not a formatting detail.
  * `extract` returns a comparable value; a missing or differing value in either
@@ -121,17 +143,47 @@ for (const invariant of invariants) {
   }
 }
 
+for (const invariant of [
+  "assertConnectorHostAllowed",
+  "dnsPinnedFetch",
+  'redirect: "manual"',
+  "maxResponseBytes",
+  "maxRedirects",
+  "timeoutMs",
+]) {
+  if (!webhookBoundary.source.includes(invariant)) {
+    failures.push(
+      `webhook boundary: missing ${invariant} in ${webhookBoundary.path}`,
+    );
+  }
+}
+for (const consumer of webhookConsumers) {
+  const source = readFileSync(resolve(root, consumer.path), "utf8");
+  if (!source.includes("hardenedWebhookFetch")) {
+    failures.push(
+      `webhook boundary: ${consumer.label} does not use hardenedWebhookFetch (${consumer.path})`,
+    );
+  }
+  if (/\(this\.options\.fetchImpl \?\? fetch\)\(/u.test(source)) {
+    failures.push(
+      `webhook boundary: ${consumer.label} retains a raw fetch fallback (${consumer.path})`,
+    );
+  }
+}
+
 if (failures.length > 0) {
   console.error("DNS pinning parity check failed:\n");
   for (const failure of failures) console.error(`  - ${failure}\n`);
   console.error(
     `Both copies implement the same SSRF control:\n${copies
       .map((copy) => `  ${copy.path}`)
-      .join("\n")}\nApply the change to both, or collapse them into one module.`,
+      .join(
+        "\n",
+      )}\nApply the change to both, or collapse them into one module.`,
   );
   process.exit(1);
 }
 
 console.log(
-  `dns pinning parity: ${invariants.length} invariants match across ${copies.length} copies`,
+  `dns pinning parity: ${invariants.length} invariants match across ${copies.length} copies; ${webhookConsumers.length} webhook delivery surfaces use the shared hardened boundary`,
 );

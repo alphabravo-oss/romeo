@@ -2,6 +2,10 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { assertNoSecretArgv, readSecretInput } from "./lib/secret-input.mjs";
+
+assertNoSecretArgv();
+
 const schemaVersion = "romeo.qdrant-live-evidence.v1";
 const outputPath = argValue("--output");
 const dryRun = hasFlag("--dry-run");
@@ -10,7 +14,7 @@ const allowUnauthenticated = hasFlag("--allow-unauthenticated");
 const endpoint = argValue("--url") ?? process.env.QDRANT_URL ?? "";
 const collection =
   argValue("--collection") ?? process.env.QDRANT_COLLECTION ?? "";
-const apiKey = argValue("--api-key") ?? process.env.QDRANT_API_KEY ?? "";
+const apiKey = readSecretInput({ environment: "QDRANT_API_KEY" }) ?? "";
 const namespacePolicy = parsePolicy(
   argValue("--namespace-policy") ??
     process.env.VECTOR_NAMESPACE_POLICY ??
@@ -233,7 +237,7 @@ function validateLiveInputs() {
   }
   if (apiKey.length === 0 && !allowUnauthenticated) {
     throw new Error(
-      "--api-key or QDRANT_API_KEY is required unless --allow-unauthenticated is set.",
+      "QDRANT_API_KEY or QDRANT_API_KEY_FILE is required unless --allow-unauthenticated is set.",
     );
   }
   if (!confirmMutation) {

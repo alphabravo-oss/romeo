@@ -52,6 +52,10 @@ export interface EdgeSecurityPostureReport {
   };
   ingress: {
     allowedOriginRuleCount: number;
+    desiredWafMode: RomeoEnv["EDGE_WAF_MODE"];
+    observedWafEnforcement: "block" | "failed" | "unknown";
+    observedWafAt?: string;
+    /** @deprecated Use desiredWafMode. */
     wafMode: RomeoEnv["EDGE_WAF_MODE"];
   };
   limits: {

@@ -25,6 +25,12 @@ export interface RetentionEnforcementResult {
   deletedFileObjectCount?: number;
   missingFileObjectCount?: number;
   deletedFileObjectBytes?: number;
+  fileRetentionBacklogRemaining?: boolean;
+  fileRetentionCursor?: { id: string; updatedAt: string };
+  fileRetentionLegalHoldSkippedCount?: number;
+  fileRetentionMetadataFailureCount?: number;
+  fileRetentionOldestCandidateAgeSeconds?: number;
+  fileRetentionScannedFileObjectCount?: number;
   deletedAuditLogCount: number;
   deletedRunEventCount: number;
   runEventCompactionLimitReached: boolean;
@@ -77,10 +83,21 @@ export interface DataDeletionPreview extends DataDeletionPlan {
   previewedAt: string;
 }
 
-export interface DataDeletionResult extends DataDeletionPlan {
+export interface DataDeletionCompletedResult extends DataDeletionPlan {
   schema: "romeo.data-deletion-result.v1";
   deletedAt: string;
 }
+
+export interface DataDeletionPendingResult extends DataDeletionPlan {
+  schema: "romeo.data-deletion-pending-result.v1";
+  status: "pending";
+  operationId: string;
+  deletionRequestedAt: string;
+}
+
+export type DataDeletionResult =
+  | DataDeletionCompletedResult
+  | DataDeletionPendingResult;
 
 export type DataExportScope = "org" | "workspace";
 
@@ -176,7 +193,7 @@ export interface DataExportDocument {
 }
 
 export interface DataExportPackageArtifact {
-  contentType: "application/json";
+  contentType: "application/json" | "application/x-ndjson";
   sizeBytes: number;
   sha256: string;
   downloadUrl: string;
@@ -185,6 +202,34 @@ export interface DataExportPackageArtifact {
     objectKeyHash: string;
     rawObjectKeyReturned: false;
   };
+}
+
+export type DataExportPackageJobState =
+  | "queued"
+  | "running"
+  | "artifact_ready"
+  | "failed"
+  | "expired";
+
+export interface DataExportPackageJob {
+  schema: "romeo.data-export-package-job.v1";
+  packageId: string;
+  orgId: string;
+  request: DataExportResolvedRequest;
+  state: DataExportPackageJobState;
+  percent: number;
+  processedRows: number;
+  attemptCount: number;
+  counts: DataExportCounts;
+  limits: DataExportLimits;
+  warnings: string[];
+  exclusions: string[];
+  artifact?: DataExportPackageArtifact;
+  errorCode?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  expiresAt?: string;
 }
 
 export interface DataExportPackage {
@@ -217,6 +262,7 @@ export interface DataExportPackageList {
   schema: "romeo.data-export-package-list.v1";
   orgId: string;
   packages: DataExportPackageSummary[];
+  jobs: DataExportPackageJob[];
   redaction: {
     packageContentReturned: false;
     rawObjectKeysReturned: false;

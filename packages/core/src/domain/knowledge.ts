@@ -1,3 +1,5 @@
+import type { WorkLease } from "./work-leases";
+
 export interface KnowledgeBase {
   id: string;
   orgId: string;
@@ -22,7 +24,7 @@ export interface KnowledgeSource {
   fileName: string;
   mimeType: string;
   sizeBytes: number;
-  status: "pending" | "indexed" | "failed";
+  status: "pending" | "extracting" | "indexed" | "failed" | "deletion_pending";
   objectKey?: string;
   metadata: Record<string, unknown>;
   chunkCount?: number;
@@ -30,6 +32,7 @@ export interface KnowledgeSource {
   indexedAt?: string;
   createdAt: string;
   updatedAt: string;
+  extractionLease?: WorkLease;
 }
 
 export interface KnowledgeChunk {

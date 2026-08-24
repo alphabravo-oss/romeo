@@ -106,7 +106,9 @@ describe("administration mutation policies", () => {
 
   it("never writes a one-time API token into query cache", async () => {
     const client = createRomeoQueryClient();
+    const inventoryKey = organizationTableKey("api_keys");
     client.setQueryData(appQueryKeys.apiKeys(), []);
+    client.setQueryData(inventoryKey, { items: [] });
     const created: CreatedApiKey = {
       apiKey: apiKey("key-created"),
       token: "romeo-secret-token",
@@ -124,6 +126,7 @@ describe("administration mutation policies", () => {
     expect(JSON.stringify(client.getQueryCache().getAll())).not.toContain(
       created.token,
     );
+    expect(client.getQueryState(inventoryKey)?.isInvalidated).toBe(true);
   });
 
   it("does not cache a credential response that completes after logout", async () => {
@@ -174,10 +177,12 @@ describe("administration mutation policies", () => {
 
   it("restores failed members of a partial bulk service-account disable", async () => {
     const client = createRomeoQueryClient();
+    const inventoryKey = organizationTableKey("service_accounts");
     client.setQueryData(appQueryKeys.serviceAccounts(), [
       serviceAccount("service-success"),
       serviceAccount("service-failure"),
     ]);
+    client.setQueryData(inventoryKey, { items: [] });
     mutationMocks.bulkDisableServiceAccounts.mockResolvedValueOnce({
       results: [
         { id: "service-success", status: "success" },
@@ -199,5 +204,15 @@ describe("administration mutation policies", () => {
     expect(
       cached?.find((item) => item.id === "service-failure")?.disabledAt,
     ).toBeUndefined();
+    expect(client.getQueryState(inventoryKey)?.isInvalidated).toBe(true);
   });
 });
+
+function organizationTableKey(resource: "api_keys" | "service_accounts") {
+  return appQueryKeys.tablePages({
+    filters: [],
+    limit: 25,
+    resource,
+    sort: [],
+  });
+}

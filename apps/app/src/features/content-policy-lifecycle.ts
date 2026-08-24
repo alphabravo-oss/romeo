@@ -26,7 +26,9 @@ export type {
   ContentPolicyVersion,
 };
 
-export async function listContentPolicyVersions(): Promise<ContentPolicyVersion[]> {
+export async function listContentPolicyVersions(): Promise<
+  ContentPolicyVersion[]
+> {
   configureBrowserApiClients();
   const response = await contentPolicyVersionsList({ throwOnError: true });
   return response.data.data;
@@ -78,13 +80,17 @@ export async function rollbackContentPolicy(
   return response.data.data;
 }
 
-export async function listContentPolicyDecisions(): Promise<ContentPolicyDecision[]> {
+export async function listContentPolicyDecisions(): Promise<
+  ContentPolicyDecision[]
+> {
   configureBrowserApiClients();
   const response = await contentPolicyDecisionsList({ throwOnError: true });
   return response.data.data;
 }
 
-export async function listContentPolicyApprovals(): Promise<ContentPolicyApproval[]> {
+export async function listContentPolicyApprovals(): Promise<
+  ContentPolicyApproval[]
+> {
   configureBrowserApiClients();
   const response = await contentPolicyApprovalsList({ throwOnError: true });
   return response.data.data;

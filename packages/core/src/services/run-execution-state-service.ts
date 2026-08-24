@@ -52,12 +52,15 @@ export class RunExecutionStateService {
     { job: BackgroundJob; checkpoint: RunExecutionCheckpoint } | undefined
   > {
     const type = runExecutionJobType(input.run.id);
-    const jobs = await this.repository.listBackgroundJobs(input.run.orgId);
-    let job = jobs.find(
-      (candidate) =>
-        candidate.type === type &&
-        (candidate.status === "queued" || candidate.status === "running"),
+    const [existing] = await this.repository.listBackgroundJobs(
+      input.run.orgId,
+      {
+        limit: 1,
+        statuses: ["queued", "running"],
+        type,
+      },
     );
+    let job = existing;
     if (job === undefined) {
       const now = new Date().toISOString();
       const checkpointKey = runExecutionCheckpointKey(input.run);
@@ -70,6 +73,7 @@ export class RunExecutionStateService {
         scopeSnapshot: input.subject.scopes,
         assistantContent: input.assistantContentPrefix ?? "",
         emitRunStarted: input.emitRunStarted !== false,
+        outputParts: [],
         ...(input.sampling === undefined ? {} : { sampling: input.sampling }),
         ...(input.reasoning === undefined
           ? {}
@@ -103,6 +107,7 @@ export class RunExecutionStateService {
     const claimed = await this.repository.claimBackgroundJob({
       orgId: input.run.orgId,
       type,
+      jobId: job.id,
       workerId: this.workerId,
       leaseSeconds: this.leaseSeconds,
     });

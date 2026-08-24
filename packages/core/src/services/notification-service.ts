@@ -28,7 +28,6 @@ import {
 import {
   createPolicyBlockedNotificationDelivery,
   disabledNotificationDeliverySender,
-  maxNotificationAttempts,
   policyBlockedNotificationDelivery,
   type NotificationDeliverySender,
 } from "./notification-delivery";
@@ -45,6 +44,7 @@ import {
   readNotificationPolicy,
   toNotificationPolicyReport,
 } from "./notification-policy-storage";
+import type { SecretResolver } from "./secret-resolver";
 
 export { readNotificationPolicy } from "./notification-policy-storage";
 export type { PublicNotificationDeliveryChannel } from "./notification-channel-config";
@@ -58,6 +58,7 @@ export class NotificationService {
   constructor(
     private readonly repository: RomeoRepository,
     private readonly deliverySender: NotificationDeliverySender = disabledNotificationDeliverySender,
+    private readonly secretResolver?: SecretResolver,
   ) {}
 
   list(subject: AuthSubject): Promise<UserNotification[]> {
@@ -167,17 +168,20 @@ export class NotificationService {
         existing.policy,
         input.policy,
       );
-      await repository.upsertSystemSetting({
-        key: policySettingKey(input.subject.orgId),
-        value: {
-          version: 1,
-          orgId: input.subject.orgId,
-          policy: updatedPolicy,
+      await repository.upsertSystemSetting(
+        {
+          key: policySettingKey(input.subject.orgId),
+          value: {
+            version: 1,
+            orgId: input.subject.orgId,
+            policy: updatedPolicy,
+            updatedAt: now,
+            updatedBy: input.subject.id,
+          },
           updatedAt: now,
-          updatedBy: input.subject.id,
         },
-        updatedAt: now,
-      });
+        input.subject.orgId,
+      );
       const updated = toNotificationPolicyReport(
         input.subject.orgId,
         updatedPolicy,
@@ -212,30 +216,46 @@ export class NotificationService {
     try {
       const deliveries: NotificationDelivery[] = [];
       const now = new Date().toISOString();
+      const leaseOwner = `notification-retry:${subject.id}`;
+      const leaseToken = createId("notification_delivery_lease");
       const policy = await readNotificationPolicy(
         this.repository,
         subject.orgId,
       );
-      const [users, failedDeliveries] = await Promise.all([
+      const [users, claimedDeliveries] = await Promise.all([
         this.repository.listUsers(subject.orgId),
-        this.repository.listFailedNotificationDeliveries(subject.orgId, 1_000),
+        this.repository.claimDueNotificationDeliveries({
+          leaseExpiresAt: new Date(Date.parse(now) + 30_000).toISOString(),
+          leaseOwner,
+          leaseToken,
+          limit: 1_000,
+          now,
+          orgId: subject.orgId,
+        }),
       ]);
       const userById = new Map(
         users
           .filter((user) => user.disabledAt === undefined)
           .map((user) => [user.id, user]),
       );
-      for (const delivery of failedDeliveries.filter((item) =>
-        isDueRetry(item, now),
-      )) {
+      for (const delivery of claimedDeliveries) {
+        const lease = delivery.deliveryLease;
+        if (lease === undefined) continue;
         const user = userById.get(delivery.userId);
-        if (user === undefined) continue;
-        const retried = await this.retryDeliveryForUser(
-          user,
-          delivery,
-          policy.policy,
+        const retried =
+          user === undefined
+            ? disabledClaim(delivery, "notification_user_unavailable")
+            : await this.retryDeliveryForUser(user, delivery, policy.policy);
+        const completed = await this.repository.finishNotificationDeliveryLease(
+          {
+            delivery: retried,
+            fencingToken: lease.fencingToken,
+            leaseOwner: lease.owner,
+            leaseToken: lease.token,
+            now: new Date().toISOString(),
+          },
         );
-        if (retried !== undefined) deliveries.push(retried);
+        if (completed !== undefined) deliveries.push(completed);
       }
       return {
         job: await completeBackgroundJob(this.repository, job),
@@ -255,7 +275,7 @@ export class NotificationService {
     user: User,
     delivery: NotificationDelivery,
     policy: NotificationPolicy,
-  ): Promise<NotificationDelivery | undefined> {
+  ): Promise<NotificationDelivery> {
     const [notifications, channels] = await Promise.all([
       this.repository.listUserNotifications(user.orgId, user.id),
       this.repository.listNotificationDeliveryChannels(user.orgId, user.id),
@@ -264,23 +284,26 @@ export class NotificationService {
       (item) => item.id === delivery.notificationId,
     );
     const channel = channels.find((item) => item.id === delivery.channelId);
-    if (notification === undefined || channel === undefined || !channel.enabled)
-      return undefined;
+    if (notification === undefined)
+      return disabledClaim(delivery, "notification_record_unavailable");
+    if (channel === undefined || !channel.enabled)
+      return disabledClaim(delivery, "notification_channel_unavailable");
     const blockReason = notificationPolicyBlockReason({
       policy,
       notificationType: notification.type,
       channel,
     });
     if (blockReason !== undefined) {
-      return this.repository.updateNotificationDelivery(
-        policyBlockedNotificationDelivery(delivery, blockReason),
-      );
+      return policyBlockedNotificationDelivery(delivery, blockReason);
     }
     return this.deliverySender.retryDelivery({
-      repository: this.repository,
+      repository: nonPersistingDeliveryRepository(this.repository),
       notification,
       channel,
       delivery,
+      ...(this.secretResolver === undefined
+        ? {}
+        : { secretResolver: this.secretResolver }),
     });
   }
 }
@@ -322,13 +345,27 @@ export async function deliveryChannelsForNotification(input: {
   return allowedChannels;
 }
 
-function isDueRetry(delivery: NotificationDelivery, now: string): boolean {
-  if (
-    delivery.status !== "failed" ||
-    delivery.attemptCount >= maxNotificationAttempts
-  )
-    return false;
-  if (delivery.metadata.deadLetter !== undefined) return false;
-  const nextAttemptAt = delivery.metadata.nextAttemptAt;
-  return typeof nextAttemptAt !== "string" || nextAttemptAt <= now;
+function nonPersistingDeliveryRepository(
+  repository: RomeoRepository,
+): RomeoRepository {
+  return new Proxy(repository, {
+    get(target, property, receiver) {
+      if (property === "updateNotificationDelivery")
+        return async (delivery: NotificationDelivery) => delivery;
+      return Reflect.get(target, property, receiver) as unknown;
+    },
+  });
+}
+
+function disabledClaim(
+  delivery: NotificationDelivery,
+  errorCode: string,
+): NotificationDelivery {
+  return {
+    ...delivery,
+    errorCode,
+    metadata: { ...delivery.metadata, deadLetter: { reason: errorCode } },
+    status: "disabled",
+    updatedAt: new Date().toISOString(),
+  };
 }

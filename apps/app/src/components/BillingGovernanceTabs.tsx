@@ -10,6 +10,7 @@ import {
   type BillingEntitlementQuotaReport,
 } from "../features/billing";
 import { useLocale } from "../lib/i18n";
+import type { MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
 import { useConfirm } from "./ConfirmDialog";
@@ -155,7 +156,10 @@ export function EntitlementsTab() {
             />
             {report.warnings.length ? (
               <div className="text-sm text-muted">
-                {t("warnings")}: {report.warnings.join(", ")}
+                {t("warnings")}:{" "}
+                {report.warnings
+                  .map((warning) => t(billingWarningMessageKey(warning)))
+                  .join(", ")}
               </div>
             ) : null}
             <DataTable
@@ -249,7 +253,10 @@ export function LifecycleTab() {
             />
             {report.warnings.length ? (
               <div className="text-sm text-muted">
-                {t("warnings")}: {report.warnings.join(", ")}
+                {t("warnings")}:{" "}
+                {report.warnings
+                  .map((warning) => t(billingWarningMessageKey(warning)))
+                  .join(", ")}
               </div>
             ) : null}
             {report.billingPlan ? (
@@ -266,4 +273,21 @@ export function LifecycleTab() {
       {dialog}
     </div>
   );
+}
+
+function billingWarningMessageKey(warning: string): MessageKey {
+  if (warning === "billing_plan_missing") return "billingWarningPlanMissing";
+  if (warning === "billing_status_not_entitled")
+    return "billingWarningStatusNotEntitled";
+  if (warning === "quota_limit_mismatch")
+    return "billingWarningQuotaLimitMismatch";
+  if (warning === "quota_missing") return "billingWarningQuotaMissing";
+  if (warning === "quota_reset_interval_mismatch")
+    return "billingWarningQuotaResetMismatch";
+  if (warning === "cancel_at_reached") return "billingWarningCancelAtReached";
+  if (warning === "past_due_grace_expired")
+    return "billingWarningPastDueGraceExpired";
+  if (warning === "subscription_period_expired")
+    return "billingWarningSubscriptionPeriodExpired";
+  return "billingWarningTrialExpired";
 }

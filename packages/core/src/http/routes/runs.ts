@@ -180,7 +180,7 @@ export function registerRunRoutes(app: RomeoApi): void {
       after,
       context.req.header("last-event-id"),
     );
-    const events = context
+    const events = await context
       .get("services")
       .runs.events(runId, subject, afterSequence, context.req.raw.signal);
     return new Response(

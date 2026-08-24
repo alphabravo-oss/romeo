@@ -4,6 +4,7 @@ import type { BackgroundJob } from "../domain/entities";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
+import { iterateBackgroundJobs } from "./background-job-query";
 import {
   artifactExtension,
   browserAutomationArtifactMaxBytes,
@@ -30,7 +31,7 @@ import {
   type BrowserAutomationArtifactReadResult,
   type BrowserAutomationArtifactUploadRegistration,
   type BrowserAutomationStoredArtifact,
-} from "./workflow-browser-tasks";
+} from "./browser-automation-tasks";
 
 export interface BrowserAutomationPostureReport {
   schema: "romeo.browser-automation-posture.v1";
@@ -123,9 +124,10 @@ export class BrowserAutomationService extends BrowserAutomationWorkerService {
   async posture(subject: AuthSubject): Promise<BrowserAutomationPostureReport> {
     assertScope(subject, "admin:read");
     const nowMs = Date.now();
-    const jobs = (
-      await this.repository.listBackgroundJobs(subject.orgId)
-    ).filter((job) => job.type === browserAutomationJobType);
+    const jobs = await this.repository.listBackgroundJobs(subject.orgId, {
+      limit: 1_000,
+      type: browserAutomationJobType,
+    });
     const queue = browserAutomationQueuePosture(jobs, nowMs);
     const artifacts = browserAutomationArtifactPosture(jobs);
     const liveEvidence = await readBrowserAutomationLiveEvidence(
@@ -299,9 +301,10 @@ export class BrowserAutomationService extends BrowserAutomationWorkerService {
     | { artifact: BrowserAutomationStoredArtifact; job: BackgroundJob }
     | undefined
   > {
-    const jobs = await this.repository.listBackgroundJobs(subject.orgId);
-    for (const job of jobs) {
-      if (job.type !== browserAutomationJobType) continue;
+    const jobs = iterateBackgroundJobs(this.repository, subject.orgId, {
+      type: browserAutomationJobType,
+    });
+    for await (const job of jobs) {
       const artifact = readBrowserAutomationStoredArtifacts(job).find(
         (item) => item.artifactId === artifactId,
       );

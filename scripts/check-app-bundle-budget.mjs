@@ -6,6 +6,8 @@ const root = resolve(import.meta.dirname, "..");
 const publicDir = resolve(root, "apps/app/.output/public");
 const manifestPath = resolve(publicDir, ".vite/manifest.json");
 const outputPath = resolve(root, "dist/ci/app-bundle-budget.json");
+const targetHeadroomPercent = 10;
+const targetRatio = (100 - targetHeadroomPercent) / 100;
 const budgets = [
   {
     id: "route_shell_js",
@@ -62,6 +64,11 @@ const checks = budgets.map((budget) => {
       maxEntryBytes: budget.maxEntryBytes,
       maxInitialBytes: budget.maxInitialBytes,
       maxInitialGzipBytes: budget.maxInitialGzipBytes,
+      targetEntryBytes: Math.floor(budget.maxEntryBytes * targetRatio),
+      targetInitialBytes: Math.floor(budget.maxInitialBytes * targetRatio),
+      targetInitialGzipBytes: Math.floor(
+        budget.maxInitialGzipBytes * targetRatio,
+      ),
       assets: [],
     };
   }
@@ -93,10 +100,15 @@ const checks = budgets.map((budget) => {
     (total, asset) => total + asset.gzipBytes,
     0,
   );
+  const targetEntryBytes = Math.floor(budget.maxEntryBytes * targetRatio);
+  const targetInitialBytes = Math.floor(budget.maxInitialBytes * targetRatio);
+  const targetInitialGzipBytes = Math.floor(
+    budget.maxInitialGzipBytes * targetRatio,
+  );
   const status =
-    entryBytes <= budget.maxEntryBytes &&
-    initialBytes <= budget.maxInitialBytes &&
-    initialGzipBytes <= budget.maxInitialGzipBytes
+    entryBytes <= targetEntryBytes &&
+    initialBytes <= targetInitialBytes &&
+    initialGzipBytes <= targetInitialGzipBytes
       ? "passed"
       : "failed";
   return {
@@ -109,6 +121,17 @@ const checks = budgets.map((budget) => {
     maxEntryBytes: budget.maxEntryBytes,
     maxInitialBytes: budget.maxInitialBytes,
     maxInitialGzipBytes: budget.maxInitialGzipBytes,
+    targetEntryBytes,
+    targetInitialBytes,
+    targetInitialGzipBytes,
+    headroomPercent: {
+      entry: percentHeadroom(entryBytes, budget.maxEntryBytes),
+      initial: percentHeadroom(initialBytes, budget.maxInitialBytes),
+      initialGzip: percentHeadroom(
+        initialGzipBytes,
+        budget.maxInitialGzipBytes,
+      ),
+    },
     assets,
   };
 });
@@ -124,6 +147,7 @@ const evidence = {
     dynamicImportsIncluded: false,
     gzipLevel: 9,
     staticImportClosureIncluded: true,
+    targetHeadroomPercent,
   },
   redaction: {
     assetContentsIncluded: false,
@@ -145,4 +169,8 @@ function collectStaticImports(source, visited = new Set()) {
     collectStaticImports(importedSource, visited);
   }
   return visited;
+}
+
+function percentHeadroom(actual, maximum) {
+  return Number((((maximum - actual) / maximum) * 100).toFixed(2));
 }

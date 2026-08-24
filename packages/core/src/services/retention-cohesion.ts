@@ -43,7 +43,11 @@ export function planRetentionCohesion(input: {
       return { action: "blocked", code: "retention_hold_blocks_shred" };
     if (input.deleted)
       return { action: "blocked", code: "retention_hold_blocks_delete" };
-    return { action: "retain", reason: "legal_hold", surfaces: RETENTION_SURFACES };
+    return {
+      action: "retain",
+      reason: "legal_hold",
+      surfaces: RETENTION_SURFACES,
+    };
   }
   if (input.cryptoShredRequested) {
     if (!input.backupChecked)
@@ -60,7 +64,11 @@ export function planRetentionCohesion(input: {
       reason: "retention_or_user_delete",
       surfaces: RETENTION_SURFACES,
     };
-  return { action: "retain", reason: "in_policy", surfaces: RETENTION_SURFACES };
+  return {
+    action: "retain",
+    reason: "in_policy",
+    surfaces: RETENTION_SURFACES,
+  };
 }
 
 export function surfaceHonorsRetention(

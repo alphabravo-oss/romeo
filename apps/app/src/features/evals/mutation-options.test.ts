@@ -68,8 +68,32 @@ describe("evaluation mutation policies", () => {
     const client = createRomeoQueryClient();
     const key = appQueryKeys.evalSuites("agent-1");
     const otherKey = appQueryKeys.evalSuites("agent-2");
+    const tableKey = appQueryKeys.tablePages({
+      filters: [],
+      limit: 25,
+      parentId: "agent-1",
+      resource: "eval_suites",
+      sort: [],
+    });
+    const otherAgentTableKey = appQueryKeys.tablePages({
+      filters: [],
+      limit: 25,
+      parentId: "agent-2",
+      resource: "eval_suites",
+      sort: [],
+    });
+    const otherResourceTableKey = appQueryKeys.tablePages({
+      filters: [],
+      limit: 25,
+      parentId: "agent-1",
+      resource: "tool_trace_calls",
+      sort: [],
+    });
     client.setQueryData(key, [suite("Before")]);
     client.setQueryData(otherKey, []);
+    client.setQueryData(tableKey, { items: [suite("Before")] });
+    client.setQueryData(otherAgentTableKey, { items: [] });
+    client.setQueryData(otherResourceTableKey, { items: [] });
     mutationMocks.createEvalSuite.mockResolvedValueOnce({
       cases: [],
       suite: suite("After"),
@@ -84,6 +108,11 @@ describe("evaluation mutation policies", () => {
     expect(client.getQueryData<EvalSuite[]>(key)?.[0]?.name).toBe("After");
     expect(client.getQueryState(key)?.isInvalidated).toBe(true);
     expect(client.getQueryState(otherKey)?.isInvalidated).toBe(false);
+    expect(client.getQueryState(tableKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(otherAgentTableKey)?.isInvalidated).toBe(false);
+    expect(client.getQueryState(otherResourceTableKey)?.isInvalidated).toBe(
+      false,
+    );
   });
 
   it("leaves cached suites unchanged after a conflict", async () => {

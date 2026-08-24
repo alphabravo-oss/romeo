@@ -22,7 +22,7 @@ import { useLocale } from "../lib/i18n";
 import { safeUserErrorMessage } from "../lib/safe-user-error";
 import * as appQueryKeys from "../lib/app-query-keys";
 import { apiQueryKeys } from "../lib/api-query-options";
-import { useWorkspaceData } from "./useWorkspaceData";
+import { useWorkspaceCatalogData } from "./useWorkspaceCatalogData";
 import { removeChatCache } from "../features/chats/cache-policy";
 
 /**
@@ -37,7 +37,7 @@ export function useAdminController() {
   // Drafts included: the admin curated table is where a model is created, and the gallery query
   // lists published models only -- so a model created here was invisible the moment it was made,
   // and the "drafts" tile above the table could only ever read zero.
-  const data = useWorkspaceData(undefined, { includeDrafts: true });
+  const data = useWorkspaceCatalogData(undefined, { includeDrafts: true });
   const [error, setError] = useState<string>();
   const [syncingProviderId, setSyncingProviderId] = useState<string>();
   const [pullingProviderId, setPullingProviderId] = useState<string>();
@@ -146,6 +146,7 @@ export function useAdminController() {
     try {
       const result = await deleteProviderModelMutation.mutateAsync({
         providerId,
+        modelId,
         model,
       });
       return result;

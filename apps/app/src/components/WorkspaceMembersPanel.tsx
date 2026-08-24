@@ -1,23 +1,30 @@
 import { NativeSelect } from "@romeo/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { revokeWorkspaceMember, shareWorkspace } from "../features/access/api";
 import { workspaceMembersQueryOptions } from "../features/access/query-options";
 import { workspacesQueryOptions } from "../features/tenancy";
 import { useLocale } from "../lib/i18n";
 import { Section } from "./console";
+import { useWorkspace } from "./WorkspaceContext";
 import { ResourceGrantEditor } from "./ResourceGrantEditor";
 import * as appQueryKeys from "../lib/app-query-keys";
 
 export function WorkspaceMembersPanel() {
   const { t } = useLocale();
+  const { workspaceId: currentWorkspaceId } = useWorkspace();
   const workspacesQuery = useQuery(workspacesQueryOptions());
-  const workspaces = workspacesQuery.data ?? [];
-  const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
+  const workspaces = useMemo(
+    () => workspacesQuery.data ?? [],
+    [workspacesQuery.data],
+  );
+  const [workspaceId, setWorkspaceId] = useState(
+    currentWorkspaceId ?? workspaces[0]?.id ?? "",
+  );
   const selectedId = workspaces.some((item) => item.id === workspaceId)
     ? workspaceId
-    : (workspaces[0]?.id ?? "");
+    : (currentWorkspaceId ?? workspaces[0]?.id ?? "");
   const membersQuery = useQuery(workspaceMembersQueryOptions(selectedId));
 
   // No section title: the page header already reads "Workspace members", and
@@ -25,9 +32,11 @@ export function WorkspaceMembersPanel() {
   // beside controls that then ran the full width of the page.
   return (
     <Section description={t("workspaceMembersHelp")}>
-      <label className="cs-fields grid gap-1 text-sm">
+      <div className="cs-fields grid gap-1 text-sm">
         <span className="text-muted">{t("workspace")}</span>
         <NativeSelect
+          aria-label={t("workspace")}
+          id="workspace-members-workspace"
           name="workspace-members-workspace"
           onChange={(event) => setWorkspaceId(event.currentTarget.value)}
           value={selectedId}
@@ -38,7 +47,7 @@ export function WorkspaceMembersPanel() {
             </option>
           ))}
         </NativeSelect>
-      </label>
+      </div>
       {selectedId.length > 0 ? (
         <ResourceGrantEditor
           grants={membersQuery.data ?? []}

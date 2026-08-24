@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "romeo.fullname" . }}-operational-ownership
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operational-ownership
+data:
+  ownership.json: |
+    {{- dict
+      "schemaVersion" "romeo.operational-ownership.v1"
+      "scheduledTenantWork" (dict
+        "mode" .Values.essentialOperations.scheduledTenantWork.mode
+        "externalOwner" .Values.essentialOperations.scheduledTenantWork.externalManagement.owner
+        "evidenceReference" .Values.essentialOperations.scheduledTenantWork.externalManagement.evidenceReference
+        "statusReference" .Values.essentialOperations.scheduledTenantWork.externalManagement.statusReference
+        "alertsConfigured" .Values.essentialOperations.scheduledTenantWork.externalManagement.alertsConfigured)
+      "databaseBackup" (dict "mode" .Values.backup.mode "enabled" .Values.backup.enabled)
+      "objectStoreBackup" (dict "owner" .Values.essentialOperations.objectStoreBackup.owner "statusReference" .Values.essentialOperations.objectStoreBackup.statusReference "alertsConfigured" .Values.essentialOperations.objectStoreBackup.alertsConfigured)
+      "disasterRecovery" (dict "owner" .Values.essentialOperations.disasterRecovery.owner "statusReference" .Values.essentialOperations.disasterRecovery.statusReference "alertsConfigured" .Values.essentialOperations.disasterRecovery.alertsConfigured)
+      | toPrettyJson | nindent 4 }}

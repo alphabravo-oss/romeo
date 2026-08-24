@@ -4,6 +4,11 @@ import type {
 } from "./delegated-oauth";
 import type { DataConnectorType } from "./data-connectors";
 import type {
+  ClaimWorkLeaseInput,
+  FinishWorkLeaseInput,
+  RenewWorkLeaseInput,
+} from "./work-leases";
+import type {
   Chat,
   ChatComment,
   ChatTag,
@@ -39,6 +44,10 @@ import type {
   ChatMessageSearchQueryResult,
   RomeoRepository,
 } from "./repository";
+import type {
+  RuntimeKeyUsageCounts,
+  RuntimeKeyUsageQuery,
+} from "./runtime-key-usage";
 
 export interface RepositoryContentCapability {
   listChats(workspaceId: string): Promise<Chat[]>;
@@ -100,6 +109,14 @@ export interface RepositoryContentCapability {
   listChatComments(chatId: string): Promise<ChatComment[]>;
   createChatComment(comment: ChatComment): Promise<ChatComment>;
   listFileObjects(orgId: string, workspaceId?: string): Promise<FileObject[]>;
+  getFileLifecycleQueueSummary(
+    orgId: string,
+  ): Promise<FileLifecycleQueueSummary>;
+  listFileRetentionCandidates(input: {
+    after?: { id: string; updatedAt: string };
+    limit: number;
+    orgId: string;
+  }): Promise<FileObject[]>;
   listAuthorizedFileObjectsPage(input: AuthorizedFileCatalogQuery): Promise<{
     items: FileObject[];
     total: number;
@@ -207,6 +224,12 @@ export interface RepositoryContentCapability {
     orgId: string,
     limit: number,
   ): Promise<NotificationDelivery[]>;
+  claimDueNotificationDeliveries(
+    input: ClaimWorkLeaseInput & { limit: number; orgId: string },
+  ): Promise<NotificationDelivery[]>;
+  finishNotificationDeliveryLease(
+    input: FinishWorkLeaseInput & { delivery: NotificationDelivery },
+  ): Promise<NotificationDelivery | undefined>;
   createNotificationDelivery(
     delivery: NotificationDelivery,
   ): Promise<NotificationDelivery>;
@@ -218,8 +241,24 @@ export interface RepositoryContentCapability {
   updateKnowledgeBase(knowledgeBase: KnowledgeBase): Promise<KnowledgeBase>;
   getKnowledgeBase(knowledgeBaseId: string): Promise<KnowledgeBase | undefined>;
   listKnowledgeSources(knowledgeBaseId: string): Promise<KnowledgeSource[]>;
+  getKnowledgeSource(sourceId: string): Promise<KnowledgeSource | undefined>;
   createKnowledgeSource(source: KnowledgeSource): Promise<KnowledgeSource>;
   updateKnowledgeSource(source: KnowledgeSource): Promise<KnowledgeSource>;
+  claimKnowledgeSourceExtraction(
+    input: ClaimWorkLeaseInput & {
+      knowledgeBaseId: string;
+      sourceId?: string;
+    },
+  ): Promise<KnowledgeSource | undefined>;
+  renewKnowledgeSourceExtractionLease(
+    input: RenewWorkLeaseInput & { sourceId: string },
+  ): Promise<KnowledgeSource | undefined>;
+  finishKnowledgeSourceExtraction(
+    input: FinishWorkLeaseInput & {
+      chunks: KnowledgeChunk[];
+      source: KnowledgeSource;
+    },
+  ): Promise<KnowledgeSource | undefined>;
   deleteKnowledgeSource(sourceId: string): Promise<KnowledgeSource | undefined>;
   listKnowledgeChunks(knowledgeBaseId: string): Promise<KnowledgeChunk[]>;
   createKnowledgeChunks(chunks: KnowledgeChunk[]): Promise<KnowledgeChunk[]>;
@@ -248,6 +287,18 @@ export interface RepositoryContentCapability {
   getDataConnector(connectorId: string): Promise<DataConnector | undefined>;
   createDataConnector(connector: DataConnector): Promise<DataConnector>;
   updateDataConnector(connector: DataConnector): Promise<DataConnector>;
+  claimDataConnectorSync(
+    input: ClaimWorkLeaseInput & { connectorId?: string; orgId: string },
+  ): Promise<DataConnector | undefined>;
+  renewDataConnectorSyncLease(
+    input: RenewWorkLeaseInput & { connectorId: string },
+  ): Promise<DataConnector | undefined>;
+  finishDataConnectorSync(
+    input: FinishWorkLeaseInput & {
+      connector: DataConnector;
+      sync: DataConnectorSync;
+    },
+  ): Promise<DataConnectorSync | undefined>;
   listDataConnectorSyncs(
     orgId: string,
     connectorId?: string,
@@ -259,6 +310,9 @@ export interface RepositoryContentCapability {
     workspaceId?: string,
     userId?: string,
   ): Promise<DelegatedOAuthConnection[]>;
+  countDelegatedOAuthTokenKeyUsage(
+    input: RuntimeKeyUsageQuery,
+  ): Promise<RuntimeKeyUsageCounts>;
   getDelegatedOAuthConnection(
     connectionId: string,
   ): Promise<DelegatedOAuthConnection | undefined>;
@@ -283,6 +337,12 @@ export interface RepositoryContentCapability {
   listVoiceProfiles(orgId: string): Promise<VoiceProfile[]>;
   getVoiceProfile(voiceProfileId: string): Promise<VoiceProfile | undefined>;
   createVoiceProfile(voiceProfile: VoiceProfile): Promise<VoiceProfile>;
+}
+
+export interface FileLifecycleQueueSummary {
+  deadLettered: number;
+  oldestQueuedAt?: string;
+  queued: number;
 }
 
 export interface ClaimFileLifecycleInput {

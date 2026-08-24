@@ -22,7 +22,7 @@ export function contentSecurityPolicy(
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     "connect-src 'self' https: wss:",
-    "media-src 'self' blob: https:",
+    "media-src 'self' data: blob: https:",
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",

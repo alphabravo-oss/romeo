@@ -7,7 +7,7 @@ import {
 import type { MessagePart as TransferMessagePart } from "@romeo/contracts";
 import type { ObjectStore } from "@romeo/storage";
 
-import type { Chat, Message, MessagePart } from "../domain/entities";
+import type { Chat, Message } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { notFound } from "../errors";
 import { createId } from "../ids";
@@ -111,7 +111,9 @@ export class ChatTransferService {
         });
         const fileRefPartIds = new Set(
           (sourceParts ?? [])
-            .filter((part) => "schemaVersion" in part && part.schemaVersion === 1)
+            .filter(
+              (part) => "schemaVersion" in part && part.schemaVersion === 1,
+            )
             .filter((part) => part.type !== "text")
             .map((part) => part.id),
         );

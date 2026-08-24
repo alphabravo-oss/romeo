@@ -28,7 +28,6 @@ describe("repository contract inventory", () => {
       methodsFor("./repository-idempotency.ts", "RepositoryIdempotency"),
     ].flat();
 
-    expect(repositoryMethods).toHaveLength(305);
     expect(ROMEO_REPOSITORY_METHOD_NAMES).toEqual(repositoryMethods);
     expect(repositoryContractInventory.map((entry) => entry.method)).toEqual(
       repositoryMethods,

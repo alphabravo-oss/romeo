@@ -4,6 +4,7 @@ import {
   advanceTrayLifecycle,
   fileStatusToTrayLifecycle,
   readyDocuments,
+  meaningfulTrayProgress,
   trayAnnouncement,
   trayBlocksSend,
   trayCanCancel,
@@ -30,9 +31,9 @@ describe("composer tray lifecycle", () => {
   });
 
   it("blocks send until ready and only keeps documents with file ids", () => {
-    expect(
-      trayBlocksSend([{ status: "uploading" }, { status: "ready" }]),
-    ).toBe(true);
+    expect(trayBlocksSend([{ status: "uploading" }, { status: "ready" }])).toBe(
+      true,
+    );
     expect(trayBlocksSend([{ status: "ready" }])).toBe(false);
     expect(
       readyDocuments([
@@ -42,11 +43,21 @@ describe("composer tray lifecycle", () => {
       ]),
     ).toEqual([{ fileId: "file_1", status: "ready" }]);
     expect(
-      trayAnnouncement({
-        fileName: "notes.pdf",
-        percent: 70,
-        status: "scanning",
-      }),
-    ).toBe("notes.pdf: scanning 70%");
+      trayAnnouncement(
+        {
+          count: 2,
+          fileName: "notes.pdf",
+          formattedPercent: "75%",
+          position: 1,
+          status: "scanning",
+        },
+        (key, values) =>
+          key === "trayLifecycleScanning"
+            ? "Scanning"
+            : `${String(values?.fileName)}, ${String(values?.position)} of ${String(values?.count)}: ${String(values?.status)}, ${String(values?.progress)}`,
+      ),
+    ).toBe("notes.pdf, 1 of 2: Scanning, 75%");
+    expect(meaningfulTrayProgress(74)).toBe(50);
+    expect(meaningfulTrayProgress(75)).toBe(75);
   });
 });

@@ -1,4 +1,15 @@
-const sameOriginFileContent = /^\/(?:api\/v1\/)?files\/[^/?#]+\/content(?:\?.*)?$/u;
+const sameOriginFileContent =
+  /^\/(?:api\/v1\/)?files\/[^/?#]+\/content(?:\?.*)?$/u;
+
+export function audioCaptionTrackUrl(transcript: string): string {
+  const cue = transcript
+    .replaceAll("\0", "")
+    .replaceAll("-->", "→")
+    .trim()
+    .slice(0, 4_000);
+  const body = `WEBVTT\n\n00:00:00.000 --> 99:59:59.999\n${cue}\n`;
+  return `data:text/vtt;charset=utf-8,${encodeURIComponent(body)}`;
+}
 
 export function imageAltText(input: {
   fileName: string;
@@ -50,7 +61,9 @@ export function isPdfAttachment(mimeType: string): boolean {
   return mimeType === "application/pdf";
 }
 
-export function metadataPageCount(metadata: Record<string, unknown>): number | undefined {
+export function metadataPageCount(
+  metadata: Record<string, unknown>,
+): number | undefined {
   const value = metadata.pageCount;
   return typeof value === "number" && Number.isInteger(value) && value > 0
     ? value
@@ -64,6 +77,39 @@ export function metadataTranscript(
   if (typeof value !== "string") return undefined;
   const transcript = value.trim();
   return transcript.length === 0 ? undefined : transcript.slice(0, 4_000);
+}
+
+export type AudioAccessibility =
+  | { kind: "speech"; status: "pending" | "failed" | "required" }
+  | { kind: "speech"; status: "ready"; transcript: string }
+  | { description: string; kind: "non_speech"; status: "ready" };
+
+export function metadataAudioAccessibility(
+  metadata: Record<string, unknown>,
+): AudioAccessibility {
+  const transcript = metadataTranscript(metadata);
+  if (transcript !== undefined)
+    return { kind: "speech", status: "ready", transcript };
+  const description = metadata.audioDescription;
+  if (
+    metadata.audioKind === "non_speech" &&
+    typeof description === "string" &&
+    description.trim().length > 0
+  ) {
+    return {
+      description: description.trim().slice(0, 1_000),
+      kind: "non_speech",
+      status: "ready",
+    };
+  }
+  return {
+    kind: "speech",
+    status:
+      metadata.transcriptStatus === "pending" ||
+      metadata.transcriptStatus === "failed"
+        ? metadata.transcriptStatus
+        : "required",
+  };
 }
 
 export function metadataDimensions(metadata: Record<string, unknown>): {

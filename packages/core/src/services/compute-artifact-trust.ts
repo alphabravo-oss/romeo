@@ -153,7 +153,8 @@ export function admitComputeArtifact(input: {
     input.archiveEntries <= ARTIFACT_INTAKE_LIMITS.maxArchiveEntries &&
     Number.isInteger(input.archiveExpansionBytes) &&
     input.archiveExpansionBytes >= 0 &&
-    input.archiveExpansionBytes <= ARTIFACT_INTAKE_LIMITS.maxArchiveExpansionBytes &&
+    input.archiveExpansionBytes <=
+      ARTIFACT_INTAKE_LIMITS.maxArchiveExpansionBytes &&
     input.archiveExpansionBytes <=
       input.sizeBytes * ARTIFACT_INTAKE_LIMITS.maxExpansionRatio;
   const sizeOk =
@@ -363,7 +364,11 @@ export function computeOperationsPosture(input: {
   );
   return {
     alerts,
-    state: blocking ? "unavailable" : alerts.length > 0 ? "degraded" : "healthy",
+    state: blocking
+      ? "unavailable"
+      : alerts.length > 0
+        ? "degraded"
+        : "healthy",
     ...(input.lastRejectionCode === undefined
       ? {}
       : { lastRejectionCode: input.lastRejectionCode }),

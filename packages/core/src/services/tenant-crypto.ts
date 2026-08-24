@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from "node:crypto";
 
 export type TenantKeyState =
   | "active"
@@ -68,7 +73,10 @@ export function sealTenantEnvelope(input: {
   const cipher = createCipheriv("aes-256-gcm", dek, iv);
   const aad = tenantAad(input.key, input.resourceId);
   cipher.setAAD(aad);
-  const ciphertext = Buffer.concat([cipher.update(input.plaintext), cipher.final()]);
+  const ciphertext = Buffer.concat([
+    cipher.update(input.plaintext),
+    cipher.final(),
+  ]);
   return {
     outcome: "ok",
     envelope: {
@@ -130,6 +138,9 @@ export function canSubstitutePlatformKey(key: TenantKey): false {
   return false;
 }
 
-function tenantAad(key: Pick<TenantKey, "orgId" | "purpose">, resourceId: string) {
+function tenantAad(
+  key: Pick<TenantKey, "orgId" | "purpose">,
+  resourceId: string,
+) {
   return Buffer.from(`${key.purpose}\0${key.orgId}\0${resourceId}`, "utf8");
 }

@@ -15,7 +15,10 @@ describe("image job policy", () => {
       source: { fileId: "file_1", ready: true, revoked: false },
     });
     expect(authorized.outcome).toBe("accepted");
-    expect(cancelImageJob(authorized.job!)).toMatchObject({
+    if (authorized.outcome !== "accepted") {
+      throw new Error("expected authorized image job");
+    }
+    expect(cancelImageJob(authorized.job)).toMatchObject({
       outcome: "accepted",
       job: { state: "cancelled" },
     });

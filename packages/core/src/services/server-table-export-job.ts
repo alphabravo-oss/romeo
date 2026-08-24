@@ -10,12 +10,13 @@ export interface FrozenTableExportSnapshot {
   schema: typeof TABLE_EXPORT_SNAPSHOT_SCHEMA;
   orgId: string;
   workspaceId: string;
+  parentId?: string;
   resource: string;
   actorId: string;
   policyVersion: string;
   applied: {
     sort: Array<{ field: string; direction: "asc" | "desc" }>;
-    filters: Array<{ field: string; operator: string }>;
+    filters: Array<{ field: string; operator: string; value?: unknown }>;
     search?: string;
   };
   estimatedRows: number;
@@ -36,11 +37,32 @@ export interface TableExportJob {
   artifactId?: string;
   expiresAt?: string;
   percent: number;
+  processedRows?: number;
+  attemptCount?: number;
+  errorCode?: string;
+}
+
+export const TABLE_EXPORT_ARTIFACT_SCHEMA =
+  "romeo.server-table-export-artifact.v1";
+
+export interface TableExportArtifact {
+  schema: typeof TABLE_EXPORT_ARTIFACT_SCHEMA;
+  id: string;
+  jobId: string;
+  orgId: string;
+  workspaceId: string;
+  fileName: string;
+  body: ReadableStream<Uint8Array>;
+  contentType: "text/csv; charset=utf-8";
+  sizeBytes: number;
+  createdAt: string;
+  expiresAt: string;
 }
 
 export function freezeTableExportSnapshot(input: {
   orgId: string;
   workspaceId: string;
+  parentId?: string;
   resource: string;
   actorId: string;
   policyVersion: string;
@@ -54,6 +76,7 @@ export function freezeTableExportSnapshot(input: {
     schema: TABLE_EXPORT_SNAPSHOT_SCHEMA,
     orgId: input.orgId,
     workspaceId: input.workspaceId,
+    ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
     resource: input.resource,
     actorId: input.actorId,
     policyVersion: input.policyVersion,
@@ -87,7 +110,7 @@ export function advanceTableExportJob(
     | { type: "start" }
     | { type: "progress"; percent: number }
     | { type: "complete"; artifactId: string; expiresAt: string }
-    | { type: "fail" },
+    | { type: "fail"; errorCode?: string },
 ): TableExportJob {
   if (job.state === "expired" || job.state === "failed") return job;
   if (event.type === "start")
@@ -98,7 +121,12 @@ export function advanceTableExportJob(
       state: "running",
       percent: Math.min(99, Math.max(job.percent, event.percent)),
     };
-  if (event.type === "fail") return { ...job, state: "failed" };
+  if (event.type === "fail")
+    return {
+      ...job,
+      state: "failed",
+      ...(event.errorCode === undefined ? {} : { errorCode: event.errorCode }),
+    };
   return {
     ...job,
     state: "artifact_ready",
@@ -112,12 +140,15 @@ export function expireTableExportArtifact(
   job: TableExportJob,
   now: string,
 ): TableExportJob {
-  if (job.expiresAt === undefined || Date.parse(job.expiresAt) > Date.parse(now))
+  if (
+    job.expiresAt === undefined ||
+    Date.parse(job.expiresAt) > Date.parse(now)
+  )
     return job;
+  const { artifactId: _expiredArtifactId, ...expired } = job;
   return {
-    ...job,
+    ...expired,
     state: "expired",
-    artifactId: undefined,
   };
 }
 

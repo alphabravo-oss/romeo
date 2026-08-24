@@ -34,7 +34,10 @@ export function summarizeCapabilityImpact(
   samples: CapabilityImpactSample[],
 ): CapabilityImpactPreview {
   const counts = emptyCounts();
-  const reasonCounts = new Map<string, CapabilityImpactPreview["reasons"][number]>();
+  const reasonCounts = new Map<
+    string,
+    CapabilityImpactPreview["reasons"][number]
+  >();
   for (const sample of samples) {
     counts[sample.effective.status] += 1;
     for (const reason of sample.effective.reasons) {
@@ -63,7 +66,9 @@ export function summarizeCapabilityImpact(
   };
 }
 
-export function assertImpactPreviewPrivacy(preview: CapabilityImpactPreview): void {
+export function assertImpactPreviewPrivacy(
+  preview: CapabilityImpactPreview,
+): void {
   const serialized = JSON.stringify(preview);
   if (
     /user_|email|@|secret|prompt|content|principal/i.test(serialized) &&

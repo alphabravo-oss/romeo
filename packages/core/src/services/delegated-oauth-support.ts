@@ -22,9 +22,7 @@ export async function consumeDelegatedOAuthCallbackState(
   const job = callbackStateJob(state, new Date().toISOString());
   try {
     await repository.transaction(async (transaction) => {
-      const existing = (await transaction.listBackgroundJobs(state.orgId)).find(
-        (item) => item.id === job.id,
-      );
+      const existing = await transaction.getBackgroundJob(state.orgId, job.id);
       if (existing !== undefined) throw callbackStateReplayError();
       await transaction.createBackgroundJob(job);
     });
@@ -223,12 +221,7 @@ export function isConnectorType(value: unknown): value is DataConnectorType {
     value === "local_import" ||
     value === "rss" ||
     value === "s3" ||
-    value === "website" ||
-    value === "confluence" ||
-    value === "jira" ||
-    value === "notion" ||
-    value === "linear" ||
-    value === "slack"
+    value === "website"
   );
 }
 

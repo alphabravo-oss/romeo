@@ -15,20 +15,20 @@ describe("resolveConfig", () => {
     });
   });
 
-  it("uses explicit non-empty API settings", () => {
+  it("uses explicit non-empty API settings from the environment", () => {
     expect(
-      resolveConfig(
-        parseArgs([
-          "--base-url",
-          "https://romeo.example",
-          "--api-key",
-          "rmk_test",
-        ]),
-        {},
-      ),
+      resolveConfig(parseArgs(["--base-url", "https://romeo.example"]), {
+        ROMEO_API_KEY: "rmk_test",
+      }),
     ).toEqual({
       baseUrl: "https://romeo.example",
       apiKey: "rmk_test",
     });
+  });
+
+  it("rejects API keys passed on argv", () => {
+    expect(() =>
+      resolveConfig(parseArgs(["--api-key", "rmk_leaked"]), {}),
+    ).toThrow("forbidden");
   });
 });

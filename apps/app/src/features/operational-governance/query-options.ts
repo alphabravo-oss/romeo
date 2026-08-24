@@ -1,4 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
+import type { UsageInterval } from "@romeo/contracts";
 
 import * as appQueryKeys from "../../lib/app-query-keys";
 import {
@@ -33,14 +34,17 @@ export const quotasDistributedStatusQueryOptions = () =>
     appQueryKeys.quotasDistributedStatus(),
     getQuotasDistributedStatus,
   );
-export const usageSummaryQueryOptions = () =>
-  volatileOptions("usageSummary", appQueryKeys.usageSummary(), getUsageSummary);
+export const usageSummaryQueryOptions = (interval?: UsageInterval) =>
+  volatileOptions("usageSummary", appQueryKeys.usageSummary(interval), () =>
+    getUsageSummary(interval),
+  );
 export const usageAlertsQueryOptions = () =>
   volatileOptions("usageAlerts", appQueryKeys.usageAlerts(), listUsageAlerts);
-export function usageEventsQueryOptions(range: string) {
+export function usageEventsQueryOptions(interval?: UsageInterval) {
   return queryOptions({
-    ...serverQueryPolicy("volatile", "usageEvents", { range }),
-    queryKey: appQueryKeys.usageEvents(range),
-    queryFn: ({ signal }) => abortableQuery(signal, listUsageEvents),
+    ...serverQueryPolicy("volatile", "usageEvents", { interval }),
+    queryKey: appQueryKeys.usageEvents(interval),
+    queryFn: ({ signal }) =>
+      abortableQuery(signal, () => listUsageEvents(interval)),
   });
 }

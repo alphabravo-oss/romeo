@@ -1,4 +1,4 @@
-import { eq, inArray, or, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import {
   agentKnowledgeBindings,
@@ -9,16 +9,20 @@ import {
   organizationCapabilityFlags,
   idempotencyReceipts,
   collaborationChannelMembers,
+  contentDeletionOperations,
   evalCases,
   evalResultHumanRatings,
   evalRunResults,
   evalRuns,
+  governanceExportArtifacts,
+  governanceExportJobs,
   messageParts,
   notificationDeliveries,
   resourceFavorites,
   resourceGrants,
   runEvents,
   runSteps,
+  serverTableSavedViews,
   systemSettings,
   toolCalls,
   usageEvents,
@@ -29,7 +33,6 @@ import {
 import {
   deleteByIds,
   deleteWhere,
-  orgScopedSystemSettingKeys,
   type TenantPurgeState,
 } from "./tenant-purge-support";
 
@@ -39,6 +42,13 @@ export async function purgeTenantPhaseOne({
   database,
   orgId,
 }: TenantPurgeState): Promise<void> {
+  await deleteWhere(
+    database,
+    counts,
+    "content_deletion_operations",
+    contentDeletionOperations,
+    eq(contentDeletionOperations.orgId, orgId),
+  );
   await deleteWhere(
     database,
     counts,
@@ -64,12 +74,31 @@ export async function purgeTenantPhaseOne({
   await deleteWhere(
     database,
     counts,
+    "governance_export_artifacts",
+    governanceExportArtifacts,
+    eq(governanceExportArtifacts.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "governance_export_jobs",
+    governanceExportJobs,
+    eq(governanceExportJobs.orgId, orgId),
+  );
+
+  await deleteWhere(
+    database,
+    counts,
     "system_settings",
     systemSettings,
-    or(
-      sql`${systemSettings.value}->>'orgId' = ${orgId}`,
-      inArray(systemSettings.key, orgScopedSystemSettingKeys(orgId)),
-    ),
+    eq(systemSettings.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "server_table_saved_views",
+    serverTableSavedViews,
+    eq(serverTableSavedViews.orgId, orgId),
   );
 
   await deleteWhere(
@@ -79,6 +108,7 @@ export async function purgeTenantPhaseOne({
     workflowRuns,
     eq(workflowRuns.orgId, orgId),
   );
+
   await deleteWhere(
     database,
     counts,

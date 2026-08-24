@@ -6,6 +6,7 @@ import {
   jsonResponse,
   standardErrorResponses,
 } from "./common";
+import { deleteTableExportRoute } from "./table-export-delete";
 
 const identifier = z.string().trim().min(1).max(300);
 const metadata = { security: authenticationSecurity };
@@ -14,8 +15,14 @@ export const ServerTableSavedViewSchema = z
   .strictObject({
     id: identifier,
     resource: identifier,
+    parentId: identifier.optional(),
     name: z.string().trim().min(1).max(80),
     source: z.enum(["server", "local_fallback"]),
+    schemaVersion: z.number().int().positive(),
+    visibility: z.enum(["private", "workspace"]),
+    isDefault: z.boolean(),
+    canEdit: z.boolean(),
+    version: z.number().int().positive(),
     query: z.strictObject({
       sort: z.array(
         z.strictObject({
@@ -27,6 +34,7 @@ export const ServerTableSavedViewSchema = z
         z.strictObject({
           field: identifier,
           operator: identifier,
+          value: z.unknown().optional(),
         }),
       ),
       search: z.string().trim().min(1).max(300).optional(),
@@ -54,6 +62,7 @@ export const listTableViewsRoute = createRoute({
           schema: z.strictObject({
             workspaceId: identifier,
             resource: identifier,
+            parentId: identifier.optional(),
             localViews: z
               .array(
                 z.strictObject({
@@ -61,7 +70,9 @@ export const listTableViewsRoute = createRoute({
                   globalFilter: z.string().max(300).optional(),
                   pageSize: z.number().int().optional(),
                   density: z.enum(["comfortable", "compact"]).optional(),
-                  columnVisibility: z.record(z.string(), z.boolean()).optional(),
+                  columnVisibility: z
+                    .record(z.string(), z.boolean())
+                    .optional(),
                   sorting: z
                     .array(
                       z.strictObject({
@@ -69,6 +80,16 @@ export const listTableViewsRoute = createRoute({
                         desc: z.boolean(),
                       }),
                     )
+                    .optional(),
+                  filters: z
+                    .array(
+                      z.strictObject({
+                        field: identifier,
+                        operator: identifier,
+                        value: z.unknown().optional(),
+                      }),
+                    )
+                    .max(20)
                     .optional(),
                 }),
               )
@@ -103,7 +124,12 @@ export const replaceTableViewRoute = createRoute({
           schema: z.strictObject({
             workspaceId: identifier,
             resource: identifier,
+            parentId: identifier.optional(),
             name: z.string().trim().min(1).max(80),
+            viewId: identifier.optional(),
+            expectedVersion: z.number().int().positive().optional(),
+            visibility: z.enum(["private", "workspace"]).optional(),
+            isDefault: z.boolean().optional(),
             globalFilter: z.string().max(300).optional(),
             pageSize: z.number().int().optional(),
             density: z.enum(["comfortable", "compact"]).optional(),
@@ -111,6 +137,131 @@ export const replaceTableViewRoute = createRoute({
             sorting: z
               .array(z.strictObject({ id: identifier, desc: z.boolean() }))
               .optional(),
+            filters: z
+              .array(
+                z.strictObject({
+                  field: identifier,
+                  operator: identifier,
+                  value: z.unknown().optional(),
+                }),
+              )
+              .max(20)
+              .optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: jsonResponse("Saved view", dataEnvelope(ServerTableSavedViewSchema)),
+    ...standardErrorResponses,
+  },
+});
+
+const savedViewMutationBody = z.strictObject({
+  workspaceId: identifier,
+  resource: identifier,
+  parentId: identifier.optional(),
+  expectedVersion: z.number().int().positive().optional(),
+  requestToken: identifier.optional(),
+});
+
+export const deleteTableViewRoute = createRoute({
+  ...metadata,
+  tags: ["Administration"],
+  method: "delete",
+  path: "/api/v1/admin/table-views/{viewId}",
+  operationId: "tableViews.delete",
+  summary: "Delete an owned server saved view",
+  request: {
+    params: z.strictObject({ viewId: identifier }),
+    body: {
+      required: true,
+      content: { "application/json": { schema: savedViewMutationBody } },
+    },
+  },
+  responses: {
+    200: jsonResponse(
+      "Deleted saved view",
+      dataEnvelope(
+        z.strictObject({
+          deleted: z.boolean(),
+          undoToken: identifier.optional(),
+          undoExpiresAt: z.iso.datetime().optional(),
+          version: z.number().int().positive().optional(),
+        }),
+      ),
+    ),
+    ...standardErrorResponses,
+  },
+});
+
+export const restoreTableViewRoute = createRoute({
+  ...metadata,
+  tags: ["Administration"],
+  method: "post",
+  path: "/api/v1/admin/table-views/{viewId}/restore",
+  operationId: "tableViews.restore",
+  summary: "Restore a recently deleted owned saved view",
+  request: {
+    params: z.strictObject({ viewId: identifier }),
+    body: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: savedViewMutationBody.extend({ undoToken: identifier }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: jsonResponse(
+      "Restored saved view",
+      dataEnvelope(ServerTableSavedViewSchema),
+    ),
+    ...standardErrorResponses,
+  },
+});
+
+export const setDefaultTableViewRoute = createRoute({
+  ...metadata,
+  tags: ["Administration"],
+  method: "post",
+  path: "/api/v1/admin/table-views/{viewId}/default",
+  operationId: "tableViews.setDefault",
+  summary: "Set or clear the owned default saved view",
+  request: {
+    params: z.strictObject({ viewId: identifier }),
+    body: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: savedViewMutationBody.extend({ isDefault: z.boolean() }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: jsonResponse("Saved view", dataEnvelope(ServerTableSavedViewSchema)),
+    ...standardErrorResponses,
+  },
+});
+
+export const shareTableViewRoute = createRoute({
+  ...metadata,
+  tags: ["Administration"],
+  method: "post",
+  path: "/api/v1/admin/table-views/{viewId}/share",
+  operationId: "tableViews.share",
+  summary: "Change workspace sharing for an owned saved view",
+  request: {
+    params: z.strictObject({ viewId: identifier }),
+    body: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: savedViewMutationBody.extend({
+            visibility: z.enum(["private", "workspace"]),
           }),
         },
       },
@@ -131,6 +282,9 @@ export const TableExportJobSchema = z
       .enum(["queued", "running", "artifact_ready", "failed", "expired"])
       .optional(),
     percent: z.number().int().min(0).max(100).optional(),
+    processedRows: z.number().int().nonnegative().optional(),
+    attemptCount: z.number().int().nonnegative().optional(),
+    errorCode: identifier.optional(),
     artifactId: identifier.optional(),
     expiresAt: z.iso.datetime().optional(),
   })
@@ -150,11 +304,13 @@ export const createTableExportRoute = createRoute({
         "application/json": {
           schema: z.strictObject({
             workspaceId: identifier,
+            parentId: identifier.optional(),
             resource: identifier,
             mode: z
               .enum(["browser_csv", "async_artifact"])
               .default("async_artifact"),
             estimatedRows: z.number().int().min(0).max(10_000_000),
+            search: z.string().trim().min(1).max(300).optional(),
             sort: z
               .array(
                 z.strictObject({
@@ -169,6 +325,7 @@ export const createTableExportRoute = createRoute({
                 z.strictObject({
                   field: identifier,
                   operator: identifier,
+                  value: z.unknown().optional(),
                 }),
               )
               .max(20)
@@ -179,7 +336,28 @@ export const createTableExportRoute = createRoute({
     },
   },
   responses: {
+    202: jsonResponse(
+      "Table export job accepted",
+      dataEnvelope(TableExportJobSchema),
+    ),
     200: jsonResponse("Table export job", dataEnvelope(TableExportJobSchema)),
+    ...standardErrorResponses,
+  },
+});
+
+export const downloadTableExportArtifactRoute = createRoute({
+  ...metadata,
+  tags: ["Administration"],
+  method: "get",
+  path: "/api/v1/admin/table-exports/{jobId}/artifact",
+  operationId: "tableExports.downloadArtifact",
+  summary: "Download an authorized, unexpired table-export artifact",
+  request: { params: z.strictObject({ jobId: identifier }) },
+  responses: {
+    200: {
+      description: "CSV export artifact",
+      content: { "text/csv": { schema: z.string() } },
+    },
     ...standardErrorResponses,
   },
 });
@@ -301,8 +479,14 @@ export const queryTablePagesRoute = createRoute({
 export const tableSurfaceRoutes = [
   listTableViewsRoute,
   replaceTableViewRoute,
+  deleteTableViewRoute,
+  restoreTableViewRoute,
+  setDefaultTableViewRoute,
+  shareTableViewRoute,
   createTableExportRoute,
   runTableExportRoute,
   getTableExportRoute,
+  deleteTableExportRoute,
+  downloadTableExportArtifactRoute,
   queryTablePagesRoute,
 ] as const;

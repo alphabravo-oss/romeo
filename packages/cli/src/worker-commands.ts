@@ -7,16 +7,17 @@ import {
   runBillingLifecycleEnforcementWorker,
 } from "./billing-worker";
 import { runBrowserAutomationWorker } from "./browser-automation-worker";
+import {
+  brokerBrowserWorkerClient,
+  brokerToolWorkerClient,
+} from "./broker-worker-clients";
 import { runDataConnectorSyncWorker } from "./data-connector-worker";
 import {
   billingEntitlementWorkerClient,
   billingLifecycleWorkerClient,
-  browserWorkerClient,
   dataConnectorWorkerClient,
   retentionWorkerClient,
-  toolWorkerClient,
   voiceWorkerClient,
-  workflowWorkerClient,
 } from "./generated-worker-clients";
 import { runRetentionEnforcementWorker } from "./retention-worker";
 import {
@@ -26,7 +27,6 @@ import {
 import { runToolDispatchWorker } from "./tool-dispatch-worker";
 import { parseToolDispatchPayloadFile } from "./tool-dispatch-payload";
 import { runVoiceCatalogSyncWorker } from "./voice-worker";
-import { runWorkflowResumeWorker } from "./workflow-worker";
 
 export function executeWorkerCommand(
   area: string,
@@ -38,7 +38,6 @@ export function executeWorkerCommand(
   if (action === "tool-dispatch") return toolDispatchWorker(context);
   if (action === "browser-automation") return browserAutomationWorker(context);
   if (action === "voice-catalog-sync") return voiceCatalogSyncWorker(context);
-  if (action === "workflow-resume") return workflowResumeWorker(context);
   if (action === "retention-enforce")
     return retentionEnforcementWorker(context);
   if (action === "billing-entitlement-reconcile")
@@ -94,7 +93,7 @@ async function toolDispatchWorker(context: CommandContext): Promise<number> {
         );
   const secretResolverDriver = toolDispatchSecretResolverDriver(context);
   return runToolDispatchWorker({
-    client: toolWorkerClient(context),
+    client: brokerToolWorkerClient(context),
     ...(context.dnsLookup === undefined
       ? {}
       : { dnsLookup: context.dnsLookup }),
@@ -130,7 +129,7 @@ function browserAutomationWorker(context: CommandContext): Promise<number> {
   const timeoutMs = optionalIntegerFlag(context.parsed, "timeout-ms") ?? 30_000;
   const maxBytes = optionalIntegerFlag(context.parsed, "max-bytes") ?? 20_000;
   return runBrowserAutomationWorker({
-    client: browserWorkerClient(context),
+    client: brokerBrowserWorkerClient(context),
     ...(context.dnsLookup === undefined
       ? {}
       : { dnsLookup: context.dnsLookup }),
@@ -210,34 +209,6 @@ function intervalWorker<TClient>(
     intervalMs,
     io: context.io,
     ...(maxIterations === undefined ? {} : { maxIterations }),
-  });
-}
-
-function workflowResumeWorker(context: CommandContext): Promise<number> {
-  const intervalMs = numberFlag(context.parsed, 60_000, "interval-ms");
-  const maxIterations = hasFlag(context.parsed.flags, "once")
-    ? 1
-    : optionalIntegerFlag(context.parsed, "max-iterations");
-  const maxRunsPerIteration = optionalIntegerFlag(context.parsed, "max-runs");
-  const maxWorkflowsPerIteration = optionalIntegerFlag(
-    context.parsed,
-    "max-workflows",
-  );
-  const workspaceId = flagValue(
-    context.parsed.flags,
-    "workspace",
-    "workspace-id",
-  );
-  return runWorkflowResumeWorker({
-    client: workflowWorkerClient(context),
-    intervalMs,
-    io: context.io,
-    ...(maxIterations === undefined ? {} : { maxIterations }),
-    ...(maxRunsPerIteration === undefined ? {} : { maxRunsPerIteration }),
-    ...(maxWorkflowsPerIteration === undefined
-      ? {}
-      : { maxWorkflowsPerIteration }),
-    ...(workspaceId === undefined ? {} : { workspaceId }),
   });
 }
 

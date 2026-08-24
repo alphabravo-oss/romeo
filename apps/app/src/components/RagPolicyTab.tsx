@@ -41,12 +41,17 @@ import {
 export function RagPolicyTab() {
   return (
     <RagPolicyQueryBoundary>
-      {(report) => <PolicyEditor report={report} />}
+      {(report, qdrantAvailable) => (
+        <PolicyEditor qdrantAvailable={qdrantAvailable} report={report} />
+      )}
     </RagPolicyQueryBoundary>
   );
 }
 
-function PolicyEditor(props: { report: RagPolicyReport }) {
+function PolicyEditor(props: {
+  qdrantAvailable: boolean;
+  report: RagPolicyReport;
+}) {
   const { t } = useLocale();
   const { report } = props;
   const apiClient = useRouterApiClient();
@@ -381,7 +386,12 @@ function PolicyEditor(props: { report: RagPolicyReport }) {
               <form.Field name="vectorBackend">
                 {(field) => (
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {(["pgvector", "qdrant"] as const).map((preset) => (
+                    {(
+                      [
+                        "pgvector",
+                        ...(props.qdrantAvailable ? (["qdrant"] as const) : []),
+                      ] as const
+                    ).map((preset) => (
                       <label
                         className={`flex cursor-pointer flex-col gap-1 rounded-md border p-3 text-sm ${
                           field.state.value === preset

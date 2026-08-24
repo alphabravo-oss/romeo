@@ -26,10 +26,10 @@ export function ToolPanel({
   tools,
 }: {
   isExecuting: boolean;
-  onExecuteCalculator: (expression: string) => void;
+  onExecuteCalculator: (expression: string) => Promise<void>;
   onApproveTool: () => void;
   onCancelToolApproval: () => void;
-  onExecuteDateTime: () => void;
+  onExecuteDateTime: () => Promise<void>;
   pendingApproval: PendingToolApproval | undefined;
   result: string | undefined;
   tools: AgentToolSummary[];
@@ -73,7 +73,7 @@ export function ToolPanel({
     defaultValues: { expression: "2 + 3 * 4" },
     onSubmit: async ({ value }) => {
       try {
-        onExecuteCalculator(value.expression);
+        await onExecuteCalculator(value.expression);
         toast(t("workspaceToolCalculatorRun"), "success");
       } catch {
         toast(t("workspaceToolCalculatorFailed"), "error");
@@ -81,10 +81,10 @@ export function ToolPanel({
     },
   });
 
-  function handleDateTimeSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleDateTimeSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      onExecuteDateTime();
+      await onExecuteDateTime();
       toast(t("workspaceToolDateTimeRun"), "success");
     } catch {
       toast(t("workspaceToolDateTimeFailed"), "error");

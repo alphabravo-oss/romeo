@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { IdempotencyService } from "./services/idempotency-service";
+import { fixtureFuture } from "./test-support/fixture-clock";
 
 describe("durable command idempotency", () => {
   it("replays exact results, conflicts on shape drift, and never persists raw keys or bodies", async () => {
@@ -315,7 +316,7 @@ function receipt(
     leaseExpiresAt: "2026-08-14T10:30:00.000Z",
     createdAt: "2026-08-14T10:00:00.000Z",
     updatedAt: "2026-08-14T10:00:00.000Z",
-    expiresAt: "2026-08-15T10:00:00.000Z",
+    expiresAt: fixtureFuture(),
     ...overrides,
   };
 }

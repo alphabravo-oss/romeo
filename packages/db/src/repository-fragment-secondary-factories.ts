@@ -1,8 +1,10 @@
 import type { RomeoDatabase } from "./client";
+export { createContentPolicyRepositoryFragment } from "./content-policy-repository-fragment-factory";
 import { PgAccessRepository } from "./access-repository";
 import { PgCapabilityAssignmentRepository } from "./capability-assignment-repository";
 import { PgCapabilityFlagRepository } from "./capability-flag-repository";
 import { PgIdempotencyRepository } from "./idempotency-repository";
+import { PgInventoriedTablePageRepository } from "./inventoried-table-page-repository";
 import { PgCollaborationChannelRepository } from "./collaboration-channel-repository";
 import { PgCollaborationRepository } from "./collaboration-repository";
 import { PgDataConnectorRepository } from "./data-connector-repository";
@@ -10,18 +12,20 @@ import { PgDataDeletionRepository } from "./data-deletion-repository";
 import { PgDelegatedOAuthRepository } from "./delegated-oauth-repository";
 import { PgFileRepository } from "./file-repository";
 import { PgGovernanceBillingRepository } from "./governance-billing-repository";
+import { PgGovernanceExportRepository } from "./governance-export-repository";
 import { PgNotificationRepository } from "./notification-repository";
 import { PgOperationalRepository } from "./operational-repository";
 import { PgRunRepository } from "./run-repository";
+import { PgServerTableRepository } from "./server-table-repository";
 import { PgToolConnectorRepository } from "./tool-connector-repository";
 import { PgVoiceRepository } from "./voice-repository";
 import { PgWebhookRepository } from "./webhook-repository";
-import { PgWorkflowRepository } from "./workflow-repository";
 import type {
   AccessRepositoryFragment,
   CapabilityAssignmentRepositoryFragment,
   CapabilityFlagRepositoryFragment,
   IdempotencyRepositoryFragment,
+  InventoriedTablePageRepositoryFragment,
   CollaborationChannelRepositoryFragment,
   CollaborationRepositoryFragment,
   DataConnectorRepositoryFragment,
@@ -29,14 +33,68 @@ import type {
   DelegatedOAuthRepositoryFragment,
   FileRepositoryFragment,
   GovernanceBillingRepositoryFragment,
+  GovernanceExportRepositoryFragment,
   NotificationRepositoryFragment,
   OperationalRepositoryFragment,
   RunRepositoryFragment,
+  ServerTableRepositoryFragment,
   ToolConnectorRepositoryFragment,
   VoiceRepositoryFragment,
   WebhookRepositoryFragment,
-  WorkflowRepositoryFragment,
 } from "./repository-fragment-types";
+
+export function createGovernanceExportRepositoryFragment(
+  db: RomeoDatabase,
+): GovernanceExportRepositoryFragment {
+  const repository = new PgGovernanceExportRepository(db);
+  return {
+    claimGovernanceExportJob:
+      repository.claimGovernanceExportJob.bind(repository),
+    createGovernanceExportArtifact:
+      repository.createGovernanceExportArtifact.bind(repository),
+    createGovernanceExportJob:
+      repository.createGovernanceExportJob.bind(repository),
+    getGovernanceExportArtifact:
+      repository.getGovernanceExportArtifact.bind(repository),
+    getGovernanceExportJob: repository.getGovernanceExportJob.bind(repository),
+    listGovernanceExportJobs:
+      repository.listGovernanceExportJobs.bind(repository),
+    updateGovernanceExportArtifact:
+      repository.updateGovernanceExportArtifact.bind(repository),
+    updateGovernanceExportJob:
+      repository.updateGovernanceExportJob.bind(repository),
+    updateGovernanceExportJobWithLease:
+      repository.updateGovernanceExportJobWithLease.bind(repository),
+  };
+}
+
+export function createInventoriedTablePageRepositoryFragment(
+  db: RomeoDatabase,
+): InventoriedTablePageRepositoryFragment {
+  const repository = new PgInventoriedTablePageRepository(db);
+  return {
+    queryInventoriedTableRows:
+      repository.queryInventoriedTableRows.bind(repository),
+  };
+}
+
+export function createServerTableRepositoryFragment(
+  db: RomeoDatabase,
+): ServerTableRepositoryFragment {
+  const repository = new PgServerTableRepository(db);
+  return {
+    deleteServerTableSavedView:
+      repository.deleteServerTableSavedView.bind(repository),
+    getServerTableSavedView:
+      repository.getServerTableSavedView.bind(repository),
+    listServerTableSavedViews:
+      repository.listServerTableSavedViews.bind(repository),
+    restoreServerTableSavedView:
+      repository.restoreServerTableSavedView.bind(repository),
+    writeServerTableSavedView:
+      repository.writeServerTableSavedView.bind(repository),
+  };
+}
 
 export function createFileRepositoryFragment(
   db: RomeoDatabase,
@@ -50,7 +108,11 @@ export function createFileRepositoryFragment(
     finishFileLifecycleLease:
       repository.finishFileLifecycleLease.bind(repository),
     getFileObject: repository.getFileObject.bind(repository),
+    getFileLifecycleQueueSummary:
+      repository.getFileLifecycleQueueSummary.bind(repository),
     listFileObjects: repository.listFileObjects.bind(repository),
+    listFileRetentionCandidates:
+      repository.listFileRetentionCandidates.bind(repository),
     listAuthorizedFileObjectsPage:
       repository.listAuthorizedFileObjectsPage.bind(repository),
     renewFileLifecycleLease:
@@ -131,12 +193,17 @@ export function createDataConnectorRepositoryFragment(
 ): DataConnectorRepositoryFragment {
   const repository = new PgDataConnectorRepository(db);
   return {
+    claimDataConnectorSync: repository.claimDataConnectorSync.bind(repository),
     createDataConnector: repository.createDataConnector.bind(repository),
     createDataConnectorSync:
       repository.createDataConnectorSync.bind(repository),
     getDataConnector: repository.getDataConnector.bind(repository),
+    finishDataConnectorSync:
+      repository.finishDataConnectorSync.bind(repository),
     listDataConnectors: repository.listDataConnectors.bind(repository),
     listDataConnectorSyncs: repository.listDataConnectorSyncs.bind(repository),
+    renewDataConnectorSyncLease:
+      repository.renewDataConnectorSyncLease.bind(repository),
     updateDataConnector: repository.updateDataConnector.bind(repository),
     updateDataConnectorSync:
       repository.updateDataConnectorSync.bind(repository),
@@ -148,6 +215,8 @@ export function createDelegatedOAuthRepositoryFragment(
 ): DelegatedOAuthRepositoryFragment {
   const repository = new PgDelegatedOAuthRepository(db);
   return {
+    countDelegatedOAuthTokenKeyUsage:
+      repository.countDelegatedOAuthTokenKeyUsage.bind(repository),
     createDelegatedOAuthConnection:
       repository.createDelegatedOAuthConnection.bind(repository),
     getDelegatedOAuthConnection:
@@ -166,14 +235,45 @@ export function createOperationalRepositoryFragment(
 ): OperationalRepositoryFragment {
   const repository = new PgOperationalRepository(db);
   return {
+    auditRetentionExportGate:
+      repository.auditRetentionExportGate.bind(repository),
+    claimAuditExportJob: repository.claimAuditExportJob.bind(repository),
+    completeAuditExportAttempt:
+      repository.completeAuditExportAttempt.bind(repository),
+    ensureAuditIntegrityRecords:
+      repository.ensureAuditIntegrityRecords.bind(repository),
     claimBackgroundJob: repository.claimBackgroundJob.bind(repository),
+    createAuditExportIdempotencyReceipt:
+      repository.createAuditExportIdempotencyReceipt.bind(repository),
+    createAuditExportJob: repository.createAuditExportJob.bind(repository),
+    createAuditIntegrityCheckpoint:
+      repository.createAuditIntegrityCheckpoint.bind(repository),
     createAuditLog: repository.createAuditLog.bind(repository),
     createBackgroundJob: repository.createBackgroundJob.bind(repository),
     createUsageEvent: repository.createUsageEvent.bind(repository),
     deleteAuditLogsBefore: repository.deleteAuditLogsBefore.bind(repository),
     getSystemSetting: repository.getSystemSetting.bind(repository),
+    getAuditExportDestination:
+      repository.getAuditExportDestination.bind(repository),
+    getAuditExportIdempotencyReceipt:
+      repository.getAuditExportIdempotencyReceipt.bind(repository),
+    getAuditExportJob: repository.getAuditExportJob.bind(repository),
+    getAuditExportJobByIdempotencyHash:
+      repository.getAuditExportJobByIdempotencyHash.bind(repository),
+    getAuditIntegrityCheckpoint:
+      repository.getAuditIntegrityCheckpoint.bind(repository),
+    getAuditIntegrityCheckpointByHash:
+      repository.getAuditIntegrityCheckpointByHash.bind(repository),
+    listAuditExportAttempts:
+      repository.listAuditExportAttempts.bind(repository),
+    listAuditExportJobs: repository.listAuditExportJobs.bind(repository),
+    listAuditIntegrityCheckpoints:
+      repository.listAuditIntegrityCheckpoints.bind(repository),
+    listAuditIntegrityRecords:
+      repository.listAuditIntegrityRecords.bind(repository),
     listAuditLogs: repository.listAuditLogs.bind(repository),
     queryAuditLogs: repository.queryAuditLogs.bind(repository),
+    getBackgroundJob: repository.getBackgroundJob.bind(repository),
     listBackgroundJobs: repository.listBackgroundJobs.bind(repository),
     listSystemSettings: repository.listSystemSettings.bind(repository),
     listUsageEvents: repository.listUsageEvents.bind(repository),
@@ -183,6 +283,8 @@ export function createOperationalRepositoryFragment(
     updateBackgroundJobWithLease:
       repository.updateBackgroundJobWithLease.bind(repository),
     upsertSystemSetting: repository.upsertSystemSetting.bind(repository),
+    upsertAuditExportDestination:
+      repository.upsertAuditExportDestination.bind(repository),
     updateBackgroundJob: repository.updateBackgroundJob.bind(repository),
     updateUsageEvent: repository.updateUsageEvent.bind(repository),
   };
@@ -198,6 +300,8 @@ export function createWebhookRepositoryFragment(
     claimWebhookDelivery: repository.claimWebhookDelivery.bind(repository),
     completeWebhookDeliveryAttempt:
       repository.completeWebhookDeliveryAttempt.bind(repository),
+    countWebhookSigningKeyUsage:
+      repository.countWebhookSigningKeyUsage.bind(repository),
     createWebhookDelivery: repository.createWebhookDelivery.bind(repository),
     createWebhookSubscription:
       repository.createWebhookSubscription.bind(repository),
@@ -213,25 +317,6 @@ export function createWebhookRepositoryFragment(
   };
 }
 
-export function createWorkflowRepositoryFragment(
-  db: RomeoDatabase,
-): WorkflowRepositoryFragment {
-  const repository = new PgWorkflowRepository(db);
-  return {
-    createWorkflowDefinition:
-      repository.createWorkflowDefinition.bind(repository),
-    createWorkflowRun: repository.createWorkflowRun.bind(repository),
-    getWorkflowDefinition: repository.getWorkflowDefinition.bind(repository),
-    getWorkflowRun: repository.getWorkflowRun.bind(repository),
-    listWorkflowDefinitions:
-      repository.listWorkflowDefinitions.bind(repository),
-    listWorkflowRuns: repository.listWorkflowRuns.bind(repository),
-    updateWorkflowDefinition:
-      repository.updateWorkflowDefinition.bind(repository),
-    updateWorkflowRun: repository.updateWorkflowRun.bind(repository),
-  };
-}
-
 export function createGovernanceBillingRepositoryFragment(
   db: RomeoDatabase,
 ): GovernanceBillingRepositoryFragment {
@@ -243,6 +328,8 @@ export function createGovernanceBillingRepositoryFragment(
     createQuotaBucket: repository.createQuotaBucket.bind(repository),
     deleteQuotaBucket: repository.deleteQuotaBucket.bind(repository),
     getBillingPlan: repository.getBillingPlan.bind(repository),
+    getBillingPlanByExternalCustomerId:
+      repository.getBillingPlanByExternalCustomerId.bind(repository),
     getBillingEventReceipt: repository.getBillingEventReceipt.bind(repository),
     getRetentionPolicy: repository.getRetentionPolicy.bind(repository),
     listQuotaBuckets: repository.listQuotaBuckets.bind(repository),
@@ -257,6 +344,8 @@ export function createNotificationRepositoryFragment(
 ): NotificationRepositoryFragment {
   const repository = new PgNotificationRepository(db);
   return {
+    claimDueNotificationDeliveries:
+      repository.claimDueNotificationDeliveries.bind(repository),
     createNotificationDelivery:
       repository.createNotificationDelivery.bind(repository),
     createNotificationDeliveryChannel:
@@ -268,6 +357,8 @@ export function createNotificationRepositoryFragment(
       repository.listFailedNotificationDeliveries.bind(repository),
     listNotificationDeliveryChannels:
       repository.listNotificationDeliveryChannels.bind(repository),
+    finishNotificationDeliveryLease:
+      repository.finishNotificationDeliveryLease.bind(repository),
     listUserNotifications: repository.listUserNotifications.bind(repository),
     updateNotificationDelivery:
       repository.updateNotificationDelivery.bind(repository),

@@ -6,7 +6,17 @@ import {
   serverQueryPolicy,
 } from "../../lib/server-query-options";
 import { listFilesPage } from "./queries";
-import { isFileReady } from "./types";
+import { isFileReady, type FilePage } from "./types";
+
+export const fileLifecycleRefreshIntervalMs = 2_000;
+
+export function fileLifecycleRefreshInterval(
+  page: FilePage | undefined,
+): number | false {
+  return page?.items.some((file) => !isFileReady(file)) === true
+    ? fileLifecycleRefreshIntervalMs
+    : false;
+}
 
 export function filesPageQueryOptions(input: {
   enabled: boolean;
@@ -20,7 +30,7 @@ export function filesPageQueryOptions(input: {
   return queryOptions({
     ...serverQueryPolicy("interactive", "files", {
       page,
-      query: normalizedQuery,
+      ...(normalizedQuery === "" ? {} : { query: normalizedQuery }),
       workspaceId,
     }),
     queryKey: appQueryKeys.files(workspaceId, {
@@ -35,6 +45,8 @@ export function filesPageQueryOptions(input: {
           query,
         }),
       ),
+    refetchInterval: (activeQuery) =>
+      fileLifecycleRefreshInterval(activeQuery.state.data),
     enabled: enabled && workspaceId !== undefined,
   });
 }
@@ -46,22 +58,23 @@ export function mentionFilesQueryOptions(input: {
   workspaceId: string | undefined;
 }) {
   const { enabled, limit, query, workspaceId } = input;
+  const normalizedQuery = query.trim();
   return queryOptions({
     ...serverQueryPolicy("interactive", "files", {
       purpose: "mention",
-      query,
+      ...(normalizedQuery === "" ? {} : { query: normalizedQuery }),
       workspaceId,
     }),
     queryKey: appQueryKeys.files(workspaceId, {
       purpose: "mention",
-      query,
+      query: normalizedQuery,
     }),
     queryFn: ({ signal }) =>
       abortableQuery(signal, async () => {
         const page = await listFilesPage(workspaceId!, {
           limit,
           offset: 0,
-          query,
+          query: normalizedQuery,
         });
         return { ...page, items: page.items.filter(isFileReady) };
       }),

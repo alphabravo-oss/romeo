@@ -36,7 +36,13 @@ export function evaluateAclFreshness(input: {
 export function planKnowledgeTombstone(input: {
   legalHold: boolean;
   surfaces: Array<
-    "primary" | "vector" | "keyword" | "cache" | "snippet" | "summary" | "retrieval"
+    | "primary"
+    | "vector"
+    | "keyword"
+    | "cache"
+    | "snippet"
+    | "summary"
+    | "retrieval"
   >;
 }):
   | { outcome: "accepted"; surfaces: typeof input.surfaces }

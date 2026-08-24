@@ -7,9 +7,11 @@ import type { MessagePartOutput as TypedMessagePart } from "@romeo/contracts";
 import type { Scope } from "@romeo/auth";
 
 export type * from "./agent-entities";
+export type * from "./audit-integrity";
 export type * from "./capabilities";
 export type * from "./identity-entities";
 export type * from "./operational-entities";
+export type * from "./server-table-records";
 
 export interface Chat {
   agentId?: string;
@@ -193,6 +195,7 @@ export type FileObjectStatus =
   | "deleted"
   | "extracting"
   | "failed"
+  | "deletion_pending"
   | "quarantined"
   | "ready"
   | "retained"
@@ -346,6 +349,14 @@ export type {
   WorkspaceFolderItemsBatchGroup,
 } from "./collaboration";
 export type {
+  ClaimContentDeletionInput,
+  ContentDeletionOperation,
+  ContentDeletionStatus,
+  ContentDeletionTargetType,
+  UpdateContentDeletionWithLeaseInput,
+  RenewContentDeletionLeaseInput,
+} from "./content-deletion";
+export type {
   AgentKnowledgeBinding,
   KnowledgeBase,
   KnowledgeChunk,
@@ -374,6 +385,8 @@ export type {
   ComplianceControlStatus,
   ComplianceReport,
   DataDeletionCounts,
+  DataDeletionCompletedResult,
+  DataDeletionPendingResult,
   DataDeletionPlan,
   DataDeletionPreview,
   DataDeletionResourceType,
@@ -384,6 +397,8 @@ export type {
   DataExportLimits,
   DataExportPackage,
   DataExportPackageArtifact,
+  DataExportPackageJob,
+  DataExportPackageJobState,
   DataExportPackageList,
   DataExportPackageSummary,
   DataExportPreview,
@@ -432,17 +447,12 @@ export type {
   WebhookEventType,
   WebhookSubscription,
 } from "./webhooks";
+export type { WorkLease } from "./work-leases";
 export type {
-  WorkflowDefinition,
-  WorkflowRun,
-  WorkflowRunStatus,
-  WorkflowSchedule,
-  WorkflowScheduleRunResult,
-  WorkflowStep,
-  WorkflowStepRecoveryPolicy,
-  WorkflowStepRetryPolicy,
-  WorkflowStepRun,
-  WorkflowStepRunStatus,
-  WorkflowStepType,
-  WorkflowTemplate,
-} from "./workflows";
+  ClaimGovernanceExportJobInput,
+  GovernanceExportArtifactRecord,
+  GovernanceExportCheckpoint,
+  GovernanceExportJobRecord,
+  GovernanceExportJobState,
+  UpdateGovernanceExportJobWithLeaseInput,
+} from "./governance-export-records";

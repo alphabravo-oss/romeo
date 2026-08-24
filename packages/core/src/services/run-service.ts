@@ -1,6 +1,5 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
 import { ProviderCircuitBreaker, type RunEvent } from "@romeo/ai-runtime";
-import { type BaseModel } from "@romeo/providers";
 import {
   disabledObjectStore,
   MemoryObjectStore,
@@ -26,7 +25,6 @@ import {
   type RunContextInspectionInput,
 } from "./run-context-inspection-service";
 import { PersistedRunContextInspectionService } from "./persisted-run-context-inspection-service";
-import { type RunKnowledgeCitation } from "./run-knowledge";
 import { recordUsage } from "./record-usage";
 import {
   createProviderRoutingPolicy,
@@ -53,6 +51,8 @@ import { RunAccessService } from "./run-access-service";
 import { RunTerminalService } from "./run-terminal-service";
 import { RunContinuationService } from "./run-continuation-service";
 import { RunSseObservability } from "./run-sse-observability";
+import { FileService } from "./file-service";
+import { RunPolicyApprovalLifecycle } from "./run-policy-approval-lifecycle";
 
 export type {
   DeferredRunStart,
@@ -77,6 +77,7 @@ export class RunService {
   private readonly access: RunAccessService;
   private readonly terminal: RunTerminalService;
   private readonly continuation: RunContinuationService;
+  private readonly policyApprovals: RunPolicyApprovalLifecycle;
   private readonly sseObservability = new RunSseObservability();
 
   constructor(
@@ -120,10 +121,21 @@ export class RunService {
       embeddingFetch,
       options,
     );
-    this.providerCircuitBreaker = new ProviderCircuitBreaker({
-      failureThreshold: options.providerCircuitFailureThreshold ?? 0,
-      cooldownMs: options.providerCircuitCooldownMs ?? 0,
-    });
+    this.providerCircuitBreaker =
+      options.providerCircuitBreaker ??
+      new ProviderCircuitBreaker({
+        failureThreshold: options.providerCircuitFailureThreshold ?? 0,
+        cooldownMs: options.providerCircuitCooldownMs ?? 0,
+      });
+    this.policyApprovals = new RunPolicyApprovalLifecycle(
+      repository,
+      runEventSequencer,
+      this.executionState,
+      this.access,
+      this.providerRoutingPolicy,
+      this.runWorkerId,
+      (input) => void this.streamingExecution.execute(input),
+    );
     this.streamingExecution = new RunStreamingExecutionService(
       repository,
       runEventSequencer,
@@ -131,7 +143,7 @@ export class RunService {
       this.providerCircuitBreaker,
       this.runWorkerId,
       options,
-      (run, event, assistantContent, model, citations, subject) =>
+      (run, event, assistantContent, model, citations, subject, outputParts) =>
         this.terminal.complete(
           run,
           event,
@@ -139,7 +151,16 @@ export class RunService {
           model,
           citations,
           subject,
+          outputParts,
         ),
+      new FileService(
+        repository,
+        objectStore,
+        options.quotaCoordinator,
+        { inlineMaxBytes: 50_000_000 },
+        options.malwareScanning,
+      ),
+      (input) => this.policyApprovals.pause(input),
     );
     this.runStart = new RunStartService(
       repository,
@@ -233,6 +254,13 @@ export class RunService {
   runTerminalOutboxOnce(): Promise<number> {
     return this.terminal.runOnce();
   }
+
+  runTerminalOutboxForOrg(
+    orgId: string,
+    signal?: AbortSignal,
+  ): Promise<number> {
+    return this.terminal.drain(orgId, signal);
+  }
   inspectContext(input: RunContextInspectionInput) {
     return this.contextInspection.inspect(input);
   }
@@ -310,12 +338,12 @@ export class RunService {
   cancel(runId: string, subject: AuthSubject): Promise<RunRecord> {
     return this.terminal.cancel(runId, subject);
   }
-  async *events(
+  async events(
     runId: string,
     subject: AuthSubject,
     afterSequence = 0,
     signal?: AbortSignal,
-  ): AsyncIterable<RunEvent> {
+  ): Promise<AsyncIterable<RunEvent>> {
     const run = await this.access.getAuthorizedRun(runId, subject, "runs:read");
     await this.recoverStaleRun(run.chatId);
     await recordUsage(this.repository, {
@@ -332,6 +360,15 @@ export class RunService {
         ...(afterSequence > 0 ? { afterSequence } : {}),
       },
     });
+    return this.replayAuthorizedEvents(run, subject, afterSequence, signal);
+  }
+
+  private async *replayAuthorizedEvents(
+    run: RunRecord,
+    subject: AuthSubject,
+    afterSequence: number,
+    signal: AbortSignal | undefined,
+  ): AsyncIterable<RunEvent> {
     let terminalSeen = false;
     const reasoningSummaryGovernor = new ReasoningSummaryGovernor(
       this.repository,
@@ -341,7 +378,7 @@ export class RunService {
       for await (const event of replayRunEvents(
         this.repository,
         this.runEventSequencer,
-        runId,
+        run.id,
         afterSequence,
         {
           closeWhenCaughtUp:
@@ -351,7 +388,7 @@ export class RunService {
             run.status === "waiting_tool_approval",
           observer: this.sseObservability.replayObserver(afterSequence > 0),
           authorize: () =>
-            this.access.assertCurrentStreamAccess(runId, subject),
+            this.access.assertCurrentStreamAccess(run.id, subject),
           ...(this.options.runStreamAuthorizationRecheckMs === undefined
             ? {}
             : {
@@ -389,10 +426,6 @@ export class RunService {
     return this.sseObservability.streamObserver(afterSequence > 0);
   }
 
-  closeRunEventTransport(): void {
-    this.runEventSequencer.close();
-  }
-
   resumeAfterApprovedTool(input: {
     subject: AuthSubject;
     runId: string;
@@ -402,6 +435,19 @@ export class RunService {
     approvalRequestId: string;
   }): Promise<RunRecord> {
     return this.continuation.resumeAfterApprovedTool(input);
+  }
+
+  resolveContentPolicyApproval(input: {
+    subject: AuthSubject;
+    approvalId: string;
+    decision: "approve" | "deny";
+    runId?: string;
+  }) {
+    return this.policyApprovals.resolve(input);
+  }
+
+  expireContentPolicyApprovals(subject: AuthSubject): Promise<void> {
+    return this.policyApprovals.expireDue(subject);
   }
 
   waitForDispatchRequest(input: {
@@ -425,23 +471,6 @@ export class RunService {
     input: Parameters<RunStreamingExecutionService["execute"]>[0],
   ): Promise<void> {
     return this.streamingExecution.execute(input);
-  }
-  private completeRun(
-    run: RunRecord,
-    event: RunEvent,
-    assistantContent: string,
-    model: BaseModel,
-    citations: RunKnowledgeCitation[],
-    subject: AuthSubject,
-  ): Promise<void> {
-    return this.terminal.complete(
-      run,
-      event,
-      assistantContent,
-      model,
-      citations,
-      subject,
-    );
   }
   private recoverStaleRun(chatId: string): Promise<void> {
     return this.recovery.recover(chatId);

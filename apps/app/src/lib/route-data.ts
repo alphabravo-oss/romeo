@@ -2,7 +2,6 @@ import type { RomeoRouterContext } from "./router-context";
 import { routeChatsInfiniteQueryOptions } from "../features/chats/query-options";
 import {
   agentsQueryOptions,
-  apiQueryKeys,
   bootstrapQueryOptions,
   interfacePreferencesQueryOptions,
   modelsQueryOptions,
@@ -19,7 +18,8 @@ import {
   type RouteWorkspaceSelection,
   type RouteWorkspaceSelectionRequest,
 } from "./route-workspace-selection";
-import type { BootstrapResponse } from "@romeo/api-client/generated/query";
+import { throwIfSignalAborted } from "./abort-signal";
+import { activeRouteLocale } from "./i18n";
 
 export type PrimaryAppRoute = "admin" | "chat" | "settings" | "workspace";
 export type PrimaryRouteLoadCause = "intent" | "navigation";
@@ -45,72 +45,134 @@ export async function prefetchPrimaryRouteData(
   { apiClient, locale, queryClient }: RomeoRouterContext,
   cause: PrimaryRouteLoadCause = "navigation",
   request: RouteWorkspaceSelectionRequest = {},
+  signal?: AbortSignal,
 ): Promise<RouteWorkspaceSelection | undefined> {
-  if (cause === "intent") {
-    await prefetchSafeRouteIntentData(route, {
-      apiClient,
-      locale,
-      queryClient,
+  const cancelUnusedRouteQueries = () => {
+    void queryClient.cancelQueries({
+      predicate: (query) =>
+        query.getObserversCount() === 0 &&
+        query.state.fetchStatus === "fetching" &&
+        routeQueryOperationIds.has(queryOperationId(query.queryKey)),
     });
-    return undefined;
-  }
-  const selectionPromise = queryClient.fetchQuery(
-    routeWorkspaceSelectionQueryOptions(request, queryClient, apiClient),
-  );
-  const independent = [
-    queryClient.prefetchQuery(interfacePreferencesQueryOptions(apiClient)),
-    queryClient.prefetchQuery(
-      routerSessionQueryOptions(locale, queryClient, apiClient),
-    ),
-  ];
-
-  if (route !== "settings" && route !== "admin") {
-    independent.push(
-      queryClient.prefetchQuery(modelsQueryOptions(apiClient)),
-      queryClient.prefetchQuery(providersQueryOptions(apiClient)),
-      queryClient.prefetchQuery(
-        providerOperationalSummaryQueryOptions(apiClient),
-      ),
-    );
-  }
-  const selection = await selectionPromise;
-  if (route === "admin") {
-    const bootstrap = queryClient.getQueryData<BootstrapResponse>(
-      apiQueryKeys.bootstrap(),
-    );
-    if (bootstrap?.subject.isAdmin !== true) {
-      await Promise.allSettled(independent);
-      throw new AdminRouteAuthorizationError();
+  };
+  signal?.addEventListener("abort", cancelUnusedRouteQueries, { once: true });
+  try {
+    throwIfSignalAborted(signal);
+    const routeLocale = activeRouteLocale(locale);
+    if (cause === "intent") {
+      await prefetchSafeRouteIntentData(route, {
+        apiClient,
+        locale: routeLocale,
+        queryClient,
+      });
+      throwIfSignalAborted(signal);
+      return undefined;
     }
-    independent.push(
-      queryClient.prefetchQuery(modelsQueryOptions(apiClient)),
-      queryClient.prefetchQuery(providersQueryOptions(apiClient)),
-      queryClient.prefetchQuery(
-        providerOperationalSummaryQueryOptions(apiClient),
-      ),
-      queryClient.prefetchQuery(providerKindsQueryOptions(apiClient)),
+    const selectionPromise = queryClient.fetchQuery(
+      routeWorkspaceSelectionQueryOptions(request, queryClient, apiClient),
     );
-  }
-  if (route !== "settings") {
-    independent.push(
+    const independent = [
+      queryClient.prefetchQuery(interfacePreferencesQueryOptions(apiClient)),
       queryClient.prefetchQuery(
-        agentsQueryOptions(selection.workspaceId, apiClient),
+        routerSessionQueryOptions(routeLocale, queryClient, apiClient),
       ),
-      queryClient.prefetchInfiniteQuery(
-        routeChatsInfiniteQueryOptions(selection.workspaceId, apiClient),
-      ),
-    );
-  }
-  if (route === "chat" || route === "workspace") {
-    independent.push(
-      queryClient.prefetchQuery(
-        effectiveCapabilitiesQueryOptions(selection.workspaceId, apiClient),
-      ),
-    );
-  }
+    ];
 
-  await Promise.allSettled(independent);
-  return selection;
+    if (route !== "settings" && route !== "admin") {
+      independent.push(
+        queryClient.prefetchQuery(modelsQueryOptions(apiClient)),
+        queryClient.prefetchQuery(providersQueryOptions(apiClient)),
+        queryClient.prefetchQuery(
+          providerOperationalSummaryQueryOptions(apiClient),
+        ),
+      );
+    }
+    // Admin authorization must await the authoritative bootstrap value. A
+    // cached route-selection result can resolve without executing its nested
+    // bootstrap query, and the concurrent session projection may still be in
+    // flight on a cold document navigation. Reading the cache at that point
+    // incorrectly denied real administrators. TanStack deduplicates this
+    // exact bootstrap read with both of those consumers.
+    const [selection, adminBootstrap] = await Promise.all([
+      selectionPromise,
+      route === "admin"
+        ? queryClient.fetchQuery(bootstrapQueryOptions(apiClient))
+        : Promise.resolve(undefined),
+    ]);
+    throwIfSignalAborted(signal);
+    if (route === "admin") {
+      if (adminBootstrap?.subject.isAdmin !== true) {
+        await Promise.allSettled(independent);
+        throw new AdminRouteAuthorizationError();
+      }
+      independent.push(
+        queryClient.prefetchQuery(modelsQueryOptions(apiClient)),
+        queryClient.prefetchQuery(providersQueryOptions(apiClient)),
+        queryClient.prefetchQuery(
+          providerOperationalSummaryQueryOptions(apiClient),
+        ),
+        queryClient.prefetchQuery(providerKindsQueryOptions(apiClient)),
+      );
+    }
+    if (route === "admin" || route === "chat" || route === "workspace") {
+      independent.push(
+        queryClient.prefetchQuery(
+          agentsQueryOptions(selection.workspaceId, apiClient),
+        ),
+      );
+    }
+    if (route === "chat") {
+      independent.push(
+        queryClient.prefetchInfiniteQuery(
+          routeChatsInfiniteQueryOptions(selection.workspaceId, apiClient),
+        ),
+      );
+    }
+    if (route === "chat" || route === "workspace") {
+      independent.push(
+        queryClient.prefetchQuery(
+          effectiveCapabilitiesQueryOptions(selection.workspaceId, apiClient),
+        ),
+      );
+    }
+
+    await Promise.allSettled(independent);
+    throwIfSignalAborted(signal);
+    return selection;
+  } catch (error) {
+    // A superseded route is control flow, not a route error. TanStack Router
+    // aborts stale matches without a reason in some hydration/navigation
+    // races; allowing that raw cancellation to escape records an `undefined`
+    // match error and can tear down the rendered route. The router already
+    // owns discarding the stale result, so resolve it without data after all
+    // unobserved work has been cancelled.
+    if (signal?.aborted === true) return undefined;
+    throw error;
+  } finally {
+    signal?.removeEventListener("abort", cancelUnusedRouteQueries);
+  }
+}
+
+const routeQueryOperationIds = new Set([
+  "agentsList",
+  "chats",
+  "interfacePreferencesGetCurrent",
+  "managedModelsList",
+  "providerKindsList",
+  "providersGetOperationalSummary",
+  "providersListConnections",
+  "providersListModels",
+  "routeWorkspaceSelection",
+  "routerSession",
+  "workspaceCapabilities",
+]);
+
+function queryOperationId(queryKey: readonly unknown[]): string {
+  const root = queryKey[0];
+  if (typeof root === "string") return root;
+  return typeof root === "object" && root !== null && "_id" in root
+    ? String(root._id)
+    : "unknown";
 }
 
 /**

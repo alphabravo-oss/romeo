@@ -7,11 +7,14 @@ import {
   plannedEdgeEnforcementEvidence,
   positiveInteger,
 } from "./lib/edge-enforcement-smoke.mjs";
+import { assertNoSecretArgv, readSecretInput } from "./lib/secret-input.mjs";
+
+assertNoSecretArgv();
 
 const outputPath = argValue("--output");
 const dryRun = process.argv.includes("--dry-run");
 const config = {
-  apiKey: argValue("--api-key") ?? process.env.ROMEO_API_KEY,
+  apiKey: readSecretInput({ environment: "ROMEO_API_KEY" }),
   baseUrl: argValue("--base-url") ?? process.env.ROMEO_BASE_URL,
   bodyLimitBytes: positiveInteger(
     argOrEnv("--body-limit-bytes", "EDGE_ENFORCEMENT_BODY_LIMIT_BYTES"),

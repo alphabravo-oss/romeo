@@ -194,7 +194,7 @@ export function RagValidateTab() {
             disabled={testMutation.isPending}
             onClick={() => void handleRetrievalTest()}
             type="button"
-            variant="primary"
+            variant="outline"
           >
             {testMutation.isPending
               ? t("ragTestingRetrieval")

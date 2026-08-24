@@ -1,4 +1,15 @@
-import { asc, desc, eq } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+} from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import {
@@ -7,11 +18,15 @@ import {
   knowledgeChunks,
   knowledgeSources,
 } from "./schema";
+import { optionalDate } from "./repository-mapping";
 import {
-  optionalDate,
-  optionalIsoString,
-  toIsoString,
-} from "./repository-mapping";
+  toKnowledgeBaseInsert,
+  toKnowledgeBaseRecord,
+  toKnowledgeChunkInsert,
+  toKnowledgeChunkRecord,
+  toKnowledgeSourceInsert,
+  toKnowledgeSourceRecord,
+} from "./knowledge-record-mapping";
 
 export interface KnowledgeBaseRecord {
   id: string;
@@ -24,7 +39,11 @@ export interface KnowledgeBaseRecord {
   updatedAt: string;
 }
 
-export type KnowledgeSourceStatusRecord = "failed" | "indexed" | "pending";
+export type KnowledgeSourceStatusRecord =
+  | "extracting"
+  | "failed"
+  | "indexed"
+  | "pending";
 
 export interface KnowledgeSourceRecord {
   id: string;
@@ -42,6 +61,13 @@ export interface KnowledgeSourceRecord {
   indexedAt?: string;
   createdAt: string;
   updatedAt: string;
+  extractionLease?: {
+    attempt: number;
+    expiresAt: string;
+    fencingToken: number;
+    owner: string;
+    token: string;
+  };
 }
 
 export interface KnowledgeChunkRecord {
@@ -114,6 +140,17 @@ export class PgKnowledgeRepository {
     return rows.map(toKnowledgeSourceRecord);
   }
 
+  async getKnowledgeSource(
+    sourceId: string,
+  ): Promise<KnowledgeSourceRecord | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(knowledgeSources)
+      .where(eq(knowledgeSources.id, sourceId))
+      .limit(1);
+    return row === undefined ? undefined : toKnowledgeSourceRecord(row);
+  }
+
   async createKnowledgeSource(
     source: KnowledgeSourceRecord,
   ): Promise<KnowledgeSourceRecord> {
@@ -144,6 +181,161 @@ export class PgKnowledgeRepository {
       .where(eq(knowledgeSources.id, source.id))
       .returning();
     return row === undefined ? source : toKnowledgeSourceRecord(row);
+  }
+
+  async claimKnowledgeSourceExtraction(input: {
+    knowledgeBaseId: string;
+    leaseExpiresAt: string;
+    leaseOwner: string;
+    leaseToken: string;
+    now: string;
+    sourceId?: string;
+  }): Promise<KnowledgeSourceRecord | undefined> {
+    return this.db.transaction(async (transaction) => {
+      const now = new Date(input.now);
+      const [candidate] = await transaction
+        .select()
+        .from(knowledgeSources)
+        .where(
+          and(
+            eq(knowledgeSources.knowledgeBaseId, input.knowledgeBaseId),
+            input.sourceId === undefined
+              ? undefined
+              : eq(knowledgeSources.id, input.sourceId),
+            isNotNull(knowledgeSources.objectKey),
+            inArray(knowledgeSources.status, [
+              "pending",
+              "failed",
+              "extracting",
+            ]),
+            or(
+              isNull(knowledgeSources.extractionLeaseExpiresAt),
+              lte(knowledgeSources.extractionLeaseExpiresAt, now),
+            ),
+          ),
+        )
+        .orderBy(asc(knowledgeSources.updatedAt), asc(knowledgeSources.id))
+        .limit(1)
+        .for("update", { skipLocked: true });
+      if (candidate === undefined) return undefined;
+      const [claimed] = await transaction
+        .update(knowledgeSources)
+        .set({
+          extractionAttempts: candidate.extractionAttempts + 1,
+          extractionFence: candidate.extractionFence + 1,
+          extractionLeaseExpiresAt: new Date(input.leaseExpiresAt),
+          extractionLeaseOwner: input.leaseOwner,
+          extractionLeaseToken: input.leaseToken,
+          status: "extracting",
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(knowledgeSources.id, candidate.id),
+            eq(knowledgeSources.extractionFence, candidate.extractionFence),
+          ),
+        )
+        .returning();
+      return claimed === undefined
+        ? undefined
+        : toKnowledgeSourceRecord(claimed);
+    });
+  }
+
+  async renewKnowledgeSourceExtractionLease(input: {
+    fencingToken: number;
+    leaseExpiresAt: string;
+    leaseOwner: string;
+    leaseToken: string;
+    now: string;
+    sourceId: string;
+  }): Promise<KnowledgeSourceRecord | undefined> {
+    const now = new Date(input.now);
+    const [row] = await this.db
+      .update(knowledgeSources)
+      .set({
+        extractionLeaseExpiresAt: new Date(input.leaseExpiresAt),
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(knowledgeSources.id, input.sourceId),
+          eq(knowledgeSources.extractionFence, input.fencingToken),
+          eq(knowledgeSources.extractionLeaseOwner, input.leaseOwner),
+          eq(knowledgeSources.extractionLeaseToken, input.leaseToken),
+          gt(knowledgeSources.extractionLeaseExpiresAt, now),
+        ),
+      )
+      .returning();
+    return row === undefined ? undefined : toKnowledgeSourceRecord(row);
+  }
+
+  async finishKnowledgeSourceExtraction(input: {
+    chunks: KnowledgeChunkRecord[];
+    fencingToken: number;
+    leaseOwner: string;
+    leaseToken: string;
+    now: string;
+    source: KnowledgeSourceRecord;
+  }): Promise<KnowledgeSourceRecord | undefined> {
+    try {
+      return await this.db.transaction(async (transaction) => {
+        const now = new Date(input.now);
+        const [claimed] = await transaction
+          .select({ id: knowledgeSources.id })
+          .from(knowledgeSources)
+          .where(
+            and(
+              eq(knowledgeSources.id, input.source.id),
+              eq(knowledgeSources.extractionFence, input.fencingToken),
+              eq(knowledgeSources.extractionLeaseOwner, input.leaseOwner),
+              eq(knowledgeSources.extractionLeaseToken, input.leaseToken),
+              gt(knowledgeSources.extractionLeaseExpiresAt, now),
+            ),
+          )
+          .limit(1)
+          .for("update");
+        if (claimed === undefined) throw new WorkLeaseLostError();
+        await transaction
+          .delete(knowledgeChunkEmbeddings)
+          .where(eq(knowledgeChunkEmbeddings.sourceId, input.source.id));
+        await transaction
+          .delete(knowledgeChunks)
+          .where(eq(knowledgeChunks.sourceId, input.source.id));
+        if (input.chunks.length > 0) {
+          await transaction
+            .insert(knowledgeChunks)
+            .values(input.chunks.map(toKnowledgeChunkInsert));
+        }
+        const [source] = await transaction
+          .update(knowledgeSources)
+          .set({
+            chunkCount: input.source.chunkCount ?? null,
+            contentHash: input.source.contentHash ?? null,
+            extractionLeaseExpiresAt: null,
+            extractionLeaseOwner: null,
+            extractionLeaseToken: null,
+            indexedAt: optionalDate(input.source.indexedAt),
+            metadata: input.source.metadata,
+            sizeBytes: input.source.sizeBytes,
+            status: input.source.status,
+            updatedAt: new Date(input.source.updatedAt),
+          })
+          .where(
+            and(
+              eq(knowledgeSources.id, input.source.id),
+              eq(knowledgeSources.extractionFence, input.fencingToken),
+              eq(knowledgeSources.extractionLeaseToken, input.leaseToken),
+            ),
+          )
+          .returning();
+        if (source === undefined) throw new WorkLeaseLostError();
+        return toKnowledgeSourceRecord(source);
+      });
+    } catch (error) {
+      if (error instanceof WorkLeaseLostError) return undefined;
+      throw error;
+    }
   }
 
   async deleteKnowledgeSource(
@@ -194,128 +386,10 @@ export class PgKnowledgeRepository {
   }
 }
 
-export function toKnowledgeBaseRecord(
-  row: typeof knowledgeBases.$inferSelect,
-): KnowledgeBaseRecord {
-  const knowledgeBase: KnowledgeBaseRecord = {
-    id: row.id,
-    orgId: row.orgId,
-    workspaceId: row.workspaceId,
-    name: row.name,
-    createdBy: row.createdBy,
-    createdAt: toIsoString(row.createdAt),
-    updatedAt: toIsoString(row.updatedAt),
-  };
-  const description = optionalIsoString(row.description);
-  if (description !== undefined) knowledgeBase.description = description;
-  return knowledgeBase;
-}
+class WorkLeaseLostError extends Error {}
 
-export function toKnowledgeSourceRecord(
-  row: typeof knowledgeSources.$inferSelect,
-): KnowledgeSourceRecord {
-  const source: KnowledgeSourceRecord = {
-    id: row.id,
-    knowledgeBaseId: row.knowledgeBaseId,
-    orgId: row.orgId,
-    workspaceId: row.workspaceId,
-    fileName: row.fileName,
-    mimeType: row.mimeType,
-    sizeBytes: row.sizeBytes,
-    status: asKnowledgeSourceStatus(row.status),
-    metadata: asJsonRecord(row.metadata),
-    createdAt: toIsoString(row.createdAt),
-    updatedAt: toIsoString(row.updatedAt),
-  };
-  const objectKey = optionalIsoString(row.objectKey);
-  if (objectKey !== undefined) source.objectKey = objectKey;
-  if (row.chunkCount !== null) source.chunkCount = row.chunkCount;
-  const contentHash = optionalIsoString(row.contentHash);
-  if (contentHash !== undefined) source.contentHash = contentHash;
-  const indexedAt = optionalIsoString(row.indexedAt);
-  if (indexedAt !== undefined) source.indexedAt = indexedAt;
-  return source;
-}
-
-export function toKnowledgeChunkRecord(
-  row: typeof knowledgeChunks.$inferSelect,
-): KnowledgeChunkRecord {
-  return {
-    id: row.id,
-    knowledgeBaseId: row.knowledgeBaseId,
-    sourceId: row.sourceId,
-    orgId: row.orgId,
-    workspaceId: row.workspaceId,
-    sequence: row.sequence,
-    content: row.content,
-    tokenCount: row.tokenCount,
-    metadata: asJsonRecord(row.metadata),
-    createdAt: toIsoString(row.createdAt),
-  };
-}
-
-function toKnowledgeBaseInsert(
-  record: KnowledgeBaseRecord,
-): typeof knowledgeBases.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    workspaceId: record.workspaceId,
-    name: record.name,
-    description: record.description ?? null,
-    createdBy: record.createdBy,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
-  };
-}
-
-function toKnowledgeSourceInsert(
-  record: KnowledgeSourceRecord,
-): typeof knowledgeSources.$inferInsert {
-  return {
-    id: record.id,
-    knowledgeBaseId: record.knowledgeBaseId,
-    orgId: record.orgId,
-    workspaceId: record.workspaceId,
-    fileName: record.fileName,
-    mimeType: record.mimeType,
-    sizeBytes: record.sizeBytes,
-    status: record.status,
-    objectKey: record.objectKey ?? null,
-    chunkCount: record.chunkCount ?? null,
-    contentHash: record.contentHash ?? null,
-    indexedAt: optionalDate(record.indexedAt),
-    metadata: record.metadata,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
-  };
-}
-
-function toKnowledgeChunkInsert(
-  record: KnowledgeChunkRecord,
-): typeof knowledgeChunks.$inferInsert {
-  return {
-    id: record.id,
-    knowledgeBaseId: record.knowledgeBaseId,
-    sourceId: record.sourceId,
-    orgId: record.orgId,
-    workspaceId: record.workspaceId,
-    sequence: record.sequence,
-    content: record.content,
-    tokenCount: record.tokenCount,
-    metadata: record.metadata,
-    createdAt: new Date(record.createdAt),
-  };
-}
-
-function asKnowledgeSourceStatus(value: string): KnowledgeSourceStatusRecord {
-  if (value === "failed" || value === "indexed" || value === "pending")
-    return value;
-  return "failed";
-}
-
-function asJsonRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return {};
-  return value as Record<string, unknown>;
-}
+export {
+  toKnowledgeBaseRecord,
+  toKnowledgeChunkRecord,
+  toKnowledgeSourceRecord,
+} from "./knowledge-record-mapping";

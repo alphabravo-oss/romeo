@@ -5,7 +5,7 @@ export type {
   DataDeletionPreview,
   DataDeletionResult,
   DataExportDocument,
-  DataExportPackage,
+  DataExportPackageJob,
   DataExportPackageDeleteResult,
   DataExportPackageList,
   DataExportPreview,

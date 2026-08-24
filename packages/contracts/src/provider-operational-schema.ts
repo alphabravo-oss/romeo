@@ -1,31 +1,37 @@
 import { z } from "@hono/zod-openapi";
 
+import { CapabilityIdSchema } from "./capabilities";
 import { ProviderKindSchema as providerKind } from "./provider-capability-schemas";
 
 const identifier = z.string().trim().min(1).max(300);
+const providerAlertCodes = [
+  "fallback_unavailable",
+  "no_available_providers",
+  "provider_circuit_open",
+  "provider_disabled",
+  "provider_kill_switch",
+  "provider_without_enabled_models",
+  "object_store_failures_recent",
+  "provider_errors_recent",
+  "queue_wait_high",
+  "sse_disconnects_recent",
+  "sse_heartbeat_failures_recent",
+  "sse_notifier_lag_high",
+  "sse_notifier_unavailable_recent",
+  "sse_slow_consumers_recent",
+  "sse_terminal_close_slow",
+  "time_to_first_token_high",
+] as const;
 
 export const ProviderOperationalSummarySchema = z
   .strictObject({
     alerts: z.array(
       z.strictObject({
-        code: z.enum([
-          "fallback_unavailable",
-          "no_available_providers",
-          "provider_circuit_open",
-          "provider_disabled",
-          "provider_kill_switch",
-          "provider_without_enabled_models",
-          "object_store_failures_recent",
-          "provider_errors_recent",
-          "queue_wait_high",
-          "sse_disconnects_recent",
-          "sse_heartbeat_failures_recent",
-          "sse_notifier_lag_high",
-          "sse_notifier_unavailable_recent",
-          "sse_slow_consumers_recent",
-          "sse_terminal_close_slow",
-          "time_to_first_token_high",
-        ]),
+        code: z.string().openapi({
+          description:
+            "Operational alert code. Clients must tolerate future alert codes.",
+          "x-extensible-enum": providerAlertCodes,
+        }),
         id: identifier,
         modelId: identifier.optional(),
         providerId: identifier.optional(),
@@ -115,12 +121,7 @@ export const ProviderOperationalSummarySchema = z
         total: z.number().int().nonnegative(),
         resolutions: z.array(
           z.strictObject({
-            capabilityId: z.enum([
-              "image_generation",
-              "reasoning_policy",
-              "voice_processing",
-              "web_retrieval",
-            ]),
+            capabilityId: CapabilityIdSchema,
             status: z.enum([
               "enabled",
               "disabled",

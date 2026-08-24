@@ -16,6 +16,7 @@ import { useLocale, type MessageKey } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { useEventCallback } from "../lib/use-event-callback";
 import { Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
@@ -84,6 +85,8 @@ export function ConnectedAppsPanel() {
     }
   }
 
+  const onRevoke = useEventCallback(handleRevoke);
+
   const columns = useMemo<ColumnDef<DelegatedOAuthConnectionSummary, any>[]>(
     () => [
       connectionCol.accessor("providerId", {
@@ -130,7 +133,7 @@ export function ConnectedAppsPanel() {
           c.row.original.status === "revoked" ? null : (
             <Button
               disabled={revokeMutation.isPending}
-              onClick={() => void handleRevoke(c.row.original.id)}
+              onClick={() => void onRevoke(c.row.original.id)}
               type="button"
             >
               {t("connectedAppsRevoke")}
@@ -138,8 +141,7 @@ export function ConnectedAppsPanel() {
           ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [revokeMutation.isPending, t],
+    [onRevoke, revokeMutation.isPending, t],
   );
   const connectionCountByProvider = useMemo(
     () =>

@@ -3,13 +3,16 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { hashApiKey } from "@romeo/auth";
+import { hashApiKey, seededSubject } from "@romeo/auth";
 import { testEnv } from "./test-support/env";
 import { MemoryObjectStore } from "@romeo/storage";
 
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
 import { createSeedData } from "./repositories/seed-data";
+import { FileService } from "./services/file-service";
+import { GovernanceExportWorker } from "./services/governance-export-worker";
+import { InventoriedTablePageService } from "./services/inventoried-table-page-service";
 
 describe("governance API", () => {
   it("filters audit logs and exports filtered CSV without raw metadata", async () => {
@@ -157,6 +160,12 @@ describe("governance API", () => {
     });
     const missing = await upload("missing.txt");
     const recent = await upload("recent.txt");
+    const worker = new FileService(repository, objectStore);
+    for (let index = 0; index < 4; index += 1) {
+      await worker.processLifecycleJob({
+        workerId: "retention_fixture_worker",
+      });
+    }
     const expiredFile = await repository.getFileObject(expired.body.data.id);
     if (expiredFile === undefined) throw new Error("Missing attached fixture");
     await repository.updateFileObject({
@@ -936,13 +945,13 @@ describe("governance API", () => {
     const executed = await executeResponse.json();
     const deletedFileResponse = await api.request(`/api/v1/files/${fileId}`);
     const auditResponse = await api.request(
-      "/api/v1/audit-logs?action=governance.data_deletion.execute",
+      "/api/v1/audit-logs?action=content.deletion.intent",
     );
     const audit = await auditResponse.json();
     const serializedAudit = JSON.stringify(audit);
 
     expect(uploadResponse.status).toBe(201);
-    expect(await objectStore.getObject(objectKey)).toBeUndefined();
+    expect(await objectStore.getObject(objectKey)).toBeDefined();
     expect(previewResponse.status).toBe(200);
     expect(preview.data.schema).toBe("romeo.data-deletion-preview.v1");
     expect(preview.data.resourceType).toBe("file_object");
@@ -954,26 +963,28 @@ describe("governance API", () => {
       objectStoreBytes: bytes.byteLength,
     });
     expect(mismatchResponse.status).toBe(400);
-    expect(executeResponse.status).toBe(200);
-    expect(executed.data.schema).toBe("romeo.data-deletion-result.v1");
+    expect(executeResponse.status).toBe(202);
+    expect(executed.data).toMatchObject({
+      schema: "romeo.data-deletion-pending-result.v1",
+      status: "pending",
+      operationId: expect.any(String),
+      deletionRequestedAt: expect.any(String),
+    });
     expect(executed.data.counts).toEqual(preview.data.counts);
-    expect(deletedFileResponse.status).toBe(404);
+    expect(deletedFileResponse.status).toBe(200);
     expect(await repository.getFileObject(fileId)).toMatchObject({
       id: fileId,
-      status: "deleted",
-      fileName: "deleted",
-      mimeType: "application/octet-stream",
-      sizeBytes: 0,
-      objectKey: `deleted/${fileId}`,
-      metadata: { contentPurged: true },
+      status: "deletion_pending",
     });
-    expect(audit.data[0].metadata.counts.fileObjects).toBe(1);
+    expect(audit.data[0].metadata).toMatchObject({
+      targetType: "file_object",
+      operationId: executed.data.operationId,
+      objectVerified: false,
+      relationalDeleted: false,
+    });
     expect(serializedAudit).not.toContain("secret file bytes");
     expect(serializedAudit).not.toContain("Governed_Delete.txt");
     expect(serializedAudit).not.toContain("objectKey");
-    expect(
-      JSON.stringify(await repository.getFileObject(fileId)),
-    ).not.toContain("Governed_Delete.txt");
   });
 
   it("previews and executes governed knowledge source deletion through the knowledge service", async () => {
@@ -1071,24 +1082,17 @@ describe("governance API", () => {
     );
     const executed = await executeResponse.json();
     const governanceAuditResponse = await api.request(
-      "/api/v1/audit-logs?action=governance.data_deletion.execute",
+      "/api/v1/audit-logs?action=content.deletion.intent",
     );
     const governanceAudit = await governanceAuditResponse.json();
-    const sourceDeleteAuditResponse = await api.request(
-      "/api/v1/audit-logs?action=knowledge.source.delete",
-    );
-    const sourceDeleteAudit = await sourceDeleteAuditResponse.json();
-    const serializedAudit = JSON.stringify({
-      governance: governanceAudit.data,
-      knowledge: sourceDeleteAudit.data,
-    });
+    const serializedAudit = JSON.stringify(governanceAudit.data);
     const governanceDeletionAudit = governanceAudit.data.find(
       (event: { resourceId: string }) => event.resourceId === sourceId,
     );
 
     expect(sourceResponse.status).toBe(202);
     expect(indexResponse.status).toBe(200);
-    expect(await objectStore.getObject(objectKey)).toBeUndefined();
+    expect(await objectStore.getObject(objectKey)).toBeDefined();
     expect(previewResponse.status).toBe(200);
     expect(preview.data).toMatchObject({
       schema: "romeo.data-deletion-preview.v1",
@@ -1104,28 +1108,27 @@ describe("governance API", () => {
       },
     });
     expect(mismatchResponse.status).toBe(400);
-    expect(executeResponse.status).toBe(200);
-    expect(executed.data.schema).toBe("romeo.data-deletion-result.v1");
-    expect(executed.data.counts).toEqual(preview.data.counts);
-    expect(await repository.listKnowledgeSources("kb_default")).toEqual([]);
-    expect(await repository.listKnowledgeChunks("kb_default")).toEqual([]);
-    expect(await repository.listKnowledgeChunkEmbeddings("kb_default")).toEqual(
-      [],
-    );
-    expect(governanceDeletionAudit?.metadata).toMatchObject({
-      knowledgeBaseId: "kb_default",
-      workspaceId: "workspace_default",
-      counts: {
-        knowledgeSources: 1,
-        knowledgeChunks: 1,
-        knowledgeEmbeddings: 1,
-      },
+    expect(executeResponse.status).toBe(202);
+    expect(executed.data).toMatchObject({
+      schema: "romeo.data-deletion-pending-result.v1",
+      status: "pending",
+      operationId: expect.any(String),
+      deletionRequestedAt: expect.any(String),
     });
-    expect(sourceDeleteAudit.data[0].metadata).toMatchObject({
-      knowledgeBaseId: "kb_default",
-      chunkCount: 1,
-      embeddingCount: 1,
-      objectDeleted: true,
+    expect(executed.data.counts).toEqual(preview.data.counts);
+    expect(await repository.listKnowledgeSources("kb_default")).toEqual([
+      expect.objectContaining({ id: sourceId, status: "deletion_pending" }),
+    ]);
+    expect(await repository.listKnowledgeChunks("kb_default")).toHaveLength(1);
+    expect(
+      await repository.listKnowledgeChunkEmbeddings("kb_default"),
+    ).toHaveLength(1);
+    expect(governanceDeletionAudit?.metadata).toMatchObject({
+      operationId: executed.data.operationId,
+      targetType: "knowledge_source",
+      workspaceId: "workspace_default",
+      vectorsVerified: false,
+      relationalDeleted: false,
     });
     expect(serializedAudit).not.toContain(content);
     expect(serializedAudit).not.toContain("governed-source-delete.md");
@@ -1839,15 +1842,24 @@ describe("governance API", () => {
     );
     const packaged = await packageResponse.json();
     const packageSerialized = JSON.stringify(packaged);
+    const completed = await new GovernanceExportWorker(
+      repository,
+      new InventoriedTablePageService(repository),
+      objectStore,
+    ).runNext({
+      subject: seededSubject,
+      workerId: "governance_export_api_test",
+      jobId: packaged.data.packageId,
+    });
+    if (completed?.artifact === undefined)
+      throw new Error("Expected completed export artifact");
     const listResponse = await api.request(
       "/api/v1/governance/data-exports/packages",
     );
     const listed = await listResponse.json();
     const listSerialized = JSON.stringify(listed);
-    const downloadResponse = await api.request(
-      packaged.data.artifact.downloadUrl,
-    );
-    const downloaded = await downloadResponse.json();
+    const downloadResponse = await api.request(completed.artifact.downloadUrl);
+    const downloaded = await downloadResponse.text();
     const mismatchDeleteResponse = await api.request(
       `/api/v1/governance/data-exports/packages/${packaged.data.packageId}`,
       {
@@ -1867,9 +1879,20 @@ describe("governance API", () => {
       },
     );
     const deleted = await deleteResponse.json();
+    const repeatedDeleteResponse = await api.request(
+      `/api/v1/governance/data-exports/packages/${packaged.data.packageId}`,
+      {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          confirmPackageId: packaged.data.packageId,
+        }),
+      },
+    );
+    const repeatedDelete = await repeatedDeleteResponse.json();
     const deletedSerialized = JSON.stringify(deleted);
     const missingDownloadResponse = await api.request(
-      packaged.data.artifact.downloadUrl,
+      completed.artifact.downloadUrl,
     );
     const postDeleteListResponse = await api.request(
       "/api/v1/governance/data-exports/packages",
@@ -1879,16 +1902,15 @@ describe("governance API", () => {
     const audit = await auditResponse.json();
     const auditSerialized = JSON.stringify(audit);
 
-    expect(packageResponse.status).toBe(200);
-    expect(packaged.data.schema).toBe("romeo.data-export-package.v1");
+    expect(packageResponse.status).toBe(202);
+    expect(packaged.data.schema).toBe("romeo.data-export-package-job.v1");
+    expect(packaged.data.state).toBe("queued");
     expect(packaged.data.packageId).toMatch(/^export_pkg_[a-f0-9]{20}$/u);
-    expect(packaged.data.artifact.downloadUrl).toBe(
+    expect(completed.artifact.downloadUrl).toBe(
       `/api/v1/governance/data-exports/packages/${packaged.data.packageId}/content`,
     );
-    expect(packaged.data.artifact.storage.rawObjectKeyReturned).toBe(false);
-    expect(packaged.data.artifact.storage.objectKeyHash).toMatch(
-      /^[a-f0-9]{64}$/u,
-    );
+    expect(completed.artifact.storage.rawObjectKeyReturned).toBe(false);
+    expect(completed.artifact.storage.objectKeyHash).toMatch(/^[a-f0-9]{64}$/u);
     expect(packageSerialized).not.toContain("packaged secret export message");
     expect(packageSerialized).not.toContain(
       "governance/data-exports/org_default",
@@ -1896,6 +1918,7 @@ describe("governance API", () => {
     expect(listResponse.status).toBe(200);
     expect(listed.data.schema).toBe("romeo.data-export-package-list.v1");
     expect(listed.data.packages).toHaveLength(1);
+    expect(listed.data.jobs).toHaveLength(1);
     expect(listed.data.packages[0]).toMatchObject({
       schema: "romeo.data-export-package-summary.v1",
       packageId: packaged.data.packageId,
@@ -1908,14 +1931,16 @@ describe("governance API", () => {
     expect(listSerialized).not.toContain("governance/data-exports/org_default");
     expect(downloadResponse.status).toBe(200);
     expect(downloadResponse.headers.get("content-type")).toContain(
-      "application/json",
+      "application/x-ndjson",
     );
-    expect(downloaded.schema).toBe("romeo.data-export.v1");
-    expect(JSON.stringify(downloaded)).toContain(
-      "packaged secret export message",
+    expect(downloadResponse.headers.get("cache-control")).toBe(
+      "private, no-store",
     );
+    expect(downloaded).toContain('"dataset":"messages"');
+    expect(downloaded).toContain("packaged secret export message");
     expect(mismatchDeleteResponse.status).toBe(400);
     expect(deleteResponse.status).toBe(200);
+    expect(repeatedDeleteResponse.status).toBe(200);
     expect(deleted.data).toMatchObject({
       schema: "romeo.data-export-package-delete-result.v1",
       packageId: packaged.data.packageId,
@@ -1925,6 +1950,7 @@ describe("governance API", () => {
       },
     });
     expect(deleted.data.storage.objectKeyHash).toMatch(/^[a-f0-9]{64}$/u);
+    expect(repeatedDelete.data).toEqual(deleted.data);
     expect(deletedSerialized).not.toContain("packaged secret export message");
     expect(deletedSerialized).not.toContain(
       "governance/data-exports/org_default",
@@ -1976,24 +2002,30 @@ describe("governance API", () => {
       },
     );
     const packaged = await packageResponse.json();
-    const registry = await repository.getSystemSetting(
-      "governance.data_export_packages.org_default",
+    const completed = await new GovernanceExportWorker(
+      repository,
+      new InventoriedTablePageService(repository),
+      objectStore,
+    ).runNext({
+      subject: seededSubject,
+      workerId: "governance_export_retention_test",
+      jobId: packaged.data.packageId,
+    });
+    if (completed?.artifact === undefined)
+      throw new Error("Expected export artifact job");
+    const artifactJob = await repository.getGovernanceExportJob(
+      "org_default",
+      packaged.data.packageId,
     );
+    if (artifactJob === undefined) throw new Error("Expected export job");
     const oldCreatedAt = new Date(
       Date.now() - 400 * 24 * 60 * 60 * 1000,
     ).toISOString();
-    await repository.upsertSystemSetting({
-      key: "governance.data_export_packages.org_default",
+    await repository.updateGovernanceExportJob({
+      ...artifactJob,
+      createdAt: oldCreatedAt,
       updatedAt: oldCreatedAt,
-      value: {
-        ...registry!.value,
-        packages: (
-          registry!.value.packages as Array<Record<string, unknown>>
-        ).map((item) => ({
-          ...item,
-          createdAt: oldCreatedAt,
-        })),
-      },
+      version: artifactJob.version + 1,
     });
 
     const retentionResponse = await api.request(
@@ -2003,7 +2035,7 @@ describe("governance API", () => {
     const retention = await retentionResponse.json();
     const retentionSerialized = JSON.stringify(retention);
     const missingDownloadResponse = await api.request(
-      packaged.data.artifact.downloadUrl,
+      completed.artifact.downloadUrl,
     );
     const listResponse = await api.request(
       "/api/v1/governance/data-exports/packages",

@@ -36,7 +36,7 @@ import {
   sha256Hex,
 } from "./file-upload-normalization";
 import type { QuotaCoordinator } from "./quota-coordination";
-import { isFileReadyForUse } from "./file-lifecycle";
+import { transitionFileLifecycle } from "./file-lifecycle";
 import { assertWorkspaceActive } from "./workspace-guard";
 
 const uploadUrlExpiresInSeconds = 900;
@@ -166,7 +166,7 @@ export class FileResumableUploadService {
       "files:write",
       "write",
     );
-    if (isFileReadyForUse(file)) return publicFileObject(file);
+    if (file.status !== "uploading") return publicFileObject(file);
     if (file.status !== "uploading") {
       throw new ApiError(
         "file_upload_not_active",
@@ -198,7 +198,7 @@ export class FileResumableUploadService {
       purpose: file.purpose,
       excludeFileId: file.id,
     });
-    await this.pipeline.traceObjectStore(
+    const stored = await this.pipeline.traceObjectStore(
       subject,
       file.workspaceId,
       file.id,
@@ -210,40 +210,42 @@ export class FileResumableUploadService {
           contentType: file.mimeType,
         }),
     );
+    if (
+      stored.key !== file.objectKey ||
+      stored.sizeBytes !== bytes.byteLength
+    ) {
+      await this.objectStore
+        .deleteObject(file.objectKey)
+        .catch(() => undefined);
+      throw new Error(
+        "Object storage did not durably acknowledge the composed upload.",
+      );
+    }
     const partKeys = partNumbers(resumable.partCount).map((partNumber) =>
       resumablePartObjectKey(file.objectKey, partNumber),
     );
-    const completed = await this.pipeline
-      .processFileLifecycle({
+    const completed = await this.repository.transaction(async (repository) => {
+      const queued = await repository.updateFileObject(
+        transitionFileLifecycle(file, "quarantined", new Date().toISOString(), {
+          lifecycleAttempts: 0,
+          metadata: { ...file.metadata, ...duplicateMetadata },
+        }),
+      );
+      await this.pipeline.audit(
+        repository,
         subject,
-        file,
-        bytes,
-        objectKeys: [file.objectKey, ...partKeys],
-        metadata: duplicateMetadata,
-      })
-      .then(async (result) => {
-        try {
-          await this.repository.transaction((repository) =>
-            this.pipeline.audit(
-              repository,
-              subject,
-              "file.resumable_upload.complete",
-              result,
-              {
-                partCount: resumable.partCount,
-                partSizeBytes: resumable.partSizeBytes,
-                purpose: result.purpose,
-                sizeBytes: result.sizeBytes,
-                mimeType: result.mimeType,
-              },
-            ),
-          );
-        } catch (error) {
-          await this.pipeline.failFileLifecycle(result, error);
-          throw error;
-        }
-        return result;
-      });
+        "file.resumable_upload.complete",
+        queued,
+        {
+          partCount: resumable.partCount,
+          partSizeBytes: resumable.partSizeBytes,
+          purpose: queued.purpose,
+          sizeBytes: queued.sizeBytes,
+          mimeType: queued.mimeType,
+        },
+      );
+      return queued;
+    });
     await this.pipeline.traceObjectStore(
       subject,
       file.workspaceId,

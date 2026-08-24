@@ -35,7 +35,9 @@ describe("media normalization", () => {
     expect(result.metadataStripped).toBe(true);
     expect(result.originalPreserved).toBe(false);
     expect(result.bytes).not.toEqual(jpegWithExif);
-    expect([...result.bytes.slice(0, 4)]).toEqual([0xff, 0xd8, 0xff, 0xda]);
+    expect(result.bytes.slice(0, 4)).toEqual(
+      new Uint8Array([0xff, 0xd8, 0xff, 0xda]),
+    );
   });
 
   it("requests isolated transcode for unbounded gif/webp without claiming coverage", () => {

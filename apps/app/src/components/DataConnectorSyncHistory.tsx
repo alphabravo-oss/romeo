@@ -65,17 +65,16 @@ function syncColumns(t: Translate): ColumnDef<DataConnectorSync, any>[] {
 }
 
 export function DataConnectorSyncHistory({
+  connectorId,
   syncs,
 }: {
+  connectorId: string | undefined;
   syncs: DataConnectorSync[];
 }) {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<DataConnectorSync>(
+  const inventoriedTable = useInventoriedServerTable(
     "data_connector_sync_runs",
-    {
-      enabled: syncs[0]?.connectorId !== undefined,
-      parentId: syncs[0]?.connectorId,
-    },
+    connectorId === undefined ? { enabled: false } : { parentId: connectorId },
   );
   const latestFailure = syncs.find((sync) => sync.status === "failed");
   return (

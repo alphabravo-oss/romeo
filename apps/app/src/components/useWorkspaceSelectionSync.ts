@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
-import type { ChatChangedEvent } from "../features";
+import type { ChatChangedEvent } from "../features/chats";
 import {
   isActiveChatRemoval,
   shouldApplyRequestedChat,

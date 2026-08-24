@@ -156,15 +156,7 @@ export class DataConnectorCatalogService {
     const blockedReasons: string[] = [];
     const warnings: string[] = [];
     if (!syncEnabled) blockedReasons.push("connector_driver_not_enabled");
-    const needsAllowlist = [
-      "website",
-      "rss",
-      "confluence",
-      "jira",
-      "notion",
-      "linear",
-      "slack",
-    ].includes(entry.type);
+    const needsAllowlist = entry.type === "website" || entry.type === "rss";
     if (
       syncEnabled &&
       needsAllowlist &&
@@ -192,22 +184,6 @@ export class DataConnectorCatalogService {
       !connectorSecretRefsSupported(this.posture)
     ) {
       warnings.push("private_repository_credentials_not_configured");
-    }
-    if (
-      syncEnabled &&
-      (entry.type === "confluence" || entry.type === "jira") &&
-      !connectorSecretRefsSupported(this.posture)
-    ) {
-      blockedReasons.push("atlassian_credentials_not_configured");
-    }
-    for (const type of ["notion", "linear", "slack"] as const) {
-      if (
-        syncEnabled &&
-        entry.type === type &&
-        !connectorSecretRefsSupported(this.posture)
-      ) {
-        blockedReasons.push(`${type}_credentials_not_configured`);
-      }
     }
     return {
       syncEnabled,

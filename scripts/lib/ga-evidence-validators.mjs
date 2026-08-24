@@ -233,6 +233,13 @@ export function createGaEvidenceValidators({
 
   function validateReleaseApprovalEvidence(content) {
     if (content.status !== "passed") return fail("release_approval_not_passed");
+    if (
+      content.mode !== "protected_environment" ||
+      content.authentic !== true ||
+      content.promotable !== true
+    ) {
+      return fail("release_approval_authenticity_invalid");
+    }
     if (content.release?.name !== "romeo") {
       return fail("release_approval_wrong_release");
     }
@@ -277,6 +284,7 @@ export function createGaEvidenceValidators({
         "secretValuesReturned",
         "fileBodiesReturned",
         "rawProvenanceReturned",
+        "rawAttestationReturned",
         "environmentReturned",
       ])
     ) {
@@ -501,7 +509,6 @@ export function createGaEvidenceValidators({
     }
     const requiredWorkers = [
       "data_connector_sync",
-      "workflow_resume",
       "webhook_retry",
       "notification_retry",
       "retention_enforce",
@@ -529,9 +536,6 @@ export function createGaEvidenceValidators({
       "worker_output_json_valid",
       "worker_output_secret_redaction",
       "worker_output_raw_content_redaction",
-      "workflow_resume_controlled_pending_work",
-      "workflow_resume_pod_crash_recovery",
-      "workflow_resume_crash_no_duplicate_linked_run",
       "worker_logs_redacted",
       "pod_logs_redacted",
     ]) {
@@ -569,27 +573,10 @@ export function createGaEvidenceValidators({
       );
     }
     if (
-      !Number.isInteger(content.logRedaction.rawPromptSentinelsChecked) ||
-      content.logRedaction.rawPromptSentinelsChecked < 2
-    ) {
-      return fail("kubernetes_workers_log_redaction_missing_prompt_sentinels");
-    }
-    if (
       !Number.isInteger(content.logRedaction.rawContentSentinelsChecked) ||
       content.logRedaction.rawContentSentinelsChecked < 1
     ) {
       return fail("kubernetes_workers_log_redaction_missing_content_sentinels");
-    }
-    if (content.crashRecovery?.recoveredStatus !== "waiting_approval") {
-      return fail("kubernetes_workers_crash_recovery_not_recovered");
-    }
-    if (content.crashRecovery?.termination !== "forced_pod_delete") {
-      return fail("kubernetes_workers_crash_termination_missing");
-    }
-    for (const field of ["workflowId", "workflowRunId", "linkedRunId"]) {
-      if (typeof content.controlledWorkflowResume?.[field] !== "string") {
-        return fail(`kubernetes_workers_missing_controlled_${field}`);
-      }
     }
     return pass();
   }
@@ -858,11 +845,7 @@ export function createGaEvidenceValidators({
       "worker_commands_ran_once",
       "worker_output_json_valid",
       "worker_output_secret_redaction",
-      "worker_output_raw_content_redaction",
-      "workflow_resume_controlled_pending_work",
       "loop_workers_emit_after_restart",
-      "workflow_resume_sigkill_recovery",
-      "workflow_resume_crash_no_duplicate_linked_run",
       "compose_logs_redacted",
     ];
     const checks = new Set(Array.isArray(content.checks) ? content.checks : []);
@@ -874,7 +857,6 @@ export function createGaEvidenceValidators({
 
     const requiredWorkers = [
       "data_connector_sync",
-      "workflow_resume",
       "webhook_retry",
       "notification_retry",
       "retention_enforce",
@@ -890,7 +872,7 @@ export function createGaEvidenceValidators({
             .map((worker) => [worker.name, worker])
         : [],
     );
-    if (!Number.isInteger(content.workerCount) || content.workerCount < 9) {
+    if (!Number.isInteger(content.workerCount) || content.workerCount < 8) {
       return fail("compose_workers_count_low");
     }
     for (const worker of requiredWorkers) {
@@ -918,15 +900,11 @@ export function createGaEvidenceValidators({
     );
     if (
       !Number.isInteger(content.loopRestartCount) ||
-      content.loopRestartCount < 3
+      content.loopRestartCount < 2
     ) {
       return fail("compose_workers_loop_restart_count_low");
     }
-    for (const worker of [
-      "workflow_resume",
-      "webhook_retry",
-      "notification_retry",
-    ]) {
+    for (const worker of ["webhook_retry", "notification_retry"]) {
       const restart = loopRestarts.get(worker);
       if (restart === undefined) {
         return fail(`compose_workers_missing_loop_restart:${worker}`);
@@ -940,21 +918,6 @@ export function createGaEvidenceValidators({
       }
     }
 
-    for (const field of ["workflowId", "workflowRunId", "linkedRunId"]) {
-      if (typeof content.controlledWorkflowResume?.[field] !== "string") {
-        return fail(`compose_workers_controlled_resume_missing:${field}`);
-      }
-    }
-    if (
-      content.crashRecovery?.signal !== "SIGKILL" ||
-      content.crashRecovery?.recoveredStatus !== "waiting_approval" ||
-      !Number.isInteger(content.crashRecovery?.afterCrashIterations) ||
-      !Number.isInteger(content.crashRecovery?.afterKillBaselineIterations) ||
-      content.crashRecovery.afterCrashIterations <=
-        content.crashRecovery.afterKillBaselineIterations
-    ) {
-      return fail("compose_workers_crash_recovery_incomplete");
-    }
     if (JSON.stringify(content).includes("RAW_")) {
       return fail("compose_workers_raw_sentinel_leaked");
     }
@@ -1090,7 +1053,7 @@ export function createGaEvidenceValidators({
       }
       if (
         !Array.isArray(variant.workerCronJobs) ||
-        variant.workerCronJobs.length < 7
+        variant.workerCronJobs.length < 6
       ) {
         return fail(`kubernetes_render_worker_cronjobs_low:${name}`);
       }
@@ -1132,20 +1095,13 @@ export function createGaEvidenceValidators({
         );
       }
     }
-    const kedaResources = new Set(
-      Array.isArray(content.kedaExamples?.resources)
-        ? content.kedaExamples.resources.map(
-            (item) => `${item.apiVersion}:${item.kind}:${item.name}`,
-          )
-        : [],
-    );
-    for (const resource of [
-      "keda.sh/v1alpha1:ScaledJob:romeo-webhook-retry",
-      "keda.sh/v1alpha1:TriggerAuthentication:romeo-webhook-retry-postgres",
-    ]) {
-      if (!kedaResources.has(resource)) {
-        return fail(`kubernetes_render_missing_keda_example:${resource}`);
-      }
+    if (
+      content.kedaExamples?.retired !== true ||
+      content.kedaExamples?.resourceCount !== 0 ||
+      !Array.isArray(content.kedaExamples?.resources) ||
+      content.kedaExamples.resources.length !== 0
+    ) {
+      return fail("kubernetes_render_retired_keda_worker_present");
     }
     return pass();
   }
@@ -1180,7 +1136,6 @@ export function createGaEvidenceValidators({
       "src/device-authorizations.test.ts",
       "src/knowledge.test.ts",
       "src/quota.test.ts",
-      "src/workflows.test.ts",
       "src/vector-isolation.test.ts",
       "src/api.test.ts",
     ];
@@ -1959,15 +1914,10 @@ export function createGaEvidenceValidators({
       }
     }
     for (const connectorType of [
-      "confluence",
       "github",
-      "jira",
-      "linear",
       "local_import",
-      "notion",
       "rss",
       "s3",
-      "slack",
       "website",
     ]) {
       if (!content.catalog?.connectorTypes?.includes(connectorType)) {
@@ -2006,19 +1956,6 @@ export function createGaEvidenceValidators({
       runtime.privateDnsFetchAttemptCount !== 0
     ) {
       return fail("data_connector_private_dns_not_blocked");
-    }
-    for (const connectorType of [
-      "confluence",
-      "jira",
-      "notion",
-      "linear",
-      "slack",
-    ]) {
-      const creation = runtime[`${connectorType}CreationStatus`];
-      const sync = runtime[`${connectorType}SyncStatus`];
-      if (creation !== 201 || sync !== "completed") {
-        return fail(`data_connector_sync_not_completed:${connectorType}`);
-      }
     }
     if (
       !redactionFlagsFalse(content.redaction, [
@@ -2935,7 +2872,7 @@ export function createGaEvidenceValidators({
 
   function validateBrowserAutomationContractEvidence(content) {
     for (const check of [
-      "browser_task_approval_metadata_redaction",
+      "browser_task_claim_exposes_raw_task",
       "stale_running_browser_task_reclaimed",
       "external_runner_completion",
       "worker_stdout_redaction",
@@ -2949,7 +2886,7 @@ export function createGaEvidenceValidators({
       }
     }
     if (
-      content.workflow?.finalStatus !== "completed" ||
+      content.job?.finalStatus !== "completed" ||
       content.worker?.firstAttempt !== 1 ||
       content.worker?.reclaimedAttempt !== 2 ||
       content.worker?.output?.completedCount !== 1 ||
@@ -2964,10 +2901,9 @@ export function createGaEvidenceValidators({
       return fail("browser_automation_retention_cleanup_missing");
     }
     for (const field of [
-      "approvalReadback",
+      "claimReadback",
       "workerStdout",
       "workerStderr",
-      "workflowReadback",
       "retentionEvidence",
     ]) {
       if (content.redaction?.[field] !== "passed") {
@@ -4103,6 +4039,7 @@ export function createGaEvidenceValidators({
       "RomeoBackgroundJobQueuedLag",
       "RomeoBackgroundJobDeadLetters",
       "RomeoPostgresBackupJobFailed",
+      "RomeoPostgresBackupMissingOrStale",
     ]) {
       if (!alertNames.has(alert)) {
         return fail(`operational_monitoring_missing_alert:${alert}`);
@@ -4132,9 +4069,16 @@ export function createGaEvidenceValidators({
 
   function validateBackupUploadFailureEvidence(content) {
     const requiredChecks = [
+      "missing_destination_exits_nonzero_before_dump",
+      "missing_local_persistence_evidence_exits_nonzero_before_dump",
       "upload_http_failure_exits_nonzero",
       "upload_timeout_exits_nonzero",
+      "credential_denial_exits_nonzero",
+      "digest_mismatch_exits_nonzero",
+      "partial_object_exits_nonzero",
       "failed_upload_does_not_write_manifest",
+      "successful_backup_manifest_status_readback_verified",
+      "local_artifacts_deleted_remote_objects_remain",
       "upload_failure_output_redacts_presigned_secret",
     ];
     const checks = new Set(Array.isArray(content.checks) ? content.checks : []);
@@ -4152,13 +4096,22 @@ export function createGaEvidenceValidators({
             .map((item) => [item.name, item])
         : [],
     );
-    for (const name of ["http_503", "upload_timeout"]) {
+    for (const name of [
+      "http_503",
+      "upload_timeout",
+      "credential_denial",
+      "digest_mismatch",
+      "partial_object",
+    ]) {
       const item = cases.get(name);
       if (item === undefined) return fail(`backup_upload_missing_case:${name}`);
       if (item.exitStatus === 0) {
         return fail(`backup_upload_case_succeeded:${name}`);
       }
-      if (item.manifestWritten !== false) {
+      if (
+        ["http_503", "upload_timeout", "credential_denial"].includes(name) &&
+        item.manifestWritten !== false
+      ) {
         return fail(`backup_upload_manifest_written:${name}`);
       }
       if (item.requestReceived !== true) {
@@ -4173,6 +4126,36 @@ export function createGaEvidenceValidators({
       ) {
         return fail(`backup_upload_redaction_missing:${name}`);
       }
+    }
+    const missingDestination = cases.get("missing_destination");
+    if (
+      missingDestination?.exitStatus === 0 ||
+      missingDestination?.dumpWritten !== false ||
+      missingDestination?.requestReceived !== false
+    ) {
+      return fail("backup_missing_destination_not_fail_closed");
+    }
+    const missingLocalEvidence = cases.get(
+      "missing_local_persistence_evidence",
+    );
+    if (
+      missingLocalEvidence?.exitStatus === 0 ||
+      missingLocalEvidence?.dumpWritten !== false ||
+      missingLocalEvidence?.requestReceived !== false
+    ) {
+      return fail("backup_missing_local_persistence_evidence_not_fail_closed");
+    }
+    const success = cases.get("successful_readback");
+    if (
+      success?.exitStatus !== 0 ||
+      success?.backupVerified !== true ||
+      success?.manifestVerified !== true ||
+      success?.statusVerified !== true ||
+      success?.localArtifactsDeleted !== true ||
+      success?.remoteObjectsRemain !== true ||
+      success?.lastSuccessAtPresent !== true
+    ) {
+      return fail("backup_successful_readback_incomplete");
     }
     if (
       !redactionFlagsFalse(content.redaction, [

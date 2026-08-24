@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   dataConnectorSyncsQueryOptions,
   syncLocalDataConnectorMutationOptions,
-} from "../features";
+} from "../features/data-connectors";
 import type { DataConnector } from "../features/types";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
@@ -144,7 +144,10 @@ export function DataConnectorImportsTab({
           )}
         </syncForm.Subscribe>
       </form>
-      <DataConnectorSyncHistory syncs={syncsQuery.data ?? []} />
+      <DataConnectorSyncHistory
+        connectorId={connector?.id}
+        syncs={syncsQuery.data ?? []}
+      />
     </div>
   );
 }

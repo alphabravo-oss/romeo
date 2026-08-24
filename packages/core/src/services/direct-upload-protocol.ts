@@ -24,7 +24,8 @@ export function validateUploadStreamChunk(input: {
   | { outcome: "continue"; receivedBytes: number }
   | { outcome: "complete"; receivedBytes: number }
   | { outcome: "denied"; code: "file_size_mismatch" } {
-  if (input.chunkLength < 0) return { outcome: "denied", code: "file_size_mismatch" };
+  if (input.chunkLength < 0)
+    return { outcome: "denied", code: "file_size_mismatch" };
   const receivedBytes = input.receivedBytes + input.chunkLength;
   if (receivedBytes > input.declaredSizeBytes || receivedBytes > input.maxBytes)
     return { outcome: "denied", code: "file_size_mismatch" };
@@ -94,7 +95,10 @@ export async function completeDirectUploadProtocol(input: {
     declaredSizeBytes: input.declaredSizeBytes,
     maxBytes: input.maxBytes,
   });
-  if (streamed.outcome === "denied" || bytes.byteLength !== input.declaredSizeBytes)
+  if (
+    streamed.outcome === "denied" ||
+    bytes.byteLength !== input.declaredSizeBytes
+  )
     return {
       outcome: "denied",
       code: "file_size_mismatch",

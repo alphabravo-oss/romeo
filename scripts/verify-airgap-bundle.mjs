@@ -384,6 +384,18 @@ function validateApproval() {
     approval.json?.status === "passed",
     { code: "approval_not_passed" },
   );
+  const bundleDryRun = publishPlan.json?.dryRun === true;
+  check(
+    "release approval authenticity posture matches publish plan",
+    bundleDryRun
+      ? approval.json?.mode === "dry_run" &&
+          approval.json?.authentic === false &&
+          approval.json?.promotable === false
+      : approval.json?.mode === "protected_environment" &&
+          approval.json?.authentic === true &&
+          approval.json?.promotable === true,
+    { code: "approval_authenticity_invalid" },
+  );
   check(
     "release approval version matches manifest",
     approval.json?.release?.version === manifest.json?.version,
@@ -512,6 +524,15 @@ function validatePublishPlan() {
     "publish plan schema is valid",
     publishPlan.json?.schemaVersion === "romeo.release-publish-plan.v1",
     { code: "publish_plan_schema_invalid" },
+  );
+  check(
+    "publish plan promotion posture is coherent",
+    publishPlan.json?.dryRun === true
+      ? publishPlan.json?.promotable === false &&
+          Array.isArray(publishPlan.json?.steps) &&
+          publishPlan.json.steps.length === 0
+      : publishPlan.json?.promotable === true,
+    { code: "publish_plan_promotion_posture_invalid" },
   );
   check(
     "publish plan release version matches manifest",

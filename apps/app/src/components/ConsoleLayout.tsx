@@ -11,10 +11,15 @@ import {
   useState,
 } from "react";
 import { useLocale } from "../lib/i18n";
+import "../styles/app-navigation.css";
 import "../styles/app-content.css";
 import "../styles/console.css";
 import { SidebarBrand, SidebarFrame } from "./SidebarFrame";
 import { ThemeToggle } from "./ThemeToggle";
+import {
+  preloadCommandPalette,
+  requestCommandPalette,
+} from "../lib/command-palette-events";
 import { useWorkspaceIntentPrefetch } from "./useWorkspaceIntentPrefetch";
 import { useWorkspace } from "./WorkspaceContext";
 
@@ -55,14 +60,25 @@ export function ConsoleLayout({
   const prefetchWorkspace = useWorkspaceIntentPrefetch();
   const { workspaceId } = useWorkspace();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const activeGroupId = groupIdForSection(groups, active);
   const [expandedGroups, setExpandedGroups] = useState(() =>
-    initialExpandedGroups(route, groups, active),
+    initialExpandedGroups(groups, active),
   );
   const activeLinkRef = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
     activeLinkRef.current?.scrollIntoView({ block: "nearest" });
   }, [active]);
+
+  useEffect(() => {
+    const persisted = readPersistedExpandedGroups(route);
+    if (persisted.size === 0) return;
+    setExpandedGroups((current) => {
+      const next = new Set([...current, ...persisted]);
+      if (activeGroupId !== undefined) next.add(activeGroupId);
+      return setsEqual(current, next) ? current : next;
+    });
+  }, [activeGroupId, route]);
 
   useEffect(() => {
     const groupId = groupIdForSection(groups, active);
@@ -249,9 +265,9 @@ export function ConsoleLayout({
                 affordance that tells people it exists at all. */}
             <Button
               className="rm-console-omnisearch"
-              onClick={() =>
-                window.dispatchEvent(new CustomEvent("romeo:command-palette"))
-              }
+              onClick={requestCommandPalette}
+              onFocus={preloadCommandPalette}
+              onPointerEnter={preloadCommandPalette}
               type="button"
               variant="ghost"
             >
@@ -332,13 +348,17 @@ function storageKey(route: string): string {
 }
 
 function initialExpandedGroups(
-  route: string,
   groups: ConsoleGroup[],
   active: string,
 ): Set<string> {
   const expanded = new Set<string>();
   const activeGroup = groupIdForSection(groups, active);
   if (activeGroup !== undefined) expanded.add(activeGroup);
+  return expanded;
+}
+
+function readPersistedExpandedGroups(route: string): Set<string> {
+  const expanded = new Set<string>();
   if (typeof window === "undefined") return expanded;
   try {
     const raw = window.localStorage.getItem(storageKey(route));
@@ -352,6 +372,12 @@ function initialExpandedGroups(
     return expanded;
   }
   return expanded;
+}
+
+function setsEqual(left: Set<string>, right: Set<string>): boolean {
+  return (
+    left.size === right.size && [...left].every((value) => right.has(value))
+  );
 }
 
 function persistExpandedGroups(route: string, groups: Set<string>): void {

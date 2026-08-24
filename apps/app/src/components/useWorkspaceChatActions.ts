@@ -1,7 +1,7 @@
 import { useMutation, type QueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 
-import type { SpeechArtifact } from "../features";
+import type { SpeechArtifact } from "../features/voices";
 import {
   archiveWorkspaceChatMutationOptions,
   updateWorkspaceChatMutationOptions,

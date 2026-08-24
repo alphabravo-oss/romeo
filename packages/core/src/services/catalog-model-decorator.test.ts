@@ -11,30 +11,37 @@ describe("decorateCatalogModels", () => {
       (item) => item.id === "model_openai_compatible_default",
     );
     expect(model).toBeDefined();
-    await repository.upsertSystemSetting({
-      key: "model.capability.probe.v1:org_default:model_openai_compatible_default",
-      updatedAt: "2026-08-14T12:00:00.000Z",
-      value: {
-        modelId: "model_openai_compatible_default",
-        orgId: "org_default",
-        probedAt: "2026-08-14T12:00:00.000Z",
-        schema: "romeo.model-capability-probe.v1",
+    await repository.upsertSystemSetting(
+      {
+        key: "model.capability.probe.v1:org_default:model_openai_compatible_default",
+        updatedAt: "2026-08-14T12:00:00.000Z",
+        value: {
+          modelId: "model_openai_compatible_default",
+          orgId: "org_default",
+          probedAt: "2026-08-14T12:00:00.000Z",
+          schema: "romeo.model-capability-probe.v1",
+        },
       },
-    });
-    await repository.upsertSystemSetting({
-      key: `provider.connection-extras.v1:${model!.providerId}`,
-      updatedAt: "2026-08-14T12:00:00.000Z",
-      value: {
-        orgId: "org_default",
-        region: "us-east-1",
-        schema: "romeo.provider-connection-extras.v1",
+      "org_default",
+    );
+    await repository.upsertSystemSetting(
+      {
+        key: `provider.connection-extras.v1:${model!.providerId}`,
+        updatedAt: "2026-08-14T12:00:00.000Z",
+        value: {
+          orgId: "org_default",
+          region: "us-east-1",
+          schema: "romeo.provider-connection-extras.v1",
+        },
       },
-    });
+      "org_default",
+    );
 
     const decorated = await decorateCatalogModels(
       repository,
       "org_default",
       [model!],
+      Date.parse("2026-08-14T12:00:00.000Z"),
     );
     expect(decorated[0]).toMatchObject({
       catalogSurface: {

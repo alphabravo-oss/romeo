@@ -39,9 +39,13 @@ describe("S3HttpConnectorReader", () => {
     const objectBytes = new TextEncoder().encode(objectBody);
     const configs: S3ClientConfig[] = [];
     const reader = new S3HttpConnectorReader({
-      accessKeyId: "connector-access-key",
       endpoint: "https://s3.example.com",
-      secretAccessKey: "connector-secret-key",
+      secretResolver: new EnvironmentSecretResolver({
+        S3_CONNECTOR_CREDENTIALS: JSON.stringify({
+          accessKeyId: "connector-access-key",
+          secretAccessKey: "connector-secret-key",
+        }),
+      }),
       clientFactory: sdkClientFactory(async (command) => {
         commands.push(command);
         if (command instanceof ListObjectsV2Command) {
@@ -67,11 +71,13 @@ describe("S3HttpConnectorReader", () => {
       prefix: "handbook/",
       region: "us-east-1",
       maxKeys: 5,
+      secretRef: "env://S3_CONNECTOR_CREDENTIALS",
     });
     const object = await reader.getObject({
       bucket: "romeo-docs",
       key: objects[0]!.key,
       region: "us-east-1",
+      secretRef: "env://S3_CONNECTOR_CREDENTIALS",
     });
 
     expect(objects).toEqual([
@@ -98,15 +104,42 @@ describe("S3HttpConnectorReader", () => {
       forcePathStyle: true,
       maxAttempts: 2,
     });
+    expect(configs[1]).toMatchObject({
+      endpoint: "https://s3.example.com",
+      region: "us-east-1",
+    });
     expect(JSON.stringify(commands)).not.toContain("connector-secret-key");
+  });
+
+  it("requires a connector secret reference before creating an SDK client", async () => {
+    const clientFactory = vi.fn();
+    const reader = new S3HttpConnectorReader({
+      endpoint: "https://s3.example.com",
+      secretResolver: new EnvironmentSecretResolver(),
+      clientFactory,
+    });
+
+    await expect(
+      reader.listObjects({
+        bucket: "romeo-docs",
+        prefix: "handbook/",
+        region: "us-east-1",
+        maxKeys: 5,
+        secretRef: "",
+      }),
+    ).rejects.toMatchObject({ code: "connector_s3_credentials_required" });
+    expect(clientFactory).not.toHaveBeenCalled();
   });
 
   it("rejects secret refs without a value-capable resolver", async () => {
     const clientFactory = vi.fn();
     const reader = new S3HttpConnectorReader({
-      accessKeyId: "connector-access-key",
       endpoint: "https://s3.example.com",
-      secretAccessKey: "connector-secret-key",
+      secretResolver: {
+        async check() {
+          return { available: true, scheme: "env" };
+        },
+      },
       clientFactory,
     });
 
@@ -122,18 +155,43 @@ describe("S3HttpConnectorReader", () => {
     expect(clientFactory).not.toHaveBeenCalled();
   });
 
+  it("rejects unavailable connector secrets without creating an SDK client", async () => {
+    const clientFactory = vi.fn();
+    const reader = new S3HttpConnectorReader({
+      endpoint: "https://s3.example.com",
+      secretResolver: new EnvironmentSecretResolver({}),
+      clientFactory,
+    });
+
+    await expect(
+      reader.listObjects({
+        bucket: "romeo-docs",
+        prefix: "handbook/",
+        region: "us-east-1",
+        maxKeys: 5,
+        secretRef: "env://S3_CONNECTOR_CREDENTIALS",
+      }),
+    ).rejects.toMatchObject({
+      code: "connector_s3_secret_ref_unavailable",
+      details: {
+        failureCode: "secret_not_found",
+        secretRefScheme: "env",
+      },
+    });
+    expect(clientFactory).not.toHaveBeenCalled();
+  });
+
   it("resolves connector-specific credentials from env secret refs", async () => {
     const configs: S3ClientConfig[] = [];
-    const reader = new S3HttpConnectorReader({
-      accessKeyId: "",
-      endpoint: "https://s3.example.com",
-      secretAccessKey: "",
-      secretResolver: new EnvironmentSecretResolver({
-        S3_CONNECTOR_CREDENTIALS: JSON.stringify({
-          accessKeyId: "connector-specific-key",
-          secretAccessKey: "connector-specific-secret",
-        }),
+    const variables = {
+      S3_CONNECTOR_CREDENTIALS: JSON.stringify({
+        accessKeyId: "connector-specific-key",
+        secretAccessKey: "connector-specific-secret",
       }),
+    };
+    const reader = new S3HttpConnectorReader({
+      endpoint: "https://s3.example.com",
+      secretResolver: new EnvironmentSecretResolver(variables),
       clientFactory: sdkClientFactory(
         async (command) =>
           command instanceof ListObjectsV2Command
@@ -158,6 +216,10 @@ describe("S3HttpConnectorReader", () => {
       maxKeys: 5,
       secretRef: "env://S3_CONNECTOR_CREDENTIALS",
     });
+    variables.S3_CONNECTOR_CREDENTIALS = JSON.stringify({
+      accessKeyId: "rotated-connector-key",
+      secretAccessKey: "rotated-connector-secret",
+    });
     const object = await reader.getObject({
       bucket: "romeo-docs",
       key: objects[0]!.key,
@@ -173,14 +235,16 @@ describe("S3HttpConnectorReader", () => {
       accessKeyId: "connector-specific-key",
       secretAccessKey: "connector-specific-secret",
     });
+    expect(configs[1]?.credentials).toMatchObject({
+      accessKeyId: "rotated-connector-key",
+      secretAccessKey: "rotated-connector-secret",
+    });
   });
 
   it("resolves connector-specific credentials from managed secret values", async () => {
     const configs: S3ClientConfig[] = [];
     const reader = new S3HttpConnectorReader({
-      accessKeyId: "",
       endpoint: "https://s3.example.com",
-      secretAccessKey: "",
       secretResolver: {
         async check() {
           return { available: true, scheme: "vault" };
@@ -224,9 +288,7 @@ describe("S3HttpConnectorReader", () => {
   it("rejects malformed credential secrets before creating an SDK client", async () => {
     const clientFactory = vi.fn();
     const reader = new S3HttpConnectorReader({
-      accessKeyId: "",
       endpoint: "https://s3.example.com",
-      secretAccessKey: "",
       secretResolver: new EnvironmentSecretResolver({
         S3_CONNECTOR_CREDENTIALS: '{"accessKeyId":"missing-secret"}',
       }),

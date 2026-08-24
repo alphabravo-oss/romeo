@@ -33,9 +33,7 @@ export async function findClaimedDispatchRequest(
   subject: AuthSubject,
   jobId: string,
 ): Promise<BackgroundJob> {
-  const job = (await repository.listBackgroundJobs(subject.orgId)).find(
-    (item) => item.id === jobId,
-  );
+  const job = await repository.getBackgroundJob(subject.orgId, jobId);
   if (job === undefined || job.type !== dispatchRequestType)
     throw notFound("Tool operation dispatch request");
   if (job.status !== "running") {
@@ -69,9 +67,7 @@ export async function findCancellableDispatchRequest(
   subject: AuthSubject,
   jobId: string,
 ): Promise<BackgroundJob> {
-  const job = (await repository.listBackgroundJobs(subject.orgId)).find(
-    (item) => item.id === jobId,
-  );
+  const job = await repository.getBackgroundJob(subject.orgId, jobId);
   if (job === undefined || job.type !== dispatchRequestType)
     throw notFound("Tool operation dispatch request");
   if (job.status === "completed" || job.status === "failed") {

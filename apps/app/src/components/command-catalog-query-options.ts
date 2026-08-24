@@ -4,7 +4,6 @@ import { listAgentGallery } from "../features/managed-models";
 import { listKnowledgeBases } from "../features/knowledge";
 import { listPromptTemplates } from "../features/prompts";
 import { listTools } from "../features/tools";
-import { listWorkflows } from "../features/workflows";
 import * as appQueryKeys from "../lib/app-query-keys";
 import { abortableQuery, serverQueryPolicy } from "../lib/server-query-options";
 
@@ -20,7 +19,6 @@ export function commandAgentsQueryOptions(
     enabled: enabled && workspaceId !== undefined,
   });
 }
-
 export function commandKnowledgeQueryOptions(
   workspaceId: string | undefined,
   enabled: boolean,
@@ -55,20 +53,5 @@ export function commandToolsQueryOptions(enabled: boolean) {
     queryKey: appQueryKeys.commandCatalog("tools"),
     queryFn: ({ signal }) => abortableQuery(signal, listTools),
     enabled,
-  });
-}
-
-export function commandWorkflowsQueryOptions(
-  workspaceId: string | undefined,
-  enabled: boolean,
-) {
-  return queryOptions({
-    ...serverQueryPolicy("stable", "commandCatalogWorkflows", {
-      workspaceId,
-    }),
-    queryKey: appQueryKeys.commandCatalog("workflows", workspaceId),
-    queryFn: ({ signal }) =>
-      abortableQuery(signal, () => listWorkflows(workspaceId!)),
-    enabled: enabled && workspaceId !== undefined,
   });
 }

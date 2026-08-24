@@ -16,10 +16,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.1090.0",
     "@hono/zod-openapi": "^1.4.0",
-    "@linear/sdk": "88.2.0",
     "@node-rs/argon2": "^2.0.2",
     "@node-saml/node-saml": "^5.1.0",
-    "@notionhq/client": "5.23.2",
     "@qdrant/js-client-rest": "1.18.0",
     "@romeo/ai-runtime": "workspace:*",
     "@romeo/auth": "workspace:*",
@@ -31,7 +29,6 @@
     "@romeo/storage": "workspace:*",
     "@romeo/tools": "workspace:*",
     "@romeo/voices": "workspace:*",
-    "@slack/web-api": "8.0.0",
     "@slack/webhook": "8.0.0",
     "@valkey/valkey-glide": "2.5.0",
     "firebase-admin": "14.2.0",

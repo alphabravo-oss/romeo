@@ -2,7 +2,7 @@ import { Button, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
 
-import { updateQuotaBucketMutationOptions } from "../features";
+import { updateQuotaBucketMutationOptions } from "../features/operational-governance";
 import type { QuotaBucket } from "../features/types";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";

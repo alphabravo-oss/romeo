@@ -24,11 +24,15 @@ import { publicUsageEvent } from "./voice-artifact-metadata";
 export class UsageService {
   constructor(private readonly repository: RomeoRepository) {}
 
-  async list(subject: AuthSubject): Promise<UsageEvent[]> {
+  async list(
+    subject: AuthSubject,
+    interval?: UsageInterval,
+  ): Promise<UsageEvent[]> {
     assertScope(subject, "usage:read");
-    return (await this.repository.listUsageEvents(subject.orgId)).map(
-      publicUsageEvent,
-    );
+    return usageEventsWithinInterval(
+      await this.repository.listUsageEvents(subject.orgId),
+      interval,
+    ).map(publicUsageEvent);
   }
 
   taxonomy(subject: AuthSubject): PublicUsageMetricDefinition[] {
@@ -43,9 +47,15 @@ export class UsageService {
     });
   }
 
-  async summary(subject: AuthSubject): Promise<UsageSummary> {
+  async summary(
+    subject: AuthSubject,
+    interval?: UsageInterval,
+  ): Promise<UsageSummary> {
     assertScope(subject, "usage:read");
-    const events = await this.repository.listUsageEvents(subject.orgId);
+    const events = usageEventsWithinInterval(
+      await this.repository.listUsageEvents(subject.orgId),
+      interval,
+    );
     const costEventIds = selectUsageCostEventIds(events);
     return {
       totals: rollup(
@@ -77,12 +87,16 @@ export class UsageService {
     };
   }
 
-  async exportEventsCsv(subject: AuthSubject): Promise<string> {
+  async exportEventsCsv(
+    subject: AuthSubject,
+    interval?: UsageInterval,
+  ): Promise<string> {
     assertScope(subject, "usage:read");
     return formatUsageEventsCsv(
-      (await this.repository.listUsageEvents(subject.orgId)).map(
-        publicUsageEvent,
-      ),
+      usageEventsWithinInterval(
+        await this.repository.listUsageEvents(subject.orgId),
+        interval,
+      ).map(publicUsageEvent),
     );
   }
 
@@ -94,6 +108,40 @@ export class UsageService {
     );
     return createQuotaUsageAlerts(buckets);
   }
+}
+
+export interface UsageInterval {
+  /** Inclusive ISO-8601 instant. */
+  from?: string | undefined;
+  /** Exclusive ISO-8601 instant. */
+  to?: string | undefined;
+}
+
+export function usageEventsWithinInterval(
+  events: readonly UsageEvent[],
+  interval: UsageInterval | undefined,
+): UsageEvent[] {
+  if (interval === undefined) return [...events];
+  const from =
+    interval.from === undefined ? undefined : Date.parse(interval.from);
+  const to = interval.to === undefined ? undefined : Date.parse(interval.to);
+  if (
+    (to !== undefined && !Number.isFinite(to)) ||
+    (from !== undefined && !Number.isFinite(from)) ||
+    (from !== undefined && to !== undefined && from >= to)
+  ) {
+    throw new Error(
+      "Usage interval must have valid instants with from before to.",
+    );
+  }
+  return events.filter((event) => {
+    const createdAt = Date.parse(event.createdAt);
+    return (
+      Number.isFinite(createdAt) &&
+      (from === undefined || createdAt >= from) &&
+      (to === undefined || createdAt < to)
+    );
+  });
 }
 
 function rollup<T extends UsageSummaryMetric>(

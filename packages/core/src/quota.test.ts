@@ -798,22 +798,6 @@ describe("Romeo quota controls", () => {
       }),
     });
     const chat = await chatResponse.json();
-    const workflowCreateResponse = await api.request("/api/v1/workflows", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        workspaceId: "workspace_default",
-        name: "Suspension workflow",
-        steps: [
-          {
-            type: "notification",
-            name: "Notify",
-            message: "Should not run while suspended.",
-          },
-        ],
-      }),
-    });
-    const workflow = await workflowCreateResponse.json();
     const connectorCreateResponse = await api.request(
       "/api/v1/data-connectors",
       {
@@ -952,26 +936,6 @@ describe("Romeo quota controls", () => {
       { method: "POST" },
     );
     const notificationRetryError = await notificationRetryResponse.json();
-    const scheduledWorkflowCreateResponse = await api.request(
-      "/api/v1/workflows",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          workspaceId: "workspace_default",
-          name: "Blocked scheduled workflow",
-          steps: [
-            {
-              type: "notification",
-              name: "Notify later",
-              message: "Should not be scheduled while suspended.",
-            },
-          ],
-          schedule: { intervalMinutes: 5 },
-        }),
-      },
-    );
-    const scheduledWorkflowError = await scheduledWorkflowCreateResponse.json();
     const scheduledConnectorCreateResponse = await api.request(
       "/api/v1/data-connectors",
       {
@@ -1006,15 +970,6 @@ describe("Romeo quota controls", () => {
       },
     );
     const connectorSyncError = await connectorSyncResponse.json();
-    const workflowRunResponse = await api.request(
-      `/api/v1/workflows/${workflow.data.id}/runs`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ input: { route: "blocked" } }),
-      },
-    );
-    const workflowRunError = await workflowRunResponse.json();
     const uploadResponse = await api.request("/api/v1/files/uploads", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1032,10 +987,6 @@ describe("Romeo quota controls", () => {
       `/api/v1/chats/${chat.data.id}/messages`,
     );
     const messages = await messagesResponse.json();
-    const workflowRunsResponse = await api.request(
-      `/api/v1/workflows/${workflow.data.id}/runs`,
-    );
-    const workflowRuns = await workflowRunsResponse.json();
     const connectorSyncsResponse = await api.request(
       `/api/v1/data-connectors/${connector.data.id}/syncs`,
     );
@@ -1047,7 +998,6 @@ describe("Romeo quota controls", () => {
     const auditResponse = await api.request("/api/v1/audit-logs");
     const audit = await auditResponse.json();
 
-    expect(workflowCreateResponse.status).toBe(201);
     expect(connectorCreateResponse.status).toBe(201);
     expect(webhookCreateResponse.status).toBe(201);
     expect(evalSuiteResponse.status).toBe(201);
@@ -1113,11 +1063,6 @@ describe("Romeo quota controls", () => {
       action: "worker.enqueue",
       reasonCodes: ["org_suspended"],
     });
-    expect(scheduledWorkflowCreateResponse.status).toBe(403);
-    expect(scheduledWorkflowError.error.details).toMatchObject({
-      action: "worker.enqueue",
-      reasonCodes: ["org_suspended"],
-    });
     expect(scheduledConnectorCreateResponse.status).toBe(403);
     expect(scheduledConnectorError.error.details).toMatchObject({
       action: "worker.enqueue",
@@ -1128,18 +1073,12 @@ describe("Romeo quota controls", () => {
       action: "connector.sync",
       reasonCodes: ["org_suspended"],
     });
-    expect(workflowRunResponse.status).toBe(403);
-    expect(workflowRunError.error.details).toMatchObject({
-      action: "workflow.run",
-      reasonCodes: ["org_suspended"],
-    });
     expect(uploadResponse.status).toBe(403);
     expect(uploadError.error.details).toMatchObject({
       action: "file.upload",
       reasonCodes: ["org_suspended"],
     });
     expect(messages.data).toEqual([]);
-    expect(workflowRuns.data).toEqual([]);
     expect(connectorSyncs.data).toEqual([]);
     expect(files.data).toEqual([]);
     expect(

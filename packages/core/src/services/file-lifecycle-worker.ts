@@ -9,9 +9,12 @@ import { extractionAttempts, isExtractableMimeType } from "./file-object-state";
 import type { FilePipelineSupport } from "./file-pipeline-support";
 import { deleteFileObjectStoredObjects } from "./file-resumable-helpers";
 import {
+  fileLifecycleMaxAttempts,
+  fileLifecycleRetryDelayMs,
   safeFileLifecycleFailureCode,
   transitionFileLifecycle,
 } from "./file-lifecycle";
+import { publishFileLifecycleWorkerMetric } from "./file-lifecycle-telemetry";
 import type { FileServiceLimits } from "./file-service-contracts";
 
 export interface FileLifecycleWorkerResult {
@@ -32,7 +35,9 @@ export class FileLifecycleWorker {
     workerId: string;
     leaseMs?: number;
     now?: string;
+    signal?: AbortSignal;
   }): Promise<FileLifecycleWorkerResult> {
+    if (input.signal?.aborted === true) return { outcome: "idle" };
     const now = input.now ?? new Date().toISOString();
     const leaseMs = Math.max(
       1_000,
@@ -48,13 +53,26 @@ export class FileLifecycleWorker {
     if (claimed === undefined) return { outcome: "idle" };
     const clock =
       input.now === undefined ? () => new Date().toISOString() : () => now;
-    return this.processClaimed(
+    const startedAt = Date.now();
+    const result = await this.processClaimed(
       claimed,
       input.workerId,
       leaseToken,
       clock,
       leaseMs,
+      input.signal,
     );
+    publishFileLifecycleWorkerMetric({
+      attempt: claimed.lifecycleAttempts ?? 0,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      outcome: result.outcome,
+      queueAgeSeconds: Math.max(
+        0,
+        Math.floor((Date.parse(now) - Date.parse(claimed.createdAt)) / 1_000),
+      ),
+      state: result.state ?? claimed.status,
+    });
+    return result;
   }
 
   private async processClaimed(
@@ -63,16 +81,23 @@ export class FileLifecycleWorker {
     leaseToken: string,
     clock: () => string,
     leaseMs: number,
+    signal?: AbortSignal,
   ): Promise<FileLifecycleWorkerResult> {
     let current = claimed;
     try {
       const now = clock();
-      const bytes = await this.objectStore.getObject(current.objectKey, {
-        maxBytes: Math.min(
-          current.sizeBytes,
-          configuredUploadLimit(current, this.limits),
-        ),
-      });
+      const bytes = await bounded(
+        (operationSignal) =>
+          this.objectStore.getObject(current.objectKey, {
+            maxBytes: Math.min(
+              current.sizeBytes,
+              configuredUploadLimit(current, this.limits),
+            ),
+            signal: operationSignal,
+          }),
+        leaseMs,
+        signal,
+      );
       if (bytes === undefined)
         throw new ApiError(
           "file_object_missing",
@@ -101,12 +126,15 @@ export class FileLifecycleWorker {
         if (renewed === undefined) return leaseLost(current);
         current = renewed;
         await bounded(
-          this.pipeline.assertMalwareScanClean(
-            bytes,
-            current.fileName,
-            current.mimeType,
-          ),
+          (operationSignal) =>
+            this.pipeline.assertMalwareScanClean(
+              bytes,
+              current.fileName,
+              current.mimeType,
+              operationSignal,
+            ),
           leaseMs,
+          signal,
         );
         if (!isExtractableMimeType(current.mimeType)) {
           return this.finishReady(current, {}, leaseOwner, leaseToken, clock());
@@ -136,17 +164,43 @@ export class FileLifecycleWorker {
         if (renewed === undefined) return leaseLost(current);
         current = renewed;
         const extraction = await bounded(
-          this.pipeline.extractFile(
-            {
-              bytes,
-              fileName: current.fileName,
-              mimeType: current.mimeType,
-            },
-            extractionAttempts(current) + 1,
-            clock(),
-          ),
+          (operationSignal) =>
+            this.pipeline.extractFile(
+              {
+                bytes,
+                fileName: current.fileName,
+                mimeType: current.mimeType,
+                signal: operationSignal,
+              },
+              extractionAttempts(current) + 1,
+              clock(),
+            ),
           leaseMs,
+          signal,
         );
+        if (extraction.status === "failed") {
+          // OCR is enrichment for images, not the authorization boundary for
+          // using a scan-clean binary with a vision-capable model. Preserve
+          // the failure provenance for search/accessibility diagnostics while
+          // allowing the governed original to become attachable.
+          if (current.mimeType.startsWith("image/")) {
+            return this.finishReady(
+              current,
+              { extraction },
+              leaseOwner,
+              leaseToken,
+              clock(),
+            );
+          }
+          return this.finishFailure(
+            current,
+            { code: extraction.failureCode ?? "file_extraction_failed" },
+            leaseOwner,
+            leaseToken,
+            clock(),
+            { extraction },
+          );
+        }
         return this.finishReady(
           current,
           { extraction },
@@ -243,11 +297,36 @@ export class FileLifecycleWorker {
     leaseOwner: string,
     leaseToken: string,
     now: string,
+    metadata: Record<string, unknown> = {},
   ): Promise<FileLifecycleWorkerResult> {
+    const attempts = current.lifecycleAttempts ?? 0;
+    const failureCode = safeFileLifecycleFailureCode(error);
+    const exhausted = attempts >= fileLifecycleMaxAttempts;
     const failed = transitionFileLifecycle(current, "failed", now, {
-      lifecycleFailureCode: safeFileLifecycleFailureCode(error),
-      lifecycleNextAttemptAt: new Date(Date.parse(now) + 60_000).toISOString(),
+      lifecycleFailureCode: failureCode,
+      ...(exhausted
+        ? {}
+        : {
+            lifecycleNextAttemptAt: new Date(
+              Date.parse(now) + fileLifecycleRetryDelayMs(attempts),
+            ).toISOString(),
+          }),
+      metadata: {
+        ...current.metadata,
+        ...metadata,
+        ...(exhausted
+          ? {
+              fileLifecycleDeadLetter: {
+                schemaVersion: 1,
+                attempts,
+                failedAt: now,
+                failureCode,
+              },
+            }
+          : {}),
+      },
     });
+    if (exhausted) delete failed.lifecycleNextAttemptAt;
     const result = await this.repository.finishFileLifecycleLease({
       file: failed,
       leaseOwner,
@@ -284,19 +363,42 @@ function leaseLost(file: FileObject): FileLifecycleWorkerResult {
   return { fileId: file.id, outcome: "lease_lost", state: file.status };
 }
 
-function bounded<T>(work: Promise<T>, leaseMs: number): Promise<T> {
+async function bounded<T>(
+  work: (signal: AbortSignal) => Promise<T>,
+  leaseMs: number,
+  signal?: AbortSignal,
+): Promise<T> {
   const timeoutMs = Math.max(500, Math.floor(leaseMs * 0.8));
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () =>
-        reject(
-          Object.assign(new Error("File lifecycle work timed out."), {
-            code: "file_lifecycle_timeout",
-          }),
-        ),
-      timeoutMs,
-    );
-    timer.unref?.();
-    work.then(resolve, reject).finally(() => clearTimeout(timer));
+  if (signal?.aborted === true) throw lifecycleAbortError();
+  const timeout = new AbortController();
+  const timer = setTimeout(
+    () => timeout.abort(lifecycleTimeoutError()),
+    timeoutMs,
+  );
+  timer.unref?.();
+  const combined =
+    signal === undefined
+      ? timeout.signal
+      : AbortSignal.any([signal, timeout.signal]);
+  try {
+    return await work(combined);
+  } catch (error) {
+    if (timeout.signal.aborted) throw lifecycleTimeoutError();
+    if (combined.aborted) throw lifecycleAbortError();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function lifecycleAbortError(): Error {
+  return Object.assign(new Error("File lifecycle work aborted."), {
+    code: "file_lifecycle_aborted",
+  });
+}
+
+function lifecycleTimeoutError(): Error {
+  return Object.assign(new Error("File lifecycle work timed out."), {
+    code: "file_lifecycle_timeout",
   });
 }

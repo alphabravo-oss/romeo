@@ -38,11 +38,7 @@ export async function updateCapabilityAssignment(
   if (input.state !== "required" && input.state !== "inherit") {
     const parents = await repository.listActiveCapabilityAssignments({
       orgId: input.subject.orgId,
-      scopes: parentScopes(
-        input.subject.orgId,
-        input.scope,
-        input.workspaceId,
-      ),
+      scopes: parentScopes(input.subject.orgId, input.scope, input.workspaceId),
       capabilityIds: [input.capabilityId],
       at: new Date().toISOString(),
     });

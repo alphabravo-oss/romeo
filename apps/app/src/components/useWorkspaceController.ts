@@ -1,6 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale } from "../lib/i18n";
-import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { useChatMessageState } from "./useChatMessageState";
 import { useToolExecution } from "./useToolExecution";
 import { useWorkspaceAttachments } from "./useWorkspaceAttachments";
@@ -17,8 +16,10 @@ import { useWorkspaceModelState } from "./useWorkspaceModelState";
 import type { WorkspaceControllerOptions } from "./workspace-controller-types";
 import { useReaderBranchSelection } from "./useReaderBranchSelection";
 import { readerScopedBranchLeaf } from "./chat-selection";
-import * as controllerOperations from "./workspace-controller-operations";
-
+import { createWorkspaceAuxiliaryActions } from "./workspace-controller-operations";
+import { inspectWorkspaceContext } from "./workspace-context-inspection";
+import { createWorkspaceControllerNavigation } from "./workspace-controller-navigation";
+import { useQueuedTurnRecovery } from "./useQueuedTurnRecovery";
 export function useWorkspaceController(
   options: WorkspaceControllerOptions = {},
 ) {
@@ -69,6 +70,7 @@ export function useWorkspaceController(
     isInspectingContext,
     messageFeedback,
     queuedTurns,
+    queuedTurnsUpdatedAt,
     setContextPreview,
     setContextPreviewError,
     setError,
@@ -81,6 +83,7 @@ export function useWorkspaceController(
     handleRateMessage,
     restoreMessages,
     syncPersistedMessages,
+    waitForAttachmentRetention,
   } = useChatMessageState({
     activeChatId,
     isStreaming,
@@ -138,6 +141,13 @@ export function useWorkspaceController(
       : { onBranchSelection: options.onBranchSelection }),
     requestedLeafMessageId: scopedLeafMessageId,
   });
+  const { handleCreateFeedbackEvalCase, refreshUsageControls } =
+    createWorkspaceAuxiliaryActions(
+      queryClient,
+      activeAgent?.id,
+      activeChatId,
+      t,
+    );
   const { draft, setDraft } = useWorkspaceDraft({
     chatId: activeChatId,
     subjectId: subject?.id,
@@ -150,8 +160,13 @@ export function useWorkspaceController(
     handleAttachFiles,
     handleAttachImages,
     handleGenerateImages,
-    handleCancelAttachment, handleMoveDocumentAttachment, handleMoveImageAttachment,
-    handleRetryDocumentAttachment, handleSelectDocumentPage, handleRemoveDocumentAttachment, handleRemoveImageAttachment,
+    handleCancelAttachment,
+    handleMoveDocumentAttachment,
+    handleMoveImageAttachment,
+    handleRetryDocumentAttachment,
+    handleSelectDocumentPage,
+    handleRemoveDocumentAttachment,
+    handleRemoveImageAttachment,
     imageAttachments,
     restorePendingAttachments,
   } = useWorkspaceAttachments({
@@ -160,14 +175,7 @@ export function useWorkspaceController(
     t,
     workspaceId: workspace?.id,
   });
-  const {
-    handleCreateProvider,
-    handleSyncProvider,
-    handleUpdateModelPricing,
-    isCreatingProvider,
-    isUpdatingModelPricing,
-    syncingProviderId,
-  } = useWorkspaceProviderActions({
+  const providerActions = useWorkspaceProviderActions({
     setError,
   });
   const activeChat = chats.find((chat) => chat.id === activeChatId);
@@ -261,6 +269,15 @@ export function useWorkspaceController(
     researchMode,
     workspaceId: workspace?.id,
   });
+  useQueuedTurnRecovery({
+    chatId: activeChatId,
+    errorMessage: t("unexpectedAsyncFailure"),
+    queuedTurns,
+    queuedTurnsUpdatedAt,
+    setError,
+    syncPersistedMessages,
+    trackChatRun,
+  });
   const {
     deleteChat,
     handleAddUrl,
@@ -298,24 +315,17 @@ export function useWorkspaceController(
     trackChatRun,
     workspaceId: workspace?.id,
   });
-  const handleSelectChat = async (chatId: string) => {
-    setModelOverrideId(undefined);
-    const moved = chatId !== activeChatId;
-    await handleSelectChatInternal(chatId);
-    if (moved) options.onChatSelection?.(chatId);
-  };
-  const handleNewChat = () => {
-    setModelOverrideId(undefined);
-    const moved = activeChatId !== undefined;
-    handleNewChatInternal();
-    if (moved) options.onChatSelection?.(undefined);
-  };
-  const handleNewTemporaryChat = () => {
-    setModelOverrideId(undefined);
-    const moved = activeChatId !== undefined;
-    handleNewTemporaryChatInternal();
-    if (moved) options.onChatSelection?.(undefined);
-  };
+  const { handleNewChat, handleNewTemporaryChat, handleSelectChat } =
+    createWorkspaceControllerNavigation({
+      ...(activeChatId === undefined ? {} : { activeChatId }),
+      clearModelOverride: () => setModelOverrideId(undefined),
+      ...(options.onChatSelection === undefined
+        ? {}
+        : { onChatSelection: options.onChatSelection }),
+      selectChat: handleSelectChatInternal,
+      startNewChat: handleNewChatInternal,
+      startNewTemporaryChat: handleNewTemporaryChatInternal,
+    });
   useWorkspaceSelectionSync({
     activeAgentId,
     activeChatId,
@@ -341,47 +351,31 @@ export function useWorkspaceController(
     setModelOverrideId,
   });
   async function handleInspectContext() {
-    if (activeChatId === undefined || activeAgent === undefined) return;
-    setIsInspectingContext(true);
-    setContextPreviewError(undefined);
-    try {
-      setContextPreview(
-        await controllerOperations.inspectWorkspaceRunContext({
-          chatId: activeChatId,
-          agentId: activeAgent.id,
-          modelId: selectedModelId,
-          routingMode,
-          researchMode,
-          reasoningMode,
-          content: draft.trim() || "Continue the conversation.",
-          fileIds: documentAttachments.map((item) => item.fileId),
-          imageCount: imageAttachments.length,
-          webSearchEnabled,
-          agenticRagEnabled,
-          attachedUrls,
-        }),
-      );
-    } catch (caught) {
-      setContextPreviewError(
-        safeUserErrorMessage(caught, t("unexpectedAsyncFailure")),
-      );
-    } finally {
-      setIsInspectingContext(false);
-    }
-  }
-  async function refreshUsageControls() {
-    await controllerOperations.refreshWorkspaceUsageControls(queryClient);
-  }
-  async function handleCreateFeedbackEvalCase(messageId: string) {
-    if (activeChatId === undefined || activeAgent === undefined) return;
-    await controllerOperations.createFeedbackEvalCase({
-      agentId: activeAgent.id,
-      chatId: activeChatId,
-      messageId,
-      t,
+    await waitForAttachmentRetention();
+    await inspectWorkspaceContext({
+      ...(activeAgent?.id === undefined
+        ? {}
+        : { activeAgentId: activeAgent.id }),
+      ...(activeChatId === undefined ? {} : { activeChatId }),
+      agenticRagEnabled,
+      attachedUrls,
+      content: draft.trim() || "Continue the conversation.",
+      contextWindowError: t("contextWindowExceeded"),
+      fallbackError: t("unexpectedAsyncFailure"),
+      fileIds: documentAttachments.flatMap((item) =>
+        item.fileId === undefined ? [] : [item.fileId],
+      ),
+      imageCount: imageAttachments.length,
+      ...(selectedModelId === undefined ? {} : { modelId: selectedModelId }),
+      reasoningMode,
+      researchMode,
+      routingMode,
+      setContextPreview,
+      setContextPreviewError,
+      setIsInspectingContext,
+      webSearchEnabled,
     });
   }
-
   return {
     activeAgent,
     activeVoiceProfileId,
@@ -403,7 +397,7 @@ export function useWorkspaceController(
     handleChatArchived,
     handleChatDeleted,
     handleWorkspaceArchived,
-    handleCreateProvider,
+    ...providerActions,
     handleApproveTool: toolExecution.approvePendingTool,
     handleCancelToolApproval: toolExecution.cancelPendingTool,
     handleExecuteCalculator: toolExecution.handleExecuteCalculator,
@@ -425,9 +419,13 @@ export function useWorkspaceController(
       setAttachedUrls((current) => current.filter((item) => item !== url)),
     handleAttachExistingFile,
     handleGenerateImages,
-    handleCancelAttachment, handleMoveDocumentAttachment, handleMoveImageAttachment,
-    handleRetryDocumentAttachment, handleSelectDocumentPage,
-    handleRemoveImageAttachment, handleRemoveDocumentAttachment,
+    handleCancelAttachment,
+    handleMoveDocumentAttachment,
+    handleMoveImageAttachment,
+    handleRetryDocumentAttachment,
+    handleSelectDocumentPage,
+    handleRemoveImageAttachment,
+    handleRemoveDocumentAttachment,
     handleRateMessage,
     handleTranscriptionError: setError,
     handleTranscribeAudio,
@@ -436,9 +434,6 @@ export function useWorkspaceController(
     handleToggleDefaultModel,
     handleSelectVariant,
     handleSubmit,
-    handleSyncProvider,
-    handleUpdateModelPricing,
-    isCreatingProvider,
     isExecutingTool: toolExecution.isExecutingTool,
     isGeneratingSpeech,
     isInspectingContext,
@@ -447,7 +442,6 @@ export function useWorkspaceController(
     isLoadingMoreChats,
     isLoadingOlderMessages,
     isTranscribingVoice,
-    isUpdatingModelPricing,
     isStreaming,
     queuedTurns,
     loadMoreChats,
@@ -494,7 +488,6 @@ export function useWorkspaceController(
     speechArtifacts,
     speechMessageId,
     subject,
-    syncingProviderId,
     runActivities,
     runWait,
     toolCalls,

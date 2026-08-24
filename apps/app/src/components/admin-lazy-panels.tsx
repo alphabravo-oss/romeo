@@ -1,10 +1,16 @@
 import { lazy } from "react";
 
+import { createRetryableImport } from "../lib/retryable-import";
+
+const panelPreloads = new Map<string, () => Promise<unknown>>();
+
 function lazyNamed<
   T extends Record<K, React.ComponentType<any>>,
   K extends keyof T,
 >(loader: () => Promise<T>, name: K) {
-  return lazy(async () => ({ default: (await loader())[name] }));
+  const load = createRetryableImport(loader);
+  panelPreloads.set(String(name), load);
+  return lazy(async () => ({ default: (await load())[name] }));
 }
 
 export const AdminOverview = lazyNamed(
@@ -115,10 +121,6 @@ export const WebhooksPanel = lazyNamed(
   () => import("./WebhooksPanel"),
   "WebhooksPanel",
 );
-export const WorkflowsPanel = lazyNamed(
-  () => import("./WorkflowsPanel"),
-  "WorkflowsPanel",
-);
 export const WebSearchPanel = lazyNamed(
   () => import("./WebSearchPanel"),
   "WebSearchPanel",
@@ -127,3 +129,46 @@ export const WorkspaceMembersPanel = lazyNamed(
   () => import("./WorkspaceMembersPanel"),
   "WorkspaceMembersPanel",
 );
+
+const sectionPanelNames: Readonly<Record<string, readonly string[]>> = {
+  overview: ["AdminOverview"],
+  usage: ["UsagePanel", "QuotaPanel"],
+  analytics: ["AnalyticsPanel"],
+  audit: ["AuditPanel"],
+  posture: ["OperationsPosturePanel"],
+  providers: [
+    "ProviderPanel",
+    "ModelCatalogPanel",
+    "ManagedModelAdminPanel",
+    "ProviderObservabilityPanel",
+  ],
+  "chat-experience": ["ChatExperiencePanel"],
+  connections: ["ToolConnectorPanel", "DataConnectorPanel"],
+  governance: ["GovernancePanel"],
+  capabilities: ["CapabilityAdminPanel"],
+  compute: ["TrustComputePanel"],
+  access: ["ApiKeyPanel", "ServiceAccountPanel"],
+  rag: ["RagGovernancePanel"],
+  abuse: ["AbuseControlsPanel"],
+  billing: ["BillingPanel"],
+  "prompt-templates": ["PromptTemplatePanel"],
+  "web-search": ["WebSearchPanel"],
+  users: ["UsersPanel"],
+  groups: ["GroupsPanel"],
+  "workspace-members": ["WorkspaceMembersPanel"],
+  organizations: ["OrganizationsPanel"],
+  impersonation: ["ImpersonationPanel"],
+  "auth-providers": ["AuthProvidersPanel"],
+  "connected-apps": ["ConnectedAppsPanel"],
+  webhooks: ["WebhooksPanel"],
+  "notification-channels": ["NotificationChannelPanel"],
+};
+
+/** Loads code only. Route data remains behind the authenticated route loader. */
+export async function preloadAdminSection(section: string): Promise<void> {
+  await Promise.all(
+    (sectionPanelNames[section] ?? []).map((name) =>
+      panelPreloads.get(name)?.(),
+    ),
+  );
+}

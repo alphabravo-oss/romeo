@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -41,6 +42,13 @@ export const dataConnectors = pgTable(
       .notNull()
       .defaultNow(),
     lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+    syncLeaseOwner: text("sync_lease_owner"),
+    syncLeaseToken: text("sync_lease_token"),
+    syncLeaseExpiresAt: timestamp("sync_lease_expires_at", {
+      withTimezone: true,
+    }),
+    syncFence: integer("sync_fence").notNull().default(0),
+    syncAttempts: integer("sync_attempts").notNull().default(0),
   },
   (table) => ({
     dataConnectorsWorkspaceCreatedIdx: index(
@@ -52,9 +60,11 @@ export const dataConnectors = pgTable(
     dataConnectorsKnowledgeBaseIdx: index("data_connectors_kb_idx").on(
       table.knowledgeBaseId,
     ),
-    dataConnectorsDueSyncIdx: index("data_connectors_due_sync_idx").on(
+    dataConnectorsDueSyncIdx: index("data_connectors_due_sync_lease_idx").on(
+      table.orgId,
       table.status,
       table.nextSyncAt,
+      table.syncLeaseExpiresAt,
     ),
   }),
 );
@@ -87,6 +97,8 @@ export const dataConnectorSyncs = pgTable(
       .notNull()
       .defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    fencingToken: integer("fencing_token"),
+    leaseToken: text("lease_token"),
   },
   (table) => ({
     dataConnectorSyncsOrgStartedIdx: index(
@@ -95,5 +107,17 @@ export const dataConnectorSyncs = pgTable(
     dataConnectorSyncsConnectorStartedIdx: index(
       "data_connector_syncs_connector_started_idx",
     ).on(table.orgId, table.connectorId, table.startedAt),
+    dataConnectorSyncsPageStartedIdx: index(
+      "data_connector_syncs_org_connector_started_id_idx",
+    ).on(table.orgId, table.connectorId, table.startedAt, table.id),
+    dataConnectorSyncsPageStatusIdx: index(
+      "data_connector_syncs_org_connector_status_id_idx",
+    ).on(table.orgId, table.connectorId, table.status, table.id),
+    dataConnectorSyncsSearchIdx: index(
+      "data_connector_syncs_search_trgm_idx",
+    ).using(
+      "gin",
+      sql`(lower(coalesce(${table.id}, '') || chr(31) || coalesce(${table.status}, ''))) gin_trgm_ops`,
+    ),
   }),
 );

@@ -309,7 +309,7 @@ export function registerAgentRoutes(app: RomeoApi): void {
   app.openapi(publishManagedModelRoute, async (context) => {
     const subject = context.get("subject");
     const { agentId } = context.req.valid("param");
-    const { channel } = context.req.valid("json");
+    const { channel = "production" } = context.req.valid("json") ?? {};
     const version = await context
       .get("services")
       .agents.publish(agentId, subject, channel);

@@ -40,8 +40,12 @@ export class ChatExperienceService {
   async get(subject: AuthSubject): Promise<ChatExperience> {
     assertScope(subject, "chats:read");
     const value =
-      (await this.repository.getSystemSetting(settingKey(subject.orgId)))
-        ?.value ?? {};
+      (
+        await this.repository.getSystemSetting(
+          settingKey(subject.orgId),
+          subject.orgId,
+        )
+      )?.value ?? {};
     return normalize(value);
   }
 
@@ -58,11 +62,14 @@ export class ChatExperienceService {
     });
     const now = new Date().toISOString();
     await this.repository.transaction(async (repository) => {
-      await repository.upsertSystemSetting({
-        key: settingKey(subject.orgId),
-        value: structuredClone(data),
-        updatedAt: now,
-      });
+      await repository.upsertSystemSetting(
+        {
+          key: settingKey(subject.orgId),
+          value: structuredClone(data),
+          updatedAt: now,
+        },
+        subject.orgId,
+      );
       await writeAuditLog(repository, {
         subject,
         action: "chat_experience.update",
@@ -89,7 +96,8 @@ export async function assistantsEnabledForOrg(
   repository: RomeoRepository,
   orgId: string,
 ): Promise<boolean> {
-  const value = (await repository.getSystemSetting(settingKey(orgId)))?.value;
+  const value = (await repository.getSystemSetting(settingKey(orgId), orgId))
+    ?.value;
   return normalize(value ?? {}).assistantsEnabled;
 }
 

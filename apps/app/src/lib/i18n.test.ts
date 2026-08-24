@@ -2,8 +2,10 @@ import { readdir, readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import {
+  cachedLocaleNamespaces,
   loadLocaleNamespace,
   namespaceNames,
+  preloadLocaleNamespaces,
   supportedLocales,
   type SupportedLocale,
 } from "../locales";
@@ -21,6 +23,20 @@ function interpolationVariables(message: string): string[] {
 }
 
 describe("core chat translation catalogs", () => {
+  it("preloads unique route namespaces into the synchronous render cache", async () => {
+    const resources = await preloadLocaleNamespaces("fr", [
+      "admin-navigation",
+      "shared-control",
+      "admin-navigation",
+    ]);
+    expect(Object.keys(resources).sort()).toEqual([
+      "admin-navigation",
+      "shared-control",
+    ]);
+    expect(cachedLocaleNamespaces("fr")["admin-navigation"]).toBe(
+      resources["admin-navigation"],
+    );
+  });
   it("keeps English, Spanish, and French keys in exact parity", async () => {
     const messages = await loadMessages();
     const englishKeys = Object.keys(messages.en).sort();
@@ -88,6 +104,9 @@ describe("core chat translation catalogs", () => {
     expect(localeNamespacesForAdminSection("compute")).toContain(
       "trust-compute",
     );
+    expect(localeNamespacesForAdminSection("governance")).toEqual(
+      expect.arrayContaining(["governance", "lifecycle-tool-voice"]),
+    );
     expect(localeNamespacesForSettingsSection("security")).toEqual(
       expect.arrayContaining(["access-credential", "security"]),
     );
@@ -137,10 +156,16 @@ describe("core chat translation catalogs", () => {
       if (namespace === "api-errors") continue;
       const catalog = await loadLocaleNamespace("en", namespace);
       for (const key of Object.keys(catalog)) {
+        const countAwareBase = key.replace(/_(?:one|other)$/u, "");
         // Deliberately conservative substring matching can miss a dead key
         // embedded in a larger string, but never breaks the build on a live
         // literal key. There are no dynamic template-literal t() call sites.
-        if (!sources.includes(`"${key}"`) && !sources.includes(`'${key}'`)) {
+        if (
+          !sources.includes(`"${key}"`) &&
+          !sources.includes(`'${key}'`) &&
+          !sources.includes(`"${countAwareBase}"`) &&
+          !sources.includes(`'${countAwareBase}'`)
+        ) {
           unused.push(`${namespace}.${key}`);
         }
       }

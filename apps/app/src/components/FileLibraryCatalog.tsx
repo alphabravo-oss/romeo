@@ -62,6 +62,22 @@ export function FileLibraryCatalog({
                   {file.mimeType} · {formatBytes(file.sizeBytes, locale)} ·{" "}
                   {fileExtractionLabel(file)}
                 </small>
+                {file.status === "failed" ? (
+                  <small aria-live="polite" className="block text-muted">
+                    {file.lifecycle.failureCode === null
+                      ? t("fileLifecycleFailureUnknown")
+                      : t("fileLifecycleFailureCode", {
+                          code: file.lifecycle.failureCode,
+                        })}{" "}
+                    {file.lifecycle.retryable
+                      ? t("fileLifecycleRetryAvailable")
+                      : t("fileLifecycleRetriesExhausted")}
+                  </small>
+                ) : !ready ? (
+                  <small aria-live="polite" className="block text-muted">
+                    {t("fileLifecycleProcessingPending")}
+                  </small>
+                ) : null}
               </span>
             </Button>
             <StatusBadge

@@ -133,19 +133,28 @@ export function InterfaceSettings() {
   }
 
   function updatePreferences(next: Partial<typeof preferences>) {
+    const previous = preferences;
     const merged = { ...preferences, ...next };
     setPreferences(merged);
     applyInterfacePreferences(merged);
     savePreferences.mutate(next, {
       onSuccess: (data) => setChatPrefs(chatUiPreferencesFrom(data)),
+      onError: () => {
+        setPreferences(previous);
+        applyInterfacePreferences(previous);
+      },
     });
   }
 
   function updateChatPref(key: keyof ChatUiPreferences, value: boolean) {
+    const previous = chatPrefs;
     setChatPrefs((current) => ({ ...current, [key]: value }));
     savePreferences.mutate(
       { [key]: value },
-      { onSuccess: (data) => setChatPrefs(chatUiPreferencesFrom(data)) },
+      {
+        onSuccess: (data) => setChatPrefs(chatUiPreferencesFrom(data)),
+        onError: () => setChatPrefs(previous),
+      },
     );
   }
 

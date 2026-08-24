@@ -2,7 +2,6 @@ import type { AuthSubject } from "@romeo/auth";
 import type { ObjectStore } from "@romeo/storage";
 
 import type { FileObject, FileObjectPurpose } from "../domain/entities";
-import { tombstoneFileObject } from "../domain/file-tombstone";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
@@ -12,7 +11,6 @@ import {
   writeAuditLog,
 } from "./audit-log";
 import {
-  extractionAttempts,
   extractionMethodFor,
   isExtractableMimeType,
   notApplicableExtractionState,
@@ -21,11 +19,7 @@ import {
   successfulExtractionState,
 } from "./file-object-state";
 import { type FileOcrProvider } from "./file-ocr";
-import {
-  isFileReadyForUse,
-  safeFileLifecycleFailureCode,
-  transitionFileLifecycle,
-} from "./file-lifecycle";
+import { isFileReadyForUse } from "./file-lifecycle";
 import {
   assertFileMalwareScanClean,
   type FileExtractionState,
@@ -55,151 +49,14 @@ export class FilePipelineSupport {
     bytes: Uint8Array,
     fileName: string,
     mimeType: string,
+    signal?: AbortSignal,
   ): Promise<void> {
     await assertFileMalwareScanClean(this.malwareScanning, {
       bytes,
       fileName,
       mimeType,
+      ...(signal === undefined ? {} : { signal }),
     });
-  }
-
-  async scanUploadedFileOrReject(
-    file: FileObject,
-    bytes: Uint8Array,
-    objectKeys: string[],
-  ): Promise<void> {
-    try {
-      await this.assertMalwareScanClean(bytes, file.fileName, file.mimeType);
-    } catch (error) {
-      if (error instanceof ApiError && error.code === "file_malware_detected") {
-        await Promise.all(
-          objectKeys.map((key) =>
-            this.objectStore.deleteObject(key).catch(() => undefined),
-          ),
-        );
-        const deletedAt = new Date().toISOString();
-        await this.repository.updateFileObject(
-          tombstoneFileObject(
-            transitionFileLifecycle(file, "deleted", deletedAt),
-            deletedAt,
-          ),
-        );
-      }
-      throw error;
-    }
-  }
-
-  async processFileLifecycle(input: {
-    subject: AuthSubject;
-    file: FileObject;
-    bytes: Uint8Array;
-    objectKeys: string[];
-    metadata?: Record<string, unknown>;
-  }): Promise<FileObject> {
-    if (isFileReadyForUse(input.file)) return input.file;
-    let current = input.file;
-    try {
-      if (current.status === "failed") {
-        const retrying = transitionFileLifecycle(
-          current,
-          "quarantined",
-          new Date().toISOString(),
-        );
-        delete retrying.lifecycleFailureCode;
-        delete retrying.lifecycleNextAttemptAt;
-        retrying.lifecycleAttempts = Math.min(
-          100,
-          (current.lifecycleAttempts ?? 0) + 1,
-        );
-        current = await this.repository.updateFileObject(retrying);
-      } else if (current.status === "uploading") {
-        current = await this.persistTransition(current, "quarantined", {
-          lifecycleAttempts: Math.min(
-            100,
-            (current.lifecycleAttempts ?? 0) + 1,
-          ),
-        });
-      }
-      if (current.status === "quarantined")
-        current = await this.persistTransition(current, "scanning");
-      if (current.status === "scanning") {
-        await this.scanUploadedFileOrReject(
-          current,
-          input.bytes,
-          input.objectKeys,
-        );
-        current = await this.persistTransition(
-          current,
-          isExtractableMimeType(current.mimeType) ? "extracting" : "ready",
-          isExtractableMimeType(current.mimeType)
-            ? {}
-            : { metadata: { ...current.metadata, ...input.metadata } },
-        );
-      }
-      if (current.status === "extracting") {
-        const extraction = await this.extractFile(
-          {
-            bytes: input.bytes,
-            fileName: current.fileName,
-            mimeType: current.mimeType,
-          },
-          extractionAttempts(current) + 1,
-        );
-        current = await this.persistTransition(current, "ready", {
-          metadata: { ...current.metadata, ...input.metadata, extraction },
-        });
-      }
-      return current;
-    } catch (error) {
-      if (error instanceof ApiError && error.code === "file_malware_detected") {
-        throw error;
-      }
-      const latest =
-        (await this.repository.getFileObject(current.id)) ?? current;
-      if (latest.status !== "deleted" && latest.status !== "failed") {
-        const failureCode = safeFileLifecycleFailureCode(error);
-        await this.persistTransition(latest, "failed", {
-          lifecycleAttempts: latest.lifecycleAttempts ?? 0,
-          lifecycleFailureCode: failureCode,
-          lifecycleNextAttemptAt: new Date(Date.now() + 60_000).toISOString(),
-          metadata: {
-            ...latest.metadata,
-            extraction:
-              latest.status === "extracting"
-                ? {
-                    ...publicExtractionState(latest),
-                    status: "failed",
-                    failureCode,
-                    completedAt: new Date().toISOString(),
-                  }
-                : publicExtractionState(latest),
-          },
-        });
-      }
-      throw error;
-    }
-  }
-
-  async failFileLifecycle(
-    file: FileObject,
-    error: unknown,
-  ): Promise<FileObject> {
-    if (file.status === "failed" || file.status === "deleted") return file;
-    return this.persistTransition(file, "failed", {
-      lifecycleAttempts: file.lifecycleAttempts ?? 0,
-      lifecycleFailureCode: safeFileLifecycleFailureCode(error),
-      lifecycleNextAttemptAt: new Date(Date.now() + 60_000).toISOString(),
-    });
-  }
-
-  private persistTransition(
-    file: FileObject,
-    status: FileObject["status"],
-    patch: Partial<FileObject> = {},
-  ): Promise<FileObject> {
-    return this.repository.updateFileObject(
-      transitionFileLifecycle(file, status, new Date().toISOString(), patch),
-    );
   }
 
   async duplicateContentMetadata(input: {
@@ -232,10 +89,16 @@ export class FilePipelineSupport {
   }
 
   async extractFile(
-    input: { bytes: Uint8Array; fileName: string; mimeType: string },
+    input: {
+      bytes: Uint8Array;
+      fileName: string;
+      mimeType: string;
+      signal?: AbortSignal;
+    },
     attempts: number,
     attemptedAt = new Date().toISOString(),
   ): Promise<FileExtractionState> {
+    input.signal?.throwIfAborted();
     if (!isExtractableMimeType(input.mimeType)) {
       return notApplicableExtractionState();
     }
@@ -273,6 +136,7 @@ export class FilePipelineSupport {
       try {
         extracted = await this.extractor.extract(input);
       } catch (primaryError) {
+        if (input.signal?.aborted === true) throw primaryError;
         if (input.mimeType !== "application/pdf") throw primaryError;
         try {
           const ocr = await this.ocrProvider.recognize(input);
@@ -312,6 +176,7 @@ export class FilePipelineSupport {
         provider: "local-document",
       });
     } catch (error) {
+      if (input.signal?.aborted === true) throw error;
       return {
         status: "failed",
         quality: "unknown",

@@ -1,14 +1,17 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { readFileContent, type FileObject } from "../features/files";
+import {
+  deleteChatFile,
+  readFileContent,
+  type FileObject,
+} from "../features/files";
 import { generateImages } from "../features/images";
 import type { MessageKey } from "../lib/i18n";
 import { movePendingAttachment } from "./composer-attachment-input";
 import {
   advanceTrayLifecycle,
   trayProgressPercent,
-  type TrayLifecycle,
 } from "./composer-tray-lifecycle";
 import { imageAltText } from "./composer-tray-media";
 import {
@@ -23,63 +26,27 @@ import {
 import { safeUserErrorMessage } from "../lib/safe-user-error";
 import * as appQueryKeys from "../lib/app-query-keys";
 import { invalidateCachedResourceExactly } from "../lib/server-mutation-options";
+import {
+  maxDocumentAttachmentBytes,
+  maxDocumentAttachments,
+  maxImageAttachmentBytes,
+  maxImageAttachments,
+  normalizeDocumentMimeType,
+  normalizeImageMimeType,
+  waitForGeneratedImageReady,
+  type PendingDocumentAttachment,
+  type PendingImageAttachment,
+} from "./workspace-attachment-policy";
 
-const maxImageAttachmentBytes = 5_000_000;
-const maxImageAttachments = 4;
-const maxDocumentAttachmentBytes = 25_000_000;
-const maxDocumentAttachments = 8;
-const supportedDocumentMimeTypes = new Set([
-  "application/json",
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/csv",
-  "text/html",
-  "text/markdown",
-  "text/plain",
-]);
-const supportedImageMimeTypes = new Set<ImageAttachmentMimeType>([
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
-
-export type ImageAttachmentMimeType =
-  | "image/gif"
-  | "image/jpeg"
-  | "image/png"
-  | "image/webp";
-
-export interface PendingImageAttachment {
-  altText: string;
-  dataBase64: string;
-  fileName: string;
-  height?: number;
-  id: string;
-  mimeType: ImageAttachmentMimeType;
-  percent: number;
-  previewUrl: string;
-  sizeBytes: number;
-  status: TrayLifecycle;
-  width?: number;
-}
-
-export interface PendingDocumentAttachment {
-  downloadUrl?: string;
-  fileId?: string;
-  fileName: string;
-  id: string;
-  mimeType: string;
-  pageCount?: number;
-  percent: number;
-  reusable?: boolean;
-  selectedPage?: number;
-  sizeBytes: number;
-  status: TrayLifecycle;
-  transcript?: string;
-}
+export {
+  normalizeImageMimeType,
+  waitForGeneratedImageReady,
+} from "./workspace-attachment-policy";
+export type {
+  ImageAttachmentMimeType,
+  PendingDocumentAttachment,
+  PendingImageAttachment,
+} from "./workspace-attachment-policy";
 
 interface WorkspaceAttachmentsOptions {
   queryClient: QueryClient;
@@ -254,15 +221,15 @@ export function useWorkspaceAttachments({
             percent: trayProgressPercent("failed"),
             status: "failed",
           });
-          setError(safeUserErrorMessage(caught, t("workspaceUnableUploadFiles")));
+          setError(
+            safeUserErrorMessage(caught, t("workspaceUnableUploadFiles")),
+          );
         } finally {
           uploads.current.delete(placeholder.id);
         }
       }),
     );
   }
-
-
 
   function handleRemoveImageAttachment(attachmentId: string) {
     setImageAttachments((current) => {
@@ -282,7 +249,7 @@ export function useWorkspaceAttachments({
     setDocumentAttachments((current) =>
       current.filter((item) => item.id !== attachmentId),
     );
-    if (attachment.reusable === true) return;
+    if (attachment.reusable === true || attachment.fileId === undefined) return;
     await deleteChatFile(attachment.fileId).catch((caught) =>
       setError(safeUserErrorMessage(caught, t("workspaceUnableRemoveFile"))),
     );
@@ -332,7 +299,11 @@ export function useWorkspaceAttachments({
         size: input.size,
       });
       for (const artifact of artifacts) {
-        await handleAttachExistingFile(artifact.file);
+        // Generated artifacts enter the same quarantine/scan lifecycle as an
+        // upload. Do not race the governed content endpoint while the response
+        // still describes a quarantined file.
+        const readyFile = await waitForGeneratedImageReady(artifact.file.id);
+        await handleAttachExistingFile(readyFile);
       }
       await invalidateCachedResourceExactly(
         queryClient,
@@ -397,7 +368,11 @@ export function useWorkspaceAttachments({
   async function handleRetryDocumentAttachment(id: string): Promise<void> {
     const current = documentAttachments.find((item) => item.id === id);
     const file = retryFiles.current.get(id);
-    if (current === undefined || file === undefined || workspaceId === undefined)
+    if (
+      current === undefined ||
+      file === undefined ||
+      workspaceId === undefined
+    )
       return;
     patchDocument(id, {
       percent: trayProgressPercent("uploading"),
@@ -449,41 +424,4 @@ export function useWorkspaceAttachments({
     imageAttachments,
     restorePendingAttachments,
   };
-}
-
-export function normalizeImageMimeType(
-  value: string,
-): ImageAttachmentMimeType | undefined {
-  const normalized = value.split(";", 1)[0]?.toLowerCase() ?? "";
-  return supportedImageMimeTypes.has(normalized as ImageAttachmentMimeType)
-    ? (normalized as ImageAttachmentMimeType)
-    : undefined;
-}
-
-function normalizeDocumentMimeType(file: File): string | undefined {
-  const reported = file.type.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-  if (supportedDocumentMimeTypes.has(reported)) return reported;
-  const lower = file.name.toLowerCase();
-  const byExtension: Array<[string, string]> = [
-    [".csv", "text/csv"],
-    [
-      ".docx",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ],
-    [".html", "text/html"],
-    [".htm", "text/html"],
-    [".json", "application/json"],
-    [".md", "text/markdown"],
-    [".pdf", "application/pdf"],
-    [
-      ".pptx",
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ],
-    [".txt", "text/plain"],
-    [
-      ".xlsx",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ],
-  ];
-  return byExtension.find(([suffix]) => lower.endsWith(suffix))?.[1];
 }

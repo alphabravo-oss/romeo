@@ -66,10 +66,14 @@ describe("data connector mutation policies", () => {
     const otherWorkspaceKey = appQueryKeys.dataConnectors("workspace-2");
     const auditFirst = appQueryKeys.auditLogs({ limit: 25 });
     const auditNext = appQueryKeys.auditLogs({ cursor: "next", limit: 25 });
+    const tableKey = connectorTableKey("workspace-1");
+    const otherTableKey = connectorTableKey("workspace-2");
     client.setQueryData(workspaceKey, []);
     client.setQueryData(otherWorkspaceKey, []);
     client.setQueryData(auditFirst, []);
     client.setQueryData(auditNext, []);
+    client.setQueryData(tableKey, { items: [] });
+    client.setQueryData(otherTableKey, { items: [] });
     mutationMocks.createDataConnector.mockResolvedValueOnce(connector());
     const observer = new MutationObserver(
       client,
@@ -88,6 +92,8 @@ describe("data connector mutation policies", () => {
     expect(client.getQueryState(otherWorkspaceKey)?.isInvalidated).toBe(false);
     expect(client.getQueryState(auditFirst)?.isInvalidated).toBe(true);
     expect(client.getQueryState(auditNext)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(tableKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(otherTableKey)?.isInvalidated).toBe(false);
   });
 
   it("converges local import projections without retaining raw content", async () => {
@@ -204,3 +210,13 @@ describe("data connector mutation policies", () => {
     expect(mutationMocks.syncLocalDataConnector).not.toHaveBeenCalled();
   });
 });
+
+function connectorTableKey(workspaceId: string) {
+  return appQueryKeys.tablePages({
+    filters: [],
+    limit: 25,
+    resource: "data_connectors",
+    sort: [],
+    workspaceId,
+  });
+}

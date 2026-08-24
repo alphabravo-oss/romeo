@@ -83,10 +83,6 @@ function configurationPosture(env) {
       "website-fetch",
       "github-fetch",
       "s3-fetch",
-      "atlassian-fetch",
-      "notion-fetch",
-      "linear-fetch",
-      "slack-fetch",
       "managed-fetch",
     ],
     DATA_CONNECTOR_EGRESS_POLICY: ["allow_public", "require_allowlist"],
@@ -166,6 +162,7 @@ function configurationPosture(env) {
     "DATA_CONNECTOR_GITHUB_TOKEN",
     "DELEGATED_OAUTH_GITHUB_CLIENT_SECRET",
     "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY",
+    "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS",
     "DATABASE_URL",
     "GCP_ACCESS_TOKEN",
     "LOCAL_AUTH_SECRET_ENCRYPTION_KEY",
@@ -173,6 +170,10 @@ function configurationPosture(env) {
     "NOTIFICATION_RESEND_API_KEY",
     "MANAGED_SECRET_ENCRYPTION_KEY",
     "POSTGRES_BACKUP_MANIFEST_UPLOAD_URL",
+    "POSTGRES_BACKUP_MANIFEST_READBACK_URL",
+    "POSTGRES_BACKUP_READBACK_URL",
+    "POSTGRES_BACKUP_STATUS_READBACK_URL",
+    "POSTGRES_BACKUP_STATUS_UPLOAD_URL",
     "POSTGRES_BACKUP_UPLOAD_URL",
     "S3_ACCESS_KEY_ID",
     "S3_SECRET_ACCESS_KEY",
@@ -181,6 +182,7 @@ function configurationPosture(env) {
     "VAULT_TOKEN",
     "VOICE_OPENAI_API_KEY",
     "WEBHOOK_SIGNING_KEY",
+    "WEBHOOK_SIGNING_KEY_PREVIOUS",
   ];
 
   return {

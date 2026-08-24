@@ -17,6 +17,7 @@ export async function decorateCatalogModels(
   repository: RomeoRepository,
   orgId: string,
   models: BaseModel[],
+  now: number = Date.now(),
 ): Promise<CatalogDecoratedModel[]> {
   if (models.length === 0) return [];
   const [providers, extras, probes] = await Promise.all([
@@ -38,6 +39,7 @@ export async function decorateCatalogModels(
           provider?.capabilities.deployment.mode ??
           model.capabilities.deployment.mode,
         model,
+        now,
         ...(probedAt === undefined ? {} : { probedAt }),
         ...(region === undefined ? {} : { region }),
       }),

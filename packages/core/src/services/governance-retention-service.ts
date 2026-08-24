@@ -9,12 +9,11 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
+import { iterateBackgroundJobs } from "./background-job-query";
 import { enforceGovernedDataExportPackageRetention } from "./data-export-package";
-import { deleteFileObjectStoredObjects } from "./file-service";
-import { isFileRetentionDeletable } from "./file-lifecycle";
+import { enforceFileRetentionBatches } from "./file-retention-enforcement";
 import {
   defaultRetentionPolicy,
-  effectiveFileExpiry,
   retentionPolicyForOrg,
   validateFileRetentionDays,
   withoutBrowserArtifacts,
@@ -22,14 +21,16 @@ import {
 import {
   browserAutomationJobType,
   readBrowserAutomationStoredArtifacts,
-} from "./workflow-browser-tasks";
+} from "./browser-automation-tasks";
 import {
   readVoiceArtifactUsageMetadata,
   redactVoiceArtifactStorageMetadata,
 } from "./voice-artifact-metadata";
 import { updateRecordedUsage } from "./record-usage";
+import type { CapabilityService } from "./capability-resolver";
 
 export interface GovernanceServiceOptions {
+  capabilities?: CapabilityService;
   env?: RomeoEnv | undefined;
   scimEnabled?: boolean | undefined;
   deleteKnowledgeSource?: (input: {
@@ -57,7 +58,7 @@ export class GovernanceRetentionService {
   async updateRetentionPolicy(input: {
     subject: AuthSubject;
     auditLogRetentionDays: number;
-    runEventRetentionDays: number;
+    runEventRetentionDays?: number;
     fileRetentionDays?: number | null;
     workspaceFileRetentionDays?: Record<string, number | null>;
     userFileRetentionDays?: Record<string, number | null>;
@@ -73,10 +74,15 @@ export class GovernanceRetentionService {
         400,
       );
     }
+    const current =
+      (await this.repository.getRetentionPolicy(input.subject.orgId)) ??
+      defaultRetentionPolicy(input.subject);
+    const runEventRetentionDays =
+      input.runEventRetentionDays ?? current.runEventRetentionDays;
     if (
-      !Number.isInteger(input.runEventRetentionDays) ||
-      input.runEventRetentionDays < 1 ||
-      input.runEventRetentionDays > 3650
+      !Number.isInteger(runEventRetentionDays) ||
+      runEventRetentionDays < 1 ||
+      runEventRetentionDays > 3650
     ) {
       throw new ApiError(
         "invalid_retention_policy",
@@ -84,9 +90,6 @@ export class GovernanceRetentionService {
         400,
       );
     }
-    const current =
-      (await this.repository.getRetentionPolicy(input.subject.orgId)) ??
-      defaultRetentionPolicy(input.subject);
     const fileRetentionDays =
       input.fileRetentionDays === undefined
         ? current.fileRetentionDays
@@ -107,7 +110,7 @@ export class GovernanceRetentionService {
       const policy = await repository.upsertRetentionPolicy({
         orgId: input.subject.orgId,
         auditLogRetentionDays: input.auditLogRetentionDays,
-        runEventRetentionDays: input.runEventRetentionDays,
+        runEventRetentionDays,
         fileRetentionDays,
         workspaceFileRetentionDays,
         userFileRetentionDays,
@@ -124,7 +127,7 @@ export class GovernanceRetentionService {
         outcome: "success",
         metadata: {
           auditLogRetentionDays: input.auditLogRetentionDays,
-          runEventRetentionDays: input.runEventRetentionDays,
+          runEventRetentionDays,
           fileRetentionDays,
           workspaceOverrideCount: Object.keys(workspaceFileRetentionDays)
             .length,
@@ -148,6 +151,20 @@ export class GovernanceRetentionService {
     const runEventCutoffAt = new Date(
       enforcedAt.getTime() - policy.runEventRetentionDays * 24 * 60 * 60 * 1000,
     ).toISOString();
+    const auditExportGate = await this.repository.auditRetentionExportGate(
+      subject.orgId,
+      cutoffAt,
+    );
+    if (!auditExportGate.deletable)
+      throw new ApiError(
+        "audit_export_confirmation_required",
+        "Audit retention is blocked until every required export destination confirms readback.",
+        409,
+        {
+          blockedDestinationCount: auditExportGate.blockedDestinationIds.length,
+          requiredThroughSequence: auditExportGate.requiredThroughSequence,
+        },
+      );
     const browserArtifacts = await this.enforceBrowserArtifactRetention(
       subject,
       cutoffAt,
@@ -164,11 +181,13 @@ export class GovernanceRetentionService {
       orgId: subject.orgId,
       cutoffAt,
     });
-    const files = await this.enforceFileRetention(
-      subject,
+    const files = await enforceFileRetentionBatches({
+      enforcedAt: enforcedAt.toISOString(),
+      objectStore: this.objectStore,
       policy,
-      enforcedAt.toISOString(),
-    );
+      repository: this.repository,
+      subject,
+    });
     const retentionCounts = await this.repository.transaction(
       async (repository) => {
         const deletedRunEventCount =
@@ -240,6 +259,19 @@ export class GovernanceRetentionService {
       deletedFileObjectCount: files.deletedFileObjectCount,
       missingFileObjectCount: files.missingFileObjectCount,
       deletedFileObjectBytes: files.deletedFileObjectBytes,
+      fileRetentionBacklogRemaining: files.backlogRemaining,
+      ...(files.cursor === undefined
+        ? {}
+        : { fileRetentionCursor: files.cursor }),
+      fileRetentionLegalHoldSkippedCount: files.legalHoldSkippedCount,
+      fileRetentionMetadataFailureCount: files.metadataFailureCount,
+      ...(files.oldestCandidateAgeSeconds === undefined
+        ? {}
+        : {
+            fileRetentionOldestCandidateAgeSeconds:
+              files.oldestCandidateAgeSeconds,
+          }),
+      fileRetentionScannedFileObjectCount: files.scannedFileObjectCount,
       deletedAuditLogCount: retentionCounts.deletedAuditLogCount,
       deletedRunEventCount: retentionCounts.deletedRunEventCount,
       runEventCompactionLimitReached:
@@ -294,50 +326,6 @@ export class GovernanceRetentionService {
           { userId },
         );
     }
-  }
-
-  private async enforceFileRetention(
-    subject: AuthSubject,
-    policy: RetentionPolicy,
-    enforcedAt: string,
-  ): Promise<{
-    deletedFileObjectCount: number;
-    missingFileObjectCount: number;
-    deletedFileObjectBytes: number;
-  }> {
-    let deletedFileObjectCount = 0;
-    let missingFileObjectCount = 0;
-    let deletedFileObjectBytes = 0;
-    const enforcedAtMs = Date.parse(enforcedAt);
-    for (const file of await this.repository.listFileObjects(subject.orgId)) {
-      if (!isFileRetentionDeletable(file)) continue;
-      const expiresAt = effectiveFileExpiry(file, policy);
-      if (expiresAt === undefined || Date.parse(expiresAt) > enforcedAtMs)
-        continue;
-      const deletionPlan = await this.repository.getDataDeletionPlan(
-        subject.orgId,
-        "file_object",
-        file.id,
-      );
-      if (deletionPlan?.legalHold !== undefined) continue;
-      const stored = await this.objectStore.getObject(file.objectKey);
-      if (stored === undefined) missingFileObjectCount += 1;
-      else deletedFileObjectBytes += stored.byteLength;
-      // Always run the complete object cleanup. The primary object may already
-      // be missing while resumable-upload or derived keys still remain.
-      await deleteFileObjectStoredObjects(this.objectStore, file);
-      await this.repository.deleteDataForResource(
-        subject.orgId,
-        "file_object",
-        file.id,
-      );
-      deletedFileObjectCount += 1;
-    }
-    return {
-      deletedFileObjectCount,
-      missingFileObjectCount,
-      deletedFileObjectBytes,
-    };
   }
 
   private async enforceVoiceArtifactRetention(
@@ -415,12 +403,12 @@ export class GovernanceRetentionService {
     }
     let cleanedBrowserAutomationJobCount = 0;
     let deletedBrowserAutomationArtifactCount = 0;
-    const jobs = await this.repository.listBackgroundJobs(subject.orgId);
-    for (const job of jobs) {
-      if (
-        job.type !== browserAutomationJobType ||
-        (job.status !== "completed" && job.status !== "failed")
-      ) {
+    const jobs = iterateBackgroundJobs(this.repository, subject.orgId, {
+      statuses: ["completed", "failed"],
+      type: browserAutomationJobType,
+    });
+    for await (const job of jobs) {
+      if (job.status !== "completed" && job.status !== "failed") {
         continue;
       }
       const artifacts = readBrowserAutomationStoredArtifacts(job);

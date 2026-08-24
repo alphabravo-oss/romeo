@@ -27,7 +27,7 @@ export const RetentionPolicySchema = z
 export const UpdateRetentionPolicyRequestSchema = z
   .strictObject({
     auditLogRetentionDays: z.number().int().min(30).max(3650),
-    runEventRetentionDays: z.number().int().min(1).max(3650),
+    runEventRetentionDays: z.number().int().min(1).max(3650).optional(),
     fileRetentionDays: z.number().int().min(1).max(3650).nullable().optional(),
     workspaceFileRetentionDays: z
       .record(
@@ -62,6 +62,14 @@ export const RetentionEnforcementResultSchema = z
     deletedFileObjectCount: count.optional(),
     missingFileObjectCount: count.optional(),
     deletedFileObjectBytes: count.optional(),
+    fileRetentionBacklogRemaining: z.boolean().optional(),
+    fileRetentionCursor: z
+      .strictObject({ id: identifier, updatedAt: timestamp })
+      .optional(),
+    fileRetentionLegalHoldSkippedCount: count.optional(),
+    fileRetentionMetadataFailureCount: count.optional(),
+    fileRetentionOldestCandidateAgeSeconds: count.optional(),
+    fileRetentionScannedFileObjectCount: count.optional(),
     deletedAuditLogCount: count,
     deletedRunEventCount: count,
     runEventCompactionLimitReached: z.boolean(),
@@ -123,6 +131,15 @@ export const GovernanceDataDeletionResultSchema = z
     deletedAt: timestamp,
   })
   .openapi("DataDeletionResult");
+export const GovernanceDataDeletionPendingResultSchema = z
+  .strictObject({
+    schema: z.literal("romeo.data-deletion-pending-result.v1"),
+    ...dataDeletionPlan,
+    status: z.literal("pending"),
+    operationId: z.string().min(1).max(200),
+    deletionRequestedAt: timestamp,
+  })
+  .openapi("DataDeletionPendingResult");
 export const PreviewDataDeletionRequestSchema = z
   .strictObject({
     resourceType: DataDeletionResourceTypeSchema,
@@ -216,8 +233,17 @@ export const DataExportDocumentSchema = z
     exportedAt: timestamp,
   })
   .openapi("DataExportDocument");
+const dataExportPackageContentTypes = [
+  "application/json",
+  "application/x-ndjson",
+] as const;
+export const DataExportPackageContentTypeSchema = z.string().openapi({
+  description:
+    "Export artifact media type. Clients must tolerate future stream-safe formats.",
+  "x-extensible-enum": dataExportPackageContentTypes,
+});
 export const DataExportPackageArtifactSchema = z.strictObject({
-  contentType: z.literal("application/json"),
+  contentType: DataExportPackageContentTypeSchema,
   sizeBytes: count,
   sha256: z.string(),
   downloadUrl: z.string(),
@@ -227,6 +253,23 @@ export const DataExportPackageArtifactSchema = z.strictObject({
     rawObjectKeyReturned: z.literal(false),
   }),
 });
+export const DataExportPackageJobSchema = z
+  .strictObject({
+    schema: z.literal("romeo.data-export-package-job.v1"),
+    packageId: identifier,
+    ...exportCommon,
+    state: z.enum(["queued", "running", "artifact_ready", "failed", "expired"]),
+    percent: z.number().int().min(0).max(100),
+    processedRows: count,
+    attemptCount: count,
+    artifact: DataExportPackageArtifactSchema.optional(),
+    errorCode: z.string().min(1).max(200).optional(),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    completedAt: timestamp.optional(),
+    expiresAt: timestamp.optional(),
+  })
+  .openapi("DataExportPackageJob");
 export const dataExportPackageFields = {
   packageId: identifier,
   ...exportCommon,
@@ -248,6 +291,7 @@ export const DataExportPackageListSchema = z
     schema: z.literal("romeo.data-export-package-list.v1"),
     orgId: identifier,
     packages: z.array(DataExportPackageSummarySchema),
+    jobs: z.array(DataExportPackageJobSchema),
     redaction: z.strictObject({
       packageContentReturned: z.literal(false),
       rawObjectKeysReturned: z.literal(false),

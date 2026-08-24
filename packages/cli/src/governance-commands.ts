@@ -145,8 +145,10 @@ function generatedClient(
   return context.generatedClient;
 }
 
-function dataEnvelope<T>(response: { data: { data: T } }): T {
-  return response.data.data;
+type EnvelopeData<T> = T extends { data: infer Value } ? Value : never;
+
+function dataEnvelope<T>(response: { data: T }): EnvelopeData<T> {
+  return (response.data as { data: EnvelopeData<T> }).data;
 }
 
 async function result(

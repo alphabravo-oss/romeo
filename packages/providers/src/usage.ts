@@ -108,7 +108,7 @@ function nestedIntegerField(
     const nested = record[parent];
     if (!isRecord(nested)) continue;
     const value = nested[child];
-    if (Number.isInteger(value) && Number(value) >= 0) return Number(value);
+    if (Number.isSafeInteger(value) && Number(value) >= 0) return Number(value);
   }
   return undefined;
 }
@@ -135,7 +135,7 @@ function integerField(
 ): number | undefined {
   for (const name of names) {
     const value = record[name];
-    if (Number.isInteger(value) && Number(value) >= 0) return Number(value);
+    if (Number.isSafeInteger(value) && Number(value) >= 0) return Number(value);
   }
   return undefined;
 }

@@ -21,6 +21,7 @@ import { bootstrapQueryOptions } from "../lib/api-query-options";
 import { useRouterApiClient } from "../lib/router-context";
 import { clearRouteDataForLogout } from "../lib/route-intent";
 import { useInventoriedServerTable } from "../lib/inventoried-server-table";
+import { useEventCallback } from "../lib/use-event-callback";
 
 type SessionRow = Session & { current: boolean };
 
@@ -38,7 +39,7 @@ export function SessionsPanel() {
   const { t } = useLocale();
   const { ask, dialog } = useConfirm();
   const bootstrapQuery = useQuery(bootstrapQueryOptions(apiClient));
-  const table = useInventoriedServerTable<Session>("user_sessions");
+  const table = useInventoriedServerTable("user_sessions");
   const revokeMutation = useMutation(revokeSessionMutationOptions());
   const revokeOthersMutation = useMutation(
     revokeOtherSessionsMutationOptions(),
@@ -94,6 +95,8 @@ export function SessionsPanel() {
       toast(t("revokeOthersFailed"), "error");
     }
   }
+
+  const onRevoke = useEventCallback(handleRevoke);
 
   const columns = useMemo<ColumnDef<SessionRow, any>[]>(
     () => [
@@ -158,7 +161,7 @@ export function SessionsPanel() {
               sessionStatus(c.row.original) !== "active" ||
               revokeMutation.isPending
             }
-            onClick={() => void handleRevoke(c.row.original)}
+            onClick={() => void onRevoke(c.row.original)}
             type="button"
           >
             {t("revoke")}
@@ -166,8 +169,7 @@ export function SessionsPanel() {
         ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [revokeMutation.isPending, t],
+    [onRevoke, revokeMutation.isPending, t],
   );
 
   return (

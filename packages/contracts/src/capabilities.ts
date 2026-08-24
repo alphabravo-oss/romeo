@@ -135,6 +135,7 @@ export const CapabilityReasonSchema = z
   .strictObject({
     code: z.enum([
       "platform_disabled",
+      "default_disabled",
       "not_configured",
       "not_entitled",
       "organization_policy",

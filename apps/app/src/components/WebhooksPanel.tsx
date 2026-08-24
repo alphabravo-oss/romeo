@@ -26,6 +26,7 @@ import {
   LocalizedNumber,
 } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { useEventCallback } from "../lib/use-event-callback";
 import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
@@ -148,6 +149,10 @@ export function WebhooksPanel() {
     }
   }
 
+  const onDisable = useEventCallback(handleDisable);
+  const onOpenDeliveries = useEventCallback(openDeliveries);
+  const onTest = useEventCallback(handleTest);
+
   const webhookColumns = useMemo<ColumnDef<WebhookSubscription, any>[]>(
     () => [
       webhookCol.accessor("url", {
@@ -185,19 +190,19 @@ export function WebhooksPanel() {
                 items={[
                   {
                     label: t("webhooksTest"),
-                    onClick: () => void handleTest(webhook.id),
+                    onClick: () => void onTest(webhook.id),
                     disabled: testMutation.isPending,
                   },
                   {
                     label: t("webhooksViewDeliveries"),
-                    onClick: () => openDeliveries(webhook),
+                    onClick: () => onOpenDeliveries(webhook),
                   },
                   ...(webhook.disabledAt
                     ? []
                     : [
                         {
                           label: t("webhooksDisable"),
-                          onClick: () => void handleDisable(webhook.id),
+                          onClick: () => void onDisable(webhook.id),
                           tone: "danger" as const,
                           disabled: disableMutation.isPending,
                         },
@@ -209,8 +214,14 @@ export function WebhooksPanel() {
         },
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [disableMutation.isPending, testMutation.isPending, t],
+    [
+      disableMutation.isPending,
+      onDisable,
+      onOpenDeliveries,
+      onTest,
+      t,
+      testMutation.isPending,
+    ],
   );
 
   const deliveryColumns = useMemo<ColumnDef<WebhookDelivery, any>[]>(

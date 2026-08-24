@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { WorkspaceShell } from "../components/WorkspaceShell";
-import { localeNamespaceGroups, useLocaleNamespaces } from "../lib/i18n";
+import {
+  localeNamespaceGroups,
+  preloadRouteLocaleNamespaces,
+  useLocaleNamespaces,
+} from "../lib/i18n";
 import modelPickerCss from "../styles/app-model-picker.css?url";
 import {
   selectBranchSearch,
@@ -19,13 +23,19 @@ export const Route = createFileRoute("/")({
     chatId: search.chat,
     workspaceId: search.workspace,
   }),
-  loader: ({ cause, context, deps }) =>
-    prefetchPrimaryRouteData(
-      "chat",
-      context,
-      cause === "preload" ? "intent" : "navigation",
-      deps,
-    ),
+  loader: async ({ abortController, cause, context, deps }) => {
+    const [selection] = await Promise.all([
+      prefetchPrimaryRouteData(
+        "chat",
+        context,
+        cause === "preload" ? "intent" : "navigation",
+        deps,
+        abortController.signal,
+      ),
+      preloadRouteLocaleNamespaces(context.locale, localeNamespaceGroups.chat),
+    ]);
+    return selection;
+  },
   component: ChatRoute,
 });
 

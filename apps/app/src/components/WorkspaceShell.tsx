@@ -29,6 +29,7 @@ import {
   LazyChatPanel,
   LazyWorkspaceNavDialogs,
 } from "./workspace-lazy-components";
+import type { WorkspaceShellProps } from "./workspace-shell-types";
 
 const subscribeToHydration = () => () => {};
 
@@ -39,20 +40,7 @@ export function WorkspaceShell({
   requestedAgentId,
   requestedChatId,
   requestedLeafMessageId,
-}: {
-  onAgentSelection?: (agentId: string) => void;
-  onChatSelection?: (
-    chatId: string | undefined,
-    options?: { replace: boolean },
-  ) => void;
-  onBranchSelection?: (
-    leafMessageId: string | undefined,
-    options?: { replace: boolean },
-  ) => void;
-  requestedAgentId?: string;
-  requestedChatId?: string;
-  requestedLeafMessageId?: string;
-}) {
+}: WorkspaceShellProps) {
   const { t } = useLocale();
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
@@ -456,7 +444,11 @@ export function WorkspaceShell({
                     if (chat) void downloadChatMarkdown(chat);
                   }
             }
-            onCancelAttachment={workspace.handleCancelAttachment} onMoveDocumentAttachment={workspace.handleMoveDocumentAttachment} onMoveImageAttachment={workspace.handleMoveImageAttachment} onRetryDocumentAttachment={workspace.handleRetryDocumentAttachment} onSelectDocumentPage={workspace.handleSelectDocumentPage}
+            onCancelAttachment={workspace.handleCancelAttachment}
+            onMoveDocumentAttachment={workspace.handleMoveDocumentAttachment}
+            onMoveImageAttachment={workspace.handleMoveImageAttachment}
+            onRetryDocumentAttachment={workspace.handleRetryDocumentAttachment}
+            onSelectDocumentPage={workspace.handleSelectDocumentPage}
             onRemoveImageAttachment={workspace.handleRemoveImageAttachment}
             onRemoveDocumentAttachment={
               workspace.handleRemoveDocumentAttachment

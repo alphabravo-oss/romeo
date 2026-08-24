@@ -13,6 +13,7 @@ export interface SpeechRequest {
   voiceId: string;
   text: string;
   format: "mp3" | "wav" | "ogg";
+  signal?: AbortSignal;
 }
 
 export interface SpeechArtifact {
@@ -34,6 +35,7 @@ export interface TranscriptionRequest {
   fileName?: string;
   language?: string;
   prompt?: string;
+  signal?: AbortSignal;
 }
 
 export interface TranscriptionResult {

@@ -59,7 +59,7 @@ export async function collectTargetQualityEvidence(config) {
     throw new Error("--base-url or ROMEO_BASE_URL is required.");
   }
   if (config.apiKey === undefined || config.apiKey.length === 0) {
-    throw new Error("--api-key or ROMEO_API_KEY is required.");
+    throw new Error("ROMEO_API_KEY or ROMEO_API_KEY_FILE is required.");
   }
 
   const checks = [];

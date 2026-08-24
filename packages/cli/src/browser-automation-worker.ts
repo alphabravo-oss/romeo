@@ -12,9 +12,10 @@ import type {
   ToolDispatchDnsLookup,
 } from "./tool-dispatch-worker";
 import { workerSignalAborted } from "./worker-control";
+import { startWorkerLeaseHeartbeat } from "./worker-lease-heartbeat";
 
 export interface BrowserAutomationWorkerClient {
-  workflows: {
+  browserAutomation: {
     claimBrowserTask(input?: {
       leaseSeconds?: number;
     }): Promise<BrowserAutomationTaskClaimResult>;
@@ -26,6 +27,10 @@ export interface BrowserAutomationWorkerClient {
       errorCode: string;
       jobId: string;
     }): Promise<unknown>;
+    renewBrowserTask?(input: {
+      jobId: string;
+      leaseSeconds: number;
+    }): Promise<BrowserAutomationTaskClaimResult>;
   };
 }
 
@@ -138,7 +143,7 @@ async function runBrowserAutomationWorkerIteration(
 
   for (let index = 0; index < maxJobs; index += 1) {
     if (workerSignalAborted(input.signal)) break;
-    const claim = await input.client.workflows.claimBrowserTask({
+    const claim = await input.client.browserAutomation.claimBrowserTask({
       leaseSeconds: input.leaseSeconds,
     });
     if (!claim.claimed || claim.job === undefined) break;
@@ -167,9 +172,21 @@ async function executeClaimedBrowserTask(
     };
   }
 
+  const heartbeat =
+    input.client.browserAutomation.renewBrowserTask === undefined
+      ? undefined
+      : startWorkerLeaseHeartbeat({
+          leaseSeconds: input.leaseSeconds,
+          renew: () =>
+            input.client.browserAutomation.renewBrowserTask!({
+              jobId,
+              leaseSeconds: input.leaseSeconds,
+            }),
+        });
   try {
     if (claim.request === undefined || claim.workflow === undefined) {
-      await input.client.workflows.failBrowserTask({
+      await heartbeat?.stop({ requireOwned: false });
+      await input.client.browserAutomation.failBrowserTask({
         jobId,
         errorCode: "browser_automation_claim_invalid",
       });
@@ -187,11 +204,13 @@ async function executeClaimedBrowserTask(
       claim,
       approvedTargetAddresses,
     );
-    await input.client.workflows.completeBrowserTask({ jobId, result });
+    await heartbeat?.stop();
+    await input.client.browserAutomation.completeBrowserTask({ jobId, result });
     return claimedJobSummary(claim, "completed");
   } catch (error) {
+    await heartbeat?.stop({ requireOwned: false });
     const errorCode = browserWorkerErrorCode(error);
-    await input.client.workflows.failBrowserTask({ jobId, errorCode });
+    await input.client.browserAutomation.failBrowserTask({ jobId, errorCode });
     return claimedJobSummary(claim, "failed", { errorCode });
   }
 }

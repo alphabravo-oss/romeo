@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { getRequestIP } from "@tanstack/react-start/server";
 
 import { romeoServerApi } from "../../../server/romeo-api";
 
 function handle({ request }: { request: Request }) {
-  return romeoServerApi.fetch(request);
+  return romeoServerApi.fetch(request, {
+    requestPeerAddress: getRequestIP(),
+  });
 }
 
 export const Route = createFileRoute("/api/v1/$")({

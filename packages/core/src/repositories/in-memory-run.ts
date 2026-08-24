@@ -228,9 +228,10 @@ export abstract class InMemoryRunRepository extends InMemoryAuditRepository {
     orgId: string,
     resourceType: E.DataDeletionResourceType,
     resourceId: string,
+    evaluatedAt?: string,
   ): Promise<E.DataDeletionPlan | undefined> {
     if (resourceType === "chat")
-      return this.chatDeletionPlan(orgId, resourceId);
+      return this.chatDeletionPlan(orgId, resourceId, evaluatedAt);
     if (resourceType === "file_object")
       return this.fileObjectDeletionPlan(orgId, resourceId);
     if (resourceType === "knowledge_source")
@@ -242,6 +243,7 @@ export abstract class InMemoryRunRepository extends InMemoryAuditRepository {
     orgId: string,
     resourceType: E.DataDeletionResourceType,
     resourceId: string,
+    evaluatedAt?: string,
   ): Promise<E.DataDeletionPlan | undefined> {
     if (resourceType === "file_object")
       return this.deleteFileObjectForDataDeletion(orgId, resourceId);
@@ -252,6 +254,7 @@ export abstract class InMemoryRunRepository extends InMemoryAuditRepository {
       orgId,
       resourceType,
       resourceId,
+      evaluatedAt,
     );
     if (!plan) return undefined;
     if (plan.legalHold !== undefined)
@@ -296,6 +299,7 @@ export abstract class InMemoryRunRepository extends InMemoryAuditRepository {
   private chatDeletionPlan(
     orgId: string,
     chatId: string,
+    evaluatedAt: string = new Date().toISOString(),
   ): E.DataDeletionPlan | undefined {
     const chat = this.data.chats.find(
       (item) => item.orgId === orgId && item.id === chatId,
@@ -323,7 +327,7 @@ export abstract class InMemoryRunRepository extends InMemoryAuditRepository {
         .map((notification) => notification.id),
     );
 
-    const legalHold = activeLegalHold(chat);
+    const legalHold = activeLegalHold(chat, evaluatedAt);
     return {
       orgId,
       workspaceId: chat.workspaceId,

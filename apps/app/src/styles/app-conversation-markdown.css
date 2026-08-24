@@ -172,7 +172,7 @@ html.dark .rm-codeblock {
   padding: 2px 6px 0 12px;
   font-size: 12px;
   /* Fixed light-on-dark chrome — code cards are always the soft dark island. */
-  color: #a1a1aa;
+  color: #b8b8c2;
   background: transparent;
   border-bottom: 0;
 }
@@ -187,7 +187,7 @@ html.dark .rm-codeblock {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #a1a1aa;
+  color: #b8b8c2;
   font: inherit;
   font-size: 12px;
   font-weight: 500;
@@ -199,7 +199,7 @@ html.dark .rm-codeblock {
   padding-inline: 0;
   text-transform: lowercase;
   letter-spacing: 0.01em;
-  opacity: 0.85;
+  opacity: 1;
 }
 
 .rm-codeblock-label:hover,
@@ -402,27 +402,4 @@ html.dark .rm-codeblock .hljs {
   100% {
     background-position: -200% 0;
   }
-}
-
-/* ============================================================
- * Enterprise console shell (Settings / Workspace / Admin pages)
- * ============================================================ */
-
-.rm-console {
-  display: grid;
-  grid-template-columns: 268px minmax(0, 1fr);
-  height: 100vh;
-  background: var(--rm-bg);
-  font-variant-numeric: tabular-nums;
-}
-
-.rm-console-nav {
-  gap: 2px;
-  padding: 12px 10px 16px;
-  overflow: hidden;
-  background: var(--rm-sidebar);
-}
-
-.rm-console-brand {
-  margin-bottom: 4px;
 }

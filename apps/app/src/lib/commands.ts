@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import { useEffect } from "react";
 
 export interface AppCommand {
+  disabled?: boolean;
   id: string;
   group: string;
   label: string;

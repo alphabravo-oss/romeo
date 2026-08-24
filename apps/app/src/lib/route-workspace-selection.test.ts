@@ -17,7 +17,12 @@ import {
 } from "./route-workspace-selection";
 
 const bootstrap: BootstrapResponse = {
-  deployment: { tenancyMode: "multi" },
+  deployment: {
+    billingEnabled: false,
+    malwareScanEnabled: false,
+    qdrantConfigured: false,
+    tenancyMode: "multi",
+  },
   organizations: [],
   subject: {
     apiKeyId: "never-serialize-api-key-id",
@@ -183,6 +188,35 @@ describe("authorized route workspace selection", () => {
       "message",
       expect.stringContaining("provider-secret"),
     );
+  });
+
+  it("does not disguise a non-authorization chat lookup failure as a missing route", async () => {
+    const client = {
+      get: vi.fn((options: { url: string }) =>
+        options.url === "/me"
+          ? Promise.resolve({ data: bootstrap })
+          : Promise.reject(
+              Object.assign(new Error("chat state conflicted"), {
+                status: 409,
+              }),
+            ),
+      ),
+      getConfig: () => ({ baseUrl: "https://romeo.example/api/v1" }),
+    } as unknown as GeneratedQueryClient;
+    const queryClient = createRomeoQueryClient();
+
+    await expect(
+      queryClient.fetchQuery(
+        routeWorkspaceSelectionQueryOptions(
+          { chatId: "chat-transient" },
+          queryClient,
+          client,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      message: "chat state conflicted",
+      status: 409,
+    });
   });
 
   it("starts bootstrap and selected-chat authorization in parallel", async () => {

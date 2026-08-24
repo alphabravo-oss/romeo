@@ -157,6 +157,11 @@ const interfaceGuidelinePatterns = [
 const forbiddenPatterns = [
   ...interfaceGuidelinePatterns,
   {
+    id: "runtime_feature_barrel_import",
+    files: appFiles,
+    pattern: /from\s+["'](?:\.\.?\/)+features["']/u,
+  },
+  {
     id: "transition_all",
     files: styleFiles,
     pattern: /transition\s*:\s*all(?:\s|;)/u,
@@ -481,36 +486,6 @@ const requiredPatterns = [
     pattern: /from\s+["']@aws-sdk\/s3-request-presigner["']/u,
   },
   {
-    id: "slack_connectors_use_official_sdk",
-    files: [
-      resolve(
-        root,
-        "packages/core/src/services/slack-data-connector-executor.ts",
-      ),
-    ],
-    pattern: /from\s+["']@slack\/web-api["']/u,
-  },
-  {
-    id: "notion_connectors_use_official_sdk",
-    files: [
-      resolve(
-        root,
-        "packages/core/src/services/notion-data-connector-executor.ts",
-      ),
-    ],
-    pattern: /from\s+["']@notionhq\/client["']/u,
-  },
-  {
-    id: "linear_connectors_use_official_sdk",
-    files: [
-      resolve(
-        root,
-        "packages/core/src/services/linear-data-connector-executor.ts",
-      ),
-    ],
-    pattern: /from\s+["']@linear\/sdk["']/u,
-  },
-  {
     id: "slack_webhooks_use_official_sdk",
     files: [
       resolve(root, "packages/core/src/services/notification-delivery.ts"),
@@ -563,19 +538,6 @@ const requiredPatterns = [
     id: "vault_secrets_use_qualified_sdk",
     files: [resolve(root, "packages/secrets/src/vault.ts")],
     pattern: /from\s+["']@litehex\/node-vault["']/u,
-  },
-  {
-    id: "workflow_routes_use_authoritative_contracts",
-    files: [resolve(root, "packages/core/src/http/routes/workflows.ts")],
-    pattern: /from\s+["']@romeo\/contracts["']/u,
-  },
-  {
-    id: "workflow_browser_client_uses_generated_sdk",
-    files: [
-      resolve(root, "apps/app/src/features/workflows/mutations.ts"),
-      resolve(root, "apps/app/src/features/workflows/queries.ts"),
-    ],
-    pattern: /from\s+["']@romeo\/api-client\/generated\/sdk["']/u,
   },
   {
     id: "session_routes_use_authoritative_contracts",
@@ -686,12 +648,9 @@ const requiredPatterns = [
     pattern: /getSsoSettingsRoute/u,
   },
   {
-    id: "sso_administration_browser_uses_generated_sdk",
-    files: [
-      resolve(root, "apps/app/src/features/sso-administration/mutations.ts"),
-      resolve(root, "apps/app/src/features/sso-administration/queries.ts"),
-    ],
-    pattern: /from\s+["']@romeo\/api-client\/generated\/sdk["']/u,
+    id: "sso_administration_generated_sdk_is_available",
+    files: [resolve(root, "packages/api-client/src/generated/sdk/sdk.gen.ts")],
+    pattern: /export const ssoAdministrationGetSettings/u,
   },
   {
     id: "governance_routes_use_authoritative_contracts",
@@ -741,12 +700,9 @@ const requiredPatterns = [
     pattern: /listToolApprovalsRoute/u,
   },
   {
-    id: "tool_approval_browser_uses_generated_sdk",
-    files: [
-      resolve(root, "apps/app/src/features/tool-approvals/mutations.ts"),
-      resolve(root, "apps/app/src/features/tool-approvals/queries.ts"),
-    ],
-    pattern: /from\s+["']@romeo\/api-client\/generated\/sdk["']/u,
+    id: "tool_approval_generated_sdk_is_available",
+    files: [resolve(root, "packages/api-client/src/generated/sdk/sdk.gen.ts")],
+    pattern: /export const toolApprovalsList/u,
   },
   {
     id: "tool_catalog_routes_use_authoritative_contracts",

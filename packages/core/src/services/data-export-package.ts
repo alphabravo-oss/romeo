@@ -6,27 +6,112 @@ import type { ObjectStore } from "@romeo/storage";
 import type {
   DataExportPackageDeleteResult,
   DataExportPackage,
+  DataExportPackageJob,
   DataExportPackageList,
   DataExportRequest,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
-import { executeDataExport } from "./data-export";
+import {
+  dataExportExclusions,
+  normalizeDataExportRequest,
+} from "./data-export";
 import {
   listRegisteredDataExportPackages,
-  registerDataExportPackage,
   removeRegisteredDataExportPackage,
+  publicJob,
 } from "./data-export-package-registry";
+import {
+  emptyCounts,
+  exportLimits,
+  selectedWorkspaces,
+  warningsFor,
+} from "./data-export-support";
+import {
+  deleteGovernanceExportObjects,
+  GOVERNANCE_EXPORT_MANIFEST_MAX_BYTES,
+  governanceExportManifestKey,
+  governanceExportObjectStream,
+  governanceExportPartKeys,
+  parseGovernanceExportManifest,
+} from "./governance-export-worker-support";
 
 const packageContentType = "application/json";
 const packageIdPattern = /^export_pkg_[a-f0-9]{20}$/u;
+export {
+  createGovernedDataExportPackage,
+  registerGovernedDataExportPackage,
+} from "./data-export-package-legacy";
+
+export async function enqueueGovernedDataExportPackage(input: {
+  repository: RomeoRepository;
+  subject: AuthSubject;
+  request: DataExportRequest;
+}): Promise<DataExportPackageJob> {
+  const request = normalizeDataExportRequest(input.request);
+  await selectedWorkspaces({
+    repository: input.repository,
+    subject: input.subject,
+    request,
+  });
+  const now = new Date().toISOString();
+  const counts = emptyCounts();
+  const job = await input.repository.createGovernanceExportJob({
+    id: createId("export_pkg"),
+    orgId: input.subject.orgId,
+    ...(request.workspaceId === undefined
+      ? {}
+      : { workspaceId: request.workspaceId }),
+    createdBy: input.subject.id,
+    request,
+    snapshotAt: now,
+    state: "queued",
+    percent: 0,
+    checkpoint: {
+      datasetIndex: 0,
+      partCount: 0,
+      processedRows: 0,
+      sizeBytes: 0,
+    },
+    counts,
+    limits: exportLimits(request),
+    warnings: warningsFor(request, counts),
+    exclusions: dataExportExclusions,
+    leaseAttempt: 0,
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return publicJob(job);
+}
+
+export async function getGovernedDataExportPackageJob(input: {
+  repository: RomeoRepository;
+  orgId: string;
+  packageId: string;
+}): Promise<DataExportPackageJob> {
+  if (!packageIdPattern.test(input.packageId))
+    throw notFound("Data export package");
+  const job = await input.repository.getGovernanceExportJob(
+    input.orgId,
+    input.packageId,
+  );
+  if (job === undefined || job.state === "deleted")
+    throw notFound("Data export package");
+  const artifact = await input.repository.getGovernanceExportArtifact(
+    input.orgId,
+    input.packageId,
+  );
+  return publicJob(job, artifact);
+}
 
 export interface DataExportPackageRead {
-  bytes: Uint8Array;
-  contentType: typeof packageContentType;
+  body: ReadableStream<Uint8Array>;
+  contentType: "application/json" | "application/x-ndjson";
   fileName: string;
   packageId: string;
+  sizeBytes: number;
 }
 
 export interface DataExportPackageRetentionResult {
@@ -34,79 +119,8 @@ export interface DataExportPackageRetentionResult {
   missingDataExportPackageCount: number;
 }
 
-export async function createGovernedDataExportPackage(input: {
-  register?: boolean | undefined;
-  repository: RomeoRepository;
-  objectStore: ObjectStore;
-  subject: AuthSubject;
-  request: DataExportRequest;
-}): Promise<DataExportPackage> {
-  const exported = await executeDataExport({
-    repository: input.repository,
-    objectStore: input.objectStore,
-    subject: input.subject,
-    request: input.request,
-  });
-  const packageId = createId("export_pkg");
-  const objectKey = dataExportPackageObjectKey(input.subject.orgId, packageId);
-  const bytes = new TextEncoder().encode(JSON.stringify(exported, null, 2));
-  const digest = sha256Hex(bytes);
-  let storedAt = new Date().toISOString();
-
-  try {
-    const stored = await input.objectStore.putObject({
-      key: objectKey,
-      body: bytes,
-      contentType: packageContentType,
-    });
-    storedAt = stored.updatedAt;
-  } catch {
-    throw new ApiError(
-      "data_export_package_store_unavailable",
-      "Object storage is not available for data export packages.",
-      503,
-    );
-  }
-
-  const packaged: DataExportPackage = {
-    schema: "romeo.data-export-package.v1",
-    packageId,
-    orgId: input.subject.orgId,
-    request: exported.request,
-    counts: exported.counts,
-    limits: exported.limits,
-    warnings: exported.warnings,
-    exclusions: exported.exclusions,
-    artifact: {
-      contentType: packageContentType,
-      sizeBytes: bytes.byteLength,
-      sha256: digest,
-      downloadUrl: dataExportPackageDownloadUrl(packageId),
-      storage: {
-        driver: "object_store",
-        objectKeyHash: sha256Hex(new TextEncoder().encode(objectKey)),
-        rawObjectKeyReturned: false,
-      },
-    },
-    createdAt: storedAt,
-  };
-  if (input.register !== false) {
-    await registerGovernedDataExportPackage({
-      repository: input.repository,
-      package: packaged,
-    });
-  }
-  return packaged;
-}
-
-export async function registerGovernedDataExportPackage(input: {
-  repository: RomeoRepository;
-  package: DataExportPackage;
-}): Promise<void> {
-  await registerDataExportPackage(input);
-}
-
 export async function readGovernedDataExportPackage(input: {
+  repository: RomeoRepository;
   objectStore: ObjectStore;
   orgId: string;
   packageId: string;
@@ -114,23 +128,87 @@ export async function readGovernedDataExportPackage(input: {
   if (!packageIdPattern.test(input.packageId)) {
     throw notFound("Data export package");
   }
-  const objectKey = dataExportPackageObjectKey(input.orgId, input.packageId);
-  let bytes: Uint8Array | undefined;
-  try {
-    bytes = await input.objectStore.getObject(objectKey);
-  } catch {
-    throw new ApiError(
-      "data_export_package_store_unavailable",
-      "Object storage is not available for data export package readback.",
-      503,
-    );
+  const job = await input.repository.getGovernanceExportJob(
+    input.orgId,
+    input.packageId,
+  );
+  const artifact = await input.repository.getGovernanceExportArtifact(
+    input.orgId,
+    input.packageId,
+  );
+  if (
+    job?.state !== "artifact_ready" ||
+    artifact === undefined ||
+    artifact.deletedAt !== undefined ||
+    Date.parse(artifact.expiresAt) <= Date.now()
+  )
+    throw notFound("Data export package");
+  if (artifact.contentType === "application/x-ndjson") {
+    try {
+      const bytes = await input.objectStore.getObject(artifact.objectKey, {
+        maxBytes: GOVERNANCE_EXPORT_MANIFEST_MAX_BYTES,
+      });
+      const manifest =
+        bytes === undefined
+          ? undefined
+          : parseGovernanceExportManifest(
+              JSON.parse(new TextDecoder().decode(bytes)),
+            );
+      if (
+        manifest === undefined ||
+        manifest.jobId !== job.id ||
+        manifest.orgId !== job.orgId ||
+        manifest.sha256 !== artifact.sha256 ||
+        manifest.sizeBytes !== artifact.sizeBytes ||
+        manifest.partKeys.length !== artifact.partCount
+      )
+        throw integrityError();
+      return {
+        body: governanceExportObjectStream(input.objectStore, manifest),
+        contentType: artifact.contentType,
+        fileName: artifact.fileName,
+        packageId: input.packageId,
+        sizeBytes: artifact.sizeBytes,
+      };
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw storeUnavailable("readback");
+    }
   }
-  if (bytes === undefined) throw notFound("Data export package");
+  const objectKey = artifact.objectKey;
+  let body: ReadableStream<Uint8Array> | undefined;
+  try {
+    const metadata = await input.objectStore.headObject?.(objectKey);
+    if (
+      metadata !== undefined &&
+      (metadata.sizeBytes !== artifact.sizeBytes ||
+        metadata.contentType.split(";", 1)[0] !== packageContentType)
+    )
+      throw integrityError();
+    if (input.objectStore.getObjectStream !== undefined) {
+      body = await input.objectStore.getObjectStream(objectKey, {
+        maxBytes: artifact.sizeBytes,
+      });
+    } else {
+      const bytes = await input.objectStore.getObject(objectKey, {
+        maxBytes: artifact.sizeBytes,
+      });
+      if (bytes !== undefined) {
+        assertPackageIntegrity(bytes, publicJob(job, artifact).artifact!);
+        body = bytesStream(bytes);
+      }
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw storeUnavailable("readback");
+  }
+  if (body === undefined) throw notFound("Data export package");
   return {
-    bytes,
+    body: verifiedPackageStream(body, publicJob(job, artifact).artifact!),
     contentType: packageContentType,
     fileName: `${input.packageId}.json`,
     packageId: input.packageId,
+    sizeBytes: artifact.sizeBytes,
   };
 }
 
@@ -155,6 +233,7 @@ export async function deleteGovernedDataExportPackage(input: {
 }
 
 export async function prepareGovernedDataExportPackageDelete(input: {
+  repository: RomeoRepository;
   objectStore: ObjectStore;
   orgId: string;
   packageId: string;
@@ -171,18 +250,18 @@ export async function prepareGovernedDataExportPackageDelete(input: {
     throw notFound("Data export package");
   }
 
-  const objectKey = dataExportPackageObjectKey(input.orgId, input.packageId);
-  try {
-    const bytes = await input.objectStore.getObject(objectKey);
-    if (bytes === undefined) throw notFound("Data export package");
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError(
-      "data_export_package_store_unavailable",
-      "Object storage is not available for data export package deletion.",
-      503,
-    );
-  }
+  const job = await input.repository.getGovernanceExportJob(
+    input.orgId,
+    input.packageId,
+  );
+  if (job === undefined) throw notFound("Data export package");
+  const artifact = await input.repository.getGovernanceExportArtifact(
+    input.orgId,
+    input.packageId,
+  );
+  const objectKey =
+    artifact?.objectKey ??
+    governanceExportManifestKey(input.orgId, input.packageId);
 
   return {
     schema: "romeo.data-export-package-delete-result.v1",
@@ -197,7 +276,7 @@ export async function prepareGovernedDataExportPackageDelete(input: {
       packageContentReturned: false,
       rawObjectKeysReturned: false,
     },
-    deletedAt: new Date().toISOString(),
+    deletedAt: job.deletedAt ?? new Date().toISOString(),
   };
 }
 
@@ -205,18 +284,39 @@ export async function removeGovernedDataExportPackageRegistration(input: {
   repository: RomeoRepository;
   orgId: string;
   packageId: string;
+  deletedAt?: string;
 }): Promise<void> {
   await removeRegisteredDataExportPackage(input);
 }
 
 export async function deleteGovernedDataExportPackageObject(input: {
+  repository: RomeoRepository;
   objectStore: ObjectStore;
   orgId: string;
   packageId: string;
 }): Promise<void> {
-  await input.objectStore.deleteObject(
-    dataExportPackageObjectKey(input.orgId, input.packageId),
+  const artifact = await input.repository.getGovernanceExportArtifact(
+    input.orgId,
+    input.packageId,
   );
+  if (artifact === undefined) return;
+  try {
+    if (artifact.contentType === "application/json") {
+      await input.objectStore.deleteObject(artifact.objectKey);
+      return;
+    }
+    await deleteGovernanceExportObjects(
+      input.objectStore,
+      artifact.objectKey,
+      governanceExportPartKeys(
+        input.orgId,
+        input.packageId,
+        artifact.partCount,
+      ),
+    );
+  } catch {
+    throw storeUnavailable("deletion");
+  }
 }
 
 export async function enforceGovernedDataExportPackageRetention(input: {
@@ -240,17 +340,27 @@ export async function enforceGovernedDataExportPackageRetention(input: {
     orgId: input.orgId,
   });
 
-  for (const item of registered.packages) {
+  for (const item of registered.jobs) {
     const createdAtMs = Date.parse(item.createdAt);
-    if (!Number.isFinite(createdAtMs) || createdAtMs >= cutoffMs) continue;
-
-    const objectKey = dataExportPackageObjectKey(input.orgId, item.packageId);
+    const artifact = await input.repository.getGovernanceExportArtifact(
+      input.orgId,
+      item.packageId,
+    );
+    const artifactExpired =
+      artifact !== undefined && Date.parse(artifact.expiresAt) <= Date.now();
+    const retentionExpired =
+      Number.isFinite(createdAtMs) && createdAtMs < cutoffMs;
+    if (!artifactExpired && !retentionExpired) continue;
     try {
-      const bytes = await input.objectStore.getObject(objectKey);
-      if (bytes === undefined) {
+      if (artifact === undefined) {
         missingDataExportPackageCount += 1;
       } else {
-        await input.objectStore.deleteObject(objectKey);
+        await deleteGovernedDataExportPackageObject({
+          repository: input.repository,
+          objectStore: input.objectStore,
+          orgId: input.orgId,
+          packageId: item.packageId,
+        });
         deletedDataExportPackageCount += 1;
       }
     } catch {
@@ -274,20 +384,81 @@ export async function enforceGovernedDataExportPackageRetention(input: {
   };
 }
 
-function dataExportPackageObjectKey(orgId: string, packageId: string): string {
-  return `governance/data-exports/${encodePathPart(orgId)}/${encodePathPart(
-    packageId,
-  )}.json`;
+function bytesStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
 }
 
-function dataExportPackageDownloadUrl(packageId: string): string {
-  return `/api/v1/governance/data-exports/packages/${encodeURIComponent(
-    packageId,
-  )}/content`;
+function verifiedPackageStream(
+  source: ReadableStream<Uint8Array>,
+  artifact: DataExportPackage["artifact"],
+): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  const digest = createHash("sha256");
+  let sizeBytes = 0;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          reader.releaseLock();
+          if (
+            sizeBytes !== artifact.sizeBytes ||
+            digest.digest("hex") !== artifact.sha256
+          ) {
+            controller.error(integrityError());
+            return;
+          }
+          controller.close();
+          return;
+        }
+        sizeBytes += value.byteLength;
+        if (sizeBytes > artifact.sizeBytes) {
+          await reader.cancel();
+          controller.error(integrityError());
+          return;
+        }
+        digest.update(value);
+        controller.enqueue(value);
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
 }
 
-function encodePathPart(value: string): string {
-  return encodeURIComponent(value).replace(/%2F/giu, "%252F");
+function assertPackageIntegrity(
+  bytes: Uint8Array,
+  artifact: DataExportPackage["artifact"],
+): void {
+  if (
+    bytes.byteLength !== artifact.sizeBytes ||
+    sha256Hex(bytes) !== artifact.sha256
+  )
+    throw integrityError();
+}
+
+function integrityError() {
+  return new ApiError(
+    "data_export_package_integrity_failed",
+    "The stored data export package failed integrity verification.",
+    500,
+  );
+}
+
+function storeUnavailable(operation: "deletion" | "readback") {
+  return new ApiError(
+    "data_export_package_store_unavailable",
+    `Object storage is not available for data export package ${operation}.`,
+    503,
+  );
 }
 
 function sha256Hex(bytes: Uint8Array): string {

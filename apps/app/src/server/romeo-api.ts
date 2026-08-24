@@ -8,6 +8,8 @@ import {
 import {
   createDatabase,
   createDatabaseConnection,
+  createPostgresRuntimeReadinessProbe,
+  createPostgresRepositoryRequestScope,
   createPostgresRomeoRepositoryFromDatabase,
 } from "@romeo/db";
 
@@ -27,7 +29,15 @@ function createServerRuntime(env: RomeoEnv): {
     });
     const runtime = createRomeoApiRuntime(
       createPostgresRomeoRepositoryFromDatabase(connection.db),
-      { env },
+      {
+        env,
+        runtimeDatabaseReadinessProbe: createPostgresRuntimeReadinessProbe(
+          connection.db,
+        ),
+        repositoryRequestScope: createPostgresRepositoryRequestScope(
+          connection.db,
+        ),
+      },
     );
     runtime.start();
     return {

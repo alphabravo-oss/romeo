@@ -7,7 +7,7 @@ import {
   Textarea,
 } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import Plug from "lucide-react/dist/esm/icons/plug.mjs";
 import Upload from "lucide-react/dist/esm/icons/upload.mjs";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left.mjs";
@@ -16,11 +16,11 @@ import { useMemo, useState } from "react";
 import {
   checkToolConnectorAuthMutationOptions,
   importOpenApiToolMutationOptions,
-  toolConnectorsQueryOptions,
   updateToolConnectorMutationOptions,
 } from "../features/tool-connectors";
 import type { ToolConnector, ToolConnectorAuthCheck } from "../features/types";
 import { PanelState } from "../lib/panel-state";
+import { appHref } from "../lib/app-href";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
 import { safeUserErrorMessage } from "../lib/safe-user-error";
@@ -39,9 +39,8 @@ export function ToolConnectorPanel({
   selectedConnectorId: string | undefined;
 }) {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<any>("tool_connectors");
+  const inventoriedTable = useInventoriedServerTable("tool_connectors");
   const { ask, dialog } = useConfirm();
-  const connectorsQuery = useQuery(toolConnectorsQueryOptions());
   const authCheckMutation = useMutation(
     checkToolConnectorAuthMutationOptions(),
   );
@@ -181,7 +180,7 @@ export function ToolConnectorPanel({
     [onSelectionChange, t],
   );
 
-  const connectors = connectorsQuery.data ?? [];
+  const connectors = inventoriedTable.rows;
   const selectedConnector = connectors.find(
     (connector) => connector.id === selectedConnectorId,
   );
@@ -198,10 +197,22 @@ export function ToolConnectorPanel({
           {t("toolBackToConnectors")}
         </Button>
         <Section>
-          {connectorsQuery.isLoading ? (
+          {inventoriedTable.query.isLoading ? (
             <div className="rm-loading" role="status">
               {t("loading")}
             </div>
+          ) : inventoriedTable.query.isError ? (
+            <InlineError className="flex items-center gap-2">
+              <span>{t("tableError")}</span>
+              <Button
+                onClick={() => void inventoriedTable.query.refetch()}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                {t("tableRetry")}
+              </Button>
+            </InlineError>
           ) : selectedConnector ? (
             <ToolConnectorDetailsPage
               authCheck={authChecks[selectedConnector.id]}
@@ -212,7 +223,7 @@ export function ToolConnectorPanel({
               updating={connectorMutation.isPending}
             />
           ) : (
-            <EmptyState title={t("toolConnectorNotFound")} />
+            <EmptyState headingLevel={2} title={t("toolConnectorNotFound")} />
           )}
           {error ? <InlineError>{error}</InlineError> : null}
         </Section>
@@ -354,13 +365,13 @@ export function ToolConnectorPanel({
                 items={[
                   {
                     label: t("toolTotalConnectors"),
-                    value: inventoriedTable.estimatedTotal,
+                    value:
+                      inventoriedTable.summary.total ??
+                      inventoriedTable.estimatedTotal,
                   },
                   {
                     label: t("toolEnabled"),
-                    value: inventoriedTable.rows.filter(
-                      (connector) => connector.enabled,
-                    ).length,
+                    value: inventoriedTable.summary.enabledTotal ?? 0,
                   },
                 ]}
               />
@@ -372,6 +383,13 @@ export function ToolConnectorPanel({
                 getRowId={(connector) => connector.id}
                 minTableWidth={760}
                 onRowActivate={(connector) => onSelectionChange(connector.id)}
+                rowHref={(connector) =>
+                  appHref("/admin", {
+                    section: "connections",
+                    toolConnector: connector.id,
+                    view: "tools",
+                  })
+                }
                 preferenceKey="admin-tool-connectors"
                 rowAriaLabel={(connector) =>
                   t("toolOpenConnector", { name: connector.name })

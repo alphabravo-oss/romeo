@@ -53,7 +53,7 @@ async function resolveOAuthClientCredentialsAccessToken(
 ): Promise<string> {
   const tokenUrl = oauthTokenUrl(claim);
   const approvedAddresses = await assertResolvedHostAllowed(
-    input,
+    { ...input, allowPrivateNetwork: false },
     tokenUrl.hostname,
   );
   const credentials = parseOAuthClientCredentials(

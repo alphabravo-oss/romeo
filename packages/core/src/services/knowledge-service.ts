@@ -46,6 +46,12 @@ import { ensureSystemAuditActor } from "./system-audit-actor";
 import type { WebhookEmitter } from "./webhook-service";
 import { assertWorkspaceActive } from "./workspace-guard";
 import { canSeeKnowledgeBase } from "./access-visibility";
+import {
+  applyPolicyPatch,
+  defaultStoredPolicy,
+} from "./rag-policy-normalization";
+import { serializeStoredPolicy } from "./rag-policy-reporting";
+import { readStoredRagPolicy, settingKey } from "./rag-policy-storage";
 
 export type {
   KnowledgeRetrievalReplayCaseInput,
@@ -312,6 +318,14 @@ export class KnowledgeService {
     return this.sources.delete(input);
   }
 
+  processContentDeletionJob(input: {
+    subject: AuthSubject;
+    workerId: string;
+    signal?: AbortSignal;
+  }) {
+    return this.sources.processContentDeletionJob(input);
+  }
+
   reindexSource(input: {
     subject: AuthSubject;
     knowledgeBaseId: string;
@@ -457,11 +471,6 @@ async function assignKnowledgeBaseTier(
     now: string;
   },
 ): Promise<void> {
-  const { applyPolicyPatch, defaultStoredPolicy } =
-    await import("./rag-policy-normalization");
-  const { readStoredRagPolicy, settingKey } =
-    await import("./rag-policy-storage");
-  const { serializeStoredPolicy } = await import("./rag-policy-reporting");
   const existing = await readStoredRagPolicy(repository, input.orgId);
   const base = existing ?? defaultStoredPolicy(input.orgId);
   const org = [...base.knowledgeBaseTierAssignments.org].filter(
@@ -478,10 +487,13 @@ async function assignKnowledgeBaseTier(
     input.now,
     input.actorId,
   );
-  await repository.upsertSystemSetting({
-    key: settingKey(input.orgId),
-    value: serializeStoredPolicy(updated),
-    updatedAt: input.now,
-  });
+  await repository.upsertSystemSetting(
+    {
+      key: settingKey(input.orgId),
+      value: serializeStoredPolicy(updated),
+      updatedAt: input.now,
+    },
+    input.orgId,
+  );
 }
 import { writeAuditLog } from "./audit-log";

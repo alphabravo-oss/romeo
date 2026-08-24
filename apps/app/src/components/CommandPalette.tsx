@@ -14,9 +14,8 @@ import Search from "lucide-react/dist/esm/icons/search.mjs";
 import Settings from "lucide-react/dist/esm/icons/settings.mjs";
 import Shield from "lucide-react/dist/esm/icons/shield.mjs";
 import Sun from "lucide-react/dist/esm/icons/sun.mjs";
-import Workflow from "lucide-react/dist/esm/icons/workflow.mjs";
 import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import { type AppCommand, commandStore } from "../lib/commands";
 import { setTheme } from "../lib/theme";
@@ -29,7 +28,6 @@ import {
   commandKnowledgeQueryOptions,
   commandPromptsQueryOptions,
   commandToolsQueryOptions,
-  commandWorkflowsQueryOptions,
 } from "./command-catalog-query-options";
 
 type Command = AppCommand;
@@ -48,14 +46,17 @@ function matches(label: string, q: string): boolean {
 }
 
 export function CommandPalette({
-  initialOpen = false,
+  onOpenChange,
+  open,
 }: {
-  initialOpen?: boolean;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
 }) {
   const { t } = useLocale();
-  const [open, setOpen] = useState(initialOpen);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const inputId = useId();
+  const listboxId = useId();
   const navigate = useNavigate();
   const { subject, workspace } = useWorkspace();
   const isAdmin = subject?.isAdmin === true;
@@ -73,10 +74,6 @@ export function CommandPalette({
   const toolsCatalog = useQuery(
     commandToolsQueryOptions(open && workspace !== undefined),
   );
-  const workflowsCatalog = useQuery(
-    commandWorkflowsQueryOptions(workspace?.id, open && isAdmin),
-  );
-
   const commands = useMemo<Command[]>(() => {
     const workspaceSearch =
       workspace?.id === undefined ? {} : { workspace: workspace.id };
@@ -195,18 +192,6 @@ export function CommandPalette({
             search: { ...workspaceSearch, section: "tools" },
           }),
       })),
-      ...(workflowsCatalog.data ?? []).map((workflow) => ({
-        id: `catalog-workflow-${workflow.id}`,
-        group: t("catalogWorkflows"),
-        label: workflow.name,
-        keywords: [workflow.description ?? "", "workflow"],
-        icon: Workflow,
-        run: () =>
-          void navigate({
-            to: "/admin",
-            search: { ...workspaceSearch, section: "workflows" },
-          }),
-      })),
     ];
     return [...dynamic, ...catalogCommands, ...staticCommands];
   }, [
@@ -218,7 +203,6 @@ export function CommandPalette({
     promptsCatalog.data,
     t,
     toolsCatalog.data,
-    workflowsCatalog.data,
     workspace?.id,
   ]);
 
@@ -233,28 +217,6 @@ export function CommandPalette({
     [commands, query],
   );
 
-  // Global ⌘K / Ctrl+K toggle.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setOpen((o) => !o);
-      } else if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-    // The console topbar's search affordance opens the same palette. It asks
-    // by name rather than synthesising a ⌘K keystroke, so the two entry points
-    // stay independent of each other's implementation.
-    const onRequest = () => setOpen(true);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("romeo:command-palette", onRequest);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("romeo:command-palette", onRequest);
-    };
-  }, []);
-
   useEffect(() => {
     if (open) {
       setQuery("");
@@ -263,66 +225,142 @@ export function CommandPalette({
     }
   }, [open]);
 
-  useEffect(() => setActive(0), [query]);
+  useEffect(() => setActive(firstEnabledIndex(filtered)), [filtered]);
 
   const run = (index: number) => {
     const cmd = filtered[index];
-    if (cmd) {
+    if (cmd && cmd.disabled !== true) {
       cmd.run();
-      setOpen(false);
+      onOpenChange(false);
     }
   };
 
   const onInputKey = (event: React.KeyboardEvent) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActive((a) => Math.min(a + 1, filtered.length - 1));
+      setActive((current) => nextEnabledIndex(filtered, current, 1));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActive((a) => Math.max(a - 1, 0));
+      setActive((current) => nextEnabledIndex(filtered, current, -1));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setActive(firstEnabledIndex(filtered));
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setActive(lastEnabledIndex(filtered));
     } else if (event.key === "Enter") {
       event.preventDefault();
       run(active);
     }
   };
 
+  const catalogQueries = [
+    agentsCatalog,
+    knowledgeCatalog,
+    promptsCatalog,
+    toolsCatalog,
+  ];
+  const catalogLoading = catalogQueries.some((catalog) => catalog.isFetching);
+  const catalogError = catalogQueries.some((catalog) => catalog.isError);
+  const status = catalogLoading
+    ? t("tableLoading")
+    : catalogError
+      ? t("tableError")
+      : `${filtered.length} ${t("tableResults")}`;
+  const activeCommand = filtered[active];
+
   let lastGroup = "";
 
   return (
     <OverlayShell
       ariaLabel={t("commandPalette")}
-      onClose={() => setOpen(false)}
+      onClose={() => onOpenChange(false)}
       open={open}
       variant="command"
     >
       <div className="rm-cmdk-input">
         <Search aria-hidden size={16} />
         <Input
+          aria-activedescendant={
+            activeCommand === undefined
+              ? undefined
+              : `${listboxId}-option-${activeCommand.id}`
+          }
+          aria-autocomplete="list"
+          aria-controls={listboxId}
+          aria-expanded={open}
+          aria-label={t("searchCommands")}
+          autoComplete="off"
+          autoFocus
+          id={inputId}
+          name="command-search"
           onChange={(e) => setQuery(e.currentTarget.value)}
           onKeyDown={onInputKey}
           placeholder={t("searchCommands")}
+          role="combobox"
           value={query}
         />
         <kbd className="rm-kbd">ESC</kbd>
       </div>
-      <div className="rm-cmdk-list">
+      <div aria-live="polite" className="sr-only" role="status">
+        {status}
+      </div>
+      {catalogError ? (
+        <div className="rm-cmdk-empty" role="alert">
+          <span>{t("tableError")}</span>{" "}
+          <Button
+            onClick={() => {
+              for (const catalog of catalogQueries) {
+                if (catalog.isError) void catalog.refetch();
+              }
+            }}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            {t("tableRetry")}
+          </Button>
+        </div>
+      ) : null}
+      <div
+        aria-label={t("commandPalette")}
+        className="rm-cmdk-list"
+        id={listboxId}
+        role="listbox"
+      >
         {filtered.length === 0 ? (
-          <div className="rm-cmdk-empty">{t("noMatchingCommands")}</div>
+          <div
+            aria-disabled="true"
+            aria-selected="false"
+            className="rm-cmdk-empty"
+            role="option"
+          >
+            {t("noMatchingCommands")}
+          </div>
         ) : (
           filtered.map((cmd, i) => {
             const showGroup = cmd.group !== lastGroup;
             lastGroup = cmd.group;
             const Icon = cmd.icon;
             return (
-              <div key={cmd.id}>
+              <div aria-label={cmd.group} key={cmd.id} role="group">
                 {showGroup ? (
                   <div className="rm-cmdk-group">{cmd.group}</div>
                 ) : null}
                 <Button
+                  aria-selected={i === active}
                   className={`rm-cmdk-item ${i === active ? "active" : ""}`}
+                  disabled={cmd.disabled}
+                  id={`${listboxId}-option-${cmd.id}`}
                   onClick={() => run(i)}
-                  onMouseMove={() => setActive(i)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseMove={() => {
+                    if (cmd.disabled !== true) setActive(i);
+                  }}
+                  role="option"
+                  tabIndex={-1}
                   type="button"
+                  variant="ghost"
                 >
                   <Icon aria-hidden size={16} />
                   <span>{cmd.label}</span>
@@ -334,4 +372,30 @@ export function CommandPalette({
       </div>
     </OverlayShell>
   );
+}
+
+function firstEnabledIndex(commands: readonly Command[]): number {
+  const index = commands.findIndex((command) => command.disabled !== true);
+  return Math.max(index, 0);
+}
+
+function lastEnabledIndex(commands: readonly Command[]): number {
+  for (let index = commands.length - 1; index >= 0; index -= 1) {
+    if (commands[index]?.disabled !== true) return index;
+  }
+  return 0;
+}
+
+function nextEnabledIndex(
+  commands: readonly Command[],
+  current: number,
+  direction: 1 | -1,
+): number {
+  if (commands.length === 0) return 0;
+  for (let offset = 1; offset <= commands.length; offset += 1) {
+    const index =
+      (current + direction * offset + commands.length) % commands.length;
+    if (commands[index]?.disabled !== true) return index;
+  }
+  return current;
 }

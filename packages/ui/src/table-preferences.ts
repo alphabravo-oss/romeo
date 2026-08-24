@@ -7,9 +7,17 @@ export interface TablePreferences {
 }
 
 export interface TableSavedView extends TablePreferences {
+  canEdit?: boolean;
+  filters?: Array<{ field: string; operator: string; value?: unknown }>;
   globalFilter: string;
+  id?: string;
+  isDefault?: boolean;
   name: string;
+  schemaVersion?: number;
+  source?: "local_fallback" | "server";
   sorting: Array<{ id: string; desc: boolean }>;
+  visibility?: "private" | "workspace";
+  version?: number;
 }
 
 interface StoredTablePreferences extends TablePreferences {

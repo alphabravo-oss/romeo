@@ -10,16 +10,7 @@ import {
   chatQueryOptions,
   chatsInfiniteQueryOptions,
 } from "../features/chats/query-options";
-import { agentToolsQueryOptions } from "../features/tools/query-options";
 import type { Message } from "../features/types";
-import {
-  interfacePreferencesQueryOptions,
-  providerOperationalSummaryQueryOptions,
-  workspaceDraftAgentsQueryOptions,
-  workspaceGalleryAgentsQueryOptions,
-  workspaceModelsQueryOptions,
-  workspaceProvidersQueryOptions,
-} from "../lib/api-query-options";
 import { useRouterApiClient } from "../lib/router-context";
 import { optimisticMessagesQueryOptions } from "../lib/optimistic-message-query-options";
 import {
@@ -29,7 +20,7 @@ import {
   resetActiveMessagePages,
   snapshotBranchLeafForChat,
 } from "../lib/message-page-query";
-import { resolveActiveAssistant } from "./assistant-selection";
+import { useWorkspaceCatalogData } from "./useWorkspaceCatalogData";
 import { useWorkspace } from "./WorkspaceContext";
 
 // Stable identity for "this chat has no transcript yet", so an idle chat does
@@ -48,25 +39,9 @@ export function useWorkspaceData(
   // The selected workspace is owned by WorkspaceProvider (persisted +
   // validated). This deduplicates the same ["bootstrap"] query rather than
   // re-fetching. Falls back to nothing while the selection reconciles.
-  const { latestChatEvent, subject, workspace } = useWorkspace();
+  const { workspace } = useWorkspace();
   const queryClient = useQueryClient();
   const apiClient = useRouterApiClient();
-  const draftAgentsQuery = useQuery(
-    workspaceDraftAgentsQueryOptions(
-      workspace?.id,
-      apiClient,
-      options.includeDrafts === true,
-    ),
-  );
-  const galleryAgentsQuery = useQuery(
-    workspaceGalleryAgentsQueryOptions(
-      workspace?.id,
-      apiClient,
-      options.includeDrafts !== true,
-    ),
-  );
-  const agentsQuery =
-    options.includeDrafts === true ? draftAgentsQuery : galleryAgentsQuery;
   const chatsQuery = useInfiniteQuery(
     chatsInfiniteQueryOptions(workspace?.id, apiClient),
   );
@@ -86,16 +61,6 @@ export function useWorkspaceData(
     optimisticMessagesQueryOptions(options.activeChatId),
   );
   const chatExperienceQuery = useQuery(chatExperienceQueryOptions());
-  const modelsQuery = useQuery(workspaceModelsQueryOptions(apiClient));
-  const providersQuery = useQuery(workspaceProvidersQueryOptions(apiClient));
-  const providerOperationalSummaryQuery = useQuery(
-    providerOperationalSummaryQueryOptions(apiClient),
-  );
-  const interfacePreferencesQuery = useQuery(
-    interfacePreferencesQueryOptions(apiClient),
-  );
-
-  const agents = useMemo(() => agentsQuery.data ?? [], [agentsQuery.data]);
   const chats = useMemo(() => {
     const pagedChats =
       chatsQuery.data?.pages.flatMap((page) => page.items) ?? [];
@@ -109,47 +74,15 @@ export function useWorkspaceData(
   const chatAgentId = chats.find(
     (chat) => chat.id === options.activeChatId,
   )?.agentId;
-  const activeAgent = useMemo(
-    () =>
-      resolveActiveAssistant({
-        ...(activeAgentId === undefined ? {} : { activeAgentId }),
-        agents,
-        ...(chatAgentId === undefined ? {} : { chatAgentId }),
-        ...(options.includeDrafts === undefined
-          ? {}
-          : { includeDrafts: options.includeDrafts }),
-        ...(options.requestedAgentId === undefined
-          ? {}
-          : { requestedAgentId: options.requestedAgentId }),
-        ...(workspace === undefined
-          ? {}
-          : {
-              ...(interfacePreferencesQuery.data?.defaultAgentByWorkspace[
-                workspace.id
-              ] === undefined
-                ? {}
-                : {
-                    userDefaultAgentId:
-                      interfacePreferencesQuery.data.defaultAgentByWorkspace[
-                        workspace.id
-                      ],
-                  }),
-              ...(workspace.defaultAgentId === undefined
-                ? {}
-                : { workspaceDefaultAgentId: workspace.defaultAgentId }),
-            }),
-      }),
-    [
-      activeAgentId,
-      agents,
-      chatAgentId,
-      interfacePreferencesQuery.data,
-      options.includeDrafts,
-      options.requestedAgentId,
-      workspace,
-    ],
-  );
-  const toolsQuery = useQuery(agentToolsQueryOptions(activeAgent?.id));
+  const catalog = useWorkspaceCatalogData(activeAgentId, {
+    ...(chatAgentId === undefined ? {} : { chatAgentId }),
+    ...(options.includeDrafts === undefined
+      ? {}
+      : { includeDrafts: options.includeDrafts }),
+    ...(options.requestedAgentId === undefined
+      ? {}
+      : { requestedAgentId: options.requestedAgentId }),
+  });
 
   const pageSnapshot = activeMessagePageSnapshot(messagePagesQuery.data?.pages);
   const optimisticMessages = optimisticMessagesQuery.data;
@@ -174,8 +107,7 @@ export function useWorkspaceData(
     return result;
   }, [messagePagesQuery, options.activeChatId, queryClient]);
   return {
-    activeAgent,
-    agents,
+    ...catalog,
     allMessages: optimisticMessages,
     branchLeafMessageId: snapshotBranchLeafForChat(
       pageSnapshot,
@@ -190,16 +122,8 @@ export function useWorkspaceData(
     isLoadingMoreChats: chatsQuery.isFetchingNextPage,
     loadMoreChats: chatsQuery.fetchNextPage,
     loadOlderMessages,
-    models: modelsQuery.data ?? [],
-    providerOperationalSummary: providerOperationalSummaryQuery.data,
-    providers: providersQuery.data ?? [],
-    interfacePreferences: interfacePreferencesQuery.data,
-    latestChatEvent,
     messages,
     messagePageNeedsReset: isMessagePageResetError(messagePagesQuery.error),
-    subject,
-    tools: toolsQuery.data ?? [],
     variantsByMessageId: pageSnapshot?.variantsByMessageId ?? {},
-    workspace,
   };
 }

@@ -3,28 +3,29 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { writeAuditLog } from "./audit-log";
+import {
+  activeContentPolicyFor,
+  CONTENT_POLICY_DETECTOR_CODES,
+  contentPolicySettingKey,
+  DEFAULT_CONTENT_POLICY_ACTIONS,
+  readContentPolicy,
+  type ContentPolicyAction,
+  type ContentPolicyDetectorActions,
+  type ContentPolicyDetectorCode,
+  type StoredContentPolicy,
+} from "./content-policy-config";
 
-export const CONTENT_POLICY_DETECTOR_CODES = [
-  "credit_card",
-  "email_address",
-  "us_ssn",
-  "api_token",
-] as const;
-export type ContentPolicyDetectorCode =
-  (typeof CONTENT_POLICY_DETECTOR_CODES)[number];
-export type ContentPolicyAction = "disabled" | "audit" | "block" | "redact";
-export type ContentPolicyDetectorActions = Record<
+export {
+  activeContentPolicyFor,
+  CONTENT_POLICY_DETECTOR_CODES,
+  contentPolicySettingKey,
+};
+export type {
+  ActiveContentPolicy,
+  ContentPolicyAction,
+  ContentPolicyDetectorActions,
   ContentPolicyDetectorCode,
-  ContentPolicyAction
->;
-
-interface StoredContentPolicy {
-  schema: "romeo.content-policy.v1";
-  orgId: string;
-  detectors: ContentPolicyDetectorActions;
-  updatedAt: string;
-  updatedBy: string;
-}
+} from "./content-policy-config";
 
 export interface ContentPolicyDetection {
   code: ContentPolicyDetectorCode;
@@ -36,19 +37,6 @@ export interface ContentPolicyEvaluation {
   action: "allow" | "audit" | "block" | "redact";
   detections: ContentPolicyDetection[];
 }
-
-const DEFAULT_ACTIONS: ContentPolicyDetectorActions = {
-  credit_card: "disabled",
-  email_address: "disabled",
-  us_ssn: "disabled",
-  api_token: "disabled",
-};
-const ACTIONS = new Set<ContentPolicyAction>([
-  "disabled",
-  "audit",
-  "block",
-  "redact",
-]);
 
 export class ContentPolicyService {
   constructor(private readonly repository: RomeoRepository) {}
@@ -71,29 +59,38 @@ export class ContentPolicyService {
       );
     }
     return this.repository.transaction(async (repository) => {
-      const current = await readPolicy(repository, input.subject.orgId);
+      const current = await readContentPolicy(repository, input.subject.orgId);
       const now = new Date().toISOString();
       const stored: StoredContentPolicy = {
         schema: "romeo.content-policy.v1",
         orgId: input.subject.orgId,
         detectors: {
-          ...(current?.detectors ?? DEFAULT_ACTIONS),
+          ...(current?.detectors ?? DEFAULT_CONTENT_POLICY_ACTIONS),
           ...input.detectors,
         },
+        versionId: `manual:${now}`,
+        approvalRequired: false,
+        approvalTtlSeconds: 3_600,
         updatedAt: now,
         updatedBy: input.subject.id,
       };
-      await repository.upsertSystemSetting({
-        key: settingKey(input.subject.orgId),
-        value: {
-          schema: stored.schema,
-          orgId: stored.orgId,
-          detectors: { ...stored.detectors },
-          updatedAt: stored.updatedAt,
-          updatedBy: stored.updatedBy,
+      await repository.upsertSystemSetting(
+        {
+          key: contentPolicySettingKey(input.subject.orgId),
+          value: {
+            schema: stored.schema,
+            orgId: stored.orgId,
+            detectors: { ...stored.detectors },
+            versionId: stored.versionId,
+            approvalRequired: stored.approvalRequired,
+            approvalTtlSeconds: stored.approvalTtlSeconds,
+            updatedAt: stored.updatedAt,
+            updatedBy: stored.updatedBy,
+          },
+          updatedAt: now,
         },
-        updatedAt: now,
-      });
+        input.subject.orgId,
+      );
       await writeAuditLog(repository, {
         subject: input.subject,
         action: "admin.content_policy.update",
@@ -219,7 +216,6 @@ interface Match {
 
 export const evaluateContentPolicyStrings = evaluateStrings;
 export const contentPolicyActionsFor = actionsFor;
-export const contentPolicySettingKey = settingKey;
 
 function evaluateStrings(
   contents: readonly string[],
@@ -398,13 +394,16 @@ async function auditEvaluation(
 }
 
 async function reportFor(repository: RomeoRepository, orgId: string) {
-  const stored = await readPolicy(repository, orgId);
+  const stored = await readContentPolicy(repository, orgId);
   return stored === undefined
     ? publicReport(
         {
           schema: "romeo.content-policy.v1",
           orgId,
-          detectors: { ...DEFAULT_ACTIONS },
+          detectors: { ...DEFAULT_CONTENT_POLICY_ACTIONS },
+          versionId: "default",
+          approvalRequired: false,
+          approvalTtlSeconds: 3_600,
           updatedAt: "",
           updatedBy: "",
         },
@@ -434,54 +433,5 @@ function publicReport(
 }
 
 async function actionsFor(repository: RomeoRepository, orgId: string) {
-  return (
-    (await readPolicy(repository, orgId))?.detectors ?? { ...DEFAULT_ACTIONS }
-  );
-}
-
-async function readPolicy(
-  repository: RomeoRepository,
-  orgId: string,
-): Promise<StoredContentPolicy | undefined> {
-  const value = (await repository.getSystemSetting(settingKey(orgId)))?.value;
-  if (value === null || typeof value !== "object" || Array.isArray(value))
-    return undefined;
-  const candidate = value as Record<string, unknown>;
-  if (
-    candidate.schema !== "romeo.content-policy.v1" ||
-    candidate.orgId !== orgId
-  )
-    return undefined;
-  const detectors = candidate.detectors;
-  if (
-    detectors === null ||
-    typeof detectors !== "object" ||
-    Array.isArray(detectors)
-  )
-    return undefined;
-  const detectorRecord = detectors as Record<string, unknown>;
-  if (
-    !CONTENT_POLICY_DETECTOR_CODES.every((code) =>
-      ACTIONS.has(detectorRecord[code] as ContentPolicyAction),
-    )
-  )
-    return undefined;
-  if (
-    typeof candidate.updatedAt !== "string" ||
-    typeof candidate.updatedBy !== "string"
-  )
-    return undefined;
-  return {
-    schema: "romeo.content-policy.v1",
-    orgId,
-    detectors: Object.fromEntries(
-      CONTENT_POLICY_DETECTOR_CODES.map((code) => [code, detectorRecord[code]]),
-    ) as ContentPolicyDetectorActions,
-    updatedAt: candidate.updatedAt,
-    updatedBy: candidate.updatedBy,
-  };
-}
-
-function settingKey(orgId: string): string {
-  return `content_policy.v1:${orgId}`;
+  return (await activeContentPolicyFor(repository, orgId)).detectors;
 }

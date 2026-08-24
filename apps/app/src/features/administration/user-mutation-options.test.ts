@@ -49,12 +49,14 @@ const page = (data: User[]): UserPage => ({
 const firstPageKey = appQueryKeys.users({
   direction: "asc",
   page: 0,
+  pageSize: 50,
   query: "",
   sort: "name",
 });
 const filteredPageKey = appQueryKeys.users({
   direction: "desc",
   page: 1,
+  pageSize: 50,
   query: "admin",
   sort: "role",
 });

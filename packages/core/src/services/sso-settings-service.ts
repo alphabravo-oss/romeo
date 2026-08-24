@@ -105,7 +105,7 @@ export class SsoSettingsService {
   constructor(
     private readonly repository: RomeoRepository,
     private readonly env: RomeoEnv,
-    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly fetchImpl?: typeof fetch,
     private readonly users?: UserLifecycleService,
   ) {}
 
@@ -191,7 +191,11 @@ export class SsoSettingsService {
       this.env,
       subject.orgId,
     );
-    return testOidcConnection({ config, fetchImpl: this.fetchImpl });
+    return testOidcConnection({
+      config,
+      env: this.env,
+      ...(this.fetchImpl === undefined ? {} : { fetchImpl: this.fetchImpl }),
+    });
   }
 
   async deprovisionOidcUser(
@@ -361,7 +365,7 @@ function normalizeInputIssuer(value: string): string {
   } catch {
     throw new ApiError(
       "invalid_sso_oidc_issuer",
-      "OIDC issuer URL must use HTTPS outside localhost.",
+      "OIDC issuer URL must use a public HTTPS endpoint.",
       400,
     );
   }

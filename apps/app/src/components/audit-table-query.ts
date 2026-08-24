@@ -1,7 +1,7 @@
 import { RomeoApiError } from "@romeo/api-client";
 import { keepPreviousData, queryOptions } from "@tanstack/react-query";
 
-import { queryAuditLogs } from "../features";
+import { queryAuditLogs } from "../features/operational-governance";
 import type { AuditLogFilter, AuditLogTableRequest } from "../features/types";
 import * as appQueryKeys from "../lib/app-query-keys";
 import { serverQueryPolicy } from "../lib/server-query-options";

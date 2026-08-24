@@ -44,6 +44,27 @@ assert(
   "app runtime must not inherit operational OS packages",
 );
 assert(
+  /FROM runtime-packages AS ops-runtime/u.test(dockerfile),
+  "ops runtime must inherit the operational OS packages",
+);
+assert(
+  /FROM deps AS check\s+COPY \. \.\s+RUN pnpm check\s+\s*FROM check AS build\s+RUN pnpm build/u.test(
+    dockerfile,
+  ),
+  "the production image path must typecheck before it builds",
+);
+assert(
+  /npm install --global --ignore-scripts pnpm@11\.7\.0/u.test(dockerfile),
+  "ops runtime must embed the repository-pinned pnpm release",
+);
+for (const required of [
+  "COPY --from=build --chown=node:node /app/node_modules /app/node_modules",
+  "COPY --from=build --chown=node:node /app/packages /app/packages",
+  "COPY --from=build --chown=node:node /app/scripts /app/scripts",
+]) {
+  assert(dockerfile.includes(required), `ops runtime is missing ${required}`);
+}
+assert(
   /^FROM node:24\.18\.0-bookworm-slim@sha256:[a-f0-9]{64} AS base$/mu.test(
     dockerfile,
   ),
@@ -95,22 +116,62 @@ run("docker", ["info", "--format", "{{.ServerVersion}}"]);
 
 const nonce = `${process.pid}-${randomUUID().slice(0, 8)}`;
 const contextTag = `romeo-context-policy:${nonce}`;
-const runtimeTag = `romeo-runtime-policy:${nonce}`;
+const appRuntimeTag = `romeo-app-runtime-policy:${nonce}`;
+const opsRuntimeTag = `romeo-ops-runtime-policy:${nonce}`;
+const negativeTypecheckTag = `romeo-negative-typecheck-policy:${nonce}`;
+const typecheckSentinel = join(
+  root,
+  "packages/auth/src/container-typecheck-sentinel.ts",
+);
 const sentinels = [
   join(root, ".env.romeo-context-sentinel"),
   join(root, "romeo-context-sentinel.pem"),
   join(root, "romeo-context-sentinel.test.ts"),
 ];
 const containers = [];
-const images = [contextTag, runtimeTag];
+const images = [contextTag, appRuntimeTag, opsRuntimeTag, negativeTypecheckTag];
 
 try {
+  assert(
+    !existsSync(typecheckSentinel),
+    `refusing to overwrite existing typecheck sentinel ${typecheckSentinel}`,
+  );
   for (const path of sentinels) {
     assert(
       !existsSync(path),
       `refusing to overwrite existing sentinel path ${path}`,
     );
     writeFileSync(path, "DO_NOT_SHIP\n", { flag: "wx", mode: 0o600 });
+  }
+
+  try {
+    writeFileSync(
+      typecheckSentinel,
+      "export const containerTypecheckSentinel: string = 1;\n",
+      { flag: "wx", mode: 0o600 },
+    );
+    const negative = expectFailure(
+      "production image typecheck sentinel",
+      "docker",
+      [
+        "build",
+        "--target",
+        "check",
+        "--tag",
+        negativeTypecheckTag,
+        "--file",
+        dockerfilePath,
+        root,
+      ],
+    );
+    const output = `${negative.stdout}\n${negative.stderr}`;
+    assert(
+      output.includes("container-typecheck-sentinel.ts") &&
+        output.includes("TS2322"),
+      "production image negative typecheck did not fail on the injected TypeScript error",
+    );
+  } finally {
+    rmSync(typecheckSentinel, { force: true });
   }
 
   build("context-policy-probe", contextTag);
@@ -129,8 +190,8 @@ try {
     );
   }
 
-  build("app-runtime", runtimeTag);
-  const runtimeEntries = exportEntries(runtimeTag, "runtime");
+  build("app-runtime", appRuntimeTag);
+  const runtimeEntries = exportEntries(appRuntimeTag, "app-runtime");
   assertNoSentinel(runtimeEntries);
   const appEntries = runtimeEntries.filter(
     (entry) => entry === "app" || entry.startsWith("app/"),
@@ -163,8 +224,91 @@ try {
     );
   }
 
+  expectFailure("app runtime package-manager exclusion", "docker", [
+    "run",
+    "--rm",
+    appRuntimeTag,
+    "pnpm",
+    "--version",
+  ]);
+
+  build("ops-runtime", opsRuntimeTag);
+  const opsEntries = exportEntries(opsRuntimeTag, "ops-runtime");
+  assertNoSentinel(opsEntries);
+  for (const required of [
+    "app/package.json",
+    "app/pnpm-lock.yaml",
+    "app/pnpm-workspace.yaml",
+    "app/node_modules",
+    "app/packages",
+    "app/scripts",
+    "app/apps/app/package.json",
+  ]) {
+    assert(
+      opsEntries.some(
+        (entry) => entry === required || entry.startsWith(`${required}/`),
+      ),
+      `ops runtime is missing /${required}`,
+    );
+  }
+  assert(
+    !opsEntries.some((entry) => entry.startsWith("app/apps/app/.output/")),
+    "ops runtime must not contain the serving application output",
+  );
+
+  run("docker", ["run", "--rm", opsRuntimeTag, "pnpm", "--version"]);
+  run("docker", [
+    "run",
+    "--rm",
+    opsRuntimeTag,
+    "pnpm",
+    "migrate:postgres",
+    "--help",
+  ]);
+  run("docker", [
+    "run",
+    "--rm",
+    "--env",
+    "DATABASE_URL=postgres://romeo:romeo@postgres.invalid:5432/romeo",
+    opsRuntimeTag,
+    "pnpm",
+    "backup:postgres",
+    "--",
+    "--durability-mode",
+    "local-persistent",
+    "--local-persistence-evidence",
+    "container-image-executable-contract",
+    "--dry-run",
+  ]);
+  for (const worker of [
+    "data-connector-sync",
+    "webhook-retry",
+    "notification-retry",
+    "retention-enforce",
+    "billing-entitlement-reconcile",
+    "billing-lifecycle-enforce",
+    "tool-dispatch",
+    "browser-automation",
+    "knowledge-extraction",
+    "voice-catalog-sync",
+  ]) {
+    run("docker", [
+      "run",
+      "--rm",
+      opsRuntimeTag,
+      "pnpm",
+      "--filter",
+      "@romeo/cli",
+      "start",
+      "--",
+      "workers",
+      worker,
+      "--help",
+    ]);
+  }
+
   console.log(
-    "container image policy: context sentinels excluded and runtime allowlist passed",
+    "container image policy: context, app-runtime exclusion, and ops-runtime command checks passed",
   );
 } finally {
   for (const container of containers)
@@ -172,6 +316,7 @@ try {
   for (const image of images)
     runCleanup("docker", ["image", "rm", "--force", image]);
   for (const path of sentinels) rmSync(path, { force: true });
+  rmSync(typecheckSentinel, { force: true });
 }
 
 function build(target, tag) {
@@ -222,6 +367,16 @@ function run(command, args, options = {}) {
 
 function runCleanup(command, args) {
   spawnSync(command, args, { cwd: root, encoding: "utf8", stdio: "ignore" });
+}
+
+function expectFailure(label, command, args) {
+  const result = spawnSync(command, args, {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  assert(result.status !== 0, `${label} unexpectedly succeeded`);
+  return result;
 }
 
 function assert(condition, message) {

@@ -24,9 +24,14 @@ export function authorizeBulkSelection(input: {
   explicitCount: number;
   matchingCount: number;
   reauthorized: boolean;
-}): { outcome: "accepted"; count: number } | { outcome: "denied"; code: "bulk_selection_reauthorization_required" } {
+}):
+  | { outcome: "accepted"; count: number }
+  | { outcome: "denied"; code: "bulk_selection_reauthorization_required" } {
   if (!input.reauthorized)
-    return { outcome: "denied", code: "bulk_selection_reauthorization_required" };
+    return {
+      outcome: "denied",
+      code: "bulk_selection_reauthorization_required",
+    };
   return {
     outcome: "accepted",
     count:

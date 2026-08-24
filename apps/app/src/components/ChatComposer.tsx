@@ -1,18 +1,18 @@
-import { Button, DropdownMenu, InlineError, Input, Textarea } from "@romeo/ui";
+import {
+  Button,
+  DropdownMenu,
+  InlineError,
+  Input,
+  Textarea,
+  useOverlayOpenerRef,
+} from "@romeo/ui";
 import ArrowUp from "lucide-react/dist/esm/icons/arrow-up.mjs";
 import Clock3 from "lucide-react/dist/esm/icons/clock-3.mjs";
 import Plus from "lucide-react/dist/esm/icons/plus.mjs";
 import Square from "lucide-react/dist/esm/icons/square.mjs";
 import Globe2 from "lucide-react/dist/esm/icons/globe-2.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
-import {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { knowledgeBasesQueryOptions } from "../features/knowledge";
@@ -35,6 +35,7 @@ import {
   buildComposerCapabilityItems,
   ComposerPendingAttachments,
 } from "./ChatComposerCapabilities";
+import { useComposerDraftControl } from "./useComposerDraftControl";
 
 export function ChatComposer({
   attachedUrls,
@@ -106,6 +107,7 @@ export function ChatComposer({
   const [noteLibraryOpen, setNoteLibraryOpen] = useState(false);
   const [urlDialogOpen, setUrlDialogOpen] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const capabilitiesOpenerRef = useOverlayOpenerRef();
   const knowledgeBasesQuery = useQuery(
     knowledgeBasesQueryOptions(
       workspaceId,
@@ -126,25 +128,14 @@ export function ChatComposer({
       count: String(names.length),
     });
   }, [knowledgeBaseIdsOverride, knowledgeBasesQuery.data, t]);
-  const [caret, setCaret] = useState(0);
   const imageModels = useMemo(
     () => listImageGenerationModels(models, providers),
     [models, providers],
   );
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const pendingCaret = useRef<number | undefined>(undefined);
-
-  // Defer menu-selection caret restoration until React writes the textarea.
-  const replaceDraft = useCallback(
-    (value: string, nextCaret: number) => {
-      pendingCaret.current = nextCaret;
-      setCaret(nextCaret);
-      onDraftChange(value);
-    },
-    [onDraftChange],
-  );
+  const { caret, replaceDraft, setCaret, textareaRef } =
+    useComposerDraftControl(draft, onDraftChange);
   const composerMenu = useComposerMenu({
     caret,
     draft,
@@ -152,22 +143,6 @@ export function ChatComposer({
     onReplaceDraft: replaceDraft,
     workspaceId,
   });
-
-  // ponytail: replace the sizing half of this effect with `field-sizing: content`
-  // in app.css once Safari/Firefox support is broad enough. Until then CSS cannot
-  // measure content, so the height comes from scrollHeight. Keyed on `draft`
-  // rather than an onInput handler because React fires no input event for the
-  // programmatic writes (prompt library, notes, "/" menu, voice transcript).
-  useLayoutEffect(() => {
-    const el = textareaRef.current;
-    if (el === null) return;
-    el.style.height = "auto"; // reset first, or it can only ever grow
-    el.style.height = `${el.scrollHeight}px`;
-    const restore = pendingCaret.current;
-    if (restore === undefined) return;
-    pendingCaret.current = undefined;
-    el.setSelectionRange(restore, restore);
-  }, [draft]);
 
   function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // Japanese/Chinese/Korean IMEs commit the candidate word with Enter. Without
@@ -222,8 +197,6 @@ export function ChatComposer({
       ) : null}
       <form
         className="rm-composer-wrap"
-        onDragOver={(event) => allowFileDrop(event, canAttach)}
-        onDrop={(event) => claimDroppedFiles(event, canAttach, onAttachFiles)}
         onSubmit={(event) => {
           if (!canSend) {
             event.preventDefault();
@@ -265,6 +238,10 @@ export function ChatComposer({
               onDraftChange(event.currentTarget.value);
             }}
             onKeyDown={handleDraftKeyDown}
+            onDragOver={(event) => allowFileDrop(event, canAttach)}
+            onDrop={(event) =>
+              claimDroppedFiles(event, canAttach, onAttachFiles)
+            }
             onPaste={(event) =>
               claimPastedFiles(event, canAttach, onAttachFiles)
             }
@@ -307,6 +284,7 @@ export function ChatComposer({
             capture="environment"
             className="rm-ui-visually-hidden"
             disabled={isStreaming}
+            name="chat-camera-attachment"
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? []);
               event.currentTarget.value = "";
@@ -319,6 +297,7 @@ export function ChatComposer({
             <DropdownMenu
               align="start"
               items={composerMenuItems}
+              openerRef={capabilitiesOpenerRef}
               trigger={
                 <Button
                   aria-label={t("capabilitiesMenu")}
@@ -466,6 +445,7 @@ export function ChatComposer({
         {error ? <InlineError role="alert">{error}</InlineError> : null}
       </form>
       <ChatComposerDialogs
+        openerRef={capabilitiesOpenerRef}
         draft={draft}
         fileLibraryOpen={fileLibraryOpen}
         imageDialogOpen={imageDialogOpen}

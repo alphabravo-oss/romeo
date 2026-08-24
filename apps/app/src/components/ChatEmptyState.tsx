@@ -1,4 +1,5 @@
 import { Button } from "@romeo/ui";
+import { Link } from "@tanstack/react-router";
 import BotMessageSquare from "lucide-react/dist/esm/icons/bot-message-square.mjs";
 import Check from "lucide-react/dist/esm/icons/check.mjs";
 import Circle from "lucide-react/dist/esm/icons/circle.mjs";
@@ -9,6 +10,7 @@ import type { ComponentProps, ReactNode } from "react";
 import type { RunContextPreview } from "../features/chat";
 import type { ChatSuggestion } from "../features/chat-experience";
 import { useLocale } from "../lib/i18n";
+import { useWorkspace } from "./WorkspaceContext";
 import type { ChatPanelProps } from "./chat-panel-types";
 import { suggestionSubtitle } from "./chat-suggestions";
 import { ContextInspector } from "./ContextInspector";
@@ -30,6 +32,7 @@ export function ChatEmptyState(props: {
   suggestions: ChatSuggestion[];
 }) {
   const { t } = useLocale();
+  const { workspaceId } = useWorkspace();
   const steps = [
     {
       complete: props.activation.providerReady,
@@ -107,12 +110,19 @@ export function ChatEmptyState(props: {
               {props.activation.isAdmin &&
               (!props.activation.providerReady ||
                 !props.activation.modelReady) ? (
-                <a
+                <Link
                   className="rm-activation__setup"
-                  href="/admin?section=providers"
+                  search={(previous) => ({
+                    ...previous,
+                    section: "providers",
+                    ...(workspaceId === undefined
+                      ? {}
+                      : { workspace: workspaceId }),
+                  })}
+                  to="/admin"
                 >
                   {t("activationOpenSetup")}
-                </a>
+                </Link>
               ) : null}
             </section>
           ) : null}

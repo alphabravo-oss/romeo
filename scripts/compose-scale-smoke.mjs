@@ -143,14 +143,13 @@ function runScaleLoadSmoke({ fixturePath, loadEvidencePath, token, url }) {
       fixturePath,
       "--base-url",
       url,
-      "--api-key",
-      token,
       "--output",
       loadEvidencePath,
     ],
     {
       cwd: repoPath("."),
       encoding: "utf8",
+      env: { ...process.env, ROMEO_API_KEY: token },
       timeout: timeoutMs,
     },
   );

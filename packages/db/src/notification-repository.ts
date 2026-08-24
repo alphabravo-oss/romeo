@@ -1,4 +1,16 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import {
@@ -6,11 +18,15 @@ import {
   notificationDeliveryChannels,
   userNotifications,
 } from "./schema";
+import { optionalDate } from "./repository-mapping";
 import {
-  optionalDate,
-  optionalIsoString,
-  toIsoString,
-} from "./repository-mapping";
+  toNotificationDeliveryChannelInsert,
+  toNotificationDeliveryChannelRecord,
+  toNotificationDeliveryInsert,
+  toNotificationDeliveryRecord,
+  toUserNotificationInsert,
+  toUserNotificationRecord,
+} from "./notification-record-mapping";
 
 export type NotificationTypeRecord =
   | "chat_mention"
@@ -74,6 +90,14 @@ export interface NotificationDeliveryRecord {
   createdAt: string;
   updatedAt: string;
   deliveredAt?: string;
+  deliveryLease?: {
+    attempt: number;
+    expiresAt: string;
+    fencingToken: number;
+    owner: string;
+    token: string;
+  };
+  providerIdempotencyKey?: string;
 }
 
 export class PgNotificationRepository {
@@ -193,6 +217,103 @@ export class PgNotificationRepository {
     return rows.map(toNotificationDeliveryRecord);
   }
 
+  async claimDueNotificationDeliveries(input: {
+    leaseExpiresAt: string;
+    leaseOwner: string;
+    leaseToken: string;
+    limit: number;
+    now: string;
+    orgId: string;
+  }): Promise<NotificationDeliveryRecord[]> {
+    return this.db.transaction(async (transaction) => {
+      const now = new Date(input.now);
+      const candidates = await transaction
+        .select({ id: notificationDeliveries.id })
+        .from(notificationDeliveries)
+        .where(
+          and(
+            eq(notificationDeliveries.orgId, input.orgId),
+            eq(notificationDeliveries.status, "failed"),
+            lt(notificationDeliveries.attemptCount, 5),
+            sql`${notificationDeliveries.metadata}->'deadLetter' is null`,
+            sql`case
+              when jsonb_typeof(${notificationDeliveries.metadata}->'nextAttemptAt') = 'string'
+                and (${notificationDeliveries.metadata}->>'nextAttemptAt')
+                  ~ '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$'
+              then (${notificationDeliveries.metadata}->>'nextAttemptAt')::timestamptz <= ${now}
+              else true
+            end`,
+            or(
+              isNull(notificationDeliveries.leaseExpiresAt),
+              lte(notificationDeliveries.leaseExpiresAt, now),
+            ),
+          ),
+        )
+        .orderBy(
+          asc(notificationDeliveries.updatedAt),
+          asc(notificationDeliveries.id),
+        )
+        .limit(Math.max(1, Math.min(input.limit, 1_000)))
+        .for("update", { skipLocked: true });
+      if (candidates.length === 0) return [];
+      const rows = await transaction
+        .update(notificationDeliveries)
+        .set({
+          deliveryFence: sql`${notificationDeliveries.deliveryFence} + 1`,
+          leaseAttempts: sql`${notificationDeliveries.leaseAttempts} + 1`,
+          leaseExpiresAt: new Date(input.leaseExpiresAt),
+          leaseOwner: input.leaseOwner,
+          leaseToken: input.leaseToken,
+          providerIdempotencyKey: sql`coalesce(${notificationDeliveries.providerIdempotencyKey}, ${notificationDeliveries.id})`,
+          updatedAt: now,
+        })
+        .where(
+          inArray(
+            notificationDeliveries.id,
+            candidates.map((candidate) => candidate.id),
+          ),
+        )
+        .returning();
+      return rows.map(toNotificationDeliveryRecord);
+    });
+  }
+
+  async finishNotificationDeliveryLease(input: {
+    delivery: NotificationDeliveryRecord;
+    fencingToken: number;
+    leaseOwner: string;
+    leaseToken: string;
+    now: string;
+  }): Promise<NotificationDeliveryRecord | undefined> {
+    const now = new Date(input.now);
+    const [row] = await this.db
+      .update(notificationDeliveries)
+      .set({
+        attemptCount: input.delivery.attemptCount,
+        deliveredAt: optionalDate(input.delivery.deliveredAt),
+        errorCode: input.delivery.errorCode ?? null,
+        leaseExpiresAt: null,
+        leaseOwner: null,
+        leaseToken: null,
+        metadata: input.delivery.metadata,
+        providerIdempotencyKey:
+          input.delivery.providerIdempotencyKey ?? input.delivery.id,
+        status: input.delivery.status,
+        updatedAt: new Date(input.delivery.updatedAt),
+      })
+      .where(
+        and(
+          eq(notificationDeliveries.id, input.delivery.id),
+          eq(notificationDeliveries.deliveryFence, input.fencingToken),
+          eq(notificationDeliveries.leaseOwner, input.leaseOwner),
+          eq(notificationDeliveries.leaseToken, input.leaseToken),
+          gt(notificationDeliveries.leaseExpiresAt, now),
+        ),
+      )
+      .returning();
+    return row === undefined ? undefined : toNotificationDeliveryRecord(row);
+  }
+
   async createNotificationDelivery(
     delivery: NotificationDeliveryRecord,
   ): Promise<NotificationDeliveryRecord> {
@@ -222,173 +343,8 @@ export class PgNotificationRepository {
   }
 }
 
-export function toUserNotificationRecord(
-  row: typeof userNotifications.$inferSelect,
-): UserNotificationRecord {
-  const notification: UserNotificationRecord = {
-    id: row.id,
-    orgId: row.orgId,
-    userId: row.userId,
-    type: asNotificationType(row.type),
-    actorId: row.actorId,
-    resourceType: asNotificationResourceType(row.resourceType),
-    resourceId: row.resourceId,
-    metadata: asJsonRecord(row.metadata),
-    createdAt: toIsoString(row.createdAt),
-  };
-  const readAt = optionalIsoString(row.readAt);
-  if (readAt !== undefined) notification.readAt = readAt;
-  return notification;
-}
-
-export function toNotificationDeliveryChannelRecord(
-  row: typeof notificationDeliveryChannels.$inferSelect,
-): NotificationDeliveryChannelRecord {
-  return {
-    id: row.id,
-    orgId: row.orgId,
-    userId: row.userId,
-    type: asNotificationDeliveryChannelType(row.type),
-    name: row.name,
-    config: asJsonRecord(row.config),
-    enabled: row.enabled,
-    createdAt: toIsoString(row.createdAt),
-    updatedAt: toIsoString(row.updatedAt),
-  };
-}
-
-export function toNotificationDeliveryRecord(
-  row: typeof notificationDeliveries.$inferSelect,
-): NotificationDeliveryRecord {
-  const delivery: NotificationDeliveryRecord = {
-    id: row.id,
-    orgId: row.orgId,
-    userId: row.userId,
-    notificationId: row.notificationId,
-    channelId: row.channelId,
-    status: asNotificationDeliveryStatus(row.status),
-    attemptCount: row.attemptCount,
-    metadata: asJsonRecord(row.metadata),
-    createdAt: toIsoString(row.createdAt),
-    updatedAt: toIsoString(row.updatedAt),
-  };
-  const errorCode = optionalIsoString(row.errorCode);
-  if (errorCode !== undefined) delivery.errorCode = errorCode;
-  const deliveredAt = optionalIsoString(row.deliveredAt);
-  if (deliveredAt !== undefined) delivery.deliveredAt = deliveredAt;
-  return delivery;
-}
-
-function toUserNotificationInsert(
-  record: UserNotificationRecord,
-): typeof userNotifications.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    userId: record.userId,
-    type: record.type,
-    actorId: record.actorId,
-    resourceType: record.resourceType,
-    resourceId: record.resourceId,
-    metadata: record.metadata,
-    readAt: optionalDate(record.readAt),
-    createdAt: new Date(record.createdAt),
-  };
-}
-
-function toNotificationDeliveryChannelInsert(
-  record: NotificationDeliveryChannelRecord,
-): typeof notificationDeliveryChannels.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    userId: record.userId,
-    type: record.type,
-    name: record.name,
-    config: record.config,
-    enabled: record.enabled,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
-  };
-}
-
-function toNotificationDeliveryInsert(
-  record: NotificationDeliveryRecord,
-): typeof notificationDeliveries.$inferInsert {
-  return {
-    id: record.id,
-    orgId: record.orgId,
-    userId: record.userId,
-    notificationId: record.notificationId,
-    channelId: record.channelId,
-    status: record.status,
-    attemptCount: record.attemptCount,
-    errorCode: record.errorCode ?? null,
-    metadata: record.metadata,
-    createdAt: new Date(record.createdAt),
-    updatedAt: new Date(record.updatedAt),
-    deliveredAt: optionalDate(record.deliveredAt),
-  };
-}
-
-function asNotificationType(value: string): NotificationTypeRecord {
-  if (
-    value === "chat_mention" ||
-    value === "support_impersonation_request_created" ||
-    value === "support_impersonation_request_approved" ||
-    value === "support_impersonation_request_rejected" ||
-    value === "support_impersonation_session_created" ||
-    value === "support_impersonation_session_revoked"
-  ) {
-    return value;
-  }
-  return "chat_mention";
-}
-
-function asNotificationResourceType(
-  value: string,
-): NotificationResourceTypeRecord {
-  if (
-    value === "chat" ||
-    value === "support_impersonation_request" ||
-    value === "support_impersonation_session"
-  ) {
-    return value;
-  }
-  return "chat";
-}
-
-function asNotificationDeliveryChannelType(
-  value: string,
-): NotificationDeliveryChannelTypeRecord {
-  if (
-    value === "email" ||
-    value === "mobile_push" ||
-    value === "pagerduty" ||
-    value === "slack" ||
-    value === "teams" ||
-    value === "webhook"
-  )
-    return value;
-  return "webhook";
-}
-
-function asNotificationDeliveryStatus(
-  value: string,
-): NotificationDeliveryStatusRecord {
-  if (
-    value === "disabled" ||
-    value === "failed" ||
-    value === "pending" ||
-    value === "sent"
-  ) {
-    return value;
-  }
-  return "failed";
-}
-
-function asJsonRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return {};
-  return value as Record<string, unknown>;
-}
+export {
+  toNotificationDeliveryChannelRecord,
+  toNotificationDeliveryRecord,
+  toUserNotificationRecord,
+} from "./notification-record-mapping";

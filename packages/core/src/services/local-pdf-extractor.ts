@@ -16,7 +16,12 @@ export interface CommandResult {
 export type CommandRunner = (
   file: string,
   args: string[],
-  options: { cwd: string; maxBuffer: number; timeoutMs: number },
+  options: {
+    cwd: string;
+    maxBuffer: number;
+    signal?: AbortSignal;
+    timeoutMs: number;
+  },
 ) => Promise<CommandResult>;
 
 export interface LocalPdfTextExtractorOptions {
@@ -36,7 +41,9 @@ export class LocalPdfTextExtractor implements KnowledgeBinaryExtractor {
     bytes: Uint8Array;
     fileName: string;
     mimeType: string;
+    signal?: AbortSignal;
   }): Promise<ExtractedKnowledgeText> {
+    input.signal?.throwIfAborted();
     const mimeType = normalizeMimeType(input.mimeType);
     if (mimeType !== "application/pdf") {
       throw new ApiError(
@@ -78,6 +85,7 @@ export class LocalPdfTextExtractor implements KnowledgeBinaryExtractor {
         {
           cwd: directory,
           maxBuffer: Math.max(1_000_000, maxBytes * 2),
+          ...(input.signal === undefined ? {} : { signal: input.signal }),
           timeoutMs: this.options.timeoutMs ?? defaultTimeoutMs,
         },
       );
@@ -102,7 +110,12 @@ export class LocalPdfTextExtractor implements KnowledgeBinaryExtractor {
 function runCommand(
   file: string,
   args: string[],
-  options: { cwd: string; maxBuffer: number; timeoutMs: number },
+  options: {
+    cwd: string;
+    maxBuffer: number;
+    signal?: AbortSignal;
+    timeoutMs: number;
+  },
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -113,6 +126,7 @@ function runCommand(
         encoding: "utf8",
         env: minimalCommandEnv(),
         maxBuffer: options.maxBuffer,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
         timeout: options.timeoutMs,
         windowsHide: true,
       },

@@ -11,6 +11,10 @@ const labels: Record<string, string> = {
   fileLifecycleDeleted: "Deleted",
   fileLifecycleExtracting: "Extracting",
   fileLifecycleFailed: "Failed security processing",
+  fileLifecycleFailureCode: "Failure code: {{code}}.",
+  fileLifecycleFailureUnknown: "Security processing failed.",
+  fileLifecycleProcessingPending:
+    "Security processing is continuing in the background.",
   fileLifecycleQuarantined: "Quarantined",
   fileLifecycleReady: "Ready",
   fileLifecycleRetained: "Retained",
@@ -18,6 +22,8 @@ const labels: Record<string, string> = {
   fileLifecycleTranscoding: "Transcoding",
   fileLifecycleUpdating: "Updating file security status",
   fileLifecycleUploading: "Uploading",
+  fileLifecycleRetriesExhausted: "Automatic retries are exhausted.",
+  fileLifecycleRetryAvailable: "This file can be retried.",
   retry: "Retry",
   unexpectedAsyncFailure: "Unexpected failure",
 };
@@ -25,7 +31,8 @@ const labels: Record<string, string> = {
 vi.mock("../lib/i18n", () => ({
   useLocale: () => ({
     locale: "en",
-    t: (key: string) => labels[key] ?? key,
+    t: (key: string, values?: Record<string, string>) =>
+      (labels[key] ?? key).replace("{{code}}", values?.code ?? ""),
   }),
 }));
 
@@ -35,8 +42,23 @@ describe("file library lifecycle accessibility", () => {
     expect(html).toContain("Failed security processing");
     expect(html).toContain("disabled");
     expect(html).toContain("Retry fixture.txt");
+    expect(html).toContain("Failure code: file_lifecycle_failed.");
+    expect(html).toContain("This file can be retried.");
     expect(html).toContain("Cancel fixture.txt");
     expect(html).toContain('aria-live="polite"');
+  });
+
+  it("explains pending background processing and exhausted retries", () => {
+    const pending = render([fileFixture("quarantined")]);
+    expect(pending).toContain(
+      "Security processing is continuing in the background.",
+    );
+    const exhausted = fileFixture("failed");
+    exhausted.lifecycle.attempts = 5;
+    exhausted.lifecycle.retryable = false;
+    const failed = render([exhausted]);
+    expect(failed).toContain("Automatic retries are exhausted.");
+    expect(failed).not.toContain("Retry fixture.txt");
   });
 
   it("keeps a ready file attachable without lifecycle retry controls", () => {

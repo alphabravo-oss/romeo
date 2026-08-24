@@ -32,7 +32,6 @@
   "navOrganizations": "Organizations",
   "navImpersonation": "Impersonation",
   "navAuthentication": "Authentication",
-  "navWorkflows": "Workflows",
   "navWebhooks": "Webhooks",
   "navNotifications": "Notifications",
   "navConnectedApps": "Connected apps",

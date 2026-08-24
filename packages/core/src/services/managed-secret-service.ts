@@ -171,16 +171,18 @@ export class ManagedSecretService implements SecretResolver {
         scheme: managedSecretScheme,
       };
     }
-    const secretId = parsed.path;
-    if (!secretIdPattern.test(secretId)) {
+    const scopedRef = parseScopedLocalSecretRef(parsed.path);
+    if (scopedRef === undefined) {
       return {
         available: false,
         failureCode: "invalid_secret_ref",
         scheme: managedSecretScheme,
       };
     }
+    const { orgId, secretId } = scopedRef;
     const setting = await this.repository.getSystemSetting(
       settingKeyForId(secretId),
+      orgId,
     );
     if (setting === undefined) {
       return {
@@ -227,7 +229,10 @@ export class ManagedSecretService implements SecretResolver {
     targetOrgId: string;
   }): Promise<ManagedSecretRewrapSummary> {
     const repository = input.repository ?? this.repository;
-    const settings = await repository.listSystemSettings();
+    const settings = [
+      ...(await repository.listSystemSettings(input.targetOrgId)),
+      ...(input.includeGlobal ? await repository.listSystemSettings(null) : []),
+    ];
     const currentKey = managedSecretKeyConfigured(this.env)
       ? managedSecretKey(this.env)
       : undefined;
@@ -279,18 +284,21 @@ export class ManagedSecretService implements SecretResolver {
       if (plaintext.source === "previous") previousKeyDecryptableCount += 1;
       if (!input.apply) continue;
 
-      await repository.upsertSystemSetting({
-        key: setting.key,
-        updatedAt: input.now,
-        value: {
-          ...stored,
-          envelope: encryptSecret({
-            key: currentKey,
-            plaintext: plaintext.value,
-            settingKey: setting.key,
-          }),
-        } satisfies ManagedSecretSetting,
-      });
+      await repository.upsertSystemSetting(
+        {
+          key: setting.key,
+          updatedAt: input.now,
+          value: {
+            ...stored,
+            envelope: encryptSecret({
+              key: currentKey,
+              plaintext: plaintext.value,
+              settingKey: setting.key,
+            }),
+          } satisfies ManagedSecretSetting,
+        },
+        stored.scope === "global" ? null : stored.orgId!,
+      );
       rewrappedCount += 1;
     }
 
@@ -339,22 +347,25 @@ export class ManagedSecretService implements SecretResolver {
       plaintext: input.value,
       settingKey,
     });
-    await repository.upsertSystemSetting({
-      key: settingKey,
-      value: {
-        createdAt: input.createdAt,
-        createdBy: input.createdBy,
-        envelope: encrypted,
-        ...(input.name === undefined ? {} : { name: input.name }),
-        ...(input.orgId === undefined ? {} : { orgId: input.orgId }),
-        purpose: input.purpose,
-        schemaVersion: managedSecretSchemaVersion,
-        scope: input.scope,
-        secretId: input.secretId,
-      } satisfies ManagedSecretSetting,
-      updatedAt: input.createdAt,
-    });
-    const secretRef = secretRefForId(input.secretId);
+    await repository.upsertSystemSetting(
+      {
+        key: settingKey,
+        value: {
+          createdAt: input.createdAt,
+          createdBy: input.createdBy,
+          envelope: encrypted,
+          ...(input.name === undefined ? {} : { name: input.name }),
+          ...(input.orgId === undefined ? {} : { orgId: input.orgId }),
+          purpose: input.purpose,
+          schemaVersion: managedSecretSchemaVersion,
+          scope: input.scope,
+          secretId: input.secretId,
+        } satisfies ManagedSecretSetting,
+        updatedAt: input.createdAt,
+      },
+      input.orgId ?? null,
+    );
+    const secretRef = secretRefForId(input.secretId, input.orgId);
     await this.auditCreate(repository, {
       name: input.name,
       orgId: input.orgId,
@@ -432,6 +443,22 @@ export class ManagedSecretService implements SecretResolver {
       },
     });
   }
+}
+
+function parseScopedLocalSecretRef(
+  path: string,
+): { orgId: string | null; secretId: string } | undefined {
+  const [scope, secretId, extra] = path.split("/");
+  if (
+    extra !== undefined ||
+    scope === undefined ||
+    scope.length === 0 ||
+    secretId === undefined ||
+    !secretIdPattern.test(secretId)
+  ) {
+    return undefined;
+  }
+  return { orgId: scope === "__global__" ? null : scope, secretId };
 }
 
 export {

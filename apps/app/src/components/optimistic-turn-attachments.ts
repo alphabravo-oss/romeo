@@ -1,10 +1,11 @@
-import { fileContentUrl } from "../features";
+import { fileContentUrl } from "../features/files";
 import type { Message } from "../features/types";
 import { readyDocuments, readyImages } from "./composer-tray-lifecycle";
 import type {
   PendingDocumentAttachment,
   PendingImageAttachment,
 } from "./useWorkspaceAttachments";
+import type { WorkspaceTurnActionsOptions } from "./workspace-turn-actions-types";
 
 /**
  * The attachments to hang on the optimistic user row, shaped like the ones the
@@ -42,4 +43,24 @@ export function optimisticTurnAttachments(
       previewUrl: fileContentUrl(attachment.fileId),
     })),
   ];
+}
+
+/** Adds the server-assigned optimistic row and returns its stable identifier. */
+export function appendOptimisticTurnRow(
+  options: Pick<WorkspaceTurnActionsOptions, "appendMessage">,
+  chatId: string,
+  content: string,
+  attachments: Message["attachments"],
+  parentId: string | undefined,
+  messageId: string,
+): string {
+  options.appendMessage(
+    chatId,
+    "user",
+    content,
+    attachments,
+    parentId,
+    messageId,
+  );
+  return messageId;
 }

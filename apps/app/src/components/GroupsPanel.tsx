@@ -15,6 +15,7 @@ import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDate } from "../lib/locale-format";
 import { toast } from "../lib/toast";
+import { useEventCallback } from "../lib/use-event-callback";
 import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
@@ -30,7 +31,7 @@ export function GroupsPanel() {
   const [addOpen, setAddOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
 
-  const table = useInventoriedServerTable<Group>("groups");
+  const table = useInventoriedServerTable("groups");
   const membersQuery = useQuery(groupMembersQueryOptions(selectedGroupId));
   const shareTargetsQuery = useQuery(
     shareTargetsQueryOptions(
@@ -46,6 +47,7 @@ export function GroupsPanel() {
   const createMutation = useMutation(createGroupMutationOptions());
   const addMemberMutation = useMutation(addGroupMemberMutationOptions());
   const removeMemberMutation = useMutation(removeGroupMemberMutationOptions());
+  const onRemoveMember = useEventCallback(handleRemoveMember);
 
   const createForm = useForm({
     defaultValues: { name: "", slug: "" },
@@ -152,7 +154,7 @@ export function GroupsPanel() {
         cell: (c) => (
           <Button
             disabled={removeMemberMutation.isPending}
-            onClick={() => void handleRemoveMember(c.row.original.userId)}
+            onClick={() => void onRemoveMember(c.row.original.userId)}
             type="button"
           >
             {t("groupsRemove")}
@@ -160,8 +162,7 @@ export function GroupsPanel() {
         ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [removeMemberMutation.isPending, t],
+    [onRemoveMember, removeMemberMutation.isPending, t],
   );
 
   async function handleRemoveMember(userId: string) {
@@ -217,7 +218,9 @@ export function GroupsPanel() {
           {() => (
             <>
               <StatRow
-                items={[{ label: t("groupsTotal"), value: table.estimatedTotal }]}
+                items={[
+                  { label: t("groupsTotal"), value: table.estimatedTotal },
+                ]}
               />
               <DataTable
                 serverState={table.serverState}

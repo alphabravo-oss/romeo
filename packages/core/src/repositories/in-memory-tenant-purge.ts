@@ -5,7 +5,7 @@ import type * as OAuth from "../domain/delegated-oauth";
 import type * as E from "../domain/entities";
 import type { TenantDataPurgeResult } from "../domain/repository";
 import type { SeedData } from "./seed-data";
-
+import { removeSeedRecords } from "./in-memory-tenant-purge-support";
 export async function purgeTenantData(
   data: SeedData,
   runEvents: Map<string, RunEvent[]>,
@@ -116,11 +116,6 @@ export async function purgeTenantData(
       .filter((subscription) => subscription.orgId === orgId)
       .map((subscription) => subscription.id),
   );
-  const workflowDefinitionIds = new Set(
-    data.workflowDefinitions
-      .filter((definition) => definition.orgId === orgId)
-      .map((definition) => definition.id),
-  );
   const folderIds = new Set(
     data.workspaceFolders
       .filter((folder) => folder.orgId === orgId)
@@ -168,18 +163,11 @@ export async function purgeTenantData(
     ...groupIds,
     ...serviceAccountIds,
   ]);
-
   const counts: Record<string, number> = {};
   const remove = <T>(
     key: keyof SeedData,
     predicate: (item: T) => boolean,
-  ): void => {
-    const values = data[key] as T[];
-    const kept = values.filter((item) => !predicate(item));
-    counts[String(key)] = values.length - kept.length;
-    (data as Record<keyof SeedData, unknown>)[key] = kept;
-  };
-
+  ): void => removeSeedRecords(data, counts, key, predicate);
   let runEventCount = 0;
   for (const runId of runIds) {
     runEventCount += runEvents.get(runId)?.length ?? 0;
@@ -189,9 +177,11 @@ export async function purgeTenantData(
 
   remove<E.SystemSetting>(
     "systemSettings",
-    (setting) =>
-      setting.value.orgId === orgId ||
-      orgScopedSystemSettingKeys(orgId).has(setting.key),
+    (setting) => setting.orgId === orgId,
+  );
+  remove<E.ServerTableSavedViewRecord>(
+    "serverTableSavedViews",
+    (view) => view.orgId === orgId,
   );
   remove<E.CapabilityAssignment>(
     "capabilityAssignments",
@@ -204,10 +194,6 @@ export async function purgeTenantData(
   remove<import("../domain/idempotency").IdempotencyReceipt>(
     "idempotencyReceipts",
     (receipt) => receipt.orgId === orgId,
-  );
-  remove<E.WorkflowRun>(
-    "workflowRuns",
-    (run) => run.orgId === orgId || workflowDefinitionIds.has(run.workflowId),
   );
   remove<E.WebhookDelivery>(
     "webhookDeliveries",
@@ -308,6 +294,18 @@ export async function purgeTenantData(
     (testCase) =>
       testCase.orgId === orgId || evalSuiteIds.has(testCase.suiteId),
   );
+  remove<import("../domain/content-policy").PolicyApprovalRecord>(
+    "contentPolicyApprovals",
+    (approval) => approval.orgId === orgId,
+  );
+  remove<import("../domain/content-policy").ContentPolicyDecisionRecord>(
+    "contentPolicyDecisions",
+    (decision) => decision.orgId === orgId,
+  );
+  remove<E.ContentDeletionOperation>(
+    "contentDeletionOperations",
+    (operation) => operation.orgId === orgId,
+  );
   remove<E.RunRecord>("runs", (run) => run.orgId === orgId);
   remove<E.KnowledgeChunkEmbedding>(
     "knowledgeChunkEmbeddings",
@@ -398,10 +396,6 @@ export async function purgeTenantData(
     "webhookSubscriptions",
     (subscription) => subscription.orgId === orgId,
   );
-  remove<E.WorkflowDefinition>(
-    "workflowDefinitions",
-    (definition) => definition.orgId === orgId,
-  );
   remove<E.DataConnector>(
     "dataConnectors",
     (connector) => connector.orgId === orgId,
@@ -465,6 +459,31 @@ export async function purgeTenantData(
     "ssoOidcSettings",
     (settings) => settings.orgId === orgId,
   );
+  remove<E.AuditExportIdempotencyReceipt>(
+    "auditExportIdempotencyReceipts",
+    (receipt) => receipt.orgId === orgId,
+  );
+  remove<E.AuditExportAttempt>(
+    "auditExportAttempts",
+    (attempt) => attempt.orgId === orgId,
+  );
+  remove<E.AuditExportJob>("auditExportJobs", (job) => job.orgId === orgId);
+  remove<E.AuditExportDestination>(
+    "auditExportDestinations",
+    (destination) => destination.orgId === orgId,
+  );
+  remove<E.AuditIntegrityCheckpoint>(
+    "auditIntegrityCheckpoints",
+    (checkpoint) => checkpoint.orgId === orgId,
+  );
+  remove<E.AuditIntegrityRecord>(
+    "auditIntegrityRecords",
+    (record) => record.orgId === orgId,
+  );
+  remove<E.AuditIntegrityTenantHead>(
+    "auditIntegrityTenantHeads",
+    (head) => head.orgId === orgId,
+  );
   remove<E.AuditLog>("auditLogs", (log) => log.orgId === orgId);
   remove<E.Group>("groups", (group) => group.orgId === orgId);
   remove<E.User>("users", (user) => user.orgId === orgId);
@@ -477,19 +496,4 @@ export async function purgeTenantData(
     organizationDeleted: (counts.organizations ?? 0) > 0,
     recordCounts: counts,
   };
-}
-function orgScopedSystemSettingKeys(orgId: string): Set<string> {
-  const encodedOrgId = encodeURIComponent(orgId);
-  return new Set([
-    `abuse_controls.org.v1:${orgId}`,
-    `auth_provider_settings.org.v1:${orgId}`,
-    `governance.data_export_packages.${encodedOrgId}`,
-    `notification_policy.org.v1:${orgId}`,
-    `rag_policy.change_request.org.v1:${orgId}`,
-    `rag_policy.org.v1:${orgId}`,
-    `tenant_lifecycle.deletion_finalization_evidence.v1:${orgId}`,
-    `tenant_lifecycle.deletion_request.v1:${orgId}`,
-    `web_search.org.v1:${orgId}`,
-    `web_search.health.v1:${orgId}`,
-  ]);
 }

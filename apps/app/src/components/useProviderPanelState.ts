@@ -55,7 +55,10 @@ export function useProviderPanelState(input: {
     const controller = new AbortController();
     verifyAbort.current = controller;
     try {
-      const result = await input.onVerifyProvider(providerId, controller.signal);
+      const result = await input.onVerifyProvider(
+        providerId,
+        controller.signal,
+      );
       if (controller.signal.aborted) return;
       setVerification((current) => ({ ...current, [providerId]: result }));
       toast(
@@ -96,7 +99,7 @@ export function useProviderPanelState(input: {
     }
   }
 
-  async function remove(providerId: string, model: BaseModel) {
+  async function remove(model: BaseModel) {
     const confirmed = await ask({
       title: t("deleteOllamaModel"),
       body: `${t("deleteOllamaModelDescription")} ${model.name}`,
@@ -105,7 +108,7 @@ export function useProviderPanelState(input: {
     });
     if (!confirmed) return;
     try {
-      await input.onDeleteProviderModel(providerId, model.id, model.name);
+      await input.onDeleteProviderModel(model.providerId, model.id, model.name);
       toast(t("modelDeleted"), "success");
     } catch {
       toast(t("couldNotDeleteModel"), "error");

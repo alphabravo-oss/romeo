@@ -32,7 +32,7 @@ describe("provider capability reports", () => {
           errorNormalization: true,
         },
       },
-      visibleModels: { total: 1 },
+      visibleModels: { total: 2 },
     });
     expect(model).toMatchObject({
       modelId,

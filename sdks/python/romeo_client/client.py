@@ -223,25 +223,6 @@ class RomeoClient:
         path = "/api/v1/device-authorizations/" + quote(device_authorization_id, safe="") + "/revoke"
         return self.data("POST", path)
 
-    def list_workflows(self, workspace_id: str | None = None) -> Any:
-        return self.data("GET", "/api/v1/workflows", query={"workspaceId": workspace_id})
-
-    def create_workflow(self, workspace_id: str, name: str, steps: list[dict[str, Any]], description: str | None = None) -> Any:
-        body = {"workspaceId": workspace_id, "name": name, "steps": steps}
-        if description is not None:
-            body["description"] = description
-        return self.data("POST", "/api/v1/workflows", json_body=body)
-
-    def start_workflow_run(self, workflow_id: str, run_input: dict[str, Any] | None = None) -> Any:
-        path = "/api/v1/workflows/" + quote(workflow_id, safe="") + "/runs"
-        body = {} if run_input is None else {"input": run_input}
-        return self.data("POST", path, json_body=body)
-
-    def approve_workflow_run(self, workflow_run_id: str, comment: str | None = None) -> Any:
-        path = "/api/v1/workflow-runs/" + quote(workflow_run_id, safe="") + "/approve"
-        body = {} if comment is None else {"comment": comment}
-        return self.data("POST", path, json_body=body)
-
     def claim_browser_automation_task(self, lease_seconds: int | None = None) -> Any:
         body = {} if lease_seconds is None else {"leaseSeconds": lease_seconds}
         return self.data("POST", "/api/v1/browser-automation-tasks/claim", json_body=body)

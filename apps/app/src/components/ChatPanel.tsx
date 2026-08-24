@@ -1,6 +1,5 @@
 import { Button } from "@romeo/ui";
 import ArrowDown from "lucide-react/dist/esm/icons/arrow-down.mjs";
-import type { DragEvent } from "react";
 import {
   useCallback,
   useEffect,
@@ -20,7 +19,7 @@ import { ChatSessionBar } from "./ChatSessionBar";
 import { ChatComposer } from "./ChatComposer";
 import { defaultStarterSuggestions } from "./chat-suggestions";
 import { ContextInspector } from "./ContextInspector";
-import { isDragOverlayVisible, nextDragDepth } from "./drag-depth";
+import { nextDragDepth } from "./drag-depth";
 import { QueuedTurnGhosts } from "./QueuedTurnGhosts";
 import {
   canPerformChatWriteAction,
@@ -30,6 +29,7 @@ import {
 import { useChatUiPreferences } from "../lib/chat-ui-preferences";
 import { useLocale } from "../lib/i18n";
 import type { ChatPanelProps } from "./chat-panel-types";
+import { chatDropTargetProps } from "./chat-panel-drop-target";
 import { ChatEmptyState } from "./ChatEmptyState";
 import {
   getActiveRun,
@@ -41,10 +41,7 @@ import {
   type TranscriptPrependAnchor,
 } from "../lib/transcript-prepend-anchor";
 
-import "../styles/app-artifacts.css";
-import "../styles/app-composer-extras.css";
-import "../styles/app-content.css";
-import "../styles/app-message-detail.css";
+import "../styles/app-chat.css";
 
 export function ChatPanel({
   activeVoiceProfileId,
@@ -119,9 +116,13 @@ export function ChatPanel({
   regenerateModels,
   onShareChat,
   onExportChatMarkdown,
-  onCancelAttachment, onMoveDocumentAttachment, onMoveImageAttachment,
-  onRemoveImageAttachment, onRemoveDocumentAttachment,
-  onRetryDocumentAttachment, onSelectDocumentPage,
+  onCancelAttachment,
+  onMoveDocumentAttachment,
+  onMoveImageAttachment,
+  onRemoveImageAttachment,
+  onRemoveDocumentAttachment,
+  onRetryDocumentAttachment,
+  onSelectDocumentPage,
   onRemoveUrl,
   onSelectVariant,
   onToggleWebSearch,
@@ -233,27 +234,12 @@ export function ChatPanel({
     };
   }, []);
 
-  const dropTargetProps = {
-    onDragEnter: (event: DragEvent<HTMLElement>) => {
-      event.preventDefault();
-      dragDepth.current = nextDragDepth(dragDepth.current, "enter");
-      setDragActive(isDragOverlayVisible(dragDepth.current));
-    },
-    onDragOver: (event: DragEvent<HTMLElement>) => {
-      event.preventDefault();
-    },
-    onDragLeave: () => {
-      dragDepth.current = nextDragDepth(dragDepth.current, "leave");
-      setDragActive(isDragOverlayVisible(dragDepth.current));
-    },
-    onDrop: (event: DragEvent<HTMLElement>) => {
-      event.preventDefault();
-      dragDepth.current = nextDragDepth(dragDepth.current, "reset");
-      setDragActive(false);
-      if (!canPerformChatWriteAction(chatAccess, "attach")) return;
-      onAttachFiles(Array.from(event.dataTransfer.files));
-    },
-  };
+  const dropTargetProps = chatDropTargetProps({
+    chatAccess,
+    dragDepth,
+    onAttachFiles,
+    setDragActive,
+  });
 
   const composer = (
     <ChatComposer
@@ -287,7 +273,13 @@ export function ChatPanel({
         onInspectContext();
       }}
       onKnowledgeBaseIdsChange={onKnowledgeBaseIdsChange}
-      onCancelAttachment={onCancelAttachment} onMoveDocumentAttachment={onMoveDocumentAttachment} onMoveImageAttachment={onMoveImageAttachment} onRemoveDocumentAttachment={onRemoveDocumentAttachment} onRemoveImageAttachment={onRemoveImageAttachment} onRetryDocumentAttachment={onRetryDocumentAttachment} onSelectDocumentPage={onSelectDocumentPage}
+      onCancelAttachment={onCancelAttachment}
+      onMoveDocumentAttachment={onMoveDocumentAttachment}
+      onMoveImageAttachment={onMoveImageAttachment}
+      onRemoveDocumentAttachment={onRemoveDocumentAttachment}
+      onRemoveImageAttachment={onRemoveImageAttachment}
+      onRetryDocumentAttachment={onRetryDocumentAttachment}
+      onSelectDocumentPage={onSelectDocumentPage}
       onRemoveUrl={onRemoveUrl}
       {...(customModels === undefined ? {} : { customModels })}
       {...(selectedCustomModelId === undefined

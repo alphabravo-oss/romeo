@@ -11,7 +11,11 @@ import { authProviderIds, type AuthProviderId } from "../domain/auth-providers";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import type { AuthProviderSettingsService } from "./auth-provider-settings-service";
-import { OidcClient, type ResolvedOidcClientConfig } from "./oidc-client";
+import {
+  OidcClient,
+  type OidcClientOptions,
+  type ResolvedOidcClientConfig,
+} from "./oidc-client";
 import { normalizeIssuer } from "./sso-config";
 import type { CreatedUserSession, SessionService } from "./session-service";
 import { normalizeAppOrigin, sanitizeAuthReturnTo } from "./auth-navigation";
@@ -53,7 +57,7 @@ export class OidcPkceService {
     private readonly sessions: SessionService,
     private readonly env: RomeoEnv,
     private readonly authProviderSettings: AuthProviderSettingsService,
-    options: { fetchImpl?: typeof fetch } = {},
+    options: Pick<OidcClientOptions, "fetchImpl" | "runtimeCache"> = {},
   ) {
     this.appOrigin = normalizeAppOrigin(env.APP_ORIGIN);
     this.oidcClient = new OidcClient(repository, env, options);

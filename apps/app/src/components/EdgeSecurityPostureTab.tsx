@@ -44,7 +44,10 @@ function postureCheckColumns(
     postureCheckColumn.accessor(
       (check) =>
         Object.entries(check.details)
-          .map(([key, value]) => `${humanizeCheckValue(key)}: ${String(value)}`)
+          .map(
+            ([key, value]) =>
+              `${humanizeCheckValue(key)}: ${displayPostureValue(value)}`,
+          )
           .join(" · "),
       {
         id: "details",
@@ -108,7 +111,10 @@ function EdgeSecurityPostureView(props: { report: EdgeSecurityPostureReport }) {
           { label: t("abuseChecksPassing"), value: passCount },
           { label: t("abuseChecksWarning"), value: warnCount },
           { label: t("abuseAppOrigin"), value: report.appOrigin.scheme },
-          { label: t("abuseWafMode"), value: report.ingress.wafMode },
+          {
+            label: t("abuseWafMode"),
+            value: humanizeCheckValue(report.ingress.wafMode),
+          },
         ]}
       />
 
@@ -132,14 +138,14 @@ function EdgeSecurityPostureView(props: { report: EdgeSecurityPostureReport }) {
             "abusePreload",
             report.tls.hstsPreload ? t("abuseYes") : t("abuseNo"),
           ],
-          ["abuseTermination", report.tls.termination],
+          ["abuseTermination", humanizeCheckValue(report.tls.termination)],
         ]}
       />
 
       <PostureStats
         title={t("abuseProxyIngress")}
         items={[
-          ["abuseProxyMode", report.proxy.mode],
+          ["abuseProxyMode", humanizeCheckValue(report.proxy.mode)],
           [
             "abuseForwardedHeadersTrusted",
             report.proxy.forwardedHeadersTrusted ? t("abuseYes") : t("abuseNo"),
@@ -151,7 +157,7 @@ function EdgeSecurityPostureView(props: { report: EdgeSecurityPostureReport }) {
       <PostureStats
         title={t("abuseRateLimits")}
         items={[
-          ["abuseDriver", report.limits.rateLimit.driver],
+          ["abuseDriver", humanizeCheckValue(report.limits.rateLimit.driver)],
           [
             "abuseDistributed",
             report.limits.rateLimit.distributed ? t("abuseYes") : t("abuseNo"),
@@ -197,6 +203,10 @@ function EdgeSecurityPostureView(props: { report: EdgeSecurityPostureReport }) {
 
 function humanizeCheckValue(value: string): string {
   return value.replaceAll("_", " ");
+}
+
+function displayPostureValue(value: unknown): string {
+  return typeof value === "string" ? humanizeCheckValue(value) : String(value);
 }
 
 function PostureStats(props: {

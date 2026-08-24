@@ -57,10 +57,18 @@ export const evaluateSandboxPostureRoute = createRoute({
         apparmor: z.boolean(),
         capabilities: z.array(z.string().trim().min(1).max(40)).max(16),
         cpuMillis: z.number().int().min(0).max(120_000),
-        diskBytes: z.number().int().min(0).max(8 * 1024 * 1024 * 1024),
+        diskBytes: z
+          .number()
+          .int()
+          .min(0)
+          .max(8 * 1024 * 1024 * 1024),
         hostNamespaces: z.boolean(),
         jobScopedTmp: z.boolean(),
-        memoryBytes: z.number().int().min(0).max(8 * 1024 * 1024 * 1024),
+        memoryBytes: z
+          .number()
+          .int()
+          .min(0)
+          .max(8 * 1024 * 1024 * 1024),
         nonRoot: z.boolean(),
         pidLimit: z.number().int().min(0).max(4_096),
         privileged: z.boolean(),

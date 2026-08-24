@@ -1,5 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { lazy, Suspense, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { lazy, Suspense, useMemo } from "react";
 import { Button } from "@romeo/ui";
 
 import { ConsoleLayout } from "../components/ConsoleLayout";
@@ -12,18 +13,17 @@ import {
   ADMIN_META,
 } from "../components/admin-console-navigation";
 import { useAdminController } from "../components/useAdminController";
+import { useAdminTabState } from "../components/useAdminTabState";
+import { useAdminDetailNavigation } from "../components/useAdminDetailNavigation";
 import {
   localeNamespacesForAdminSection,
   useLocale,
   useLocaleNamespaces,
 } from "../lib/i18n";
 import { resolveSectionKey } from "../lib/section-routing";
-import { prefetchPrimaryRouteData } from "../lib/route-data";
-import {
-  resolveAgentStudioTab,
-  type AgentStudioTab,
-} from "../components/agent-studio-model";
-import { modelAvailabilityFilter } from "../components/model-catalog-navigation";
+import { bootstrapQueryOptions } from "../lib/api-query-options";
+import { useRouterApiClient } from "../lib/router-context";
+import { resolveAgentStudioTab } from "../components/agent-studio-model";
 import {
   AbuseControlsPanel,
   AdminOverview,
@@ -54,25 +54,31 @@ import {
   UsagePanel,
   WebhooksPanel,
   WebSearchPanel,
-  WorkflowsPanel,
   WorkspaceMembersPanel,
+  preloadAdminSection,
 } from "../components/admin-lazy-panels";
 import adminCss from "../styles/admin.css?url";
 import { validateAdminSearch } from "./-admin-route-search";
+import {
+  resolveAdminAccessView,
+  resolveAdminConnectionView,
+  resolveAdminProviderView,
+  resolveAdminUsageView,
+} from "./-admin-route-views";
+import { loadAdminRouteData } from "./-admin-route-loader";
 
 const AdminViewNav = lazy(async () => ({
   default: (await import("../components/AdminViewNav")).AdminViewNav,
 }));
 
 export const Route = createFileRoute("/admin")({
-  loaderDeps: ({ search }) => ({ workspaceId: search.workspace }),
-  loader: ({ cause, context, deps }) =>
-    prefetchPrimaryRouteData(
-      "admin",
-      context,
-      cause === "preload" ? "intent" : "navigation",
-      deps,
-    ),
+  loaderDeps: ({ search }) => ({
+    ...(search.section === undefined ? {} : { section: search.section }),
+    ...(search.workspace === undefined
+      ? {}
+      : { workspaceId: search.workspace }),
+  }),
+  loader: loadAdminRouteData,
   head: () => ({
     links: [{ rel: "stylesheet", href: adminCss }],
   }),
@@ -83,123 +89,40 @@ export const Route = createFileRoute("/admin")({
 function AdminPage() {
   const { t } = useLocale();
   const admin = useAdminController();
+  const apiClient = useRouterApiClient();
+  const bootstrapQuery = useQuery(bootstrapQueryOptions(apiClient));
+  const billingEnabled =
+    bootstrapQuery.data?.deployment?.billingEnabled === true;
   const search = Route.useSearch();
-  const navigate = Route.useNavigate();
+  const tabState = useAdminTabState(search);
+  const {
+    updateManagedModelSearch,
+    updateManagedModelTab,
+    updateProviderConnectionSearch,
+    updateToolConnectorSearch,
+  } = useAdminDetailNavigation();
   const { section: sectionParam } = search;
   const section = resolveSectionKey(sectionParam, ADMIN_META, "overview");
   useLocaleNamespaces(localeNamespacesForAdminSection(section));
-  const providerView =
-    search.view === "models"
-      ? "base-models"
-      : ["providers", "base-models", "curated", "observability"].includes(
-            search.view ?? "",
-          )
-        ? search.view!
-        : "providers";
-  const usageView = ["consumption", "quotas"].includes(search.view ?? "")
-    ? search.view!
-    : "consumption";
-  const connectionView = ["sources", "imports", "catalog", "tools"].includes(
-    search.view ?? "",
-  )
-    ? search.view!
-    : "sources";
-  const accessView = ["keys", "service-accounts"].includes(search.view ?? "")
-    ? search.view!
-    : "keys";
-  const updateProviderSearch = useCallback(
-    (next: {
-      availability?:
-        | "all"
-        | "available"
-        | "unavailable"
-        | "enabled"
-        | "disabled";
-      direction?: "asc" | "desc";
-      model?: string | null;
-      page?: number;
-      provider?: string;
-      query?: string;
-      sort?:
-        | "availability"
-        | "contextWindow"
-        | "displayName"
-        | "enabled"
-        | "name";
-    }) =>
-      void navigate({
-        search: (previous) => {
-          const merged = {
-            ...previous,
-            section: "providers",
-            view: "base-models",
-            ...next,
-          };
-          if (merged.model !== null) return merged;
-          const { model: _model, ...withoutModel } = merged;
-          return withoutModel;
-        },
-      }),
-    [navigate],
+  const providerView = resolveAdminProviderView(search.view);
+  const usageView = resolveAdminUsageView(search.view);
+  const connectionView = resolveAdminConnectionView(search.view);
+  const accessView = resolveAdminAccessView(search.view);
+  const navigationGroups = useMemo(
+    () =>
+      ADMIN_GROUPS.map((group, index) => ({
+        id: group.labelKey ?? `group-${index}`,
+        ...(group.labelKey === undefined ? {} : { label: t(group.labelKey) }),
+        items: group.items
+          .filter((item) => billingEnabled || item.key !== "billing")
+          .map((item) => ({
+            key: item.key,
+            label: t(item.labelKey),
+            icon: item.icon,
+          })),
+      })),
+    [billingEnabled, t],
   );
-  const updateManagedModelSearch = useCallback(
-    (managedModel: string | null) =>
-      void navigate({
-        search: (previous) => {
-          const {
-            managedModel: _managedModel,
-            managedModelTab: _managedModelTab,
-            ...rest
-          } = previous;
-          return {
-            ...rest,
-            section: "providers",
-            view: "curated",
-            ...(managedModel ? { managedModel } : {}),
-          };
-        },
-      }),
-    [navigate],
-  );
-  const updateManagedModelTab = useCallback(
-    (managedModelTab: AgentStudioTab) =>
-      void navigate({
-        search: (previous) => ({
-          ...previous,
-          section: "providers",
-          view: "curated",
-          managedModelTab,
-        }),
-      }),
-    [navigate],
-  );
-  const updateProviderConnectionSearch = useCallback(
-    (connection: string | null) =>
-      void navigate({
-        search: {
-          section: "providers",
-          view: "providers",
-          ...(connection ? { connection } : {}),
-        },
-      }),
-    [navigate],
-  );
-  const updateToolConnectorSearch = useCallback(
-    (toolConnector: string | null) =>
-      void navigate({
-        search: (previous) => {
-          const { toolConnector: _toolConnector, ...rest } = previous;
-          return {
-            ...rest,
-            section: "connections",
-            view: "tools",
-            ...(toolConnector ? { toolConnector } : {}),
-          };
-        },
-      }),
-    [navigate],
-  );
-
   // Client-side gate is UX only — the API enforces real authz on every
   // admin endpoint. ponytail: no beforeLoad/router-context plumbing needed.
   if (admin.subject === undefined) {
@@ -222,17 +145,10 @@ function AdminPage() {
   return (
     <ConsoleLayout
       active={section}
-      groups={ADMIN_GROUPS.map((group, index) => ({
-        id: group.labelKey ?? `group-${index}`,
-        ...(group.labelKey === undefined ? {} : { label: t(group.labelKey) }),
-        items: group.items.map((item) => ({
-          key: item.key,
-          label: t(item.labelKey),
-          icon: item.icon,
-        })),
-      }))}
+      groups={navigationGroups}
       route="/admin"
       title={t("admin")}
+      onSectionIntent={preloadAdminSection}
       userMenu={
         <WorkspaceUserMenu
           isAdmin
@@ -292,10 +208,12 @@ function AdminPage() {
 
           {section === "audit" ? <AdminAuditRoutePanel /> : null}
 
-          {section === "posture" ? <OperationsPosturePanel /> : null}
+          {section === "posture" ? (
+            <OperationsPosturePanel tabState={tabState} />
+          ) : null}
 
           {section === "providers" ? (
-            <div className="grid min-w-0 gap-4">
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
               <AdminViewNav
                 active={providerView}
                 ariaLabel={t("navProviders")}
@@ -333,34 +251,12 @@ function AdminPage() {
               {providerView === "base-models" ? (
                 <ModelCatalogPanel
                   agents={admin.agents}
-                  availability={modelAvailabilityFilter(search.availability)}
                   isUpdating={
                     admin.isUpdatingModelPricing || admin.isUpdatingModel
                   }
                   models={admin.models}
-                  onNavigationChange={updateProviderSearch}
-                  direction={search.direction === "desc" ? "desc" : "asc"}
                   providers={admin.providers}
-                  providerId={search.provider ?? "all"}
-                  query={search.query ?? ""}
-                  selectedModelId={search.model}
-                  page={search.page ?? 0}
-                  sort={
-                    [
-                      "availability",
-                      "contextWindow",
-                      "displayName",
-                      "enabled",
-                      "name",
-                    ].includes(search.sort ?? "")
-                      ? (search.sort as
-                          | "availability"
-                          | "contextWindow"
-                          | "displayName"
-                          | "enabled"
-                          | "name")
-                      : "displayName"
-                  }
+                  routeSearch={search}
                   onUpdateModel={admin.handleUpdateModel}
                   onUpdatePricing={admin.handleUpdateModelPricing}
                   onManagedModelCreated={updateManagedModelSearch}
@@ -425,6 +321,7 @@ function AdminPage() {
               onChatArchived={admin.handleChatArchived}
               onChatDeleted={admin.handleChatDeleted}
               onWorkspaceArchived={admin.handleWorkspaceArchived}
+              tabState={tabState}
               workspace={admin.workspace}
             />
           ) : null}
@@ -452,11 +349,17 @@ function AdminPage() {
             </div>
           ) : null}
 
-          {section === "rag" ? <RagGovernancePanel /> : null}
+          {section === "rag" ? (
+            <RagGovernancePanel tabState={tabState} />
+          ) : null}
 
-          {section === "abuse" ? <AbuseControlsPanel /> : null}
+          {section === "abuse" ? (
+            <AbuseControlsPanel tabState={tabState} />
+          ) : null}
 
-          {section === "billing" ? <BillingPanel /> : null}
+          {section === "billing" && billingEnabled ? (
+            <BillingPanel tabState={tabState} />
+          ) : null}
 
           {section === "prompt-templates" ? <PromptTemplatePanel /> : null}
           {section === "web-search" ? <WebSearchPanel /> : null}
@@ -482,12 +385,10 @@ function AdminPage() {
 
           {section === "connected-apps" ? <ConnectedAppsPanel /> : null}
 
-          {section === "workflows" ? <WorkflowsPanel /> : null}
-
           {section === "webhooks" ? <WebhooksPanel /> : null}
 
           {section === "notification-channels" ? (
-            <NotificationChannelPanel />
+            <NotificationChannelPanel tabState={tabState} />
           ) : null}
         </Suspense>
       </Page>

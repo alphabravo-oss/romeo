@@ -154,6 +154,9 @@ describe("ContextInspector", () => {
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
       "inspectingContext",
     );
+    expect(
+      container.querySelector('[role="dialog"]')?.getAttribute("aria-busy"),
+    ).toBe("true");
 
     state.query.isPending = false;
     state.query.isError = true;
@@ -185,6 +188,9 @@ describe("ContextInspector", () => {
       ),
     );
     expect(container.textContent).toContain("contextNoRun");
+    expect(
+      container.querySelector('[role="dialog"]')?.getAttribute("aria-busy"),
+    ).toBe("false");
   });
 });
 

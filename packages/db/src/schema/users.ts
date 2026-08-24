@@ -27,6 +27,10 @@ export const users = pgTable(
       .defaultNow(),
   },
   (table) => ({
+    usersOrgIdUnique: uniqueIndex("users_org_id_id_uidx").on(
+      table.orgId,
+      table.id,
+    ),
     usersOrgEmailIdx: uniqueIndex("users_org_email_idx").on(
       table.orgId,
       table.email,

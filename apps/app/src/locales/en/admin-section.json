@@ -34,7 +34,6 @@
   "adminWorkspaceMembersDescription": "Grant or revoke workspace membership for users and groups.",
   "adminOrganizationsDescription": "Organizations visible to your account.",
   "adminImpersonationDescription": "Review and act on support impersonation requests.",
-  "adminWorkflowsDescription": "Workflow templates, runs, and approval gates.",
   "adminWebhooksDescription": "Outbound webhook subscriptions and delivery history.",
   "adminNotificationsDescription": "Delivery channels and notification history.",
   "adminDeviceTokensDescription": "Long-lived device credentials and their scopes.",

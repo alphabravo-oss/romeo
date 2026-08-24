@@ -4,6 +4,7 @@ import {
   authenticationSecurity,
   dataEnvelope,
   jsonResponse,
+  optionalIdempotencyHeaders,
   standardErrorResponses,
 } from "./common";
 
@@ -67,7 +68,9 @@ export const previewCompareSynthesisRoute = createRoute({
         z.strictObject({
           outcome: z.enum(["accepted", "denied"]),
           citations: z
-            .array(z.strictObject({ candidateId: identifier, hash: identifier }))
+            .array(
+              z.strictObject({ candidateId: identifier, hash: identifier }),
+            )
             .optional(),
         }),
       ),
@@ -129,7 +132,10 @@ export const previewCryptoShredRoute = createRoute({
       dataEnvelope(
         z.strictObject({
           outcome: z.enum(["accepted", "denied"]),
+          executed: z.literal(false).optional(),
           externalCopiesClaimed: z.literal(false).optional(),
+          keysDestroyed: z.literal(false).optional(),
+          preview: z.literal(true).optional(),
         }),
       ),
     ),
@@ -147,9 +153,13 @@ export const sealAuditSegmentRoute = createRoute({
   request: {
     body: requestBody(
       z.strictObject({
-        eventIds: z.array(identifier).max(500),
+        /** @deprecated Canonical stored audit records are selected server-side. */
+        eventIds: z.array(identifier).max(500).optional(),
+        maxRecords: z.number().int().min(1).max(500).optional(),
+        /** @deprecated The persisted tenant checkpoint chain is authoritative. */
         previousHash: z.string().trim().min(1).max(128).optional(),
-        signingKeyVersion: z.string().trim().min(1).max(80),
+        /** @deprecated The active protected signing-key version is selected server-side. */
+        signingKeyVersion: z.string().trim().min(1).max(80).optional(),
       }),
     ),
   },
@@ -163,6 +173,13 @@ export const sealAuditSegmentRoute = createRoute({
           segmentHash: identifier.optional(),
           previousHash: z.string().min(1).max(128).optional(),
           eventCount: z.number().int().nonnegative().optional(),
+          checkpointId: identifier.optional(),
+          fromSequence: z.number().int().positive().optional(),
+          toSequence: z.number().int().positive().optional(),
+          rootHash: z.string().length(64).optional(),
+          algorithm: z.literal("hmac-sha256").optional(),
+          keyVersion: z.string().trim().min(1).max(80).optional(),
+          signature: z.string().length(64).optional(),
         }),
       ),
     ),
@@ -178,14 +195,22 @@ export const checkpointSiemExportRoute = createRoute({
   operationId: "trust.siemExport.checkpoint",
   summary: "Checkpoint a SIEM or WORM audit-segment export",
   request: {
+    headers: optionalIdempotencyHeaders,
     body: requestBody(
       z.strictObject({
-        attempt: z.number().int().min(0).max(20),
+        /** @deprecated Attempts are assigned by the durable export worker. */
+        attempt: z.number().int().min(0).max(20).optional(),
         destination: z.enum(["customer_siem", "worm_compatible"]),
+        idempotencyKey: z.string().trim().min(1).max(200).optional(),
+        checkpointHash: z.string().trim().length(64).optional(),
+        /** @deprecated Delivery receipts come from destination readback. */
         priorReceiptHash: z.string().trim().min(1).max(128).optional(),
+        /** @deprecated Delivery receipts come from destination readback. */
         receiptHash: z.string().trim().min(1).max(128).optional(),
-        sealedAt: z.iso.datetime(),
-        segmentHash: identifier,
+        /** @deprecated The stored checkpoint timestamp is authoritative. */
+        sealedAt: z.iso.datetime().optional(),
+        /** @deprecated Use checkpointHash; stored tenant checkpoints are authoritative. */
+        segmentHash: identifier.optional(),
       }),
     ),
   },
@@ -196,6 +221,7 @@ export const checkpointSiemExportRoute = createRoute({
         z.strictObject({
           state: z.enum([
             "duplicate",
+            "dead_letter",
             "exported",
             "failed",
             "in_flight",
@@ -203,6 +229,8 @@ export const checkpointSiemExportRoute = createRoute({
           ]),
           lagMs: z.number().int().nonnegative(),
           destination: z.enum(["customer_siem", "worm_compatible"]),
+          duplicate: z.boolean().optional(),
+          jobId: identifier.optional(),
         }),
       ),
     ),
@@ -216,7 +244,8 @@ export const authorizeBreakGlassRoute = createRoute({
   method: "post",
   path: "/api/v1/admin/trust/break-glass",
   operationId: "trust.breakGlass.authorize",
-  summary: "Authorize time-limited break-glass without disabling mandatory controls",
+  summary:
+    "Authorize time-limited break-glass without disabling mandatory controls",
   request: {
     body: requestBody(
       z.strictObject({
@@ -233,8 +262,10 @@ export const authorizeBreakGlassRoute = createRoute({
       dataEnvelope(
         z.strictObject({
           outcome: z.enum(["accepted", "denied"]),
-          alerted: z.literal(true).optional(),
+          alerted: z.literal(false).optional(),
+          executed: z.literal(false).optional(),
           expiresAt: z.iso.datetime().optional(),
+          preview: z.literal(true).optional(),
           code: z
             .enum([
               "break_glass_mandatory_control",

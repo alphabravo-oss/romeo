@@ -1,46 +1,40 @@
-import { readEnv } from "@romeo/config";
-import { disabledObjectStore } from "@romeo/storage";
-
 import type { RomeoRepository } from "../domain/repository";
 import { AbuseControlService } from "./abuse-control-service";
+import { ApiKeyService } from "./api-key-service";
+export * from "./audit-integrity";
+export * from "./runtime-key-rotation-posture-service";
+export * from "./internal-readiness-service";
+export * from "./data-connector-sync-coordinator";
+export * from "./tenant-scheduled-work-coordinator";
 import { AuthProviderSettingsService } from "./auth-provider-settings-service";
 import { BrowserAutomationService } from "./browser-automation-service";
 import { ChatService } from "./chat-service";
 import { lookupNetworkHost } from "./data-connector-network-policy";
 import { ChatEventService } from "./chat-event-service";
 import { CapabilityService } from "./capability-resolver";
-import { capabilityPlatformPolicyFromEnv } from "./capability-platform-policy";
 import { createDataConnectorExecutor } from "./data-connector-executor-factory";
 import { DelegatedOAuthService } from "./delegated-oauth-service";
 import { DirectorySyncService } from "./directory-sync-service";
 import { KnowledgeService } from "./knowledge-service";
-import { withTelemetryObjectStore } from "./telemetry-context";
 import { FileService } from "./file-service";
 import { ManagedSecretService } from "./managed-secret-service";
 import { derivePageCursorSecret } from "./page-cursor";
-import { createNotificationDeliverySender } from "./notification-delivery-factory";
 import { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
 import { OrganizationCapabilityFlagService } from "./organization-capability-flag-service";
 import { createQdrantKnowledgeVectorStore } from "./qdrant-knowledge-vector-store";
-import { RunEventSequencer } from "./run-event-sequencer";
 import { RunService } from "./run-service";
 import { TemporaryChatCleanupWorker } from "./temporary-chat-cleanup-worker";
 import {
   canResolveExternalVectorStoreSecret,
-  createFileOcrProvider,
-  createChatEventTransport,
-  createKnowledgeExtractor,
-  createObjectStore,
   createOidcAuthenticator,
-  createQuotaCoordinator,
-  createRunEventTransport,
-  createSecretResolver,
-  createSecretWriter,
-  createToolDispatchPayloadStore,
-  createVoiceProvider,
 } from "./service-runtime-factories";
 import { buildServiceRegistry } from "./service-registry-builder";
 import { SessionService } from "./session-service";
+import {
+  createServiceRuntimeDependencies,
+  type ServiceRuntimeDependencies,
+} from "./service-runtime-dependencies";
+export * from "./service-runtime-dependencies";
 import type {
   CreateServicesOptions,
   RomeoServices,
@@ -54,19 +48,41 @@ import { ToolConnectorService } from "./tool-connector-service";
 import { ToolService } from "./tool-service";
 import { UserLifecycleService } from "./user-lifecycle-service";
 import { WebhookService } from "./webhook-service";
-import { WorkflowService } from "./workflow-service";
 import { WebSearchService } from "./web-search-service";
-import {
-  vectorStoreDeploymentFromEnv,
-  withExternalVectorRoutingActive,
-} from "./vector-store-deployment";
+import { withExternalVectorRoutingActive } from "./vector-store-deployment";
+
+export interface AuthenticationServices {
+  apiKeys: ApiKeyService;
+  oidc: ReturnType<typeof createOidcAuthenticator>;
+  sessions: SessionService;
+}
+
+export function createAuthenticationServices(
+  repository: RomeoRepository,
+  options: CreateServicesOptions,
+  runtime: ServiceRuntimeDependencies,
+): AuthenticationServices {
+  return {
+    apiKeys: new ApiKeyService(repository),
+    oidc: createOidcAuthenticator(
+      repository,
+      runtime.env,
+      options.oidcFetch,
+      runtime.oidcRuntimeCache,
+    ),
+    sessions: new SessionService(repository),
+  };
+}
 
 export function createServices(
   repository: RomeoRepository,
   options: CreateServicesOptions = {},
+  runtime: ServiceRuntimeDependencies = createServiceRuntimeDependencies(
+    options,
+  ),
 ): RomeoServices {
-  const env = options.env ?? readEnv();
-  const platformCapabilityPolicy = capabilityPlatformPolicyFromEnv(env);
+  const env = runtime.env;
+  const platformCapabilityPolicy = runtime.capabilityPlatformPolicy;
   const capabilityFlags = new OrganizationCapabilityFlagService(
     repository,
     platformCapabilityPolicy,
@@ -76,27 +92,18 @@ export function createServices(
     platformCapabilityPolicy,
     capabilityFlags,
   );
-  const runEventSequencer = new RunEventSequencer(
-    options.runEventTransport ?? createRunEventTransport(env),
-  );
-  const baseObjectStore = options.objectStore ?? createObjectStore(env);
-  const objectStore =
-    baseObjectStore === disabledObjectStore
-      ? baseObjectStore
-      : withTelemetryObjectStore(baseObjectStore);
-  const quotaCoordinator =
-    options.quotaCoordinator ?? createQuotaCoordinator(env);
-  const chatEventTransport =
-    options.chatEventTransport ?? createChatEventTransport(env);
-  const vectorStoreDeployment = vectorStoreDeploymentFromEnv(env);
-  const secretWriter = options.secretWriter ?? createSecretWriter(env);
+  const runEventSequencer = runtime.runEventSequencer;
+  const objectStore = runtime.objectStore;
+  const quotaCoordinator = runtime.quotaCoordinator;
+  const chatEventTransport = runtime.chatEventTransport;
+  const vectorStoreDeployment = runtime.vectorStoreDeployment;
+  const secretWriter = runtime.secretWriter;
   const managedSecrets = new ManagedSecretService(
     repository,
     env,
     secretWriter,
   );
-  const externalSecretResolver =
-    options.secretResolver ?? createSecretResolver(env);
+  const externalSecretResolver = runtime.externalSecretResolver;
   const secretResolver = new SchemeRoutingSecretResolver(
     { "romeo-secret": managedSecrets },
     externalSecretResolver,
@@ -105,17 +112,15 @@ export function createServices(
     ? createQdrantKnowledgeVectorStore(
         env,
         secretResolver,
-        options.qdrantClientFactory,
+        undefined,
+        runtime.qdrantClientProvider,
       )
     : undefined;
   const activeVectorStoreDeployment =
     knowledgeVectorStore === undefined
       ? vectorStoreDeployment
       : withExternalVectorRoutingActive(vectorStoreDeployment);
-  const toolDispatchPayloadStore = createToolDispatchPayloadStore(
-    env,
-    objectStore,
-  );
+  const toolDispatchPayloadStore = runtime.toolDispatchPayloadStore;
   const delegatedOAuth = new DelegatedOAuthService(
     repository,
     env,
@@ -126,11 +131,16 @@ export function createServices(
   const dataConnectorExecutor =
     options.dataConnectorExecutor ??
     createDataConnectorExecutor(env, secretResolver, delegatedOAuth);
-  const knowledgeExtractor =
-    options.knowledgeExtractor ?? createKnowledgeExtractor(env);
-  const fileOcrProvider = options.fileOcrProvider ?? createFileOcrProvider(env);
-  const oidc = createOidcAuthenticator(repository, env, options.oidcFetch);
-  const voiceProvider = options.voiceProvider ?? createVoiceProvider(env);
+  const fileMalwareScanner = runtime.fileMalwareScanner;
+  const knowledgeExtractor = runtime.knowledgeExtractor;
+  const fileOcrProvider = runtime.fileOcrProvider;
+  const oidc = createOidcAuthenticator(
+    repository,
+    env,
+    options.oidcFetch,
+    runtime.oidcRuntimeCache,
+  );
+  const voiceProvider = runtime.voiceProvider;
   const sessions = new SessionService(repository);
   const webhookOptions: {
     fetchImpl?: typeof fetch;
@@ -140,6 +150,9 @@ export function createServices(
     signingKey: string;
   } = {
     signingKey: env.WEBHOOK_SIGNING_KEY,
+    ...(env.WEBHOOK_SIGNING_KEY_PREVIOUS.length === 0
+      ? {}
+      : { signingKeyPrevious: env.WEBHOOK_SIGNING_KEY_PREVIOUS }),
   };
   if (options.webhookFetch !== undefined) {
     webhookOptions.fetchImpl = options.webhookFetch;
@@ -147,19 +160,7 @@ export function createServices(
     webhookOptions.hostLookup = lookupNetworkHost;
   }
   const webhooks = new WebhookService(repository, webhookOptions);
-  const notificationDelivery = createNotificationDeliverySender(env, {
-    ...webhookOptions,
-    secretResolver,
-    ...(options.notificationSmtpSendMail === undefined
-      ? {}
-      : { smtpSendMail: options.notificationSmtpSendMail }),
-    ...(options.notificationResendClientFactory === undefined
-      ? {}
-      : { resendClientFactory: options.notificationResendClientFactory }),
-    ...(options.notificationFcmClientFactory === undefined
-      ? {}
-      : { fcmClientFactory: options.notificationFcmClientFactory }),
-  });
+  const notificationDelivery = runtime.notificationDelivery;
   const toolOperationExecutionEnabled =
     env.TOOL_OPERATION_EXECUTION_DRIVER === "http-fetch";
   const tools = new ToolService(repository, runEventSequencer, webhooks, {
@@ -224,6 +225,7 @@ export function createServices(
     objectStore,
     {
       capabilityPlatformPolicy: platformCapabilityPolicy,
+      providerCircuitBreaker: runtime.providerCircuitBreaker,
       providerCircuitCooldownMs: env.MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS,
       providerCircuitFailureThreshold:
         env.MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD,
@@ -256,9 +258,9 @@ export function createServices(
       messageAttachmentMaxBytes: env.MESSAGE_ATTACHMENT_MAX_BYTES,
       malwareScanning: {
         policy: env.FILE_MALWARE_SCAN_POLICY,
-        ...(options.fileMalwareScanner === undefined
+        ...(fileMalwareScanner === undefined
           ? {}
-          : { scanner: options.fileMalwareScanner }),
+          : { scanner: fileMalwareScanner }),
       },
       quotaCoordinator,
       toolOperationExecutionEnabled,
@@ -296,10 +298,8 @@ export function createServices(
   };
   if (options.toolOperationFetch !== undefined)
     toolConnectorOptions.fetchImpl = options.toolOperationFetch;
-  const workflows = new WorkflowService(repository, runs);
   const browserAutomation = new BrowserAutomationService(
     repository,
-    workflows,
     objectStore,
     env,
   );
@@ -315,9 +315,9 @@ export function createServices(
     },
     {
       policy: env.FILE_MALWARE_SCAN_POLICY,
-      ...(options.fileMalwareScanner === undefined
+      ...(fileMalwareScanner === undefined
         ? {}
-        : { scanner: options.fileMalwareScanner }),
+        : { scanner: fileMalwareScanner }),
     },
     knowledgeExtractor,
     fileOcrProvider,
@@ -343,9 +343,9 @@ export function createServices(
     messagePageCursorSecrets,
     messageSearchCursorSecrets,
     policy: env.FILE_MALWARE_SCAN_POLICY,
-    ...(options.fileMalwareScanner === undefined
+    ...(fileMalwareScanner === undefined
       ? {}
-      : { scanner: options.fileMalwareScanner }),
+      : { scanner: fileMalwareScanner }),
   });
   const chatEvents = new ChatEventService(chatEventTransport);
   const temporaryChatCleanup = new TemporaryChatCleanupWorker(
@@ -373,14 +373,17 @@ export function createServices(
     directorySync,
     env,
     files,
+    internalReadiness: runtime.internalReadiness,
     knowledge,
     ...(knowledgeVectorStore === undefined ? {} : { knowledgeVectorStore }),
     managedSecrets,
     notificationDelivery,
+    oidcRuntimeCache: runtime.oidcRuntimeCache,
     objectStore,
     oidc,
     openWebUiCompatibility,
     options,
+    providerCircuitBreaker: runtime.providerCircuitBreaker,
     quotaCoordinator,
     repository,
     runs,
@@ -393,6 +396,5 @@ export function createServices(
     voiceProvider,
     webhooks,
     webSearch,
-    workflows,
   });
 }

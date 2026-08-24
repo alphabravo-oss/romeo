@@ -26,23 +26,19 @@ spec:
         app.kubernetes.io/component: migration
     spec:
       restartPolicy: Never
-      serviceAccountName: {{ include "romeo.serviceAccountName" . }}
+      serviceAccountName: {{ include "romeo.identityServiceAccountName" (dict "root" . "identity" (dict "serviceAccount" .Values.migration.serviceAccount) "component" "migration") }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: migrate
-          image: {{ include "romeo.image" . | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ include "romeo.opsImage" . | quote }}
+          imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
           command: ["pnpm", "migrate:postgres"]
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: {{ include "romeo.configMapName" . }}
-            {{- if or .Values.secrets.existingSecret .Values.secrets.create }}
-            - secretRef:
-                name: {{ include "romeo.secretName" . }}
-            {{- end }}
           env:
             {{- include "romeo.nodeWritableEnv" . | nindent 12 }}
             - name: DATABASE_URL

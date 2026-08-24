@@ -6,10 +6,10 @@ import Brain from "lucide-react/dist/esm/icons/brain.mjs";
 import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen.mjs";
 import Smartphone from "lucide-react/dist/esm/icons/smartphone.mjs";
 import UserIcon from "lucide-react/dist/esm/icons/user.mjs";
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 
 import { ConsoleLayout } from "../components/ConsoleLayout";
-import { PageHeader } from "../components/PageHeader";
+import { Page } from "../components/console";
 import {
   DeviceTokensPanel,
   InterfaceSettings,
@@ -23,6 +23,7 @@ import { useWorkspace } from "../components/WorkspaceContext";
 import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
 import {
   localeNamespacesForSettingsSection,
+  preloadRouteLocaleNamespaces,
   useLocale,
   useLocaleNamespaces,
 } from "../lib/i18n";
@@ -31,14 +32,26 @@ import { prefetchPrimaryRouteData } from "../lib/route-data";
 import { validatedWorkspaceRouteSearch } from "../lib/route-workspace-selection";
 
 export const Route = createFileRoute("/settings")({
-  loaderDeps: ({ search }) => ({ workspaceId: search.workspace }),
-  loader: ({ cause, context, deps }) =>
-    prefetchPrimaryRouteData(
-      "settings",
-      context,
-      cause === "preload" ? "intent" : "navigation",
-      deps,
-    ),
+  loaderDeps: ({ search }) => ({
+    section: search.section,
+    workspaceId: search.workspace,
+  }),
+  loader: async ({ abortController, cause, context, deps }) => {
+    const [selection] = await Promise.all([
+      prefetchPrimaryRouteData(
+        "settings",
+        context,
+        cause === "preload" ? "intent" : "navigation",
+        deps,
+        abortController.signal,
+      ),
+      preloadRouteLocaleNamespaces(
+        context.locale,
+        localeNamespacesForSettingsSection(deps.section ?? "interface"),
+      ),
+    ]);
+    return selection;
+  },
   validateSearch: (
     search: Record<string, unknown>,
   ): { section?: string; workspace?: string } => ({
@@ -52,47 +65,53 @@ function SettingsPage() {
   const { subject, workspace } = useWorkspace();
   const { t } = useLocale();
   const { section: sectionParam } = Route.useSearch();
-  const groups = [
-    {
-      label: t("preferences"),
-      items: [
-        { key: "interface", label: t("interface"), icon: SlidersHorizontal },
-        { key: "notifications", label: t("notifications"), icon: Bell },
-        { key: "memories", label: t("memory"), icon: Brain },
-        { key: "notes", label: t("note"), icon: NotebookPen },
-      ],
-    },
-    {
-      label: t("account"),
-      items: [
-        { key: "account", label: t("profile"), icon: UserIcon },
-        { key: "security", label: t("security"), icon: ShieldCheck },
-        {
-          key: "device-tokens",
-          label: t("deviceTokensTitle"),
-          icon: Smartphone,
-        },
-      ],
-    },
-  ];
-  const meta: Record<string, { title: string; description: string }> = {
-    interface: {
-      title: t("interface"),
-      description: t("interfaceDescription"),
-    },
-    notifications: {
-      title: t("notifications"),
-      description: t("notificationsDescription"),
-    },
-    memories: { title: t("memory"), description: t("memoryDescription") },
-    notes: { title: t("note"), description: t("notesDescription") },
-    account: { title: t("profile"), description: t("profileDescription") },
-    security: { title: t("security"), description: t("securityDescription") },
-    "device-tokens": {
-      title: t("deviceTokensTitle"),
-      description: t("adminDeviceTokensDescription"),
-    },
-  };
+  const groups = useMemo(
+    () => [
+      {
+        label: t("preferences"),
+        items: [
+          { key: "interface", label: t("interface"), icon: SlidersHorizontal },
+          { key: "notifications", label: t("notifications"), icon: Bell },
+          { key: "memories", label: t("memory"), icon: Brain },
+          { key: "notes", label: t("note"), icon: NotebookPen },
+        ],
+      },
+      {
+        label: t("account"),
+        items: [
+          { key: "account", label: t("profile"), icon: UserIcon },
+          { key: "security", label: t("security"), icon: ShieldCheck },
+          {
+            key: "device-tokens",
+            label: t("deviceTokensTitle"),
+            icon: Smartphone,
+          },
+        ],
+      },
+    ],
+    [t],
+  );
+  const meta = useMemo<Record<string, { title: string; description: string }>>(
+    () => ({
+      interface: {
+        title: t("interface"),
+        description: t("interfaceDescription"),
+      },
+      notifications: {
+        title: t("notifications"),
+        description: t("notificationsDescription"),
+      },
+      memories: { title: t("memory"), description: t("memoryDescription") },
+      notes: { title: t("note"), description: t("notesDescription") },
+      account: { title: t("profile"), description: t("profileDescription") },
+      security: { title: t("security"), description: t("securityDescription") },
+      "device-tokens": {
+        title: t("deviceTokensTitle"),
+        description: t("adminDeviceTokensDescription"),
+      },
+    }),
+    [t],
+  );
   const section = resolveSectionKey(sectionParam, meta, "interface");
   useLocaleNamespaces(localeNamespacesForSettingsSection(section));
 
@@ -112,32 +131,33 @@ function SettingsPage() {
         />
       }
     >
-      <PageHeader
+      <Page
         description={meta[section]!.description}
         title={meta[section]!.title}
-      />
-      <Suspense
-        fallback={
-          <div className="rm-loading" role="status">
-            {t("loading")}
-          </div>
-        }
       >
-        {section === "interface" ? <InterfaceSettings /> : null}
-        {section === "notifications" ? <NotificationPanel /> : null}
-        {section === "memories" ? (
-          <PersonalContentPanel kind="memories" />
-        ) : null}
-        {section === "notes" ? <PersonalContentPanel kind="notes" /> : null}
-        {section === "account" ? (
-          <SettingsAccountSection
-            subject={subject}
-            workspaceName={workspace?.name}
-          />
-        ) : null}
-        {section === "security" ? <SettingsSecuritySection /> : null}
-        {section === "device-tokens" ? <DeviceTokensPanel /> : null}
-      </Suspense>
+        <Suspense
+          fallback={
+            <div className="rm-loading" role="status">
+              {t("loading")}
+            </div>
+          }
+        >
+          {section === "interface" ? <InterfaceSettings /> : null}
+          {section === "notifications" ? <NotificationPanel /> : null}
+          {section === "memories" ? (
+            <PersonalContentPanel kind="memories" />
+          ) : null}
+          {section === "notes" ? <PersonalContentPanel kind="notes" /> : null}
+          {section === "account" ? (
+            <SettingsAccountSection
+              subject={subject}
+              workspaceName={workspace?.name}
+            />
+          ) : null}
+          {section === "security" ? <SettingsSecuritySection /> : null}
+          {section === "device-tokens" ? <DeviceTokensPanel /> : null}
+        </Suspense>
+      </Page>
     </ConsoleLayout>
   );
 }

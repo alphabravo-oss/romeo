@@ -22,7 +22,7 @@ export function workspaceContentPageQueryOptions(input: {
     ...serverQueryPolicy("interactive", "personalContent", {
       kind,
       page,
-      query: normalizedQuery,
+      ...(normalizedQuery === "" ? {} : { query: normalizedQuery }),
       workspaceId,
     }),
     queryKey: appQueryKeys.personalContent(kind, workspaceId, {
@@ -34,9 +34,21 @@ export function workspaceContentPageQueryOptions(input: {
         listWorkspaceContentPage(kind, workspaceId!, {
           limit: pageSize,
           offset: page * pageSize,
-          query,
+          query: normalizedQuery,
         }),
       ),
     enabled: enabled && workspaceId !== undefined,
+    refetchInterval: (current) =>
+      current.state.data?.items.some((item) =>
+        [
+          "uploading",
+          "quarantined",
+          "scanning",
+          "extracting",
+          "transcoding",
+        ].includes(item.lifecycleStatus),
+      )
+        ? 1_000
+        : false,
   });
 }

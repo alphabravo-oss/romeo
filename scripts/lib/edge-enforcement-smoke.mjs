@@ -198,7 +198,7 @@ async function adminPostureEvidence(config) {
   if (config.apiKey === undefined || config.apiKey.length === 0) {
     if (config.requireAdminPosture) {
       throw new Error(
-        "--api-key or ROMEO_API_KEY is required with --require-admin-posture.",
+        "ROMEO_API_KEY or ROMEO_API_KEY_FILE is required with --require-admin-posture.",
       );
     }
     return { checked: false };

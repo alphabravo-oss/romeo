@@ -13,6 +13,7 @@ import {
   markNotificationRead,
   updateNotificationPolicy,
 } from "./mutations";
+import { invalidateInventoriedTablePages } from "../../lib/inventoried-table-cache";
 
 export function createNotificationChannelMutationOptions() {
   return serverMutationOptions({
@@ -73,7 +74,7 @@ export function markNotificationReadMutationOptions() {
         }
       },
     },
-    reconcile: (client, notification) => {
+    reconcile: async (client, notification) => {
       client.setQueryData<UserNotification[]>(
         appQueryKeys.notifications(),
         (current) =>
@@ -81,6 +82,9 @@ export function markNotificationReadMutationOptions() {
             item.id === notification.id ? notification : item,
           ),
       );
+      await invalidateInventoriedTablePages(client, {
+        resource: "notifications",
+      });
     },
     invalidations: () => [
       { exact: true, queryKey: appQueryKeys.notifications() },

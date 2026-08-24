@@ -85,7 +85,11 @@ export class BuiltInToolExecutionService {
       );
     }
 
-    if (binding.approvalRequired && options.approved !== true) {
+    if (
+      binding.approvalRequired &&
+      options.approvalRequestId === undefined &&
+      options.approved !== true
+    ) {
       const toolCall = await recordToolCall(this.repository, {
         subject,
         agent,
@@ -127,6 +131,7 @@ export class BuiltInToolExecutionService {
           tool.id,
           options.approvalRequestId,
           run?.id,
+          input,
         );
       } catch (error) {
         const errorCode =

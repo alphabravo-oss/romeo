@@ -12,8 +12,10 @@ import { CliUsageError } from "./cli-errors";
 import { csvFlag, optionalIntegerFlag, requiredFlag } from "./command-flags";
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
+import { readCliSecret, rejectSecretFlag } from "./secret-input";
 
 interface DeviceCommandContext {
+  env?: NodeJS.ProcessEnv;
   generatedClient?: GeneratedApiClient;
   io: CliIo;
   parsed: ParsedArgs;
@@ -53,7 +55,15 @@ function createDevice(context: DeviceCommandContext) {
 }
 
 function refreshDevice(context: DeviceCommandContext) {
-  const refreshToken = requiredFlag(context.parsed, "refresh-token");
+  rejectSecretFlag(context.parsed.flags, "refresh-token");
+  const refreshToken = readCliSecret(
+    context.env ?? process.env,
+    "ROMEO_DEVICE_REFRESH_TOKEN",
+  );
+  if (refreshToken === undefined)
+    throw new CliUsageError(
+      "ROMEO_DEVICE_REFRESH_TOKEN or ROMEO_DEVICE_REFRESH_TOKEN_FILE is required.",
+    );
   return deviceAuthorizationsRefresh({
     body: { refreshToken },
     client: generatedClient(context),

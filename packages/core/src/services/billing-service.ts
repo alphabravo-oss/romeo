@@ -44,10 +44,12 @@ export interface BillingPlanApplyResult {
 }
 
 export interface BillingServiceOptions {
+  enabled?: boolean;
   genericWebhookSecret?: string;
   genericWebhookToleranceSeconds?: number;
   stripeWebhookSecret?: string;
   stripeWebhookToleranceSeconds?: number;
+  tenancyMode?: "multi" | "single";
   webhookOrgId?: string;
 }
 
@@ -60,6 +62,7 @@ export class BillingService {
   ) {}
 
   current(subject: AuthSubject): Promise<BillingPlan | undefined> {
+    this.assertEnabled();
     assertScope(subject, "admin:read");
     return this.repository.getBillingPlan(subject.orgId);
   }
@@ -67,6 +70,7 @@ export class BillingService {
   async entitlementReport(
     subject: AuthSubject,
   ): Promise<BillingEntitlementReport> {
+    this.assertEnabled();
     assertScope(subject, "admin:read");
     return buildBillingEntitlementReport(this.repository, subject.orgId);
   }
@@ -74,6 +78,7 @@ export class BillingService {
   async reconcileEntitlements(
     subject: AuthSubject,
   ): Promise<BillingEntitlementReconciliationResult> {
+    this.assertEnabled();
     assertScope(subject, "admin:write");
     return reconcileBillingEntitlements(this.repository, subject);
   }
@@ -90,6 +95,7 @@ export class BillingService {
     externalSubscriptionId?: string;
     lifecycle?: BillingLifecycleInput;
   }): Promise<BillingPlanApplyResult> {
+    this.assertEnabled();
     assertScope(input.subject, "admin:write");
     validateBillingQuotaTemplates(input.quotaTemplates);
     return this.repository.transaction(async (repository) =>
@@ -101,6 +107,7 @@ export class BillingService {
     subject: AuthSubject;
     event: ExternalBillingEventInput;
   }): Promise<BillingPlanApplyResult> {
+    this.assertEnabled();
     assertScope(input.subject, "admin:write");
     return this.withSyncLock(input.subject.orgId, () =>
       this.repository.transaction(async (repository) => {
@@ -245,7 +252,7 @@ export class BillingService {
       secret: this.options.stripeWebhookSecret ?? "",
       toleranceSeconds: this.options.stripeWebhookToleranceSeconds ?? 300,
     });
-    const orgId = this.options.webhookOrgId ?? "org_default";
+    const orgId = await this.resolveWebhookOrgId(event.externalCustomerId);
     return this.syncExternalEvent({
       subject: await billingWebhookSubject(this.repository, orgId),
       event,
@@ -264,7 +271,7 @@ export class BillingService {
       secret: this.options.genericWebhookSecret ?? "",
       toleranceSeconds: this.options.genericWebhookToleranceSeconds ?? 300,
     });
-    const orgId = this.options.webhookOrgId ?? "org_default";
+    const orgId = await this.resolveWebhookOrgId(event.externalCustomerId);
     return this.syncExternalEvent({
       subject: await billingWebhookSubject(this.repository, orgId),
       event,
@@ -272,6 +279,7 @@ export class BillingService {
   }
 
   async lifecycleReport(subject: AuthSubject): Promise<BillingLifecycleReport> {
+    this.assertEnabled();
     assertScope(subject, "admin:read");
     return this.buildLifecycleReport(subject.orgId);
   }
@@ -279,6 +287,7 @@ export class BillingService {
   async enforceLifecycle(
     subject: AuthSubject,
   ): Promise<BillingLifecycleEnforcementResult> {
+    this.assertEnabled();
     assertScope(subject, "admin:write");
     return this.repository.transaction(async (repository) => {
       const plan = await repository.getBillingPlan(subject.orgId);
@@ -341,6 +350,36 @@ export class BillingService {
         },
       };
     });
+  }
+
+  private assertEnabled(): void {
+    if (this.options.enabled === false) {
+      throw new ApiError(
+        "billing_disabled",
+        "Billing is disabled for this deployment.",
+        404,
+      );
+    }
+  }
+
+  private async resolveWebhookOrgId(
+    externalCustomerId: string | undefined,
+  ): Promise<string> {
+    this.assertEnabled();
+    const customerId = externalCustomerId?.trim() ?? "";
+    if (customerId.length > 0) {
+      const mapped =
+        await this.repository.getBillingPlanByExternalCustomerId(customerId);
+      if (mapped !== undefined) return mapped.orgId;
+    }
+    if (this.options.tenancyMode === "multi") {
+      throw new ApiError(
+        "billing_org_unmapped",
+        "Billing webhook could not be mapped to an organization.",
+        400,
+      );
+    }
+    return this.options.webhookOrgId ?? "org_default";
   }
 
   private async applyPlanInRepository(

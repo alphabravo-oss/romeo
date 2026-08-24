@@ -1,4 +1,5 @@
 import type { TenantDataPurgeResult } from "@romeo/core";
+import { sql } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import { purgeTenantPhaseOne } from "./tenant-purge-phase-one";
@@ -15,6 +16,10 @@ export class PgTenantPurgeRepository {
       const context = await tenantPurgeContext(database, orgId);
       const counts: Record<string, number> = {};
       const state = { context, counts, database, orgId };
+
+      await database.execute(
+        sql`select set_config('romeo.audit_integrity_mutation', 'authorized', true)`,
+      );
 
       await purgeTenantPhaseOne(state);
       await purgeTenantPhaseTwo(state);

@@ -1,5 +1,5 @@
 import { Button } from "@romeo/ui";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import CheckCircle from "lucide-react/dist/esm/icons/check-circle.mjs";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical.mjs";
 import Play from "lucide-react/dist/esm/icons/play.mjs";
@@ -9,7 +9,6 @@ import { useMemo, useState } from "react";
 import { RomeoApiError } from "@romeo/api-client";
 import {
   dispatchToolOperationMutationOptions,
-  toolOperationsQueryOptions,
   testToolOperationMutationOptions,
   updateToolOperationMutationOptions,
 } from "../features/tool-connectors";
@@ -20,20 +19,20 @@ import type {
 } from "../features/types";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { LocalizedBytes } from "../lib/locale-format";
+import { localizedStatus } from "../lib/localized-status";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { ToolOperationTestResult } from "./ToolOperationTestResult";
 import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { useInventoriedServerTable } from "../lib/inventoried-server-table";
+import { useEventCallback } from "../lib/use-event-callback";
 
 const col = createColumnHelper<ToolOperation>();
 
 export function ToolOperationList({ connectorId }: { connectorId: string }) {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<ToolOperation>(
-    "tool_operations",
-    { parentId: connectorId },
-  );
-  const operationsQuery = useQuery(toolOperationsQueryOptions(connectorId));
+  const inventoriedTable = useInventoriedServerTable("tool_operations", {
+    parentId: connectorId,
+  });
   const testMutation = useMutation(testToolOperationMutationOptions());
   const operationMutation = useMutation(updateToolOperationMutationOptions());
   const dispatchMutation = useMutation(dispatchToolOperationMutationOptions());
@@ -45,7 +44,6 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
     Record<string, string>
   >({});
   const [error, setError] = useState<string>();
-  const operations = operationsQuery.data ?? [];
 
   async function handleTest(operation: ToolOperation) {
     setError(undefined);
@@ -126,6 +124,10 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
     }
   }
 
+  const onDispatch = useEventCallback(handleDispatch);
+  const onTest = useEventCallback(handleTest);
+  const onToggleOperation = useEventCallback(handleToggleOperation);
+
   const columns = useMemo<ColumnDef<ToolOperation, any>[]>(
     () => [
       col.accessor("name", {
@@ -166,7 +168,7 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
               <Button
                 className="inline-flex min-h-8 items-center gap-2 px-2 text-xs"
                 disabled={operationMutation.isPending}
-                onClick={() => void handleToggleOperation(operation)}
+                onClick={() => void onToggleOperation(operation)}
                 type="button"
               >
                 <Power aria-hidden="true" size={14} />
@@ -179,7 +181,7 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
               <Button
                 className="inline-flex min-h-8 items-center gap-2 px-2 text-xs"
                 disabled={testMutation.isPending}
-                onClick={() => void handleTest(operation)}
+                onClick={() => void onTest(operation)}
                 type="button"
               >
                 <FlaskConical aria-hidden="true" size={14} />
@@ -192,7 +194,7 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
               <Button
                 className="inline-flex min-h-8 items-center gap-2 px-2 text-xs"
                 disabled={dispatchMutation.isPending}
-                onClick={() => void handleDispatch(operation)}
+                onClick={() => void onDispatch(operation)}
                 type="button"
               >
                 <Play aria-hidden="true" size={14} />
@@ -206,7 +208,7 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
                 <Button
                   className="inline-flex min-h-8 items-center gap-2 px-2 text-xs"
                   disabled={dispatchMutation.isPending}
-                  onClick={() => void handleDispatch(operation, true)}
+                  onClick={() => void onDispatch(operation, true)}
                   type="button"
                 >
                   <CheckCircle aria-hidden="true" size={14} />
@@ -218,13 +220,15 @@ export function ToolOperationList({ connectorId }: { connectorId: string }) {
         },
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       approvalRequests,
-      operationMutation.isPending,
-      testMutation.isPending,
       dispatchMutation.isPending,
+      onDispatch,
+      onTest,
+      onToggleOperation,
+      operationMutation.isPending,
       t,
+      testMutation.isPending,
     ],
   );
 
@@ -260,8 +264,8 @@ function ToolOperationDispatchSummary({
   return (
     <div className="mt-2 grid gap-1 rounded-md border border-border p-2 text-muted">
       <div>
-        {t("toolOperationDispatch")}: {result.job.status} - HTTP{" "}
-        {result.response.status}
+        {t("toolOperationDispatch")}: {localizedStatus(result.job.status, t)} -
+        HTTP {result.response.status}
       </div>
       <div>
         {t("toolOperationResponse")}:{" "}
@@ -269,7 +273,8 @@ function ToolOperationDispatchSummary({
         {result.response.truncated ? ` ${t("toolOperationTruncated")}` : ""}
       </div>
       <div>
-        {t("toolOperationSchema")}: {result.response.schemaValidation.status}
+        {t("toolOperationSchema")}:{" "}
+        {localizedStatus(result.response.schemaValidation.status, t)}
         {result.response.schemaValidation.errorCode
           ? ` (${result.response.schemaValidation.errorCode})`
           : ""}

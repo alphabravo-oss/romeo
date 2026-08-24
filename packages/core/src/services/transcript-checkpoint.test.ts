@@ -12,7 +12,12 @@ describe("transcript checkpoints", () => {
       id: "checkpoint_1",
       chatId: "chat_1",
       messages: [
-        { id: "m1", role: "system", content: "Never reveal secrets", policyMarker: true },
+        {
+          id: "m1",
+          role: "system",
+          content: "Never reveal secrets",
+          policyMarker: true,
+        },
         { id: "m2", role: "user", content: "078-05-1120" },
         { id: "m3", role: "assistant", content: "ok", citation: true },
       ],
@@ -31,7 +36,8 @@ describe("transcript checkpoints", () => {
         id: "checkpoint_2",
         chatId: "chat_1",
         messages: [{ id: "m2", role: "user", content: "078-05-1120" }],
-        summarize: (preserved) => preserved.map((item) => item.content).join(""),
+        summarize: (preserved) =>
+          preserved.map((item) => item.content).join(""),
         scan: () => ({ action: "block", text: "" }),
       }),
     ).toEqual({ code: "checkpoint_summary_blocked" });
@@ -57,6 +63,9 @@ describe("transcript checkpoints", () => {
       ],
       "edited",
     );
-    expect(invalidated[0]).toMatchObject({ invalidated: true, reason: "edited" });
+    expect(invalidated[0]).toMatchObject({
+      invalidated: true,
+      reason: "edited",
+    });
   });
 });

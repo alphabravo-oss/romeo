@@ -34,7 +34,6 @@
   "adminWorkspaceMembersDescription": "Concede o revoca la pertenencia al espacio de trabajo para usuarios y grupos.",
   "adminOrganizationsDescription": "Organizaciones visibles para tu cuenta.",
   "adminImpersonationDescription": "Revisa y gestiona solicitudes de suplantación de soporte.",
-  "adminWorkflowsDescription": "Plantillas, ejecuciones y puertas de aprobación de flujos de trabajo.",
   "adminWebhooksDescription": "Suscripciones de webhook salientes e historial de entregas.",
   "adminNotificationsDescription": "Canales de entrega e historial de notificaciones.",
   "adminDeviceTokensDescription": "Credenciales de dispositivo de larga duración y sus ámbitos.",

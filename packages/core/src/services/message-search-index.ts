@@ -29,9 +29,22 @@ export function messageSearchIndexKey(input: MessageSearchIndexKey): string {
 export function applySearchIndexMutation(
   current: MessageSearchIndexEntry | undefined,
   mutation:
-    | { type: "upsert"; messageId: string; textHash: string; now: string; key: MessageSearchIndexKey }
-    | { type: "tombstone"; messageId: string; now: string; key: MessageSearchIndexKey },
-): MessageSearchIndexEntry | { outcome: "rejected"; code: "search_index_tombstoned" } {
+    | {
+        type: "upsert";
+        messageId: string;
+        textHash: string;
+        now: string;
+        key: MessageSearchIndexKey;
+      }
+    | {
+        type: "tombstone";
+        messageId: string;
+        now: string;
+        key: MessageSearchIndexKey;
+      },
+):
+  | MessageSearchIndexEntry
+  | { outcome: "rejected"; code: "search_index_tombstoned" } {
   if (current?.status === "tombstoned")
     return { outcome: "rejected", code: "search_index_tombstoned" };
   if (mutation.type === "tombstone")
@@ -53,7 +66,11 @@ export function applySearchIndexMutation(
 export function lookupSearchIndexEntry(
   entry: MessageSearchIndexEntry | undefined,
 ): { outcome: "hit"; textHash: string } | { outcome: "miss" } {
-  if (entry === undefined || entry.status === "tombstoned" || entry.textHash === undefined)
+  if (
+    entry === undefined ||
+    entry.status === "tombstoned" ||
+    entry.textHash === undefined
+  )
     return { outcome: "miss" };
   return { outcome: "hit", textHash: entry.textHash };
 }

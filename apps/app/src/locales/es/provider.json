@@ -14,8 +14,6 @@
   "catalogError": "Error de sincronización",
   "catalogPending": "Pendiente",
   "catalogStale": "Desactualizado",
-  "catalogSyncFailedEmpty": "La última sincronización falló. Revisa el error anterior y verifica la conexión o vuelve a sincronizar.",
-  "catalogSyncPendingEmpty": "El descubrimiento automático de modelos está pendiente. También puedes sincronizar ahora.",
   "chooseProviderPreset": "Elige un proveedor preconfigurado",
   "configure": "Configurar",
   "configureConnection": "Configurar conexión",

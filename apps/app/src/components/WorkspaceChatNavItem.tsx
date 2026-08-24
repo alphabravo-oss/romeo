@@ -1,7 +1,7 @@
 import { Button } from "@romeo/ui";
 import Star from "lucide-react/dist/esm/icons/star.mjs";
 
-import { chatExportUrl } from "../features";
+import { chatExportUrl } from "../features/chats";
 import type { Chat } from "../features/types";
 import { useLocale } from "../lib/i18n";
 import { OverflowMenu } from "./OverflowMenu";

@@ -2,6 +2,7 @@ import { Octokit, RequestError } from "octokit";
 
 import { ApiError } from "../errors";
 import { requirePublicApiErrorCode } from "../public-api-error-registry";
+import { SecretBearingEgressClient } from "./secret-bearing-egress";
 
 export interface GitHubOAuth2IdentityPolicy {
   adminTeams: string[];
@@ -30,6 +31,7 @@ interface GitHubEmail {
 
 const providerTimeoutMs = 10_000;
 const maxProviderResponseBytes = 256 * 1024;
+const githubApiOrigin = "https://api.github.com";
 
 export async function fetchGitHubOAuth2Identity(
   accessToken: string,
@@ -84,11 +86,17 @@ export async function fetchGitHubOAuth2Identity(
 }
 
 function createGitHubClient(accessToken: string, fetchImpl: typeof fetch) {
+  const resourceFetch = new SecretBearingEgressClient({
+    allowedOrigins: [githubApiOrigin],
+    fetchImpl,
+    maxResponseBytes: maxProviderResponseBytes,
+    timeoutMs: providerTimeoutMs,
+  }).fetch;
   return new Octokit({
     auth: accessToken,
     request: {
       fetch: (input: string | URL | Request, init?: RequestInit) =>
-        boundedProviderFetch(fetchImpl, input, init),
+        boundedProviderFetch(resourceFetch, input, init),
     },
     userAgent: "Romeo",
   });

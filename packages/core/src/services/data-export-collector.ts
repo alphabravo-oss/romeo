@@ -8,6 +8,7 @@ import type {
   MessagePart,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import { collectBackgroundJobs } from "./background-job-query";
 import { readRagPolicy } from "./rag-policy-service";
 import { isMessagePartV1 } from "./message-part-v1";
 import { publicUsageEvent } from "./voice-artifact-metadata";
@@ -81,7 +82,8 @@ export async function collectDataExport(input: {
     data.ragVectorPosture = exportRagVectorPosture(ragPolicy);
   }
 
-  const backgroundJobs = await input.repository.listBackgroundJobs(
+  const backgroundJobs = await collectBackgroundJobs(
+    input.repository,
     input.subject.orgId,
   );
   const exportedBackgroundJobs =
@@ -95,6 +97,10 @@ export async function collectDataExport(input: {
     data.backgroundJobs = exportedBackgroundJobs.map(exportBackgroundJob);
   }
 
+  const allConnectorSyncs = await input.repository.listDataConnectorSyncs(
+    input.subject.orgId,
+  );
+
   for (const workspace of workspaces) {
     const [
       agents,
@@ -103,7 +109,6 @@ export async function collectDataExport(input: {
       knowledgeBases,
       fileObjects,
       dataConnectors,
-      workflows,
     ] = await Promise.all([
       input.repository.listAgents(workspace.id),
       input.repository.listPromptTemplates(input.subject.orgId, workspace.id),
@@ -111,20 +116,13 @@ export async function collectDataExport(input: {
       input.repository.listKnowledgeBases(workspace.id),
       input.repository.listFileObjects(input.subject.orgId, workspace.id),
       input.repository.listDataConnectors(input.subject.orgId, workspace.id),
-      input.repository.listWorkflowDefinitions(
-        input.subject.orgId,
-        workspace.id,
-      ),
     ]);
-
     counts.agents += agents.length;
     counts.promptTemplates += promptTemplates.length;
     counts.chats += chats.length;
     counts.knowledgeBases += knowledgeBases.length;
     counts.fileObjects += fileObjects.length;
     counts.dataConnectors += dataConnectors.length;
-    counts.workflows += workflows.length;
-
     if (input.includeData) {
       data.agents.push(
         ...agents.map((agent) => ({
@@ -173,25 +171,29 @@ export async function collectDataExport(input: {
       for (const message of messages) {
         const parts = await input.repository.listMessageParts(message.id);
         counts.messageParts += parts.length;
-        messagesWithParts.push({
-          id: message.id,
-          role: message.role,
-          content: maybeContent(message.content, input.request.includeContent),
-          attachments: (message.attachments ?? []).map((attachment) => ({
-            id: attachment.id,
-            fileName: maybeContent(
-              attachment.fileName,
+        if (input.includeData)
+          messagesWithParts.push({
+            id: message.id,
+            role: message.role,
+            content: maybeContent(
+              message.content,
               input.request.includeContent,
             ),
-            mimeType: attachment.mimeType,
-            sizeBytes: attachment.sizeBytes,
-            kind: attachment.kind,
-          })),
-          parts: parts.map((part) =>
-            exportMessagePart(part, input.request.includeContent),
-          ),
-          createdAt: message.createdAt,
-        });
+            attachments: (message.attachments ?? []).map((attachment) => ({
+              id: attachment.id,
+              fileName: maybeContent(
+                attachment.fileName,
+                input.request.includeContent,
+              ),
+              mimeType: attachment.mimeType,
+              sizeBytes: attachment.sizeBytes,
+              kind: attachment.kind,
+            })),
+            parts: parts.map((part) =>
+              exportMessagePart(part, input.request.includeContent),
+            ),
+            createdAt: message.createdAt,
+          });
       }
       counts.messages += messages.length;
       counts.chatComments += comments.length;
@@ -220,7 +222,9 @@ export async function collectDataExport(input: {
       const [sources, chunks, embeddings] = await Promise.all([
         input.repository.listKnowledgeSources(knowledgeBase.id),
         input.repository.listKnowledgeChunks(knowledgeBase.id),
-        input.repository.listKnowledgeChunkEmbeddings(knowledgeBase.id),
+        input.includeData
+          ? input.repository.listKnowledgeChunkEmbeddings(knowledgeBase.id)
+          : Promise.resolve([]),
       ]);
       counts.knowledgeSources += sources.length;
       counts.knowledgeChunks += chunks.length;
@@ -321,13 +325,10 @@ export async function collectDataExport(input: {
       }
     }
 
-    const syncs = await input.repository.listDataConnectorSyncs(
-      input.subject.orgId,
-    );
     const connectorIds = new Set(
       dataConnectors.map((connector) => connector.id),
     );
-    const workspaceSyncs = syncs.filter((sync) =>
+    const workspaceSyncs = allConnectorSyncs.filter((sync) =>
       connectorIds.has(sync.connectorId),
     );
     counts.dataConnectorSyncs += workspaceSyncs.length;
@@ -361,63 +362,6 @@ export async function collectDataExport(input: {
             })),
         })),
       );
-    }
-
-    for (const workflow of workflows) {
-      const runs = await input.repository.listWorkflowRuns(
-        input.subject.orgId,
-        workflow.id,
-      );
-      counts.workflowRuns += runs.length;
-      if (input.includeData) {
-        data.workflows.push({
-          id: workflow.id,
-          workspaceId: workflow.workspaceId,
-          name: maybeContent(workflow.name, input.request.includeContent),
-          description: maybeContent(
-            workflow.description,
-            input.request.includeContent,
-          ),
-          enabled: workflow.enabled,
-          schedule: workflow.schedule,
-          createdBy: workflow.createdBy,
-          createdAt: workflow.createdAt,
-          updatedAt: workflow.updatedAt,
-          steps: workflow.steps.map((step) =>
-            input.request.includeContent
-              ? safeObject(step)
-              : {
-                  id: step.id,
-                  type: step.type,
-                  inputKeys: step.inputKeys ?? [],
-                  hasPrompt:
-                    step.handoffPrompt !== undefined ||
-                    step.roomPrompt !== undefined ||
-                    step.approvalPrompt !== undefined ||
-                    step.task !== undefined ||
-                    step.message !== undefined,
-                },
-          ),
-          runs: runs.map((run) => ({
-            id: run.id,
-            status: run.status,
-            createdBy: run.createdBy,
-            approvedBy: run.approvedBy,
-            inputKeys: Object.keys(run.input).sort(),
-            steps: run.steps.map((step) => ({
-              stepId: step.stepId,
-              type: step.type,
-              status: step.status,
-              outputKeys: Object.keys(step.output).sort(),
-              completedAt: step.completedAt,
-            })),
-            currentStepId: run.currentStepId,
-            createdAt: run.createdAt,
-            updatedAt: run.updatedAt,
-            completedAt: run.completedAt,
-          })),
-        });
-      }
     }
   }
 

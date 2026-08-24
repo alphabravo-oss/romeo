@@ -7,16 +7,18 @@ import {
   previewVoiceMutationOptions,
   syncVoicesMutationOptions,
   voicesQueryOptions,
-} from "../features";
+} from "../features/voices";
 import { bindAgentVoiceMutationOptions } from "../features/managed-models/mutation-options";
 import type { SpeechArtifact, VoiceProfile } from "../features/voices";
 import type { Agent } from "../features/managed-models";
 import { useLocale, type Locale } from "../lib/i18n";
+import { appHref } from "../lib/app-href";
 import { formatNumber, LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
 import { createColumnHelper, DataTable } from "./DataTable";
 import { Section } from "./console";
 import { safeUserErrorMessage } from "../lib/safe-user-error";
+import { audioCaptionTrackUrl } from "./composer-tray-media";
 
 const voiceColumn = createColumnHelper<VoiceProfile>();
 
@@ -155,6 +157,13 @@ export function VoicePanel({
           getRowId={(voice) => voice.id}
           minTableWidth={900}
           onRowActivate={(voice) => onSelectionChange(voice.id)}
+          rowHref={(voice) =>
+            appHref("/workspace", {
+              resource: voice.id,
+              section: "voice",
+              workspace: workspaceId,
+            })
+          }
           preferenceKey="workspace-voices"
           rowAriaLabel={(voice) =>
             t("workspaceVoiceOpen", { name: voice.name })
@@ -271,15 +280,19 @@ export function VoicePanel({
                   {formatSpeechArtifact(previewArtifact, locale)}
                 </p>
                 {previewArtifact.playbackUrl ? (
-                  // The visible preview metadata is the text alternative for
-                  // this generated speech-only artifact.
-                  // oxlint-disable-next-line jsx-a11y/media-has-caption
                   <audio
                     className="w-full"
                     controls
                     preload="metadata"
                     src={previewArtifact.playbackUrl}
-                  />
+                  >
+                    <track
+                      default
+                      kind="captions"
+                      label={t("trayAudioCaptions")}
+                      src={audioCaptionTrackUrl(t("workspaceVoicePreviewText"))}
+                    />
+                  </audio>
                 ) : null}
               </div>
             ) : null}

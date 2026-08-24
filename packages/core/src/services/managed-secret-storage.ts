@@ -305,8 +305,8 @@ export function assertGlobalAdmin(subject: AuthSubject): void {
   );
 }
 
-export function secretRefForId(secretId: string): string {
-  return `${managedSecretScheme}://${secretId}`;
+export function secretRefForId(secretId: string, orgId?: string): string {
+  return `${managedSecretScheme}://${encodeURIComponent(orgId ?? "__global__")}/${encodeURIComponent(secretId)}`;
 }
 
 export function settingKeyForId(secretId: string): string {

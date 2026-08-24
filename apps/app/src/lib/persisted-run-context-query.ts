@@ -22,7 +22,10 @@ export function persistedRunContextQueryOptions(
     enabled: chatId !== undefined,
     meta: {
       ssr: false,
-      ...devQueryDiagnosticMeta("persistedRunContext", { chatId, runId }),
+      ...devQueryDiagnosticMeta("persistedRunContext", {
+        ...(chatId === undefined ? {} : { chatId }),
+        ...(runId === undefined ? {} : { runId }),
+      }),
     },
     refetchOnReconnect: true,
     refetchOnWindowFocus: false,

@@ -1,11 +1,15 @@
-import { StatusBadge } from "@romeo/ui";
+import { StatusBadge, type ServerTableState } from "@romeo/ui";
 import { useMemo } from "react";
 
 import type { EvalRun, EvalRunResult, EvalSuite } from "../features/types";
 import { useLocale } from "../lib/i18n";
-import { LocalizedDateTime, LocalizedNumber } from "../lib/locale-format";
+import {
+  LocalizedDateTime,
+  LocalizedDuration,
+  LocalizedNumber,
+} from "../lib/locale-format";
+import { localizedStatus } from "../lib/localized-status";
 import { createColumnHelper, DataTable } from "./DataTable";
-import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const suiteColumn = createColumnHelper<EvalSuite>();
 const runColumn = createColumnHelper<EvalRun>();
@@ -14,12 +18,13 @@ const resultColumn = createColumnHelper<EvalRunResult>();
 export function EvalSuiteTable({
   data,
   onSelect,
+  serverState,
 }: {
   data: EvalSuite[];
   onSelect: (id: string) => void;
+  serverState: ServerTableState;
 }) {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<any>("eval_suites");
   const columns = useMemo(
     () => [
       suiteColumn.accessor("name", {
@@ -42,9 +47,9 @@ export function EvalSuiteTable({
   );
   return (
     <DataTable
-      serverState={inventoriedTable.serverState}
+      serverState={serverState}
       columns={columns}
-      data={inventoriedTable.rows}
+      data={data}
       getRowId={(suite) => suite.id}
       onRowActivate={(suite) => onSelect(suite.id)}
       preferenceKey="eval-suites"
@@ -114,7 +119,7 @@ export function EvalRunTable({
           row.original.metrics === undefined ? (
             t("evalNotAvailable")
           ) : (
-            <LocalizedNumber value={row.original.metrics.latencyMs} />
+            <LocalizedDuration milliseconds={row.original.metrics.latencyMs} />
           ),
       }),
       runColumn.accessor("completedAt", {
@@ -132,7 +137,7 @@ export function EvalRunTable({
       minTableWidth={900}
       onRowActivate={(run) => onSelect(run.id)}
       preferenceKey="eval-runs"
-      rowAriaLabel={(run) => `${run.status} ${run.modelId}`}
+      rowAriaLabel={(run) => `${localizedStatus(run.status, t)} ${run.modelId}`}
       searchVisibility="always"
     />
   );

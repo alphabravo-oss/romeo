@@ -1,7 +1,7 @@
-import { Input, Textarea, Button } from "@romeo/ui";
+import { Button, InlineError, Input, Textarea } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Upload from "lucide-react/dist/esm/icons/upload.mjs";
 
 import {
@@ -9,12 +9,11 @@ import {
   deleteKnowledgeSourceMutationOptions,
   extractKnowledgeSourceMutationOptions,
   ingestKnowledgeFileMutationOptions,
-  knowledgeBasesQueryOptions,
+  knowledgeBaseQueryOptions,
   knowledgeIngestReadinessQueryOptions,
-  knowledgeSourcesQueryOptions,
   queryKnowledgeBaseMutationOptions,
   reindexKnowledgeSourceMutationOptions,
-} from "../features";
+} from "../features/knowledge";
 import { Section } from "./console";
 import { ingestKnowledgeFile } from "./knowledge-file-ingest";
 import { toast } from "../lib/toast";
@@ -36,6 +35,7 @@ import { KnowledgeWorkspaceTabs } from "./KnowledgeWorkspaceTabs";
 import { KnowledgePanelHeader } from "./KnowledgePanelHeader";
 import type { KnowledgePanelProps } from "./knowledge-panel-types";
 import { KnowledgeCatalogBoundary } from "./KnowledgeCatalogBoundary";
+import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 export function KnowledgePanel({
   activeAgent,
@@ -52,16 +52,19 @@ export function KnowledgePanel({
   const [reindexing, setReindexing] = useState<KnowledgeSource>();
   const { ask, dialog } = useConfirm();
 
-  const knowledgeBasesQuery = useQuery(knowledgeBasesQueryOptions(workspaceId));
-  const knowledgeBases = useMemo(
-    () => knowledgeBasesQuery.data ?? [],
-    [knowledgeBasesQuery.data],
+  const knowledgeBasesTable = useInventoriedServerTable(
+    "knowledge_bases",
+    workspaceId === undefined ? { enabled: false } : { workspaceId },
   );
-  const activeKnowledgeBase = knowledgeBases.find(
-    (item) => item.id === selectedKnowledgeBaseId,
+  const knowledgeBaseQuery = useQuery(
+    knowledgeBaseQueryOptions(selectedKnowledgeBaseId),
   );
-  const sourcesQuery = useQuery(
-    knowledgeSourcesQueryOptions(activeKnowledgeBase?.id),
+  const activeKnowledgeBase = knowledgeBaseQuery.data;
+  const sourcesTable = useInventoriedServerTable(
+    "knowledge_sources",
+    activeKnowledgeBase === undefined
+      ? { enabled: false }
+      : { parentId: activeKnowledgeBase.id },
   );
   const sharesQuery = useQuery(
     knowledgeSharesQueryOptions(activeKnowledgeBase?.id, isAdmin),
@@ -209,7 +212,7 @@ export function KnowledgePanel({
 
   async function handleDeleteSource(sourceId: string) {
     if (!activeKnowledgeBase) return;
-    const source = sourcesQuery.data?.find((item) => item.id === sourceId);
+    const source = sourcesTable.rows.find((item) => item.id === sourceId);
     if (!source) return;
     if (
       !(await ask({
@@ -241,7 +244,7 @@ export function KnowledgePanel({
   }
 
   function handleReindexSource(sourceId: string) {
-    const source = sourcesQuery.data?.find((item) => item.id === sourceId);
+    const source = sourcesTable.rows.find((item) => item.id === sourceId);
     if (!source) return;
     ReindexForm.reset({ content: "", payloadSourceId: source.id });
     setReindexing(source);
@@ -265,19 +268,36 @@ export function KnowledgePanel({
     }
   }
 
+  if (selectedKnowledgeBaseId !== undefined && knowledgeBaseQuery.isPending) {
+    return (
+      <div className="rm-loading" role="status">
+        {t("loading")}
+      </div>
+    );
+  }
+  if (selectedKnowledgeBaseId !== undefined && knowledgeBaseQuery.isError) {
+    return (
+      <InlineError className="flex items-center gap-2">
+        <span>{t("queryCouldNotLoad")}</span>
+        <Button onClick={() => void knowledgeBaseQuery.refetch()}>
+          {t("tryAgain")}
+        </Button>
+      </InlineError>
+    );
+  }
   if (activeKnowledgeBase === undefined) {
     return (
       <KnowledgeCatalogBoundary
         ingestReadiness={ingestQuery.data}
         isAdmin={isAdmin}
-        isLoading={knowledgeBasesQuery.isLoading}
-        knowledgeBases={knowledgeBases}
+        knowledgeBases={knowledgeBasesTable.rows}
         onCreated={(knowledgeBaseId) => {
           onSelectionChange(knowledgeBaseId);
           setNotice(t("knowledgeBaseCreatedNotice"));
         }}
         onSelectionChange={onSelectionChange}
         workspaceId={workspaceId}
+        tableState={knowledgeBasesTable.serverState}
       />
     );
   }
@@ -452,7 +472,8 @@ export function KnowledgePanel({
           onExtract={(sourceId) => void handleExtractSource(sourceId)}
           onQuery={handleQuery}
           onReindex={handleReindexSource}
-          sourcesQuery={sourcesQuery}
+          sources={sourcesTable.rows}
+          tableState={sourcesTable.serverState}
         />
         {dialog}
       </Section>

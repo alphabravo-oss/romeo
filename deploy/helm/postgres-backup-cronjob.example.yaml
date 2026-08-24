@@ -39,6 +39,8 @@ spec:
                   pnpm backup:postgres -- \
                     --output /tmp/romeo-postgres.dump \
                     --manifest-output /tmp/romeo-postgres.dump.manifest.json \
+                    --status-output /tmp/romeo-postgres.dump.status.json \
+                    --durability-mode verified-upload \
                     --retention-days "${POSTGRES_BACKUP_RETENTION_DAYS:-30}" \
                     --upload-timeout-ms "${POSTGRES_BACKUP_UPLOAD_TIMEOUT_MS:-30000}"
               volumeMounts:

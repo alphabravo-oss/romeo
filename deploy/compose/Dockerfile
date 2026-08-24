@@ -8,8 +8,11 @@ COPY apps/app/package.json apps/app/package.json
 COPY packages packages
 RUN pnpm install --frozen-lockfile
 
-FROM deps AS build
+FROM deps AS check
 COPY . .
+RUN pnpm check
+
+FROM check AS build
 RUN pnpm build
 
 FROM base AS runtime-packages
@@ -26,11 +29,18 @@ RUN apt-get update \
 # Operational jobs retain the compiled workspace and scripts they invoke, but
 # never inherit arbitrary build-context files or local environment files.
 FROM runtime-packages AS ops-runtime
-COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/tsconfig.base.json /app/
-COPY --from=build /app/node_modules /app/node_modules
-COPY --from=build /app/packages /app/packages
-COPY --from=build /app/scripts /app/scripts
-COPY --from=build /app/apps/app/package.json /app/apps/app/package.json
+RUN rm -f /usr/local/bin/pnpm /usr/local/bin/pnpx \
+  && npm install --global --ignore-scripts pnpm@11.7.0 \
+  && rm -rf /root/.npm
+# The runtime dependency graph was frozen and validated in the build stage.
+# Operational commands must never attempt an implicit install (or require a
+# writable application directory) when pnpm detects workspace metadata drift.
+ENV pnpm_config_verify_deps_before_run=false
+COPY --from=build --chown=node:node /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/tsconfig.base.json /app/
+COPY --from=build --chown=node:node /app/node_modules /app/node_modules
+COPY --from=build --chown=node:node /app/packages /app/packages
+COPY --from=build --chown=node:node /app/scripts /app/scripts
+COPY --from=build --chown=node:node /app/apps/app/package.json /app/apps/app/package.json
 RUN install -d -o node -g node /backups
 USER node
 

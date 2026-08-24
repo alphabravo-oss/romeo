@@ -2,7 +2,7 @@ import { Button, Input } from "@romeo/ui";
 import Plus from "lucide-react/dist/esm/icons/plus.mjs";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.mjs";
 import SearchIcon from "lucide-react/dist/esm/icons/search.mjs";
-import type { ComponentProps, ReactNode } from "react";
+import { createElement, type ComponentProps, type ReactNode } from "react";
 
 /**
  * Filter controls on the left, the group's one real action on the right.
@@ -13,6 +13,7 @@ import type { ComponentProps, ReactNode } from "react";
  */
 export function Toolbar({
   actions,
+  ariaLabel,
   children,
   onSearchChange,
   searchLabel,
@@ -20,6 +21,7 @@ export function Toolbar({
   searchValue,
 }: {
   actions?: ReactNode;
+  ariaLabel: string;
   /** Extra filters — selects, date ranges, segmented controls. */
   children?: ReactNode;
   onSearchChange?: (value: string) => void;
@@ -31,7 +33,7 @@ export function Toolbar({
   if (!hasSearch && children === undefined && actions === undefined)
     return null;
   return (
-    <div className="cs-toolbar">
+    <div aria-label={ariaLabel} className="cs-toolbar" role="toolbar">
       <div className="cs-toolbar__filters">
         {hasSearch ? (
           <div className="cs-search">
@@ -108,11 +110,13 @@ export function RefreshButton({
 export function EmptyState({
   action,
   description,
+  headingLevel,
   icon,
   title,
 }: {
   action?: ReactNode;
   description?: ReactNode;
+  headingLevel: 2 | 3 | 4 | 5 | 6;
   icon?: ReactNode;
   title: ReactNode;
 }): ReactNode {
@@ -123,7 +127,11 @@ export function EmptyState({
           {icon}
         </span>
       )}
-      <p className="cs-empty__title">{title}</p>
+      {createElement(
+        `h${headingLevel}`,
+        { className: "cs-empty__title" },
+        title,
+      )}
       {description === undefined ? null : (
         <p className="cs-empty__description">{description}</p>
       )}

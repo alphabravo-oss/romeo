@@ -32,7 +32,10 @@ export function ProfileEditPanel({
       try {
         await mutation.mutateAsync(input);
         toast(t("profileUpdated"), "success");
-        form.reset();
+        form.reset({
+          name: input.name ?? value.name,
+          email: input.email ?? value.email,
+        });
       } catch {
         toast(t("couldNotUpdateProfile"), "error");
       }

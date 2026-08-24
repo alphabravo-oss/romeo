@@ -22,6 +22,7 @@ export class ChatTemporaryService {
     workspaceId?: string;
   }): Promise<{ deletedChatIds: string[]; skippedLegalHoldIds: string[] }> {
     assertScope(input.subject, "admin:write");
+    const evaluatedAt = new Date().toISOString();
     const workspaceIds =
       input.workspaceId === undefined
         ? input.subject.workspaceIds
@@ -29,12 +30,12 @@ export class ChatTemporaryService {
     const chats = await this.expiredChats(
       input.subject.orgId,
       workspaceIds,
-      Date.now(),
+      Date.parse(evaluatedAt),
     );
     const deletedChatIds: string[] = [];
     const skippedLegalHoldIds: string[] = [];
     for (const chat of chats) {
-      const outcome = await this.purge(chat);
+      const outcome = await this.purge(chat, evaluatedAt);
       if (outcome === "legal_hold") skippedLegalHoldIds.push(chat.id);
       if (outcome === "deleted") deletedChatIds.push(chat.id);
     }
@@ -62,12 +63,13 @@ export class ChatTemporaryService {
     skippedLegalHoldIds: string[];
     deletedObjectCount: number;
   }> {
+    const evaluatedAt = input.now ?? new Date().toISOString();
     const workspaces = await this.repository.listWorkspaces(input.orgId);
     const chats = (
       await this.expiredChats(
         input.orgId,
         workspaces.map((workspace) => workspace.id),
-        Date.parse(input.now ?? new Date().toISOString()),
+        Date.parse(evaluatedAt),
       )
     )
       .sort(
@@ -81,7 +83,7 @@ export class ChatTemporaryService {
     let deletedObjectCount = 0;
     for (const chat of chats) {
       const attachmentCount = await this.attachmentCount(chat.id);
-      const outcome = await this.purge(chat);
+      const outcome = await this.purge(chat, evaluatedAt);
       if (outcome === "legal_hold") skippedLegalHoldIds.push(chat.id);
       if (outcome === "deleted") {
         deletedChatIds.push(chat.id);
@@ -108,7 +110,7 @@ export class ChatTemporaryService {
         deletedObjects: deletedObjectCount,
         ...currentTelemetryMetadata(),
       },
-      createdAt: new Date().toISOString(),
+      createdAt: evaluatedAt,
     });
     return {
       scanned: chats.length,
@@ -118,11 +120,15 @@ export class ChatTemporaryService {
     };
   }
 
-  async purge(chat: Chat): Promise<TemporaryChatPurgeOutcome> {
+  async purge(
+    chat: Chat,
+    evaluatedAt: string = new Date().toISOString(),
+  ): Promise<TemporaryChatPurgeOutcome> {
     const plan = await this.repository.getDataDeletionPlan(
       chat.orgId,
       "chat",
       chat.id,
+      evaluatedAt,
     );
     if (plan?.legalHold !== undefined) return "legal_hold";
     const messages = await this.repository.listMessages(chat.id);
@@ -140,6 +146,7 @@ export class ChatTemporaryService {
       chat.orgId,
       "chat",
       chat.id,
+      evaluatedAt,
     );
     return deleted === undefined ? "missing" : "deleted";
   }

@@ -210,8 +210,12 @@ function CapabilityOverviewList({
   const [filter, setFilter] = useState<"all" | "changed">("all");
   const rows = data.capabilities.filter((row) => {
     const copy = capabilityCopyFor(row.definition.id);
-    const haystack = `${t(copy.name)} ${t(copy.description)} ${row.definition.category} ${row.definition.risk} ${row.definition.lifecycle}`.toLowerCase();
-    if (query.trim().length > 0 && !haystack.includes(query.trim().toLowerCase()))
+    const haystack =
+      `${t(copy.name)} ${t(copy.description)} ${row.definition.category} ${row.definition.risk} ${row.definition.lifecycle}`.toLowerCase();
+    if (
+      query.trim().length > 0 &&
+      !haystack.includes(query.trim().toLowerCase())
+    )
       return false;
     if (filter === "changed" && row.configuredAssignment === undefined)
       return false;
@@ -223,9 +227,9 @@ function CapabilityOverviewList({
         {t("capabilityRegistryVersion")}: {data.registryVersion}
       </p>
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label={t("capabilityFilter")}>
+        <Field label={t("capabilitySearch")}>
           <Input
-            name="capability_filter"
+            name="capability_search"
             onChange={(event) => setQuery(event.currentTarget.value)}
             value={query}
           />

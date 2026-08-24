@@ -31,6 +31,11 @@ export type { RepositoryCapabilityFlags } from "./repository-capability-flags";
 export type { RepositoryIdempotency } from "./repository-idempotency";
 export type { RepositoryIdentityCapability } from "./repository-identity";
 export type { RepositoryOperationsCapability } from "./repository-operations";
+export type * from "./server-table-records";
+export type * from "./inventoried-table-repository";
+export type * from "./content-policy";
+export type * from "./governance-export-records";
+export type * from "./content-deletion";
 
 export interface AuthorizedChatCatalogQuery {
   archived: "active" | "all" | "archived";
@@ -213,6 +218,7 @@ export interface RomeoRepositoryRuntime {
 }
 
 export interface ClaimBackgroundJobInput {
+  jobId?: string;
   leaseSeconds: number;
   now?: string;
   orgId: string;
@@ -221,8 +227,18 @@ export interface ClaimBackgroundJobInput {
   workerId: string;
 }
 
+export interface ListBackgroundJobsInput {
+  cursor?: { createdAt: string; id: string };
+  limit: number;
+  order?: "asc" | "desc";
+  payloadEquals?: Record<string, string>;
+  statuses?: BackgroundJob["status"][];
+  type?: string;
+}
+
 export interface RenewBackgroundJobLeaseInput {
   jobId: string;
+  leaseAttempt?: number;
   leaseSeconds: number;
   now?: string;
   orgId: string;
@@ -231,6 +247,7 @@ export interface RenewBackgroundJobLeaseInput {
 
 export interface UpdateBackgroundJobWithLeaseInput {
   job: BackgroundJob;
+  leaseAttempt?: number;
   workerId: string;
   now?: string;
 }

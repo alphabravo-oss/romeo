@@ -1,14 +1,5 @@
 import type { QueryUsersInput, UserTableQueryResult } from "@romeo/core";
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  ilike,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { queryIdentityUsers } from "./identity-user-query";
 
 import type { RomeoDatabase } from "./client";
@@ -107,7 +98,10 @@ export class PgIdentityRepository {
       eq(users.orgId, orgId),
       query === undefined || query === ""
         ? undefined
-        : or(ilike(users.name, containsPattern(query)), ilike(users.email, containsPattern(query))),
+        : or(
+            ilike(users.name, containsPattern(query)),
+            ilike(users.email, containsPattern(query)),
+          ),
     );
     const sortColumn =
       input.sort === "email"

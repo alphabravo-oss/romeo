@@ -10,10 +10,7 @@ describe("compare leg authorization", () => {
     const legs = await authorizeCompareLegs({
       repository,
       subject: seededSubject,
-      modelIds: [
-        "model_openai_compatible_default",
-        "model_missing",
-      ],
+      modelIds: ["model_openai_compatible_default", "model_missing"],
     });
     expect(legs[0]).toMatchObject({
       modelId: "model_openai_compatible_default",

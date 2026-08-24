@@ -28,16 +28,16 @@ describe("browser task commands", () => {
     const uploads: string[] = [];
     const cases: Array<{ args: string[]; url: string }> = [
       {
-        args: ["workflows", "browser-task-claim"],
+        args: ["browser-automation", "browser-task-claim"],
         url: "/browser-automation-tasks/claim",
       },
       {
-        args: ["workflows", "browser-task-renew", "--job", "job_1"],
+        args: ["browser-automation", "browser-task-renew", "--job", "job_1"],
         url: "/browser-automation-tasks/{jobId}/renew-lease",
       },
       {
         args: [
-          "workflows",
+          "browser-automation",
           "browser-artifact-upload",
           "--job",
           "job_1",
@@ -49,16 +49,16 @@ describe("browser task commands", () => {
         url: "/browser-automation-tasks/{jobId}/artifacts/uploads",
       },
       {
-        args: ["workflows", "browser-tasks-expire"],
+        args: ["browser-automation", "browser-tasks-expire"],
         url: "/browser-automation-tasks/expire",
       },
       {
-        args: ["workflows", "browser-task-complete", "--job", "job_1"],
+        args: ["browser-automation", "browser-task-complete", "--job", "job_1"],
         url: "/browser-automation-tasks/{jobId}/complete",
       },
       {
         args: [
-          "workflows",
+          "browser-automation",
           "browser-task-fail",
           "--job",
           "job_1",
@@ -71,7 +71,7 @@ describe("browser task commands", () => {
 
     for (const testCase of cases) {
       await expect(
-        executeBrowserTaskCommand("workflows", testCase.args[1], {
+        executeBrowserTaskCommand("browser-automation", testCase.args[1], {
           fetchImpl: async (input) => {
             uploads.push(String(input));
             return new Response(null, { status: 200 });

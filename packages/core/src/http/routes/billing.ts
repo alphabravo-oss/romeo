@@ -7,6 +7,7 @@ import {
   reconcileBillingEntitlementsRoute,
   syncExternalBillingEventRoute,
 } from "@romeo/contracts";
+import { createHash } from "node:crypto";
 import type { RomeoApi } from "../context";
 
 export function registerBillingRoutes(app: RomeoApi): void {
@@ -50,7 +51,13 @@ export function registerBillingRoutes(app: RomeoApi): void {
 
   app.openapi(syncExternalBillingEventRoute, async (context) => {
     const subject = context.get("subject");
-    const event = context.req.valid("json");
+    const receivedAt = new Date().toISOString();
+    const request = context.req.valid("json");
+    const event = {
+      ...request,
+      eventId: request.eventId ?? legacyBillingEventId(request),
+      occurredAt: request.occurredAt ?? receivedAt,
+    };
     const data = await context
       .get("services")
       .billing.syncExternalEvent({ subject, event });
@@ -103,4 +110,27 @@ export function registerBillingRoutes(app: RomeoApi): void {
     });
     return context.json({ data });
   });
+}
+
+/**
+ * Compatibility id for legacy callers that predate explicit provider event
+ * ids. Identical semantic payloads collapse to the same receipt even when JSON
+ * object key order differs. New integrations should always send eventId.
+ */
+export function legacyBillingEventId(value: unknown): string {
+  return `legacy_${createHash("sha256")
+    .update(canonicalJson(value))
+    .digest("hex")
+    .slice(0, 48)}`;
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === undefined) return "null";
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
+    .join(",")}}`;
 }

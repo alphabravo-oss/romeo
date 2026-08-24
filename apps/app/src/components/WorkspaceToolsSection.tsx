@@ -18,9 +18,9 @@ export function WorkspaceToolsSection({
         onApproveTool={() => void execution.approvePendingTool()}
         onCancelToolApproval={execution.cancelPendingTool}
         onExecuteCalculator={(expression) =>
-          void execution.handleExecuteCalculator(expression)
+          execution.handleExecuteCalculator(expression)
         }
-        onExecuteDateTime={() => void execution.handleExecuteDateTime()}
+        onExecuteDateTime={() => execution.handleExecuteDateTime()}
         pendingApproval={execution.pendingApproval}
         result={execution.toolResult}
         tools={tools}

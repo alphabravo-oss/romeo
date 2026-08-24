@@ -10,6 +10,7 @@ import type {
 
 import type { BackgroundJob, RunRecord } from "../domain/entities";
 import type { RunKnowledgeCitation } from "./run-knowledge";
+import type { PersistedOutputPartRef } from "./persist-output-parts";
 import { reasoningPolicyFromUnknown } from "./run-reasoning-policy";
 
 export interface RunExecutionJobPayload {
@@ -26,6 +27,8 @@ export interface RunExecutionJobPayload {
     | "waiting_tool_dispatch"
     | "output_interrupted";
   workerLease?: unknown;
+  contentPolicyApprovalId?: string;
+  contentPolicyDecisionId?: string;
 }
 
 export interface RunExecutionCheckpoint {
@@ -37,6 +40,7 @@ export interface RunExecutionCheckpoint {
   scopeSnapshot: Scope[];
   assistantContent: string;
   emitRunStarted: boolean;
+  outputParts?: PersistedOutputPartRef[];
   reasoning?: ProviderReasoningParameters;
   reasoningPolicy?: ProviderReasoningPolicyLayers;
   sampling?: ProviderSampling;
@@ -97,6 +101,12 @@ export function executionJobPayload(
     ...(payload.workerLease === undefined
       ? {}
       : { workerLease: payload.workerLease }),
+    ...(typeof payload.contentPolicyApprovalId === "string"
+      ? { contentPolicyApprovalId: payload.contentPolicyApprovalId }
+      : {}),
+    ...(typeof payload.contentPolicyDecisionId === "string"
+      ? { contentPolicyDecisionId: payload.contentPolicyDecisionId }
+      : {}),
   };
 }
 
@@ -129,6 +139,11 @@ export function runExecutionCheckpoint(
   const structuredOutput = providerStructuredOutput(
     checkpoint.structuredOutput,
   );
+  const outputParts = Array.isArray(checkpoint.outputParts)
+    ? checkpoint.outputParts
+        .map(persistedOutputPartRef)
+        .filter((part): part is PersistedOutputPartRef => part !== undefined)
+    : [];
   return {
     messages: checkpoint.messages as ChatMessage[],
     citations: checkpoint.citations as RunKnowledgeCitation[],
@@ -138,10 +153,46 @@ export function runExecutionCheckpoint(
     scopeSnapshot,
     assistantContent: checkpoint.assistantContent,
     emitRunStarted: checkpoint.emitRunStarted,
+    ...(outputParts.length === 0 ? {} : { outputParts }),
     ...(sampling === undefined ? {} : { sampling }),
     ...(reasoning === undefined ? {} : { reasoning }),
     ...(reasoningPolicy === undefined ? {} : { reasoningPolicy }),
     ...(structuredOutput === undefined ? {} : { structuredOutput }),
+  };
+}
+
+function persistedOutputPartRef(
+  value: unknown,
+): PersistedOutputPartRef | undefined {
+  const part = objectRecord(value);
+  if (
+    part === undefined ||
+    (part.type !== "image_ref" &&
+      part.type !== "audio_ref" &&
+      part.type !== "citation_ref" &&
+      part.type !== "artifact_ref")
+  )
+    return undefined;
+  return {
+    type: part.type,
+    ...(typeof part.fileId === "string" ? { fileId: part.fileId } : {}),
+    ...(typeof part.mediaType === "string"
+      ? { mediaType: part.mediaType }
+      : {}),
+    ...(typeof part.artifactId === "string"
+      ? { artifactId: part.artifactId }
+      : {}),
+    ...(typeof part.sourceId === "string" ? { sourceId: part.sourceId } : {}),
+    ...(typeof part.documentId === "string"
+      ? { documentId: part.documentId }
+      : {}),
+    ...(typeof part.chunkId === "string" ? { chunkId: part.chunkId } : {}),
+    ...(typeof part.title === "string" ? { title: part.title } : {}),
+    ...(typeof part.version === "string" ? { version: part.version } : {}),
+    ...(typeof part.durationMs === "number" &&
+    Number.isSafeInteger(part.durationMs)
+      ? { durationMs: part.durationMs }
+      : {}),
   };
 }
 

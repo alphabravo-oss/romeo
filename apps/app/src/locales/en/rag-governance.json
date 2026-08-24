@@ -1,5 +1,6 @@
 {
   "applyProposedRagPolicyForRequest": "Apply the proposed RAG policy for request",
+  "approve": "Approve",
   "approveChangeRequestTitle": "Approve change request?",
   "atLeastOneKnowledgeBaseId": "At least one knowledge base id is required.",
   "averageLatencyMs": "Avg latency (ms)",

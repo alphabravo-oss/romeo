@@ -1,0 +1,441 @@
+import { createHash } from "node:crypto";
+
+import type { AuthSubject } from "@romeo/auth";
+
+import type { BackgroundJob } from "../domain/entities";
+import { ApiError } from "../errors";
+import {
+  type BrowserTaskStepInput,
+  normalizeBrowserTaskStep,
+} from "./browser-task-normalization";
+import { isPrivateNetworkHost } from "./network-host-policy";
+import {
+  browserAutomationPayloadSchemaVersion,
+  browserAutomationWorkerQueue,
+  type BrowserAutomationArtifactSummary,
+  type BrowserAutomationCompletionResult,
+  type BrowserAutomationJobPayload,
+  type BrowserAutomationStoredArtifact,
+  type BrowserAutomationTaskClaimResult,
+  type BrowserAutomationTaskReadbackResult,
+  type BrowserAutomationWorkerLease,
+  type BrowserTaskSandboxPolicy,
+} from "./browser-automation-task-types";
+
+export * from "./browser-automation-task-types";
+export { normalizeBrowserTaskStep } from "./browser-task-normalization";
+
+export function browserTaskApprovalOutput(
+  step: BrowserTaskStepInput,
+): Record<string, unknown> {
+  const normalized = normalizeBrowserTaskStep(step);
+  return {
+    approvalKind: "browser_task",
+    approvalPrompt: step.approvalPrompt ?? step.name,
+    targetOrigin: normalized.targetOrigin,
+    targetHost: normalized.targetHost,
+    sandboxPolicy: disabledBrowserTaskSandboxPolicy(),
+    taskKeys: ["task"],
+  };
+}
+
+export function browserTaskApprovedOutput(input: {
+  approvedAt: string;
+  approvedBy: string;
+  job: BackgroundJob;
+  step: BrowserTaskStepInput;
+}): Record<string, unknown> {
+  const normalized = normalizeBrowserTaskStep(input.step);
+  return {
+    approvalKind: "browser_task",
+    approvalPrompt: input.step.approvalPrompt ?? input.step.name,
+    approvedAt: input.approvedAt,
+    approvedBy: input.approvedBy,
+    jobId: input.job.id,
+    sandboxPolicy: externalBrowserTaskSandboxPolicy(),
+    targetHost: normalized.targetHost,
+    targetOrigin: normalized.targetOrigin,
+    taskHash: hashBrowserTask(normalized.task),
+    taskKeys: ["task"],
+    workerQueue: browserAutomationWorkerQueue,
+  };
+}
+
+export function createBrowserAutomationJobPayload(input: {
+  approvedAt: string;
+  subject: AuthSubject;
+  step: BrowserTaskStepInput & { id: string };
+  workflowId: string;
+  workflowRunId: string;
+  workspaceId: string;
+}): BrowserAutomationJobPayload {
+  const normalized = normalizeBrowserTaskStep(input.step);
+  return {
+    approvedAt: input.approvedAt,
+    approvedBy: input.subject.id,
+    sandboxPolicy: externalBrowserTaskSandboxPolicy(),
+    schemaVersion: browserAutomationPayloadSchemaVersion,
+    stepId: input.step.id,
+    targetHost: normalized.targetHost,
+    targetOrigin: normalized.targetOrigin,
+    targetUrl: normalized.targetUrl,
+    task: normalized.task,
+    taskHash: hashBrowserTask(normalized.task),
+    taskLength: normalized.task.length,
+    workflowId: input.workflowId,
+    workflowRunId: input.workflowRunId,
+    workerQueue: browserAutomationWorkerQueue,
+    workspaceId: input.workspaceId,
+  };
+}
+
+export function browserAutomationClaimResult(
+  job: BackgroundJob,
+  step?: BrowserTaskStepInput,
+): BrowserAutomationTaskClaimResult {
+  const payload = readBrowserAutomationJobPayload(job);
+  const lease = readBrowserAutomationWorkerLease(job);
+  const task =
+    step === undefined ? payload.task : normalizeBrowserTaskStep(step).task;
+  return {
+    claimed: true,
+    job: jobSummary(job),
+    ...(lease === undefined ? {} : { lease }),
+    ...(task === undefined
+      ? {}
+      : {
+          request: {
+            targetHost: payload.targetHost,
+            targetOrigin: payload.targetOrigin,
+            targetUrl: payload.targetUrl,
+            task,
+            taskHash: payload.taskHash,
+            taskLength: payload.taskLength,
+          },
+        }),
+    sandboxPolicy: payload.sandboxPolicy,
+    workerQueue: browserAutomationWorkerQueue,
+    workflow: workflowSummary(payload),
+  };
+}
+
+export function browserAutomationReadbackResult(
+  job: BackgroundJob,
+  outcome: BrowserAutomationTaskReadbackResult["outcome"],
+  input: {
+    errorCode?: string | undefined;
+    result?: BrowserAutomationCompletionResult | undefined;
+  } = {},
+): BrowserAutomationTaskReadbackResult {
+  const payload = readBrowserAutomationJobPayload(job);
+  return {
+    job: jobSummary(job),
+    outcome,
+    workerQueue: browserAutomationWorkerQueue,
+    workflow: workflowSummary(payload),
+    ...(input.errorCode === undefined ? {} : { errorCode: input.errorCode }),
+    ...(input.result === undefined ? {} : { result: input.result }),
+  };
+}
+
+export function readBrowserAutomationJobPayload(
+  job: BackgroundJob,
+): BrowserAutomationJobPayload {
+  const payload = job.payload;
+  const sandboxPolicy = readSandboxPolicy(payload.sandboxPolicy);
+  if (
+    payload.schemaVersion !== browserAutomationPayloadSchemaVersion ||
+    payload.workerQueue !== browserAutomationWorkerQueue ||
+    typeof payload.workflowId !== "string" ||
+    typeof payload.workflowRunId !== "string" ||
+    typeof payload.workspaceId !== "string" ||
+    typeof payload.stepId !== "string" ||
+    typeof payload.targetUrl !== "string" ||
+    typeof payload.targetOrigin !== "string" ||
+    typeof payload.targetHost !== "string" ||
+    typeof payload.taskHash !== "string" ||
+    typeof payload.taskLength !== "number" ||
+    typeof payload.approvedBy !== "string" ||
+    typeof payload.approvedAt !== "string" ||
+    sandboxPolicy === undefined
+  ) {
+    throw new ApiError(
+      "browser_automation_task_invalid",
+      "Browser automation task metadata is invalid.",
+      409,
+    );
+  }
+  return {
+    approvedAt: payload.approvedAt,
+    approvedBy: payload.approvedBy,
+    sandboxPolicy,
+    schemaVersion: browserAutomationPayloadSchemaVersion,
+    stepId: payload.stepId,
+    targetHost: payload.targetHost,
+    targetOrigin: payload.targetOrigin,
+    targetUrl: payload.targetUrl,
+    ...(typeof payload.task === "string" ? { task: payload.task } : {}),
+    taskHash: payload.taskHash,
+    taskLength: payload.taskLength,
+    workflowId: payload.workflowId,
+    workflowRunId: payload.workflowRunId,
+    workerQueue: browserAutomationWorkerQueue,
+    workspaceId: payload.workspaceId,
+  };
+}
+
+export function readBrowserAutomationWorkerLease(
+  job: BackgroundJob,
+): BrowserAutomationWorkerLease | undefined {
+  const value = job.payload.workerLease;
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return undefined;
+  const lease = value as Partial<BrowserAutomationWorkerLease>;
+  if (
+    typeof lease.workerId !== "string" ||
+    typeof lease.claimedAt !== "string" ||
+    typeof lease.renewedAt !== "string" ||
+    typeof lease.expiresAt !== "string" ||
+    typeof lease.leaseSeconds !== "number" ||
+    typeof lease.attempt !== "number"
+  ) {
+    return undefined;
+  }
+  return {
+    attempt: lease.attempt,
+    claimedAt: lease.claimedAt,
+    expiresAt: lease.expiresAt,
+    leaseSeconds: lease.leaseSeconds,
+    renewedAt: lease.renewedAt,
+    workerId: lease.workerId,
+  };
+}
+
+export function readBrowserAutomationStoredArtifacts(
+  job: BackgroundJob,
+): BrowserAutomationStoredArtifact[] {
+  const artifacts = job.payload.browserArtifacts;
+  if (!Array.isArray(artifacts)) return [];
+  return artifacts
+    .map(readBrowserAutomationStoredArtifact)
+    .filter((artifact) => artifact !== undefined);
+}
+
+export function publicBrowserAutomationArtifact(
+  artifact: BrowserAutomationStoredArtifact,
+): BrowserAutomationArtifactSummary {
+  return {
+    artifactId: artifact.artifactId,
+    artifactUrl: artifact.artifactUrl,
+    type: artifact.type,
+    ...(artifact.contentType === undefined
+      ? {}
+      : { contentType: artifact.contentType }),
+    ...(artifact.sizeBytes === undefined
+      ? {}
+      : { sizeBytes: artifact.sizeBytes }),
+  };
+}
+
+export function normalizeBrowserAutomationCompletionResult(
+  input: BrowserAutomationCompletionResult,
+): BrowserAutomationCompletionResult {
+  const result: BrowserAutomationCompletionResult = {
+    ...(input.artifactCount === undefined
+      ? {}
+      : { artifactCount: input.artifactCount }),
+    ...(input.artifacts === undefined
+      ? {}
+      : { artifacts: input.artifacts.map(normalizeArtifactSummary) }),
+    ...(input.capturedBytes === undefined
+      ? {}
+      : { capturedBytes: input.capturedBytes }),
+    ...(input.durationMs === undefined ? {} : { durationMs: input.durationMs }),
+    ...(input.navigationCount === undefined
+      ? {}
+      : { navigationCount: input.navigationCount }),
+    ...(input.networkDeniedCount === undefined
+      ? {}
+      : { networkDeniedCount: input.networkDeniedCount }),
+    ...(input.outputKeys === undefined
+      ? {}
+      : { outputKeys: uniqueStrings(input.outputKeys, 50) }),
+    ...(input.redactionApplied === undefined
+      ? {}
+      : { redactionApplied: input.redactionApplied }),
+  };
+  if (input.finalOrigin !== undefined) {
+    const final = normalizeFinalBrowserUrl(input.finalOrigin);
+    result.finalHost = final.host;
+    result.finalOrigin = final.origin;
+    result.finalPath = final.path;
+  }
+  return result;
+}
+
+function disabledBrowserTaskSandboxPolicy(): BrowserTaskSandboxPolicy {
+  return {
+    artifactCapture: "metadata_only",
+    downloadPolicy: "blocked",
+    executionDriver: "disabled",
+    network: "target_origin_only",
+    uploadPolicy: "blocked",
+  };
+}
+
+function externalBrowserTaskSandboxPolicy(): BrowserTaskSandboxPolicy {
+  return {
+    artifactCapture: "screenshots_and_traces",
+    downloadPolicy: "metadata_only",
+    executionDriver: "external_worker",
+    network: "target_origin_only",
+    uploadPolicy: "blocked",
+  };
+}
+
+function hashBrowserTask(task: string): string {
+  return createHash("sha256").update(task).digest("hex");
+}
+
+function jobSummary(job: BackgroundJob): {
+  id: string;
+  status: BackgroundJob["status"];
+  type: string;
+} {
+  return { id: job.id, status: job.status, type: job.type };
+}
+
+function workflowSummary(
+  payload: BrowserAutomationJobPayload,
+): BrowserAutomationTaskReadbackResult["workflow"] {
+  return {
+    stepId: payload.stepId,
+    workflowId: payload.workflowId,
+    workflowRunId: payload.workflowRunId,
+    workspaceId: payload.workspaceId,
+  };
+}
+
+function readSandboxPolicy(
+  value: unknown,
+): BrowserTaskSandboxPolicy | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return undefined;
+  const policy = value as Partial<BrowserTaskSandboxPolicy>;
+  if (
+    (policy.executionDriver !== "disabled" &&
+      policy.executionDriver !== "external_worker") ||
+    policy.network !== "target_origin_only" ||
+    (policy.artifactCapture !== "metadata_only" &&
+      policy.artifactCapture !== "screenshots_and_traces") ||
+    (policy.downloadPolicy !== "blocked" &&
+      policy.downloadPolicy !== "metadata_only") ||
+    policy.uploadPolicy !== "blocked"
+  ) {
+    return undefined;
+  }
+  return {
+    artifactCapture: policy.artifactCapture,
+    downloadPolicy: policy.downloadPolicy,
+    executionDriver: policy.executionDriver,
+    network: policy.network,
+    uploadPolicy: policy.uploadPolicy,
+  };
+}
+
+function normalizeFinalBrowserUrl(value: string): {
+  host: string;
+  origin: string;
+  path: string;
+} {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ApiError(
+      "browser_automation_final_url_invalid",
+      "Browser automation final URL must be a valid HTTPS URL.",
+      400,
+    );
+  }
+  if (url.protocol !== "https:")
+    throw new ApiError(
+      "browser_automation_final_url_invalid",
+      "Browser automation final URL must use HTTPS.",
+      400,
+    );
+  if (
+    url.username.length > 0 ||
+    url.password.length > 0 ||
+    url.hash.length > 0 ||
+    url.search.length > 0
+  ) {
+    throw new ApiError(
+      "browser_automation_final_url_invalid",
+      "Browser automation final URL must not include credentials, fragments, or query strings.",
+      400,
+    );
+  }
+  if (isPrivateNetworkHost(url.hostname))
+    throw new ApiError(
+      "browser_automation_final_url_invalid",
+      "Browser automation final URL must not target local or private hosts.",
+      400,
+    );
+  return { host: url.hostname, origin: url.origin, path: url.pathname };
+}
+
+function normalizeArtifactSummary(
+  artifact: BrowserAutomationArtifactSummary,
+): BrowserAutomationArtifactSummary {
+  return {
+    artifactId: artifact.artifactId,
+    type: artifact.type,
+    ...(artifact.artifactUrl === undefined
+      ? {}
+      : { artifactUrl: artifact.artifactUrl }),
+    ...(artifact.contentType === undefined
+      ? {}
+      : { contentType: artifact.contentType }),
+    ...(artifact.sizeBytes === undefined
+      ? {}
+      : { sizeBytes: artifact.sizeBytes }),
+  };
+}
+
+function readBrowserAutomationStoredArtifact(
+  value: unknown,
+): BrowserAutomationStoredArtifact | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return undefined;
+  const artifact = value as Partial<BrowserAutomationStoredArtifact>;
+  if (
+    typeof artifact.artifactId !== "string" ||
+    artifact.artifactId.length === 0 ||
+    (artifact.type !== "screenshot" && artifact.type !== "trace") ||
+    typeof artifact.artifactUrl !== "string" ||
+    typeof artifact.contentType !== "string" ||
+    typeof artifact.registeredAt !== "string" ||
+    typeof artifact.registeredBy !== "string" ||
+    typeof artifact.sizeBytes !== "number" ||
+    typeof artifact.storageKey !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    artifactId: artifact.artifactId,
+    artifactUrl: artifact.artifactUrl,
+    contentType: artifact.contentType,
+    registeredAt: artifact.registeredAt,
+    registeredBy: artifact.registeredBy,
+    sizeBytes: artifact.sizeBytes,
+    storageKey: artifact.storageKey,
+    type: artifact.type,
+  };
+}
+
+function uniqueStrings(values: string[], maxItems: number): string[] {
+  return [
+    ...new Set(values.map((value) => value.trim()).filter(Boolean)),
+  ].slice(0, maxItems);
+}

@@ -14,6 +14,7 @@ import type {
   UpdateNotificationPolicyRequest,
 } from "../features/notifications";
 import { useLocale } from "../lib/i18n";
+import type { MessageKey } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { PanelState } from "../lib/panel-state";
 import { toast } from "../lib/toast";
@@ -36,6 +37,15 @@ function notificationTypeLabel(type: NotificationType): string {
     .split("_")
     .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
     .join(" ");
+}
+
+function notificationChannelTypeKey(type: string): MessageKey {
+  if (type === "email") return "channelTypeEmail";
+  if (type === "mobile_push") return "channelTypeMobilePush";
+  if (type === "pagerduty") return "channelTypePagerDuty";
+  if (type === "slack") return "channelTypeSlack";
+  if (type === "teams") return "channelTypeTeams";
+  return "channelTypeWebhook";
 }
 
 export function NotificationPolicyForm() {
@@ -182,7 +192,7 @@ function PolicyEditor(props: { report: NotificationPolicyReport }) {
                         }}
                         type="checkbox"
                       />
-                      <span>{type}</span>
+                      <span>{t(notificationChannelTypeKey(type))}</span>
                     </label>
                   );
                 })}

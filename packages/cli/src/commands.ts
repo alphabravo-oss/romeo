@@ -23,15 +23,16 @@ import { executeSessionCommand } from "./session-commands";
 import { executeToolCommand } from "./tool-commands";
 import { executeVoiceCommand } from "./voice-commands";
 import { executeWebhookCommand } from "./webhook-commands";
-import { executeWorkflowCommand } from "./workflow-commands";
 import { executeWorkerCommand } from "./worker-commands";
 
 export interface CommandContext {
+  baseUrl?: string;
   generatedClient: GeneratedApiClient;
   dnsLookup?: (
     host: string,
   ) => Promise<Array<{ address: string; family?: number }>>;
   fetchImpl: typeof fetch;
+  env?: NodeJS.ProcessEnv;
   io: CliIo;
   pinnedFetchImpl?: ToolDispatchPinnedFetch;
   parsed: ParsedArgs;
@@ -93,8 +94,6 @@ export async function executeCommand(context: CommandContext): Promise<number> {
   if (knowledgeCommand !== undefined) return knowledgeCommand;
   const webhookCommand = executeWebhookCommand(area, action, context);
   if (webhookCommand !== undefined) return webhookCommand;
-  const workflowCommand = executeWorkflowCommand(area, action, context);
-  if (workflowCommand !== undefined) return workflowCommand;
   const browserTaskCommand = executeBrowserTaskCommand(area, action, context);
   if (browserTaskCommand !== undefined) return browserTaskCommand;
   const workerCommand = executeWorkerCommand(area, action, context);
@@ -111,7 +110,7 @@ function printUsage(io: CliIo): void {
   io.stdout.write(`Romeo CLI
 
 Usage:
-  romeo health [--base-url URL] [--api-key KEY]
+  romeo health [--base-url URL] # credentials: ROMEO_API_KEY or ROMEO_API_KEY_FILE
   romeo providers summary
   romeo models list
   romeo models sync --provider ID
@@ -175,7 +174,7 @@ Usage:
   romeo folders delete-item --folder ID --item ID
   romeo devices list
   romeo devices create --name NAME --scopes me:read,chats:read [--ttl-days 90]
-  romeo devices refresh --refresh-token TOKEN
+  romeo devices refresh # token: ROMEO_DEVICE_REFRESH_TOKEN or ROMEO_DEVICE_REFRESH_TOKEN_FILE
   romeo devices revoke --device ID
   romeo connectors list [--workspace ID]
   romeo connectors create-local --workspace ID --kb ID [--name NAME] [--source-access-mode connector_owner]
@@ -183,20 +182,12 @@ Usage:
   romeo connectors create-rss --workspace ID --kb ID --url https://docs.example.com/feed.xml [--name NAME] [--max-items 20] [--sync-interval-minutes 60] [--source-access-mode connector_owner]
   romeo connectors sync --connector ID
   romeo connectors sync-local --connector ID --file path --mime-type text/markdown
-  romeo workflows list [--workspace ID]
-  romeo workflows templates
-  romeo workflows create-template --template ID --workspace ID [--agent ID] [--name NAME] [--schedule-interval-minutes N]
-  romeo workflows create --workspace ID --name NAME --agent ID [--handoff-agent ID] [--handoff-prompt TEXT] [--room-agents agent_a,agent_b] [--room-prompt TEXT] [--tool-approval NAME] [--tool-risk low|medium|high] [--tool-input-keys key1,key2] [--browser-url https://example.com/path] [--browser-task TEXT] [--retry-attempts 2] [--on-failure fail|continue] [--approval TEXT] [--schedule-interval-minutes N]
-  romeo workflows run-due-schedules
-  romeo workflows run --workflow ID
-  romeo workflows resume --run ID
-  romeo workflows approve --run ID [--comment TEXT]
-  romeo workflows browser-task-claim [--lease-seconds 300]
-  romeo workflows browser-task-renew --job ID [--lease-seconds 300]
-  romeo workflows browser-artifact-upload --job ID --file path --type screenshot|trace --content-type image/png
-  romeo workflows browser-tasks-expire [--queued-timeout-seconds 86400] [--running-timeout-seconds 3600] [--limit 100]
-  romeo workflows browser-task-complete --job ID [--final-url https://example.com/path] [--artifact-count N] [--duration-ms N] [--navigation-count N] [--network-denied-count N] [--captured-bytes N] [--output-keys key,key] [--redaction-applied true|false]
-  romeo workflows browser-task-fail --job ID --error-code browser_failed
+  romeo browser-automation browser-task-claim [--lease-seconds 300]
+  romeo browser-automation browser-task-renew --job ID [--lease-seconds 300]
+  romeo browser-automation browser-artifact-upload --job ID --file path --type screenshot|trace --content-type image/png
+  romeo browser-automation browser-tasks-expire [--queued-timeout-seconds 86400] [--running-timeout-seconds 3600] [--limit 100]
+  romeo browser-automation browser-task-complete --job ID [--final-url https://example.com/path] [--artifact-count N] [--duration-ms N] [--navigation-count N] [--network-denied-count N] [--captured-bytes N] [--output-keys key,key] [--redaction-applied true|false]
+  romeo browser-automation browser-task-fail --job ID --error-code browser_failed
   romeo governance retention [--days 365]
   romeo governance retention-enforce
   romeo governance data-delete-preview --chat ID
@@ -248,10 +239,9 @@ Usage:
   romeo workers notification-retry [--once] [--interval-ms 60000] [--max-iterations N]
   romeo workers tool-dispatch [--payload-file payloads.json] [--secret-resolver disabled|env|vault|aws-sm|gcp-sm|azure-kv|cloud] [--once] [--interval-ms 10000] [--max-iterations N] [--max-jobs N] [--lease-seconds 300] [--timeout-ms 10000] [--max-bytes 1000000]
   romeo workers browser-automation --runner-url https://browser-runner.internal/tasks [--once] [--interval-ms 10000] [--max-iterations N] [--max-jobs N] [--lease-seconds 300] [--timeout-ms 30000] [--max-bytes 20000]
-  romeo workers knowledge-extraction --kb ID [--once] [--interval-ms 60000] [--max-iterations N] [--max-sources N]
+  romeo workers knowledge-extraction [--once] [--interval-ms 60000] [--max-iterations N] [--max-sources N] [--lease-seconds 300]
   romeo workers data-connector-sync [--workspace ID] [--once] [--interval-ms 60000] [--max-iterations N] [--max-connectors N]
   romeo workers voice-catalog-sync [--once] [--interval-ms 86400000] [--max-iterations N]
-  romeo workers workflow-resume [--workspace ID] [--once] [--interval-ms 60000] [--max-iterations N] [--max-workflows N] [--max-runs N]
   romeo workers retention-enforce [--once] [--interval-ms 86400000] [--max-iterations N]
   romeo workers billing-entitlement-reconcile [--once] [--interval-ms 300000] [--max-iterations N]
   romeo workers billing-lifecycle-enforce [--once] [--interval-ms 900000] [--max-iterations N]

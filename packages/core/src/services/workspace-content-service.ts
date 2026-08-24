@@ -30,6 +30,8 @@ export interface WorkspaceContentItem {
   ownerId: string;
   expiresAt?: string;
   expired: boolean;
+  lifecycleStatus: FileObject["status"];
+  ready: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -157,7 +159,7 @@ export class WorkspaceContentService {
     input: UpdateWorkspaceContentInput,
   ): Promise<WorkspaceContentItem> {
     assertScope(subject, "files:write");
-    const file = await this.authorizedItem(subject, kind, id, true);
+    const file = await this.authorizedItem(subject, kind, id, true, true);
     const current = await this.toItem(file, kind);
     const body =
       input.body === undefined ? current.body : normalizeBody(input.body);
@@ -208,7 +210,7 @@ export class WorkspaceContentService {
     id: string,
   ): Promise<WorkspaceContentItem> {
     assertScope(subject, "files:write");
-    const file = await this.authorizedItem(subject, kind, id, true);
+    const file = await this.authorizedItem(subject, kind, id, true, false);
     const item = await this.toItem(file, kind);
     await this.files.delete(subject, file.id);
     await this.audit(
@@ -225,12 +227,13 @@ export class WorkspaceContentService {
     kind: WorkspaceContentKind,
     id: string,
     write: boolean,
+    requireReady: boolean,
   ): Promise<FileObject> {
     const file = await this.repository.getFileObject(id);
     if (
       file === undefined ||
       file.orgId !== subject.orgId ||
-      !isFileReadyForUse(file) ||
+      (requireReady && !isFileReadyForUse(file)) ||
       file.purpose !== kind
     ) {
       throw notFound(kind === "memory" ? "Memory" : "Note");
@@ -305,6 +308,8 @@ export class WorkspaceContentService {
       ownerId: file.ownerId,
       ...(expiresAt === undefined ? {} : { expiresAt }),
       expired: expiresAt !== undefined && Date.parse(expiresAt) <= Date.now(),
+      lifecycleStatus: file.status,
+      ready: isFileReadyForUse(file),
       createdAt: file.createdAt,
       updatedAt: file.updatedAt,
     };
@@ -385,6 +390,8 @@ export async function resolveRunMemories(input: {
         ownerId: file.ownerId,
         ...(expiresAt === undefined ? {} : { expiresAt }),
         expired: false,
+        lifecycleStatus: file.status,
+        ready: true,
         createdAt: file.createdAt,
         updatedAt: file.updatedAt,
       };

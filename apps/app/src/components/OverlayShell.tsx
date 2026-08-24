@@ -1,5 +1,5 @@
 import X from "lucide-react/dist/esm/icons/x.mjs";
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { Button, DialogPrimitive } from "@romeo/ui";
 
 type OverlayVariant = "command" | "confirm" | "dialog" | "drawer" | "shortcuts";
@@ -19,6 +19,21 @@ export function OverlayShell({
   open: boolean;
   variant: OverlayVariant;
 }): ReactNode {
+  const openerRef = useRef<HTMLElement | null>(null);
+  const effectOpenRef = useRef(open);
+  useLayoutEffect(() => {
+    if (open && !effectOpenRef.current) {
+      openerRef.current = activeElement();
+    }
+    if (!open && effectOpenRef.current) {
+      const opener = openerRef.current;
+      openerRef.current = null;
+      queueMicrotask(() => {
+        if (canRestoreOpener(opener)) opener.focus();
+      });
+    }
+    effectOpenRef.current = open;
+  }, [open]);
   return (
     <DialogPrimitive.Root
       onOpenChange={(nextOpen) => {
@@ -32,7 +47,16 @@ export function OverlayShell({
           {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
           {...(labelledBy ? { "aria-labelledby": labelledBy } : {})}
           className={`rm-ui-dialog rm-overlay-${variant}`}
+          onCloseAutoFocus={(event) => {
+            const opener = openerRef.current;
+            openerRef.current = null;
+            event.preventDefault();
+            queueMicrotask(() => {
+              if (canRestoreOpener(opener)) opener.focus();
+            });
+          }}
           onOpenAutoFocus={(event) => {
+            openerRef.current ??= activeElement();
             if (variant === "drawer") event.preventDefault();
           }}
         >
@@ -40,6 +64,20 @@ export function OverlayShell({
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  );
+}
+
+function activeElement(): HTMLElement | null {
+  return typeof document !== "undefined" &&
+    document.activeElement instanceof HTMLElement
+    ? document.activeElement
+    : null;
+}
+
+function canRestoreOpener(element: HTMLElement | null): element is HTMLElement {
+  return (
+    element?.isConnected === true &&
+    element.closest("[hidden],[inert],[aria-hidden='true']") === null
   );
 }
 

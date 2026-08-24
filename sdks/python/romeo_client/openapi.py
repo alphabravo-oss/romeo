@@ -203,7 +203,7 @@ OPERATIONS = {
         "name": "post_admin_content_policy_approvals",
         "method": "POST",
         "path": "/api/v1/admin/content-policy/approvals",
-        "summary": "Pause a run for a scoped, expiring, content-minimized approval"
+        "summary": "Retired client-created content-policy approval request"
     },
     "post_admin_content_policy_approvals_approvalid_resolve": {
         "name": "post_admin_content_policy_approvals_approvalid_resolve",
@@ -475,6 +475,12 @@ OPERATIONS = {
         "path": "/api/v1/admin/readiness",
         "summary": "Get production readiness checks"
     },
+    "get_admin_runtime_key_rotation_posture": {
+        "name": "get_admin_runtime_key_rotation_posture",
+        "method": "GET",
+        "path": "/api/v1/admin/runtime-key-rotation/posture",
+        "summary": "Get global runtime key-rotation usage posture"
+    },
     "post_admin_secret_rotation_rewrap": {
         "name": "post_admin_secret_rotation_rewrap",
         "method": "POST",
@@ -523,11 +529,23 @@ OPERATIONS = {
         "path": "/api/v1/admin/table-exports",
         "summary": "Queue an async table export from a frozen query snapshot"
     },
+    "delete_admin_table_exports_jobid": {
+        "name": "delete_admin_table_exports_jobid",
+        "method": "DELETE",
+        "path": "/api/v1/admin/table-exports/{jobId}",
+        "summary": "Delete an owned table-export artifact and expire the job"
+    },
     "get_admin_table_exports_jobid": {
         "name": "get_admin_table_exports_jobid",
         "method": "GET",
         "path": "/api/v1/admin/table-exports/{jobId}",
         "summary": "Read a table export job and expire stale artifacts"
+    },
+    "get_admin_table_exports_jobid_artifact": {
+        "name": "get_admin_table_exports_jobid_artifact",
+        "method": "GET",
+        "path": "/api/v1/admin/table-exports/{jobId}/artifact",
+        "summary": "Download an authorized, unexpired table-export artifact"
     },
     "post_admin_table_exports_jobid_run": {
         "name": "post_admin_table_exports_jobid_run",
@@ -552,6 +570,30 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/admin/table-views/list",
         "summary": "List server saved views with optional local-preference fallback"
+    },
+    "delete_admin_table_views_viewid": {
+        "name": "delete_admin_table_views_viewid",
+        "method": "DELETE",
+        "path": "/api/v1/admin/table-views/{viewId}",
+        "summary": "Delete an owned server saved view"
+    },
+    "post_admin_table_views_viewid_default": {
+        "name": "post_admin_table_views_viewid_default",
+        "method": "POST",
+        "path": "/api/v1/admin/table-views/{viewId}/default",
+        "summary": "Set or clear the owned default saved view"
+    },
+    "post_admin_table_views_viewid_restore": {
+        "name": "post_admin_table_views_viewid_restore",
+        "method": "POST",
+        "path": "/api/v1/admin/table-views/{viewId}/restore",
+        "summary": "Restore a recently deleted owned saved view"
+    },
+    "post_admin_table_views_viewid_share": {
+        "name": "post_admin_table_views_viewid_share",
+        "method": "POST",
+        "path": "/api/v1/admin/table-views/{viewId}/share",
+        "summary": "Change workspace sharing for an owned saved view"
     },
     "post_admin_trust_audit_segments": {
         "name": "post_admin_trust_audit_segments",
@@ -2155,6 +2197,12 @@ OPERATIONS = {
         "path": "/api/v1/governance/data-exports/packages/{packageId}",
         "summary": "Delete a governed data-export package"
     },
+    "get_governance_data_exports_packages_packageid": {
+        "name": "get_governance_data_exports_packages_packageid",
+        "method": "GET",
+        "path": "/api/v1/governance/data-exports/packages/{packageId}",
+        "summary": "Get a governed data-export package job"
+    },
     "get_governance_data_exports_packages_packageid_content": {
         "name": "get_governance_data_exports_packages_packageid_content",
         "method": "GET",
@@ -2250,6 +2298,24 @@ OPERATIONS = {
         "method": "POST",
         "path": "/api/v1/images/jobs/{jobId}/cancel",
         "summary": "Cancel a durable image job"
+    },
+    "post_internal_worker_broker_audience_claims": {
+        "name": "post_internal_worker_broker_audience_claims",
+        "method": "POST",
+        "path": "/api/v1/internal/worker-broker/{audience}/claims",
+        "summary": "Claim the next tenant-scoped item for one worker audience"
+    },
+    "post_internal_worker_broker_audience_claims_complete": {
+        "name": "post_internal_worker_broker_audience_claims_complete",
+        "method": "POST",
+        "path": "/api/v1/internal/worker-broker/{audience}/claims/complete",
+        "summary": "Complete or fail an audience-bound fenced worker claim"
+    },
+    "post_internal_worker_broker_audience_claims_renew": {
+        "name": "post_internal_worker_broker_audience_claims_renew",
+        "method": "POST",
+        "path": "/api/v1/internal/worker-broker/{audience}/claims/renew",
+        "summary": "Renew an audience-bound fenced worker claim"
     },
     "get_jobs": {
         "name": "get_jobs",
@@ -2761,6 +2827,12 @@ OPERATIONS = {
         "path": "/api/v1/quotas/{quotaBucketId}",
         "summary": "Update a quota bucket"
     },
+    "get_readyz": {
+        "name": "get_readyz",
+        "method": "GET",
+        "path": "/api/v1/readyz",
+        "summary": "Get dependency-aware internal runtime readiness"
+    },
     "post_realtime_adapters_preview": {
         "name": "post_realtime_adapters_preview",
         "method": "POST",
@@ -2771,7 +2843,7 @@ OPERATIONS = {
         "name": "post_realtime_sessions",
         "method": "POST",
         "path": "/api/v1/realtime/sessions",
-        "summary": "Create an authenticated realtime voice session or fail closed"
+        "summary": "Preview realtime session policy. This does not start a live gateway session."
     },
     "post_run_groups": {
         "name": "post_run_groups",

@@ -46,6 +46,7 @@ export interface QuotaCoordinationStatus {
 }
 
 export interface QuotaCoordinator {
+  close?(): void;
   reserve(input: QuotaReservationInput): Promise<QuotaReservationResult>;
   status(): Promise<QuotaCoordinationStatus>;
   syncBucket(bucket: QuotaReservationBucket): Promise<void>;

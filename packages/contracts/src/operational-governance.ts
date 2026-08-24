@@ -14,6 +14,7 @@ import { UsageMetricDefinitionSchema } from "./usage-metrics";
 
 const identifier = z.string().trim().min(1).max(300);
 const timestamp = z.iso.datetime();
+const intervalTimestamp = z.iso.datetime({ offset: true });
 const nonnegative = z.number().nonnegative();
 const quotaMetric = z.enum([
   "image.cost.micro_usd",
@@ -148,6 +149,21 @@ export const UsageSummarySchema = z
   })
   .openapi("UsageSummary");
 
+export const UsageIntervalSchema = z
+  .strictObject({
+    from: intervalTimestamp.optional(),
+    to: intervalTimestamp.optional(),
+  })
+  .refine(
+    (interval) =>
+      interval.from === undefined ||
+      interval.to === undefined ||
+      Date.parse(interval.from) < Date.parse(interval.to),
+    { message: "from must be before the exclusive to bound" },
+  )
+  .openapi("UsageInterval");
+export type UsageInterval = z.infer<typeof UsageIntervalSchema>;
+
 export const UsageAlertSchema = z
   .strictObject({
     id: identifier,
@@ -277,6 +293,7 @@ export const listUsageEventsRoute = createRoute({
   path: "/api/v1/usage/events",
   operationId: "operationalGovernance.listUsageEvents",
   summary: "List usage events",
+  request: { query: UsageIntervalSchema },
   responses: {
     200: jsonResponse("Usage events", dataEnvelope(z.array(UsageEventSchema))),
     ...errors,
@@ -302,6 +319,7 @@ export const exportUsageEventsRoute = createRoute({
   path: "/api/v1/usage/events.csv",
   operationId: "operationalGovernance.exportUsageEvents",
   summary: "Export usage events as CSV",
+  request: { query: UsageIntervalSchema },
   responses: { 200: csvResponse("Usage events CSV"), ...errors },
 });
 export const getUsageSummaryRoute = createRoute({
@@ -310,6 +328,7 @@ export const getUsageSummaryRoute = createRoute({
   path: "/api/v1/usage/summary",
   operationId: "operationalGovernance.getUsageSummary",
   summary: "Summarize usage",
+  request: { query: UsageIntervalSchema },
   responses: {
     200: jsonResponse("Usage summary", dataEnvelope(UsageSummarySchema)),
     ...errors,

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, type AnchorHTMLAttributes } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LocaleProvider } from "../lib/i18n";
@@ -52,6 +53,7 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  window.localStorage.clear();
 });
 
 afterEach(() => {
@@ -61,6 +63,39 @@ afterEach(() => {
 });
 
 describe("ConsoleLayout section intent", () => {
+  it("keeps the server render independent from persisted browser groups", () => {
+    window.localStorage.setItem(
+      "romeo:console-nav:/workspace",
+      JSON.stringify(["saved-group"]),
+    );
+    const html = renderToString(
+      <LocaleProvider initialLocale="en">
+        <ConsoleLayout
+          active="active"
+          groups={[
+            {
+              id: "active-group",
+              label: "Active group",
+              items: [{ key: "active", label: "Active item" }],
+            },
+            {
+              id: "saved-group",
+              label: "Saved group",
+              items: [{ key: "saved", label: "Persisted item" }],
+            },
+          ]}
+          route="/workspace"
+          title="Workspace"
+        >
+          Content
+        </ConsoleLayout>
+      </LocaleProvider>,
+    );
+
+    expect(html).toContain("Active item");
+    expect(html).not.toContain("Persisted item");
+  });
+
   it("preloads a safe lazy section from keyboard focus and pointer hover", () => {
     const onSectionIntent = vi.fn(() => Promise.resolve());
     act(() =>

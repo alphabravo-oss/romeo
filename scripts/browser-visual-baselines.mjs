@@ -95,6 +95,13 @@ async function captureScenario({ route, theme, viewport }) {
       content:
         "*,*::before,*::after{animation-duration:0.001ms!important;animation-delay:0ms!important;transition-duration:0.001ms!important;caret-color:transparent!important}",
     });
+    // The router can replace the SSR shell during hydration after the first
+    // visibility check. Re-assert the real visual surface immediately before
+    // measuring it so a transient detached shell cannot produce a zero-size
+    // false failure.
+    await page.locator(route.requiredSelector).first().waitFor({
+      state: "visible",
+    });
     const metrics = await page.evaluate((requiredSelector) => {
       const required = document.querySelector(requiredSelector);
       const rect = required?.getBoundingClientRect();
@@ -172,7 +179,20 @@ async function waitForStableVisualState(page, route) {
   await page.waitForFunction(
     ({ readySelector, requireNoSkeletons }) =>
       (!requireNoSkeletons ||
-        document.querySelector(".rm-ui-skeleton") === null) &&
+        ![
+          ...document.querySelectorAll(
+            ".rm-ui-skeleton, .rm-loading, [aria-busy='true']",
+          ),
+        ].some((element) => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            style.display !== "none" &&
+            style.visibility !== "hidden"
+          );
+        })) &&
       (readySelector === undefined ||
         document.querySelector(readySelector) !== null),
     { readySelector: visualReadySelector, requireNoSkeletons },
@@ -185,7 +205,20 @@ async function waitForStableVisualState(page, route) {
   await page.waitForFunction(
     ({ readySelector, requireNoSkeletons }) =>
       (!requireNoSkeletons ||
-        document.querySelector(".rm-ui-skeleton") === null) &&
+        ![
+          ...document.querySelectorAll(
+            ".rm-ui-skeleton, .rm-loading, [aria-busy='true']",
+          ),
+        ].some((element) => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            style.display !== "none" &&
+            style.visibility !== "hidden"
+          );
+        })) &&
       (readySelector === undefined ||
         document.querySelector(readySelector) !== null),
     { readySelector: visualReadySelector, requireNoSkeletons },

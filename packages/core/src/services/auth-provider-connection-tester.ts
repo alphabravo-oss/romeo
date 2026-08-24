@@ -58,13 +58,17 @@ import {
 import { resolveSsoOidcConfig } from "./sso-config";
 
 export class AuthProviderConnectionTester {
+  private readonly fetchImpl: typeof fetch;
+
   constructor(
     private readonly repository: RomeoRepository,
     private readonly env: RomeoEnv,
-    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly oidcFetchImpl?: typeof fetch,
     private readonly secretResolver?: SecretResolver,
     private readonly ldapClientFactory?: LdapClientFactory,
-  ) {}
+  ) {
+    this.fetchImpl = oidcFetchImpl ?? fetch;
+  }
 
   async test(input: {
     subject: AuthSubject;
@@ -146,7 +150,10 @@ export class AuthProviderConnectionTester {
     );
     const test = await testOidcConnection({
       config: resolved.config,
-      fetchImpl: this.fetchImpl,
+      env: this.env,
+      ...(this.oidcFetchImpl === undefined
+        ? {}
+        : { fetchImpl: this.oidcFetchImpl }),
     });
     return {
       ...test,

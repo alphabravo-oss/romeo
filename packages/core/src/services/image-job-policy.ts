@@ -57,8 +57,7 @@ export function authorizeImageJob(input: {
 export function cancelImageJob(job: ImageJob): ImageJobDecision {
   if (job.state === "completed" || job.state === "failed")
     return { outcome: "denied", code: "image_job_cancelled" };
-  if (job.state === "cancelled")
-    return { outcome: "accepted", job };
+  if (job.state === "cancelled") return { outcome: "accepted", job };
   return { outcome: "accepted", job: { ...job, state: "cancelled" } };
 }
 

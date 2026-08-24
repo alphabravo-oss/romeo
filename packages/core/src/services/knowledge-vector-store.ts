@@ -28,12 +28,19 @@ export interface KnowledgeVectorStoreReadinessProbe {
 }
 
 export interface KnowledgeVectorStore {
+  deleteEmbeddingsForOrg?(input: { orgId: string }): Promise<void>;
   deleteEmbeddingsForSource(input: {
     knowledgeBaseId: string;
     orgId: string;
     sourceId: string;
     workspaceId: string;
   }): Promise<void>;
+  verifyEmbeddingsAbsentForSource?(input: {
+    knowledgeBaseId: string;
+    orgId: string;
+    sourceId: string;
+    workspaceId: string;
+  }): Promise<boolean>;
   search(
     input: KnowledgeVectorStoreSearchInput,
   ): Promise<KnowledgeChunkEmbeddingSearchHit[]>;

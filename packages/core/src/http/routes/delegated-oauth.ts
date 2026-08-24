@@ -7,6 +7,7 @@ import {
   startDelegatedOAuthRoute,
 } from "@romeo/contracts";
 
+import { dataConnectorTypes } from "../../domain/data-connectors";
 import { ApiError } from "../../errors";
 import type { RomeoApi } from "../context";
 import { shouldSecureCookie } from "../cookie-security";
@@ -35,11 +36,19 @@ export function registerDelegatedOAuthRoutes(app: RomeoApi): void {
   app.openapi(startDelegatedOAuthRoute, async (context) => {
     const subject = context.get("subject");
     const body = context.req.valid("json");
+    if (!dataConnectorTypes.some((type) => type === body.connectorType)) {
+      throw new ApiError(
+        "delegated_oauth_connector_unsupported",
+        "This connector type is retired and no longer accepts new delegated OAuth connections.",
+        400,
+        { connectorType: body.connectorType },
+      );
+    }
     const data = context.get("services").delegatedOAuth.start({
       subject,
       providerId: body.providerId,
       workspaceId: body.workspaceId,
-      connectorType: body.connectorType,
+      connectorType: body.connectorType as (typeof dataConnectorTypes)[number],
       ...(body.scopes === undefined ? {} : { scopes: body.scopes }),
       ...(body.returnTo === undefined ? {} : { returnTo: body.returnTo }),
     });

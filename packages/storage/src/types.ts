@@ -24,8 +24,12 @@ export interface ObjectStore {
   putObject(input: PutObjectInput): Promise<StoredObject>;
   getObject(
     key: string,
-    options?: { maxBytes?: number },
+    options?: { maxBytes?: number; signal?: AbortSignal },
   ): Promise<Uint8Array | undefined>;
+  getObjectStream?(
+    key: string,
+    options?: { maxBytes?: number; signal?: AbortSignal },
+  ): Promise<ReadableStream<Uint8Array> | undefined>;
   headObject?(key: string): Promise<StoredObject | undefined>;
   deleteObject(key: string): Promise<void>;
   createPresignedUpload(input: {
@@ -35,6 +39,20 @@ export interface ObjectStore {
     sha256?: string;
     sizeBytes?: number;
   }): Promise<PresignedUpload>;
+  checkReadiness?(signal?: AbortSignal): Promise<ObjectStoreReadinessResult>;
+}
+
+export interface ObjectStoreReadinessResult {
+  authenticated: boolean;
+  deleteVerified: boolean;
+  encryptionConfigured: boolean;
+  lifecycleConfigured: boolean;
+  readAfterWriteVerified: boolean;
+  ready: boolean;
+  replicationConfigured: boolean;
+  tlsEnabled: boolean;
+  versioningEnabled: boolean;
+  writeVerified: boolean;
 }
 
 export class ObjectSizeLimitError extends Error {

@@ -1,12 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
 import type { FormEvent } from "react";
 
-import { updateChat } from "../features";
+import { updateChat } from "../features/chats";
 import {
   createWorkspaceChatMutationOptions,
   forkWorkspaceChatMutationOptions,
 } from "../features/chats/mutation-options";
-import type { Message } from "../features/types";
 import { RomeoApiError } from "@romeo/api-client";
 import { getActiveChatRun, listQueuedTurns } from "../features/runs";
 import {
@@ -24,7 +23,10 @@ import {
   readyImages,
   trayBlocksSend,
 } from "./composer-tray-lifecycle";
-import { optimisticTurnAttachments } from "./optimistic-turn-attachments";
+import {
+  appendOptimisticTurnRow,
+  optimisticTurnAttachments,
+} from "./optimistic-turn-attachments";
 import { resolveAttachmentsForResend } from "./resend-attachments";
 import { formatBranchTitle, rememberBranchOrigin } from "./chat-enterprise";
 import { isMessageActionEnabled, resolveTurnOutcome } from "./turn-rollback";
@@ -74,24 +76,6 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     });
   }
 
-  function appendTurnRow(
-    chatId: string,
-    content: string,
-    attachments: Message["attachments"],
-    parentId: string | undefined,
-    messageId: string,
-  ): string {
-    options.appendMessage(
-      chatId,
-      "user",
-      content,
-      attachments,
-      parentId,
-      messageId,
-    );
-    return messageId;
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const typedContent = options.draft.trim();
@@ -108,7 +92,12 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     ) {
       return;
     }
-    if (trayBlocksSend([...options.imageAttachments, ...options.documentAttachments])) {
+    if (
+      trayBlocksSend([
+        ...options.imageAttachments,
+        ...options.documentAttachments,
+      ])
+    ) {
       options.setError(options.t("trayWaitForUploads"));
       return;
     }
@@ -163,6 +152,10 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           ? {}
           : { knowledgeBaseIds: options.knowledgeBaseIdsOverride }),
       });
+      // A queued continuation advances the shared active branch. Stop pinning
+      // the reader to the pre-queue leaf so reload can follow the eventual
+      // input/assistant rows even when the server drains before we observe it.
+      options.onBranchSelection?.(options.activeChatId, undefined);
       options.setDraft("");
       options.setAttachedUrls([]);
     } catch (caught) {
@@ -244,7 +237,8 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           : { knowledgeBaseIds: options.knowledgeBaseIdsOverride }),
       });
       accepted = true;
-      const userMessageId = appendTurnRow(
+      const userMessageId = appendOptimisticTurnRow(
+        options,
         chat.id,
         content,
         optimisticTurnAttachments(images, documents),
@@ -344,7 +338,8 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           ? {}
           : { knowledgeBaseIds: options.knowledgeBaseIdsOverride }),
       });
-      const userMessageId = appendTurnRow(
+      const userMessageId = appendOptimisticTurnRow(
+        options,
         chatId,
         lastUser.content,
         lastUser.attachments,
@@ -366,10 +361,11 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
 
   async function followQueuedRuns(chatId: string, previousRunId?: string) {
     for (let attempt = 0; attempt < 30; attempt += 1) {
-      const [activeRun, queue] = await Promise.all([
-        getActiveChatRun(chatId),
-        listQueuedTurns(chatId),
-      ]);
+      // Queue listing asks the server to drain pending work. Read it before the
+      // active run so the two snapshots cannot straddle a fast drain as
+      // "inactive before" plus "empty after" and abandon the recovered turn.
+      const queue = await listQueuedTurns(chatId);
+      const activeRun = await getActiveChatRun(chatId);
       // Keyed by the chat being drained, not by the chat on screen: this loop
       // runs from a settled background run and polls for up to three seconds.
       replaceQueuedTurnsCache(options.queryClient, chatId, queue);
@@ -377,6 +373,13 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
       // calls back here, so the queue drains without holding this loop open.
       if (activeRun !== null && activeRun.id !== previousRunId) {
         trackChatRun(chatId, activeRun.id);
+        return;
+      }
+      if (queue.length === 0) {
+        // The queued run may already have reached a terminal state (especially
+        // with the deterministic development provider). Re-read its messages
+        // so reload recovery does not depend on having observed the stream.
+        await options.syncPersistedMessages(chatId);
         return;
       }
       if (queue.every((turn) => turn.status === "failed")) return;
@@ -461,7 +464,8 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
           ? {}
           : { knowledgeBaseIds: options.knowledgeBaseIdsOverride }),
       });
-      const userMessageId = appendTurnRow(
+      const userMessageId = appendOptimisticTurnRow(
+        options,
         chatId,
         content.trim(),
         message.attachments,
@@ -479,14 +483,10 @@ export function useWorkspaceTurnActions(options: WorkspaceTurnActionsOptions) {
     }
   }
 
-  async function handleContinueResponse() {
-    await submitTurn(options.t("chatContinueResponse"));
-  }
-
   return {
     followQueuedRuns,
     handleBranchFromMessage,
-    handleContinueResponse,
+    handleContinueResponse: () => submitTurn(options.t("chatContinueResponse")),
     handleEditAndResend,
     handleFollowUp,
     handleSubmit,

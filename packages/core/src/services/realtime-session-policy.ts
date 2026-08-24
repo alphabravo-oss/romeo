@@ -29,13 +29,20 @@ export function authorizeRealtimeSession(
       code: "capability_platform_disabled",
       fallback: "batch_stt_tts",
     };
-  if (!request.gatewayInstalled || request.durationSeconds > request.maxDurationSeconds)
+  if (
+    !request.gatewayInstalled ||
+    request.durationSeconds > request.maxDurationSeconds
+  )
     return {
       outcome: "denied",
       code: "realtime_runtime_uninstalled",
       fallback: "batch_stt_tts",
     };
-  return { outcome: "accepted", retention: request.retention, fallback: "none" };
+  return {
+    outcome: "accepted",
+    retention: request.retention,
+    fallback: "none",
+  };
 }
 
 export function defaultRealtimeRetention(): RealtimeRetention {

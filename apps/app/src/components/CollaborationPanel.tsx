@@ -292,7 +292,13 @@ export function CollaborationPanel({
             empty={t("dataConnectorNeedsKb")}
             emptyAction={
               <Button asChild variant="primary">
-                <Link search={{ section: "knowledge" }} to="/workspace">
+                <Link
+                  search={(previous) => ({
+                    ...previous,
+                    section: "knowledge",
+                  })}
+                  to="/workspace"
+                >
                   {t("knowledgeAddBase")}
                 </Link>
               </Button>

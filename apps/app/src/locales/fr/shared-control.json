@@ -41,7 +41,9 @@
   "tableComfortable": "Confortable",
   "tableCompact": "Compacte",
   "tableDensity": "Densité",
+  "tableError": "Impossible de charger ce tableau.",
   "tableExportCsv": "Exporter en CSV",
+  "tableExportFileStem": "tableau",
   "tableLoading": "Chargement…",
   "tableNextPage": "Suivant",
   "tableNoMatches": "Aucun résultat",
@@ -51,6 +53,7 @@
   "tablePage": "page",
   "tablePreviousPage": "Précédent",
   "tableResetView": "Réinitialiser la vue du tableau",
+  "tableRetry": "Réessayer",
   "tableResults": "résultats",
   "tableRowsPerPage": "Lignes par page",
   "tableSearch": "Rechercher dans le tableau",
@@ -58,6 +61,12 @@
   "tableSelectAllRows": "Sélectionner toutes les lignes",
   "tableSelected": "sélectionnées",
   "tableSelectRow": "Sélectionner la ligne",
+  "tableDeselectRow": "Désélectionner la ligne",
+  "tableDefaultView": "Vue par défaut",
+  "tableShareView": "Partager la vue",
+  "tableUnshareView": "Arrêter de partager la vue",
+  "tableServerAuthorityUnavailable": "Les vues enregistrées et les exportations sont indisponibles pour le moment.",
+  "tableOperationFailed": "L’opération du tableau a échoué. Réessayez.",
   "tableShown": "affichées",
   "tableSavedViews": "Vues enregistrées",
   "tableSaveView": "Enregistrer",
@@ -73,5 +82,6 @@
   "accessGrantRevoked": "Accès révoqué",
   "accessRevoke": "Révoquer",
   "accessRevokeFailed": "Impossible de révoquer l’accès",
-  "accessNoGrants": "Aucune autorisation pour le moment."
+  "accessNoGrants": "Aucune autorisation pour le moment.",
+  "accessPrincipal": "Personne ou groupe"
 }

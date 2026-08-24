@@ -4,6 +4,7 @@ import {
 } from "@romeo/api-client/runtime/generated-client";
 
 import { flagValue, type ParsedArgs } from "./args";
+import { readCliSecret, rejectSecretFlag } from "./secret-input";
 
 export interface CliConfig {
   baseUrl: string;
@@ -14,12 +15,12 @@ export function resolveConfig(
   parsed: ParsedArgs,
   env: NodeJS.ProcessEnv,
 ): CliConfig {
+  rejectSecretFlag(parsed.flags, "api-key");
   const baseUrl =
     nonEmpty(flagValue(parsed.flags, "base-url")) ??
     nonEmpty(env.ROMEO_BASE_URL) ??
     "http://127.0.0.1:3000";
-  const apiKey =
-    nonEmpty(flagValue(parsed.flags, "api-key")) ?? nonEmpty(env.ROMEO_API_KEY);
+  const apiKey = readCliSecret(env, "ROMEO_API_KEY");
   return apiKey === undefined ? { baseUrl } : { baseUrl, apiKey };
 }
 

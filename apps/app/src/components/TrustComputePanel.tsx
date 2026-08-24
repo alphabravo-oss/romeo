@@ -62,9 +62,14 @@ export function TrustComputePanelView({
 }) {
   const { t } = useLocale();
   return (
-    <Section description={t("trustComputeIntro")} title={t("trustPostureTitle")}>
+    <Section
+      description={t("trustComputeIntro")}
+      title={t("trustPostureTitle")}
+    >
       <p className="text-sm text-muted" role="status">
-        {t("trustSyntheticGreenNever")}
+        {t("trustSyntheticGreenNever")} These checks evaluate policy only. They
+        do not execute break-glass, destroy keys, seal audit segments, or
+        install a compute runtime.
       </p>
       <dl className="grid gap-2 text-sm sm:grid-cols-2">
         {(
@@ -290,7 +295,8 @@ function resultLabel(data: unknown, t: (key: MessageKey) => string): string {
     return t("computeOutcomeAccepted");
   if (isRecord(data) && data.outcome === "denied")
     return t("computeOutcomeDenied");
-  if (isRecord(data) && data.state === "healthy") return t("computeStateHealthy");
+  if (isRecord(data) && data.state === "healthy")
+    return t("computeStateHealthy");
   if (isRecord(data) && data.state === "degraded")
     return t("computeStateDegraded");
   if (isRecord(data) && data.state === "unavailable")

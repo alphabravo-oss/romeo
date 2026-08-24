@@ -1,5 +1,8 @@
 import { z } from "zod";
+
+import { s3EnvShape, trustedProxyCidrsSchema } from "./edge-storage-env-shape";
 import { platformEnvShape } from "./platform-env-shape";
+import { productionSecurityEnvShape } from "./production-security-env-shape";
 import {
   validateProductionEnvironment,
   validateToolDispatchPayloadStore,
@@ -8,6 +11,7 @@ import {
 export const envSchema = z
   .object({
     ...platformEnvShape,
+    ...productionSecurityEnvShape,
     ROMEO_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
@@ -36,7 +40,6 @@ export const envSchema = z
       .positive()
       .max(5_000_000_000)
       .default(500_000_000),
-    FILE_MALWARE_SCAN_POLICY: z.enum(["off", "required"]).default("off"),
     MESSAGE_ATTACHMENT_MAX_BYTES: z.coerce
       .number()
       .int()
@@ -137,7 +140,6 @@ export const envSchema = z
       .default(60_000),
     MODEL_PROVIDER_DISABLED_IDS: z.string().default(""),
     MODEL_PROVIDER_FALLBACK_MODEL_ID: z.string().default(""),
-    VALKEY_URL: z.string().default("redis://localhost:6379"),
     REALTIME_EVENT_DRIVER: z.enum(["memory", "valkey"]).default("memory"),
     REALTIME_EVENT_KEY_PREFIX: z
       .string()
@@ -171,6 +173,7 @@ export const envSchema = z
       .enum(["direct", "trusted_proxy"])
       .default("direct"),
     EDGE_TRUSTED_PROXY_HOPS: z.coerce.number().int().min(1).max(10).default(1),
+    EDGE_TRUSTED_PROXY_CIDRS: trustedProxyCidrsSchema,
     EDGE_WAF_MODE: z.enum(["disabled", "monitor", "block"]).default("disabled"),
     EDGE_ALLOWED_ORIGINS: z.string().default(""),
     EDGE_HSTS_ENABLED: z
@@ -193,10 +196,6 @@ export const envSchema = z
         "website-fetch",
         "github-fetch",
         "s3-fetch",
-        "atlassian-fetch",
-        "notion-fetch",
-        "linear-fetch",
-        "slack-fetch",
         "managed-fetch",
       ])
       .default("disabled"),
@@ -260,6 +259,7 @@ export const envSchema = z
       .string()
       .default("repo,read:user,user:email"),
     DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: z.string().default(""),
+    DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS: z.string().default(""),
     KNOWLEDGE_EXTRACTION_DRIVER: z
       .enum(["disabled", "local-pdftotext", "local-documents"])
       .default("local-documents"),
@@ -437,11 +437,7 @@ export const envSchema = z
       .string()
       .default("alloy,echo,fable,onyx,nova,shimmer"),
     VOICE_OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
-    S3_ENDPOINT: z.string().default("http://localhost:9000"),
-    S3_BUCKET: z.string().default("romeo"),
-    S3_REGION: z.string().default("us-east-1"),
-    S3_ACCESS_KEY_ID: z.string().default("romeo"),
-    S3_SECRET_ACCESS_KEY: z.string().default("romeo-local-secret"),
+    ...s3EnvShape,
     SESSION_SECRET: z.string().min(16).default("dev-session-secret-change-me"),
     SESSION_SECRET_PREVIOUS: z
       .union([z.string().min(16), z.literal("")])
@@ -458,6 +454,11 @@ export const envSchema = z
       .string()
       .min(16)
       .default("dev-webhook-signing-key-change-me"),
+    WEBHOOK_SIGNING_KEY_PREVIOUS: z.string().default(""),
+    BILLING_ENABLED: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((value) => value === "true"),
     BILLING_STRIPE_WEBHOOK_SECRET: z.string().default(""),
     BILLING_STRIPE_WEBHOOK_TOLERANCE_SECONDS: z.coerce
       .number()

@@ -1,8 +1,8 @@
 # Secure file lifecycle
 
-Status: implemented foundation with an explicit completion prerequisite. Roadmap
-item EP-07-03 remains open because production attachment and retention writers do
-not yet transition file records to `attached` and `retained`.
+Status: implemented. Upload requests validate and durably enqueue content; the
+supervised tenant scheduler owns all scanning, OCR, extraction, retry, and
+dead-letter transitions outside the HTTP request.
 
 ## Security objective
 
@@ -24,7 +24,7 @@ monotonic version checks. Current processing follows:
 
 ```text
 uploading -> quarantined -> scanning -> extracting/transcoding -> ready
-                         \-> failed -> quarantined (explicit retry)
+                         \-> failed -> quarantined (scheduled or explicit retry)
                          \-> deleted (malware rejection)
 ready -> attached | retained | failed | deleted
 attached -> ready | retained | failed | deleted
@@ -46,8 +46,11 @@ Migration `0027_secure_file_lifecycle.sql` is additive. It introduces bounded
 status/version/attempt fields, safe failure and next-attempt fields, exclusive
 lease owner/token/expiry fields, attachment/retention timestamps, checks, and a
 claim index. It deliberately contains no unbounded data rewrite. Legacy
-`available` rows continue to read and execute while new uploads write lifecycle
-version zero and transition to `ready`.
+`available` rows continue to read and execute. Inline upload persistence and
+direct/resumable completion validate declared size, digest, media signature,
+authorized ownership, and object-store acknowledgement, then atomically persist
+`quarantined`. Scanner, extractor, and OCR adapters are not called before the
+HTTP response.
 
 Memory and PostgreSQL repositories expose the same claim, stage-advance, renew,
 and finish operations. PostgreSQL claims use `FOR UPDATE SKIP LOCKED`; all stage
@@ -57,13 +60,16 @@ while a stale worker cannot renew, advance, or finish the record.
 
 `lifecycleAttempts` has one source per processing attempt:
 
-- synchronous initial processing increments when it enters quarantine;
-- a leased retry increments during claim;
+- upload completion enters quarantine with zero attempts;
+- every exclusive leased claim increments exactly once;
 - failure persistence does not increment it again;
 - explicit retry only requeues and preserves the count.
 
-The retry ceiling is 100. Retry API calls are idempotently rejected outside the
-failed state and never execute scanner or extraction work inline.
+Retries use a bounded exponential schedule starting at 30 seconds and capped at
+15 minutes. Five failed claims exhaust the policy, clear the retry timestamp,
+and persist a sanitized `fileLifecycleDeadLetter` record. Retry API calls and
+extraction retries only requeue work; neither reads the object nor executes a
+scanner/extractor in the request.
 
 ## Object and processing bounds
 
@@ -82,6 +88,12 @@ content-free tombstone. Scanner and extractor work are bounded below the lease,
 with a renewal and version recheck before each expensive stage. A stale lease or
 duplicate callback cannot commit a terminal state.
 
+The worker derives an absolute per-stage deadline below the lease and combines
+it with the supervisor drain signal. The combined `AbortSignal` reaches bounded
+object reads, ClamAV sockets, OCR child processes, PDF child processes, and
+binary extractors. A timeout aborts cooperative work before the lease is
+released; completion remains fenced even after crash/reclaim.
+
 Data-export object reads also use declared, per-request, and global bounds before
 materializing bytes. Exported file metadata intentionally omits object keys,
 lease owners/tokens/expiry, internal retry scheduling, and provider/scanner
@@ -95,8 +107,8 @@ file content reads, extraction retry, run context/provider projection, and
 workspace-content access after tenant/workspace/resource authorization. This
 ordering avoids disclosing cross-tenant file existence or lifecycle state.
 
-Retention enforcement includes legacy available plus new ready and attached
-objects, excludes nonready records, and does not delete retained records. It also
+Retention enforcement includes legacy available, ready, attached, and exhausted
+failed objects, but does not delete retained records. It also
 rechecks the deletion plan immediately before deletion so a new legal hold wins a
 race with a scheduled retention job. Tenant purge and ordinary deletion reuse
 existing repository/object cleanup; the additive lifecycle columns cascade with
@@ -114,19 +126,30 @@ The retry route is a generated-client-safe `POST` mutation. It records a
 privacy-safe `file.lifecycle.retry` audit event containing only attempt count,
 finite failure code, workspace identifier, and standard telemetry metadata.
 
-The file library uses a governed TanStack mutation factory and exact cached-page
-invalidation. It exposes localized English, Spanish, and French lifecycle
-labels, live status text, disabled attachment affordances before readiness, and
-retry/cancel-delete controls. Errors use canonical privacy-safe user copy. The
-catalog is keyboard operable and uses status semantics that remain meaningful
-without color.
+The file library uses a governed TanStack mutation factory, exact cached-page
+invalidation, and a two-second recovery poll only while a page contains pending
+files. It exposes localized English, Spanish, and French lifecycle labels, live
+background progress, finite failure code, retry eligibility/exhaustion,
+disabled attachment affordances before readiness, and retry/cancel-delete
+controls. Errors use canonical privacy-safe user copy. The catalog is keyboard
+operable and uses status semantics that remain meaningful without color.
+
+The internal all-tenant coordinator owns `file_lifecycle` at a one-second
+interval with only `files:read` and `files:write`, a deterministic tenant job,
+lease heartbeat/fencing, bounded fair tenant selection, replica suppression,
+and supervisor drain. No organization API key or global-admin worker credential
+is involved. Readiness requires a fresh `scheduled_file_lifecycle` snapshot.
+The operational job summary adds a bounded aggregate `file.lifecycle` queue
+projection without file or tenant identifiers; Prometheus alerts on oldest queue
+age and any current dead letter.
 
 ## Validation evidence
 
 Automated coverage includes:
 
 - central transition/version validation and retained-state denial;
-- required-scanner unavailable, explicit retry, and single-source attempt count;
+- required-scanner unavailable, automatic and explicit retry, exponential
+  backoff, dead-letter exhaustion, and single-source attempt count;
 - malicious upload object deletion and content-free tombstone persistence;
 - declared-size and configured upload-mode object-read bounds;
 - exclusive claim, renewal, stage advance, stale finish rejection, crash expiry,
@@ -134,7 +157,12 @@ Automated coverage includes:
 - legacy available and new ready/attached/retained retention eligibility, with
   nonready and retained exclusion;
 - tenant/workspace/resource authorization and action-time run-context readiness;
-- direct, resumable, and inline completion/idempotency behavior;
+- direct, resumable, and inline accepted/quarantined completion, object
+  durability, idempotency, and no-inline-scanner behavior;
+- supervisor abort propagation through object read, malware scan, OCR, and
+  extraction adapters;
+- operational queue aggregate/alerts, scheduler ownership, drain, and UI
+  polling/progress/exhaustion behavior;
 - migration checksum/baseline/evolution-policy checks;
 - generated contract parsing, localized UI state, mutation policy, query-key,
   type, architecture, build, and bundle gates.
@@ -142,24 +170,7 @@ Automated coverage includes:
 The repository can run the PostgreSQL parity suite when its live database test
 environment is configured. The in-memory conformance suite runs unconditionally.
 
-## Open completion prerequisite
-
-No production path currently owns the reference-counted transition from `ready`
-to `attached`, or the policy/legal-hold transition to `retained`. Run creation
-still copies reusable file metadata into legacy message attachment objects rather
-than atomically linking the file record. Consequently detach, message deletion,
-hold release, and “last reference removed” behavior cannot yet be proven.
-
-EP-07-03 must remain open until a single transactional owner implements and tests:
-
-1. atomic message-part/file reference creation and `ready -> attached`;
-2. idempotent detach/message-delete reference removal without deleting a file
-   still referenced elsewhere;
-3. policy/legal-hold acquisition as `ready|attached -> retained`;
-4. authorized hold release semantics that cannot weaken an active hold;
-5. export, tenant purge, retention, and concurrent attach/delete races for those
-   reachable states in both memory and PostgreSQL.
-
-These requirements naturally meet EP-07-07 output-part persistence and EP-07-10
-action-time access work, but they are not considered complete merely because the
-states and columns exist.
+Live target evidence remains environment-gated: PostgreSQL `SKIP LOCKED`/RLS
+contention with pool size one, a real ClamAV and OCR cancellation drill, a
+Compose crash-and-reclaim run, Prometheus rule firing/clearance, and an
+upload-to-ready browser acceptance against the deployed target.

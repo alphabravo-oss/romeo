@@ -10,6 +10,7 @@ import type { SecretValueResolver } from "./secret-resolver";
 import type { ToolDispatchPinnedFetch } from "./dns-pinned-fetch";
 import { executeToolDispatchHttpRequest } from "./tool-dispatch-http";
 import { workerSignalAborted } from "./worker-control";
+import { startWorkerLeaseHeartbeat } from "./worker-lease-heartbeat";
 
 export interface ToolDispatchWorkerClient {
   tool: {
@@ -27,6 +28,10 @@ export interface ToolDispatchWorkerClient {
       jobId: string;
       errorCode: string;
     }): Promise<ToolOperationDispatchRequestReadbackResult>;
+    renewDispatchRequest?(input: {
+      jobId: string;
+      leaseSeconds: number;
+    }): Promise<ToolOperationDispatchRequestClaimResult>;
     readDispatchRequestPayload?(input: {
       jobId: string;
     }): Promise<ToolOperationDispatchRequestPayloadResult>;
@@ -194,9 +199,21 @@ async function executeClaimedDispatchRequest(
     };
   }
 
+  const heartbeat =
+    input.client.tool.renewDispatchRequest === undefined
+      ? undefined
+      : startWorkerLeaseHeartbeat({
+          leaseSeconds: input.leaseSeconds,
+          renew: () =>
+            input.client.tool.renewDispatchRequest!({
+              jobId,
+              leaseSeconds: input.leaseSeconds,
+            }),
+        });
   try {
     const payload = await resolveClaimPayload(input, claim, payloads);
     if (payload === undefined) {
+      await heartbeat?.stop({ requireOwned: false });
       await input.client.tool.failDispatchRequest({
         jobId,
         errorCode: "worker_payload_unavailable",
@@ -211,6 +228,7 @@ async function executeClaimedDispatchRequest(
       claim,
       payload,
     );
+    await heartbeat?.stop();
     await input.client.tool.completeDispatchRequest({ jobId, response });
     return claimedJobSummary(claim, "completed", {
       bodyBytes: response.bodyBytes,
@@ -218,6 +236,7 @@ async function executeClaimedDispatchRequest(
       truncated: response.truncated,
     });
   } catch (error) {
+    await heartbeat?.stop({ requireOwned: false });
     const errorCode = workerErrorCode(error);
     await input.client.tool.failDispatchRequest({ jobId, errorCode });
     return claimedJobSummary(claim, "failed", { errorCode });

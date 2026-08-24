@@ -48,6 +48,7 @@ export function ContextInspector({
   const inspecting = loading || (chatId !== undefined && inspection.isPending);
   return (
     <aside
+      aria-busy={inspecting}
       aria-describedby="context-inspector-description"
       aria-labelledby="context-inspector-title"
       aria-modal="false"

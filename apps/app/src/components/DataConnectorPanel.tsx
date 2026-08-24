@@ -8,8 +8,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   createDataConnectorMutationOptions,
   dataConnectorCatalogQueryOptions,
-  knowledgeBasesQueryOptions,
-} from "../features";
+} from "../features/data-connectors";
+import { knowledgeBasesQueryOptions } from "../features/knowledge";
 import type { DataConnector, DataConnectorType } from "../features/types";
 import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
@@ -37,10 +37,10 @@ export function DataConnectorPanel({
   workspaceId: string | undefined;
 }) {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<any>("data_connectors", {
-    enabled: workspaceId !== undefined,
-    workspaceId,
-  });
+  const inventoriedTable = useInventoriedServerTable(
+    "data_connectors",
+    workspaceId === undefined ? { enabled: false } : { workspaceId },
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [addType, setAddType] = useState<DataConnectorType>("local_import");
   const [activeConnectorId, setActiveConnectorId] = useState<string>();
@@ -209,13 +209,13 @@ export function DataConnectorPanel({
               items={[
                 {
                   label: t("connectorTotal"),
-                  value: inventoriedTable.estimatedTotal,
+                  value:
+                    inventoriedTable.summary.total ??
+                    inventoriedTable.estimatedTotal,
                 },
                 {
                   label: t("connectorActive"),
-                  value: inventoriedTable.rows.filter(
-                    (row) => row.status === "active",
-                  ).length,
+                  value: inventoriedTable.summary.activeTotal ?? 0,
                 },
               ]}
             />
@@ -386,7 +386,10 @@ export function DataConnectorPanel({
           <Button asChild variant="primary">
             <Link
               preload="intent"
-              search={{ section: "knowledge" }}
+              search={(previous) => ({
+                ...previous,
+                section: "knowledge",
+              })}
               to="/workspace"
             >
               {t("knowledgeAddBase")}

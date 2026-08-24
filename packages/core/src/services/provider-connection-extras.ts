@@ -22,15 +22,18 @@ export async function saveProviderConnectionExtras(
 ): Promise<void> {
   const extras = publicProviderConnectionExtras(input.extras);
   if (Object.keys(extras).length === 0) return;
-  await repository.upsertSystemSetting({
-    key: extrasKey(input.providerId),
-    updatedAt: new Date().toISOString(),
-    value: {
-      ...extras,
-      orgId: input.orgId,
-      schema: PROVIDER_CONNECTION_EXTRAS_SCHEMA,
+  await repository.upsertSystemSetting(
+    {
+      key: extrasKey(input.providerId),
+      updatedAt: new Date().toISOString(),
+      value: {
+        ...extras,
+        orgId: input.orgId,
+        schema: PROVIDER_CONNECTION_EXTRAS_SCHEMA,
+      },
     },
-  });
+    input.orgId,
+  );
 }
 
 export async function readProviderConnectionExtras(
@@ -39,7 +42,7 @@ export async function readProviderConnectionExtras(
   providerId: string,
 ): Promise<ProviderConnectionExtras | undefined> {
   return parseExtras(
-    (await repository.getSystemSetting(extrasKey(providerId)))?.value,
+    (await repository.getSystemSetting(extrasKey(providerId), orgId))?.value,
     orgId,
   );
 }
@@ -49,11 +52,14 @@ export async function readProviderConnectionExtrasById(
   orgId: string,
 ): Promise<Map<string, ProviderConnectionExtras>> {
   const extras = new Map<string, ProviderConnectionExtras>();
-  for (const setting of await repository.listSystemSettings()) {
+  for (const setting of await repository.listSystemSettings(orgId)) {
     if (!setting.key.startsWith("provider.connection-extras.v1:")) continue;
     const parsed = parseExtras(setting.value, orgId);
     if (parsed === undefined) continue;
-    extras.set(setting.key.slice("provider.connection-extras.v1:".length), parsed);
+    extras.set(
+      setting.key.slice("provider.connection-extras.v1:".length),
+      parsed,
+    );
   }
   return extras;
 }
@@ -63,7 +69,9 @@ export function publicProviderConnectionExtras(
 ): ProviderConnectionExtras {
   return {
     ...(extras.auth === undefined ? {} : { auth: extras.auth }),
-    ...(extras.deployment === undefined ? {} : { deployment: extras.deployment }),
+    ...(extras.deployment === undefined
+      ? {}
+      : { deployment: extras.deployment }),
     ...(extras.project === undefined ? {} : { project: extras.project }),
     ...(extras.region === undefined ? {} : { region: extras.region }),
     ...(extras.target === undefined ? {} : { target: extras.target }),
@@ -87,12 +95,18 @@ function parseExtras(
   )
     return undefined;
   return publicProviderConnectionExtras({
-    ...(typeof candidate.auth === "string" ? { auth: candidate.auth as never } : {}),
+    ...(typeof candidate.auth === "string"
+      ? { auth: candidate.auth as never }
+      : {}),
     ...(typeof candidate.deployment === "string"
       ? { deployment: candidate.deployment }
       : {}),
-    ...(typeof candidate.project === "string" ? { project: candidate.project } : {}),
-    ...(typeof candidate.region === "string" ? { region: candidate.region } : {}),
+    ...(typeof candidate.project === "string"
+      ? { project: candidate.project }
+      : {}),
+    ...(typeof candidate.region === "string"
+      ? { region: candidate.region }
+      : {}),
     ...(typeof candidate.target === "string"
       ? { target: candidate.target as never }
       : {}),

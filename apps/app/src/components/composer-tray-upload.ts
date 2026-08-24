@@ -1,5 +1,9 @@
 import type { FileObject } from "../features/files";
-import { createChatFile, deleteChatFile, fileContentUrl } from "../features/files";
+import {
+  createChatFile,
+  deleteChatFile,
+  fileContentUrl,
+} from "../features/files";
 import { isFileReady } from "../features/files/types";
 import { blobToBase64 } from "./workspace-controller-media";
 import {
@@ -8,12 +12,14 @@ import {
   type TrayLifecycle,
 } from "./composer-tray-lifecycle";
 import {
+  metadataAudioAccessibility,
   metadataPageCount,
   metadataTranscript,
   safeAttachmentDownloadUrl,
 } from "./composer-tray-media";
 
 export function documentFieldsFromStoredFile(file: FileObject): {
+  audioAccessibility?: ReturnType<typeof metadataAudioAccessibility>;
   downloadUrl?: string;
   fileId: string;
   pageCount?: number;
@@ -25,14 +31,19 @@ export function documentFieldsFromStoredFile(file: FileObject): {
     ? "ready"
     : fileStatusToTrayLifecycle(file.status);
   const pageCount =
-    file.extraction.pageCount === null || file.extraction.pageCount === undefined
+    file.extraction.pageCount === null ||
+    file.extraction.pageCount === undefined
       ? metadataPageCount(file.metadata)
       : file.extraction.pageCount;
   const transcript = metadataTranscript(file.metadata);
+  const audioAccessibility = file.mimeType.startsWith("audio/")
+    ? metadataAudioAccessibility(file.metadata)
+    : undefined;
   const downloadUrl = safeAttachmentDownloadUrl(
     file.contentUrl ?? fileContentUrl(file.id),
   );
   return {
+    ...(audioAccessibility === undefined ? {} : { audioAccessibility }),
     fileId: file.id,
     percent: trayProgressPercent(status),
     status,
@@ -64,10 +75,7 @@ export async function uploadChatDocument(input: {
   const next = documentFieldsFromStoredFile(stored);
   return {
     ...next,
-    status:
-      next.status === "uploading"
-        ? ("scanning" as const)
-        : next.status,
+    status: next.status === "uploading" ? ("scanning" as const) : next.status,
     percent: trayProgressPercent(
       next.status === "uploading" ? "scanning" : next.status,
     ),

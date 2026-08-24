@@ -28,6 +28,7 @@
   "usersDisableConfirmBody": "Se cierra su sesión y no podrá volver a iniciarla hasta que lo reactives. Se conservan sus conversaciones y archivos.",
   "usersDisableConfirmTitle": "¿Desactivar a este miembro?",
   "usersLastAdminHint": "No puedes desactivar al último administrador.",
+  "usersScheduledWorkerName": "Proceso del sistema — {operation}",
   "userUpdateRole": "Actualizar rol",
   "userUser": "Usuario",
   "userDirectory": "Directorio",

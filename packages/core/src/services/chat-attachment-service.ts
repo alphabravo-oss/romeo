@@ -1,13 +1,14 @@
 import type { AuthSubject } from "@romeo/auth";
 import type { ObjectStore } from "@romeo/storage";
 
-import type { Message } from "../domain/entities";
+import type { Message, MessagePart } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { writeAuditLog } from "./audit-log";
 import { getAuthorizedChat } from "./chat-access";
 import { LocalOoxmlTextExtractor } from "./local-ooxml-extractor";
 import { readMessageAttachment } from "./message-attachments";
+import { isLegacyAttachmentPart, isMessagePartV1 } from "./message-part-v1";
 
 export class ChatAttachmentService {
   constructor(
@@ -113,17 +114,33 @@ export class ChatAttachmentService {
     const message = await this.repository.getMessage(input.messageId);
     if (!message || message.chatId !== chat.id) throw notFound("Message");
     const part = await this.repository.getMessagePart(input.attachmentId);
-    if (!part || part.messageId !== message.id || part.type !== "attachment") {
+    if (!part || part.messageId !== message.id) {
       throw notFound("Message attachment");
     }
-    return this.repository.transaction(async (repository) => {
-      const updated = await repository.updateMessagePart({
+    let retainedPart: MessagePart;
+    if (isLegacyAttachmentPart(part)) {
+      retainedPart = {
         ...part,
         metadata: {
           ...part.metadata,
           retainedInContext: input.retainedInContext,
         },
-      });
+      };
+    } else if (
+      isMessagePartV1(part) &&
+      (part.type === "image_ref" ||
+        part.type === "document_ref" ||
+        part.type === "audio_ref")
+    ) {
+      retainedPart = {
+        ...part,
+        retainedInContext: input.retainedInContext,
+      };
+    } else {
+      throw notFound("Message attachment");
+    }
+    return this.repository.transaction(async (repository) => {
+      const updated = await repository.updateMessagePart(retainedPart);
       await writeAuditLog(repository, {
         subject: input.subject,
         action: "chat.attachment.retention.update",

@@ -17,9 +17,9 @@ describe("typed message parts", () => {
     });
     expect(fileIdsForMessagePart(part)).toEqual(["file_1"]);
     expect(parseMessagePartV1(part)).toEqual(part);
-    expect(() =>
-      assertFileReadyForUse({ status: "scanning" }),
-    ).toThrowError(/not completed its security lifecycle/);
+    expect(() => assertFileReadyForUse({ status: "scanning" })).toThrowError(
+      /not completed its security lifecycle/,
+    );
     expect(() => assertFileReadyForUse({ status: "ready" })).not.toThrow();
   });
 });

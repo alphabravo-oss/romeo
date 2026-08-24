@@ -37,11 +37,15 @@ export class TenantAdminService {
     private readonly repository: RomeoRepository,
     private readonly abuseControls: AbuseControlService,
     private readonly objectStore: ObjectStore = disabledObjectStore,
+    vectorStore?: {
+      deleteEmbeddingsForOrg?(input: { orgId: string }): Promise<void>;
+    },
   ) {
     this.deletionLifecycle = new TenantDeletionLifecycleService(
       repository,
       abuseControls,
       objectStore,
+      vectorStore,
     );
   }
 

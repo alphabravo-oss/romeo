@@ -33,7 +33,8 @@ export async function verifyProviderConnection(input: {
     ...(resolution?.value === undefined ? {} : { apiKey: resolution.value }),
     fetchImpl: withTelemetryFetch(input.fetchImpl ?? fetch),
   });
-  const credentialRequired = provider.capabilities.deployment.credentialRequired;
+  const credentialRequired =
+    provider.capabilities.deployment.credentialRequired;
   return {
     ...result,
     latencyMs: Date.now() - startedAt,

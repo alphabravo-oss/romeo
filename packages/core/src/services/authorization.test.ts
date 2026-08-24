@@ -13,7 +13,6 @@ import { RunService } from "./run-service";
 import { canManageServiceAccount } from "./service-account-access";
 import { UsageService } from "./usage-service";
 import { VoiceService } from "./voice-service";
-import { WorkflowService } from "./workflow-service";
 
 const otherUser: AuthSubject = {
   id: "user_other",
@@ -278,71 +277,6 @@ describe("service authorization", () => {
         "connector_workspace_denied",
       ),
     ).resolves.toEqual([]);
-  });
-
-  it("blocks workflow resume outside caller workspace access", async () => {
-    const repository = new InMemoryRomeoRepository();
-    await repository.createWorkflowDefinition({
-      id: "workflow_workspace_denied",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      name: "Workspace denied workflow",
-      steps: [
-        {
-          id: "step_1",
-          type: "agent_run",
-          name: "Draft",
-          agentId: "agent_default",
-        },
-      ],
-      enabled: true,
-      createdBy: "user_dev_admin",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    await repository.createWorkflowRun({
-      id: "workflow_run_workspace_denied",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      workflowId: "workflow_workspace_denied",
-      status: "waiting_run",
-      input: {},
-      steps: [
-        {
-          stepId: "step_1",
-          type: "agent_run",
-          status: "waiting_run",
-          output: { runId: "run_missing" },
-        },
-      ],
-      currentStepId: "step_1",
-      createdBy: "user_dev_admin",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    const subject: AuthSubject = {
-      id: "user_workflow_workspace_denied",
-      type: "user",
-      orgId: "org_default",
-      workspaceIds: ["workspace_other"],
-      groupIds: [],
-      scopes: ["agents:run"],
-      isAdmin: false,
-    };
-    const workflows = new WorkflowService(repository, {} as never);
-
-    await expect(
-      workflows.resume({
-        subject,
-        workflowRunId: "workflow_run_workspace_denied",
-      }),
-    ).rejects.toMatchObject({ code: "forbidden" });
-    await expect(
-      repository.getWorkflowRun("workflow_run_workspace_denied"),
-    ).resolves.toMatchObject({
-      status: "waiting_run",
-      currentStepId: "step_1",
-    });
   });
 
   it("blocks cross-org governed data deletion without deleting the target", async () => {

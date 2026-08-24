@@ -22,6 +22,11 @@ describe("data connector repository mappers", () => {
       createdAt: new Date("2026-06-27T00:00:00.000Z"),
       updatedAt: new Date("2026-06-27T00:05:00.000Z"),
       lastSyncAt: null,
+      syncLeaseOwner: null,
+      syncLeaseToken: null,
+      syncLeaseExpiresAt: null,
+      syncFence: 0,
+      syncAttempts: 0,
     });
 
     expect(connector).toEqual({
@@ -56,6 +61,8 @@ describe("data connector repository mappers", () => {
       errorCode: "connector_failed",
       startedAt: new Date("2026-06-27T00:00:00.000Z"),
       completedAt: new Date("2026-06-27T00:01:00.000Z"),
+      fencingToken: null,
+      leaseToken: null,
     });
 
     expect(sync).toMatchObject({

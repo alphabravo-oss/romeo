@@ -3,6 +3,102 @@
 
 import * as z from "zod";
 
+export const zReasoningSummaryDeltaEventData = z.object({
+  classification: z.enum(["provider_safe_summary"]),
+  contentPolicyApplied: z.literal(true),
+  text: z.string().max(4096),
+});
+
+export const zReasoningSummaryCompletedEventData = z.union([
+  z.object({
+    classification: z.enum(["provider_safe_summary"]),
+    status: z.enum(["completed"]),
+    characterCount: z.int().gte(0).lte(20000).optional(),
+    durationMs: z.int().gte(0).lte(86400000).optional(),
+    reasoningTokens: z.int().gte(0).lte(200000).optional(),
+  }),
+  z.object({
+    classification: z.enum(["hidden_reasoning_omitted"]),
+    status: z.enum(["discarded"]),
+    durationMs: z.int().gte(0).lte(86400000).optional(),
+    reasoningTokens: z.int().gte(0).lte(200000).optional(),
+  }),
+]);
+
+export const zRunContinuingEventData = z.object({
+  reason: z.enum(["tool_approval", "tool_dispatch"]),
+  toolId: z.string().min(1).max(300),
+  approvalRequestId: z.string().min(1).max(300).optional(),
+  jobId: z.string().min(1).max(300).optional(),
+  outcome: z.enum(["completed", "failed"]).optional(),
+  errorCode: z.string().optional(),
+});
+
+export const zTypedRunEvent = z.union([
+  z.object({
+    id: z.string().min(1).max(300),
+    runId: z.string().min(1).max(300),
+    sequence: z.int().gte(0),
+    schemaVersion: z.literal(1),
+    legId: z.string().min(1).max(300).optional(),
+    channel: z.string().min(1).max(64).optional(),
+    createdAt: z.iso.datetime(),
+    type: z.enum(["reasoning.summary.delta"]),
+    data: zReasoningSummaryDeltaEventData,
+  }),
+  z.object({
+    id: z.string().min(1).max(300),
+    runId: z.string().min(1).max(300),
+    sequence: z.int().gte(0),
+    schemaVersion: z.literal(1),
+    legId: z.string().min(1).max(300).optional(),
+    channel: z.string().min(1).max(64).optional(),
+    createdAt: z.iso.datetime(),
+    type: z.enum(["reasoning.summary.completed"]),
+    data: zReasoningSummaryCompletedEventData,
+  }),
+  z.object({
+    id: z.string().min(1).max(300),
+    runId: z.string().min(1).max(300),
+    sequence: z.int().gte(0),
+    schemaVersion: z.literal(1),
+    legId: z.string().min(1).max(300).optional(),
+    channel: z.string().min(1).max(64).optional(),
+    createdAt: z.iso.datetime(),
+    type: z.enum(["run.continuing"]),
+    data: zRunContinuingEventData,
+  }),
+  z.object({
+    id: z.string().min(1).max(300),
+    runId: z.string().min(1).max(300),
+    sequence: z.int().gte(0),
+    schemaVersion: z.literal(1),
+    legId: z.string().min(1).max(300).optional(),
+    channel: z.string().min(1).max(64).optional(),
+    createdAt: z.iso.datetime(),
+    type: z.enum([
+      "run.started",
+      "message.started",
+      "message.delta",
+      "message.reasoning",
+      "message.completed",
+      "retrieval.completed",
+      "tool.requested",
+      "tool.started",
+      "tool.approval_required",
+      "tool.completed",
+      "tool.failed",
+      "run.cancelled",
+      "run.completed",
+      "run.failed",
+      "run.waiting_tool_approval",
+      "run.waiting_tool_dispatch",
+      "output.part.ready",
+    ]),
+    data: z.record(z.string(), z.unknown()),
+  }),
+]);
+
 export const zAdminUser = z.object({
   id: z.string().min(1).max(300),
   orgId: z.string().min(1).max(300),
@@ -267,44 +363,7 @@ export const zApiKeySummary = z.object({
   userId: z.string().min(1).max(300).optional(),
   serviceAccountId: z.string().min(1).max(300).optional(),
   name: z.string().min(1),
-  scopes: z.array(
-    z.enum([
-      "me:read",
-      "organizations:read",
-      "workspaces:read",
-      "providers:read",
-      "providers:write",
-      "models:read",
-      "models:use",
-      "agents:read",
-      "agents:create",
-      "agents:write",
-      "agents:run",
-      "chats:read",
-      "chats:write",
-      "runs:read",
-      "runs:create",
-      "runs:cancel",
-      "files:read",
-      "files:write",
-      "knowledge:read",
-      "knowledge:write",
-      "knowledge:query",
-      "audit:read",
-      "usage:read",
-      "webhooks:read",
-      "webhooks:write",
-      "voices:use",
-      "voices:manage",
-      "tools:use",
-      "tools:manage",
-      "capabilities:read",
-      "capabilities:manage",
-      "capabilities:approve",
-      "admin:read",
-      "admin:write",
-    ]),
-  ),
+  scopes: z.array(z.string()),
   revokedAt: z.iso.datetime().optional(),
   createdAt: z.iso.datetime(),
 });
@@ -377,44 +436,7 @@ export const zServiceAccount = z.object({
   id: z.string().min(1).max(300),
   orgId: z.string().min(1).max(300),
   name: z.string().min(1),
-  scopes: z.array(
-    z.enum([
-      "me:read",
-      "organizations:read",
-      "workspaces:read",
-      "providers:read",
-      "providers:write",
-      "models:read",
-      "models:use",
-      "agents:read",
-      "agents:create",
-      "agents:write",
-      "agents:run",
-      "chats:read",
-      "chats:write",
-      "runs:read",
-      "runs:create",
-      "runs:cancel",
-      "files:read",
-      "files:write",
-      "knowledge:read",
-      "knowledge:write",
-      "knowledge:query",
-      "audit:read",
-      "usage:read",
-      "webhooks:read",
-      "webhooks:write",
-      "voices:use",
-      "voices:manage",
-      "tools:use",
-      "tools:manage",
-      "capabilities:read",
-      "capabilities:manage",
-      "capabilities:approve",
-      "admin:read",
-      "admin:write",
-    ]),
-  ),
+  scopes: z.array(z.string()),
   createdBy: z.string().min(1).max(300),
   disabledAt: z.iso.datetime().optional(),
   createdAt: z.iso.datetime(),
@@ -1324,7 +1346,7 @@ export const zApplyBillingPlanRequest = z.object({
 });
 
 export const zSyncExternalBillingEventRequest = z.object({
-  eventId: z.string().min(1).max(300),
+  eventId: z.string().min(1).max(300).optional(),
   provider: z.string().min(1).max(80),
   eventType: z.enum([
     "customer.updated",
@@ -1352,7 +1374,7 @@ export const zSyncExternalBillingEventRequest = z.object({
     .string()
     .regex(/^[A-Z]{3}$\/u/)
     .optional(),
-  occurredAt: z.iso.datetime(),
+  occurredAt: z.iso.datetime().optional(),
   planCode: z.string().min(1).max(120).optional(),
   planName: z.string().min(1).max(200).optional(),
   status: z.enum(["active", "canceled", "past_due", "trialing"]).optional(),
@@ -2193,6 +2215,9 @@ export const zUser = z.object({
 });
 
 export const zBootstrapDeployment = z.object({
+  billingEnabled: z.boolean(),
+  malwareScanEnabled: z.boolean(),
+  qdrantConfigured: z.boolean(),
   tenancyMode: z.enum(["single", "multi"]),
 });
 
@@ -4151,6 +4176,59 @@ export const zPostgresOperationalPostureReport = z.object({
   ),
 });
 
+export const zRuntimeKeyRotationBlocker = z.object({
+  action: z.string().min(1).max(240),
+  code: z.enum([
+    "active_key_not_configured",
+    "corrupt_records_present",
+    "legacy_unversioned_records_present",
+    "previous_key_invalid",
+    "previous_key_matches_active",
+    "previous_key_usage_present",
+    "unknown_key_version_records_present",
+  ]),
+  count: z.int().gte(0),
+});
+
+export const zRuntimeKeyUsageCounts = z.object({
+  active: z.int().gte(0),
+  corrupt: z.int().gte(0),
+  legacyUnversioned: z.int().gte(0),
+  previous: z.int().gte(0),
+  total: z.int().gte(0),
+  unknown: z.int().gte(0),
+});
+
+export const zRuntimeKeyRotationSurfacePosture = z.object({
+  configuration: z.object({
+    activeKeyConfigured: z.boolean(),
+    previousKeyAccepted: z.boolean(),
+    previousKeyConfigured: z.boolean(),
+  }),
+  removalStatus: z.enum(["blocked", "not_configured", "safe"]),
+  safeToRemovePrevious: z.boolean(),
+  blockers: z.array(zRuntimeKeyRotationBlocker),
+  usage: zRuntimeKeyUsageCounts,
+});
+
+export const zRuntimeKeyRotationPostureReport = z.object({
+  schema: z.enum(["romeo.runtime-key-rotation-posture.v1"]),
+  generatedAt: z.iso.datetime(),
+  aggregationScope: z.enum(["all_organizations"]),
+  status: z.enum(["attention_required", "ready"]),
+  delegatedOAuth: zRuntimeKeyRotationSurfacePosture,
+  webhookSigning: zRuntimeKeyRotationSurfacePosture,
+  redaction: z.object({
+    ciphertextReturned: z.literal(false),
+    connectionIdsReturned: z.literal(false),
+    deliveryIdsReturned: z.literal(false),
+    keyMaterialReturned: z.literal(false),
+    payloadsReturned: z.literal(false),
+    rawSignaturesReturned: z.literal(false),
+    secretValuesReturned: z.literal(false),
+  }),
+});
+
 export const zProviderDialectSummary = z.object({
   contractVersion: z.enum(["1"]),
   version: z.string().regex(/^[a-z0-9][a-z0-9.-]{2,79}$\/u/),
@@ -4425,27 +4503,25 @@ export const zProviderCatalogSyncJob = z.object({
   error: z.string().max(300).optional(),
 });
 
+export const zCapabilityId = z.enum([
+  "image_generation",
+  "reasoning_policy",
+  "voice_processing",
+  "web_retrieval",
+  "content_firewall",
+  "knowledge_acl",
+  "realtime_voice",
+  "image_editing",
+  "secure_compute",
+  "multi_model_compare",
+  "tenant_encryption",
+  "data_export",
+]);
+
 export const zProviderOperationalSummary = z.object({
   alerts: z.array(
     z.object({
-      code: z.enum([
-        "fallback_unavailable",
-        "no_available_providers",
-        "provider_circuit_open",
-        "provider_disabled",
-        "provider_kill_switch",
-        "provider_without_enabled_models",
-        "object_store_failures_recent",
-        "provider_errors_recent",
-        "queue_wait_high",
-        "sse_disconnects_recent",
-        "sse_heartbeat_failures_recent",
-        "sse_notifier_lag_high",
-        "sse_notifier_unavailable_recent",
-        "sse_slow_consumers_recent",
-        "sse_terminal_close_slow",
-        "time_to_first_token_high",
-      ]),
+      code: z.string(),
       id: z.string().min(1).max(300),
       modelId: z.string().min(1).max(300).optional(),
       providerId: z.string().min(1).max(300).optional(),
@@ -4540,12 +4616,7 @@ export const zProviderOperationalSummary = z.object({
       total: z.int().gte(0),
       resolutions: z.array(
         z.object({
-          capabilityId: z.enum([
-            "image_generation",
-            "reasoning_policy",
-            "voice_processing",
-            "web_retrieval",
-          ]),
+          capabilityId: zCapabilityId,
           status: z.enum([
             "enabled",
             "disabled",
@@ -5156,6 +5227,27 @@ export const zReadinessReport = z.object({
   checks: z.array(zReadinessCheck),
 });
 
+export const zInternalReadinessReport = z.object({
+  status: z.enum(["ready", "unready"]),
+  generatedAt: z.iso.datetime(),
+  checks: z
+    .array(
+      z.object({
+        id: z.enum([
+          "configuration",
+          "database",
+          "migrations",
+          "object_storage",
+          "scheduled_operations",
+          "valkey",
+        ]),
+        status: z.enum(["pass", "fail"]),
+      }),
+    )
+    .min(1)
+    .max(6),
+});
+
 export const zReasoningPolicyV1 = z.union([
   z.object({
     schemaVersion: z.literal(1),
@@ -5430,6 +5522,7 @@ export const zRunRecord = z.object({
   createdBy: z.string().min(1).max(300),
   createdAt: z.iso.datetime(),
   completedAt: z.iso.datetime().optional(),
+  inputMessageId: z.string().min(1).max(300).optional(),
 });
 
 export const zQueuedChatTurn = z.object({
@@ -5458,12 +5551,6 @@ export const zEnqueueChatTurnRequest = z.object({
   agenticRag: z.boolean().optional(),
   idempotencyKey: z.string().min(1).max(200).optional(),
 });
-
-export const zStartedRunRecord = zRunRecord.and(
-  z.object({
-    inputMessageId: z.string().min(1).max(300),
-  }),
-);
 
 export const zIdempotencyKey = z.string().min(1).max(200);
 
@@ -5501,101 +5588,17 @@ export const zStartRunRequest = z.object({
   idempotencyKey: z.string().min(1).max(200).optional(),
 });
 
-export const zReasoningSummaryDeltaEventData = z.object({
-  classification: z.enum(["provider_safe_summary"]),
-  contentPolicyApplied: z.literal(true),
-  text: z.string().max(4096),
+export const zRunEvent = z.object({
+  id: z.string().min(1).max(300),
+  runId: z.string().min(1).max(300),
+  sequence: z.int().gte(0),
+  type: z.string(),
+  data: z.union([zRunContinuingEventData, z.record(z.string(), z.unknown())]),
+  schemaVersion: z.literal(1).optional(),
+  legId: z.string().min(1).max(300).optional(),
+  channel: z.string().min(1).max(64).optional(),
+  createdAt: z.iso.datetime(),
 });
-
-export const zReasoningSummaryCompletedEventData = z.union([
-  z.object({
-    classification: z.enum(["provider_safe_summary"]),
-    status: z.enum(["completed"]),
-    characterCount: z.int().gte(0).lte(20000).optional(),
-    durationMs: z.int().gte(0).lte(86400000).optional(),
-    reasoningTokens: z.int().gte(0).lte(200000).optional(),
-  }),
-  z.object({
-    classification: z.enum(["hidden_reasoning_omitted"]),
-    status: z.enum(["discarded"]),
-    durationMs: z.int().gte(0).lte(86400000).optional(),
-    reasoningTokens: z.int().gte(0).lte(200000).optional(),
-  }),
-]);
-
-export const zRunContinuingEventData = z.object({
-  reason: z.enum(["tool_approval", "tool_dispatch"]),
-  toolId: z.string().min(1).max(300),
-  approvalRequestId: z.string().min(1).max(300).optional(),
-  jobId: z.string().min(1).max(300).optional(),
-  outcome: z.enum(["completed", "failed"]).optional(),
-  errorCode: z.string().optional(),
-});
-
-export const zRunEvent = z.union([
-  z.object({
-    id: z.string().min(1).max(300),
-    runId: z.string().min(1).max(300),
-    sequence: z.int().gte(0),
-    schemaVersion: z.literal(1),
-    legId: z.string().min(1).max(300).optional(),
-    channel: z.string().min(1).max(64).optional(),
-    createdAt: z.iso.datetime(),
-    type: z.enum(["reasoning.summary.delta"]),
-    data: zReasoningSummaryDeltaEventData,
-  }),
-  z.object({
-    id: z.string().min(1).max(300),
-    runId: z.string().min(1).max(300),
-    sequence: z.int().gte(0),
-    schemaVersion: z.literal(1),
-    legId: z.string().min(1).max(300).optional(),
-    channel: z.string().min(1).max(64).optional(),
-    createdAt: z.iso.datetime(),
-    type: z.enum(["reasoning.summary.completed"]),
-    data: zReasoningSummaryCompletedEventData,
-  }),
-  z.object({
-    id: z.string().min(1).max(300),
-    runId: z.string().min(1).max(300),
-    sequence: z.int().gte(0),
-    schemaVersion: z.literal(1),
-    legId: z.string().min(1).max(300).optional(),
-    channel: z.string().min(1).max(64).optional(),
-    createdAt: z.iso.datetime(),
-    type: z.enum(["run.continuing"]),
-    data: zRunContinuingEventData,
-  }),
-  z.object({
-    id: z.string().min(1).max(300),
-    runId: z.string().min(1).max(300),
-    sequence: z.int().gte(0),
-    schemaVersion: z.literal(1),
-    legId: z.string().min(1).max(300).optional(),
-    channel: z.string().min(1).max(64).optional(),
-    createdAt: z.iso.datetime(),
-    type: z.enum([
-      "run.started",
-      "message.started",
-      "message.delta",
-      "message.reasoning",
-      "message.completed",
-      "retrieval.completed",
-      "tool.requested",
-      "tool.started",
-      "tool.approval_required",
-      "tool.completed",
-      "tool.failed",
-      "run.cancelled",
-      "run.completed",
-      "run.failed",
-      "run.waiting_tool_approval",
-      "run.waiting_tool_dispatch",
-      "output.part.ready",
-    ]),
-    data: z.record(z.string(), z.unknown()),
-  }),
-]);
 
 export const zSsoOidcProviderPreset = z.object({
   id: z.enum([
@@ -5969,6 +5972,7 @@ export const zImageRefMessagePart = z.object({
       createdAt: z.iso.datetime().optional(),
     })
     .optional(),
+  retainedInContext: z.boolean().optional(),
 });
 
 export const zAudioRefMessagePart = z.object({
@@ -6029,6 +6033,7 @@ export const zAudioRefMessagePart = z.object({
       createdAt: z.iso.datetime().optional(),
     })
     .optional(),
+  retainedInContext: z.boolean().optional(),
 });
 
 export const zVideoRefMessagePart = z.object({
@@ -6138,6 +6143,7 @@ export const zDocumentRefMessagePart = z.object({
       createdAt: z.iso.datetime().optional(),
     })
     .optional(),
+  retainedInContext: z.boolean().optional(),
 });
 
 export const zToolResultRefMessagePart = z.object({
@@ -6808,6 +6814,7 @@ export const zCapabilityDefinition = z.object({
   defaultConfiguration: zCapabilityConfiguration,
   merge: z.object({
     boolean: z.enum(["deny_dominates"]),
+    booleans: z.array(z.string()),
     maxima: z.array(z.string()),
     allowlists: z.array(z.string()),
   }),
@@ -6854,6 +6861,7 @@ export const zPlatformCapabilityPosture = z.object({
 export const zCapabilityReason = z.object({
   code: z.enum([
     "platform_disabled",
+    "default_disabled",
     "not_configured",
     "not_entitled",
     "organization_policy",
@@ -7288,6 +7296,7 @@ export const zCapabilityImpactPreview = z.object({
     z.object({
       code: z.enum([
         "platform_disabled",
+        "default_disabled",
         "not_configured",
         "not_entitled",
         "organization_policy",
@@ -7677,6 +7686,7 @@ export const zContentPolicyApproval = z.object({
   id: z.string().min(1).max(300),
   runId: z.string().min(1).max(300),
   decisionId: z.string().min(1).max(300),
+  policyVersionId: z.string().min(1).max(300),
   state: z.enum(["pending", "approved", "denied", "expired"]),
   expiresAt: z.iso.datetime(),
   createdAt: z.iso.datetime(),
@@ -7705,10 +7715,6 @@ export const zDataConnectorPostureReport = z.object({
       "website-fetch",
       "github-fetch",
       "s3-fetch",
-      "atlassian-fetch",
-      "notion-fetch",
-      "linear-fetch",
-      "slack-fetch",
       "managed-fetch",
     ]),
     egressPolicy: z.enum(["allow_public", "require_allowlist"]),
@@ -7760,8 +7766,8 @@ export const zDataConnectorPostureReport = z.object({
       rss: z.int().gte(0).optional(),
       confluence: z.int().gte(0).optional(),
       jira: z.int().gte(0).optional(),
-      notion: z.int().gte(0).optional(),
       linear: z.int().gte(0).optional(),
+      notion: z.int().gte(0).optional(),
       slack: z.int().gte(0).optional(),
     }),
   }),
@@ -7855,8 +7861,8 @@ export const zDataConnectorType = z.enum([
   "rss",
   "confluence",
   "jira",
-  "notion",
   "linear",
+  "notion",
   "slack",
 ]);
 
@@ -7892,10 +7898,6 @@ export const zDataConnectorCatalogReport = z.object({
     "website-fetch",
     "github-fetch",
     "s3-fetch",
-    "atlassian-fetch",
-    "notion-fetch",
-    "linear-fetch",
-    "slack-fetch",
     "managed-fetch",
   ]),
   egressPolicy: z.enum(["allow_public", "require_allowlist"]),
@@ -8105,44 +8107,7 @@ export const zDeviceAuthorization = z.object({
   orgId: z.string().min(1).max(300),
   userId: z.string().min(1).max(300),
   name: z.string(),
-  scopes: z.array(
-    z.enum([
-      "me:read",
-      "organizations:read",
-      "workspaces:read",
-      "providers:read",
-      "providers:write",
-      "models:read",
-      "models:use",
-      "agents:read",
-      "agents:create",
-      "agents:write",
-      "agents:run",
-      "chats:read",
-      "chats:write",
-      "runs:read",
-      "runs:create",
-      "runs:cancel",
-      "files:read",
-      "files:write",
-      "knowledge:read",
-      "knowledge:write",
-      "knowledge:query",
-      "audit:read",
-      "usage:read",
-      "webhooks:read",
-      "webhooks:write",
-      "voices:use",
-      "voices:manage",
-      "tools:use",
-      "tools:manage",
-      "capabilities:read",
-      "capabilities:manage",
-      "capabilities:approve",
-      "admin:read",
-      "admin:write",
-    ]),
-  ),
+  scopes: z.array(z.string()),
   accessApiKeyId: z.string().min(1).max(300),
   expiresAt: z.iso.datetime(),
   createdAt: z.iso.datetime(),
@@ -8238,6 +8203,9 @@ export const zEdgeSecurityPostureReport = z.object({
   }),
   ingress: z.object({
     allowedOriginRuleCount: z.int().gte(0),
+    desiredWafMode: z.enum(["disabled", "monitor", "block"]),
+    observedWafEnforcement: z.enum(["unknown", "failed", "block"]),
+    observedWafAt: z.iso.datetime().optional(),
     wafMode: z.enum(["disabled", "monitor", "block"]),
   }),
   limits: z.object({
@@ -8455,6 +8423,34 @@ export const zTrustPosture = z.object({
     "not_configured",
     "not_applicable",
   ]),
+  auditExport: z.object({
+    customerSiem: z.object({
+      ageMs: z.int().gte(0).optional(),
+      lagSequences: z.int().gte(0),
+      lastSuccessAt: z.iso.datetime().optional(),
+      state: z.enum([
+        "dead_letter",
+        "not_configured",
+        "pending",
+        "retrying",
+        "running",
+        "verified",
+      ]),
+    }),
+    wormCompatible: z.object({
+      ageMs: z.int().gte(0).optional(),
+      lagSequences: z.int().gte(0),
+      lastSuccessAt: z.iso.datetime().optional(),
+      state: z.enum([
+        "dead_letter",
+        "not_configured",
+        "pending",
+        "retrying",
+        "running",
+        "verified",
+      ]),
+    }),
+  }),
   syntheticGreen: z.literal(false),
 });
 
@@ -8484,8 +8480,14 @@ export const zImageJobDecision = z.object({
 export const zServerTableSavedView = z.object({
   id: z.string().min(1).max(300),
   resource: z.string().min(1).max(300),
+  parentId: z.string().min(1).max(300).optional(),
   name: z.string().min(1).max(80),
   source: z.enum(["server", "local_fallback"]),
+  schemaVersion: z.int().gt(0),
+  visibility: z.enum(["private", "workspace"]),
+  isDefault: z.boolean(),
+  canEdit: z.boolean(),
+  version: z.int().gt(0),
   query: z.object({
     sort: z.array(
       z.object({
@@ -8497,6 +8499,7 @@ export const zServerTableSavedView = z.object({
       z.object({
         field: z.string().min(1).max(300),
         operator: z.string().min(1).max(300),
+        value: z.unknown().optional(),
       }),
     ),
     search: z.string().min(1).max(300).optional(),
@@ -8516,6 +8519,9 @@ export const zTableExportJob = z.object({
     .enum(["queued", "running", "artifact_ready", "failed", "expired"])
     .optional(),
   percent: z.int().gte(0).lte(100).optional(),
+  processedRows: z.int().gte(0).optional(),
+  attemptCount: z.int().gte(0).optional(),
+  errorCode: z.string().min(1).max(300).optional(),
   artifactId: z.string().min(1).max(300).optional(),
   expiresAt: z.iso.datetime().optional(),
 });
@@ -8865,19 +8871,7 @@ export const zRateEvalResultRequest = z.object({
 
 export const zFileLifecycle = z.object({
   schemaVersion: z.literal(1),
-  state: z.enum([
-    "uploading",
-    "quarantined",
-    "scanning",
-    "extracting",
-    "transcoding",
-    "ready",
-    "attached",
-    "retained",
-    "failed",
-    "deleted",
-    "available",
-  ]),
+  state: z.string(),
   version: z.int().gte(0),
   attempts: z.int().gte(0).lte(100),
   retryable: z.boolean(),
@@ -8935,19 +8929,7 @@ export const zFileObject = z.object({
     "web_source",
     "voice_artifact",
   ]),
-  status: z.enum([
-    "uploading",
-    "quarantined",
-    "scanning",
-    "extracting",
-    "transcoding",
-    "ready",
-    "attached",
-    "retained",
-    "failed",
-    "deleted",
-    "available",
-  ]),
+  status: z.string(),
   lifecycle: zFileLifecycle,
   metadata: z.record(z.string(), z.unknown()),
   extraction: zFileExtraction,
@@ -9064,7 +9046,7 @@ export const zRetentionPolicy = z.object({
 
 export const zUpdateRetentionPolicyRequest = z.object({
   auditLogRetentionDays: z.int().gte(30).lte(3650),
-  runEventRetentionDays: z.int().gte(1).lte(3650),
+  runEventRetentionDays: z.int().gte(1).lte(3650).optional(),
   fileRetentionDays: z.int().gte(1).lte(3650).nullish(),
   workspaceFileRetentionDays: z
     .record(z.string(), z.int().gte(1).lte(3650).nullable())
@@ -9090,6 +9072,17 @@ export const zRetentionEnforcementResult = z.object({
   deletedFileObjectCount: z.int().gte(0).optional(),
   missingFileObjectCount: z.int().gte(0).optional(),
   deletedFileObjectBytes: z.int().gte(0).optional(),
+  fileRetentionBacklogRemaining: z.boolean().optional(),
+  fileRetentionCursor: z
+    .object({
+      id: z.string().min(1).max(300),
+      updatedAt: z.iso.datetime(),
+    })
+    .optional(),
+  fileRetentionLegalHoldSkippedCount: z.int().gte(0).optional(),
+  fileRetentionMetadataFailureCount: z.int().gte(0).optional(),
+  fileRetentionOldestCandidateAgeSeconds: z.int().gte(0).optional(),
+  fileRetentionScannedFileObjectCount: z.int().gte(0).optional(),
   deletedAuditLogCount: z.int().gte(0),
   deletedRunEventCount: z.int().gte(0),
   runEventCompactionLimitReached: z.boolean(),
@@ -9099,6 +9092,25 @@ export const zRetentionEnforcementResult = z.object({
 export const zPreviewDataDeletionRequest = z.object({
   resourceType: z.enum(["chat", "file_object", "knowledge_source"]),
   resourceId: z.string().min(1).max(200),
+});
+
+export const zDataDeletionPendingResult = z.object({
+  schema: z.enum(["romeo.data-deletion-pending-result.v1"]),
+  orgId: z.string().min(1).max(300),
+  workspaceId: z.string().min(1).max(300),
+  resourceType: z.enum(["chat", "file_object", "knowledge_source"]),
+  resourceId: z.string().min(1).max(300),
+  knowledgeBaseId: z.string().min(1).max(300).optional(),
+  legalHold: z
+    .object({
+      until: z.iso.datetime(),
+      reason: z.string().optional(),
+    })
+    .optional(),
+  counts: zDataDeletionCounts,
+  status: z.enum(["pending"]),
+  operationId: z.string().min(1).max(200),
+  deletionRequestedAt: z.iso.datetime(),
 });
 
 export const zExecuteDataDeletionRequest = zPreviewDataDeletionRequest.and(
@@ -9326,6 +9338,68 @@ export const zDataExportDocument = z.object({
   exportedAt: z.iso.datetime(),
 });
 
+export const zDataExportPackageJob = z.object({
+  schema: z.enum(["romeo.data-export-package-job.v1"]),
+  packageId: z.string().min(1).max(300),
+  orgId: z.string().min(1).max(300),
+  request: z.object({
+    scope: z.enum(["org", "workspace"]),
+    workspaceId: z.string().min(1).max(300).optional(),
+    includeContent: z.boolean(),
+    includeObjectBytes: z.boolean(),
+    maxObjectBytes: z.int().gte(0),
+  }),
+  counts: z.object({
+    workspaces: z.int().gte(0),
+    agents: z.int().gte(0),
+    promptTemplates: z.int().gte(0),
+    chats: z.int().gte(0),
+    messages: z.int().gte(0),
+    messageParts: z.int().gte(0),
+    chatComments: z.int().gte(0),
+    knowledgeBases: z.int().gte(0),
+    knowledgeSources: z.int().gte(0),
+    knowledgeChunks: z.int().gte(0),
+    fileObjects: z.int().gte(0),
+    fileObjectBytesIncluded: z.int().gte(0),
+    knowledgeSourceBytesIncluded: z.int().gte(0),
+    dataConnectors: z.int().gte(0),
+    dataConnectorSyncs: z.int().gte(0),
+    workflows: z.int().gte(0),
+    workflowRuns: z.int().gte(0),
+    usageEvents: z.int().gte(0),
+    backgroundJobs: z.int().gte(0),
+  }),
+  limits: z.object({
+    maxObjectBytes: z.int().gte(0),
+    maxTotalObjectBytes: z.int().gte(0),
+  }),
+  warnings: z.array(z.string()),
+  exclusions: z.array(z.string()),
+  state: z.enum(["queued", "running", "artifact_ready", "failed", "expired"]),
+  percent: z.int().gte(0).lte(100),
+  processedRows: z.int().gte(0),
+  attemptCount: z.int().gte(0),
+  artifact: z
+    .object({
+      contentType: z.string(),
+      sizeBytes: z.int().gte(0),
+      sha256: z.string(),
+      downloadUrl: z.string(),
+      storage: z.object({
+        driver: z.enum(["object_store"]),
+        objectKeyHash: z.string(),
+        rawObjectKeyReturned: z.literal(false),
+      }),
+    })
+    .optional(),
+  errorCode: z.string().min(1).max(200).optional(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().optional(),
+  expiresAt: z.iso.datetime().optional(),
+});
+
 export const zDataExportPackageList = z.object({
   schema: z.enum(["romeo.data-export-package-list.v1"]),
   orgId: z.string().min(1).max(300),
@@ -9369,7 +9443,7 @@ export const zDataExportPackageList = z.object({
       warnings: z.array(z.string()),
       exclusions: z.array(z.string()),
       artifact: z.object({
-        contentType: z.enum(["application/json"]),
+        contentType: z.string(),
         sizeBytes: z.int().gte(0),
         sha256: z.string(),
         downloadUrl: z.string(),
@@ -9382,63 +9456,12 @@ export const zDataExportPackageList = z.object({
       createdAt: z.iso.datetime(),
     }),
   ),
+  jobs: z.array(zDataExportPackageJob),
   redaction: z.object({
     packageContentReturned: z.literal(false),
     rawObjectKeysReturned: z.literal(false),
   }),
   generatedAt: z.iso.datetime(),
-});
-
-export const zDataExportPackage = z.object({
-  schema: z.enum(["romeo.data-export-package.v1"]),
-  packageId: z.string().min(1).max(300),
-  orgId: z.string().min(1).max(300),
-  request: z.object({
-    scope: z.enum(["org", "workspace"]),
-    workspaceId: z.string().min(1).max(300).optional(),
-    includeContent: z.boolean(),
-    includeObjectBytes: z.boolean(),
-    maxObjectBytes: z.int().gte(0),
-  }),
-  counts: z.object({
-    workspaces: z.int().gte(0),
-    agents: z.int().gte(0),
-    promptTemplates: z.int().gte(0),
-    chats: z.int().gte(0),
-    messages: z.int().gte(0),
-    messageParts: z.int().gte(0),
-    chatComments: z.int().gte(0),
-    knowledgeBases: z.int().gte(0),
-    knowledgeSources: z.int().gte(0),
-    knowledgeChunks: z.int().gte(0),
-    fileObjects: z.int().gte(0),
-    fileObjectBytesIncluded: z.int().gte(0),
-    knowledgeSourceBytesIncluded: z.int().gte(0),
-    dataConnectors: z.int().gte(0),
-    dataConnectorSyncs: z.int().gte(0),
-    workflows: z.int().gte(0),
-    workflowRuns: z.int().gte(0),
-    usageEvents: z.int().gte(0),
-    backgroundJobs: z.int().gte(0),
-  }),
-  limits: z.object({
-    maxObjectBytes: z.int().gte(0),
-    maxTotalObjectBytes: z.int().gte(0),
-  }),
-  warnings: z.array(z.string()),
-  exclusions: z.array(z.string()),
-  artifact: z.object({
-    contentType: z.enum(["application/json"]),
-    sizeBytes: z.int().gte(0),
-    sha256: z.string(),
-    downloadUrl: z.string(),
-    storage: z.object({
-      driver: z.enum(["object_store"]),
-      objectKeyHash: z.string(),
-      rawObjectKeyReturned: z.literal(false),
-    }),
-  }),
-  createdAt: z.iso.datetime(),
 });
 
 export const zDataExportPackageDeleteResult = z.object({
@@ -9535,44 +9558,7 @@ export const zAccessReviewReport = z.object({
     z.object({
       id: z.string().min(1).max(300),
       name: z.string(),
-      scopes: z.array(
-        z.enum([
-          "me:read",
-          "organizations:read",
-          "workspaces:read",
-          "providers:read",
-          "providers:write",
-          "models:read",
-          "models:use",
-          "agents:read",
-          "agents:create",
-          "agents:write",
-          "agents:run",
-          "chats:read",
-          "chats:write",
-          "runs:read",
-          "runs:create",
-          "runs:cancel",
-          "files:read",
-          "files:write",
-          "knowledge:read",
-          "knowledge:write",
-          "knowledge:query",
-          "audit:read",
-          "usage:read",
-          "webhooks:read",
-          "webhooks:write",
-          "voices:use",
-          "voices:manage",
-          "tools:use",
-          "tools:manage",
-          "capabilities:read",
-          "capabilities:manage",
-          "capabilities:approve",
-          "admin:read",
-          "admin:write",
-        ]),
-      ),
+      scopes: z.array(z.string()),
       createdBy: z.string().min(1).max(300),
       disabledAt: z.iso.datetime().optional(),
       activeApiKeyCount: z.int().gte(0),
@@ -9610,18 +9596,7 @@ export const zAccessReviewReport = z.object({
         id: z.string().min(1).max(300),
         workspaceId: z.string().min(1).max(300),
         knowledgeBaseId: z.string().min(1).max(300),
-        type: z.enum([
-          "local_import",
-          "github",
-          "s3",
-          "website",
-          "rss",
-          "confluence",
-          "jira",
-          "notion",
-          "linear",
-          "slack",
-        ]),
+        type: z.enum(["local_import", "github", "s3", "website", "rss"]),
         status: z.string(),
         createdBy: z.string().min(1).max(300),
         configKeys: z.array(z.string()),
@@ -9646,11 +9621,6 @@ export const zAccessReviewReport = z.object({
           "s3",
           "website",
           "rss",
-          "confluence",
-          "jira",
-          "notion",
-          "linear",
-          "slack",
         ]),
         providerAccountLoginConfigured: z.boolean(),
         providerAccountLoginHash: z.string().optional(),
@@ -9831,7 +9801,7 @@ export const zKnowledgeSource = z.object({
   fileName: z.string().min(1),
   mimeType: z.string().min(1),
   sizeBytes: z.int().gte(0),
-  status: z.enum(["pending", "indexed", "failed"]),
+  status: z.string(),
   objectKey: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()),
   chunkCount: z.int().gte(0).optional(),
@@ -11294,7 +11264,7 @@ export const zPublicSpeechArtifact = z.object({
 });
 
 export const zTranscriptionResult = z.object({
-  text: z.string(),
+  text: z.string().max(200000),
   language: z.string().optional(),
   durationMs: z.int().gte(0).optional(),
 });
@@ -11734,6 +11704,55 @@ export const zApproveWorkflowRunRequest = z.object({
   comment: z.string().min(1).max(1000).optional(),
 });
 
+export const zWorkerBrokerClaimResponse = z.object({
+  audience: z.enum([
+    "tool_dispatch",
+    "browser_automation",
+    "knowledge_extraction",
+  ]),
+  claim: z.record(z.string(), z.unknown()).optional(),
+  claimed: z.boolean(),
+  claimToken: z.string().min(1).max(16384).optional(),
+});
+
+export const zWorkerBrokerClaimRequest = z.object({
+  leaseSeconds: z.int().gte(30).lte(900).optional().default(300),
+  payloadStorage: z
+    .enum([
+      "external_worker_secret_store_required",
+      "managed_encrypted_object_store",
+    ])
+    .optional(),
+  workerId: z.string().min(1).max(160),
+});
+
+export const zWorkerBrokerRenewRequest = z.object({
+  claimToken: z.string().min(1).max(16384),
+  leaseSeconds: z.int().gte(30).lte(900).optional().default(300),
+  workerId: z.string().min(1).max(160),
+});
+
+export const zWorkerBrokerCompleteRequest = z.object({
+  claimToken: z.string().min(1).max(16384),
+  errorCode: z.string().max(120).optional(),
+  response: z
+    .object({
+      bodyBytes: z.int().gte(0),
+      contentType: z.string().max(255).optional(),
+      ok: z.boolean(),
+      schemaValidation: z.object({
+        errorCode: z.string().max(120).optional(),
+        status: z.enum(["failed", "passed"]),
+      }),
+      status: z.int().gte(100).lte(599),
+      truncated: z.boolean(),
+    })
+    .optional(),
+  result: z.record(z.string(), z.unknown()).optional(),
+  success: z.boolean(),
+  workerId: z.string().min(1).max(160),
+});
+
 export const zWorkspaceContentItem = z.object({
   id: z.string().min(1).max(300),
   workspaceId: z.string().min(1).max(300),
@@ -11746,6 +11765,8 @@ export const zWorkspaceContentItem = z.object({
   ownerId: z.string().min(1).max(300),
   expiresAt: z.iso.datetime().optional(),
   expired: z.boolean(),
+  lifecycleStatus: z.string(),
+  ready: z.boolean(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -13472,6 +13493,11 @@ export const zOperationalGovernanceExportAuditLogsQuery = z.object({
  */
 export const zOperationalGovernanceExportAuditLogsResponse = z.string();
 
+export const zOperationalGovernanceListUsageEventsQuery = z.object({
+  from: z.iso.datetime().optional(),
+  to: z.iso.datetime().optional(),
+});
+
 /**
  * Usage events
  */
@@ -13487,10 +13513,20 @@ export const zOperationalGovernanceListUsageMetricDefinitionsResponse =
     data: z.array(zUsageMetricDefinition),
   });
 
+export const zOperationalGovernanceExportUsageEventsQuery = z.object({
+  from: z.iso.datetime().optional(),
+  to: z.iso.datetime().optional(),
+});
+
 /**
  * Usage events CSV
  */
 export const zOperationalGovernanceExportUsageEventsResponse = z.string();
+
+export const zOperationalGovernanceGetUsageSummaryQuery = z.object({
+  from: z.iso.datetime().optional(),
+  to: z.iso.datetime().optional(),
+});
 
 /**
  * Usage summary
@@ -13568,6 +13604,13 @@ export const zOperationalPostureGetGaEvidenceResponse = z.object({
  */
 export const zOperationalPostureGetPostgresResponse = z.object({
   data: zPostgresOperationalPostureReport,
+});
+
+/**
+ * Runtime key-rotation posture
+ */
+export const zOperationalPostureGetRuntimeKeyRotationResponse = z.object({
+  data: zRuntimeKeyRotationPostureReport,
 });
 
 export const zProvidersGetCapabilityReportPath = z.object({
@@ -13704,6 +13747,10 @@ export const zProvidersPullOllamaModelResponse = z.object({
 export const zProvidersDeleteOllamaModelPath = z.object({
   providerId: z.string().min(1).max(300),
   model: z.string().min(1).max(300),
+});
+
+export const zProvidersDeleteOllamaModelQuery = z.object({
+  modelId: z.string().min(1).max(300).optional(),
 });
 
 /**
@@ -14073,6 +14120,13 @@ export const zReadinessGetReportResponse = z.object({
   data: zReadinessReport,
 });
 
+/**
+ * Runtime is ready
+ */
+export const zHealthGetInternalReadinessResponse = z.object({
+  data: zInternalReadinessReport,
+});
+
 export const zRunsInspectContextBody = zInspectRunContextRequest;
 
 /**
@@ -14154,7 +14208,7 @@ export const zRunsStartHeaders = z.object({
  * Started run
  */
 export const zRunsStartResponse = z.object({
-  data: zStartedRunRecord,
+  data: zRunRecord,
 });
 
 export const zRunsGetPath = z.object({
@@ -16185,14 +16239,18 @@ export const zTrustCryptoShredPreviewBody = z.object({
 export const zTrustCryptoShredPreviewResponse = z.object({
   data: z.object({
     outcome: z.enum(["accepted", "denied"]),
+    executed: z.literal(false).optional(),
     externalCopiesClaimed: z.literal(false).optional(),
+    keysDestroyed: z.literal(false).optional(),
+    preview: z.literal(true).optional(),
   }),
 });
 
 export const zTrustAuditSegmentsSealBody = z.object({
-  eventIds: z.array(z.string().min(1).max(300)).max(500),
+  eventIds: z.array(z.string().min(1).max(300)).max(500).optional(),
+  maxRecords: z.int().gte(1).lte(500).optional(),
   previousHash: z.string().min(1).max(128).optional(),
-  signingKeyVersion: z.string().min(1).max(80),
+  signingKeyVersion: z.string().min(1).max(80).optional(),
 });
 
 /**
@@ -16205,16 +16263,29 @@ export const zTrustAuditSegmentsSealResponse = z.object({
     segmentHash: z.string().min(1).max(300).optional(),
     previousHash: z.string().min(1).max(128).optional(),
     eventCount: z.int().gte(0).optional(),
+    checkpointId: z.string().min(1).max(300).optional(),
+    fromSequence: z.int().gt(0).optional(),
+    toSequence: z.int().gt(0).optional(),
+    rootHash: z.string().length(64).optional(),
+    algorithm: z.enum(["hmac-sha256"]).optional(),
+    keyVersion: z.string().min(1).max(80).optional(),
+    signature: z.string().length(64).optional(),
   }),
 });
 
 export const zTrustSiemExportCheckpointBody = z.object({
-  attempt: z.int().gte(0).lte(20),
+  attempt: z.int().gte(0).lte(20).optional(),
   destination: z.enum(["customer_siem", "worm_compatible"]),
+  idempotencyKey: z.string().min(1).max(200).optional(),
+  checkpointHash: z.string().length(64).optional(),
   priorReceiptHash: z.string().min(1).max(128).optional(),
   receiptHash: z.string().min(1).max(128).optional(),
-  sealedAt: z.iso.datetime(),
-  segmentHash: z.string().min(1).max(300),
+  sealedAt: z.iso.datetime().optional(),
+  segmentHash: z.string().min(1).max(300).optional(),
+});
+
+export const zTrustSiemExportCheckpointHeaders = z.object({
+  "idempotency-key": zIdempotencyKey.optional(),
 });
 
 /**
@@ -16222,9 +16293,18 @@ export const zTrustSiemExportCheckpointBody = z.object({
  */
 export const zTrustSiemExportCheckpointResponse = z.object({
   data: z.object({
-    state: z.enum(["duplicate", "exported", "failed", "in_flight", "pending"]),
+    state: z.enum([
+      "duplicate",
+      "dead_letter",
+      "exported",
+      "failed",
+      "in_flight",
+      "pending",
+    ]),
     lagMs: z.int().gte(0),
     destination: z.enum(["customer_siem", "worm_compatible"]),
+    duplicate: z.boolean().optional(),
+    jobId: z.string().min(1).max(300).optional(),
   }),
 });
 
@@ -16241,8 +16321,10 @@ export const zTrustBreakGlassAuthorizeBody = z.object({
 export const zTrustBreakGlassAuthorizeResponse = z.object({
   data: z.object({
     outcome: z.enum(["accepted", "denied"]),
-    alerted: z.literal(true).optional(),
+    alerted: z.literal(false).optional(),
+    executed: z.literal(false).optional(),
     expiresAt: z.iso.datetime().optional(),
+    preview: z.literal(true).optional(),
     code: z
       .enum([
         "break_glass_mandatory_control",
@@ -16590,6 +16672,7 @@ export const zComputeOperationsPostureResponse = z.object({
 export const zTableViewsListBody = z.object({
   workspaceId: z.string().min(1).max(300),
   resource: z.string().min(1).max(300),
+  parentId: z.string().min(1).max(300).optional(),
   localViews: z
     .array(
       z.object({
@@ -16605,6 +16688,16 @@ export const zTableViewsListBody = z.object({
               desc: z.boolean(),
             }),
           )
+          .optional(),
+        filters: z
+          .array(
+            z.object({
+              field: z.string().min(1).max(300),
+              operator: z.string().min(1).max(300),
+              value: z.unknown().optional(),
+            }),
+          )
+          .max(20)
           .optional(),
       }),
     )
@@ -16622,7 +16715,12 @@ export const zTableViewsListResponse = z.object({
 export const zTableViewsReplaceBody = z.object({
   workspaceId: z.string().min(1).max(300),
   resource: z.string().min(1).max(300),
+  parentId: z.string().min(1).max(300).optional(),
   name: z.string().min(1).max(80),
+  viewId: z.string().min(1).max(300).optional(),
+  expectedVersion: z.int().gt(0).optional(),
+  visibility: z.enum(["private", "workspace"]).optional(),
+  isDefault: z.boolean().optional(),
   globalFilter: z.string().max(300).optional(),
   pageSize: z.int().optional(),
   density: z.enum(["comfortable", "compact"]).optional(),
@@ -16635,6 +16733,16 @@ export const zTableViewsReplaceBody = z.object({
       }),
     )
     .optional(),
+  filters: z
+    .array(
+      z.object({
+        field: z.string().min(1).max(300),
+        operator: z.string().min(1).max(300),
+        value: z.unknown().optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 
 /**
@@ -16644,14 +16752,100 @@ export const zTableViewsReplaceResponse = z.object({
   data: zServerTableSavedView,
 });
 
+export const zTableViewsDeleteBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  resource: z.string().min(1).max(300),
+  parentId: z.string().min(1).max(300).optional(),
+  expectedVersion: z.int().gt(0).optional(),
+  requestToken: z.string().min(1).max(300).optional(),
+});
+
+export const zTableViewsDeletePath = z.object({
+  viewId: z.string().min(1).max(300),
+});
+
+/**
+ * Deleted saved view
+ */
+export const zTableViewsDeleteResponse = z.object({
+  data: z.object({
+    deleted: z.boolean(),
+    undoToken: z.string().min(1).max(300).optional(),
+    undoExpiresAt: z.iso.datetime().optional(),
+    version: z.int().gt(0).optional(),
+  }),
+});
+
+export const zTableViewsRestoreBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  resource: z.string().min(1).max(300),
+  parentId: z.string().min(1).max(300).optional(),
+  expectedVersion: z.int().gt(0).optional(),
+  requestToken: z.string().min(1).max(300).optional(),
+  undoToken: z.string().min(1).max(300),
+});
+
+export const zTableViewsRestorePath = z.object({
+  viewId: z.string().min(1).max(300),
+});
+
+/**
+ * Restored saved view
+ */
+export const zTableViewsRestoreResponse = z.object({
+  data: zServerTableSavedView,
+});
+
+export const zTableViewsSetDefaultBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  resource: z.string().min(1).max(300),
+  parentId: z.string().min(1).max(300).optional(),
+  expectedVersion: z.int().gt(0).optional(),
+  requestToken: z.string().min(1).max(300).optional(),
+  isDefault: z.boolean(),
+});
+
+export const zTableViewsSetDefaultPath = z.object({
+  viewId: z.string().min(1).max(300),
+});
+
+/**
+ * Saved view
+ */
+export const zTableViewsSetDefaultResponse = z.object({
+  data: zServerTableSavedView,
+});
+
+export const zTableViewsShareBody = z.object({
+  workspaceId: z.string().min(1).max(300),
+  resource: z.string().min(1).max(300),
+  parentId: z.string().min(1).max(300).optional(),
+  expectedVersion: z.int().gt(0).optional(),
+  requestToken: z.string().min(1).max(300).optional(),
+  visibility: z.enum(["private", "workspace"]),
+});
+
+export const zTableViewsSharePath = z.object({
+  viewId: z.string().min(1).max(300),
+});
+
+/**
+ * Saved view
+ */
+export const zTableViewsShareResponse = z.object({
+  data: zServerTableSavedView,
+});
+
 export const zTableExportsCreateBody = z.object({
   workspaceId: z.string().min(1).max(300),
+  parentId: z.string().min(1).max(300).optional(),
   resource: z.string().min(1).max(300),
   mode: z
     .enum(["browser_csv", "async_artifact"])
     .optional()
     .default("async_artifact"),
   estimatedRows: z.int().gte(0).lte(10000000),
+  search: z.string().min(1).max(300).optional(),
   sort: z
     .array(
       z.object({
@@ -16667,6 +16861,7 @@ export const zTableExportsCreateBody = z.object({
       z.object({
         field: z.string().min(1).max(300),
         operator: z.string().min(1).max(300),
+        value: z.unknown().optional(),
       }),
     )
     .max(20)
@@ -16674,12 +16869,14 @@ export const zTableExportsCreateBody = z.object({
     .default([]),
 });
 
-/**
- * Table export job
- */
-export const zTableExportsCreateResponse = z.object({
-  data: zTableExportJob,
-});
+export const zTableExportsCreateResponse = z.union([
+  z.object({
+    data: zTableExportJob,
+  }),
+  z.object({
+    data: zTableExportJob,
+  }),
+]);
 
 export const zTableExportsRunPath = z.object({
   jobId: z.string().min(1).max(300),
@@ -16692,6 +16889,19 @@ export const zTableExportsRunResponse = z.object({
   data: zTableExportJob,
 });
 
+export const zTableExportsDeletePath = z.object({
+  jobId: z.string().min(1).max(300),
+});
+
+/**
+ * Deleted table export
+ */
+export const zTableExportsDeleteResponse = z.object({
+  data: z.object({
+    deleted: z.literal(true),
+  }),
+});
+
 export const zTableExportsGetPath = z.object({
   jobId: z.string().min(1).max(300),
 });
@@ -16702,6 +16912,15 @@ export const zTableExportsGetPath = z.object({
 export const zTableExportsGetResponse = z.object({
   data: zTableExportJob,
 });
+
+export const zTableExportsDownloadArtifactPath = z.object({
+  jobId: z.string().min(1).max(300),
+});
+
+/**
+ * CSV export artifact
+ */
+export const zTableExportsDownloadArtifactResponse = z.string();
 
 export const zTablePagesQueryBody = z.object({
   resource: z.string().min(1).max(300),
@@ -17068,12 +17287,14 @@ export const zGovernancePreviewDataDeletionResponse = z.object({
 
 export const zGovernanceExecuteDataDeletionBody = zExecuteDataDeletionRequest;
 
-/**
- * Data deletion result
- */
-export const zGovernanceExecuteDataDeletionResponse = z.object({
-  data: zDataDeletionResult,
-});
+export const zGovernanceExecuteDataDeletionResponse = z.union([
+  z.object({
+    data: zDataDeletionResult,
+  }),
+  z.object({
+    data: zDataDeletionPendingResult,
+  }),
+]);
 
 /**
  * Data-rights coverage
@@ -17110,10 +17331,10 @@ export const zGovernanceListDataExportPackagesResponse = z.object({
 export const zGovernanceCreateDataExportPackageBody = zDataExportRequest;
 
 /**
- * Data-export package
+ * Accepted data-export package job
  */
 export const zGovernanceCreateDataExportPackageResponse = z.object({
-  data: zDataExportPackage,
+  data: zDataExportPackageJob,
 });
 
 export const zGovernanceDeleteDataExportPackageBody =
@@ -17128,6 +17349,17 @@ export const zGovernanceDeleteDataExportPackagePath = z.object({
  */
 export const zGovernanceDeleteDataExportPackageResponse = z.object({
   data: zDataExportPackageDeleteResult,
+});
+
+export const zGovernanceGetDataExportPackagePath = z.object({
+  packageId: z.string().min(1).max(300),
+});
+
+/**
+ * Data-export package job
+ */
+export const zGovernanceGetDataExportPackageResponse = z.object({
+  data: zDataExportPackageJob,
 });
 
 export const zGovernanceReadDataExportPackagePath = z.object({
@@ -18215,6 +18447,57 @@ export const zWorkflowsResumeRunPath = z.object({
  */
 export const zWorkflowsResumeRunResponse = z.object({
   data: zWorkflowRun,
+});
+
+export const zWorkerBrokerClaimBody = zWorkerBrokerClaimRequest;
+
+export const zWorkerBrokerClaimPath = z.object({
+  audience: z.enum([
+    "tool_dispatch",
+    "browser_automation",
+    "knowledge_extraction",
+  ]),
+});
+
+/**
+ * Worker claim
+ */
+export const zWorkerBrokerClaimResponse2 = z.object({
+  data: zWorkerBrokerClaimResponse,
+});
+
+export const zWorkerBrokerRenewBody = zWorkerBrokerRenewRequest;
+
+export const zWorkerBrokerRenewPath = z.object({
+  audience: z.enum([
+    "tool_dispatch",
+    "browser_automation",
+    "knowledge_extraction",
+  ]),
+});
+
+/**
+ * Renewed worker claim
+ */
+export const zWorkerBrokerRenewResponse = z.object({
+  data: zWorkerBrokerClaimResponse,
+});
+
+export const zWorkerBrokerCompleteBody = zWorkerBrokerCompleteRequest;
+
+export const zWorkerBrokerCompletePath = z.object({
+  audience: z.enum([
+    "tool_dispatch",
+    "browser_automation",
+    "knowledge_extraction",
+  ]),
+});
+
+/**
+ * Worker completion result
+ */
+export const zWorkerBrokerCompleteResponse = z.object({
+  data: z.record(z.string(), z.unknown()),
 });
 
 export const zWorkspaceContentListMemoriesQuery = z.object({

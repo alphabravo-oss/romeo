@@ -6,15 +6,10 @@ import { executeWorkerCommand } from "./worker-commands";
 describe("worker commands", () => {
   it("uses generated SDK operations for scheduled API workers", async () => {
     const requests: string[] = [];
+    const brokerRequests: string[] = [];
     const generatedClient = {
       get: async ({ url }: { url: string }) => {
         requests.push(url);
-        if (url === "/workflows")
-          return envelope([{ id: "workflow_1", enabled: true }]);
-        if (url === "/workflows/{workflowId}/runs")
-          return envelope([
-            workflowRun("run_waiting", "waiting_run", "step_1"),
-          ]);
         if (url === "/data-connectors")
           return envelope([
             {
@@ -55,20 +50,8 @@ describe("worker commands", () => {
             profiles: [],
             providerVoiceCount: 0,
           });
-        if (url === "/workflow-runs/{workflowRunId}/resume")
-          return envelope(workflowRun("run_waiting", "completed"));
         if (url === "/data-connectors/{connectorId}/sync")
           return envelope({ id: "sync_1", status: "completed" });
-        if (url === "/browser-automation-tasks/claim")
-          return envelope({
-            claimed: false,
-            workerQueue: "browser_automation",
-          });
-        if (url === "/tool-operation-dispatch-requests/claim")
-          return envelope({
-            claimed: false,
-            workerQueue: "tool_operation_dispatch",
-          });
         throw new Error(`Unexpected generated POST ${url}`);
       },
     } as never;
@@ -77,15 +60,26 @@ describe("worker commands", () => {
       "billing-entitlement-reconcile",
       "billing-lifecycle-enforce",
       "voice-catalog-sync",
-      "workflow-resume",
       "data-connector-sync",
       "browser-automation",
       "tool-dispatch",
     ]) {
       await expect(
         executeWorkerCommand("workers", action, {
+          baseUrl: "https://api.example.test",
+          env: {
+            BROWSER_AUTOMATION_BROKER_TOKEN: "browser-test-token",
+            TOOL_DISPATCH_BROKER_TOKEN: "tool-test-token",
+            ROMEO_WORKER_ID: "worker-test",
+          },
           generatedClient,
-          fetchImpl: fetch,
+          fetchImpl: async (request) => {
+            const url = String(request);
+            brokerRequests.push(url);
+            return new Response(JSON.stringify({ data: { claimed: false } }), {
+              headers: { "content-type": "application/json" },
+            });
+          },
           io: silentIo(),
           parsed: parseArgs([
             "workers",
@@ -105,13 +99,12 @@ describe("worker commands", () => {
       "/billing/entitlements/reconcile",
       "/billing/lifecycle/enforce",
       "/voices/sync",
-      "/workflows",
-      "/workflows/{workflowId}/runs",
-      "/workflow-runs/{workflowRunId}/resume",
       "/data-connectors",
       "/data-connectors/{connectorId}/sync",
-      "/browser-automation-tasks/claim",
-      "/tool-operation-dispatch-requests/claim",
+    ]);
+    expect(brokerRequests).toEqual([
+      "https://api.example.test/api/v1/internal/worker-broker/browser_automation/claims",
+      "https://api.example.test/api/v1/internal/worker-broker/tool_dispatch/claims",
     ]);
   });
 });
@@ -122,23 +115,6 @@ function envelope<T>(data: T) {
 
 function billingState() {
   return { status: "active", warnings: [] };
-}
-
-function workflowRun(id: string, status: string, currentStepId?: string) {
-  return {
-    id,
-    workflowId: "workflow_1",
-    status,
-    currentStepId,
-    steps: [
-      {
-        stepId: "step_1",
-        type: "agent_run",
-        status,
-        output: {},
-      },
-    ],
-  };
 }
 
 function silentIo() {

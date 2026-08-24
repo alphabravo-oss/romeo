@@ -1,5 +1,4 @@
 import {
-  allowInsecureRequests,
   type Configuration,
   customFetch,
   discovery,
@@ -16,19 +15,20 @@ export interface OidcDiscoveryMetadata {
 
 export async function discoverOidcMetadata(input: {
   clientId: string;
-  fetchImpl?: typeof fetch;
+  fetchImpl: typeof fetch;
   issuer: string;
+  validateEndpoint?: (value: string) => void;
 }): Promise<OidcDiscoveryMetadata> {
   return oidcMetadataFromConfiguration(await discoverOidcConfiguration(input));
 }
 
 export async function discoverOidcConfiguration(input: {
   clientId: string;
-  fetchImpl?: typeof fetch;
+  fetchImpl: typeof fetch;
   issuer: string;
+  validateEndpoint?: (value: string) => void;
 }): Promise<Configuration> {
   const issuerUrl = new URL(input.issuer);
-  const fetchImpl = input.fetchImpl ?? fetch;
   const oidcFetch: CustomFetch = (url, options) => {
     const init: RequestInit = {
       headers: options.headers,
@@ -37,15 +37,24 @@ export async function discoverOidcConfiguration(input: {
     };
     if (options.signal !== undefined) init.signal = options.signal;
     if (options.body !== undefined) init.body = options.body as BodyInit;
-    return fetchImpl(url, init);
+    return input.fetchImpl(url, init);
   };
   const options: Parameters<typeof discovery>[4] = {
     [customFetch]: oidcFetch,
-    ...(isLocalHttpIssuer(issuerUrl)
-      ? { execute: [allowInsecureRequests] }
-      : {}),
   };
-  return discovery(issuerUrl, input.clientId, undefined, None(), options);
+  const configuration = await discovery(
+    issuerUrl,
+    input.clientId,
+    undefined,
+    None(),
+    options,
+  );
+  assertOidcConfigurationMetadata(configuration, input.issuer);
+  if (input.validateEndpoint !== undefined) {
+    for (const endpoint of oidcMetadataEndpointValues(configuration))
+      input.validateEndpoint(endpoint);
+  }
+  return configuration;
 }
 
 export function oidcMetadataFromConfiguration(
@@ -65,11 +74,37 @@ export function oidcMetadataFromConfiguration(
   return result;
 }
 
-function isLocalHttpIssuer(issuer: URL): boolean {
-  return (
-    issuer.protocol === "http:" &&
-    (issuer.hostname === "localhost" ||
-      issuer.hostname === "127.0.0.1" ||
-      issuer.hostname === "::1")
+function assertOidcConfigurationMetadata(
+  configuration: Configuration,
+  expectedIssuer: string,
+): void {
+  const actualIssuer = configuration
+    .serverMetadata()
+    .issuer.replace(/\/+$/u, "");
+  if (actualIssuer !== expectedIssuer.replace(/\/+$/u, ""))
+    throw new Error("oidc_discovery_issuer_mismatch");
+}
+
+function oidcMetadataEndpointValues(configuration: Configuration): string[] {
+  const metadata = configuration.serverMetadata() as unknown as Record<
+    string,
+    unknown
+  >;
+  const direct = Object.entries(metadata).flatMap(([name, value]) =>
+    (name.endsWith("_endpoint") ||
+      name.endsWith("_jwks_uri") ||
+      name === "jwks_uri" ||
+      name === "check_session_iframe") &&
+    typeof value === "string"
+      ? [value]
+      : [],
   );
+  const mtlsAliases = metadata.mtls_endpoint_aliases;
+  if (typeof mtlsAliases !== "object" || mtlsAliases === null) return direct;
+  return [
+    ...direct,
+    ...Object.values(mtlsAliases).filter(
+      (value): value is string => typeof value === "string",
+    ),
+  ];
 }

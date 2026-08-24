@@ -93,6 +93,7 @@ const imageTransform = z.strictObject({
 });
 
 const partVersion = { schemaVersion: z.literal(1) } as const;
+const retainedContext = { retainedInContext: z.boolean().optional() } as const;
 
 export const TextMessagePartSchema = z
   .strictObject({
@@ -113,6 +114,7 @@ export const ImageRefMessagePartSchema = z
     altText: z.string().trim().min(1).max(2_000).optional(),
     transform: imageTransform.optional(),
     provenance: mediaProvenance.optional(),
+    ...retainedContext,
   })
   .openapi("ImageRefMessagePart");
 
@@ -127,6 +129,7 @@ export const AudioRefMessagePartSchema = z
     waveformFileId: identifier.optional(),
     language: language.optional(),
     provenance: mediaProvenance.optional(),
+    ...retainedContext,
   })
   .openapi("AudioRefMessagePart");
 
@@ -163,6 +166,7 @@ export const DocumentRefMessagePartSchema = z
     pageSelection: pageSelection.optional(),
     extractedTextPartId: identifier.optional(),
     provenance: mediaProvenance.optional(),
+    ...retainedContext,
   })
   .openapi("DocumentRefMessagePart");
 

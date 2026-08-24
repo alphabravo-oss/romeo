@@ -11,6 +11,9 @@ import {
 import { organizations, workspaces } from "./tenancy";
 import { users } from "./users";
 
+// The workflow product surface is retired, but these tables remain part of the
+// durable schema until a separately approved contract migration proves that
+// compatibility, export, retention, legal hold, and restore obligations ended.
 export const workflowDefinitions = pgTable(
   "workflow_definitions",
   {

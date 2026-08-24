@@ -404,7 +404,7 @@ export function AgentStudioPanel({
         {isAdmin ? (
           <ManagedModelCustomizationPanel activeAgent={activeAgent} />
         ) : (
-          <EmptyState title={t("agentAdminBehaviorOnly")} />
+          <EmptyState headingLevel={2} title={t("agentAdminBehaviorOnly")} />
         )}
       </div>
 

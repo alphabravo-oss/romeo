@@ -1,4 +1,8 @@
-export type ByokProvider = "aws_kms" | "azure_key_vault" | "gcp_kms" | "self_hosted";
+export type ByokProvider =
+  | "aws_kms"
+  | "azure_key_vault"
+  | "gcp_kms"
+  | "self_hosted";
 
 export function authorizeByokIntegration(input: {
   provider: ByokProvider;
@@ -23,7 +27,10 @@ export function planTenantKeyRotation(input: {
       mixedKeyReads: true;
       resumable: true;
     }
-  | { outcome: "denied"; code: "policy_bundle_approval_required" | "tenant_key_unavailable" } {
+  | {
+      outcome: "denied";
+      code: "policy_bundle_approval_required" | "tenant_key_unavailable";
+    } {
   if (input.bulkPlaintext)
     return { outcome: "denied", code: "tenant_key_unavailable" };
   if (!input.dualControl)
@@ -42,16 +49,34 @@ export function authorizeCryptoShred(input: {
   approverIds: string[];
   actorId: string;
 }):
-  | { outcome: "accepted"; evidence: { keysDestroyed: true; externalCopiesClaimed: false } }
-  | { outcome: "denied"; code: "data_deletion_legal_hold" | "policy_bundle_approval_required" } {
+  | {
+      outcome: "accepted";
+      evidence: {
+        executed: false;
+        externalCopiesClaimed: false;
+        keysDestroyed: false;
+        preview: true;
+      };
+    }
+  | {
+      outcome: "denied";
+      code: "data_deletion_legal_hold" | "policy_bundle_approval_required";
+    } {
   if (input.legalHold || !input.backupChecked)
     return { outcome: "denied", code: "data_deletion_legal_hold" };
-  const distinct = new Set(input.approverIds.filter((id) => id !== input.actorId));
+  const distinct = new Set(
+    input.approverIds.filter((id) => id !== input.actorId),
+  );
   if (distinct.size < 1)
     return { outcome: "denied", code: "policy_bundle_approval_required" };
   return {
     outcome: "accepted",
-    evidence: { keysDestroyed: true, externalCopiesClaimed: false },
+    evidence: {
+      executed: false,
+      externalCopiesClaimed: false,
+      keysDestroyed: false,
+      preview: true,
+    },
   };
 }
 

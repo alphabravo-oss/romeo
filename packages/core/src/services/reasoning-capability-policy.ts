@@ -66,6 +66,7 @@ export async function legacyReasoningConfiguration(
     return {};
   const setting = await repository.getSystemSetting(
     reasoningPolicySettingKey(orgId),
+    orgId,
   );
   const policy = providerReasoningPolicyFromUnknown(setting?.value.policy);
   return policy === undefined

@@ -3,6 +3,7 @@ import type { MiddlewareHandler } from "hono";
 
 import { ApiError } from "../errors";
 import type { AppBindings } from "./context";
+import { readCookie, sessionCookieName } from "./session-cookie";
 
 const unsafeMethods = new Set(["DELETE", "PATCH", "POST", "PUT"]);
 const csrfExemptPaths = new Set([
@@ -16,6 +17,17 @@ export function csrfProtection(env: RomeoEnv): MiddlewareHandler<AppBindings> {
     if (!unsafeMethods.has(context.req.method)) return next();
     const path = new URL(context.req.url).pathname;
     if (csrfExemptPaths.has(path)) return next();
+
+    // CSRF is a confused-deputy risk only when the browser contributes ambient
+    // session credentials. Bearer clients authenticate explicitly and must not
+    // be forced to manufacture browser headers. When both are present the
+    // request context deliberately prefers the bearer token, so it remains a
+    // bearer-authenticated request here too.
+    const authorization = context.req.header("authorization")?.trim() ?? "";
+    const hasBearerAuthorization = /^Bearer\s+\S+/iu.test(authorization);
+    const hasSessionCookie =
+      readCookie(context.req.header("cookie"), sessionCookieName) !== undefined;
+    if (!hasSessionCookie || hasBearerAuthorization) return next();
 
     const secFetchSite = context.req.header("sec-fetch-site")?.toLowerCase();
     if (secFetchSite === "cross-site") throw csrfError("fetch_metadata");
@@ -32,6 +44,10 @@ export function csrfProtection(env: RomeoEnv): MiddlewareHandler<AppBindings> {
       !isAllowedBrowserOrigin(referer, env)
     ) {
       throw csrfError("referer");
+    }
+
+    if (origin === undefined && referer === undefined) {
+      throw csrfError("missing_origin_proof");
     }
 
     await next();

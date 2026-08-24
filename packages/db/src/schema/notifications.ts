@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   foreignKey,
@@ -48,6 +49,18 @@ export const userNotifications = pgTable(
       table.orgId,
       table.resourceType,
       table.resourceId,
+    ),
+    userNotificationPageCreatedIdx: index(
+      "user_notifications_org_user_created_id_idx",
+    ).on(table.orgId, table.userId, table.createdAt, table.id),
+    userNotificationPageTypeIdx: index(
+      "user_notifications_org_user_type_id_idx",
+    ).on(table.orgId, table.userId, table.type, table.id),
+    userNotificationSearchIdx: index(
+      "user_notifications_search_trgm_idx",
+    ).using(
+      "gin",
+      sql`(lower(coalesce(${table.id}, '') || chr(31) || coalesce(${table.type}, '') || chr(31) || coalesce(${table.resourceId}, ''))) gin_trgm_ops`,
     ),
   }),
 );
@@ -106,6 +119,12 @@ export const notificationDeliveries = pgTable(
       .notNull()
       .defaultNow(),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    leaseOwner: text("lease_owner"),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    deliveryFence: integer("delivery_fence").notNull().default(0),
+    leaseAttempts: integer("lease_attempts").notNull().default(0),
+    providerIdempotencyKey: text("provider_idempotency_key"),
   },
   (table) => ({
     notificationDeliveryNotificationIdx: index(
@@ -116,10 +135,20 @@ export const notificationDeliveries = pgTable(
       table.userId,
       table.createdAt,
     ),
-    notificationDeliveryStatusIdx: index("notification_delivery_status_idx").on(
-      table.orgId,
-      table.status,
-      table.updatedAt,
+    notificationDeliveryStatusIdx: index(
+      "notification_delivery_status_lease_idx",
+    ).on(table.orgId, table.status, table.leaseExpiresAt, table.updatedAt),
+    notificationDeliveryPageCreatedIdx: index(
+      "notification_deliveries_org_user_created_id_idx",
+    ).on(table.orgId, table.userId, table.createdAt, table.id),
+    notificationDeliveryPageStatusIdx: index(
+      "notification_deliveries_org_user_status_id_idx",
+    ).on(table.orgId, table.userId, table.status, table.id),
+    notificationDeliverySearchIdx: index(
+      "notification_deliveries_search_trgm_idx",
+    ).using(
+      "gin",
+      sql`(lower(coalesce(${table.id}, '') || chr(31) || coalesce(${table.status}, '') || chr(31) || coalesce(${table.errorCode}, ''))) gin_trgm_ops`,
     ),
     notificationDeliveryNotificationFk: foreignKey({
       name: "notification_deliveries_notification_fk",

@@ -99,7 +99,10 @@ export function isPolicyWeakening(
 
 export function evaluatePolicyBundlePublication(input: {
   changes: PolicyBundleChange[];
-}): Extract<PolicyBundleDecision, { outcome: "publish" | "approval_required" }> {
+}): Extract<
+  PolicyBundleDecision,
+  { outcome: "publish" | "approval_required" }
+> {
   const classes = [
     ...new Set(
       input.changes.flatMap((change) =>
@@ -136,7 +139,10 @@ export function publishApprovedPolicyBundle(input: {
   bundle: PolicyBundle;
   now: string;
 }): PolicyBundle | PolicyBundleDecision {
-  if (input.bundle.state !== "approved" || input.bundle.approverId === undefined)
+  if (
+    input.bundle.state !== "approved" ||
+    input.bundle.approverId === undefined
+  )
     return { outcome: "rejected", code: "policy_bundle_not_approved" };
   return { ...input.bundle, state: "published", updatedAt: input.now };
 }

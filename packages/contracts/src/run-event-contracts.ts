@@ -72,6 +72,38 @@ const genericEventTypes = z.enum([
   "run.waiting_tool_dispatch",
   "output.part.ready",
 ]);
+const runEventWireTypes = [
+  ...genericEventTypes.options,
+  "reasoning.summary.delta",
+  "reasoning.summary.completed",
+  "run.continuing",
+] as const;
+
+/**
+ * Stable wire envelope used by generated HTTP/SSE clients. Event-specific
+ * validation is exposed separately through TypedRunEvent so adding a new event
+ * variant does not replace the established response object contract.
+ */
+export const RunEventWireSchema = z
+  .strictObject({
+    id: eventEnvelope.id,
+    runId: eventEnvelope.runId,
+    sequence: eventEnvelope.sequence,
+    type: z.string().openapi({
+      description:
+        "Run event type. Clients must preserve and tolerate future event types.",
+      "x-extensible-enum": runEventWireTypes,
+    }),
+    data: z.union([
+      RunContinuingEventDataSchema,
+      z.record(z.string(), z.unknown()),
+    ]),
+    schemaVersion: eventEnvelope.schemaVersion.optional(),
+    legId: eventEnvelope.legId,
+    channel: eventEnvelope.channel,
+    createdAt: eventEnvelope.createdAt,
+  })
+  .openapi("RunEvent");
 
 export const RunEventSchema = z
   .discriminatedUnion("type", [
@@ -96,4 +128,4 @@ export const RunEventSchema = z
       data: z.record(z.string(), z.unknown()),
     }),
   ])
-  .openapi("RunEvent");
+  .openapi("TypedRunEvent");

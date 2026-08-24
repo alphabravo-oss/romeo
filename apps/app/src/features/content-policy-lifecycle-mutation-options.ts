@@ -59,8 +59,13 @@ export function rollbackContentPolicyMutationOptions() {
 export function dryRunContentPolicyVersionMutationOptions() {
   return serverMutationOptions({
     resource: "contentPolicy.versions.dryRun",
-    mutationFn: ({ versionId, content }: { versionId: string; content: string }) =>
-      dryRunContentPolicyVersion(versionId, content),
+    mutationFn: ({
+      versionId,
+      content,
+    }: {
+      versionId: string;
+      content: string;
+    }) => dryRunContentPolicyVersion(versionId, content),
     reconcile: (client) => {
       void client.invalidateQueries({
         exact: true,

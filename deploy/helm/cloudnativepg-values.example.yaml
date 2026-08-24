@@ -22,24 +22,14 @@ valkey:
     name: romeo-valkey
     key: VALKEY_URL
 
-workers:
-  apiKeySecret:
-    name: romeo-worker-api-key
-    key: ROMEO_API_KEY
-  dataConnectorSync:
-    enabled: true
-  workflowResume:
-    enabled: true
-  webhookRetry:
-    enabled: true
-  notificationRetry:
-    enabled: true
-  retentionEnforce:
-    enabled: true
-  billingEntitlementReconcile:
-    enabled: true
-  billingLifecycleEnforce:
-    enabled: true
+# Scheduled all-tenant operations run inside the app's fenced coordinator.
 
 backup:
+  mode: externally-managed
   enabled: false
+  externalManagement:
+    owner: platform-database-team
+    evidenceReference: cloudnativepg-scheduled-backup-and-restore-runbook
+    observedAt: "2026-08-23T00:00:00Z"
+    statusReference: cloudnativepg-live-backup-status-dashboard
+    alertsConfigured: true

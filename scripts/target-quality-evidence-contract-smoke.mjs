@@ -237,8 +237,6 @@ function runQualitySmoke(baseUrl, evidencePath, options = {}) {
         repoPath("scripts/target-quality-evidence-smoke.mjs"),
         "--base-url",
         baseUrl,
-        "--api-key",
-        apiKey,
         "--agent-id",
         "agent_contract",
         "--require-eval-passed",
@@ -256,6 +254,7 @@ function runQualitySmoke(baseUrl, evidencePath, options = {}) {
       ],
       {
         cwd: root,
+        env: { ...process.env, ROMEO_API_KEY: apiKey },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );

@@ -1,6 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
-
-import { toolCallsQueryOptions } from "../features/tools";
 import type { ToolCallRecord } from "../features/tools";
 import { useLocale } from "../lib/i18n";
 import { PanelState } from "../lib/panel-state";
@@ -17,8 +14,12 @@ export function ToolTracePanel({
   activeAgentId: string | undefined;
 }) {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<any>("tool_trace_calls");
-  const callsQuery = useQuery(toolCallsQueryOptions(activeAgentId));
+  const inventoriedTable = useInventoriedServerTable(
+    "tool_trace_calls",
+    activeAgentId === undefined
+      ? { enabled: false }
+      : { parentId: activeAgentId },
+  );
 
   if (activeAgentId === undefined) {
     return (
@@ -75,15 +76,15 @@ export function ToolTracePanel({
     <Section
       actions={
         <PageActions
-          onRefresh={() => void callsQuery.refetch()}
+          onRefresh={() => void inventoriedTable.query.refetch()}
           refreshLabel={t("refresh")}
-          refreshing={callsQuery.isFetching || activeAgentId === undefined}
+          refreshing={inventoriedTable.query.isFetching}
         />
       }
       title={t("toolTraceCalls")}
     >
-      <PanelState query={callsQuery} empty={t("toolTraceNone")}>
-        {(calls) => (
+      <PanelState query={inventoriedTable.query} empty={t("toolTraceNone")}>
+        {() => (
           <DataTable
             serverState={inventoriedTable.serverState}
             columns={columns}

@@ -7,6 +7,9 @@ import type {
   DataConnectorExecutor,
 } from "./data-connector-executors";
 import type { SecretResolver } from "./secret-resolver";
+import { SecretBearingEgressClient } from "./secret-bearing-egress";
+
+const githubApiOrigin = "https://api.github.com";
 
 export interface DelegatedOAuthConnectorCredentialProvider {
   getConnectorAccessToken(input: {
@@ -37,7 +40,6 @@ export class GitHubDataConnectorExecutor implements DataConnectorExecutor {
   private readonly retryAttempts: number;
   private readonly retryBackoffMs: number;
   private readonly timeoutMs: number;
-  private readonly token: string | undefined;
 
   constructor(
     options: {
@@ -49,7 +51,6 @@ export class GitHubDataConnectorExecutor implements DataConnectorExecutor {
       retryBackoffMs?: number;
       secretResolver?: SecretResolver;
       timeoutMs?: number;
-      token?: string;
     } = {},
   ) {
     this.fetchImpl = options.fetchImpl ?? fetch;
@@ -60,10 +61,6 @@ export class GitHubDataConnectorExecutor implements DataConnectorExecutor {
     this.retryBackoffMs = options.retryBackoffMs ?? 250;
     this.secretResolver = options.secretResolver;
     this.timeoutMs = options.timeoutMs ?? 10_000;
-    this.token =
-      options.token === undefined || options.token.length === 0
-        ? undefined
-        : options.token;
   }
 
   async sync(connector: DataConnector): Promise<DataConnectorExecutionResult> {
@@ -76,9 +73,15 @@ export class GitHubDataConnectorExecutor implements DataConnectorExecutor {
     const config = readGitHubConfig(connector);
     const maxItems = Math.min(config.maxItems, this.maxItems);
     const token = await this.connectorToken(connector, config);
+    const resourceFetch = new SecretBearingEgressClient({
+      allowedOrigins: [githubApiOrigin],
+      fetchImpl: this.fetchImpl,
+      maxResponseBytes: Math.min(this.maxBytes, 2 * 1024 * 1024),
+      timeoutMs: this.timeoutMs,
+    }).fetch;
     const client = new Octokit({
       ...(token === undefined ? {} : { auth: token }),
-      request: { fetch: this.fetchImpl },
+      request: { fetch: resourceFetch },
       retry: { retryAfterBaseValue: this.retryBackoffMs },
     });
     const tree = await this.fetchTree(client, config);
@@ -216,7 +219,13 @@ export class GitHubDataConnectorExecutor implements DataConnectorExecutor {
         connector,
       });
     }
-    if (config.secretRef === undefined) return this.token;
+    if (config.secretRef === undefined) {
+      throw new ApiError(
+        "connector_github_credentials_required",
+        "GitHub connector requires secretRef or delegatedOAuthConnectionId.",
+        400,
+      );
+    }
     if (this.secretResolver?.resolveValue === undefined) {
       throw new ApiError(
         "connector_github_secret_ref_unsupported",

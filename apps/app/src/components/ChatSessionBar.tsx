@@ -4,7 +4,7 @@ import Share2 from "lucide-react/dist/esm/icons/share-2.mjs";
 import Shield from "lucide-react/dist/esm/icons/shield.mjs";
 import { Button } from "@romeo/ui";
 
-import { chatExportUrl } from "../features";
+import { chatExportUrl } from "../features/chats";
 import { useLocale } from "../lib/i18n";
 import {
   chatSensitivity,

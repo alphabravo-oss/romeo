@@ -11,6 +11,7 @@ import type {
   UserSession,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import { iterateBackgroundJobs } from "./background-job-query";
 import { accessReviewPolicyPosture } from "./identity-lifecycle-policy";
 import { listToolOperationsByConnector } from "./tool-operation-catalog";
 
@@ -39,7 +40,6 @@ export async function buildAccessReviewReport(
     dataConnectors,
     delegatedOAuthConnections,
     toolConnectors,
-    backgroundJobs,
     auditLogs,
   ] = await Promise.all([
     repository.listUsers(orgId),
@@ -51,7 +51,6 @@ export async function buildAccessReviewReport(
     repository.listDataConnectors(orgId),
     repository.listDelegatedOAuthConnections(orgId),
     repository.listToolConnectors(orgId),
-    repository.listBackgroundJobs(orgId),
     repository.listAuditLogs(orgId),
   ]);
   const sessionsByUser = new Map(
@@ -104,7 +103,9 @@ export async function buildAccessReviewReport(
       };
     })
     .sort(byId);
-  const workerJobs = workerJobPosture(backgroundJobs);
+  const workerJobs = await workerJobPosture(
+    iterateBackgroundJobs(repository, orgId),
+  );
 
   return {
     schema: "romeo.access-review-report.v1",
@@ -390,31 +391,30 @@ function supportRequestPosture(
   return { ...base, status: "pending" };
 }
 
-function workerJobPosture(
-  jobs: BackgroundJob[],
-): AccessReviewWorkerJobPosture[] {
-  const groups = new Map<string, BackgroundJob[]>();
-  for (const job of jobs) {
+async function workerJobPosture(
+  jobs: AsyncIterable<BackgroundJob>,
+): Promise<AccessReviewWorkerJobPosture[]> {
+  const groups = new Map<string, AccessReviewWorkerJobPosture>();
+  for await (const job of jobs) {
     const key = `${job.type}:${job.status}`;
-    groups.set(key, [...(groups.get(key) ?? []), job]);
+    const current = groups.get(key);
+    const oldestCreatedAt =
+      current?.oldestCreatedAt !== undefined &&
+      current.oldestCreatedAt <= job.createdAt
+        ? current.oldestCreatedAt
+        : job.createdAt;
+    groups.set(key, {
+      type: job.type,
+      status: job.status,
+      count: (current?.count ?? 0) + 1,
+      oldestCreatedAt,
+    });
   }
-  return Array.from(groups.values())
-    .map((items) => {
-      const oldestCreatedAt = items
-        .map((job) => job.createdAt)
-        .sort((left, right) => left.localeCompare(right))[0];
-      return {
-        type: items[0]!.type,
-        status: items[0]!.status,
-        count: items.length,
-        ...(oldestCreatedAt === undefined ? {} : { oldestCreatedAt }),
-      };
-    })
-    .sort((left, right) =>
-      `${left.type}:${left.status}`.localeCompare(
-        `${right.type}:${right.status}`,
-      ),
-    );
+  return Array.from(groups.values()).sort((left, right) =>
+    `${left.type}:${left.status}`.localeCompare(
+      `${right.type}:${right.status}`,
+    ),
+  );
 }
 
 function isActiveSession(session: UserSession): boolean {

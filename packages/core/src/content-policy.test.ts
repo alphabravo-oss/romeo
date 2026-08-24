@@ -14,6 +14,7 @@ import {
   enforceContentPolicyValue,
 } from "./services/content-policy-service";
 import { OpenAiEmbeddingsService } from "./services/openai-embeddings-service";
+import { OpenAiChatCompletionsService } from "./services/openai-chat-completions-service";
 import { OpenWebUiCompatibilityService } from "./services/openwebui-compatibility-service";
 import { RunEventSequencer } from "./services/run-event-sequencer";
 import { persistTerminalRun } from "./services/run-terminal-effects";
@@ -99,6 +100,82 @@ describe("content policy", () => {
     expect(await repository.listUsageEvents(seededSubject.orgId)).toEqual([]);
   });
 
+  it("rejects unregistered embedding model names before provider dispatch", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const fetchImpl = vi.fn<typeof fetch>();
+    const embeddings = new OpenAiEmbeddingsService(repository, { fetchImpl });
+
+    await expect(
+      embeddings.create({
+        subject: seededSubject,
+        request: {
+          model: "arbitrary-provider-model-name",
+          input: ["Do not dispatch."],
+        },
+      }),
+    ).rejects.toMatchObject({ code: "not_found", status: 404 });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(await repository.listUsageEvents(seededSubject.orgId)).toEqual([]);
+  });
+
+  it("governs buffered and streamed OpenAI-compatible provider output before release", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const policy = new ContentPolicyService(repository);
+    await policy.update({
+      subject: seededSubject,
+      detectors: { email_address: "redact", api_token: "block" },
+    });
+    const provider = await repository.getProvider("provider_openai_compatible");
+    if (provider === undefined) throw new Error("Expected seeded provider");
+    provider.baseUrl = "https://provider.example.test/v1";
+    provider.credentialRef = "env://ROMEO_PROVIDER_API_KEY";
+
+    const responses = [
+      ["Contact private@", "example.com safely."],
+      ["Stream private@", "example.com safely."],
+      ["Never reveal sk-abcdefghij", "klmnopqrstuvwxyz123456"],
+    ];
+    let responseIndex = 0;
+    const service = new OpenAiChatCompletionsService(repository, {
+      fetchImpl: async () =>
+        new Response(
+          providerSse(
+            (responses[responseIndex++] ?? []).map((content) => ({
+              choices: [{ delta: { content } }],
+            })),
+          ),
+          { status: 200 },
+        ),
+      secretResolver: new EnvironmentSecretResolver({
+        ROMEO_PROVIDER_API_KEY: "test-provider-key",
+      }),
+    });
+    const request = {
+      model: "model_openai_compatible_default",
+      messages: [{ role: "user" as const, content: "Respond safely." }],
+    };
+
+    const buffered = await service.complete({
+      request,
+      subject: seededSubject,
+    });
+    expect(buffered.choices[0]?.message.content).toBe(
+      "Contact [REDACTED:EMAIL_ADDRESS] safely.",
+    );
+    const streamed = await service.stream({
+      request: { ...request, stream: true },
+      subject: seededSubject,
+    });
+    const streamedText = await new Response(streamed).text();
+    expect(streamedText).toContain("Stream [REDACTED:EMAIL_ADDRESS] safely.");
+    expect(streamedText).not.toContain("private@example.com");
+    expect(streamedText).toContain("data: [DONE]");
+
+    await expect(
+      service.complete({ request, subject: seededSubject }),
+    ).rejects.toMatchObject({ code: "content_policy_blocked", status: 403 });
+  });
+
   it("provides authorized admin report, update and privacy-safe simulation APIs", async () => {
     const repository = new InMemoryRomeoRepository();
     const api = createRomeoApi(repository);
@@ -136,9 +213,9 @@ describe("content policy", () => {
     expect(JSON.stringify(simulationBody)).not.toContain(
       "secret-person@example.com",
     );
-    expect(JSON.stringify(await repository.listSystemSettings())).not.toContain(
-      sentinel,
-    );
+    expect(
+      JSON.stringify(await repository.listSystemSettings("org_default")),
+    ).not.toContain(sentinel);
   });
 
   it("rejects non-admin report, update, and simulation requests without echoing content", async () => {
@@ -177,7 +254,7 @@ describe("content policy", () => {
         await Promise.all([report.json(), update.json(), simulation.json()]),
       ),
     ).not.toContain(sentinel);
-    expect(await repository.listSystemSettings()).toEqual([]);
+    expect(await repository.listSystemSettings("org_default")).toEqual([]);
   });
 
   it("governs chat-transfer, OpenWebUI import, and channel content before persistence", async () => {
@@ -299,17 +376,20 @@ describe("content policy", () => {
       subject: seededSubject,
       detectors: { us_ssn: "block" },
     });
-    await repository.upsertSystemSetting({
-      key: reasoningPolicySettingKey(seededSubject.orgId),
-      value: {
-        policy: {
-          schemaVersion: 1,
-          mode: "summary",
-          retainSummary: true,
+    await repository.upsertSystemSetting(
+      {
+        key: reasoningPolicySettingKey(seededSubject.orgId),
+        value: {
+          policy: {
+            schemaVersion: 1,
+            mode: "summary",
+            retainSummary: true,
+          },
         },
+        updatedAt: "2026-08-14T12:00:00.000Z",
       },
-      updatedAt: "2026-08-14T12:00:00.000Z",
-    });
+      seededSubject.orgId,
+    );
     const provider = await repository.getProvider("provider_openai_compatible");
     const model = await repository.getModel("model_openai_compatible_default");
     if (provider === undefined || model === undefined)
@@ -430,6 +510,21 @@ describe("content policy", () => {
     expect(result.evaluation).toEqual({ action: "allow", detections: [] });
   });
 });
+
+function providerSse(events: unknown[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+        );
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+}
 
 function responsesSse(events: unknown[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();

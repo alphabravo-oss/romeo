@@ -1,5 +1,6 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { RomeoEnv } from "@romeo/config";
+import type { ObjectStore } from "@romeo/storage";
 
 import {
   getRomeoRepositoryRuntime,
@@ -43,6 +44,7 @@ import {
   gaEvidenceReadinessCheck,
   vectorStoreDeploymentCheck,
 } from "./readiness-vector-store-checks";
+import { objectStorageReadinessCheck } from "./readiness-object-storage";
 
 export * from "./readiness-result";
 
@@ -54,7 +56,15 @@ export class ReadinessService {
       env,
     ),
     private readonly vectorStoreReadinessProbe?: KnowledgeVectorStoreReadinessProbe,
+    private readonly objectStore?: ObjectStore,
   ) {}
+
+  async objectStorageDependencyReady(): Promise<boolean> {
+    return (
+      (await objectStorageReadinessCheck(this.env, this.objectStore)).status ===
+      "pass"
+    );
+  }
 
   async report(subject: AuthSubject): Promise<ReadinessReport> {
     assertScope(subject, "admin:read");
@@ -78,13 +88,19 @@ export class ReadinessService {
       ),
     ]);
 
-    const pgvectorPhysicalIsolationEvidence =
-      await summarizePgvectorPhysicalIsolationEvidence(
+    const [
+      pgvectorPhysicalIsolationEvidence,
+      qdrantLiveEvidence,
+      gaEvidencePosture,
+      objectStorageCheck,
+    ] = await Promise.all([
+      summarizePgvectorPhysicalIsolationEvidence(
         this.env.PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH,
-      );
-    const qdrantLiveEvidence = await summarizeQdrantLiveEvidence(
-      this.env.QDRANT_LIVE_EVIDENCE_PATH,
-    );
+      ),
+      summarizeQdrantLiveEvidence(this.env.QDRANT_LIVE_EVIDENCE_PATH),
+      new GaEvidencePostureService(this.env).report(subject),
+      objectStorageReadinessCheck(this.env, this.objectStore),
+    ]);
     const vectorStoreCheck = await vectorStoreDeploymentCheck({
       deployment: this.vectorStoreDeployment,
       env: this.env,
@@ -92,10 +108,6 @@ export class ReadinessService {
       qdrantLiveEvidence,
       readinessProbe: this.vectorStoreReadinessProbe,
     });
-    const gaEvidencePosture = await new GaEvidencePostureService(
-      this.env,
-    ).report(subject);
-
     const checks: ReadinessCheck[] = [
       secretCheck(
         "session_secret",
@@ -141,15 +153,7 @@ export class ReadinessService {
         this.env,
         authProviderSettings.effective.providers,
       ),
-      this.env.OBJECT_STORE_DRIVER === "memory"
-        ? warn("object_storage", "Memory object storage is enabled.", {
-            required: "OBJECT_STORE_DRIVER=s3",
-          })
-        : pass(
-            "object_storage",
-            "Durable object storage adapter is configured.",
-            { driver: this.env.OBJECT_STORE_DRIVER },
-          ),
+      objectStorageCheck,
       providers.length > 0
         ? pass("providers", "At least one provider is configured.", {
             count: providers.length,

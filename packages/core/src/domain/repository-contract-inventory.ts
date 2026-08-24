@@ -24,6 +24,7 @@ export type RepositoryMethodDomain =
   | "quota"
   | "run"
   | "settings"
+  | "table"
   | "tenancy"
   | "tool"
   | "transaction"
@@ -85,6 +86,8 @@ function domainForMethod(
   method: RomeoRepositoryMethodName,
 ): RepositoryMethodDomain {
   if (method === "transaction") return "transaction";
+  if (method.startsWith("audit") || includesAny(method, ["Audit"]))
+    return "audit";
   if (includesAny(method, ["CapabilityAssignment", "CapabilityFlag"]))
     return "capability";
   if (includesAny(method, ["IdempotencyReceipt"])) return "job";
@@ -97,7 +100,8 @@ function domainForMethod(
     ])
   )
     return "agent";
-  if (includesAny(method, ["SystemSetting"])) return "settings";
+  if (includesAny(method, ["SystemSetting", "ServerTableSavedView"]))
+    return "settings";
   if (
     includesAny(method, [
       "ApiKey",
@@ -128,15 +132,24 @@ function domainForMethod(
   if (includesAny(method, ["Organization", "Workspace"])) return "tenancy";
   if (includesAny(method, ["Provider", "Model"])) return "provider";
   if (includesAny(method, ["Eval"])) return "eval";
-  if (includesAny(method, ["FileObject", "FileLifecycle"])) return "file";
+  if (includesAny(method, ["FileObject", "FileLifecycle", "FileRetention"]))
+    return "file";
   if (includesAny(method, ["Chat", "Message", "CollaborationChannel"]))
     return "chat";
   if (includesAny(method, ["Notification"])) return "notification";
   if (includesAny(method, ["Knowledge"])) return "knowledge";
-  if (includesAny(method, ["DataConnector", "DelegatedOAuthConnection"]))
+  if (includesAny(method, ["DataConnector", "DelegatedOAuth"]))
     return "connector";
   if (includesAny(method, ["Voice"])) return "voice";
   if (includesAny(method, ["Tool"])) return "tool";
+  if (
+    includesAny(method, [
+      "ContentDeletion",
+      "ContentPolicy",
+      "GovernanceExport",
+    ])
+  )
+    return "governance";
   if (includesAny(method, ["RunEvent", "Run"])) return "run";
   if (includesAny(method, ["AuditLog"])) return "audit";
   if (
@@ -149,6 +162,7 @@ function domainForMethod(
   )
     return "governance";
   if (includesAny(method, ["UsageEvent"])) return "usage";
+  if (includesAny(method, ["InventoriedTable"])) return "table";
   if (includesAny(method, ["BackgroundJob"])) return "job";
   if (includesAny(method, ["Webhook"])) return "webhook";
   if (includesAny(method, ["Workflow"])) return "workflow";
@@ -175,6 +189,7 @@ function operationForMethod(
   if (method.startsWith("delete")) return "delete";
   if (method.startsWith("finish")) return "update";
   if (method.startsWith("fail")) return "update";
+  if (method.startsWith("ensure")) return "update";
   if (method.startsWith("finalize")) return "update";
   if (method.startsWith("purge")) return "delete";
   if (method.startsWith("get")) return "get";
@@ -182,6 +197,7 @@ function operationForMethod(
   if (method.startsWith("claim")) return "update";
   if (method.startsWith("cancel")) return "update";
   if (method.startsWith("renew")) return "update";
+  if (method.startsWith("restore")) return "update";
   if (method.startsWith("record")) return "update";
   if (method.startsWith("query")) return "search";
   if (method.startsWith("reconcile")) return "update";
@@ -189,8 +205,11 @@ function operationForMethod(
   if (method.startsWith("rotate")) return "update";
   if (method.startsWith("search")) return "search";
   if (method.startsWith("update")) return "update";
+  if (method.startsWith("transition")) return "update";
   if (method.startsWith("upsert")) return "upsert";
   if (method.startsWith("with")) return "transaction";
+  if (method.startsWith("write")) return "upsert";
+  if (method.startsWith("audit")) return "get";
   return exhaustiveOperation(method);
 }
 
@@ -251,6 +270,7 @@ function auditImpactForDomain(
     domain === "job" ||
     domain === "notification" ||
     domain === "provider" ||
+    domain === "table" ||
     domain === "tool" ||
     domain === "webhook"
   ) {

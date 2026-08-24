@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
+import {
+  DeleteObjectCommand,
+  GetBucketEncryptionCommand,
+  GetBucketLifecycleConfigurationCommand,
+  GetBucketReplicationCommand,
+  GetBucketVersioningCommand,
+  GetObjectCommand,
+  HeadBucketCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
 
 import { S3ObjectStore } from "./s3-object-store";
 import { createS3PresignedRequest } from "./s3-signer";
+import type { S3ReadinessClientFactory } from "./s3-readiness";
 
 const config = {
   endpoint: "http://rustfs:9000",
@@ -134,5 +146,236 @@ describe("S3ObjectStore", () => {
     await expect(
       store.getObject("bounded.txt", { maxBytes: 10 }),
     ).rejects.toMatchObject({ name: "ObjectSizeLimitError", maxBytes: 10 });
+  });
+
+  it("probes authenticated bucket posture and verifies reversible write/read/delete", async () => {
+    const calls: string[] = [];
+    let stored: Uint8Array | undefined;
+    let deleted = false;
+    const clientFactory: S3ReadinessClientFactory = () => ({
+      destroy() {
+        calls.push("destroy");
+      },
+      async send(command) {
+        calls.push(command.constructor.name);
+        if (command instanceof HeadBucketCommand) return {};
+        if (command instanceof GetBucketEncryptionCommand) {
+          return {
+            ServerSideEncryptionConfiguration: {
+              Rules: [
+                {
+                  ApplyServerSideEncryptionByDefault: {
+                    SSEAlgorithm: "aws:kms",
+                  },
+                },
+              ],
+            },
+          };
+        }
+        if (command instanceof GetBucketVersioningCommand)
+          return { Status: "Enabled" };
+        if (command instanceof GetBucketLifecycleConfigurationCommand) {
+          return {
+            Rules: [
+              {
+                Status: "Enabled",
+                NoncurrentVersionExpiration: { NoncurrentDays: 30 },
+              },
+            ],
+          };
+        }
+        if (command instanceof GetBucketReplicationCommand) return {};
+        if (command instanceof PutObjectCommand) {
+          deleted = false;
+          stored = new Uint8Array(command.input.Body as Uint8Array);
+          return {};
+        }
+        if (command instanceof GetObjectCommand) {
+          return {
+            ContentLength: stored?.byteLength,
+            Body: {
+              async transformToByteArray() {
+                return stored!;
+              },
+            },
+          };
+        }
+        if (command instanceof DeleteObjectCommand) {
+          deleted = true;
+          return {};
+        }
+        if (command instanceof HeadObjectCommand && deleted) {
+          const error = new Error("not found");
+          error.name = "NotFound";
+          throw error;
+        }
+        throw new Error("unexpected command");
+      },
+    });
+    const store = new S3ObjectStore(
+      {
+        ...config,
+        endpoint: "https://objects.example.com",
+        readiness: {
+          requireEncryption: true,
+          requireLifecycle: true,
+          requireReplication: false,
+          requireVersioning: true,
+          timeoutMs: 1_000,
+        },
+      },
+      fetch,
+      clientFactory,
+    );
+
+    await expect(store.checkReadiness()).resolves.toEqual({
+      authenticated: true,
+      deleteVerified: true,
+      encryptionConfigured: true,
+      lifecycleConfigured: true,
+      readAfterWriteVerified: true,
+      ready: true,
+      replicationConfigured: false,
+      tlsEnabled: true,
+      versioningEnabled: true,
+      writeVerified: true,
+    });
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        "HeadBucketCommand",
+        "GetBucketEncryptionCommand",
+        "GetBucketVersioningCommand",
+        "GetBucketLifecycleConfigurationCommand",
+        "GetBucketReplicationCommand",
+        "PutObjectCommand",
+        "GetObjectCommand",
+        "DeleteObjectCommand",
+        "HeadObjectCommand",
+        "destroy",
+      ]),
+    );
+
+    const replicationRequired = new S3ObjectStore(
+      {
+        ...config,
+        endpoint: "https://objects.example.com",
+        readiness: {
+          requireEncryption: true,
+          requireLifecycle: true,
+          requireReplication: true,
+          requireVersioning: true,
+          timeoutMs: 1_000,
+        },
+      },
+      fetch,
+      clientFactory,
+    );
+    await expect(replicationRequired.checkReadiness()).resolves.toMatchObject({
+      ready: false,
+      replicationConfigured: false,
+    });
+  });
+
+  it("fails posture without leaking bucket or endpoint identifiers", async () => {
+    const clientFactory: S3ReadinessClientFactory = () => ({
+      destroy() {},
+      async send() {
+        throw new Error("secret-bucket at private.objects.internal denied");
+      },
+    });
+    const store = new S3ObjectStore(
+      {
+        ...config,
+        bucket: "secret-bucket",
+        endpoint: "https://private.objects.internal",
+      },
+      fetch,
+      clientFactory,
+    );
+
+    const error = await store.checkReadiness().catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("S3 readiness probe failed.");
+    expect((error as Error).message).not.toMatch(
+      /secret-bucket|private\.objects/,
+    );
+  });
+
+  it("refuses to send authenticated readiness traffic over plaintext", async () => {
+    let clientCreated = false;
+    const store = new S3ObjectStore(config, fetch, () => {
+      clientCreated = true;
+      throw new Error("must not initialize");
+    });
+
+    await expect(store.checkReadiness()).rejects.toThrow(
+      "S3 readiness probe requires an HTTPS endpoint.",
+    );
+    expect(clientCreated).toBe(false);
+  });
+
+  it("aborts a readiness probe at its total deadline", async () => {
+    let destroyed = false;
+    const clientFactory: S3ReadinessClientFactory = () => ({
+      destroy() {
+        destroyed = true;
+      },
+      send(_command, options) {
+        return new Promise((_resolve, reject) => {
+          options?.abortSignal?.addEventListener(
+            "abort",
+            () => reject(new Error("provider timeout detail")),
+            { once: true },
+          );
+        });
+      },
+    });
+    const store = new S3ObjectStore(
+      {
+        ...config,
+        endpoint: "https://objects.example.com",
+        readiness: { timeoutMs: 5 },
+      },
+      fetch,
+      clientFactory,
+    );
+
+    await expect(store.checkReadiness()).rejects.toThrow(
+      "S3 readiness probe timed out.",
+    );
+    expect(destroyed).toBe(true);
+  });
+
+  it("propagates the caller deadline into every S3 readiness command", async () => {
+    let observedAbort = false;
+    const clientFactory: S3ReadinessClientFactory = () => ({
+      destroy() {},
+      send(_command, options) {
+        return new Promise((_resolve, reject) => {
+          options?.abortSignal?.addEventListener(
+            "abort",
+            () => {
+              observedAbort = true;
+              reject(new Error("caller deadline"));
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    const store = new S3ObjectStore(
+      {
+        ...config,
+        endpoint: "https://objects.example.com",
+        readiness: { timeoutMs: 10_000 },
+      },
+      fetch,
+      clientFactory,
+    );
+    const controller = new AbortController();
+    const pending = store.checkReadiness(controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toThrow("S3 readiness probe timed out.");
+    expect(observedAbort).toBe(true);
   });
 });

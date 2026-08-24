@@ -37,7 +37,11 @@ describe("reasoning summary persistence", () => {
         retentionAllowsPersist: true,
         answerBody: "ok",
       }),
-    ).toMatchObject({ outcome: "discarded", code: "hidden_trace", answerBody: "ok" });
+    ).toMatchObject({
+      outcome: "discarded",
+      code: "hidden_trace",
+      answerBody: "ok",
+    });
     expect(
       persistReasoningSummary({
         classification: "provider_safe_summary",

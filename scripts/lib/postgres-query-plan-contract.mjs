@@ -226,35 +226,6 @@ export const QUERY_PLAN_REVIEW_CHECKS = [
     `,
   },
   {
-    id: "workflow_definitions_due_schedule",
-    category: "workflow-resume",
-    description: "Scheduled workflow scan for due workflow starts.",
-    expectedIndexes: ["workflow_definitions_due_schedule_idx"],
-    sql: `
-      SELECT id
-      FROM workflow_definitions
-      WHERE org_id = 'org_default'
-        AND enabled = true
-        AND next_scheduled_run_at <= ${planTimestamp}
-      ORDER BY next_scheduled_run_at ASC, id ASC
-      LIMIT 100
-    `,
-  },
-  {
-    id: "workflow_runs_waiting",
-    category: "workflow-resume",
-    description: "Waiting workflow run scan for resume workers.",
-    expectedIndexes: ["workflow_runs_status_updated_idx"],
-    sql: `
-      SELECT id
-      FROM workflow_runs
-      WHERE org_id = 'org_default'
-        AND status IN ('waiting_run', 'waiting_approval')
-      ORDER BY updated_at ASC, id ASC
-      LIMIT 100
-    `,
-  },
-  {
     id: "notification_delivery_retry",
     category: "notification-retry",
     description: "Failed notification delivery retry scan.",

@@ -84,7 +84,7 @@ export class AuthProviderSettingsService {
   constructor(
     private readonly repository: RomeoRepository,
     private readonly env: RomeoEnv,
-    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly fetchImpl?: typeof fetch,
     private readonly secretResolver?: SecretResolver,
     private readonly ldapClientFactory?: LdapClientFactory,
   ) {}
@@ -255,11 +255,14 @@ export class AuthProviderSettingsService {
           org,
           input.settings.confirmDisableLocalFallback === true,
         );
-        await repository.upsertSystemSetting({
-          key: globalSettingsKey,
-          value: serializeGlobal(global, now, input.subject.id),
-          updatedAt: now,
-        });
+        await repository.upsertSystemSetting(
+          {
+            key: globalSettingsKey,
+            value: serializeGlobal(global, now, input.subject.id),
+            updatedAt: now,
+          },
+          null,
+        );
         changedScopes.push("global");
       }
 
@@ -274,11 +277,14 @@ export class AuthProviderSettingsService {
           org,
           input.settings.confirmDisableLocalFallback === true,
         );
-        await repository.upsertSystemSetting({
-          key: orgSettingsKey(orgId),
-          value: serializeOrg(org, now, input.subject.id),
-          updatedAt: now,
-        });
+        await repository.upsertSystemSetting(
+          {
+            key: orgSettingsKey(orgId),
+            value: serializeOrg(org, now, input.subject.id),
+            updatedAt: now,
+          },
+          orgId,
+        );
         changedScopes.push("org");
       }
 

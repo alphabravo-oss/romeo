@@ -12,7 +12,15 @@ export function deleteChatDataInMemory(input: {
   runEvents: Map<string, RunEvent[]>;
   runIds: Set<string>;
 }): void {
-  const { data, chatId, messageIds, notificationIds, orgId, runEvents, runIds } = input;
+  const {
+    data,
+    chatId,
+    messageIds,
+    notificationIds,
+    orgId,
+    runEvents,
+    runIds,
+  } = input;
   const referencedFileIds = [
     ...new Set(
       data.messageFileReferences
@@ -27,7 +35,11 @@ export function deleteChatDataInMemory(input: {
     (part) => !messageIds.has(part.messageId),
   );
   data.messages = data.messages.filter((message) => message.chatId !== chatId);
-  reconcileFileReferencesInMemory(data, referencedFileIds, new Date().toISOString());
+  reconcileFileReferencesInMemory(
+    data,
+    referencedFileIds,
+    new Date().toISOString(),
+  );
   data.chats = data.chats.filter(
     (chat) => !(chat.orgId === orgId && chat.id === chatId),
   );
@@ -41,7 +53,8 @@ export function deleteChatDataInMemory(input: {
     (comment) => !(comment.orgId === orgId && comment.chatId === chatId),
   );
   data.chatTagAssignments = data.chatTagAssignments.filter(
-    (assignment) => !(assignment.orgId === orgId && assignment.chatId === chatId),
+    (assignment) =>
+      !(assignment.orgId === orgId && assignment.chatId === chatId),
   );
   data.userNotifications = data.userNotifications.filter(
     (notification) => !notificationIds.has(notification.id),
@@ -60,11 +73,19 @@ export function deleteChatDataInMemory(input: {
   );
   data.resourceFavorites = data.resourceFavorites.filter(
     (favorite) =>
-      !(favorite.orgId === orgId && favorite.resourceType === "chat" && favorite.resourceId === chatId),
+      !(
+        favorite.orgId === orgId &&
+        favorite.resourceType === "chat" &&
+        favorite.resourceId === chatId
+      ),
   );
   data.workspaceFolderItems = data.workspaceFolderItems.filter(
     (item) =>
-      !(item.orgId === orgId && item.resourceType === "chat" && item.resourceId === chatId),
+      !(
+        item.orgId === orgId &&
+        item.resourceType === "chat" &&
+        item.resourceId === chatId
+      ),
   );
   for (const runId of runIds) runEvents.delete(runId);
 }
@@ -123,9 +144,11 @@ export function fileObjectStorageObjectCount(
 
 export function activeLegalHold(
   chat: E.Chat,
+  evaluatedAt: string = new Date().toISOString(),
 ): E.DataDeletionPlan["legalHold"] | undefined {
   if (chat.legalHoldUntil === undefined) return undefined;
-  if (new Date(chat.legalHoldUntil).getTime() <= Date.now()) return undefined;
+  if (Date.parse(chat.legalHoldUntil) <= Date.parse(evaluatedAt))
+    return undefined;
   return {
     until: chat.legalHoldUntil,
     ...(chat.legalHoldReason !== undefined

@@ -1,46 +1,44 @@
+import { createHash } from "node:crypto";
+
 import type {
-  DataExportCounts,
-  DataExportLimits,
   DataExportPackage,
+  DataExportPackageArtifact,
+  DataExportPackageJob,
   DataExportPackageList,
   DataExportPackageSummary,
-  DataExportResolvedRequest,
+  GovernanceExportArtifactRecord,
+  GovernanceExportJobRecord,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 
-const registrySchema = "romeo.data-export-package-registry.v1";
 const registryLimit = 200;
-
-const countKeys: Array<keyof DataExportCounts> = [
-  "workspaces",
-  "agents",
-  "promptTemplates",
-  "chats",
-  "messages",
-  "messageParts",
-  "chatComments",
-  "knowledgeBases",
-  "knowledgeSources",
-  "knowledgeChunks",
-  "fileObjects",
-  "fileObjectBytesIncluded",
-  "knowledgeSourceBytesIncluded",
-  "dataConnectors",
-  "dataConnectorSyncs",
-  "workflows",
-  "workflowRuns",
-  "usageEvents",
-  "backgroundJobs",
-];
+const artifactTtlMs = 24 * 60 * 60 * 1_000;
 
 export async function listRegisteredDataExportPackages(input: {
   repository: RomeoRepository;
   orgId: string;
 }): Promise<DataExportPackageList> {
+  const records = await input.repository.listGovernanceExportJobs(
+    input.orgId,
+    registryLimit,
+  );
+  const jobs = await Promise.all(
+    records.map(async (job) =>
+      publicJob(
+        job,
+        await input.repository.getGovernanceExportArtifact(job.orgId, job.id),
+      ),
+    ),
+  );
   return {
     schema: "romeo.data-export-package-list.v1",
     orgId: input.orgId,
-    packages: await readRegistry(input.repository, input.orgId),
+    packages: jobs.flatMap((job) =>
+      job.state === "artifact_ready" && job.artifact !== undefined
+        ? [summaryFromJob(job)]
+        : [],
+    ),
+    jobs,
     redaction: {
       packageContentReturned: false,
       rawObjectKeysReturned: false,
@@ -53,203 +51,180 @@ export async function registerDataExportPackage(input: {
   repository: RomeoRepository;
   package: DataExportPackage;
 }): Promise<void> {
-  const existing = await readRegistry(input.repository, input.package.orgId);
-  const summary = summarizePackage(input.package);
-  await writeRegistry(input.repository, input.package.orgId, [
-    summary,
-    ...existing.filter((item) => item.packageId !== summary.packageId),
-  ]);
+  const existing = await input.repository.getGovernanceExportJob(
+    input.package.orgId,
+    input.package.packageId,
+  );
+  if (existing !== undefined) {
+    const artifact = await input.repository.getGovernanceExportArtifact(
+      input.package.orgId,
+      input.package.packageId,
+    );
+    if (artifact?.sha256 === input.package.artifact.sha256) return;
+    throw new Error("data_export_package_registration_conflict");
+  }
+  const objectKey = legacyObjectKey(
+    input.package.orgId,
+    input.package.packageId,
+  );
+  const expiresAt = new Date(
+    Date.parse(input.package.createdAt) + artifactTtlMs,
+  ).toISOString();
+  await input.repository.createGovernanceExportJob({
+    id: input.package.packageId,
+    orgId: input.package.orgId,
+    ...(input.package.request.workspaceId === undefined
+      ? {}
+      : { workspaceId: input.package.request.workspaceId }),
+    createdBy: "legacy_governance_export",
+    request: input.package.request,
+    snapshotAt: input.package.createdAt,
+    state: "artifact_ready",
+    percent: 100,
+    checkpoint: {
+      datasetIndex: 0,
+      partCount: 1,
+      processedRows: totalRows(Object.values(input.package.counts)),
+      sizeBytes: input.package.artifact.sizeBytes,
+    },
+    counts: input.package.counts,
+    limits: input.package.limits,
+    warnings: input.package.warnings,
+    exclusions: input.package.exclusions,
+    leaseAttempt: 0,
+    version: 1,
+    createdAt: input.package.createdAt,
+    updatedAt: input.package.createdAt,
+    completedAt: input.package.createdAt,
+  });
+  await input.repository.createGovernanceExportArtifact({
+    id: `artifact_${input.package.packageId}`,
+    jobId: input.package.packageId,
+    orgId: input.package.orgId,
+    objectKey,
+    contentType: input.package.artifact.contentType,
+    fileName: `${input.package.packageId}.json`,
+    sizeBytes: input.package.artifact.sizeBytes,
+    sha256: input.package.artifact.sha256,
+    partCount: 1,
+    createdAt: input.package.createdAt,
+    expiresAt,
+  });
 }
 
 export async function removeRegisteredDataExportPackage(input: {
   repository: RomeoRepository;
   orgId: string;
   packageId: string;
+  deletedAt?: string;
 }): Promise<void> {
-  const existing = await readRegistry(input.repository, input.orgId);
-  await writeRegistry(
-    input.repository,
+  const job = await input.repository.getGovernanceExportJob(
     input.orgId,
-    existing.filter((item) => item.packageId !== input.packageId),
+    input.packageId,
   );
-}
-
-function summarizePackage(
-  packaged: DataExportPackage,
-): DataExportPackageSummary {
-  return {
-    schema: "romeo.data-export-package-summary.v1",
-    packageId: packaged.packageId,
-    orgId: packaged.orgId,
-    request: packaged.request,
-    counts: packaged.counts,
-    limits: packaged.limits,
-    warnings: packaged.warnings,
-    exclusions: packaged.exclusions,
-    artifact: packaged.artifact,
-    createdAt: packaged.createdAt,
-  };
-}
-
-async function readRegistry(
-  repository: RomeoRepository,
-  orgId: string,
-): Promise<DataExportPackageSummary[]> {
-  const setting = await repository.getSystemSetting(registryKey(orgId));
-  const value = setting?.value;
-  if (
-    value === undefined ||
-    value.schema !== registrySchema ||
-    value.orgId !== orgId ||
-    !Array.isArray(value.packages)
-  ) {
-    return [];
-  }
-  return value.packages
-    .map(readSummary)
-    .filter((item): item is DataExportPackageSummary => item !== undefined)
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-}
-
-async function writeRegistry(
-  repository: RomeoRepository,
-  orgId: string,
-  packages: DataExportPackageSummary[],
-): Promise<void> {
-  await repository.upsertSystemSetting({
-    key: registryKey(orgId),
-    value: {
-      schema: registrySchema,
-      orgId,
-      packages: packages
-        .slice()
-        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-        .slice(0, registryLimit),
-    },
-    updatedAt: new Date().toISOString(),
+  if (job === undefined || job.state === "deleted") return;
+  const now = input.deletedAt ?? new Date().toISOString();
+  const {
+    leaseOwner: _leaseOwner,
+    leaseExpiresAt: _leaseExpiresAt,
+    ...deletingJob
+  } = job;
+  const updated = await input.repository.updateGovernanceExportJob({
+    ...deletingJob,
+    state: "deleted",
+    deletedAt: now,
+    updatedAt: now,
+    version: job.version + 1,
   });
+  if (updated === undefined) throw new Error("governance_export_job_conflict");
+  const artifact = await input.repository.getGovernanceExportArtifact(
+    input.orgId,
+    input.packageId,
+  );
+  if (artifact !== undefined)
+    await input.repository.updateGovernanceExportArtifact({
+      ...artifact,
+      deletedAt: now,
+    });
 }
 
-function registryKey(orgId: string): string {
-  return `governance.data_export_packages.${encodeURIComponent(orgId)}`;
-}
-
-function readSummary(value: unknown): DataExportPackageSummary | undefined {
-  if (!isRecord(value)) return undefined;
-  const request = readRequest(value.request);
-  const counts = readCounts(value.counts);
-  const limits = readLimits(value.limits);
-  const artifact = readArtifact(value.artifact);
-  if (
-    value.schema !== "romeo.data-export-package-summary.v1" ||
-    typeof value.packageId !== "string" ||
-    typeof value.orgId !== "string" ||
-    typeof value.createdAt !== "string" ||
-    request === undefined ||
-    counts === undefined ||
-    limits === undefined ||
+export function publicJob(
+  job: GovernanceExportJobRecord,
+  artifact?: GovernanceExportArtifactRecord,
+): DataExportPackageJob {
+  const artifactExpired =
+    artifact !== undefined && Date.parse(artifact.expiresAt) <= Date.now();
+  const publicArtifact =
     artifact === undefined ||
-    !Array.isArray(value.warnings) ||
-    !Array.isArray(value.exclusions) ||
-    !value.warnings.every((item) => typeof item === "string") ||
-    !value.exclusions.every((item) => typeof item === "string")
-  ) {
-    return undefined;
-  }
+    artifact.deletedAt !== undefined ||
+    artifactExpired
+      ? undefined
+      : publicArtifactFor(job.id, artifact);
+  return {
+    schema: "romeo.data-export-package-job.v1",
+    packageId: job.id,
+    orgId: job.orgId,
+    request: job.request,
+    state:
+      job.state === "deleted" ||
+      (job.state === "artifact_ready" && artifactExpired)
+        ? "expired"
+        : job.state,
+    percent: job.percent,
+    processedRows: job.checkpoint.processedRows,
+    attemptCount: job.leaseAttempt,
+    counts: job.counts,
+    limits: job.limits,
+    warnings: job.warnings,
+    exclusions: job.exclusions,
+    ...(publicArtifact === undefined ? {} : { artifact: publicArtifact }),
+    ...(job.errorCode === undefined ? {} : { errorCode: job.errorCode }),
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    ...(job.completedAt === undefined ? {} : { completedAt: job.completedAt }),
+    ...(artifact === undefined ? {} : { expiresAt: artifact.expiresAt }),
+  };
+}
+
+function summaryFromJob(job: DataExportPackageJob): DataExportPackageSummary {
+  if (job.artifact === undefined) throw new Error("export_artifact_missing");
   return {
     schema: "romeo.data-export-package-summary.v1",
-    packageId: value.packageId,
-    orgId: value.orgId,
-    request,
-    counts,
-    limits,
-    warnings: value.warnings,
-    exclusions: value.exclusions,
-    artifact,
-    createdAt: value.createdAt,
+    packageId: job.packageId,
+    orgId: job.orgId,
+    request: job.request,
+    counts: job.counts,
+    limits: job.limits,
+    warnings: job.warnings,
+    exclusions: job.exclusions,
+    artifact: job.artifact,
+    createdAt: job.createdAt,
   };
 }
 
-function readRequest(value: unknown): DataExportResolvedRequest | undefined {
-  if (!isRecord(value)) return undefined;
-  if (
-    (value.scope !== "org" && value.scope !== "workspace") ||
-    typeof value.includeContent !== "boolean" ||
-    typeof value.includeObjectBytes !== "boolean" ||
-    typeof value.maxObjectBytes !== "number"
-  ) {
-    return undefined;
-  }
-  if (
-    value.workspaceId !== undefined &&
-    typeof value.workspaceId !== "string"
-  ) {
-    return undefined;
-  }
+function publicArtifactFor(
+  packageId: string,
+  artifact: GovernanceExportArtifactRecord,
+): DataExportPackageArtifact {
   return {
-    scope: value.scope,
-    ...(value.workspaceId === undefined
-      ? {}
-      : { workspaceId: value.workspaceId }),
-    includeContent: value.includeContent,
-    includeObjectBytes: value.includeObjectBytes,
-    maxObjectBytes: value.maxObjectBytes,
-  };
-}
-
-function readCounts(value: unknown): DataExportCounts | undefined {
-  if (!isRecord(value)) return undefined;
-  const counts: Partial<DataExportCounts> = {};
-  for (const key of countKeys) {
-    const count = value[key];
-    if (typeof count !== "number") return undefined;
-    counts[key] = count;
-  }
-  return counts as DataExportCounts;
-}
-
-function readLimits(value: unknown): DataExportLimits | undefined {
-  if (!isRecord(value)) return undefined;
-  if (
-    typeof value.maxObjectBytes !== "number" ||
-    typeof value.maxTotalObjectBytes !== "number"
-  ) {
-    return undefined;
-  }
-  return {
-    maxObjectBytes: value.maxObjectBytes,
-    maxTotalObjectBytes: value.maxTotalObjectBytes,
-  };
-}
-
-function readArtifact(
-  value: unknown,
-): DataExportPackageSummary["artifact"] | undefined {
-  if (!isRecord(value) || !isRecord(value.storage)) return undefined;
-  if (
-    value.contentType !== "application/json" ||
-    typeof value.sizeBytes !== "number" ||
-    typeof value.sha256 !== "string" ||
-    typeof value.downloadUrl !== "string" ||
-    value.storage.driver !== "object_store" ||
-    typeof value.storage.objectKeyHash !== "string" ||
-    value.storage.rawObjectKeyReturned !== false
-  ) {
-    return undefined;
-  }
-  return {
-    contentType: "application/json",
-    sizeBytes: value.sizeBytes,
-    sha256: value.sha256,
-    downloadUrl: value.downloadUrl,
+    contentType: artifact.contentType,
+    sizeBytes: artifact.sizeBytes,
+    sha256: artifact.sha256,
+    downloadUrl: `/api/v1/governance/data-exports/packages/${encodeURIComponent(packageId)}/content`,
     storage: {
       driver: "object_store",
-      objectKeyHash: value.storage.objectKeyHash,
+      objectKeyHash: createHash("sha256")
+        .update(artifact.objectKey)
+        .digest("hex"),
       rawObjectKeyReturned: false,
     },
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function legacyObjectKey(orgId: string, packageId: string): string {
+  return `governance/data-exports/${encodeURIComponent(orgId)}/${encodeURIComponent(packageId)}.json`;
+}
+
+function totalRows(counts: number[]): number {
+  return counts.reduce((sum, count) => sum + count, 0);
 }

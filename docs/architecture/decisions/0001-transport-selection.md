@@ -35,7 +35,7 @@ as the system of record loses events during reconnects and deploys.
 - Provider callbacks, queues, and notifier outages cannot bypass durable persistence.
 - Bidirectional voice is a separate governed capability and cannot reuse text SSE as
   an accidental audio tunnel.
-- Compare/export/workflow streams reuse the same event envelope and authorization
+- Compare, export, and other long-running job streams reuse the same event envelope and authorization
   rules rather than creating feature-specific socket protocols.
 
 ## Validation

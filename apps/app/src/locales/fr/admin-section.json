@@ -34,7 +34,6 @@
   "adminWorkspaceMembersDescription": "Accordez ou révoquez l’appartenance à un espace de travail pour les utilisateurs et les groupes.",
   "adminOrganizationsDescription": "Organisations visibles pour votre compte.",
   "adminImpersonationDescription": "Examinez et traitez les demandes d’usurpation du support.",
-  "adminWorkflowsDescription": "Modèles, exécutions et portes d’approbation des flux de travail.",
   "adminWebhooksDescription": "Abonnements webhook sortants et historique des livraisons.",
   "adminNotificationsDescription": "Canaux de livraison et historique des notifications.",
   "adminDeviceTokensDescription": "Identifiants d’appareil de longue durée et leurs portées.",

@@ -73,10 +73,17 @@
   --rm-hover: rgb(24 24 27 / 5%);
   --rm-bubble: #f4f4f5;
   --rm-text: #18181b;
-  --rm-muted: #71717a;
+  /* #71717a only reaches 4.39:1 on the soft surface used by table headers and
+     neutral pills. This step preserves the zinc hierarchy with AA headroom. */
+  --rm-muted: #6b6b74;
   --rm-border: #e4e4e7;
   --rm-accent: #3b82f6;
   --rm-accent-hover: #2563eb;
+  /* Filled controls need a darker brand step so white foreground content
+     clears WCAG AA. Keep --rm-accent bright enough for focus rings and text,
+     and use this token whenever the accent is a surface. */
+  --rm-accent-solid: #2563eb;
+  --rm-accent-solid-hover: #1d4ed8;
   --rm-on-accent: #ffffff;
   --rm-accent-strong: #2563eb;
   --rm-accent-secondary: #7c3aed;
@@ -138,7 +145,7 @@
   --foreground: 240 10% 3.9%;
   --card: 0 0% 100%;
   --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
+  --muted-foreground: 240 3.8% 42%;
   --border: 240 5.9% 90%;
 }
 
@@ -163,6 +170,8 @@ html.dark {
   --rm-border: #35353d;
   --rm-accent: #3b82f6;
   --rm-accent-hover: #60a5fa;
+  --rm-accent-solid: #2563eb;
+  --rm-accent-solid-hover: #1d4ed8;
   --rm-on-accent: #ffffff;
   --rm-accent-strong: #60a5fa;
   --rm-accent-secondary: #8b5cf6;
@@ -570,10 +579,30 @@ html.dark .rm-new-chat-button:hover {
 
 .rm-connection-result {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
+  align-items: flex-start;
+  gap: 0.5rem;
   margin-top: 0.65rem;
   font-size: 0.75rem;
+}
+
+.rm-connection-result__copy,
+.rm-connection-result__checks {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.rm-connection-result__checks > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--rm-text);
+}
+
+.rm-connection-result__latency {
+  margin-inline-start: auto;
+  white-space: nowrap;
 }
 
 .rm-connection-result.success {
@@ -619,6 +648,12 @@ html.dark .rm-new-chat-button:hover {
       12rem
     );
   gap: 0.5rem;
+}
+
+@media (max-width: 780px) {
+  .rm-model-catalog-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .rm-model-search {

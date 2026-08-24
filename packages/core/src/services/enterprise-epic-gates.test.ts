@@ -37,9 +37,15 @@ import {
   revokeTenantKey,
   sealTenantEnvelope,
 } from "./tenant-crypto";
-import { mergeSavedViews, migrateLocalSavedView } from "./server-table-saved-view";
+import {
+  mergeSavedViews,
+  migrateLocalSavedView,
+} from "./server-table-saved-view";
 import { authorizeTableExportJob } from "./server-table-export-job";
-import { applySearchIndexMutation, lookupSearchIndexEntry } from "./message-search-index";
+import {
+  applySearchIndexMutation,
+  lookupSearchIndexEntry,
+} from "./message-search-index";
 import { planRetentionCohesion } from "./retention-cohesion";
 import { validateRegionalEndpoint } from "./provider-endpoint-policy";
 import { persistReasoningSummary } from "./persist-reasoning-summary";
@@ -48,7 +54,10 @@ import { projectProviderParts } from "./provider-part-projection";
 import { evaluateDestinationPolicy } from "./policy-boundaries";
 import { declareConnectorAclCapability } from "./connector-acl-catalog";
 import { applyCompareGroupCancel } from "./compare-session-control";
-import { planFileReferenceAttach, reconcileAttachRetention } from "./file-reference-writer";
+import {
+  planFileReferenceAttach,
+  reconcileAttachRetention,
+} from "./file-reference-writer";
 import { selectRealtimeAdapter } from "./realtime-voice-contracts";
 import { authorizeCompareSynthesis } from "./compare-synthesis";
 import { evaluateAclFreshness } from "./knowledge-acl-lifecycle";
@@ -57,7 +66,10 @@ import { completeDirectUploadProtocol } from "./direct-upload-protocol";
 import { normalizeUploadedMedia } from "./media-normalization";
 import { persistProviderOutputParts } from "./persist-output-parts";
 import { evaluateModalityContentPolicy } from "./modality-content-policy";
-import { createPolicyVersionDraft, publishPolicyVersion } from "./content-policy-versioning";
+import {
+  createPolicyVersionDraft,
+  publishPolicyVersion,
+} from "./content-policy-versioning";
 import { requestPolicyApproval } from "./policy-approval";
 
 describe("enterprise epic gates", () => {
@@ -94,9 +106,23 @@ describe("enterprise epic gates", () => {
         platformDisabled: false,
       }).effective.status,
     ).toBe("not_allowed");
+    const enabledAssignment = {
+      id: "a_enabled",
+      orgId: "org_default",
+      scopeType: "organization" as const,
+      scopeId: "org_default",
+      capabilityId: "secure_compute" as const,
+      state: "enabled" as const,
+      configuration: {},
+      version: 1,
+      actorId: "user_admin",
+      reason: "enable dependency-state checks",
+      effectiveAt: "2026-08-14T09:00:00.000Z",
+      createdAt: "2026-08-14T09:00:00.000Z",
+    };
     expect(
       resolveGenericCapability({
-        assignments: [],
+        assignments: [enabledAssignment],
         definition,
         now: "2026-08-14T10:00:00.000Z",
         platformDisabled: false,
@@ -105,7 +131,7 @@ describe("enterprise epic gates", () => {
     ).toBe("not_entitled");
     expect(
       resolveGenericCapability({
-        assignments: [],
+        assignments: [enabledAssignment],
         definition,
         now: "2026-08-14T10:00:00.000Z",
         platformDisabled: false,
@@ -117,7 +143,7 @@ describe("enterprise epic gates", () => {
         role: "member",
         workspaceClass: "default",
         effective: resolveGenericCapability({
-          assignments: [],
+          assignments: [enabledAssignment],
           definition,
           now: "2026-08-14T10:00:00.000Z",
           platformDisabled: false,
@@ -181,7 +207,7 @@ describe("enterprise epic gates", () => {
             ? { id: String((value as { id: unknown }).id) }
             : undefined,
       ),
-    ).toThrow();
+    ).toThrow("Page cursor is invalid or expired.");
   });
 
   it("creates and DLP-blocks unsafe checkpoints", () => {
@@ -189,7 +215,14 @@ describe("enterprise epic gates", () => {
       createTranscriptCheckpoint({
         id: "cp1",
         chatId: "chat_1",
-        messages: [{ id: "m1", role: "system", content: "Stay safe", policyMarker: true }],
+        messages: [
+          {
+            id: "m1",
+            role: "system",
+            content: "Stay safe",
+            policyMarker: true,
+          },
+        ],
         summarize: (items) => items.map((item) => item.content).join(""),
         scan: (summary) =>
           /secret/i.test(summary)
@@ -203,7 +236,7 @@ describe("enterprise epic gates", () => {
     expect(
       omitUnsupportedProviderKnobs({
         requested: { temperature: 0.1, seed: 1 },
-        supported: new Set(["temperature"]),
+        supported: new Set(["temperature"] as const),
       }).omitted,
     ).toEqual(["seed"]);
     expect(evaluateProviderProbe({ advertised: true, probed: false })).toEqual({
@@ -244,14 +277,14 @@ describe("enterprise epic gates", () => {
         platformDisabled: false,
         runtime: "uninstalled",
         jobId: "job_1",
-      }).code,
-    ).toBe("compute_runtime_uninstalled");
+      }),
+    ).toEqual({ outcome: "denied", code: "compute_runtime_uninstalled" });
     expect(
       evaluateComputeEgress({
         hostname: "169.254.169.254",
         approvedDestinations: [],
-      }).code,
-    ).toBe("compute_egress_denied");
+      }),
+    ).toEqual({ outcome: "denied", code: "compute_egress_denied" });
     expect(
       recoverComputeLease({
         lease: {
@@ -262,8 +295,8 @@ describe("enterprise epic gates", () => {
         },
         runnerId: "runner_a",
         now: "2026-08-14T10:01:00.000Z",
-      }).code,
-    ).toBe("compute_lease_lost");
+      }),
+    ).toEqual({ outcome: "denied", code: "compute_lease_lost" });
     expect(
       evaluateSandboxPosture({
         allowPrivilegeEscalation: false,
@@ -281,8 +314,8 @@ describe("enterprise epic gates", () => {
         seccomp: true,
         teardown: "deterministic",
         wallSeconds: 30,
-      }).code,
-    ).toBe("compute_sandbox_posture_denied");
+      }),
+    ).toEqual({ outcome: "denied", code: "compute_sandbox_posture_denied" });
     expect(
       authorizeRuntimeImage({
         allowlistedDigests: [],
@@ -291,8 +324,8 @@ describe("enterprise epic gates", () => {
         mutableTag: true,
         publicPackageInstall: true,
         signed: false,
-      }).code,
-    ).toBe("compute_runtime_image_unverified");
+      }),
+    ).toEqual({ outcome: "denied", code: "compute_runtime_image_unverified" });
     expect(
       admitComputeArtifact({
         archiveEntries: 1,
@@ -304,8 +337,8 @@ describe("enterprise epic gates", () => {
         outputPath: "../out.csv",
         sha256: `sha256:${"ab".repeat(32)}`,
         sizeBytes: 10,
-      }).code,
-    ).toBe("compute_artifact_intake_denied");
+      }),
+    ).toEqual({ outcome: "denied", code: "compute_artifact_intake_denied" });
   });
 
   it("preflights compare sessions and keeps partial failure explicit", () => {
@@ -417,14 +450,17 @@ describe("enterprise epic gates", () => {
       resourceId: "file_1",
     });
     expect(sealed.outcome).toBe("ok");
+    if (sealed.outcome !== "ok" || sealed.envelope === undefined) {
+      throw new Error("expected sealed tenant envelope");
+    }
     expect(canSubstitutePlatformKey(key)).toBe(false);
     expect(
       openTenantEnvelope({
         key: revokeTenantKey(key),
         wrappingMaterial: Buffer.from("customer-wrapping-material-32b!!"),
-        envelope: sealed.envelope!,
-      }).code,
-    ).toBe("tenant_key_revoked");
+        envelope: sealed.envelope,
+      }),
+    ).toEqual({ outcome: "unavailable", code: "tenant_key_revoked" });
   });
 
   it("covers saved-view merge, async export, search tombstone, retention hold, residency, and summary persist", () => {
@@ -438,7 +474,9 @@ describe("enterprise epic gates", () => {
       now: "2026-08-14T12:00:00.000Z",
     });
     if ("outcome" in local) throw new Error("expected view");
-    expect(mergeSavedViews({ server: [local], localFallback: [local] })).toHaveLength(1);
+    expect(
+      mergeSavedViews({ server: [local], localFallback: [local] }),
+    ).toHaveLength(1);
     expect(
       authorizeTableExportJob({ mode: "browser_csv", estimatedRows: 8_000 }),
     ).toEqual({ outcome: "denied", code: "table_export_must_be_async" });
@@ -568,6 +606,10 @@ describe("enterprise epic gates", () => {
       (
         await persistProviderOutputParts({
           parts: [{ type: "citation", citation: { sourceId: "src" } }],
+          authorizeCitation: async () => ({
+            documentId: "src",
+            title: "Authorized source",
+          }),
           store: async () => ({ fileId: "unused" }),
           persistPart: async () => undefined,
           emit: () => undefined,
@@ -635,8 +677,10 @@ describe("enterprise epic gates", () => {
       reconcileAttachRetention({ referenceCount: 1, legalHoldActive: true }),
     ).toBe("retained");
     expect(
-      selectRealtimeAdapter({ nativeAvailable: false, pipelineAvailable: false })
-        .outcome,
+      selectRealtimeAdapter({
+        nativeAvailable: false,
+        pipelineAvailable: false,
+      }).outcome,
     ).toBe("denied");
     expect(
       authorizeCompareSynthesis({

@@ -10,6 +10,70 @@ import { selectUsageCostEventIds } from "./usage-cost-reconciliation";
 import type { WebhookEmitter } from "./webhook-service";
 
 describe("run terminal effects", () => {
+  it("atomically links governed provider files to the terminal assistant message", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const run: RunRecord = {
+      agentId: "agent_default",
+      agentVersionId: "agent_version_default_v1",
+      chatId: "chat_welcome",
+      createdAt: "2026-07-16T12:00:00.000Z",
+      createdBy: "user_dev_admin",
+      id: "run_terminal_provider_output",
+      modelId: "model_openai_compatible_default",
+      orgId: "org_default",
+      providerId: "provider_openai_compatible",
+      status: "running",
+      workspaceId: "workspace_default",
+    };
+    await repository.createRun(run);
+    await repository.createFileObject({
+      createdAt: run.createdAt,
+      fileName: "provider-output.png",
+      id: "file_provider_output",
+      lifecycleVersion: 1,
+      metadata: { runId: run.id, source: "provider_output" },
+      mimeType: "image/png",
+      objectKey:
+        "files/org_default/workspace_default/file_provider_output/output.png",
+      orgId: run.orgId,
+      ownerId: run.createdBy,
+      ownerType: "user",
+      purpose: "generated_image",
+      sha256: "a".repeat(64),
+      sizeBytes: 67,
+      status: "ready",
+      updatedAt: run.createdAt,
+      workspaceId: run.workspaceId,
+    });
+
+    await persistTerminalRun(repository, new RunEventSequencer(), {
+      assistantContent: "",
+      outputParts: [
+        {
+          fileId: "file_provider_output",
+          mediaType: "image/png",
+          type: "image_ref",
+        },
+      ],
+      run,
+      status: "completed",
+    });
+
+    const messageId = `msg_run_terminal_${run.id}`;
+    expect(await repository.listMessageParts(messageId)).toMatchObject([
+      {
+        fileId: "file_provider_output",
+        messageId,
+        type: "image_ref",
+      },
+    ]);
+    expect(
+      await repository.getFileObject("file_provider_output"),
+    ).toMatchObject({
+      status: "attached",
+    });
+  });
+
   it("records reported reasoning once when terminal completion races", async () => {
     const repository = new InMemoryRomeoRepository();
     const seededModel = await repository.getModel(

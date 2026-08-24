@@ -36,7 +36,9 @@ export function mapReasoningToNativeAdapter(input: {
       outcome: "mapped",
       native: {
         reasoning: {
-          ...(requested.effort === undefined ? {} : { effort: requested.effort }),
+          ...(requested.effort === undefined
+            ? {}
+            : { effort: requested.effort }),
           ...(requested.summary === undefined
             ? {}
             : { summary: requested.summary }),

@@ -1,4 +1,7 @@
-import { getProviderDialectSummary, type ProviderInstance } from "@romeo/providers";
+import {
+  getProviderDialectSummary,
+  type ProviderInstance,
+} from "@romeo/providers";
 
 import type { RomeoRepository } from "../domain/repository";
 import { decorateCatalogModels } from "./catalog-model-decorator";

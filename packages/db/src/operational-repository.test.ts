@@ -88,6 +88,8 @@ describe("operational repository mappers", () => {
   it("maps system settings as JSON records for product configuration", () => {
     const setting = toSystemSettingRecord({
       key: "auth_provider_settings.global.v1",
+      orgId: null,
+      scopeOrgId: "__global__",
       value: {
         version: 1,
         providers: {

@@ -138,7 +138,8 @@ export async function resolveRetainedMessageContext(input: {
         (isLegacyAttachmentPart(part) &&
           part.metadata.retainedInContext !== false) ||
         (isMessagePartV1(part) &&
-          (part.type === "image_ref" || part.type === "document_ref")),
+          (part.type === "image_ref" || part.type === "document_ref") &&
+          part.retainedInContext !== false),
     )
     .slice(-8);
   const documents: RetainedMessageContext["documents"] = [];

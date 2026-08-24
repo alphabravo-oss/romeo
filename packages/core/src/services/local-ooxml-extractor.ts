@@ -41,7 +41,9 @@ export class LocalOoxmlTextExtractor implements KnowledgeBinaryExtractor {
     bytes: Uint8Array;
     fileName: string;
     mimeType: string;
+    signal?: AbortSignal;
   }): Promise<ExtractedKnowledgeText> {
+    input.signal?.throwIfAborted();
     const mimeType = normalizeMimeType(input.mimeType);
     const kind = mimeTypes.get(mimeType);
     if (kind === undefined) {
@@ -62,6 +64,7 @@ export class LocalOoxmlTextExtractor implements KnowledgeBinaryExtractor {
       maxExpandedBytes:
         this.options.maxExpandedBytes ?? defaultMaxExpandedBytes,
     });
+    input.signal?.throwIfAborted();
     const parts =
       kind === "docx"
         ? extractDocxParts(entries)
@@ -74,6 +77,7 @@ export class LocalOoxmlTextExtractor implements KnowledgeBinaryExtractor {
         this.options.maxTextChars ?? defaultMaxTextChars,
       ),
     );
+    input.signal?.throwIfAborted();
     return {
       content,
       metadata: {

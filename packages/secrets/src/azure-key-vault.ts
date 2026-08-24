@@ -69,6 +69,7 @@ const defaultAzureClientFactory: AzureKeyVaultSdkClientFactory = (options) => {
 };
 
 export class AzureKeyVaultResolver implements SecretResolver {
+  private sdkClient: AzureKeyVaultSdkClient | undefined;
   private readonly clientFactory: AzureKeyVaultSdkClientFactory;
   private readonly timeoutMs: number;
 
@@ -110,10 +111,10 @@ export class AzureKeyVaultResolver implements SecretResolver {
   }
 
   private client(): AzureKeyVaultSdkClient {
-    return this.clientFactory({
+    return (this.sdkClient ??= this.clientFactory({
       accessToken: this.options.accessToken,
       vaultUrl: this.options.vaultUrl,
-    });
+    }));
   }
 
   private validate(parsed: ManagedSecretRef): SecretAvailability | undefined {

@@ -64,6 +64,7 @@ export function ConfirmDialog(props: {
         variant: tone === "danger" ? "danger" : "primary",
       }}
       cancelLabel={cancelLabel}
+      failureMessage={t("unexpectedAsyncFailure")}
       onConfirm={onConfirm}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) onCancel();

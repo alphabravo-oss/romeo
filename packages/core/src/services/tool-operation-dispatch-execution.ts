@@ -32,7 +32,11 @@ export async function fetchBounded(
     const response =
       pinning?.pinnedFetchImpl !== undefined &&
       pinning.approvedAddresses.length > 0
-        ? await pinning.pinnedFetchImpl(url, pinnedInit, pinning.approvedAddresses)
+        ? await pinning.pinnedFetchImpl(
+            url,
+            pinnedInit,
+            pinning.approvedAddresses,
+          )
         : await fetchImpl(url, pinnedInit);
     const body = await readBodySize(response, maxBytes);
     const contentType = response.headers.get("content-type") ?? undefined;

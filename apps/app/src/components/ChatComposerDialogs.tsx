@@ -92,6 +92,7 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
     <>
       <FormDialog
         open={props.promptLibraryOpen}
+        openerRef={props.openerRef}
         title={t("promptLibrary")}
         onClose={() => props.setPromptLibraryOpen(false)}
       >
@@ -138,6 +139,7 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
 
       <FormDialog
         open={props.fileLibraryOpen}
+        openerRef={props.openerRef}
         title={t("fileLibrary")}
         onClose={() => props.setFileLibraryOpen(false)}
       >
@@ -172,6 +174,7 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
 
       <FormDialog
         open={props.noteLibraryOpen}
+        openerRef={props.openerRef}
         title={t("insertNote")}
         onClose={() => props.setNoteLibraryOpen(false)}
       >
@@ -220,6 +223,7 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
 
       <FormDialog
         open={props.knowledgeLibraryOpen}
+        openerRef={props.openerRef}
         title={t("composerKnowledgePicker")}
         onClose={() => props.setKnowledgeLibraryOpen(false)}
       >
@@ -298,6 +302,7 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
 
       <FormDialog
         open={props.urlDialogOpen}
+        openerRef={props.openerRef}
         title={t("attachWebpage")}
         onClose={() => props.setUrlDialogOpen(false)}
       >
@@ -370,6 +375,7 @@ export function ChatComposerDialogs(props: ChatComposerDialogsProps) {
 
       <FormDialog
         open={props.imageDialogOpen}
+        openerRef={props.openerRef}
         title={t("generateImage")}
         onClose={() => props.setImageDialogOpen(false)}
       >

@@ -43,6 +43,17 @@ describe("run event route", () => {
     expect(body.error.code).toBe("conflicting_run_event_cursor");
   });
 
+  it("completes authorization before committing SSE headers", async () => {
+    const response = await createRomeoApi(
+      new InMemoryRomeoRepository(),
+    ).request("/api/v1/runs/run_missing/events");
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(body.error.code).toBe("not_found");
+  });
+
   it("closes immediately when a terminal run cursor is already caught up", async () => {
     const repository = await completedRunRepository();
     const api = createRomeoApi(repository);

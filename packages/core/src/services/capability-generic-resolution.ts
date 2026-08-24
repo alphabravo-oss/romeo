@@ -77,6 +77,14 @@ export function resolveGenericCapability(input: {
   }
   if (input.agentVersionDefault?.state === "disabled")
     reasons.push({ code: "agent_version_policy", layer: "agent_version" });
+  const explicitlyEnabled = policies.some(
+    (assignment) =>
+      assignment?.state === "enabled" || assignment?.state === "required",
+  );
+  const defaultDisabled =
+    input.definition.defaultState === "disabled" && !explicitlyEnabled;
+  if (defaultDisabled)
+    reasons.push({ code: "default_disabled", layer: "platform" });
   // State rank, not layer precedence: required > disabled > enabled. A deny at
   // any layer overrides an enable at any other (so a group deny beats an org
   // enable), and a "required" mandate in turn overrides that deny. The
@@ -91,7 +99,8 @@ export function resolveGenericCapability(input: {
     !input.platformDisabled;
   const allowed =
     input.platformDisabled ||
-    (!required && policies.some((item) => item?.state === "disabled"))
+    (!required &&
+      (defaultDisabled || policies.some((item) => item?.state === "disabled")))
       ? "no"
       : "yes";
   const requestedChanges = requestedChangesFor(

@@ -61,7 +61,12 @@ export const WorkspaceSchema = z
   .openapi("Workspace");
 
 export const BootstrapDeploymentSchema = z
-  .strictObject({ tenancyMode: z.enum(["single", "multi"]) })
+  .strictObject({
+    billingEnabled: z.boolean(),
+    malwareScanEnabled: z.boolean(),
+    qdrantConfigured: z.boolean(),
+    tenancyMode: z.enum(["single", "multi"]),
+  })
   .openapi("BootstrapDeployment");
 
 export const BootstrapResponseSchema = z

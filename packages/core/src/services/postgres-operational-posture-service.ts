@@ -49,16 +49,6 @@ const QUERY_PLAN_REVIEW_CHECKS = [
     expectedIndexCount: 1,
   },
   {
-    id: "workflow_definitions_due_schedule",
-    category: "workflow-resume",
-    expectedIndexCount: 1,
-  },
-  {
-    id: "workflow_runs_waiting",
-    category: "workflow-resume",
-    expectedIndexCount: 1,
-  },
-  {
     id: "notification_delivery_retry",
     category: "notification-retry",
     expectedIndexCount: 1,

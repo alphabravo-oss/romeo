@@ -35,7 +35,7 @@ const orgSettingsKeyPrefix = "auth_provider_settings.org.v1:";
 export async function readAuthProviderGlobalSettings(
   repository: RomeoRepository,
 ): Promise<StoredAuthProviderGlobalSettings> {
-  const setting = await repository.getSystemSetting(globalSettingsKey);
+  const setting = await repository.getSystemSetting(globalSettingsKey, null);
   return parseGlobalSettings(setting?.value);
 }
 
@@ -43,7 +43,10 @@ export async function readAuthProviderOrgSettings(
   repository: RomeoRepository,
   orgId: string,
 ): Promise<StoredAuthProviderOrgOverrides> {
-  const setting = await repository.getSystemSetting(orgSettingsKey(orgId));
+  const setting = await repository.getSystemSetting(
+    orgSettingsKey(orgId),
+    orgId,
+  );
   return parseOrgSettings(orgId, setting?.value);
 }
 

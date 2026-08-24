@@ -51,9 +51,6 @@ const knownScopedKeyPositions = new Map<string, readonly number[]>([
   ["usageEvents", [1]],
   ["webhookDeliveries", [1]],
   ["webhooks", [1]],
-  ["workflowRuns", [1]],
-  ["workflowTemplates", [1]],
-  ["workflows", [1]],
   ["workspaceCapabilities", [1]],
   ["workspaceMembers", [1]],
 ]);
@@ -89,15 +86,16 @@ export function installQueryCacheDiagnostics(
 }
 
 export function diagnoseQuery(
-  query: Pick<Query, "meta" | "queryHash" | "queryKey" | "state">,
+  query: Pick<Query, "meta" | "options" | "queryHash" | "queryKey" | "state">,
   signatures: Map<string, string>,
 ): string[] {
   const messages: string[] = [];
   const diagnostic = readDiagnosticMeta(query.meta);
-  const signature = JSON.stringify({
-    key: query.queryKey,
-    resource: diagnostic?.resource,
-  });
+  // Query metadata may be attached after an optimistic setQueryData creates
+  // the cache entry. Hash collision safety is about semantic key identity;
+  // treating that metadata enrichment as a different signature creates a
+  // false alarm for a key that has not changed.
+  const signature = JSON.stringify(query.queryKey);
   const previous = signatures.get(query.queryHash);
   if (previous !== undefined && previous !== signature) {
     messages.push(`key collision for hash ${query.queryHash}`);
@@ -105,7 +103,13 @@ export function diagnoseQuery(
     signatures.set(query.queryHash, signature);
   }
 
-  if (diagnostic !== undefined) {
+  // Disabled query factories deliberately carry empty sentinel dimensions so
+  // hooks remain unconditional. They cannot fetch or cross a tenant boundary,
+  // so reporting them as live scope defects creates noisy false positives and
+  // hides genuinely unsafe enabled queries.
+  const explicitlyDisabled =
+    (query.options as { enabled?: unknown } | undefined)?.enabled === false;
+  if (diagnostic !== undefined && !explicitlyDisabled) {
     for (const [dimension, value] of Object.entries(
       diagnostic.dimensions ?? {},
     )) {

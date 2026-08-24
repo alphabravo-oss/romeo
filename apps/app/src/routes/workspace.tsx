@@ -6,7 +6,7 @@ import Mic from "lucide-react/dist/esm/icons/mic.mjs";
 import Users from "lucide-react/dist/esm/icons/users.mjs";
 import Wrench from "lucide-react/dist/esm/icons/wrench.mjs";
 import { Field, Select } from "@romeo/ui";
-import { Suspense, useState } from "react";
+import { Suspense, useMemo } from "react";
 
 import { ConsoleLayout } from "../components/ConsoleLayout";
 import { resolveAgentStudioTab } from "../components/agent-studio-model";
@@ -16,7 +16,7 @@ import {
   MasterListItem,
   Page,
 } from "../components/console";
-import { useWorkspaceData } from "../components/useWorkspaceData";
+import { useWorkspaceCatalogData } from "../components/useWorkspaceCatalogData";
 import { WorkspaceUserMenu } from "../components/WorkspaceUserMenu";
 import {
   AgentStudioPanel,
@@ -29,35 +29,53 @@ import {
 } from "../components/workspace-console-lazy-panels";
 import {
   localeNamespacesForWorkspaceSection,
+  preloadRouteLocaleNamespaces,
   type MessageKey,
   useLocale,
   useLocaleNamespaces,
 } from "../lib/i18n";
 import { resolveSectionKey } from "../lib/section-routing";
+import { appHref } from "../lib/app-href";
 import { prefetchPrimaryRouteData } from "../lib/route-data";
 import { validatedWorkspaceRouteSearch } from "../lib/route-workspace-selection";
 import adminCss from "../styles/admin.css?url";
 
 export const Route = createFileRoute("/workspace")({
-  loaderDeps: ({ search }) => ({ workspaceId: search.workspace }),
-  loader: ({ cause, context, deps }) =>
-    prefetchPrimaryRouteData(
-      "workspace",
-      context,
-      cause === "preload" ? "intent" : "navigation",
-      deps,
-    ),
+  loaderDeps: ({ search }) => ({
+    section: search.section,
+    workspaceId: search.workspace,
+  }),
+  loader: async ({ abortController, cause, context, deps }) => {
+    const [selection] = await Promise.all([
+      prefetchPrimaryRouteData(
+        "workspace",
+        context,
+        cause === "preload" ? "intent" : "navigation",
+        deps,
+        abortController.signal,
+      ),
+      preloadRouteLocaleNamespaces(
+        context.locale,
+        localeNamespacesForWorkspaceSection(
+          resolveSectionKey(deps.section, META, "agents"),
+        ),
+      ),
+    ]);
+    return selection;
+  },
   head: () => ({
     links: [{ rel: "stylesheet", href: adminCss }],
   }),
   validateSearch: (
     search: Record<string, unknown>,
   ): {
+    agent?: string;
     resource?: string;
     section?: string;
     tab?: string;
     workspace?: string;
   } => ({
+    ...(typeof search.agent === "string" ? { agent: search.agent } : {}),
     ...(typeof search.resource === "string"
       ? { resource: search.resource }
       : {}),
@@ -127,9 +145,28 @@ function WorkspacePage() {
   const { section: sectionParam } = search;
   const section = resolveSectionKey(sectionParam, META, "agents");
   useLocaleNamespaces(localeNamespacesForWorkspaceSection(section));
-  const [agentId, setAgentId] = useState<string>();
-  const data = useWorkspaceData(agentId, { includeDrafts: true });
+  const agentId = search.agent;
+  const data = useWorkspaceCatalogData(agentId, {
+    includeDrafts: true,
+    ...(agentId === undefined ? {} : { requestedAgentId: agentId }),
+  });
   const workspaceId = data.workspace?.id;
+  const navigationGroups = useMemo(
+    () =>
+      GROUPS.map((group) => ({
+        items: group.items.map((item) => ({
+          key: item.key,
+          label: t(item.labelKey),
+          icon: item.icon,
+        })),
+      })),
+    [t],
+  );
+  function setAgentId(nextAgentId: string) {
+    void navigate({
+      search: (previous) => ({ ...previous, agent: nextAgentId }),
+    });
+  }
 
   // Per-agent sections need a chosen model; expose a picker at the top. The
   // agents section has its own list beside the editor, so a second control for
@@ -153,13 +190,7 @@ function WorkspacePage() {
   return (
     <ConsoleLayout
       active={section}
-      groups={GROUPS.map((group) => ({
-        items: group.items.map((item) => ({
-          key: item.key,
-          label: t(item.labelKey),
-          icon: item.icon,
-        })),
-      }))}
+      groups={navigationGroups}
       route="/workspace"
       title={t("workspace")}
       onSectionIntent={preloadWorkspaceSection}
@@ -204,6 +235,12 @@ function WorkspacePage() {
                           : t("agentPublished")
                       }
                       key={agent.id}
+                      href={appHref("/workspace", {
+                        agent: agent.id,
+                        section: "agents",
+                        tab: search.tab,
+                        workspace: workspaceId,
+                      })}
                       meta={agent.baseModelId}
                       onSelect={() => setAgentId(agent.id)}
                       selected={agent.id === data.activeAgent?.id}

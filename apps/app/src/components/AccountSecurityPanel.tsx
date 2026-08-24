@@ -162,7 +162,7 @@ export function AccountSecurityPanel() {
           <div className="grid gap-5">
             {/* Password */}
             <div className="grid gap-2">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <div className="text-sm font-medium">
                     {t("localPassword")}
@@ -181,7 +181,7 @@ export function AccountSecurityPanel() {
 
             {/* MFA */}
             <div className="grid gap-2 border-t border-border pt-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <div className="text-sm font-medium">{t("twoFactor")}</div>
                   <div className="text-xs text-muted">

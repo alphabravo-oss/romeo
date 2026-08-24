@@ -1,11 +1,57 @@
 import { ProviderCircuitBreaker } from "@romeo/ai-runtime";
+import { ProviderOperationalSummarySchema } from "@romeo/contracts";
 import { describe, expect, it } from "vitest";
 
 import { InMemoryRomeoRepository } from "../repositories/in-memory";
+import { capabilityIds } from "./capability-definition-registry";
+import { capabilityResolutionUsageStore } from "./capability-resolution-observability";
 import { createProviderRoutingPolicy } from "./provider-routing";
 import { summarizeProviderOperations } from "./provider-operational-summary";
 
 describe("provider operational summary", () => {
+  it("keeps operational telemetry valid for every canonical capability", async () => {
+    capabilityResolutionUsageStore.reset();
+    try {
+      for (const capabilityId of capabilityIds) {
+        capabilityResolutionUsageStore.record({
+          capabilityId,
+          status: "disabled",
+          dimensions: {
+            installed: "unknown",
+            entitled: "unknown",
+            available: "unknown",
+            allowed: "no",
+            capable: "unknown",
+            selected: "no",
+          },
+          effective: {},
+          requestedChanges: [],
+          reasons: [],
+          assignmentVersions: [],
+          registryVersion: "capability-registry.v1",
+          resolvedAt: "2026-08-24T00:00:00.000Z",
+        });
+      }
+      const summary = await summarizeProviderOperations({
+        circuitBreaker: new ProviderCircuitBreaker(),
+        options: {},
+        orgId: "org_default",
+        repository: new InMemoryRomeoRepository(),
+        routingPolicy: createProviderRoutingPolicy({}),
+      });
+
+      expect(ProviderOperationalSummarySchema.parse(summary)).toMatchObject({
+        runtime: {
+          capabilityAssignments: {
+            total: capabilityIds.length,
+          },
+        },
+      });
+    } finally {
+      capabilityResolutionUsageStore.reset();
+    }
+  });
+
   it("summarizes provider routing, circuit, and fallback state without provider endpoints", async () => {
     const repository = new InMemoryRomeoRepository();
     const circuitBreaker = new ProviderCircuitBreaker({

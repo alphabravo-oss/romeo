@@ -2,7 +2,7 @@ import { Button, Input, NativeSelect } from "@romeo/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
 
-import { createKnowledgeBaseMutationOptions } from "../features";
+import { createKnowledgeBaseMutationOptions } from "../features/knowledge";
 import { useLocale } from "../lib/i18n";
 import { toast } from "../lib/toast";
 import { FormDialog } from "./FormDialog";

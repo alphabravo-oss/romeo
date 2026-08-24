@@ -5,10 +5,7 @@ import type {
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
 import * as appQueryKeys from "../../lib/app-query-keys";
-import {
-  invalidateCachedResourceExactly,
-  serverMutationOptions,
-} from "../../lib/server-mutation-options";
+import { serverMutationOptions } from "../../lib/server-mutation-options";
 import {
   bulkDisableServiceAccounts,
   bulkRevokeApiKeys,
@@ -18,6 +15,7 @@ import {
   disableServiceAccount,
   revokeApiKey,
 } from "./mutations";
+import { invalidateInventoriedTablePages } from "../../lib/inventoried-table-cache";
 
 type CachedList<T> = T[] | undefined;
 
@@ -98,7 +96,7 @@ export function createApiKeyMutationOptions() {
     mutationFn: createApiKey,
     reconcile: async (client, created) => {
       upsertById(client, appQueryKeys.apiKeys(), created.apiKey);
-      await invalidateCachedResourceExactly(client, appQueryKeys.tablePages());
+      await invalidateInventoriedTablePages(client, { resource: "api_keys" });
     },
   });
 }
@@ -124,7 +122,7 @@ export function revokeApiKeyMutationOptions() {
     },
     reconcile: async (client, apiKey) => {
       upsertById(client, queryKey, apiKey);
-      await invalidateCachedResourceExactly(client, appQueryKeys.tablePages());
+      await invalidateInventoriedTablePages(client, { resource: "api_keys" });
     },
   });
 }
@@ -156,7 +154,7 @@ export function bulkRevokeApiKeysMutationOptions() {
         result.results,
         revokedNow,
       );
-      await invalidateCachedResourceExactly(client, appQueryKeys.tablePages());
+      await invalidateInventoriedTablePages(client, { resource: "api_keys" });
     },
     invalidations: () => [{ exact: true, queryKey }],
   });
@@ -166,8 +164,12 @@ export function createServiceAccountMutationOptions() {
   return serverMutationOptions({
     resource: "serviceAccount.create",
     mutationFn: createServiceAccount,
-    reconcile: (client, account) =>
-      upsertById(client, appQueryKeys.serviceAccounts(), account),
+    reconcile: async (client, account) => {
+      upsertById(client, appQueryKeys.serviceAccounts(), account);
+      await invalidateInventoriedTablePages(client, {
+        resource: "service_accounts",
+      });
+    },
   });
 }
 
@@ -175,8 +177,10 @@ export function createServiceAccountApiKeyMutationOptions() {
   return serverMutationOptions({
     resource: "serviceAccount.apiKey.create",
     mutationFn: createServiceAccountApiKey,
-    reconcile: (client, created) =>
-      upsertById(client, appQueryKeys.apiKeys(), created.apiKey),
+    reconcile: async (client, created) => {
+      upsertById(client, appQueryKeys.apiKeys(), created.apiKey);
+      await invalidateInventoriedTablePages(client, { resource: "api_keys" });
+    },
   });
 }
 
@@ -199,7 +203,12 @@ export function disableServiceAccountMutationOptions() {
         markById(client, queryKey, new Set([serviceAccountId]), disabledNow),
       rollback: (client, snapshot) => restoreList(client, queryKey, snapshot),
     },
-    reconcile: (client, account) => upsertById(client, queryKey, account),
+    reconcile: async (client, account) => {
+      upsertById(client, queryKey, account);
+      await invalidateInventoriedTablePages(client, {
+        resource: "service_accounts",
+      });
+    },
   });
 }
 
@@ -222,14 +231,18 @@ export function bulkDisableServiceAccountsMutationOptions() {
         markById(client, queryKey, new Set(serviceAccountIds), disabledNow),
       rollback: (client, snapshot) => restoreList(client, queryKey, snapshot),
     },
-    reconcile: (client, result, _ids, snapshot) =>
+    reconcile: async (client, result, _ids, snapshot) => {
       reconcileBulkResult(
         client,
         queryKey,
         snapshot,
         result.results,
         disabledNow,
-      ),
+      );
+      await invalidateInventoriedTablePages(client, {
+        resource: "service_accounts",
+      });
+    },
     invalidations: () => [{ exact: true, queryKey }],
   });
 }

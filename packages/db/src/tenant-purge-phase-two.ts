@@ -6,6 +6,8 @@ import {
   chatTags,
   chats,
   collaborationChannels,
+  contentPolicyApprovals,
+  contentPolicyDecisions,
   dataConnectors,
   dataConnectorSyncs,
   delegatedOAuthConnections,
@@ -44,6 +46,20 @@ export async function purgeTenantPhaseTwo({
   database,
   orgId,
 }: TenantPurgeState): Promise<void> {
+  await deleteWhere(
+    database,
+    counts,
+    "content_policy_approvals",
+    contentPolicyApprovals,
+    eq(contentPolicyApprovals.orgId, orgId),
+  );
+  await deleteWhere(
+    database,
+    counts,
+    "content_policy_decisions",
+    contentPolicyDecisions,
+    eq(contentPolicyDecisions.orgId, orgId),
+  );
   await deleteWhere(database, counts, "runs", runs, eq(runs.orgId, orgId));
   await deleteWhere(
     database,

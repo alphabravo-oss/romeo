@@ -29,12 +29,16 @@ import type {
   TrustSiemExportCheckpointData,
 } from "@romeo/api-client/generated/sdk";
 
-async function unwrap<T>(work: () => Promise<{ data: { data: T } }>): Promise<T> {
+async function unwrap<T>(
+  work: () => Promise<{ data: { data: T } }>,
+): Promise<T> {
   configureBrowserApiClients();
   return (await work()).data.data;
 }
 
-export function evaluateSandboxPosture(body: ComputeSandboxPostureData["body"]) {
+export function evaluateSandboxPosture(
+  body: ComputeSandboxPostureData["body"],
+) {
   return unwrap(() => computeSandboxPosture({ body, throwOnError: true }));
 }
 
@@ -86,7 +90,9 @@ export function previewCryptoShred(body: TrustCryptoShredPreviewData["body"]) {
   return unwrap(() => trustCryptoShredPreview({ body, throwOnError: true }));
 }
 
-export function authorizeBreakGlass(body: TrustBreakGlassAuthorizeData["body"]) {
+export function authorizeBreakGlass(
+  body: TrustBreakGlassAuthorizeData["body"],
+) {
   return unwrap(() => trustBreakGlassAuthorize({ body, throwOnError: true }));
 }
 
@@ -94,6 +100,8 @@ export function sealAuditSegment(body: TrustAuditSegmentsSealData["body"]) {
   return unwrap(() => trustAuditSegmentsSeal({ body, throwOnError: true }));
 }
 
-export function checkpointSiemExport(body: TrustSiemExportCheckpointData["body"]) {
+export function checkpointSiemExport(
+  body: TrustSiemExportCheckpointData["body"],
+) {
   return unwrap(() => trustSiemExportCheckpoint({ body, throwOnError: true }));
 }

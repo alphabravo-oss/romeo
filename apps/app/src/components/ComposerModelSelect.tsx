@@ -5,7 +5,11 @@ import Search from "lucide-react/dist/esm/icons/search.mjs";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { deleteFavorite, favoriteResource, listFavorites } from "../features";
+import {
+  deleteFavorite,
+  favoriteResource,
+  listFavorites,
+} from "../features/collaboration";
 import type { AgentGalleryItem } from "../features/managed-models";
 import type { BaseModel, Provider } from "../features/types";
 import { useLocale } from "../lib/i18n";
@@ -77,18 +81,18 @@ export function ComposerModelSelect({
     filteredModels,
     readyCustomModels,
   } = useComposerModelOptions({
-      models,
-      providers,
-      customModels,
-      query,
-      capabilityFilter,
-      pinnedIds,
-      requiresReasoning,
-      requiresVision,
-      requiresTools,
-      requiresLocalOnly,
-      minContextWindow,
-    });
+    models,
+    providers,
+    customModels,
+    query,
+    capabilityFilter,
+    pinnedIds,
+    requiresReasoning,
+    requiresVision,
+    ...(requiresTools === undefined ? {} : { requiresTools }),
+    ...(requiresLocalOnly === undefined ? {} : { requiresLocalOnly }),
+    ...(minContextWindow === undefined ? {} : { minContextWindow }),
+  });
   const pickerRows = useMemo(
     () =>
       modelPickerRows(
@@ -150,7 +154,7 @@ export function ComposerModelSelect({
     setMenuMaxHeight(Math.max(160, Math.min(320, Math.floor(available))));
   }
 
-  function handleModelMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+  function handleModelMenuKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
       closeModelMenu({ restoreFocus: true });
@@ -280,12 +284,11 @@ export function ComposerModelSelect({
       {open ? (
         // Keyboard handling belongs on the composite dialog so arrows work
         // consistently from its search, filters, and virtualized listbox.
-        // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
-        <div
+        <dialog
+          aria-modal="false"
           className="rm-composer-model-menu rm-model-menu rm-chat-model-menu"
           aria-label={t("chooseModel")}
           onKeyDown={handleModelMenuKeyDown}
-          role="dialog"
           tabIndex={-1}
           style={
             menuMaxHeight === undefined
@@ -417,7 +420,7 @@ export function ComposerModelSelect({
               </div>
             )}
           </div>
-        </div>
+        </dialog>
       ) : null}
     </div>
   );

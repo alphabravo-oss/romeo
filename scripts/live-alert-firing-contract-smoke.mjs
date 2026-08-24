@@ -31,6 +31,7 @@ const requiredAlerts = [
   { name: "RomeoBackgroundJobQueuedLag", category: "queue" },
   { name: "RomeoBackgroundJobDeadLetters", category: "queue" },
   { name: "RomeoPostgresBackupJobFailed", category: "backup" },
+  { name: "RomeoPostgresBackupMissingOrStale", category: "backup" },
 ];
 let serverMode = "passing";
 

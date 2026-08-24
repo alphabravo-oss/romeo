@@ -3,7 +3,6 @@ import {
   knowledgeCreateUpload,
   knowledgeExtractSource,
   knowledgeIndexEmbeddings,
-  knowledgeListSources,
   type CreateKnowledgeUploadRequest,
   type IndexKnowledgeEmbeddingsRequest,
 } from "@romeo/api-client/generated/sdk";
@@ -15,8 +14,12 @@ import { numberFlag, optionalIntegerFlag, requiredFlag } from "./command-flags";
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
 import { runKnowledgeExtractionWorker } from "./knowledge-worker";
+import { brokerKnowledgeWorkerClient } from "./broker-worker-clients";
+import type { CommandContext } from "./commands";
 
 interface KnowledgeCommandContext {
+  baseUrl?: string;
+  env?: NodeJS.ProcessEnv;
   fetchImpl: typeof fetch;
   generatedClient?: GeneratedApiClient;
   io: CliIo;
@@ -106,19 +109,21 @@ function knowledgeExtractionWorker(
     "max-sources",
   );
   return runKnowledgeExtractionWorker({
-    client: {
-      knowledge: {
-        extractUpload: (knowledgeBaseId, sourceId) =>
-          extractUpload(context, knowledgeBaseId, sourceId),
-        listSources: (knowledgeBaseId) => listSources(context, knowledgeBaseId),
-      },
-    },
+    client: brokerKnowledgeWorkerClient(requiredWorkerContext(context)),
     intervalMs,
     io: context.io,
-    knowledgeBaseId: requiredFlag(context.parsed, "knowledge-base", "kb"),
+    leaseSeconds: optionalIntegerFlag(context.parsed, "lease-seconds") ?? 300,
     ...(maxIterations === undefined ? {} : { maxIterations }),
     ...(maxSourcesPerIteration === undefined ? {} : { maxSourcesPerIteration }),
   });
+}
+
+function requiredWorkerContext(
+  context: KnowledgeCommandContext,
+): CommandContext {
+  if (context.baseUrl === undefined)
+    throw new Error("Worker broker base URL is unavailable.");
+  return context as CommandContext;
 }
 
 async function createUpload(
@@ -159,19 +164,6 @@ async function extractUpload(
     await knowledgeExtractSource({
       client: generatedClient(context),
       path: { knowledgeBaseId, sourceId },
-      throwOnError: true,
-    })
-  ).data.data;
-}
-
-async function listSources(
-  context: KnowledgeCommandContext,
-  knowledgeBaseId: string,
-) {
-  return (
-    await knowledgeListSources({
-      client: generatedClient(context),
-      path: { knowledgeBaseId },
       throwOnError: true,
     })
   ).data.data;

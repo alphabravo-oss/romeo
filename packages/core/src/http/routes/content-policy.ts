@@ -59,18 +59,22 @@ export function registerContentPolicyRoutes(app: RomeoApi): void {
 
   app.openapi(createContentPolicyVersionRoute, async (context) => {
     const body = context.req.valid("json");
-    const version = await context.get("services").contentPolicyVersions.createDraft({
-      subject: context.get("subject"),
-      detectors: body.detectors,
-      ...(body.approvalRequired === undefined
-        ? {}
-        : { approvalRequired: body.approvalRequired }),
-      ...(body.approvalTtlSeconds === undefined
-        ? {}
-        : { approvalTtlSeconds: body.approvalTtlSeconds }),
-    });
+    const version = await context
+      .get("services")
+      .contentPolicyVersions.createDraft({
+        subject: context.get("subject"),
+        detectors: body.detectors,
+        ...(body.approvalRequired === undefined
+          ? {}
+          : { approvalRequired: body.approvalRequired }),
+        ...(body.approvalTtlSeconds === undefined
+          ? {}
+          : { approvalTtlSeconds: body.approvalTtlSeconds }),
+      });
     return context.json({
-      data: context.get("services").contentPolicyVersions.publicVersion(version),
+      data: context
+        .get("services")
+        .contentPolicyVersions.publicVersion(version),
     });
   });
 
@@ -87,23 +91,31 @@ export function registerContentPolicyRoutes(app: RomeoApi): void {
 
   app.openapi(publishContentPolicyVersionRoute, async (context) => {
     const { versionId } = context.req.valid("param");
-    const version = await context.get("services").contentPolicyVersions.publish({
-      subject: context.get("subject"),
-      versionId,
-    });
+    const version = await context
+      .get("services")
+      .contentPolicyVersions.publish({
+        subject: context.get("subject"),
+        versionId,
+      });
     return context.json({
-      data: context.get("services").contentPolicyVersions.publicVersion(version),
+      data: context
+        .get("services")
+        .contentPolicyVersions.publicVersion(version),
     });
   });
 
   app.openapi(rollbackContentPolicyRoute, async (context) => {
     const body = context.req.valid("json");
-    const version = await context.get("services").contentPolicyVersions.rollback({
-      subject: context.get("subject"),
-      ...(body.versionId === undefined ? {} : { versionId: body.versionId }),
-    });
+    const version = await context
+      .get("services")
+      .contentPolicyVersions.rollback({
+        subject: context.get("subject"),
+        ...(body.versionId === undefined ? {} : { versionId: body.versionId }),
+      });
     return context.json({
-      data: context.get("services").contentPolicyVersions.publicVersion(version),
+      data: context
+        .get("services")
+        .contentPolicyVersions.publicVersion(version),
     });
   });
 

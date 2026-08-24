@@ -22,8 +22,9 @@ export function authorizeBreakGlass(input: {
 }):
   | {
       outcome: "accepted";
-      alerted: true;
+      alerted: false;
       expiresAt: string;
+      preview: true;
       ttlMinutes: number;
     }
   | { outcome: "denied"; code: BreakGlassDenial } {
@@ -44,11 +45,12 @@ export function authorizeBreakGlass(input: {
   )
     return { outcome: "denied", code: "break_glass_mandatory_control" };
   return {
-    alerted: true,
+    alerted: false,
     expiresAt: new Date(
       Date.parse(input.now) + input.ttlMinutes * 60_000,
     ).toISOString(),
     outcome: "accepted",
+    preview: true,
     ttlMinutes: input.ttlMinutes,
   };
 }

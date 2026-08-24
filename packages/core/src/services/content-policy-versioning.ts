@@ -1,4 +1,5 @@
 import type {
+  ContentPolicyDetection,
   ContentPolicyDetectorActions,
   ContentPolicyEvaluation,
 } from "./content-policy-service";
@@ -37,7 +38,11 @@ export interface SanitizedPolicyDecision {
   versionId: string;
   surface: string;
   action: ContentPolicyEvaluation["action"];
-  detectors: Array<{ code: string; count: number; action: string }>;
+  detectors: Array<{
+    action: ContentPolicyDetection["action"];
+    code: ContentPolicyDetection["code"];
+    count: number;
+  }>;
   decidedAt: string;
 }
 
@@ -104,8 +109,13 @@ export function publishPolicyVersion(input: {
 }):
   | { outcome: "published"; store: ContentPolicyVersionStore }
   | { outcome: "denied"; code: "content_policy_version_not_draft" } {
-  const current = input.store.versions.find((item) => item.id === input.versionId);
-  if (current === undefined || (current.state !== "draft" && current.state !== "staged"))
+  const current = input.store.versions.find(
+    (item) => item.id === input.versionId,
+  );
+  if (
+    current === undefined ||
+    (current.state !== "draft" && current.state !== "staged")
+  )
     return { outcome: "denied", code: "content_policy_version_not_draft" };
   const versions = input.store.versions.map((item) => {
     if (item.id === input.versionId) {
@@ -116,7 +126,8 @@ export function publishPolicyVersion(input: {
         publishedBy: input.actorId,
       };
     }
-    if (item.state === "published") return { ...item, state: "retired" as const };
+    if (item.state === "published")
+      return { ...item, state: "retired" as const };
     return item;
   });
   return {

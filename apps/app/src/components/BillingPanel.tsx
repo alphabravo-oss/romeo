@@ -31,7 +31,7 @@ import {
   type BillingQuotaMetric,
 } from "./billing-plan-payload";
 import { useConfirm } from "./ConfirmDialog";
-import { Tabs } from "./Tabs";
+import { Tabs, type RoutedTabsState } from "./Tabs";
 
 const templateCol = createColumnHelper<BillingPlanQuotaTemplate>();
 
@@ -59,7 +59,7 @@ const eventTypes: ExternalBillingEventType[] = [
   "subscription.updated",
 ];
 
-export function BillingPanel() {
+export function BillingPanel({ tabState }: { tabState?: RoutedTabsState }) {
   const { t } = useLocale();
   const required = ({ value }: { value: string }) =>
     !value?.trim() ? t("required") : undefined;
@@ -113,6 +113,8 @@ export function BillingPanel() {
       </div>
 
       <Tabs
+        activeId={tabState?.activeId}
+        onActiveIdChange={tabState?.onActiveIdChange}
         tabs={[
           {
             id: "plan",

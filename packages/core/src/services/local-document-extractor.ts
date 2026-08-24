@@ -44,6 +44,7 @@ export class LocalDocumentTextExtractor implements KnowledgeBinaryExtractor {
     bytes: Uint8Array;
     fileName: string;
     mimeType: string;
+    signal?: AbortSignal;
   }): Promise<ExtractedKnowledgeText> {
     const mimeType = normalizeMimeType(input.mimeType);
     if (ocrImageMimeTypes.has(mimeType)) return this.ocrExtract(input);
@@ -68,6 +69,7 @@ export class LocalDocumentTextExtractor implements KnowledgeBinaryExtractor {
     bytes: Uint8Array;
     fileName: string;
     mimeType: string;
+    signal?: AbortSignal;
   }): Promise<ExtractedKnowledgeText> {
     const result = await this.ocr.recognize(input);
     return {
@@ -89,6 +91,7 @@ export class LocalDocumentTextExtractor implements KnowledgeBinaryExtractor {
       bytes: Uint8Array;
       fileName: string;
       mimeType: string;
+      signal?: AbortSignal;
     },
     primaryError: unknown,
   ): Promise<ExtractedKnowledgeText> {

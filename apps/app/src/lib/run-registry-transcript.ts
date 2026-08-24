@@ -4,7 +4,10 @@ import type { RunEvent } from "../features/runs";
 import type { Message } from "../features/types";
 import type { MessageKey } from "./i18n";
 import { providerRunFailure } from "./run-registry-events";
-import { reconcileAssistantTranscript, setAssistantRunError } from "./run-registry-messages";
+import {
+  reconcileAssistantTranscript,
+  setAssistantRunError,
+} from "./run-registry-messages";
 import type { TrackedRun } from "./run-registry-types";
 
 export function markAssistantRunError(

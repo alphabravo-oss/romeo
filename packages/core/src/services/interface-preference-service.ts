@@ -45,8 +45,12 @@ export class InterfacePreferenceService {
 
   async get(subject: AuthSubject): Promise<InterfacePreferences> {
     const value =
-      (await this.repository.getSystemSetting(preferenceKey(subject)))?.value ??
-      {};
+      (
+        await this.repository.getSystemSetting(
+          preferenceKey(subject),
+          subject.orgId,
+        )
+      )?.value ?? {};
     return normalize(value);
   }
 
@@ -55,11 +59,14 @@ export class InterfacePreferenceService {
     input: Partial<InterfacePreferences>,
   ): Promise<InterfacePreferences> {
     const data = normalize({ ...(await this.get(subject)), ...input });
-    await this.repository.upsertSystemSetting({
-      key: preferenceKey(subject),
-      value: { ...data },
-      updatedAt: new Date().toISOString(),
-    });
+    await this.repository.upsertSystemSetting(
+      {
+        key: preferenceKey(subject),
+        value: { ...data },
+        updatedAt: new Date().toISOString(),
+      },
+      subject.orgId,
+    );
     return data;
   }
 }

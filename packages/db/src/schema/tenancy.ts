@@ -37,6 +37,10 @@ export const workspaces = pgTable(
       .defaultNow(),
   },
   (table) => ({
+    workspaceOrgIdUnique: uniqueIndex("workspaces_org_id_id_uidx").on(
+      table.orgId,
+      table.id,
+    ),
     workspaceOrgSlugIdx: uniqueIndex("workspace_org_slug_idx").on(
       table.orgId,
       table.slug,

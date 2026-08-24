@@ -121,6 +121,7 @@ export interface FileMalwareScanner {
     bytes: Uint8Array;
     fileName: string;
     mimeType: string;
+    signal?: AbortSignal;
   }): Promise<{ verdict: "clean" | "malicious" | "unavailable" }>;
 }
 
@@ -128,7 +129,12 @@ export type FileMalwareScanPolicy = "off" | "required";
 
 export async function assertFileMalwareScanClean(
   scanning: { policy: FileMalwareScanPolicy; scanner?: FileMalwareScanner },
-  input: { bytes: Uint8Array; fileName: string; mimeType: string },
+  input: {
+    bytes: Uint8Array;
+    fileName: string;
+    mimeType: string;
+    signal?: AbortSignal;
+  },
 ): Promise<void> {
   if (scanning.policy === "off") return;
   const scanner = scanning.scanner;
@@ -138,7 +144,8 @@ export async function assertFileMalwareScanClean(
   let verdict: "clean" | "malicious" | "unavailable";
   try {
     verdict = (await scanner.scan(input)).verdict;
-  } catch {
+  } catch (error) {
+    if (input.signal?.aborted === true) throw error;
     verdict = "unavailable";
   }
   if (verdict === "clean") return;

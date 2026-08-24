@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import {
   authenticationSecurity,
   dataEnvelope,
+  errorResponse,
   jsonResponse,
   standardErrorResponses,
 } from "./common";
@@ -52,7 +53,7 @@ export const PublicSpeechArtifactSchema = z
   .openapi("PublicSpeechArtifact");
 export const TranscriptionResultSchema = z
   .strictObject({
-    text: z.string(),
+    text: z.string().max(200_000),
     language: z.string().optional(),
     durationMs: z.number().int().nonnegative().optional(),
   })
@@ -76,7 +77,12 @@ export const TranscribeVoiceSchema = z
   })
   .openapi("TranscribeVoiceRequest");
 const meta = { tags: ["Voices"], security: authenticationSecurity };
-const errors = standardErrorResponses;
+const errors = {
+  ...standardErrorResponses,
+  502: errorResponse,
+  503: errorResponse,
+  504: errorResponse,
+} as const;
 const body = <T extends z.ZodType>(schema: T) => ({
   required: true as const,
   content: { "application/json": { schema } },

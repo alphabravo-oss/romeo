@@ -66,7 +66,7 @@ export default defineConfig(({ command, mode }) => {
       tailwindcss(),
       tanstackStart({ srcDirectory: "src" }),
       viteReact(),
-      nitro(),
+      nitro({ plugins: ["./src/server/plugins/romeo-runtime-shutdown.ts"] }),
     ],
   };
 });

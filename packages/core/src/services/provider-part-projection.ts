@@ -62,14 +62,26 @@ export function authorizeMediaQuota(input: {
       dimension: "counts" | "bytes" | "pixels" | "duration" | "pages";
     } {
   if (input.counts > input.limits.maxCounts)
-    return { outcome: "denied", code: "media_quota_exceeded", dimension: "counts" };
+    return {
+      outcome: "denied",
+      code: "media_quota_exceeded",
+      dimension: "counts",
+    };
   if (input.bytes > input.limits.maxBytes)
-    return { outcome: "denied", code: "media_quota_exceeded", dimension: "bytes" };
+    return {
+      outcome: "denied",
+      code: "media_quota_exceeded",
+      dimension: "bytes",
+    };
   if (
     input.limits.maxPixels !== undefined &&
     (input.pixels ?? 0) > input.limits.maxPixels
   )
-    return { outcome: "denied", code: "media_quota_exceeded", dimension: "pixels" };
+    return {
+      outcome: "denied",
+      code: "media_quota_exceeded",
+      dimension: "pixels",
+    };
   if (
     input.limits.maxDurationSeconds !== undefined &&
     (input.durationSeconds ?? 0) > input.limits.maxDurationSeconds
@@ -83,7 +95,11 @@ export function authorizeMediaQuota(input: {
     input.limits.maxPages !== undefined &&
     (input.pages ?? 0) > input.limits.maxPages
   )
-    return { outcome: "denied", code: "media_quota_exceeded", dimension: "pages" };
+    return {
+      outcome: "denied",
+      code: "media_quota_exceeded",
+      dimension: "pages",
+    };
   return { outcome: "accepted" };
 }
 

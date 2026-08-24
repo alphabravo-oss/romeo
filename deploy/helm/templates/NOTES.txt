@@ -2,7 +2,7 @@ Romeo has been rendered with Postgres mode: {{ .Values.postgres.mode }}.
 
 Required before production traffic:
 - Provide DATABASE_URL through `postgres.databaseUrlSecret` or `postgres.cloudnativepg.databaseUrlSecret`.
-- Provide SESSION_SECRET, LOCAL_AUTH_SECRET_ENCRYPTION_KEY, MANAGED_SECRET_ENCRYPTION_KEY when using romeo-secret refs, and WEBHOOK_SIGNING_KEY through `secrets.existingSecret` or `secrets.create`. Use the matching `*_PREVIOUS` keys only during staged rotation/rewrap windows.
+- Provide SESSION_SECRET, LOCAL_AUTH_SECRET_ENCRYPTION_KEY, MANAGED_SECRET_ENCRYPTION_KEY, WEBHOOK_SIGNING_KEY, and DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY through `secrets.existingSecret`. Use matching `*_PREVIOUS` keys only during a staged read-old/write-new rotation, and remove them only after zero previous/legacy key-version usage is proven.
 - Run the migration job before application readiness cutover.
 - Run `pnpm validate:postgres` against the same DATABASE_URL after migration.
 

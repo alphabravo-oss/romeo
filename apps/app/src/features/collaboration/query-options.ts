@@ -82,7 +82,10 @@ export function chatSharesQueryOptions(
   enabled = chatId !== undefined,
 ) {
   return queryOptions({
-    ...serverQueryPolicy("interactive", "chatShares", { chatId, purpose }),
+    ...serverQueryPolicy("interactive", "chatShares", {
+      chatId,
+      ...(purpose === undefined ? {} : { purpose }),
+    }),
     queryKey: appQueryKeys.chatShares(chatId, purpose),
     queryFn: ({ signal }) =>
       abortableQuery(signal, () => listChatShares(chatId!)),

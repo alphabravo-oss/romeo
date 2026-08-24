@@ -66,6 +66,7 @@ describe("directory sync mutation policy", () => {
     const usersKey = appQueryKeys.users({
       direction: "asc",
       page: 0,
+      pageSize: 50,
       query: "",
       sort: "name",
     });
@@ -90,12 +91,14 @@ describe("directory sync mutation policy", () => {
     const usersFirst = appQueryKeys.users({
       direction: "asc",
       page: 0,
+      pageSize: 50,
       query: "",
       sort: "name",
     });
     const usersFiltered = appQueryKeys.users({
       direction: "desc",
       page: 2,
+      pageSize: 50,
       query: "admin",
       sort: "role",
     });
@@ -136,6 +139,7 @@ describe("directory sync mutation policy", () => {
     const usersKey = appQueryKeys.users({
       direction: "asc",
       page: 0,
+      pageSize: 50,
       query: "",
       sort: "name",
     });

@@ -22,13 +22,13 @@ spec:
             app.kubernetes.io/component: postgres-backup
         spec:
           restartPolicy: Never
-          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          serviceAccountName: {{ include "romeo.identityServiceAccountName" (dict "root" . "identity" (dict "serviceAccount" .Values.backup.serviceAccount) "component" "postgres-backup") }}
           securityContext:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: postgres-backup
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["/bin/sh", "-lc"]
               args:
                 - |
@@ -36,7 +36,10 @@ spec:
                   pnpm backup:postgres -- \
                     --output /tmp/romeo-postgres.dump \
                     --manifest-output /tmp/romeo-postgres.dump.manifest.json \
+                    --status-output /tmp/romeo-postgres.dump.status.json \
+                    --durability-mode verified-upload \
                     --retention-days "${POSTGRES_BACKUP_RETENTION_DAYS:-30}" \
+                    --policy-max-age-seconds "${POSTGRES_BACKUP_POLICY_MAX_AGE_SECONDS:-3600}" \
                     --upload-timeout-ms "${POSTGRES_BACKUP_UPLOAD_TIMEOUT_MS:-30000}"
               env:
                 {{- include "romeo.nodeWritableEnv" . | nindent 16 }}
@@ -49,20 +52,43 @@ spec:
                   value: {{ .Values.backup.retentionDays | quote }}
                 - name: POSTGRES_BACKUP_UPLOAD_TIMEOUT_MS
                   value: {{ .Values.backup.uploadTimeoutMs | quote }}
-                {{- if .Values.backup.uploadUrlSecret.name }}
+                - name: POSTGRES_BACKUP_POLICY_MAX_AGE_SECONDS
+                  value: {{ .Values.backup.policyMaxAgeSeconds | quote }}
                 - name: POSTGRES_BACKUP_UPLOAD_URL
                   valueFrom:
                     secretKeyRef:
                       name: {{ .Values.backup.uploadUrlSecret.name }}
                       key: {{ .Values.backup.uploadUrlSecret.key }}
-                {{- end }}
-                {{- if .Values.backup.manifestUploadUrlSecret.name }}
+                - name: POSTGRES_BACKUP_READBACK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.readbackUrlSecret.name }}
+                      key: {{ .Values.backup.readbackUrlSecret.key }}
                 - name: POSTGRES_BACKUP_MANIFEST_UPLOAD_URL
                   valueFrom:
                     secretKeyRef:
                       name: {{ .Values.backup.manifestUploadUrlSecret.name }}
                       key: {{ .Values.backup.manifestUploadUrlSecret.key }}
-                {{- end }}
+                - name: POSTGRES_BACKUP_MANIFEST_READBACK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.manifestReadbackUrlSecret.name }}
+                      key: {{ .Values.backup.manifestReadbackUrlSecret.key }}
+                - name: POSTGRES_BACKUP_STATUS_UPLOAD_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.statusUploadUrlSecret.name }}
+                      key: {{ .Values.backup.statusUploadUrlSecret.key }}
+                - name: POSTGRES_BACKUP_STATUS_READBACK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.statusReadbackUrlSecret.name }}
+                      key: {{ .Values.backup.statusReadbackUrlSecret.key }}
+                - name: POSTGRES_BACKUP_POLICY_READBACK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.policyReadbackUrlSecret.name }}
+                      key: {{ .Values.backup.policyReadbackUrlSecret.key }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
               volumeMounts:

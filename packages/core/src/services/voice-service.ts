@@ -19,7 +19,7 @@ import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import { authorizeVoiceProcessing } from "./capability-consumer-enforcement";
-import type { CapabilityService } from "./capability-resolver";
+import { CapabilityService } from "./capability-resolver";
 import { enforceContentPolicyText } from "./content-policy-service";
 import { recordSubjectUsage, updateRecordedUsage } from "./record-usage";
 import {
@@ -30,7 +30,6 @@ import {
 } from "./voice-artifact-metadata";
 import {
   auditVoiceProfile,
-  boundedVoiceText,
   createVoiceUseGrant,
   decodeBoundedBase64Audio,
   findActiveVoiceArtifactEvent,
@@ -38,11 +37,11 @@ import {
   publicVoiceArtifact,
   safeAudioContentType,
   safeTranscriptionContentType,
-  voiceCatalogKey,
-  voiceProfileFromProvider,
 } from "./voice-service-helpers";
 import { listVoiceProfilesWithDependencies } from "./voice-catalog-summary";
+import { syncVoiceCatalog } from "./voice-catalog-sync";
 import { VoiceAccess } from "./voice-access";
+import { voiceProviderApiError } from "./voice-provider-error";
 
 export type {
   PublicSpeechArtifact,
@@ -57,7 +56,9 @@ export class VoiceService {
     private readonly repository: RomeoRepository,
     private readonly voiceProvider: VoiceProvider = disabledVoiceProvider,
     private readonly objectStore: ObjectStore = memoryObjectStore,
-    private readonly capabilities?: CapabilityService,
+    private readonly capabilities: CapabilityService = new CapabilityService(
+      repository,
+    ),
   ) {
     this.access = new VoiceAccess(repository);
   }
@@ -66,69 +67,12 @@ export class VoiceService {
   }
 
   async syncCatalog(subject: AuthSubject) {
-    assertScope(subject, "voices:manage");
-    await authorizeVoiceProcessing(this.capabilities, subject);
-    await assertAbuseControlsAllow(this.repository, subject, {
-      action: "voice.request",
-      workerClass: "voice.catalog_sync",
+    return syncVoiceCatalog({
+      repository: this.repository,
+      voiceProvider: this.voiceProvider,
+      capabilities: this.capabilities,
+      subject,
     });
-    const catalog = await this.voiceProvider.listVoices(subject.orgId);
-    if (catalog.length > 100)
-      throw new ApiError(
-        "voice_catalog_too_large",
-        "Voice provider catalog sync is limited to 100 voices.",
-        413,
-      );
-
-    const existing = await this.repository.listVoiceProfiles(subject.orgId);
-    const existingKeys = new Set(
-      existing.map((voice) =>
-        voiceCatalogKey(voice.providerId, voice.providerVoiceId),
-      ),
-    );
-    const imported = await this.repository.transaction(async (repository) => {
-      const imported: VoiceProfile[] = [];
-      for (const providerVoice of catalog) {
-        const candidate = voiceProfileFromProvider(
-          subject.orgId,
-          providerVoice,
-        );
-        const key = voiceCatalogKey(
-          candidate.providerId,
-          candidate.providerVoiceId,
-        );
-        if (existingKeys.has(key)) continue;
-        const created = await repository.createVoiceProfile(candidate);
-        await createVoiceUseGrant(repository, subject, created.id);
-        existingKeys.add(key);
-        imported.push(created);
-      }
-
-      await auditVoiceProfile(
-        repository,
-        subject,
-        "voice.catalog_sync",
-        "voice_catalog",
-        {
-          providerVoiceCount: catalog.length,
-          importedCount: imported.length,
-          existingCount: catalog.length - imported.length,
-          providerIds: [
-            ...new Set(
-              catalog.map((voice) => boundedVoiceText(voice.providerId, 120)),
-            ),
-          ].sort(),
-        },
-      );
-      return imported;
-    });
-
-    return {
-      imported: imported.length,
-      existing: catalog.length - imported.length,
-      providerVoiceCount: catalog.length,
-      profiles: imported,
-    };
   }
 
   async create(input: {
@@ -171,6 +115,7 @@ export class VoiceService {
   }
 
   async preview(input: {
+    signal?: AbortSignal;
     subject: AuthSubject;
     voiceProfileId: string;
     text: string;
@@ -184,6 +129,7 @@ export class VoiceService {
       subject: input.subject,
       voiceProfile,
       text: input.text,
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
       metric: "voice.preview.generated",
     });
   }
@@ -192,6 +138,7 @@ export class VoiceService {
     subject: AuthSubject;
     messageId: string;
     voiceProfileId: string;
+    signal?: AbortSignal;
   }) {
     const message = await this.access.assistantMessage(
       input.subject,
@@ -212,6 +159,7 @@ export class VoiceService {
       subject: input.subject,
       voiceProfile,
       text: message.content,
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
       metric: "voice.message.generated",
       metadata: { messageId: message.id, chatId: message.chatId },
     });
@@ -224,6 +172,7 @@ export class VoiceService {
     fileName?: string;
     language?: string;
     prompt?: string;
+    signal?: AbortSignal;
   }): Promise<TranscriptionResult> {
     assertScope(input.subject, "voices:use");
     await authorizeVoiceProcessing(this.capabilities, input.subject);
@@ -257,13 +206,22 @@ export class VoiceService {
         ...(input.fileName === undefined ? {} : { fileName: input.fileName }),
         ...(input.language === undefined ? {} : { language: input.language }),
         ...(governedPrompt === undefined ? {} : { prompt: governedPrompt }),
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
       });
+      if (typeof result.text !== "string" || result.text.length > 200_000)
+        throw new Error("Voice transcription exceeded the response limit.");
+      const governedTranscript = await enforceContentPolicyText(
+        this.repository,
+        input.subject,
+        result.text,
+      );
+      const governedResult = { ...result, text: governedTranscript.content };
       await this.repository.transaction(async (repository) => {
         const metadata = {
           audioBytes: audio.byteLength,
           contentType,
-          textLength: result.text.length,
-          language: result.language ?? null,
+          textLength: governedResult.text.length,
+          language: governedResult.language ?? null,
           promptProvided: input.prompt !== undefined,
         };
         await recordSubjectUsage(repository, input.subject, {
@@ -278,7 +236,7 @@ export class VoiceService {
         await recordSubjectUsage(
           repository,
           input.subject,
-          result.durationMs === undefined
+          governedResult.durationMs === undefined
             ? {
                 orgId: input.subject.orgId,
                 sourceType: "voice",
@@ -293,19 +251,15 @@ export class VoiceService {
                 sourceType: "voice",
                 sourceId: "voice_transcription",
                 metric: "audio.input_second",
-                quantity: result.durationMs / 1000,
+                quantity: governedResult.durationMs / 1000,
                 unit: "second",
                 metadata: { contentType },
               },
         );
       });
-      return result;
-    } catch {
-      throw new ApiError(
-        "voice_not_configured",
-        "Voice transcription is not configured.",
-        409,
-      );
+      return governedResult;
+    } catch (caught) {
+      throw voiceProviderApiError(caught, "transcription");
     }
   }
 
@@ -327,7 +281,9 @@ export class VoiceService {
     );
     if (storageKey === undefined || contentType === undefined)
       throw notFound("Voice artifact");
-    const bytes = await this.objectStore.getObject(storageKey);
+    const bytes = await this.objectStore.getObject(storageKey, {
+      maxBytes: 50_000_000,
+    });
     if (bytes === undefined) throw notFound("Voice artifact");
     return { bytes, contentType };
   }
@@ -424,6 +380,7 @@ export class VoiceService {
     text: string;
     metric: "voice.message.generated" | "voice.preview.generated";
     metadata?: Record<string, unknown>;
+    signal?: AbortSignal;
   }) {
     await authorizeVoiceProcessing(this.capabilities, input.subject);
     const governedText = (
@@ -434,18 +391,32 @@ export class VoiceService {
       providerId: input.voiceProfile.providerId,
       workerClass: "voice.synthesis",
     });
+    let persistedStorageKey: string | undefined;
     try {
       const artifact = await this.voiceProvider.synthesize({
         orgId: input.subject.orgId,
         voiceId: input.voiceProfile.providerVoiceId,
         text: governedText,
         format: "wav",
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
       });
+      const contentType = safeAudioContentType(artifact.contentType);
+      if (contentType === undefined)
+        throw new Error("Voice synthesis returned an unsupported media type.");
+      if (artifact.body !== undefined && artifact.body.byteLength > 50_000_000)
+        throw new Error("Voice synthesis exceeded the response limit.");
+      const serverOwnedArtifact = {
+        ...artifact,
+        id: createId("voice_artifact"),
+        contentType,
+      };
       const persistedArtifact = await persistVoiceArtifact(
         this.objectStore,
         input.subject.orgId,
-        artifact,
+        serverOwnedArtifact,
       );
+      if (serverOwnedArtifact.body !== undefined)
+        persistedStorageKey = persistedArtifact.storageKey;
       await this.repository.transaction(async (repository) => {
         await recordSubjectUsage(repository, input.subject, {
           orgId: input.subject.orgId,
@@ -487,12 +458,14 @@ export class VoiceService {
         );
       });
       return publicVoiceArtifact(persistedArtifact);
-    } catch {
-      throw new ApiError(
-        "voice_not_configured",
-        "Voice synthesis is not configured.",
-        409,
-      );
+    } catch (caught) {
+      if (persistedStorageKey !== undefined) {
+        await this.objectStore.deleteObject(persistedStorageKey).catch(() => {
+          // Preserve the authoritative provider/persistence failure; the
+          // lifecycle reconciler will retry deletion of any remaining orphan.
+        });
+      }
+      throw voiceProviderApiError(caught, "synthesis");
     }
   }
 }

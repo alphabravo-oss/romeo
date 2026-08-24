@@ -1033,7 +1033,7 @@ function gateDefinitions() {
     gate({
       id: "phase34.backup_upload_failure_smoke",
       phase: "34",
-      title: "Backup upload failure smoke",
+      title: "Backup durability and readback smoke",
       evidence: [
         evidence("dist/ci/postgres-backup-upload-failure-smoke.json", {
           schemaVersion: "romeo.postgres-backup-upload-failure-smoke.v1",

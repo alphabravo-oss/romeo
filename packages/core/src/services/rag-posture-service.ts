@@ -2,13 +2,13 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 import { readEnv } from "@romeo/config";
 
 import type {
-  BackgroundJob,
   KnowledgeChunk,
   KnowledgeChunkEmbedding,
   KnowledgeSource,
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import type { RagPolicyPhysicalVectorIsolation } from "../domain/rag-policy";
+import { iterateBackgroundJobs } from "./background-job-query";
 import type {
   ExternalVectorStorePosture,
   VectorStoreDeploymentPosture,
@@ -118,13 +118,13 @@ export class RagPostureService {
 
     const [
       workspaces,
-      jobs,
+      jobPosture,
       ragPolicy,
       pgvectorPhysicalIsolationEvidence,
       qdrantLiveEvidence,
     ] = await Promise.all([
       this.repository.listWorkspaces(subject.orgId),
-      this.repository.listBackgroundJobs(subject.orgId),
+      summarizeKnowledgeJobs(this.repository, subject.orgId),
       readRagPolicy(this.repository, subject.orgId),
       summarizePgvectorPhysicalIsolationEvidence(
         this.pgvectorPhysicalIsolationEvidencePath,
@@ -165,7 +165,6 @@ export class RagPostureService {
       sources,
       workspaceCount: workspaces.length,
     });
-    const jobPosture = summarizeKnowledgeJobs(jobs);
     const fallback = fallbackPosture(corpus);
     const physicalIsolation = physicalIsolationPosture(
       ragPolicy.physicalVectorIsolation,
@@ -269,28 +268,35 @@ function summarizeCorpus(input: {
   };
 }
 
-function summarizeKnowledgeJobs(
-  jobs: BackgroundJob[],
-): RagPostureReport["jobs"] {
-  const knowledgeJobs = jobs.filter((job) => job.type.startsWith("knowledge."));
-  return {
-    failedEmbeddingIndexJobCount: knowledgeJobs.filter(
-      (job) =>
-        job.type === "knowledge.embedding.index" && job.status === "failed",
-    ).length,
-    failedExtractionJobCount: knowledgeJobs.filter(
-      (job) => job.type === "knowledge.extract" && job.status === "failed",
-    ).length,
-    failedReindexJobCount: knowledgeJobs.filter(
-      (job) => job.type === "knowledge.reindex" && job.status === "failed",
-    ).length,
-    queuedKnowledgeJobCount: knowledgeJobs.filter(
-      (job) => job.status === "queued",
-    ).length,
-    runningKnowledgeJobCount: knowledgeJobs.filter(
-      (job) => job.status === "running",
-    ).length,
+async function summarizeKnowledgeJobs(
+  repository: RomeoRepository,
+  orgId: string,
+): Promise<RagPostureReport["jobs"]> {
+  const summary: RagPostureReport["jobs"] = {
+    failedEmbeddingIndexJobCount: 0,
+    failedExtractionJobCount: 0,
+    failedReindexJobCount: 0,
+    queuedKnowledgeJobCount: 0,
+    runningKnowledgeJobCount: 0,
   };
+  for (const type of [
+    "knowledge.embedding.index",
+    "knowledge.extract",
+    "knowledge.reindex",
+  ]) {
+    for await (const job of iterateBackgroundJobs(repository, orgId, {
+      type,
+    })) {
+      if (job.status === "queued") summary.queuedKnowledgeJobCount += 1;
+      if (job.status === "running") summary.runningKnowledgeJobCount += 1;
+      if (job.status !== "failed") continue;
+      if (type === "knowledge.embedding.index")
+        summary.failedEmbeddingIndexJobCount += 1;
+      if (type === "knowledge.extract") summary.failedExtractionJobCount += 1;
+      if (type === "knowledge.reindex") summary.failedReindexJobCount += 1;
+    }
+  }
+  return summary;
 }
 
 function fallbackPosture(

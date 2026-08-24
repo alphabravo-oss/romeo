@@ -227,7 +227,7 @@ export class KnowledgeRetrievalService {
     const visibleSources = filterKnowledgeSourcesForSubject(
       sources,
       input.subject,
-    );
+    ).filter((source) => source.status === "indexed");
     const visibleChunks = filterKnowledgeChunksForSources(
       chunks,
       visibleSources,

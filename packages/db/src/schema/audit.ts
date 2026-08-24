@@ -47,5 +47,29 @@ export const auditLogs = pgTable(
       "gin",
       sql`(lower(${table.action} || chr(31) || ${table.actorId} || chr(31) || ${table.resourceType} || chr(31) || ${table.resourceId})) gin_trgm_ops`,
     ),
+    auditLogsSupportRequestCreatedIdx: index(
+      "audit_logs_support_request_created_idx",
+    )
+      .on(table.orgId, table.createdAt, table.id)
+      .where(
+        sql`${table.action} = 'support.impersonation.request.create' and ${table.resourceType} = 'support_impersonation_request'`,
+      ),
+    auditLogsSupportDecisionIdx: index("audit_logs_support_decision_idx")
+      .on(
+        table.orgId,
+        sql`(${table.metadata} ->> 'approvalRequestId')`,
+        table.createdAt,
+        table.id,
+      )
+      .where(
+        sql`${table.action} in ('support.impersonation.request.approve', 'support.impersonation.request.reject')`,
+      ),
+    auditLogsSupportSessionCreatedIdx: index(
+      "audit_logs_support_session_created_idx",
+    )
+      .on(table.orgId, table.createdAt, table.id)
+      .where(
+        sql`${table.action} = 'support.impersonation.create' and ${table.resourceType} = 'session'`,
+      ),
   }),
 );

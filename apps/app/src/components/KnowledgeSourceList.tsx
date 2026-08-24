@@ -3,8 +3,12 @@ import { useMemo } from "react";
 
 import type { KnowledgeSource } from "../features/types";
 import { useLocale } from "../lib/i18n";
-import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
-import { useInventoriedServerTable } from "../lib/inventoried-server-table";
+import {
+  type ColumnDef,
+  DataTable,
+  createColumnHelper,
+  type ServerTableState,
+} from "./DataTable";
 
 const col = createColumnHelper<KnowledgeSource>();
 
@@ -17,6 +21,7 @@ export function KnowledgeSourceList({
   onExtract,
   onReindex,
   sources,
+  tableState,
 }: {
   canUpload?: boolean;
   isDeleting: boolean;
@@ -26,15 +31,9 @@ export function KnowledgeSourceList({
   onExtract: (sourceId: string) => void;
   onReindex: (sourceId: string) => void;
   sources: KnowledgeSource[];
+  tableState: ServerTableState;
 }) {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<KnowledgeSource>(
-    "knowledge_sources",
-    {
-      enabled: sources[0]?.knowledgeBaseId !== undefined,
-      parentId: sources[0]?.knowledgeBaseId,
-    },
-  );
   const columns = useMemo<ColumnDef<KnowledgeSource, any>[]>(
     () => [
       col.accessor("fileName", {
@@ -112,9 +111,9 @@ export function KnowledgeSourceList({
   return (
     <div className="mt-3">
       <DataTable
-        serverState={inventoriedTable.serverState}
+        serverState={tableState}
         columns={columns}
-        data={inventoriedTable.rows}
+        data={sources}
         empty={t("knowledgeNoSources")}
       />
     </div>

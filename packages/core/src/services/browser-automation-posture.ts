@@ -4,7 +4,7 @@ import type { BackgroundJob } from "../domain/entities";
 import {
   readBrowserAutomationStoredArtifacts,
   readBrowserAutomationWorkerLease,
-} from "./workflow-browser-tasks";
+} from "./browser-automation-tasks";
 import type { BrowserAutomationPostureReport } from "./browser-automation-service";
 import {
   allowedScreenshotArtifactContentTypes,

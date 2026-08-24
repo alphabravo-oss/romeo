@@ -2,6 +2,7 @@ import { assertScope, hasWorkspaceAccess, type AuthSubject } from "@romeo/auth";
 
 import type { BackgroundJob, ToolCallRecord } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import { collectApprovalQueueJobs } from "./background-job-query";
 import type { ToolCatalogService } from "./tool-catalog-service";
 import type {
   OperationToolContext,
@@ -9,17 +10,19 @@ import type {
 } from "./tool-service-contracts";
 import {
   TOOL_APPROVAL_TTL_MS,
-  operationApprovalConsumed,
   operationApprovalDecision,
   operationApprovalExpired,
   optionalStringProperty,
   stringArrayPayload,
   stringPayload,
   stringPayloadOptional,
-  toolApprovalConsumed,
   toolApprovalDecision,
   toolApprovalExpired,
 } from "./tool-service-helpers";
+import {
+  operationApprovalConsumed,
+  toolApprovalConsumed,
+} from "./tool-approval-integrity";
 
 export class ToolApprovalQueryService {
   constructor(
@@ -36,7 +39,7 @@ export class ToolApprovalQueryService {
       await this.catalog.getAgentForSubject(subject, input.agentId);
     const [calls, jobs, operationTools] = await Promise.all([
       this.repository.listToolCalls(subject.orgId),
-      this.repository.listBackgroundJobs(subject.orgId),
+      collectApprovalQueueJobs(this.repository, subject.orgId),
       this.catalog.listOperationTools(subject),
     ]);
     const toolCallApprovals = calls
@@ -48,7 +51,7 @@ export class ToolApprovalQueryService {
       )
       .filter((call) => input.runId === undefined || call.runId === input.runId)
       .filter((call) => !toolApprovalExpired(call))
-      .filter((call) => !toolApprovalConsumed(call, calls))
+      .filter((call) => !toolApprovalConsumed(call, calls, jobs))
       .filter((call) => toolApprovalDecision(call, jobs) === undefined)
       .map((call) => this.toToolCallSummary(call, operationTools));
     const operationApprovals = jobs
@@ -69,8 +72,8 @@ export class ToolApprovalQueryService {
         (job) => input.runId === undefined || job.payload.runId === input.runId,
       )
       .filter((job) => !operationApprovalExpired(job))
-      .filter((job) => !operationApprovalConsumed(job))
-      .filter((job) => operationApprovalDecision(job) === undefined)
+      .filter((job) => !operationApprovalConsumed(job, jobs))
+      .filter((job) => operationApprovalDecision(job, jobs) === undefined)
       .map((job) => this.toOperationSummary(job, operationTools));
     return [...toolCallApprovals, ...operationApprovals].sort(
       (left, right) =>

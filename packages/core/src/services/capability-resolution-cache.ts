@@ -72,9 +72,7 @@ export function requestedCapabilityVersion(requested: unknown): string {
 export function assignmentPolicyVersion(
   versions: Array<{ layer: CapabilityLayer; version: number }>,
 ): string {
-  return versions
-    .map((item) => `${item.layer}:${item.version}`)
-    .join(",");
+  return versions.map((item) => `${item.layer}:${item.version}`).join(",");
 }
 
 export function readCapabilityResolutionCache(input: {
@@ -93,9 +91,7 @@ export function readCapabilityResolutionCache(input: {
   const expiresAt = Date.parse(input.entry.expiresAt);
   const now = Date.parse(input.now);
   const expired =
-    !Number.isFinite(expiresAt) ||
-    !Number.isFinite(now) ||
-    expiresAt <= now;
+    !Number.isFinite(expiresAt) || !Number.isFinite(now) || expiresAt <= now;
   if (sameKey && !expired) return { outcome: "hit", value: input.entry.value };
   if (input.risk === "high" || input.risk === "critical")
     return { outcome: "stale_fail", code: "capability_resolution_stale" };

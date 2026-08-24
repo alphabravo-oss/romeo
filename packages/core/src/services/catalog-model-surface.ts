@@ -62,7 +62,10 @@ export function catalogModelSurface(input: {
     contextWindow: input.model.contextWindow,
     deploymentBoundary: input.deploymentMode,
     modalities: [...input.model.capabilities.modalities],
-    probeFreshness: catalogProbeFreshness(input.probedAt, input.now ?? Date.now()),
+    probeFreshness: catalogProbeFreshness(
+      input.probedAt,
+      input.now ?? Date.now(),
+    ),
     reasoning: catalogSupportLevel(
       input.model.capabilities.reasoning === true,
       source,

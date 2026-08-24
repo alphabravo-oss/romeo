@@ -10,6 +10,7 @@ import type { RomeoRepository } from "../domain/repository";
 import { createId } from "../ids";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
 import { objectKeys } from "./tool-execution";
+import { toolApprovalBindingJob } from "./tool-approval-integrity";
 
 export async function recordToolCall(
   repository: RomeoRepository,
@@ -46,5 +47,13 @@ export async function recordToolCall(
   };
   if (input.errorCode !== undefined) record.errorCode = input.errorCode;
   if (input.runId !== undefined) record.runId = input.runId;
-  return repository.createToolCall(record);
+  if (record.status !== "approval_required")
+    return repository.createToolCall(record);
+  return repository.transaction(async (transaction) => {
+    const saved = await transaction.createToolCall(record);
+    await transaction.createBackgroundJob(
+      toolApprovalBindingJob(saved, input.requestInput),
+    );
+    return saved;
+  });
 }

@@ -6,6 +6,7 @@ import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
+import { CapabilityService } from "./capability-resolver";
 import {
   authorizeWebRetrieval,
   enforceWebUrlLimit,
@@ -24,7 +25,6 @@ import {
   deduplicateSearchResults,
   extractPage,
   failureCode,
-  healthKey,
   isFreshEnough,
   isUnreachableFailure,
   normalizeDomains,
@@ -34,11 +34,14 @@ import {
   type StoredWebSearchConfiguration,
   type WebSearchConfiguration,
   type WebSearchProvider,
-  type WebSearchProviderHealth,
   type WebSearchResult,
 } from "./web-search-support";
 import { collectWebRetrievalHits } from "./web-retrieval-hits";
-import { readStoredWebSearchConfiguration } from "./web-search-configuration-store";
+import {
+  readStoredWebSearchConfiguration,
+  readWebSearchProviderHealth,
+  writeWebSearchProviderHealth,
+} from "./web-search-configuration-store";
 import {
   WebSearchProviderClient,
   type WebSearchServiceOptions,
@@ -51,13 +54,16 @@ export class WebSearchService extends WebSearchProviderClient {
     private readonly repository: RomeoRepository,
     options: WebSearchServiceOptions = {},
   ) {
-    super(options);
+    super({
+      ...options,
+      capabilities: options.capabilities ?? new CapabilityService(repository),
+    });
   }
   async configuration(subject: AuthSubject): Promise<WebSearchConfiguration> {
     assertScope(subject, "admin:read");
     return publicConfiguration(
       await readStoredWebSearchConfiguration(this.repository, subject.orgId),
-      await this.readHealth(subject.orgId),
+      await readWebSearchProviderHealth(this.repository, subject.orgId),
     );
   }
 
@@ -117,11 +123,14 @@ export class WebSearchService extends WebSearchProviderClient {
     if (input.credentialRef === null) delete next.credentialRef;
     const value: Record<string, unknown> = { ...next };
     if (next.credentialRef === undefined) delete value.credentialRef;
-    await this.repository.upsertSystemSetting({
-      key: configurationKey(subject.orgId),
-      value,
-      updatedAt: new Date().toISOString(),
-    });
+    await this.repository.upsertSystemSetting(
+      {
+        key: configurationKey(subject.orgId),
+        value,
+        updatedAt: new Date().toISOString(),
+      },
+      subject.orgId,
+    );
     await writeAuditLog(this.repository, {
       subject,
       action: "web_search.configuration.update",
@@ -135,7 +144,10 @@ export class WebSearchService extends WebSearchProviderClient {
         blockedDomainCount: next.blockedDomains.length,
       },
     });
-    return publicConfiguration(next, await this.readHealth(subject.orgId));
+    return publicConfiguration(
+      next,
+      await readWebSearchProviderHealth(this.repository, subject.orgId),
+    );
   }
 
   async search(
@@ -204,13 +216,13 @@ export class WebSearchService extends WebSearchProviderClient {
         normalizedQuery,
         credential,
       );
-      await this.writeHealth(subject.orgId, {
+      await writeWebSearchProviderHealth(this.repository, subject.orgId, {
         status: "healthy",
         lastCheckedAt: new Date().toISOString(),
         latencyMs: Math.max(0, Date.now() - startedAt),
       });
     } catch (error) {
-      await this.writeHealth(subject.orgId, {
+      await writeWebSearchProviderHealth(this.repository, subject.orgId, {
         status: "degraded",
         lastCheckedAt: new Date().toISOString(),
         latencyMs: Math.max(0, Date.now() - startedAt),
@@ -446,38 +458,6 @@ export class WebSearchService extends WebSearchProviderClient {
         this.search(currentSubject, query, input),
       ingest: (currentSubject, urls) =>
         this.ingestUrls(currentSubject, urls, input),
-    });
-  }
-
-  private async readHealth(orgId: string): Promise<WebSearchProviderHealth> {
-    const value =
-      (await this.repository.getSystemSetting(healthKey(orgId)))?.value ?? {};
-    const status =
-      value.status === "healthy" || value.status === "degraded"
-        ? value.status
-        : "unknown";
-    return {
-      status,
-      ...(typeof value.lastCheckedAt === "string"
-        ? { lastCheckedAt: value.lastCheckedAt }
-        : {}),
-      ...(typeof value.latencyMs === "number"
-        ? { latencyMs: value.latencyMs }
-        : {}),
-      ...(typeof value.lastErrorCode === "string"
-        ? { lastErrorCode: value.lastErrorCode }
-        : {}),
-    };
-  }
-
-  private async writeHealth(
-    orgId: string,
-    health: WebSearchProviderHealth,
-  ): Promise<void> {
-    await this.repository.upsertSystemSetting({
-      key: healthKey(orgId),
-      value: { ...health },
-      updatedAt: new Date().toISOString(),
     });
   }
 }

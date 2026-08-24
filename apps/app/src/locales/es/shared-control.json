@@ -41,7 +41,9 @@
   "tableComfortable": "Cómoda",
   "tableCompact": "Compacta",
   "tableDensity": "Densidad",
+  "tableError": "No se pudo cargar esta tabla.",
   "tableExportCsv": "Exportar CSV",
+  "tableExportFileStem": "tabla",
   "tableLoading": "Cargando…",
   "tableNextPage": "Siguiente",
   "tableNoMatches": "No hay coincidencias",
@@ -51,6 +53,7 @@
   "tablePage": "página",
   "tablePreviousPage": "Anterior",
   "tableResetView": "Restablecer vista de tabla",
+  "tableRetry": "Reintentar",
   "tableResults": "resultados",
   "tableRowsPerPage": "Filas por página",
   "tableSearch": "Buscar en la tabla",
@@ -58,6 +61,12 @@
   "tableSelectAllRows": "Seleccionar todas las filas",
   "tableSelected": "seleccionadas",
   "tableSelectRow": "Seleccionar fila",
+  "tableDeselectRow": "Deseleccionar fila",
+  "tableDefaultView": "Vista predeterminada",
+  "tableShareView": "Compartir vista",
+  "tableUnshareView": "Dejar de compartir la vista",
+  "tableServerAuthorityUnavailable": "Las vistas guardadas y las exportaciones no están disponibles ahora.",
+  "tableOperationFailed": "La operación de la tabla falló. Inténtalo de nuevo.",
   "tableShown": "mostradas",
   "tableSavedViews": "Vistas guardadas",
   "tableSaveView": "Guardar",
@@ -73,5 +82,6 @@
   "accessGrantRevoked": "Acceso revocado",
   "accessRevoke": "Revocar",
   "accessRevokeFailed": "No se pudo revocar el acceso",
-  "accessNoGrants": "Aún no hay permisos."
+  "accessNoGrants": "Aún no hay permisos.",
+  "accessPrincipal": "Persona o grupo"
 }

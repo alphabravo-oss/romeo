@@ -228,7 +228,10 @@ export function CapabilityAdminRow({
         {displayCapabilityValue(assignment?.state ?? "inherit", t)}
       </p>
       {row.controllingLayer === undefined ? null : (
-        <p className="text-sm" id={`capability-controlling-${row.definition.id}`}>
+        <p
+          className="text-sm"
+          id={`capability-controlling-${row.definition.id}`}
+        >
           {t("capabilityControllingLayer")}:{" "}
           {displayCapabilityValue(row.controllingLayer, t)}
         </p>
@@ -297,7 +300,7 @@ export function CapabilityAdminRow({
         </p>
       ) : null}
       <fieldset
-        className="mt-4 grid gap-4"
+        className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
         disabled={update.isPending || !row.canOverride}
       >
         <legend className="font-medium">{t("capabilityPolicyOverride")}</legend>

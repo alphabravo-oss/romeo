@@ -1,6 +1,7 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
 
 import type { RomeoRepository } from "../domain/repository";
+import type { ContentPolicyDecisionRecord } from "../domain/content-policy";
 import { ApiError, notFound } from "../errors";
 import { createId } from "../ids";
 import { writeAuditLog } from "./audit-log";
@@ -12,7 +13,6 @@ import {
   createPolicyVersionDraft,
   dryRunPolicyVersion,
   publishPolicyVersion,
-  publishedDetectors,
   rollbackPolicyVersion,
   type ContentPolicyVersion,
   type ContentPolicyVersionStore,
@@ -20,7 +20,6 @@ import {
 } from "./content-policy-versioning";
 
 const STORE_SCHEMA = "romeo.content-policy.versions.v1";
-const DECISION_SCHEMA = "romeo.content-policy.decisions.v1";
 
 export class ContentPolicyVersionService {
   constructor(private readonly repository: RomeoRepository) {}
@@ -69,7 +68,10 @@ export class ContentPolicyVersionService {
     content: string;
   }) {
     assertScope(input.subject, "admin:write");
-    const version = await this.requireVersion(input.subject.orgId, input.versionId);
+    const version = await this.requireVersion(
+      input.subject.orgId,
+      input.versionId,
+    );
     const now = new Date().toISOString();
     const result = dryRunPolicyVersion({
       version,
@@ -77,7 +79,11 @@ export class ContentPolicyVersionService {
       decisionId: createId("policy_decision"),
       now,
     });
-    await this.appendDecision(input.subject.orgId, result.decision, now);
+    await this.repository.createContentPolicyDecision({
+      ...result.decision,
+      orgId: input.subject.orgId,
+      policyVersionId: result.decision.versionId,
+    });
     return {
       ...result.evaluation,
       evaluatedAt: now,
@@ -108,8 +114,15 @@ export class ContentPolicyVersionService {
         409,
       );
     await this.writeStore(input.subject.orgId, published.store, now);
-    await this.applyPublished(input.subject.orgId, published.store, now, input.subject.id);
-    const version = published.store.versions.find((item) => item.id === input.versionId)!;
+    await this.applyPublished(
+      input.subject.orgId,
+      published.store,
+      now,
+      input.subject.id,
+    );
+    const version = published.store.versions.find(
+      (item) => item.id === input.versionId,
+    )!;
     await writeAuditLog(this.repository, {
       subject: input.subject,
       action: "admin.content_policy.version.publish",
@@ -139,7 +152,12 @@ export class ContentPolicyVersionService {
         409,
       );
     await this.writeStore(input.subject.orgId, rolled.store, now);
-    await this.applyPublished(input.subject.orgId, rolled.store, now, input.subject.id);
+    await this.applyPublished(
+      input.subject.orgId,
+      rolled.store,
+      now,
+      input.subject.id,
+    );
     const version = rolled.store.versions.find(
       (item) => item.id === rolled.store.publishedVersionId,
     )!;
@@ -153,9 +171,13 @@ export class ContentPolicyVersionService {
     return version;
   }
 
-  async listDecisions(subject: AuthSubject): Promise<SanitizedPolicyDecision[]> {
+  async listDecisions(
+    subject: AuthSubject,
+  ): Promise<SanitizedPolicyDecision[]> {
     assertScope(subject, "admin:read");
-    return this.readDecisions(subject.orgId);
+    return (
+      await this.repository.listContentPolicyDecisions(subject.orgId, 100)
+    ).map(publicDecision);
   }
 
   publicVersion(version: ContentPolicyVersion) {
@@ -167,7 +189,9 @@ export class ContentPolicyVersionService {
       approvalRequired: version.approvalRequired,
       approvalTtlSeconds: version.approvalTtlSeconds,
       createdAt: version.createdAt,
-      ...(version.publishedAt === undefined ? {} : { publishedAt: version.publishedAt }),
+      ...(version.publishedAt === undefined
+        ? {}
+        : { publishedAt: version.publishedAt }),
     };
   }
 
@@ -177,19 +201,27 @@ export class ContentPolicyVersionService {
     now: string,
     actorId: string,
   ): Promise<void> {
-    const detectors = publishedDetectors(store);
-    if (detectors === undefined) return;
-    await this.repository.upsertSystemSetting({
-      key: contentPolicySettingKey(orgId),
-      value: {
-        schema: "romeo.content-policy.v1",
-        orgId,
-        detectors: { ...detectors },
+    const version = store.versions.find(
+      (candidate) => candidate.id === store.publishedVersionId,
+    );
+    if (version === undefined) return;
+    await this.repository.upsertSystemSetting(
+      {
+        key: contentPolicySettingKey(orgId),
+        value: {
+          schema: "romeo.content-policy.v1",
+          orgId,
+          detectors: { ...version.detectors },
+          versionId: version.id,
+          approvalRequired: version.approvalRequired,
+          approvalTtlSeconds: version.approvalTtlSeconds,
+          updatedAt: now,
+          updatedBy: actorId,
+        },
         updatedAt: now,
-        updatedBy: actorId,
       },
-      updatedAt: now,
-    });
+      orgId,
+    );
   }
 
   private async requireVersion(
@@ -204,7 +236,9 @@ export class ContentPolicyVersionService {
   }
 
   private async readStore(orgId: string): Promise<ContentPolicyVersionStore> {
-    const value = (await this.repository.getSystemSetting(storeKey(orgId)))?.value;
+    const value = (
+      await this.repository.getSystemSetting(storeKey(orgId), orgId)
+    )?.value;
     if (value === null || typeof value !== "object" || Array.isArray(value))
       return { versions: [] };
     const candidate = value as Record<string, unknown>;
@@ -228,42 +262,30 @@ export class ContentPolicyVersionService {
     store: ContentPolicyVersionStore,
     now: string,
   ): Promise<void> {
-    await this.repository.upsertSystemSetting({
-      key: storeKey(orgId),
-      value: { schema: STORE_SCHEMA, orgId, ...store },
-      updatedAt: now,
-    });
+    await this.repository.upsertSystemSetting(
+      {
+        key: storeKey(orgId),
+        value: { schema: STORE_SCHEMA, orgId, ...store },
+        updatedAt: now,
+      },
+      orgId,
+    );
   }
-
-  private async readDecisions(orgId: string): Promise<SanitizedPolicyDecision[]> {
-    const value = (await this.repository.getSystemSetting(decisionKey(orgId)))?.value;
-    if (value === null || typeof value !== "object" || Array.isArray(value))
-      return [];
-    const candidate = value as Record<string, unknown>;
-    return Array.isArray(candidate.decisions)
-      ? (candidate.decisions as SanitizedPolicyDecision[])
-      : [];
-  }
-
-  private async appendDecision(
-    orgId: string,
-    decision: SanitizedPolicyDecision,
-    now: string,
-  ): Promise<void> {
-    const decisions = [...(await this.readDecisions(orgId)), decision].slice(-100);
-    await this.repository.upsertSystemSetting({
-      key: decisionKey(orgId),
-      value: { schema: DECISION_SCHEMA, orgId, decisions },
-      updatedAt: now,
-    });
-  }
-
 }
 
 function storeKey(orgId: string): string {
   return `content_policy.versions.v1:${orgId}`;
 }
 
-function decisionKey(orgId: string): string {
-  return `content_policy.decisions.v1:${orgId}`;
+function publicDecision(
+  decision: ContentPolicyDecisionRecord,
+): SanitizedPolicyDecision {
+  return {
+    id: decision.id,
+    versionId: decision.policyVersionId,
+    surface: decision.surface,
+    action: decision.action,
+    detectors: decision.detectors.map((detector) => ({ ...detector })),
+    decidedAt: decision.decidedAt,
+  };
 }

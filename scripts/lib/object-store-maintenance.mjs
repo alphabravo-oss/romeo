@@ -133,6 +133,9 @@ export async function downloadObject(config, object, destination) {
     contentType: response.headers.get("content-type") ?? object.contentType,
     etag: trimEtag(response.headers.get("etag") ?? object.etag),
     lastModified: response.headers.get("last-modified") ?? object.lastModified,
+    versionId: response.headers.get("x-amz-version-id") ?? undefined,
+    serverSideEncryption:
+      response.headers.get("x-amz-server-side-encryption") ?? undefined,
   };
 }
 
@@ -207,9 +210,13 @@ export function manifestObjectAbsolutePath(manifestPath, objectFile) {
 }
 
 export function validateObjectStoreManifest(manifest) {
-  if (manifest?.schemaVersion !== "romeo.object-store-backup.v1") {
+  if (
+    !["romeo.object-store-backup.v1", "romeo.object-store-backup.v2"].includes(
+      manifest?.schemaVersion,
+    )
+  ) {
     throw new Error(
-      "Object-store manifest schemaVersion must be romeo.object-store-backup.v1.",
+      "Object-store manifest schemaVersion must be a supported Romeo object-store backup schema.",
     );
   }
   if (!Array.isArray(manifest.objects))
@@ -231,6 +238,24 @@ export function validateObjectStoreManifest(manifest) {
       typeof object.contentType !== "string"
     )
       throw new Error(`Object ${object.key} has invalid contentType.`);
+  }
+  if (manifest.schemaVersion === "romeo.object-store-backup.v2") {
+    if (
+      typeof manifest.backupSetId !== "string" ||
+      manifest.backupSetId.length < 8
+    )
+      throw new Error("Object-store v2 manifest requires backupSetId.");
+    const checkpointAt = new Date(manifest.checkpointAt);
+    if (Number.isNaN(checkpointAt.getTime()))
+      throw new Error("Object-store v2 manifest requires checkpointAt.");
+    if (typeof manifest.destinationPolicy?.policySha256 !== "string")
+      throw new Error(
+        "Object-store v2 manifest requires destination policy proof.",
+      );
+    if (manifest.sourceConsistency?.status !== "verified")
+      throw new Error(
+        "Object-store v2 manifest requires source consistency proof.",
+      );
   }
 }
 

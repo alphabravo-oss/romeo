@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "baseline": {
+    "path": "docs/api/openapi-baseline.json",
+    "sha256": "57c984218c9b0be18d2550b1fc330be03d5618133791b4d2c61fa637d4f567e6"
+  },
+  "breakingChanges": [
+    {
+      "fingerprint": "bb1c8faca80f",
+      "id": "response-success-status-removed",
+      "operationId": "governance.createDataExportPackage",
+      "path": "/governance/data-exports/packages",
+      "approvedAt": "2026-08-23T00:00:00.000Z",
+      "expiresAt": "2027-08-23T00:00:00.000Z",
+      "migrationDocument": "docs/api/compatibility-decisions/governance-export-async-jobs.md",
+      "owner": "api-governance",
+      "rationale": "Durable bounded exports require a 202 job lifecycle; preserving the synchronous 200 response would reintroduce unbounded request-time execution and memory use.",
+      "targetMajorVersion": "2.0"
+    }
+  ],
+  "warningChanges": [
+    {
+      "fingerprint": "a1bba1c37ce3",
+      "id": "request-property-max-set",
+      "operationId": "knowledge.createUpload",
+      "path": "/knowledge-bases/{knowledgeBaseId}/uploads",
+      "classification": "security_limit",
+      "owner": "api-governance",
+      "reviewedAt": "2026-08-23T00:00:00.000Z",
+      "reviewExpiresAt": "2027-02-23T00:00:00.000Z",
+      "rationale": "The 25 MB declaration limit bounds storage reservation and extraction-amplification risk before a presigned upload is issued; callers must split or reject larger inputs.",
+      "documentation": "docs/api/compatibility-decisions/knowledge-upload-size-limit.md"
+    }
+  ]
+}

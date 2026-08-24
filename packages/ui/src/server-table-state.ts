@@ -4,6 +4,7 @@ import type {
   SortingState,
   Updater,
 } from "@tanstack/react-table";
+import type { ServerTableAuthorityScope } from "./table-authority";
 
 export interface ServerTableFilterState {
   field: string;
@@ -20,9 +21,12 @@ export type ServerTableTotal =
  * cursor history and URL serialization; DataTable owns only presentation.
  */
 export interface ServerTableState {
+  authorityScope?: ServerTableAuthorityScope;
+  /** Filters the server confirmed it applied. */
   filters: readonly ServerTableFilterState[];
   hasNextPage: boolean;
   isFetching?: boolean;
+  isScopeTransition?: boolean;
   onFiltersChange?: (filters: readonly ServerTableFilterState[]) => void;
   onNextPage: () => void;
   onPageSizeChange: (pageSize: number) => void;
@@ -31,8 +35,16 @@ export interface ServerTableState {
   onSortingChange?: OnChangeFn<SortingState>;
   pageIndex: number;
   pageSize: number;
+  /** Filters requested by the client, kept separate from server truth. */
+  requestedFilters?: readonly ServerTableFilterState[];
+  retry?: () => void;
+  /** Changes whenever tenant/workspace/parent/filter identity changes. */
+  scopeKey?: string;
   search: string;
+  /** UI column id to supported API sort field. Unmapped columns are unsortable. */
+  sortFieldByColumnId?: Readonly<Record<string, string>>;
   sorting: SortingState;
+  status?: "error" | "idle" | "loading" | "success";
   total: ServerTableTotal;
 }
 

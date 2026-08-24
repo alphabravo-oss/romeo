@@ -17,10 +17,14 @@ globalThis.ResizeObserver = class ResizeObserver {
 };
 
 const labels: DataTableLabels = {
+  approximate: "Approximately",
+  bulkActions: "Bulk actions",
   columns: "Columns",
   comfortable: "Comfortable",
   compact: "Compact",
   density: "Density",
+  defaultExportFileName: "table.csv",
+  error: "Could not load table",
   exportCsv: "Export CSV",
   loading: "Loading",
   nextPage: "Next page",
@@ -28,9 +32,11 @@ const labels: DataTableLabels = {
   noRecords: "No records",
   of: "of",
   options: "Table options",
+  operationFailed: "Operation failed",
   page: "page",
   previousPage: "Previous page",
   resetView: "Reset table view",
+  retry: "Retry",
   results: "results",
   rowsPerPage: "Rows per page",
   savedViews: "Saved views",
@@ -43,7 +49,14 @@ const labels: DataTableLabels = {
   shown: "shown",
   viewName: "View name",
   deleteView: "Delete view",
+  deselectRow: "Deselect row",
   total: "total",
+  defaultView: "Default view",
+  shareView: "Share view",
+  unshareView: "Unshare view",
+  serverAuthorityUnavailable: "Server unavailable",
+  undo: "Undo",
+  viewDeleted: "View deleted",
 };
 const column = createColumnHelper<{ id: string; name: string }>();
 const columns = [
@@ -196,6 +209,266 @@ describe("advanced data table", () => {
     expect(onPreviousPage).toHaveBeenCalledOnce();
     expect(onNextPage).toHaveBeenCalledOnce();
     expect(onPageSizeChange).toHaveBeenCalledWith(50);
+  });
+
+  it("disables unsupported server sorting and exposes loading semantics", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        labels={labels}
+        serverState={{
+          filters: [],
+          hasNextPage: false,
+          onNextPage: vi.fn(),
+          onPageSizeChange: vi.fn(),
+          onSortingChange: vi.fn(),
+          pageIndex: 0,
+          pageSize: 25,
+          scopeKey: "organization",
+          search: "",
+          sortFieldByColumnId: { createdAt: "createdAt" },
+          sorting: [],
+          status: "loading",
+          total: { mode: "unknown" },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Loading")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Name" })).toBeNull();
+    expect(
+      document.querySelector(".rm-table-block")?.getAttribute("aria-busy"),
+    ).toBe("true");
+  });
+
+  it("renders an accessible error with an explicit retry", async () => {
+    const retry = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        labels={labels}
+        serverState={{
+          filters: [],
+          hasNextPage: false,
+          onNextPage: vi.fn(),
+          onPageSizeChange: vi.fn(),
+          pageIndex: 0,
+          pageSize: 25,
+          retry,
+          scopeKey: "organization",
+          search: "",
+          sorting: [],
+          status: "error",
+          total: { mode: "unknown" },
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Could not load table",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("uses server authority for saved-view lifecycle and export actions", async () => {
+    const saveView = vi.fn(async () => undefined);
+    const restoreView = vi.fn(async () => undefined);
+    const deleteView = vi.fn(async () => ({ restore: restoreView }));
+    const setDefaultView = vi.fn(async () => undefined);
+    const setViewVisibility = vi.fn(async () => undefined);
+    const exportView = vi.fn(async () => undefined);
+    const savedView = {
+      canEdit: true,
+      columnVisibility: {},
+      density: "comfortable" as const,
+      filters: [],
+      globalFilter: "",
+      id: "saved_view_1",
+      isDefault: false,
+      name: "Incidents",
+      pageSize: 25,
+      schemaVersion: 2,
+      sorting: [],
+      source: "server" as const,
+      visibility: "private" as const,
+    };
+    render(
+      <DataTable
+        authority={{
+          mode: "server",
+          status: "ready",
+          savedViews: [savedView],
+          deleteView,
+          exportView,
+          saveView,
+          setDefaultView,
+          setViewVisibility,
+        }}
+        columns={columns}
+        data={data.slice(0, 1)}
+        labels={labels}
+        serverState={{
+          filters: [],
+          hasNextPage: false,
+          onNextPage: vi.fn(),
+          onPageSizeChange: vi.fn(),
+          pageIndex: 0,
+          pageSize: 25,
+          search: "",
+          sorting: [],
+          status: "success",
+          total: { mode: "estimated", value: 500 },
+        }}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Export CSV" }));
+    await user.click(screen.getByRole("button", { name: "Table options" }));
+    await user.click(
+      screen.getByRole("button", { name: "Default view: Incidents" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Share view: Incidents" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Delete view: Incidents" }),
+    );
+    expect(deleteView).toHaveBeenCalledOnce();
+    expect(
+      screen
+        .getAllByRole("status")
+        .some((status) => status.textContent?.includes("View deleted")),
+    ).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(restoreView).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Table options" }));
+    await user.type(screen.getByRole("textbox", { name: "View name" }), "Mine");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(exportView).toHaveBeenCalledWith(expect.any(Object), 500);
+    expect(setDefaultView).toHaveBeenCalledWith(savedView, true);
+    expect(setViewVisibility).toHaveBeenCalledWith(savedView, "workspace");
+    expect(deleteView).toHaveBeenCalledOnce();
+    expect(saveView).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Mine" }),
+    );
+  });
+
+  it("exposes exact row counts and absolute indices without claiming estimates", () => {
+    const serverState: ServerTableState = {
+      filters: [],
+      hasNextPage: true,
+      onNextPage: vi.fn(),
+      onPageSizeChange: vi.fn(),
+      pageIndex: 2,
+      pageSize: 2,
+      search: "",
+      sorting: [],
+      status: "success",
+      total: { mode: "exact", value: 10 },
+    };
+    const view = render(
+      <DataTable
+        columns={columns}
+        data={data.slice(0, 2)}
+        labels={labels}
+        serverState={serverState}
+      />,
+    );
+    const table = screen.getByRole("table");
+    expect(table.getAttribute("aria-rowcount")).toBe("11");
+    expect(screen.getAllByRole("row")[1]?.getAttribute("aria-rowindex")).toBe(
+      "6",
+    );
+
+    view.rerender(
+      <DataTable
+        columns={columns}
+        data={data.slice(0, 2)}
+        labels={labels}
+        serverState={{
+          ...serverState,
+          total: { mode: "estimated", value: 10 },
+        }}
+      />,
+    );
+    expect(screen.getByRole("table").hasAttribute("aria-rowcount")).toBe(false);
+    expect(
+      screen
+        .getAllByRole("status")
+        .some((status) => status.textContent?.includes("Approximately")),
+    ).toBe(true);
+  });
+
+  it("gives every selection checkbox a row-specific accessible name", async () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={data.slice(0, 2)}
+        enableRowSelection
+        getRowId={(row) => row.id}
+        labels={labels}
+        rowAriaLabel={(row) => row.name}
+      />,
+    );
+
+    const first = screen.getByRole("checkbox", { name: "Select row: User 30" });
+    const second = screen.getByRole("checkbox", {
+      name: "Select row: User 29",
+    });
+    expect(first).not.toBe(second);
+    await userEvent.click(first);
+    expect(
+      screen.getByRole("checkbox", { name: "Deselect row: User 30" }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Select all rows" })
+        .getAttribute("data-state"),
+    ).toBe("indeterminate");
+  });
+
+  it("renders a real primary-cell link and isolates modified clicks and row actions", () => {
+    const onActivate = vi.fn();
+    const action = vi.fn();
+    const linkedColumns = [
+      column.accessor("name", { header: "Name" }),
+      column.display({
+        id: "actions",
+        header: "Actions",
+        cell: () => <button onClick={action}>Archive</button>,
+      }),
+    ];
+    render(
+      <DataTable
+        columns={linkedColumns}
+        data={data.slice(0, 1)}
+        labels={labels}
+        onRowActivate={onActivate}
+        rowAriaLabel={(row) => `Open ${row.name}`}
+        rowHref={(row) => `/users/${row.id}`}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Open User 30" });
+    expect(link.getAttribute("href")).toBe("/users/1");
+    link.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        metaKey: true,
+      }),
+    );
+    expect(onActivate).not.toHaveBeenCalled();
+    screen.getByRole("button", { name: "Archive" }).click();
+    expect(action).toHaveBeenCalledOnce();
+    expect(onActivate).not.toHaveBeenCalled();
+    link.click();
+    expect(onActivate).toHaveBeenCalledOnce();
   });
 });
 

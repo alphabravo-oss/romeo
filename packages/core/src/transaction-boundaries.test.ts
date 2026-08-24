@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 
-import type { RunEvent } from "@romeo/ai-runtime";
 import type { AuthSubject } from "@romeo/auth";
 import { testEnv } from "./test-support/env";
-import { defaultProviderCapabilities, type BaseModel } from "@romeo/providers";
+import { defaultProviderCapabilities } from "@romeo/providers";
 import { disabledRagProvider } from "@romeo/rag";
 import {
   MemoryObjectStore,
@@ -23,8 +22,6 @@ import type {
   ToolOperation,
   UserNotification,
   UsageEvent,
-  WorkflowDefinition,
-  WorkflowRun,
 } from "./domain/entities";
 import type { RomeoRepository } from "./domain/repository";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
@@ -35,6 +32,7 @@ import { ChannelService } from "./services/channel-service";
 import { ChatService } from "./services/chat-service";
 import { CollaborationService } from "./services/collaboration-service";
 import { DataConnectorService } from "./services/data-connector-service";
+import { dispatchApprovalRequestDigest } from "./services/tool-approval-integrity";
 import { DelegatedOAuthService } from "./services/delegated-oauth-service";
 import { DelegatedOAuthTokenVault } from "./services/delegated-oauth-token-vault";
 import { DeviceAuthorizationService } from "./services/device-authorization-service";
@@ -64,6 +62,7 @@ import { QuotaService } from "./services/quota-service";
 import { RunEventSequencer } from "./services/run-event-sequencer";
 import type { RunEventTransport } from "./services/run-event-transport";
 import { RunService } from "./services/run-service";
+import { persistTerminalRun } from "./services/run-terminal-effects";
 import { SecretRotationService } from "./services/secret-rotation-service";
 import { EnvironmentSecretResolver } from "./services/secret-resolver";
 import { SessionService } from "./services/session-service";
@@ -80,7 +79,6 @@ import { UserLifecycleService } from "./services/user-lifecycle-service";
 import { VoiceService } from "./services/voice-service";
 import { WebhookService } from "./services/webhook-service";
 import { WorkspaceService } from "./services/workspace-service";
-import { WorkflowService } from "./services/workflow-service";
 
 describe("durable transaction boundaries", () => {
   it("rolls back agent publish when the publish audit write fails", async () => {
@@ -171,13 +169,29 @@ describe("durable transaction boundaries", () => {
     const repository = new InMemoryRomeoRepository();
     const { connector, operation } = dispatchFixture("enqueue_rollback");
     const approvalRequestId = "job_dispatch_enqueue_approval_rollback";
+    const subject = toolManageSubject();
+    const request = {
+      subject,
+      connector,
+      operation,
+      externalExecutionEnabled: true,
+      fetchImpl: fetch,
+      maxBytes: 1024,
+      secretResolver: {} as never,
+      timeoutMs: 1000,
+      approved: true,
+      approvalRequestId,
+      parameters: { issueId: "ISSUE-ROLLBACK" },
+      body: { title: "dispatch enqueue rollback" },
+    };
+    const approvedAt = new Date().toISOString();
     await repository.createBackgroundJob({
       id: approvalRequestId,
       orgId: "org_default",
       type: "tool.operation.approval_request",
       status: "completed",
       payload: {
-        actorId: toolManageSubject().id,
+        actorId: subject.id,
         connectorId: connector.id,
         operationId: operation.operationId,
         method: operation.method,
@@ -186,6 +200,10 @@ describe("durable transaction boundaries", () => {
         riskLevel: operation.riskLevel,
         parameterKeys: ["issueId"],
         bodyKeys: ["title"],
+        requestDigest: dispatchApprovalRequestDigest(request),
+        decision: "approved",
+        approvedAt,
+        approvedBy: subject.id,
       },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -194,31 +212,24 @@ describe("durable transaction boundaries", () => {
 
     await expect(
       enqueueToolOperationDispatch({
+        ...request,
         repository: failAuditRepository(
           repository,
           "tool.operation.dispatch.enqueue",
         ),
-        subject: toolManageSubject(),
-        connector,
-        operation,
-        externalExecutionEnabled: true,
-        fetchImpl: fetch,
-        maxBytes: 1024,
-        secretResolver: {} as never,
-        timeoutMs: 1000,
-        approved: true,
-        approvalRequestId,
-        parameters: { issueId: "ISSUE-ROLLBACK" },
-        body: { title: "dispatch enqueue rollback" },
       }),
     ).rejects.toThrow(
       "Injected audit failure: tool.operation.dispatch.enqueue",
     );
 
     const jobs = await repository.listBackgroundJobs("org_default");
-    const approvalRequest = jobs.find((job) => job.id === approvalRequestId);
-    expect(approvalRequest?.payload.consumedAt).toBeUndefined();
-    expect(approvalRequest?.payload.consumedBy).toBeUndefined();
+    expect(
+      jobs.some(
+        (job) =>
+          job.type === "tool.operation.approval.consumption" &&
+          job.payload.approvalRequestId === approvalRequestId,
+      ),
+    ).toBe(false);
     expect(
       jobs.some((job) => job.type === "tool.operation.dispatch_request"),
     ).toBe(false);
@@ -267,6 +278,13 @@ describe("durable transaction boundaries", () => {
     expect(approvalRequest?.payload.decision).toBeUndefined();
     expect(approvalRequest?.payload.rejectedAt).toBeUndefined();
     expect(approvalRequest?.payload.rejectedBy).toBeUndefined();
+    expect(
+      jobs.some(
+        (job) =>
+          job.type === "tool.operation.approval.decision" &&
+          job.payload.approvalRequestId === approvalRequestId,
+      ),
+    ).toBe(false);
     expect(
       (await repository.listAuditLogs("org_default")).some(
         (log) => log.action === "tool.operation.approval.reject",
@@ -601,36 +619,20 @@ describe("durable transaction boundaries", () => {
         return () => undefined;
       },
     };
-    const service = new RunService(
-      failUsageRepository(repository, "run.completed"),
-      new RunEventSequencer(transport),
-    );
-    const completeRun = (
-      service as unknown as {
-        completeRun: (
-          run: RunRecord,
-          event: RunEvent,
-          assistantContent: string,
-          model: BaseModel,
-          citations: [],
-        ) => Promise<void>;
-      }
-    ).completeRun.bind(service);
-
     await expect(
-      completeRun(
-        run,
+      persistTerminalRun(
+        failUsageRepository(repository, "run.completed"),
+        new RunEventSequencer(transport),
         {
-          id: "evt_terminal_usage_rollback",
-          runId: run.id,
-          sequence: 1,
-          type: "run.completed",
-          data: {},
-          createdAt: "2026-06-30T15:11:00.000Z",
+          assistantContent: "Durable answer.",
+          model,
+          run,
+          status: "completed",
+          terminalEvent: {
+            data: {},
+            type: "run.completed",
+          },
         },
-        "Durable answer.",
-        model,
-        [],
       ),
     ).rejects.toThrow("Injected usage failure: run.completed");
 
@@ -1452,7 +1454,7 @@ describe("durable transaction boundaries", () => {
     ]);
     const beforeUsage = await repository.listUsageEvents("org_default");
     const service = new KnowledgeService(
-      failAuditRepository(repository, "knowledge.source.delete"),
+      failAuditRepository(repository, "content.deletion.intent"),
     );
 
     await expect(
@@ -1461,7 +1463,7 @@ describe("durable transaction boundaries", () => {
         knowledgeBaseId: "kb_default",
         sourceId: source.id,
       }),
-    ).rejects.toThrow("Injected audit failure: knowledge.source.delete");
+    ).rejects.toThrow("Injected audit failure: content.deletion.intent");
 
     expect(
       (await repository.listKnowledgeSources("kb_default")).some(
@@ -1483,7 +1485,7 @@ describe("durable transaction boundaries", () => {
     );
     expect(
       (await repository.listAuditLogs("org_default")).some(
-        (log) => log.action === "knowledge.source.delete",
+        (log) => log.action === "content.deletion.intent",
       ),
     ).toBe(false);
   });
@@ -2015,9 +2017,9 @@ describe("durable transaction boundaries", () => {
 
   it("rolls back local managed-secret creation when audit fails", async () => {
     const repository = new InMemoryRomeoRepository();
-    const beforeSecretSettings = (await repository.listSystemSettings()).filter(
-      (setting) => setting.key.startsWith("managed_secret.v1:"),
-    );
+    const beforeSecretSettings = (
+      await repository.listSystemSettings("org_default")
+    ).filter((setting) => setting.key.startsWith("managed_secret.v1:"));
 
     await expect(
       new ManagedSecretService(
@@ -2035,7 +2037,7 @@ describe("durable transaction boundaries", () => {
     ).rejects.toThrow("Injected audit failure: admin.managed_secret.create");
 
     expect(
-      (await repository.listSystemSettings()).filter((setting) =>
+      (await repository.listSystemSettings("org_default")).filter((setting) =>
         setting.key.startsWith("managed_secret.v1:"),
       ),
     ).toHaveLength(beforeSecretSettings.length);
@@ -2088,9 +2090,9 @@ describe("durable transaction boundaries", () => {
     const beforeFactor = await repository.getLocalMfaFactor(
       "mfa_factor_rotation_rollback",
     );
-    const beforeSecretSettings = (await repository.listSystemSettings()).filter(
-      (setting) => setting.key.startsWith("managed_secret.v1:"),
-    );
+    const beforeSecretSettings = (
+      await repository.listSystemSettings("org_default")
+    ).filter((setting) => setting.key.startsWith("managed_secret.v1:"));
     const rotationEnv = testEnv({
       LOCAL_AUTH_SECRET_ENCRYPTION_KEY: newLocalMfaKey,
       LOCAL_AUTH_SECRET_ENCRYPTION_KEY_PREVIOUS: oldLocalMfaKey,
@@ -2118,9 +2120,9 @@ describe("durable transaction boundaries", () => {
     const afterFactor = await repository.getLocalMfaFactor(
       "mfa_factor_rotation_rollback",
     );
-    const afterSecretSettings = (await repository.listSystemSettings()).filter(
-      (setting) => setting.key.startsWith("managed_secret.v1:"),
-    );
+    const afterSecretSettings = (
+      await repository.listSystemSettings("org_default")
+    ).filter((setting) => setting.key.startsWith("managed_secret.v1:"));
     const oldResolved = await new ManagedSecretService(
       repository,
       oldSecretEnv,
@@ -2454,6 +2456,7 @@ describe("durable transaction boundaries", () => {
     expect(
       await repository.getSystemSetting(
         "tenant_lifecycle.deletion_request.v1:org_default",
+        "org_default",
       ),
     ).toBeUndefined();
     expect(
@@ -2751,6 +2754,46 @@ describe("durable transaction boundaries", () => {
     );
   });
 
+  it("removes synthesized voice bytes when usage persistence fails", async () => {
+    const repository = new InMemoryRomeoRepository();
+    const objectStore = trackingObjectStore();
+    const service = new VoiceService(
+      failUsageRepository(repository, "voice.preview.generated"),
+      {
+        listVoices: async () => [],
+        transcribe: async () => ({ text: "not used" }),
+        synthesize: async () => ({
+          id: "untrusted-provider-artifact-id",
+          contentType: "audio/wav",
+          storageKey: "untrusted-provider-storage-key",
+          body: new Uint8Array([82, 73, 70, 70]),
+        }),
+      },
+      objectStore.store,
+    );
+
+    await expect(
+      service.preview({
+        subject: voiceUseSubject(),
+        voiceProfileId: "voice_default",
+        text: "Clean up this failed preview.",
+      }),
+    ).rejects.toMatchObject({
+      code: "provider_unexpected_failure",
+      status: 502,
+    });
+
+    expect(objectStore.putKeys).toHaveLength(1);
+    expect(objectStore.putKeys[0]).not.toContain(
+      "untrusted-provider-artifact-id",
+    );
+    expect(objectStore.deleteKeys).toEqual(objectStore.putKeys);
+    expect(
+      await objectStore.store.getObject(objectStore.putKeys[0]!),
+    ).toBeUndefined();
+    expect(await repository.listUsageEvents("org_default")).toEqual([]);
+  });
+
   it("rolls back voice artifact deletion when audit fails", async () => {
     const repository = new InMemoryRomeoRepository();
     const objectStore = trackingObjectStore();
@@ -3032,8 +3075,8 @@ describe("durable transaction boundaries", () => {
     ).rejects.toThrow("Injected audit failure: file.upload_session.complete");
 
     expect(await repository.getFileObject(file.id)).toMatchObject({
-      status: "failed",
-      lifecycleFailureCode: "file_lifecycle_failed",
+      status: "uploading",
+      lifecycleVersion: 0,
     });
     expect(await objectStore.getObject(file.objectKey)).toBeDefined();
   });
@@ -3054,13 +3097,13 @@ describe("durable transaction boundaries", () => {
 
     await expect(
       new FileService(
-        failAuditRepository(repository, "file.delete"),
+        failAuditRepository(repository, "content.deletion.intent"),
         objectStore,
       ).delete(fileWriteSubject(), file.id),
-    ).rejects.toThrow("Injected audit failure: file.delete");
+    ).rejects.toThrow("Injected audit failure: content.deletion.intent");
 
     const afterDeleteFailure = await repository.getFileObject(file.id);
-    expect(afterDeleteFailure).toMatchObject({ status: "ready" });
+    expect(afterDeleteFailure).toMatchObject({ status: "quarantined" });
     expect(afterDeleteFailure?.deletedAt).toBe(file.deletedAt);
     expect(await objectStore.getObject(file.objectKey)).toBeDefined();
   });
@@ -3086,6 +3129,7 @@ describe("durable transaction boundaries", () => {
       sizeBytes: 5,
       dataBase64: Buffer.from("hello").toString("base64"),
     });
+    await service.processLifecycleJob({ workerId: "extraction_owner_setup" });
 
     await expect(service.retryExtraction(outsider, created.id)).rejects.toThrow(
       `Missing write permission for file:${created.id}`,
@@ -3093,7 +3137,8 @@ describe("durable transaction boundaries", () => {
     await expect(
       service.retryExtraction(owner, created.id),
     ).resolves.toMatchObject({
-      extraction: { status: "succeeded", attempts: 2 },
+      status: "quarantined",
+      extraction: { status: "pending", attempts: 0 },
     });
   });
 
@@ -3271,200 +3316,6 @@ describe("durable transaction boundaries", () => {
     expect(
       (await repository.getApiKey("api_key_role_rollback"))?.revokedAt,
     ).toBeUndefined();
-  });
-
-  it("rolls back workflow resume finalization when audit fails", async () => {
-    const repository = new InMemoryRomeoRepository();
-    const workflow: WorkflowDefinition = {
-      id: "workflow_resume_rollback",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      name: "Resume rollback",
-      steps: [
-        {
-          id: "step_1",
-          type: "agent_run",
-          name: "Draft",
-          agentId: "agent_default",
-        },
-      ],
-      enabled: true,
-      createdBy: "user_dev_admin",
-      createdAt: "2026-06-30T15:30:00.000Z",
-      updatedAt: "2026-06-30T15:30:00.000Z",
-    };
-    const linkedRun: RunRecord = {
-      id: "run_workflow_resume_linked",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      chatId: "chat_welcome",
-      agentId: "agent_default",
-      agentVersionId: "agent_version_default_v1",
-      modelId: "model_openai_compatible_default",
-      providerId: "provider_openai_compatible",
-      status: "completed",
-      createdBy: "user_dev_admin",
-      createdAt: "2026-06-30T15:31:00.000Z",
-      completedAt: "2026-06-30T15:32:00.000Z",
-    };
-    const workflowRun: WorkflowRun = {
-      id: "workflow_run_resume_rollback",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      workflowId: workflow.id,
-      status: "waiting_run",
-      input: {},
-      steps: [
-        {
-          stepId: "step_1",
-          type: "agent_run",
-          status: "waiting_run",
-          output: { runId: linkedRun.id },
-        },
-      ],
-      currentStepId: "step_1",
-      createdBy: "user_dev_admin",
-      createdAt: "2026-06-30T15:30:00.000Z",
-      updatedAt: "2026-06-30T15:31:00.000Z",
-    };
-    await repository.createWorkflowDefinition(workflow);
-    await repository.createRun(linkedRun);
-    await repository.createWorkflowRun(workflowRun);
-
-    const service = new WorkflowService(
-      failAuditRepository(repository, "workflow.run.resume"),
-      {} as never,
-    );
-
-    await expect(
-      service.resume({
-        subject: workflowAdminSubject(),
-        workflowRunId: workflowRun.id,
-      }),
-    ).rejects.toThrow("Injected audit failure: workflow.run.resume");
-
-    const storedRun = await repository.getWorkflowRun(workflowRun.id);
-    expect(storedRun).toMatchObject({
-      status: "waiting_run",
-      currentStepId: "step_1",
-      steps: [
-        {
-          stepId: "step_1",
-          status: "waiting_run",
-          output: { runId: linkedRun.id },
-        },
-      ],
-    });
-    expect(storedRun?.completedAt).toBeUndefined();
-    expect(
-      (await repository.listAuditLogs("org_default")).some(
-        (log) => log.action === "workflow.run.resume",
-      ),
-    ).toBe(false);
-  });
-
-  it("rolls back workflow retry linked run creation when audit fails", async () => {
-    const repository = new InMemoryRomeoRepository();
-    const workflow: WorkflowDefinition = {
-      id: "workflow_retry_linked_run_rollback",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      name: "Retry linked run rollback",
-      steps: [
-        {
-          id: "step_1",
-          type: "agent_run",
-          name: "Draft",
-          agentId: "agent_default",
-          retryPolicy: { maxAttempts: 2 },
-        },
-      ],
-      enabled: true,
-      createdBy: "user_dev_admin",
-      createdAt: "2026-06-30T15:35:00.000Z",
-      updatedAt: "2026-06-30T15:35:00.000Z",
-    };
-    const failedLinkedRun: RunRecord = {
-      id: "run_workflow_retry_failed_linked",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      chatId: "chat_welcome",
-      agentId: "agent_default",
-      agentVersionId: "agent_version_default_v1",
-      modelId: "model_openai_compatible_default",
-      providerId: "provider_openai_compatible",
-      status: "failed",
-      createdBy: "user_dev_admin",
-      createdAt: "2026-06-30T15:36:00.000Z",
-      completedAt: "2026-06-30T15:37:00.000Z",
-    };
-    const workflowRun: WorkflowRun = {
-      id: "workflow_run_retry_linked_run_rollback",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      workflowId: workflow.id,
-      status: "waiting_run",
-      input: { prompt: "Retry this only if the transaction commits." },
-      steps: [
-        {
-          stepId: "step_1",
-          type: "agent_run",
-          status: "waiting_run",
-          output: { runId: failedLinkedRun.id, attempt: 1 },
-        },
-      ],
-      currentStepId: "step_1",
-      createdBy: "user_dev_admin",
-      createdAt: "2026-06-30T15:35:00.000Z",
-      updatedAt: "2026-06-30T15:36:00.000Z",
-    };
-    await repository.createWorkflowDefinition(workflow);
-    await repository.createRun(failedLinkedRun);
-    await repository.createWorkflowRun(workflowRun);
-    const chatCount = (await repository.listChats("workspace_default")).length;
-    const usageCount = (await repository.listUsageEvents("org_default")).length;
-    const failingRepository = failAuditRepository(
-      repository,
-      "workflow.run.retry",
-    );
-    const service = new WorkflowService(
-      failingRepository,
-      new RunService(failingRepository, new RunEventSequencer()),
-    );
-
-    await expect(
-      service.resume({
-        subject: workflowAdminSubject(),
-        workflowRunId: workflowRun.id,
-      }),
-    ).rejects.toThrow("Injected audit failure: workflow.run.retry");
-
-    const storedRun = await repository.getWorkflowRun(workflowRun.id);
-    expect(storedRun).toMatchObject({
-      status: "waiting_run",
-      currentStepId: "step_1",
-      steps: [
-        {
-          stepId: "step_1",
-          status: "waiting_run",
-          output: { runId: failedLinkedRun.id, attempt: 1 },
-        },
-      ],
-    });
-    expect(await repository.getRun(failedLinkedRun.id)).toMatchObject({
-      status: "failed",
-    });
-    expect(await repository.listChats("workspace_default")).toHaveLength(
-      chatCount,
-    );
-    expect(await repository.listUsageEvents("org_default")).toHaveLength(
-      usageCount,
-    );
-    expect(
-      (await repository.listAuditLogs("org_default")).some(
-        (log) => log.action === "workflow.run.retry",
-      ),
-    ).toBe(false);
   });
 
   it("rolls back support access requests when notification enqueue fails", async () => {
@@ -3839,11 +3690,9 @@ describe("durable transaction boundaries", () => {
       objectStore.store,
     ).listDataExportPackages(governanceAdminSubject());
     expect(packages.packages).toHaveLength(0);
-    expect(objectStore.putKeys).toHaveLength(1);
-    expect(objectStore.deleteKeys).toEqual(objectStore.putKeys);
-    expect(
-      await objectStore.store.getObject(objectStore.putKeys[0]!),
-    ).toBeUndefined();
+    expect(packages.jobs).toHaveLength(0);
+    expect(objectStore.putKeys).toHaveLength(0);
+    expect(objectStore.deleteKeys).toHaveLength(0);
     expect(
       (await repository.listAuditLogs("org_default")).some(
         (log) => log.action === "governance.data_export.package.create",
@@ -3877,12 +3726,10 @@ describe("durable transaction boundaries", () => {
     const packages = await service.listDataExportPackages(
       governanceAdminSubject(),
     );
-    expect(packages.packages).toHaveLength(1);
-    expect(packages.packages[0]?.packageId).toBe(packaged.packageId);
+    expect(packages.packages).toHaveLength(0);
+    expect(packages.jobs).toHaveLength(1);
+    expect(packages.jobs[0]?.packageId).toBe(packaged.packageId);
     expect(objectStore.deleteKeys).toHaveLength(0);
-    expect(
-      await objectStore.store.getObject(objectStore.putKeys[0]!),
-    ).toBeDefined();
     expect(
       (await repository.listAuditLogs("org_default")).some(
         (log) => log.action === "governance.data_export.package.delete",
@@ -4906,18 +4753,6 @@ function supportAdminSubject(id = "user_dev_admin"): AuthSubject {
 
 function supportApproverSubject(id: string): AuthSubject {
   return supportAdminSubject(id);
-}
-
-function workflowAdminSubject(): AuthSubject {
-  return {
-    id: "user_dev_admin",
-    type: "user",
-    orgId: "org_default",
-    workspaceIds: ["workspace_default"],
-    groupIds: ["group_admins"],
-    scopes: ["agents:run", "runs:create"],
-    isAdmin: true,
-  };
 }
 
 function governanceAdminSubject(): AuthSubject {

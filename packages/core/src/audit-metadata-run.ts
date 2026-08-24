@@ -279,6 +279,7 @@ export const canonicalRunAuditMetadataKeysByAction = {
     "approvalRequestId",
     "decision",
     "inputKeyCount",
+    "runId",
     "workspaceId",
   ],
   "tool.approval.cancel": [
@@ -287,6 +288,7 @@ export const canonicalRunAuditMetadataKeysByAction = {
     "decision",
     "errorCode",
     "inputKeyCount",
+    "runId",
     "workspaceId",
   ],
   "tool.approval.reject": [

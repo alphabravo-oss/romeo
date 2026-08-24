@@ -4,7 +4,6 @@ import type { ObjectStore } from "@romeo/storage";
 import type { KnowledgeBase, KnowledgeSource } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
-import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import { consumeQuota } from "./consume-quota";
 import {
@@ -17,7 +16,7 @@ import {
   canIngestInlineText,
   extractInlineKnowledgeContent,
 } from "./knowledge-ingestion";
-import type { KnowledgeRetrievalPlan } from "./knowledge-retrieval-plan";
+import { ContentDeletionService } from "./content-deletion-service";
 import {
   canReadKnowledgeSource,
   filterKnowledgeSourcesForSubject,
@@ -26,21 +25,27 @@ import { indexKnowledgeSource } from "./knowledge-source-indexing";
 import { registerKnowledgeSource } from "./knowledge-source-registration";
 import type { KnowledgeVectorStore } from "./knowledge-vector-store";
 import type { QuotaCoordinator } from "./quota-coordination";
-import { readRagPolicy } from "./rag-policy-service";
 import { recordSubjectUsage } from "./record-usage";
-import { ensureSystemAuditActor } from "./system-audit-actor";
 import { reportCleanupFailure } from "./telemetry-context";
 import { emitWebhookEvent } from "./webhook-events";
 import type { WebhookEmitter } from "./webhook-service";
 
 export class KnowledgeSourceService {
+  private readonly deletions: ContentDeletionService;
+
   constructor(
     private readonly repository: RomeoRepository,
     private readonly objectStore: ObjectStore,
     private readonly vectorStore?: KnowledgeVectorStore,
     private readonly quotaCoordinator?: QuotaCoordinator,
     private readonly webhooks?: WebhookEmitter,
-  ) {}
+  ) {
+    this.deletions = new ContentDeletionService(
+      repository,
+      objectStore,
+      vectorStore,
+    );
+  }
 
   async list(
     knowledgeBaseId: string,
@@ -55,7 +60,7 @@ export class KnowledgeSourceService {
     return filterKnowledgeSourcesForSubject(
       await this.repository.listKnowledgeSources(knowledgeBaseId),
       subject,
-    );
+    ).filter((source) => source.status !== "deletion_pending");
   }
 
   async delete(input: {
@@ -64,58 +69,20 @@ export class KnowledgeSourceService {
     sourceId: string;
   }): Promise<KnowledgeSource> {
     const { knowledgeBase, source } = await this.writableSource(input);
-    const [chunks, embeddings, ragPolicy] = await Promise.all([
-      this.repository.listKnowledgeChunks(knowledgeBase.id),
-      this.repository.listKnowledgeChunkEmbeddings(knowledgeBase.id),
-      readRagPolicy(this.repository, knowledgeBase.orgId),
-    ]);
-    const chunkCount = chunks.filter(
-      (chunk) => chunk.sourceId === source.id,
-    ).length;
-    const embeddingCount = embeddings.filter(
-      (embedding) => embedding.sourceId === source.id,
-    ).length;
-    await this.deleteExternalVectors(knowledgeBase, source);
-    if (source.objectKey !== undefined) {
-      await this.objectStore.deleteObject(source.objectKey);
-    }
-    return this.repository.transaction(async (repository) => {
-      await repository.deleteKnowledgeChunkEmbeddingsForSource(source.id);
-      await repository.deleteKnowledgeChunksForSource(source.id);
-      const deleted = await repository.deleteKnowledgeSource(source.id);
-      if (!deleted) throw notFound("Knowledge source");
-      const metadata = {
-        deleteVectorsOnSourceDelete:
-          ragPolicy.retention.deleteVectorsOnSourceDelete,
-        embeddingCount,
-        exportIncludesEmbeddingVectors:
-          ragPolicy.retention.exportIncludesEmbeddingVectors,
-        knowledgeBaseId: knowledgeBase.id,
-        chunkCount,
-        objectDeleted: source.objectKey !== undefined,
-        ragPolicySource: ragPolicy.source,
-      };
-      await recordSubjectUsage(repository, input.subject, {
-        orgId: knowledgeBase.orgId,
-        workspaceId: knowledgeBase.workspaceId,
-        sourceType: "storage",
-        sourceId: source.id,
-        metric: "storage.source_deleted",
-        quantity: source.sizeBytes,
-        unit: "byte",
-        metadata,
-      });
-      await this.auditDelete(
-        input.subject,
-        {
-          ...metadata,
-          sourceId: source.id,
-          workspaceId: knowledgeBase.workspaceId,
-        },
-        repository,
-      );
-      return deleted;
-    });
+    await this.deletions.enqueueKnowledgeSource(
+      input.subject,
+      knowledgeBase,
+      source,
+    );
+    return { ...source, status: "deletion_pending" };
+  }
+
+  processContentDeletionJob(input: {
+    subject: AuthSubject;
+    workerId: string;
+    signal?: AbortSignal;
+  }) {
+    return this.deletions.runOnce(input);
   }
 
   async reindex(input: {
@@ -308,54 +275,14 @@ export class KnowledgeSourceService {
     const source = (
       await this.repository.listKnowledgeSources(knowledgeBase.id)
     ).find((item) => item.id === input.sourceId);
-    if (!source || !canReadKnowledgeSource(source, input.subject)) {
+    if (
+      !source ||
+      source.status === "deletion_pending" ||
+      !canReadKnowledgeSource(source, input.subject)
+    ) {
       throw notFound("Knowledge source");
     }
     return { knowledgeBase, source };
-  }
-
-  private async auditDelete(
-    subject: AuthSubject,
-    metadata: {
-      chunkCount: number;
-      deleteVectorsOnSourceDelete: boolean;
-      embeddingCount: number;
-      exportIncludesEmbeddingVectors: boolean;
-      knowledgeBaseId: string;
-      objectDeleted: boolean;
-      ragPolicySource: KnowledgeRetrievalPlan["policy"]["source"];
-      sourceId: string;
-      workspaceId: string;
-    },
-    repository: RomeoRepository,
-  ): Promise<void> {
-    const actorId =
-      subject.type === "user"
-        ? subject.id
-        : (
-            await ensureSystemAuditActor(repository, {
-              kind: "service_account_knowledge_retention",
-              name: "Service Account Knowledge Retention Audit",
-              orgId: subject.orgId,
-            })
-          ).id;
-    await writeAuditLog(repository, {
-      id: createId("audit"),
-      orgId: subject.orgId,
-      actorId,
-      action: "knowledge.source.delete",
-      resourceType: "knowledge_source",
-      resourceId: metadata.sourceId,
-      outcome: "success",
-      metadata: {
-        actorSubjectType: subject.type,
-        ...metadata,
-        ...(subject.type === "service_account"
-          ? { serviceAccountId: subject.id }
-          : {}),
-      },
-      createdAt: new Date().toISOString(),
-    });
   }
 
   private deleteExternalVectors(
@@ -432,4 +359,3 @@ export class KnowledgeSourceService {
     });
   }
 }
-import { writeAuditLog } from "./audit-log";

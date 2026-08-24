@@ -55,9 +55,7 @@ describe("knowledge ACL prefilter", () => {
       reasonCode: "knowledge_acl_denied",
     });
     const stale = prefilterKnowledgeCandidates({
-      candidates: [
-        { ...candidates[0]!, syncedAt: "2026-08-14T09:00:00.000Z" },
-      ],
+      candidates: [{ ...candidates[0]!, syncedAt: "2026-08-14T09:00:00.000Z" }],
       bindings: [binding("doc_allowed", "principal_1")],
       principalId: "principal_1",
       now: "2026-08-14T10:02:00.000Z",

@@ -8,6 +8,7 @@ import {
 } from "./common";
 import { GaEvidencePostureReportSchema } from "./ga-evidence-posture";
 import { PostgresOperationalPostureReportSchema } from "./postgres-operational-posture";
+import { RuntimeKeyRotationPostureReportSchema } from "./runtime-key-rotation-posture";
 
 export {
   GaEvidencePostureGateEvidenceSchema,
@@ -15,6 +16,7 @@ export {
 } from "./ga-evidence-posture-base";
 export { GaEvidencePostureReportSchema } from "./ga-evidence-posture";
 export { PostgresOperationalPostureReportSchema } from "./postgres-operational-posture";
+export { RuntimeKeyRotationPostureReportSchema } from "./runtime-key-rotation-posture";
 
 const metadata = {
   tags: ["Operational posture"],
@@ -51,7 +53,23 @@ export const getPostgresOperationalPostureRoute = createRoute({
   },
 });
 
+export const getRuntimeKeyRotationPostureRoute = createRoute({
+  ...metadata,
+  method: "get",
+  path: "/api/v1/admin/runtime-key-rotation/posture",
+  operationId: "operationalPosture.getRuntimeKeyRotation",
+  summary: "Get global runtime key-rotation usage posture",
+  responses: {
+    200: jsonResponse(
+      "Runtime key-rotation posture",
+      dataEnvelope(RuntimeKeyRotationPostureReportSchema),
+    ),
+    ...standardErrorResponses,
+  },
+});
+
 export const operationalPostureRoutes = [
   getGaEvidencePostureRoute,
   getPostgresOperationalPostureRoute,
+  getRuntimeKeyRotationPostureRoute,
 ] as const;

@@ -15,7 +15,7 @@ export function registerBootstrapRoutes(app: RomeoApi): void {
     return context.json(
       {
         subject,
-        deployment: { tenancyMode: services.deployment.tenancyMode },
+        deployment: services.deployment,
         ...bootstrap,
       },
       200,

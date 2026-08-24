@@ -123,12 +123,13 @@ export async function resolveCapabilityWithDetails(
     registryVersion: definition.registryVersion,
     requestedVersion: requestedCapabilityVersion(input.requested),
   };
+  const cacheEntry = deps.resolutionCache.get(
+    capabilityResolutionCacheKey(cacheKey),
+  );
   const cached =
     assignmentOverride === undefined
       ? readCapabilityResolutionCache({
-          entry: deps.resolutionCache.get(
-            capabilityResolutionCacheKey(cacheKey),
-          ),
+          ...(cacheEntry === undefined ? {} : { entry: cacheEntry }),
           key: cacheKey,
           now,
           risk: definition.risk,

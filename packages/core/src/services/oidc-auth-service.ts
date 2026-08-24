@@ -6,7 +6,7 @@ import {
 import type { RomeoEnv } from "@romeo/config";
 
 import type { RomeoRepository } from "../domain/repository";
-import { OidcClient } from "./oidc-client";
+import { OidcClient, type OidcClientOptions } from "./oidc-client";
 
 export interface OidcAuthenticator {
   readonly enabled: boolean;
@@ -26,7 +26,7 @@ export class DiscoveryOidcAuthenticator implements OidcAuthenticator {
   constructor(
     repository: RomeoRepository,
     env: RomeoEnv,
-    options: { fetchImpl?: typeof fetch } = {},
+    options: Pick<OidcClientOptions, "fetchImpl" | "runtimeCache"> = {},
   ) {
     this.oidcClient = new OidcClient(repository, env, options);
   }

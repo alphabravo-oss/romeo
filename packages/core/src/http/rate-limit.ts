@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { isIP } from "node:net";
 
 import type { AuthSubject } from "@romeo/auth";
 import type { RomeoEnv } from "@romeo/config";
@@ -13,6 +12,7 @@ import {
 import type { AppBindings } from "./context";
 import { readCookie, sessionCookieName } from "./session-cookie";
 import { normalizedRequestId } from "./request-id";
+import { resolveTrustedProxy } from "./trusted-proxy";
 
 type RomeoContext = Context<AppBindings>;
 
@@ -42,6 +42,7 @@ interface RateLimitStore {
 
 const exemptPaths = new Set([
   "/api/v1/health",
+  "/api/v1/health/object-storage",
   "/api/v1/docs",
   "/api/v1/openapi.json",
 ]);
@@ -309,24 +310,21 @@ function parseValkeyRateLimitResponse(response: ValkeyValue): {
 }
 
 function clientIdentity(context: RomeoContext, env: RomeoEnv): string {
-  if (env.EDGE_TRUSTED_PROXY_MODE !== "trusted_proxy") {
-    // Direct mode is development-only. A lightweight browser fingerprint keeps
-    // one local client from exhausting every other client's shared bucket.
-    return `direct:${hashKeyPart(
-      [
-        context.req.header("user-agent") ?? "unknown-agent",
-        context.req.header("accept-language") ?? "unknown-language",
-      ].join("|"),
-    )}`;
+  const proxy = resolveTrustedProxy(context, env);
+  if (proxy.trusted && proxy.clientAddress !== undefined) {
+    return `ip:${hashKeyPart(proxy.clientAddress)}`;
   }
-  const chain = (context.req.header("x-forwarded-for") ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-  const candidate = chain.at(-env.EDGE_TRUSTED_PROXY_HOPS);
-  return candidate !== undefined && isIP(candidate) !== 0
-    ? `ip:${hashKeyPart(candidate)}`
-    : "ip:unknown";
+  if (proxy.peerAddress !== undefined) {
+    return `peer:${hashKeyPart(proxy.peerAddress)}`;
+  }
+  // Adapter-less unit calls have no transport peer. A lightweight browser
+  // fingerprint keeps one local test/dev client from sharing every bucket.
+  return `direct:${hashKeyPart(
+    [
+      context.req.header("user-agent") ?? "unknown-agent",
+      context.req.header("accept-language") ?? "unknown-language",
+    ].join("|"),
+  )}`;
 }
 
 function principalIdentity(subject: AuthSubject): string {

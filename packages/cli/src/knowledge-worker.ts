@@ -1,27 +1,24 @@
-import type {
-  KnowledgeExtractionJobResult,
-  KnowledgeSource,
-} from "./api-types";
-
 import type { CliIo } from "./io";
 import { writeJson } from "./io";
 import { workerSignalAborted } from "./worker-control";
 
 export interface KnowledgeExtractionWorkerClient {
-  knowledge: {
-    extractUpload(
-      knowledgeBaseId: string,
-      sourceId: string,
-    ): Promise<KnowledgeExtractionJobResult>;
-    listSources(knowledgeBaseId: string): Promise<KnowledgeSource[]>;
-  };
+  claimExtraction(input: { leaseSeconds: number }): Promise<{
+    claimed: boolean;
+    source?: { id?: string } & Record<string, unknown>;
+  }>;
+  completeExtraction(input: {
+    errorCode?: string;
+    sourceId: string;
+    success: boolean;
+  }): Promise<unknown>;
 }
 
 export interface RunKnowledgeExtractionWorkerInput {
   client: KnowledgeExtractionWorkerClient;
   intervalMs: number;
   io: CliIo;
-  knowledgeBaseId: string;
+  leaseSeconds?: number;
   maxIterations?: number;
   maxSourcesPerIteration?: number;
   signal?: AbortSignal;
@@ -36,40 +33,43 @@ export async function runKnowledgeExtractionWorker(
 
   while (!workerSignalAborted(input.signal)) {
     iteration += 1;
-    const sources = await input.client.knowledge.listSources(
-      input.knowledgeBaseId,
-    );
-    const pending = sources
-      .filter(
-        (source) =>
-          source.status === "pending" && source.objectKey !== undefined,
-      )
-      .slice(0, input.maxSourcesPerIteration ?? 10);
-    const results: KnowledgeExtractionJobResult[] = [];
+    const results: unknown[] = [];
     const errors: Array<{ error: string; sourceId: string }> = [];
-
-    for (const source of pending) {
+    const maximum = input.maxSourcesPerIteration ?? 10;
+    let claimedCount = 0;
+    for (let index = 0; index < maximum; index += 1) {
+      if (workerSignalAborted(input.signal)) break;
+      const claim = await input.client.claimExtraction({
+        leaseSeconds: input.leaseSeconds ?? 300,
+      });
+      if (!claim.claimed) break;
+      const sourceId = claim.source?.id;
+      if (sourceId === undefined)
+        throw new Error("worker_broker_claim_invalid");
+      claimedCount += 1;
       try {
         results.push(
-          await input.client.knowledge.extractUpload(
-            input.knowledgeBaseId,
-            source.id,
-          ),
+          await input.client.completeExtraction({ sourceId, success: true }),
         );
       } catch (error) {
-        errors.push({
-          sourceId: source.id,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Unknown extraction error.",
-        });
+        const message =
+          error instanceof Error ? error.message : "Unknown extraction error.";
+        errors.push({ error: message, sourceId });
+        try {
+          await input.client.completeExtraction({
+            errorCode: "knowledge_extraction_failed",
+            sourceId,
+            success: false,
+          });
+        } catch {
+          // The first completion may have consumed or lost the fenced claim.
+        }
       }
     }
 
     writeJson(input.io, {
       iteration,
-      pendingCount: pending.length,
+      claimedCount,
       extractedCount: results.length,
       failedCount: errors.length,
       results,
@@ -81,7 +81,6 @@ export async function runKnowledgeExtractionWorker(
     if (workerSignalAborted(input.signal)) return 0;
     await sleep(input.intervalMs);
   }
-
   return 0;
 }
 

@@ -9,36 +9,36 @@ import {
   LocalizedDateTime,
 } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
+import { appHref } from "../lib/app-href";
 import { AddButton } from "./AddButton";
-import { createColumnHelper, DataTable } from "./DataTable";
+import {
+  createColumnHelper,
+  DataTable,
+  type ServerTableState,
+} from "./DataTable";
 import { KnowledgeBaseCreateDialog } from "./KnowledgeBaseCreateDialog";
 import { KnowledgeIngestNotice } from "./KnowledgeIngestNotice";
-import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const knowledgeBaseColumn = createColumnHelper<KnowledgeBase>();
 
 export function KnowledgeCatalogPage({
   ingestReadiness,
   isAdmin = false,
-  isLoading,
   knowledgeBases,
   onCreated,
   onSelectionChange,
   workspaceId,
+  tableState,
 }: {
   ingestReadiness?: KnowledgeIngestReadiness;
   isAdmin?: boolean;
-  isLoading: boolean;
   knowledgeBases: KnowledgeBase[];
   onCreated: (knowledgeBaseId: string) => void;
   onSelectionChange: (knowledgeBaseId: string) => void;
   workspaceId: string | undefined;
+  tableState: ServerTableState;
 }) {
   const { locale, t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<KnowledgeBase>(
-    "knowledge_bases",
-    { enabled: workspaceId !== undefined, workspaceId },
-  );
   const [createOpen, setCreateOpen] = useState(false);
   const columns = useMemo(
     () => [
@@ -105,13 +105,20 @@ export function KnowledgeCatalogPage({
         workspaceId={workspaceId}
       />
       <DataTable
-        serverState={inventoriedTable.serverState}
+        serverState={tableState}
         columns={columns}
-        data={inventoriedTable.rows}
-        empty={isLoading ? t("loading") : t("knowledgeNoBases")}
+        data={knowledgeBases}
+        empty={t("knowledgeNoBases")}
         getRowId={(knowledgeBase) => knowledgeBase.id}
         minTableWidth={980}
         onRowActivate={(knowledgeBase) => onSelectionChange(knowledgeBase.id)}
+        rowHref={(knowledgeBase) =>
+          appHref("/workspace", {
+            resource: knowledgeBase.id,
+            section: "knowledge",
+            workspace: workspaceId,
+          })
+        }
         preferenceKey="workspace-knowledge-bases"
         rowAriaLabel={(knowledgeBase) =>
           t("knowledgeOpenBase", { name: knowledgeBase.name })

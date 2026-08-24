@@ -306,7 +306,7 @@ export const publishManagedModelRoute = createRoute({
   request: {
     params: agentPath,
     body: {
-      required: true,
+      required: false,
       content: { "application/json": { schema: PublishManagedModelSchema } },
     },
   },

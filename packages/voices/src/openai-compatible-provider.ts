@@ -57,16 +57,17 @@ export class OpenAICompatibleVoiceProvider implements VoiceProvider {
     }
 
     try {
-      const response = await this.client().audio.speech.create({
-        model: this.options.model,
-        voice: request.voiceId,
-        input: request.text,
-        response_format: request.format === "ogg" ? "opus" : request.format,
-      });
+      const response = await this.client().audio.speech.create(
+        {
+          model: this.options.model,
+          voice: request.voiceId,
+          input: request.text,
+          response_format: request.format === "ogg" ? "opus" : request.format,
+        },
+        request.signal === undefined ? undefined : { signal: request.signal },
+      );
 
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.byteLength === 0)
-        throw new Error("Voice synthesis returned an empty artifact.");
+      const bytes = await readBoundedAudioBody(response, 50_000_000);
 
       const id = crypto.randomUUID();
       const contentType = audioContentType(
@@ -108,18 +109,23 @@ export class OpenAICompatibleVoiceProvider implements VoiceProvider {
     );
 
     try {
-      const payload = await this.client().audio.transcriptions.create({
-        model,
-        file,
-        response_format: "verbose_json",
-        ...(request.language === undefined
-          ? {}
-          : { language: request.language }),
-        ...(request.prompt === undefined ? {} : { prompt: request.prompt }),
-      });
+      const payload = await this.client().audio.transcriptions.create(
+        {
+          model,
+          file,
+          response_format: "verbose_json",
+          ...(request.language === undefined
+            ? {}
+            : { language: request.language }),
+          ...(request.prompt === undefined ? {} : { prompt: request.prompt }),
+        },
+        request.signal === undefined ? undefined : { signal: request.signal },
+      );
       const text = payload.text.trim();
       if (text.length === 0)
         throw new Error("Voice transcription returned empty text.");
+      if (text.length > 200_000)
+        throw new Error("Voice transcription exceeded the response limit.");
       const language =
         typeof payload.language === "string" && payload.language.length > 0
           ? payload.language
@@ -150,6 +156,49 @@ export class OpenAICompatibleVoiceProvider implements VoiceProvider {
       timeout: this.timeoutMs,
     });
   }
+}
+
+async function readBoundedAudioBody(
+  response: Response,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes)
+    throw new Error("Voice synthesis exceeded the response limit.");
+  if (response.body === null) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength === 0)
+      throw new Error("Voice synthesis returned an empty artifact.");
+    if (bytes.byteLength > maxBytes)
+      throw new Error("Voice synthesis exceeded the response limit.");
+    return bytes;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      total += next.value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel("voice_synthesis_response_too_large");
+        throw new Error("Voice synthesis exceeded the response limit.");
+      }
+      chunks.push(next.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (total === 0)
+    throw new Error("Voice synthesis returned an empty artifact.");
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 export function parseOpenAICompatibleVoiceCatalog(

@@ -19,6 +19,7 @@ import {
 import type { BaseModel, Provider } from "../features/providers/types";
 import { updateWorkspaceDefaultAgentMutationOptions } from "../features/tenancy";
 import { downloadText } from "../lib/download";
+import { appHref } from "../lib/app-href";
 import { useLocale } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { toast } from "../lib/toast";
@@ -271,7 +272,7 @@ export function ManagedModelAdminPanel({
 
   if (selectedAgentId) {
     return (
-      <div className="grid min-w-0 gap-4">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
         <Button
           className="w-fit"
           onClick={() => onNavigationChange(null)}
@@ -294,7 +295,7 @@ export function ManagedModelAdminPanel({
             workspaceId={workspaceId}
           />
         ) : (
-          <EmptyState title={t("managedModelNotFound")}>
+          <EmptyState headingLevel={2} title={t("managedModelNotFound")}>
             {t("managedModelNotFoundDescription")}
           </EmptyState>
         )}
@@ -340,7 +341,7 @@ export function ManagedModelAdminPanel({
           />
         </div>
       </div>
-      <div className="mt-4 grid gap-4">
+      <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
         <PanelStats
           items={[
             { label: t("curatedModels"), value: agents.length },
@@ -361,6 +362,14 @@ export function ManagedModelAdminPanel({
           getRowId={(agent) => agent.id}
           minTableWidth={1_020}
           onRowActivate={(agent) => onNavigationChange(agent.id)}
+          rowHref={(agent) =>
+            appHref("/admin", {
+              managedModel: agent.id,
+              section: "providers",
+              view: "curated",
+              workspace: workspaceId,
+            })
+          }
           preferenceKey="admin-managed-models"
           rowAriaLabel={(agent) => t("managedModelOpen", { name: agent.name })}
           searchVisibility="always"

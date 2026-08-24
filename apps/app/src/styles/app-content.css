@@ -115,7 +115,10 @@
   padding: 0 10px;
   margin-bottom: 2px;
   border-radius: 6px;
-  color: var(--rm-faint);
+  /* These labels are small uppercase navigation text, so the decorative
+     `faint` token does not provide enough contrast. `muted` clears AA in
+     both light and dark sidebars without competing with active items. */
+  color: var(--rm-muted);
   font-size: 10.5px;
   font-weight: 650;
   letter-spacing: 0.07em;

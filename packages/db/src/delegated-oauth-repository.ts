@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import type {
   DataConnectorType,
@@ -6,6 +6,8 @@ import type {
   DelegatedOAuthConnectionStatus,
   DelegatedOAuthProviderId,
   DelegatedOAuthTokenEnvelope,
+  RuntimeKeyUsageCounts,
+  RuntimeKeyUsageQuery,
 } from "@romeo/core";
 
 import type { RomeoDatabase } from "./client";
@@ -44,6 +46,68 @@ export class PgDelegatedOAuthRepository {
         asc(delegatedOAuthConnections.id),
       );
     return rows.map(toDelegatedOAuthConnectionRecord);
+  }
+
+  async countDelegatedOAuthTokenKeyUsage(
+    input: RuntimeKeyUsageQuery,
+  ): Promise<RuntimeKeyUsageCounts> {
+    const token = delegatedOAuthConnections.token;
+    const common = sql`
+      jsonb_typeof(${token}) = 'object'
+      and ${token}->>'alg' = 'A256GCM'
+      and jsonb_typeof(${token}->'iv') = 'string'
+      and length(${token}->>'iv') > 0
+      and jsonb_typeof(${token}->'ciphertext') = 'string'
+      and length(${token}->>'ciphertext') > 0
+      and jsonb_typeof(${token}->'tag') = 'string'
+      and length(${token}->>'tag') > 0
+      and jsonb_typeof(${token}->'createdAt') = 'string'
+      and length(${token}->>'createdAt') > 0
+    `;
+    const legacy = sql`(${common}) and ${token}->>'v' in ('1', '2')`;
+    const versioned = sql`
+      (${common})
+      and ${token}->>'v' = '3'
+      and jsonb_typeof(${token}->'keyVersion') = 'string'
+      and ${token}->>'keyVersion' ~ '^[a-f0-9]{16}$'
+    `;
+    const active =
+      input.activeVersion === undefined
+        ? sql`false`
+        : sql`${token}->>'keyVersion' = ${input.activeVersion}`;
+    const previous =
+      input.previousVersion === undefined
+        ? sql`false`
+        : sql`${token}->>'keyVersion' = ${input.previousVersion}`;
+    const [row] = await this.db
+      .select({
+        active:
+          sql<number>`count(*) filter (where (${versioned}) and (${active}))`.mapWith(
+            Number,
+          ),
+        corrupt:
+          sql<number>`count(*) filter (where not ((${legacy}) or (${versioned})))`.mapWith(
+            Number,
+          ),
+        legacyUnversioned:
+          sql<number>`count(*) filter (where ${legacy})`.mapWith(Number),
+        previous:
+          sql<number>`count(*) filter (where (${versioned}) and (${previous}))`.mapWith(
+            Number,
+          ),
+        total: sql<number>`count(*)`.mapWith(Number),
+        unknown:
+          sql<number>`count(*) filter (where (${versioned}) and not (${active}) and not (${previous}))`.mapWith(
+            Number,
+          ),
+      })
+      .from(delegatedOAuthConnections)
+      .where(
+        input.orgId === undefined
+          ? undefined
+          : eq(delegatedOAuthConnections.orgId, input.orgId),
+      );
+    return row ?? emptyKeyUsage();
   }
 
   async getDelegatedOAuthConnection(
@@ -218,7 +282,9 @@ function asTokenEnvelope(value: unknown): DelegatedOAuthTokenEnvelope {
     typeof value === "object" &&
     value !== null &&
     ((value as { v?: unknown }).v === 1 ||
-      (value as { v?: unknown }).v === 2) &&
+      (value as { v?: unknown }).v === 2 ||
+      ((value as { v?: unknown }).v === 3 &&
+        typeof (value as { keyVersion?: unknown }).keyVersion === "string")) &&
     (value as { alg?: unknown }).alg === "A256GCM" &&
     typeof (value as { ciphertext?: unknown }).ciphertext === "string" &&
     typeof (value as { iv?: unknown }).iv === "string" &&
@@ -228,4 +294,15 @@ function asTokenEnvelope(value: unknown): DelegatedOAuthTokenEnvelope {
     return value as DelegatedOAuthTokenEnvelope;
   }
   throw new Error("Delegated OAuth token envelope is invalid.");
+}
+
+function emptyKeyUsage(): RuntimeKeyUsageCounts {
+  return {
+    active: 0,
+    corrupt: 0,
+    legacyUnversioned: 0,
+    previous: 0,
+    total: 0,
+    unknown: 0,
+  };
 }

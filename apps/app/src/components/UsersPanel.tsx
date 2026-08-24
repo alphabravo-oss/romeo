@@ -1,4 +1,5 @@
-import { Input, LinkButton, NativeSelect, Button } from "@romeo/ui";
+import { Input, NativeSelect, Button } from "@romeo/ui";
+import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
 import { useCallback, useMemo, useState } from "react";
@@ -84,7 +85,7 @@ export function UsersPanel({
         cell: (c) => (
           <IdentityCell
             mono
-            primary={c.getValue()}
+            primary={displayUserName(c.getValue(), t)}
             secondary={c.row.original.email}
           />
         ),
@@ -158,9 +159,17 @@ export function UsersPanel({
         <PageActions
           onRefresh={() => void usersQuery.refetch()}
           primary={
-            <LinkButton href="/admin?section=auth-providers" variant="primary">
-              {t("usersAddViaSso")}
-            </LinkButton>
+            <Button asChild variant="primary">
+              <Link
+                search={(previous) => ({
+                  ...previous,
+                  section: "auth-providers",
+                })}
+                to="/admin"
+              >
+                {t("usersAddViaSso")}
+              </Link>
+            </Button>
           }
           refreshLabel={t("refresh")}
           refreshing={usersQuery.isFetching}
@@ -254,6 +263,16 @@ export function UsersPanel({
       {dialog}
     </Section>
   );
+}
+
+function displayUserName(
+  name: string,
+  t: ReturnType<typeof useLocale>["t"],
+): string {
+  const scheduledWorker = /^Scheduled ([a-z0-9_]+) worker$/u.exec(name);
+  if (scheduledWorker === null) return name;
+  const operation = (scheduledWorker[1] ?? "").replaceAll("_", " ");
+  return t("usersScheduledWorkerName", { operation });
 }
 
 function UserManageDialog({

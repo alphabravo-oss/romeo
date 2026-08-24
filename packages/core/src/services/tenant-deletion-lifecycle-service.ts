@@ -31,6 +31,9 @@ export class TenantDeletionLifecycleService {
     private readonly repository: RomeoRepository,
     private readonly abuseControls: AbuseControlService,
     private readonly objectStore: ObjectStore = disabledObjectStore,
+    private readonly vectorStore?: {
+      deleteEmbeddingsForOrg?(input: { orgId: string }): Promise<void>;
+    },
   ) {}
 
   async requestDeletion(input: {
@@ -48,18 +51,21 @@ export class TenantDeletionLifecycleService {
     const reasonCode = normalizeReasonCode(input.reasonCode);
     const now = new Date().toISOString();
     return this.repository.transaction(async (repository) => {
-      await repository.upsertSystemSetting({
-        key: deletionRequestKey(input.orgId),
-        updatedAt: now,
-        value: {
-          schemaVersion: "romeo.tenant-deletion-request.v1",
-          orgId: input.orgId,
-          status: "requested",
-          reasonCode,
-          requestedAt: now,
-          requestedBy: input.subject.id,
+      await repository.upsertSystemSetting(
+        {
+          key: deletionRequestKey(input.orgId),
+          updatedAt: now,
+          value: {
+            schemaVersion: "romeo.tenant-deletion-request.v1",
+            orgId: input.orgId,
+            status: "requested",
+            reasonCode,
+            requestedAt: now,
+            requestedBy: input.subject.id,
+          },
         },
-      });
+        input.orgId,
+      );
       await this.abuseControlService(repository).updateForOrg({
         subject: input.subject,
         orgId: input.orgId,
@@ -100,18 +106,21 @@ export class TenantDeletionLifecycleService {
     }
     const now = new Date().toISOString();
     return this.repository.transaction(async (repository) => {
-      await repository.upsertSystemSetting({
-        key: deletionRequestKey(input.orgId),
-        updatedAt: now,
-        value: {
-          schemaVersion: "romeo.tenant-deletion-request.v1",
-          orgId: input.orgId,
-          ...existing,
-          status: "cancelled",
-          cancelledAt: now,
-          cancelledBy: input.subject.id,
+      await repository.upsertSystemSetting(
+        {
+          key: deletionRequestKey(input.orgId),
+          updatedAt: now,
+          value: {
+            schemaVersion: "romeo.tenant-deletion-request.v1",
+            orgId: input.orgId,
+            ...existing,
+            status: "cancelled",
+            cancelledAt: now,
+            cancelledBy: input.subject.id,
+          },
         },
-      });
+        input.orgId,
+      );
       await writeAuditLog(repository, {
         subject: input.subject,
         action: "admin.organization.deletion_request.cancel",
@@ -244,6 +253,9 @@ export class TenantDeletionLifecycleService {
       objectStore: this.objectStore,
       orgId: input.orgId,
       repository: this.repository,
+      ...(this.vectorStore === undefined
+        ? {}
+        : { vectorStore: this.vectorStore }),
     });
   }
 

@@ -4,6 +4,7 @@ import { MemoryObjectStore } from "@romeo/storage";
 
 import { createRomeoApi } from "./api";
 import { InMemoryRomeoRepository } from "./repositories/in-memory";
+import { FileService } from "./services/file-service";
 
 describe("collaboration API", () => {
   it("searches share targets across same-org users, groups, and visible service accounts", async () => {
@@ -233,7 +234,8 @@ describe("collaboration API", () => {
 
   it("shares files and allows granted non-admin readers to fetch content", async () => {
     const objectStore = new MemoryObjectStore();
-    const api = createRomeoApi(new InMemoryRomeoRepository(), { objectStore });
+    const repository = new InMemoryRomeoRepository();
+    const api = createRomeoApi(repository, { objectStore });
     const uploadResponse = await api.request("/api/v1/files", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -246,6 +248,9 @@ describe("collaboration API", () => {
       }),
     });
     const uploaded = await uploadResponse.json();
+    await new FileService(repository, objectStore).processLifecycleJob({
+      workerId: "collaboration_file",
+    });
     const serviceAccountResponse = await api.request(
       "/api/v1/service-accounts",
       {

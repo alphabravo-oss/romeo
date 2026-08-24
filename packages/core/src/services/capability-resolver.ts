@@ -330,7 +330,9 @@ export class CapabilityService {
         ...(input.expectedVersion === undefined
           ? {}
           : { expectedVersion: input.expectedVersion }),
-        ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt }),
+        ...(input.expiresAt === undefined
+          ? {}
+          : { expiresAt: input.expiresAt }),
         ...(input.workspaceId === undefined
           ? {}
           : { workspaceId: input.workspaceId }),
@@ -348,33 +350,42 @@ export class CapabilityService {
     bundleId: string;
     reason: string;
   }) {
-    const published = await this.policyBundles.approve(input);
-    const change = published.changes[0];
-    const assignment = change?.assignment;
-    if (change !== undefined && assignment !== undefined) {
-      await updateCapabilityAssignment(this.repository, {
-        subject: input.subject,
-        capabilityId: change.capabilityId as CapabilityId,
-        scope: {
-          scopeType: assignment.scopeType,
-          scopeId: assignment.scopeId,
-        },
-        state: change.nextState,
-        configuration: assignment.configuration,
-        reason: assignment.reason,
-        ...(assignment.expectedVersion === undefined
-          ? {}
-          : { expectedVersion: assignment.expectedVersion }),
-        ...(assignment.expiresAt === undefined
-          ? {}
-          : { expiresAt: assignment.expiresAt }),
-        ...(assignment.workspaceId === undefined
-          ? {}
-          : { workspaceId: assignment.workspaceId }),
-      });
-    }
+    const publicBundle = await this.repository.transaction(
+      async (repository) => {
+        // The bundle transition, assignment replacement, and both audit writes
+        // form one publication commit. A version conflict or write failure must
+        // leave the bundle pending so a distinct approver can retry safely.
+        const policyBundles = new PolicyBundleService(repository);
+        const published = await policyBundles.approve(input);
+        const change = published.changes[0];
+        const assignment = change?.assignment;
+        if (change !== undefined && assignment !== undefined) {
+          await updateCapabilityAssignment(repository, {
+            subject: input.subject,
+            capabilityId: change.capabilityId as CapabilityId,
+            scope: {
+              scopeType: assignment.scopeType,
+              scopeId: assignment.scopeId,
+            },
+            state: change.nextState,
+            configuration: assignment.configuration,
+            reason: assignment.reason,
+            ...(assignment.expectedVersion === undefined
+              ? {}
+              : { expectedVersion: assignment.expectedVersion }),
+            ...(assignment.expiresAt === undefined
+              ? {}
+              : { expiresAt: assignment.expiresAt }),
+            ...(assignment.workspaceId === undefined
+              ? {}
+              : { workspaceId: assignment.workspaceId }),
+          });
+        }
+        return policyBundles.publicBundle(published);
+      },
+    );
     this.dropResolutionCache(input.subject.orgId);
-    return this.policyBundles.publicBundle(published);
+    return publicBundle;
   }
 
   async previewAssignment(

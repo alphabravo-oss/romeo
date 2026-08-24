@@ -19,11 +19,14 @@ describe("mixed attachment tray surfaces", () => {
     expect(tray).toMatch(/role="progressbar"/u);
     expect(tray).toMatch(/trayRetryUpload/u);
     expect(tray).toMatch(/onCancelAttachment/u);
-    expect(tray).toMatch(/<audio controls/u);
+    expect(tray).toMatch(/<audio/u);
+    expect(tray).toMatch(/<track/u);
     expect(tray).toMatch(/traySafeDownload/u);
     expect(tray).toMatch(/trayDocumentPage/u);
-    expect(tray).toMatch(/ArrowLeft/u);
+    expect(tray).toMatch(/moveAttachmentEarlier/u);
+    expect(tray).toMatch(/moveAttachmentLater/u);
     expect(composer).toMatch(/capture="environment"/u);
+    expect(composer).toMatch(/name="chat-camera-attachment"/u);
     expect(styles).toMatch(/prefers-reduced-motion: reduce/u);
     expect(styles).toMatch(/\.reduce-motion \.rm-tray-progress-bar/u);
   });

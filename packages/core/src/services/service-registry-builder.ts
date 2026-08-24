@@ -1,4 +1,5 @@
 import type { RomeoEnv } from "@romeo/config";
+import type { ProviderCircuitBreaker } from "@romeo/ai-runtime";
 import type { ObjectStore } from "@romeo/storage";
 import type { VoiceProvider } from "@romeo/voices";
 
@@ -8,6 +9,10 @@ import { AgentService } from "./agent-service";
 import { AnalyticsService } from "./analytics-service";
 import { ApiKeyService } from "./api-key-service";
 import { AuditService } from "./audit-service";
+import {
+  AuditIntegrityService,
+  VersionedHmacAuditCheckpointSigner,
+} from "./audit-integrity";
 import type { AbuseControlService } from "./abuse-control-service";
 import type { AuthProviderSettingsService } from "./auth-provider-settings-service";
 import { BillingService } from "./billing-service";
@@ -35,11 +40,13 @@ import { EvalService } from "./eval-service";
 import type { FileService } from "./file-service";
 import { GaEvidencePostureService } from "./ga-evidence-posture-service";
 import { GovernanceService } from "./governance-service";
+import { GovernanceExportWorker } from "./governance-export-worker";
 import { GroupService } from "./group-service";
 import { ImageGenerationService } from "./image-generation-service";
 import { ImageJobStore } from "./image-job-store";
 import { ModelCapabilityProbeService } from "./model-capability-probe";
 import { InterfacePreferenceService } from "./interface-preference-service";
+import type { InternalReadinessService } from "./internal-readiness-service";
 import { IdempotencyService } from "./idempotency-service";
 import { JobService } from "./job-service";
 import {
@@ -56,6 +63,7 @@ import type { NotificationDeliverySender } from "./notification-delivery";
 import { NotificationService } from "./notification-service";
 import { OAuth2PkceService } from "./oauth2-pkce-service";
 import { OidcPkceService } from "./oidc-pkce-service";
+import type { OidcRuntimeCache } from "./oidc-client";
 import type { OidcAuthenticator } from "./oidc-auth-service";
 import { OpenAiChatCompletionsService } from "./openai-chat-completions-service";
 import { OpenAiEmbeddingsService } from "./openai-embeddings-service";
@@ -73,6 +81,7 @@ import { RagPolicyService } from "./rag-policy-service";
 import { RagPostureService } from "./rag-posture-service";
 import { ReadinessService } from "./readiness-service";
 import type { RunService } from "./run-service";
+import { RuntimeKeyRotationPostureService } from "./runtime-key-rotation-posture-service";
 import { SamlAuthService } from "./saml-auth-service";
 import { ScimService } from "./scim-service";
 import type { SecretResolver } from "./secret-resolver";
@@ -90,11 +99,11 @@ import type { VectorStoreDeploymentPosture } from "./vector-store-deployment";
 import { VoiceService } from "./voice-service";
 import type { WebhookService } from "./webhook-service";
 import type { WebSearchService } from "./web-search-service";
-import type { WorkflowService } from "./workflow-service";
+
 import { WorkspaceContentService } from "./workspace-content-service";
 import { WorkspaceService } from "./workspace-service";
 import type { CreateServicesOptions, RomeoServices } from "./index";
-import { parseCsvEnvironmentList } from "./data-connector-executor-factory";
+import { dataConnectorRuntimePosture } from "./service-registry-data-connector-posture";
 
 interface ServiceRegistryInput {
   abuseControls: AbuseControlService;
@@ -111,14 +120,17 @@ interface ServiceRegistryInput {
   directorySync: DirectorySyncService;
   env: RomeoEnv;
   files: FileService;
+  internalReadiness: InternalReadinessService;
   knowledge: KnowledgeService;
   knowledgeVectorStore?: ReturnType<typeof createQdrantKnowledgeVectorStore>;
   managedSecrets: ManagedSecretService;
   notificationDelivery: NotificationDeliverySender;
+  oidcRuntimeCache: OidcRuntimeCache;
   objectStore: ObjectStore;
   oidc: OidcAuthenticator;
   openWebUiCompatibility: OpenWebUiCompatibilityService;
   options: CreateServicesOptions;
+  providerCircuitBreaker: ProviderCircuitBreaker;
   quotaCoordinator: QuotaCoordinator;
   repository: RomeoRepository;
   runs: RunService;
@@ -131,7 +143,6 @@ interface ServiceRegistryInput {
   voiceProvider: VoiceProvider;
   webhooks: WebhookService;
   webSearch: WebSearchService;
-  workflows: WorkflowService;
 }
 
 export function buildServiceRegistry(
@@ -152,14 +163,17 @@ export function buildServiceRegistry(
     directorySync,
     env,
     files,
+    internalReadiness,
     knowledge,
     knowledgeVectorStore,
     managedSecrets,
     notificationDelivery,
+    oidcRuntimeCache,
     objectStore,
     oidc,
     openWebUiCompatibility,
     options,
+    providerCircuitBreaker,
     quotaCoordinator,
     repository,
     runs,
@@ -172,7 +186,6 @@ export function buildServiceRegistry(
     voiceProvider,
     webhooks,
     webSearch,
-    workflows,
   } = input;
 
   const auditCursorSecrets: [string, ...string[]] = [
@@ -182,6 +195,15 @@ export function buildServiceRegistry(
     auditCursorSecrets.push(
       derivePageCursorSecret(env.SESSION_SECRET_PREVIOUS, "audit-table"),
     );
+
+  const tablePages = new InventoriedTablePageService(repository, {
+    cursorSecrets: inventoriedTablePageCursorSecrets({
+      current: env.SESSION_SECRET,
+      ...(env.SESSION_SECRET_PREVIOUS.length > 0
+        ? { previous: env.SESSION_SECRET_PREVIOUS }
+        : {}),
+    }),
+  });
 
   return {
     abuseControls,
@@ -195,8 +217,21 @@ export function buildServiceRegistry(
     audit: new AuditService(repository, {
       cursorSecrets: auditCursorSecrets,
     }),
+    auditIntegrity: new AuditIntegrityService(
+      repository,
+      options.auditCheckpointSigner ??
+        VersionedHmacAuditCheckpointSigner.fromSecrets({
+          current: env.SESSION_SECRET,
+          ...(env.SESSION_SECRET_PREVIOUS.length === 0
+            ? {}
+            : { previous: env.SESSION_SECRET_PREVIOUS }),
+        }),
+      options.auditExportClient,
+    ),
     authProviderSettings,
     billing: new BillingService(repository, {
+      enabled: env.BILLING_ENABLED,
+      tenancyMode: env.TENANCY_MODE,
       genericWebhookSecret: env.BILLING_GENERIC_WEBHOOK_SECRET,
       genericWebhookToleranceSeconds:
         env.BILLING_GENERIC_WEBHOOK_TOLERANCE_SECONDS,
@@ -213,20 +248,33 @@ export function buildServiceRegistry(
     capabilityFlags,
     chats,
     temporaryChatCleanup,
-    chatComments: new ChatCommentService(repository, notificationDelivery),
+    chatComments: new ChatCommentService(
+      repository,
+      notificationDelivery,
+      secretResolver,
+    ),
     chatTags: new ChatTagService(repository),
     collaboration: new CollaborationService(repository),
     contentPolicy: new ContentPolicyService(repository),
     contentPolicyVersions: new ContentPolicyVersionService(repository),
-    contentPolicyApprovals: new PolicyApprovalService(repository),
+    contentPolicyApprovals: new PolicyApprovalService(repository, {
+      resolve: (resolution) => runs.resolveContentPolicyApproval(resolution),
+      expireDue: (subject) => runs.expireContentPolicyApprovals(subject),
+    }),
     dataConnectors: new DataConnectorService(
       repository,
       knowledge,
       dataConnectorExecutor,
-      dataConnectorPosture(env),
+      dataConnectorRuntimePosture(env),
     ),
     delegatedOAuth,
-    deployment: { tenancyMode: env.TENANCY_MODE },
+    deployment: {
+      tenancyMode: env.TENANCY_MODE,
+      billingEnabled: env.BILLING_ENABLED,
+      malwareScanEnabled: env.FILE_MALWARE_SCAN_ENABLED,
+      qdrantConfigured:
+        activeVectorStoreDeployment.externalVectorStore.configured,
+    },
     directorySync,
     deviceAuthorizations: new DeviceAuthorizationService(repository),
     edgeSecurity: new EdgeSecurityService(env),
@@ -242,10 +290,16 @@ export function buildServiceRegistry(
     files,
     gaEvidencePosture: new GaEvidencePostureService(env),
     governance: new GovernanceService(repository, objectStore, {
+      capabilities,
       env,
       scimEnabled: env.SCIM_ENABLED,
       deleteKnowledgeSource: (value) => knowledge.deleteSource(value),
     }),
+    governanceExports: new GovernanceExportWorker(
+      repository,
+      tablePages,
+      objectStore,
+    ),
     groups: new GroupService(repository),
     imageJobs: new ImageJobStore(repository),
     modelCapabilityProbes: new ModelCapabilityProbeService(repository),
@@ -259,17 +313,15 @@ export function buildServiceRegistry(
         : { fetchImpl: options.providerFetch }),
     }),
     interfacePreferences: new InterfacePreferenceService(repository),
+    internalReadiness,
     idempotency: new IdempotencyService(repository),
     jobs: new JobService(repository),
-    tableExports: new ServerTableExportWorker(repository),
-    tablePages: new InventoriedTablePageService(repository, {
-      cursorSecrets: inventoriedTablePageCursorSecrets({
-        current: env.SESSION_SECRET,
-        ...(env.SESSION_SECRET_PREVIOUS.length > 0
-          ? { previous: env.SESSION_SECRET_PREVIOUS }
-          : {}),
-      }),
-    }),
+    tableExports: new ServerTableExportWorker(
+      repository,
+      tablePages,
+      objectStore,
+    ),
+    tablePages,
     tableViews: new ServerTableViewService(repository),
     knowledge,
     ldapAuth: new LdapAuthService(
@@ -284,14 +336,23 @@ export function buildServiceRegistry(
     ),
     localAuth: new LocalAuthService(repository, sessions, env),
     managedSecrets,
-    notifications: new NotificationService(repository, notificationDelivery),
+    notifications: new NotificationService(
+      repository,
+      notificationDelivery,
+      secretResolver,
+    ),
     oidc,
     oidcPkce: new OidcPkceService(
       repository,
       sessions,
       env,
       authProviderSettings,
-      options.oidcFetch === undefined ? {} : { fetchImpl: options.oidcFetch },
+      {
+        ...(options.oidcFetch === undefined
+          ? {}
+          : { fetchImpl: options.oidcFetch }),
+        runtimeCache: oidcRuntimeCache,
+      },
     ),
     oauth2Pkce: new OAuth2PkceService(
       repository,
@@ -315,6 +376,13 @@ export function buildServiceRegistry(
     ),
     scim: new ScimService(repository, { enabled: env.SCIM_ENABLED }),
     openAiChatCompletions: new OpenAiChatCompletionsService(repository, {
+      capabilities,
+      circuitBreaker: providerCircuitBreaker,
+      providerDisabledIds: env.MODEL_PROVIDER_DISABLED_IDS,
+      providerFallbackModelId: env.MODEL_PROVIDER_FALLBACK_MODEL_ID,
+      providerRetryAttempts: env.MODEL_PROVIDER_RETRY_ATTEMPTS,
+      providerRetryBackoffMs: env.MODEL_PROVIDER_RETRY_BACKOFF_MS,
+      providerTimeoutMs: env.MODEL_PROVIDER_STREAM_TIMEOUT_MS,
       quotaCoordinator,
       secretResolver,
       webhooks,
@@ -323,6 +391,12 @@ export function buildServiceRegistry(
         : { fetchImpl: options.providerFetch }),
     }),
     openAiEmbeddings: new OpenAiEmbeddingsService(repository, {
+      circuitBreaker: providerCircuitBreaker,
+      providerDisabledIds: env.MODEL_PROVIDER_DISABLED_IDS,
+      providerFallbackModelId: env.MODEL_PROVIDER_FALLBACK_MODEL_ID,
+      providerRetryAttempts: env.MODEL_PROVIDER_RETRY_ATTEMPTS,
+      providerRetryBackoffMs: env.MODEL_PROVIDER_RETRY_BACKOFF_MS,
+      providerTimeoutMs: env.MODEL_PROVIDER_STREAM_TIMEOUT_MS,
       quotaCoordinator,
       secretResolver,
       webhooks,
@@ -361,8 +435,13 @@ export function buildServiceRegistry(
       env,
       activeVectorStoreDeployment,
       knowledgeVectorStore,
+      objectStore,
     ),
     runs,
+    runtimeKeyRotationPosture: new RuntimeKeyRotationPostureService(
+      repository,
+      env,
+    ),
     serviceAccounts: new ServiceAccountService(repository),
     secretRotation: new SecretRotationService(repository, env, managedSecrets),
     sessions,
@@ -372,7 +451,12 @@ export function buildServiceRegistry(
       options.oidcFetch,
       users,
     ),
-    tenantAdmin: new TenantAdminService(repository, abuseControls, objectStore),
+    tenantAdmin: new TenantAdminService(
+      repository,
+      abuseControls,
+      objectStore,
+      knowledgeVectorStore,
+    ),
     toolConnectors: new ToolConnectorService(
       repository,
       secretResolver,
@@ -389,42 +473,11 @@ export function buildServiceRegistry(
     ),
     webhooks,
     webSearch,
-    workflows,
     workspace: new WorkspaceService(repository),
     workspaceContent: new WorkspaceContentService(
       repository,
       files,
       objectStore,
     ),
-  };
-}
-
-function dataConnectorPosture(env: RomeoEnv) {
-  return {
-    executionDriver: env.DATA_CONNECTOR_EXECUTION_DRIVER,
-    egressPolicy: env.DATA_CONNECTOR_EGRESS_POLICY,
-    allowedHostRuleCount: parseCsvEnvironmentList(
-      env.DATA_CONNECTOR_FETCH_ALLOWED_HOSTS,
-    ).length,
-    fetchMaxBytes: env.DATA_CONNECTOR_FETCH_MAX_BYTES,
-    fetchRetryAttempts: env.DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS,
-    fetchRetryBackoffMs: env.DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS,
-    fetchTimeoutMs: env.DATA_CONNECTOR_FETCH_TIMEOUT_MS,
-    liveEvidencePath: env.DATA_CONNECTOR_LIVE_EVIDENCE_PATH,
-    workerEnabled: env.DATA_CONNECTOR_WORKER_ENABLED,
-    networkPolicyConfigured: env.DATA_CONNECTOR_NETWORK_POLICY_ENABLED,
-    secretResolverDriver: env.SECRET_RESOLVER_DRIVER,
-    managedSecretConfigured:
-      env.MANAGED_SECRET_ENCRYPTION_KEY.trim().length >= 32,
-    githubDeploymentTokenConfigured:
-      env.DATA_CONNECTOR_GITHUB_TOKEN.trim().length > 0,
-    delegatedOAuthGithubConfigured:
-      env.DELEGATED_OAUTH_GITHUB_CLIENT_ID.trim().length > 0 &&
-      env.DELEGATED_OAUTH_GITHUB_CLIENT_SECRET.trim().length > 0 &&
-      env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY.trim().length >= 32,
-    s3EndpointConfigured: env.S3_ENDPOINT.trim().length > 0,
-    s3DeploymentCredentialsConfigured:
-      env.S3_ACCESS_KEY_ID.trim().length > 0 &&
-      env.S3_SECRET_ACCESS_KEY.trim().length > 0,
   };
 }

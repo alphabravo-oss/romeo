@@ -4,6 +4,7 @@ import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.mjs";
 import type { ReactNode } from "react";
 
 import type { DataTableLabels } from "./advanced-data-table";
+import { Button } from "./button";
 import type { ServerPagination } from "./server-table-state";
 
 export function ClientTablePager<T>({
@@ -106,24 +107,28 @@ function PagerButtons({
 }) {
   return (
     <div className="rm-table-pager-nav">
-      <button
+      <Button
         className="rm-table-pager-button"
         disabled={!canPrevious}
         onClick={onPrevious}
+        size="sm"
         type="button"
+        variant="ghost"
       >
         <ChevronLeft aria-hidden size={14} />
         {labels.previousPage}
-      </button>
-      <button
+      </Button>
+      <Button
         className="rm-table-pager-button"
         disabled={!canNext}
         onClick={onNext}
+        size="sm"
         type="button"
+        variant="ghost"
       >
         {labels.nextPage}
         <ChevronRight aria-hidden size={14} />
-      </button>
+      </Button>
     </div>
   );
 }

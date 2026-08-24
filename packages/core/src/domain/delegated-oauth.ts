@@ -41,9 +41,8 @@ interface DelegatedOAuthTokenEnvelopeBase {
   tag: string;
 }
 
-export type DelegatedOAuthTokenEnvelope = DelegatedOAuthTokenEnvelopeBase & {
-  v: 1 | 2;
-};
+export type DelegatedOAuthTokenEnvelope = DelegatedOAuthTokenEnvelopeBase &
+  ({ v: 1 | 2; keyVersion?: never } | { v: 3; keyVersion: string });
 
 export interface DelegatedOAuthConnection {
   id: string;

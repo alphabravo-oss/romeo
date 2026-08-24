@@ -8,11 +8,12 @@ import {
   createQuotaBucketMutationOptions,
   deleteQuotaBucketMutationOptions,
   quotasQueryOptions,
-} from "../features";
+} from "../features/operational-governance";
 import type { CreateQuotaBucketRequest, QuotaBucket } from "../features/types";
 import { PanelState } from "../lib/panel-state";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { toast } from "../lib/toast";
+import { useEventCallback } from "../lib/use-event-callback";
 import { AddButton, Section, StatRow } from "./console";
 import { useConfirm } from "./ConfirmDialog";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
@@ -51,6 +52,7 @@ export function QuotaPanel() {
   const deleteMutation = useMutation(deleteQuotaBucketMutationOptions());
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<QuotaBucket | null>(null);
+  const onDelete = useEventCallback(handleDelete);
 
   const quotaForm = useForm({
     defaultValues: {
@@ -131,7 +133,7 @@ export function QuotaPanel() {
             </Button>
             <Button
               disabled={deleteMutation.isPending}
-              onClick={() => void handleDelete(c.row.original.id)}
+              onClick={() => void onDelete(c.row.original.id)}
               type="button"
             >
               {t("quotaDelete")}
@@ -140,8 +142,7 @@ export function QuotaPanel() {
         ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [deleteMutation.isPending, t],
+    [deleteMutation.isPending, onDelete, t],
   );
 
   async function handleDelete(quotaBucketId: string) {

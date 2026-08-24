@@ -6,6 +6,14 @@ import type {
 } from "../domain/data-connector-catalog";
 import type { DataConnectorType } from "../domain/entities";
 
+type HistoricalDataConnectorType =
+  | "confluence"
+  | "jira"
+  | "linear"
+  | "notion"
+  | "slack";
+type DataConnectorPostureType = DataConnectorType | HistoricalDataConnectorType;
+
 export interface DataConnectorCatalogRuntimePosture {
   executionDriver: RomeoEnv["DATA_CONNECTOR_EXECUTION_DRIVER"];
   egressPolicy: RomeoEnv["DATA_CONNECTOR_EGRESS_POLICY"];
@@ -86,7 +94,7 @@ export interface DataConnectorPostureReport {
     managed: number;
     scheduled: number;
     total: number;
-    byType: Record<DataConnectorType, number>;
+    byType: Record<DataConnectorPostureType, number>;
   };
   syncs: {
     completed: number;

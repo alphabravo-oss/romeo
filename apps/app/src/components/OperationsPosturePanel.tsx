@@ -20,7 +20,7 @@ import { LocalizedDateTime } from "../lib/locale-format";
 import { Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { humanizeWarningCode } from "./posture-warning-text";
-import { Tabs } from "./Tabs";
+import { Tabs, type RoutedTabsState } from "./Tabs";
 import {
   jobStatusDot,
   OperationalStatusDot,
@@ -38,11 +38,17 @@ import {
  * All headline numbers and rows are derived from real query data. Nothing here
  * mutates server state.
  */
-export function OperationsPosturePanel(): React.ReactNode {
+export function OperationsPosturePanel({
+  tabState,
+}: {
+  tabState?: RoutedTabsState;
+}): React.ReactNode {
   const { t } = useLocale();
   return (
     <Section>
       <Tabs
+        activeId={tabState?.activeId}
+        onActiveIdChange={tabState?.onActiveIdChange}
         tabs={[
           {
             id: "ga",

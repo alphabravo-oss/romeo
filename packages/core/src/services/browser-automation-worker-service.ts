@@ -2,14 +2,12 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { RomeoEnv } from "@romeo/config";
 import type { ObjectStore } from "@romeo/storage";
 
-import type { BackgroundJob, WorkflowStep } from "../domain/entities";
+import type { BackgroundJob } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import { writeAuditLog } from "./audit-log";
-import type { DeferredRunStart } from "./run-service";
 import { continueTelemetryContextFromPayload } from "./telemetry-context";
-import type { WorkflowService } from "./workflow-service";
 import {
   browserAutomationClaimResult,
   browserAutomationJobType,
@@ -24,13 +22,12 @@ import {
   type BrowserAutomationTaskClaimResult,
   type BrowserAutomationTaskExpiryResult,
   type BrowserAutomationTaskReadbackResult,
-} from "./workflow-browser-tasks";
+} from "./browser-automation-tasks";
 import { withRegisteredArtifacts } from "./browser-automation-artifacts";
 
 export class BrowserAutomationWorkerService {
   constructor(
     protected readonly repository: RomeoRepository,
-    protected readonly workflows: WorkflowService,
     protected readonly objectStore: ObjectStore,
     protected readonly env: RomeoEnv,
   ) {}
@@ -63,25 +60,9 @@ export class BrowserAutomationWorkerService {
         );
       }
       if (lease.attempt > browserAutomationMaxAttempts) {
-        const deadLettered = await this.deadLetter(
-          repository,
-          input.subject,
-          job,
-          lease.attempt,
-        );
-        await this.workflows.failBrowserTaskFromWorker({
-          repository,
-          subject: input.subject,
-          job: deadLettered,
-          errorCode: "browser_automation_attempts_exhausted",
-        });
+        await this.deadLetter(repository, input.subject, job, lease.attempt);
         return { claimed: false, workerQueue: browserAutomationWorkerQueue };
       }
-      const step = await this.browserWorkflowStep(
-        repository,
-        input.subject,
-        job,
-      );
       await this.audit(
         repository,
         input.subject,
@@ -93,7 +74,7 @@ export class BrowserAutomationWorkerService {
           leaseSeconds: lease.leaseSeconds,
         },
       );
-      return browserAutomationClaimResult(job, step);
+      return browserAutomationClaimResult(job);
     });
   }
 
@@ -116,11 +97,6 @@ export class BrowserAutomationWorkerService {
         409,
       );
     }
-    const step = await this.browserWorkflowStep(
-      this.repository,
-      input.subject,
-      job,
-    );
     await this.audit(
       this.repository,
       input.subject,
@@ -129,7 +105,7 @@ export class BrowserAutomationWorkerService {
       "success",
       { leaseSeconds: input.leaseSeconds },
     );
-    return browserAutomationClaimResult(job, step);
+    return browserAutomationClaimResult(job);
   }
 
   async complete(input: {
@@ -138,8 +114,7 @@ export class BrowserAutomationWorkerService {
     subject: AuthSubject;
   }): Promise<BrowserAutomationTaskReadbackResult> {
     assertScope(input.subject, "tools:manage");
-    const deferredStarts: DeferredRunStart[] = [];
-    const readback = await this.repository.transaction(async (repository) => {
+    return this.repository.transaction(async (repository) => {
       const job = await this.claimedJob(repository, input.subject, input.jobId);
       const result = withRegisteredArtifacts(
         normalizeBrowserAutomationCompletionResult(input.result),
@@ -158,13 +133,6 @@ export class BrowserAutomationWorkerService {
         updatedAt: now,
         completedAt: now,
       });
-      await this.workflows.completeBrowserTaskFromWorker({
-        repository,
-        subject: input.subject,
-        job: completed,
-        result,
-        deferredStarts,
-      });
       await this.audit(
         repository,
         input.subject,
@@ -181,8 +149,6 @@ export class BrowserAutomationWorkerService {
         result,
       });
     });
-    for (const start of deferredStarts) start.startExecution();
-    return readback;
   }
 
   async fail(input: {
@@ -199,12 +165,6 @@ export class BrowserAutomationWorkerService {
         job,
         input.errorCode,
       );
-      await this.workflows.failBrowserTaskFromWorker({
-        repository,
-        subject: input.subject,
-        job: failed,
-        errorCode: input.errorCode,
-      });
       return browserAutomationReadbackResult(failed, "failed", {
         errorCode: input.errorCode,
       });
@@ -222,7 +182,12 @@ export class BrowserAutomationWorkerService {
     const now = new Date(nowMs).toISOString();
     return this.repository.transaction(async (repository) => {
       const candidates = (
-        await repository.listBackgroundJobs(input.subject.orgId)
+        await repository.listBackgroundJobs(input.subject.orgId, {
+          limit: input.limit,
+          order: "asc",
+          statuses: ["queued", "running"],
+          type: browserAutomationJobType,
+        })
       )
         .map((job) => expirationCandidate(job, input, nowMs))
         .filter((candidate) => candidate !== undefined)
@@ -249,12 +214,6 @@ export class BrowserAutomationWorkerService {
           },
           updatedAt: now,
           completedAt: now,
-        });
-        await this.workflows.failBrowserTaskFromWorker({
-          repository,
-          subject: input.subject,
-          job: expired,
-          errorCode: "browser_automation_task_expired",
         });
         await this.audit(
           repository,
@@ -287,10 +246,9 @@ export class BrowserAutomationWorkerService {
     subject: AuthSubject,
     jobId: string,
   ): Promise<BackgroundJob> {
-    const job = (await repository.listBackgroundJobs(subject.orgId)).find(
-      (item) => item.id === jobId && item.type === browserAutomationJobType,
-    );
-    if (job === undefined) throw notFound("Browser automation task");
+    const job = await repository.getBackgroundJob(subject.orgId, jobId);
+    if (job === undefined || job.type !== browserAutomationJobType)
+      throw notFound("Browser automation task");
     if (job.status !== "running") {
       throw new ApiError(
         "browser_automation_task_not_claimed",
@@ -312,36 +270,6 @@ export class BrowserAutomationWorkerService {
       );
     }
     return job;
-  }
-
-  protected async browserWorkflowStep(
-    repository: RomeoRepository,
-    subject: AuthSubject,
-    job: BackgroundJob,
-  ): Promise<WorkflowStep> {
-    const payload = readBrowserAutomationJobPayload(job);
-    const workflow = await repository.getWorkflowDefinition(payload.workflowId);
-    if (workflow === undefined || workflow.orgId !== subject.orgId)
-      throw notFound("Workflow");
-    if (
-      subject.isAdmin !== true &&
-      !subject.workspaceIds.includes(workflow.workspaceId)
-    ) {
-      throw new ApiError(
-        "browser_automation_workspace_forbidden",
-        "Browser automation task is outside the caller workspace access.",
-        403,
-      );
-    }
-    const step = workflow.steps.find((item) => item.id === payload.stepId);
-    if (step?.type !== "browser_task") {
-      throw new ApiError(
-        "browser_automation_task_invalid",
-        "Browser automation task does not reference a browser workflow step.",
-        409,
-      );
-    }
-    return step;
   }
 
   protected async deadLetter(

@@ -4,7 +4,6 @@ import { useMutation } from "@tanstack/react-query";
 import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
 import { useMemo, useState } from "react";
 
-
 import {
   bulkDisableServiceAccountsMutationOptions,
   createServiceAccountApiKeyMutationOptions,
@@ -22,6 +21,7 @@ import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
 import { SecretRevealCard } from "./SecretRevealCard";
 import { useInventoriedServerTable } from "../lib/inventoried-server-table";
+import { useEventCallback } from "../lib/use-event-callback";
 
 const serviceAccountScopes = [
   "me:read",
@@ -39,7 +39,7 @@ export function ServiceAccountPanel() {
   const { ask, dialog } = useConfirm();
   const [addOpen, setAddOpen] = useState(false);
   const [createdToken, setCreatedToken] = useState<string>();
-  const table = useInventoriedServerTable<ServiceAccount>("service_accounts");
+  const table = useInventoriedServerTable("service_accounts");
   const createMutation = useMutation(createServiceAccountMutationOptions());
   const keyMutation = useMutation(createServiceAccountApiKeyMutationOptions());
   const disableMutation = useMutation(disableServiceAccountMutationOptions());
@@ -151,6 +151,9 @@ export function ServiceAccountPanel() {
     }
   }
 
+  const onCreateKey = useEventCallback(handleCreateKey);
+  const onDisable = useEventCallback(handleDisable);
+
   const columns = useMemo<ColumnDef<ServiceAccount, any>[]>(
     () => [
       col.accessor("name", {
@@ -188,7 +191,7 @@ export function ServiceAccountPanel() {
                 disabled:
                   keyMutation.isPending ||
                   c.row.original.disabledAt !== undefined,
-                onClick: () => void handleCreateKey(c.row.original),
+                onClick: () => void onCreateKey(c.row.original),
               },
               {
                 label: t("disable"),
@@ -196,15 +199,20 @@ export function ServiceAccountPanel() {
                 disabled:
                   disableMutation.isPending ||
                   c.row.original.disabledAt !== undefined,
-                onClick: () => void handleDisable(c.row.original.id),
+                onClick: () => void onDisable(c.row.original.id),
               },
             ]}
           />
         ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [disableMutation.isPending, keyMutation.isPending, t],
+    [
+      disableMutation.isPending,
+      keyMutation.isPending,
+      onCreateKey,
+      onDisable,
+      t,
+    ],
   );
 
   return (

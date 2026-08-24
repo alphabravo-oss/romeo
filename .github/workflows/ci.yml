@@ -59,18 +59,51 @@ jobs:
           fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL
           --ignore-unfixed --exit-code 1 --skip-dirs .git /repo
 
-      - name: Build the serving image
+      - name: Build the serving and operational images
         run: >-
-          docker build --target app-runtime --tag romeo:security-scan
+          docker build --target app-runtime --tag romeo:security-scan-app
+          --file deploy/compose/Dockerfile . &&
+          docker build --target ops-runtime --tag romeo:security-scan-ops
           --file deploy/compose/Dockerfile .
 
-      - name: Scan the serving image
-        run: >-
-          docker run --rm
-          --volume /var/run/docker.sock:/var/run/docker.sock
-          aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
-          image --scanners vuln,secret --severity HIGH,CRITICAL
-          --ignore-unfixed --exit-code 1 romeo:security-scan
+      - name: Scan the serving and operational images
+        run: |
+          mkdir -p dist/ci/container-scans
+          APP_IMAGE_DIGEST="$(docker image inspect --format '{{.Id}}' romeo:security-scan-app)"
+          OPS_IMAGE_DIGEST="$(docker image inspect --format '{{.Id}}' romeo:security-scan-ops)"
+          node scripts/generate-container-image-manifest.mjs \
+          --image "app=romeo/app:0.1.0@${APP_IMAGE_DIGEST}" \
+          --image "ops=romeo/ops:0.1.0@${OPS_IMAGE_DIGEST}" \
+          --output dist/ci/container-image-manifest.json
+          docker run --rm \
+          --volume /var/run/docker.sock:/var/run/docker.sock \
+          --volume "$PWD/dist/ci/container-scans:/reports" \
+          aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c \
+          image --scanners vuln,secret,license --format json \
+          --output /reports/app.trivy.raw.json romeo:security-scan-app
+          node scripts/bind-container-scan-report.mjs \
+          --raw-report dist/ci/container-scans/app.trivy.raw.json \
+          --role app --reference romeo/app:0.1.0 --digest "$APP_IMAGE_DIGEST" \
+          --output dist/ci/container-scans/app.trivy.report.json
+          docker run --rm \
+          --volume /var/run/docker.sock:/var/run/docker.sock \
+          --volume "$PWD/dist/ci/container-scans:/reports" \
+          aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c \
+          image --scanners vuln,secret,license --format json \
+          --output /reports/ops.trivy.raw.json romeo:security-scan-ops
+          node scripts/bind-container-scan-report.mjs \
+          --raw-report dist/ci/container-scans/ops.trivy.raw.json \
+          --role ops --reference romeo/ops:0.1.0 --digest "$OPS_IMAGE_DIGEST" \
+          --output dist/ci/container-scans/ops.trivy.report.json
+
+      - name: Upload digest-bound container scan evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-container-scan-evidence
+          path: |
+            dist/ci/container-image-manifest.json
+            dist/ci/container-scans/**
+          if-no-files-found: error
 
   quality:
     name: Quality Gates
@@ -118,6 +151,9 @@ jobs:
       - name: Lint source
         run: pnpm lint
 
+      - name: Reject handwritten source suppressions
+        run: pnpm check:source-suppressions
+
       - name: Check architecture ratchets
         run: pnpm check:architecture
 
@@ -129,6 +165,9 @@ jobs:
 
       - name: Check DNS pinning parity
         run: pnpm check:dns-pinning-parity
+
+      - name: Check secret-bearing OAuth egress
+        run: pnpm check:secret-bearing-egress
 
       - name: Check test contracts
         run: pnpm check:test-contracts
@@ -277,8 +316,11 @@ jobs:
       - name: Edge enforcement contract smoke
         run: pnpm smoke:edge:contract -- --output dist/ci/live-edge-enforcement-contract-smoke.json
 
-      - name: Postgres backup upload failure smoke
+      - name: Postgres backup durability and readback smoke
         run: pnpm smoke:postgres:backup-upload-failure -- --output dist/ci/postgres-backup-upload-failure-smoke.json
+
+      - name: Release container security negative contract
+        run: pnpm smoke:release:container-security
 
       - name: Support bundle redaction smoke
         run: pnpm smoke:support-bundle-redaction -- --output dist/ci/support-bundle-redaction.json
@@ -445,6 +487,7 @@ jobs:
     timeout-minutes: 20
     needs:
       - quality
+      - security
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -463,6 +506,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download digest-bound container scan evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release-container-scan-evidence
+          path: dist/ci
+
       - name: Pack release artifacts
         run: pnpm release:pack -- --skip-verify
 
@@ -476,25 +525,34 @@ jobs:
         run: pnpm containers:scan-plan -- --scanner trivy --output dist/release/container-scan-plan.json
 
       - name: Generate offline security evidence
-        run: pnpm release:security -- --manifest dist/release/release-manifest.json --sbom dist/release/sbom.cdx.json --output dist/release/security-evidence.json
+        run: >-
+          pnpm release:security --
+          --manifest dist/release/release-manifest.json
+          --sbom dist/release/sbom.cdx.json
+          --container-image-manifest dist/ci/container-image-manifest.json
+          --container-scan-file dist/ci/container-scans/app.trivy.report.json
+          --container-scan-file dist/ci/container-scans/ops.trivy.report.json
+          --container-policy-exceptions docs/security/container-scan-exceptions.json
+          --scan-max-age-seconds 7200
+          --output dist/release/security-evidence.json
 
       - name: Generate release provenance evidence
         run: pnpm release:provenance -- --manifest dist/release/release-manifest.json --channel-file dist/release/release-channel.json --security-evidence dist/release/security-evidence.json --sbom dist/release/sbom.cdx.json --commit-sha "$GITHUB_SHA" --source-repo "$GITHUB_REPOSITORY" --source-ref "$GITHUB_REF" --builder-id "$GITHUB_WORKFLOW" --ci-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --output dist/release/release-provenance.json
 
       - name: Generate dry-run release approval evidence
-        run: pnpm release:approval -- --manifest dist/release/release-manifest.json --provenance-file dist/release/release-provenance.json --approval-system github_environment --approval-ref "ci-dry-run-${GITHUB_RUN_ID}" --approver-id ci-dry-run-approver-a --approver-id ci-dry-run-approver-b --approved-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --output dist/release/release-approval.json
+        run: pnpm release:approval -- --dry-run --manifest dist/release/release-manifest.json --provenance-file dist/release/release-provenance.json --approval-system github_environment --approval-ref "ci-dry-run-${GITHUB_RUN_ID}" --approver-id ci-dry-run-approver-a --approver-id ci-dry-run-approver-b --approved-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --output dist/release/release-approval.json
 
       - name: Validate release channel upgrade metadata
         run: pnpm release:upgrade-check -- --channel-file dist/release/release-channel.json --output dist/release/upgrade-validation.json
 
       - name: Generate publish plan
-        run: pnpm release:publish-plan -- --manifest dist/release/release-manifest.json --channel-file dist/release/release-channel.json --security-evidence dist/release/security-evidence.json --require-security-evidence --provenance-file dist/release/release-provenance.json --require-provenance --approval-file dist/release/release-approval.json --require-approval --output dist/release/publish-plan.json
+        run: pnpm release:publish-plan -- --dry-run --manifest dist/release/release-manifest.json --channel-file dist/release/release-channel.json --security-evidence dist/release/security-evidence.json --require-security-evidence --provenance-file dist/release/release-provenance.json --require-provenance --approval-file dist/release/release-approval.json --require-approval --output dist/release/publish-plan.json
 
       - name: Generate release GA checklist draft
         run: pnpm ga:checklist -- --output dist/release/ga-checklist.json
 
       - name: Generate GA evidence bundle
-        run: pnpm ga:bundle -- --checklist dist/release/ga-checklist.json --output dist/release/ga-evidence-bundle.json
+        run: pnpm ga:bundle -- --dry-run --checklist dist/release/ga-checklist.json --output dist/release/ga-evidence-bundle.json
 
       - name: Verify air-gapped release bundle
         run: pnpm release:airgap-check -- --bundle-dir dist/release --publish-plan publish-plan.json --require-publish-plan --approval-file release-approval.json --require-approval --ga-bundle ga-evidence-bundle.json --require-ga-bundle --output dist/release/airgap-bundle-verification.json

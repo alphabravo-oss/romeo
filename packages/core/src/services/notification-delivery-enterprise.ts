@@ -11,6 +11,10 @@ import {
   stringMetadata,
   type NotificationDeliverySender,
 } from "./notification-delivery";
+import {
+  hardenedWebhookFetch,
+  type HardenedWebhookFetchOptions,
+} from "./hardened-webhook-fetch";
 import type { SecretResolver } from "./secret-resolver";
 import { parseManagedSecretRef } from "./secret-refs";
 import { normalizeWebhookUrl } from "./webhook-url";
@@ -18,16 +22,7 @@ import { normalizeWebhookUrl } from "./webhook-url";
 type PagerDutySeverity = "critical" | "error" | "info" | "warning";
 
 export class TeamsWebhookNotificationDeliverySender implements NotificationDeliverySender {
-  private readonly timeoutMs: number;
-
-  constructor(
-    private readonly options: {
-      fetchImpl?: typeof fetch;
-      timeoutMs?: number;
-    } = {},
-  ) {
-    this.timeoutMs = options.timeoutMs ?? 10_000;
-  }
+  constructor(private readonly options: HardenedWebhookFetchOptions = {}) {}
 
   async createDelivery(input: {
     repository: RomeoRepository;
@@ -84,18 +79,20 @@ export class TeamsWebhookNotificationDeliverySender implements NotificationDeliv
       );
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await (this.options.fetchImpl ?? fetch)(url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "user-agent": "Romeo-Notifications/0.1",
+      const response = await hardenedWebhookFetch(
+        url,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": delivery.providerIdempotencyKey ?? delivery.id,
+            "user-agent": "Romeo-Notifications/0.1",
+          },
+          body: JSON.stringify(teamsMessageCard(notification)),
         },
-        signal: controller.signal,
-        body: JSON.stringify(teamsMessageCard(notification)),
-      });
+        this.options,
+      );
       return repository.updateNotificationDelivery(
         response.ok
           ? sentDelivery(delivery, {
@@ -118,32 +115,27 @@ export class TeamsWebhookNotificationDeliverySender implements NotificationDeliv
           { retryable: true },
         ),
       );
-    } finally {
-      clearTimeout(timeout);
     }
   }
 }
 
 export class PagerDutyEventsNotificationDeliverySender implements NotificationDeliverySender {
   private readonly endpoint: string;
-  private readonly timeoutMs: number;
 
   constructor(
-    private readonly options: {
+    private readonly options: HardenedWebhookFetchOptions & {
       eventsUrl: string;
-      fetchImpl?: typeof fetch;
       secretResolver: SecretResolver;
-      timeoutMs?: number;
     },
   ) {
     this.endpoint = normalizeWebhookUrl(options.eventsUrl);
-    this.timeoutMs = options.timeoutMs ?? 10_000;
   }
 
   async createDelivery(input: {
     repository: RomeoRepository;
     notification: UserNotification;
     channel: NotificationDeliveryChannel;
+    secretResolver?: SecretResolver;
   }): Promise<NotificationDelivery> {
     const delivery = await input.repository.createNotificationDelivery(
       baseDelivery(input.notification, input.channel, { status: "pending" }),
@@ -153,6 +145,7 @@ export class PagerDutyEventsNotificationDeliverySender implements NotificationDe
       input.notification,
       input.channel,
       delivery,
+      input.secretResolver,
     );
   }
 
@@ -161,12 +154,14 @@ export class PagerDutyEventsNotificationDeliverySender implements NotificationDe
     notification: UserNotification;
     channel: NotificationDeliveryChannel;
     delivery: NotificationDelivery;
+    secretResolver?: SecretResolver;
   }): Promise<NotificationDelivery> {
     return this.attemptDelivery(
       input.repository,
       input.notification,
       input.channel,
       input.delivery,
+      input.secretResolver,
     );
   }
 
@@ -175,6 +170,7 @@ export class PagerDutyEventsNotificationDeliverySender implements NotificationDe
     notification: UserNotification,
     channel: NotificationDeliveryChannel,
     delivery: NotificationDelivery,
+    secretResolver: SecretResolver | undefined,
   ): Promise<NotificationDelivery> {
     if (channel.type !== "pagerduty") {
       return repository.updateNotificationDelivery(
@@ -199,7 +195,10 @@ export class PagerDutyEventsNotificationDeliverySender implements NotificationDe
       );
     }
 
-    const routingKey = await this.resolveRoutingKey(routingKeyRef);
+    const routingKey = await this.resolveRoutingKey(
+      routingKeyRef,
+      secretResolver ?? this.options.secretResolver,
+    );
     if (routingKey.value === undefined) {
       return repository.updateNotificationDelivery(
         failedDelivery(
@@ -217,24 +216,26 @@ export class PagerDutyEventsNotificationDeliverySender implements NotificationDe
       );
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await (this.options.fetchImpl ?? fetch)(this.endpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "user-agent": "Romeo-Notifications/0.1",
-        },
-        signal: controller.signal,
-        body: JSON.stringify(
-          pagerDutyEventPayload(
-            notification,
-            routingKey.value,
-            pagerDutySeverity(channel.config.severity),
+      const response = await hardenedWebhookFetch(
+        this.endpoint,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": delivery.providerIdempotencyKey ?? delivery.id,
+            "user-agent": "Romeo-Notifications/0.1",
+          },
+          body: JSON.stringify(
+            pagerDutyEventPayload(
+              notification,
+              routingKey.value,
+              pagerDutySeverity(channel.config.severity),
+            ),
           ),
-        ),
-      });
+        },
+        this.options,
+      );
       return repository.updateNotificationDelivery(
         response.ok
           ? sentDelivery(delivery, {
@@ -257,12 +258,13 @@ export class PagerDutyEventsNotificationDeliverySender implements NotificationDe
           { retryable: true },
         ),
       );
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
-  private async resolveRoutingKey(secretRef: string): Promise<{
+  private async resolveRoutingKey(
+    secretRef: string,
+    secretResolver: SecretResolver,
+  ): Promise<{
     failureCode?: string;
     retryable: boolean;
     scheme: string;
@@ -278,8 +280,7 @@ export class PagerDutyEventsNotificationDeliverySender implements NotificationDe
         scheme: "",
       };
     }
-    const resolution =
-      await this.options.secretResolver.resolveValue?.(secretRef);
+    const resolution = await secretResolver.resolveValue?.(secretRef);
     if (resolution?.available === true && resolution.value !== undefined) {
       return {
         retryable: false,

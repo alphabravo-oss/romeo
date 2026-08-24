@@ -34,6 +34,7 @@ const expectedComposeSmokeMatrixNames = [
   "tiered-rag",
 ];
 const requiredWorkflowCommands = [
+  "pnpm check:secret-bearing-egress",
   "pnpm check:data-table-inventory",
   "pnpm check:sdk-drift",
   "pnpm check:openapi-route-coverage",

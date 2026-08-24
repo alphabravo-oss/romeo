@@ -12,6 +12,7 @@ import type {
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { type AuditMetadata, writeAuditLog } from "./audit-log";
+import { listApprovalArtifactJobs } from "./background-job-query";
 import { disabledSecretResolver } from "./secret-resolver";
 import { recordToolCall } from "./tool-call-records";
 import { enqueueToolOperationDispatch } from "./tool-operation-dispatch";
@@ -25,11 +26,17 @@ import {
 import {
   isToolExecutionReplayError,
   isUniqueConstraintError,
-  toolApprovalConsumed,
   toolApprovalDecision,
   toolExecutionIdempotencyJob,
   toolExecutionReplayError,
 } from "./tool-service-helpers";
+import {
+  consumeToolApproval,
+  toolApprovalConsumed,
+  toolApprovalRequestDigest,
+  validToolApprovalBinding,
+  withApprovalCriticalSection,
+} from "./tool-approval-integrity";
 import { emitWebhookEvent } from "./webhook-events";
 import type { WebhookEmitter } from "./webhook-service";
 
@@ -143,6 +150,7 @@ export class ToolExecutionSupport {
     toolId: string,
     approvalRequestId: string | undefined,
     runId: string | undefined,
+    requestInput: unknown,
   ): Promise<void> {
     if (approvalRequestId === undefined)
       throw new ApiError(
@@ -153,7 +161,11 @@ export class ToolExecutionSupport {
       );
     const [calls, jobs] = await Promise.all([
       this.repository.listToolCalls(subject.orgId),
-      this.repository.listBackgroundJobs(subject.orgId),
+      listApprovalArtifactJobs(
+        this.repository,
+        subject.orgId,
+        approvalRequestId,
+      ),
     ]);
     const approvalRequest = calls.find((call) => call.id === approvalRequestId);
     if (
@@ -170,7 +182,7 @@ export class ToolExecutionSupport {
         409,
         { agentId: agent.id, toolId },
       );
-    if (toolApprovalConsumed(approvalRequest, calls))
+    if (toolApprovalConsumed(approvalRequest, calls, jobs))
       throw new ApiError(
         "tool_approval_request_consumed",
         "Tool approval request was already consumed.",
@@ -178,15 +190,23 @@ export class ToolExecutionSupport {
         { agentId: agent.id, toolId },
       );
     const decision = toolApprovalDecision(approvalRequest, jobs);
-    if (decision?.status === "rejected" || decision?.status === "cancelled")
+    if (decision?.status !== "approved") {
+      if (decision?.status === "rejected" || decision?.status === "cancelled")
+        throw new ApiError(
+          decision.status === "cancelled"
+            ? "tool_approval_request_cancelled"
+            : "tool_approval_request_rejected",
+          `Tool approval request was ${decision.status}.`,
+          409,
+          { agentId: agent.id, toolId },
+        );
       throw new ApiError(
-        decision.status === "cancelled"
-          ? "tool_approval_request_cancelled"
-          : "tool_approval_request_rejected",
-        `Tool approval request was ${decision.status}.`,
+        "invalid_tool_approval_request",
+        "Tool approval request does not have a durable approved decision.",
         409,
         { agentId: agent.id, toolId },
       );
+    }
     if (Date.now() - new Date(approvalRequest.completedAt).getTime() > 900_000)
       throw new ApiError(
         "tool_approval_request_expired",
@@ -194,6 +214,50 @@ export class ToolExecutionSupport {
         409,
         { agentId: agent.id, toolId },
       );
+    if (!validToolApprovalBinding(approvalRequest, requestInput, jobs))
+      throw new ApiError(
+        "invalid_tool_approval_request",
+        "Tool approval request is not bound to this exact execution input.",
+        409,
+        { agentId: agent.id, toolId },
+      );
+    await withApprovalCriticalSection(subject.orgId, approvalRequest.id, () =>
+      this.repository.transaction(async (repository) => {
+        const currentJobs = await listApprovalArtifactJobs(
+          repository,
+          subject.orgId,
+          approvalRequest.id,
+        );
+        const currentCalls = await repository.listToolCalls(subject.orgId);
+        if (toolApprovalConsumed(approvalRequest, currentCalls, currentJobs))
+          throw new ApiError(
+            "tool_approval_request_consumed",
+            "Tool approval request was already consumed.",
+            409,
+            { agentId: agent.id, toolId },
+          );
+        if (
+          toolApprovalDecision(approvalRequest, currentJobs)?.status !==
+            "approved" ||
+          !validToolApprovalBinding(approvalRequest, requestInput, currentJobs)
+        )
+          throw new ApiError(
+            "invalid_tool_approval_request",
+            "Tool approval request is no longer valid for this execution.",
+            409,
+            { agentId: agent.id, toolId },
+          );
+        await consumeToolApproval({
+          approval: approvalRequest,
+          repository,
+          requestDigest: toolApprovalRequestDigest(
+            approvalRequest,
+            requestInput,
+          ),
+          subject,
+        });
+      }),
+    );
   }
 
   async audit(
@@ -223,9 +287,10 @@ export class ToolExecutionSupport {
     const job = toolExecutionIdempotencyJob(input, new Date().toISOString());
     try {
       await this.repository.transaction(async (repository) => {
-        const exists = (
-          await repository.listBackgroundJobs(input.subject.orgId)
-        ).some((item) => item.id === job.id);
+        const exists = await repository.getBackgroundJob(
+          input.subject.orgId,
+          job.id,
+        );
         if (exists) throw toolExecutionReplayError(input.tool.id, input.runId);
         await repository.createBackgroundJob(job);
       });

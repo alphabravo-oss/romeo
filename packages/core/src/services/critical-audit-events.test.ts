@@ -15,9 +15,9 @@ describe("critical audit events", () => {
     for (const action of CRITICAL_AUDIT_ACTIONS) {
       expect(auditActionRegistry[action]?.action).toBe(action);
     }
-    expect(
-      missingCriticalAuditWrites(new Set(["provider.create"])),
-    ).toContain("admin.organization.suspend");
+    expect(missingCriticalAuditWrites(new Set(["provider.create"]))).toContain(
+      "admin.organization.suspend",
+    );
 
     const written = collectQuotedActions(
       dirname(fileURLToPath(new URL(".", import.meta.url))),

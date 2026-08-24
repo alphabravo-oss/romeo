@@ -21,6 +21,7 @@ import { FormDialog } from "./FormDialog";
 import { OverflowMenu } from "./OverflowMenu";
 import { SecretRevealCard } from "./SecretRevealCard";
 import { useInventoriedServerTable } from "../lib/inventoried-server-table";
+import { useEventCallback } from "../lib/use-event-callback";
 
 const col = createColumnHelper<ApiKeySummary>();
 
@@ -39,7 +40,7 @@ export function ApiKeyPanel() {
   const [addOpen, setAddOpen] = useState(false);
   const [createdToken, setCreatedToken] = useState<string>();
   const [detailKey, setDetailKey] = useState<ApiKeySummary>();
-  const table = useInventoriedServerTable<ApiKeySummary>("api_keys");
+  const table = useInventoriedServerTable("api_keys");
   const createMutation = useMutation(createApiKeyMutationOptions());
   const revokeMutation = useMutation(revokeApiKeyMutationOptions());
   const bulkRevokeMutation = useMutation(bulkRevokeApiKeysMutationOptions());
@@ -119,6 +120,8 @@ export function ApiKeyPanel() {
     }
   }
 
+  const onRevoke = useEventCallback(handleRevoke);
+
   const columns = useMemo<ColumnDef<ApiKeySummary, any>[]>(
     () => [
       col.accessor("name", {
@@ -177,15 +180,14 @@ export function ApiKeyPanel() {
                 disabled:
                   c.row.original.revokedAt !== undefined ||
                   revokeMutation.isPending,
-                onClick: () => void handleRevoke(c.row.original.id),
+                onClick: () => void onRevoke(c.row.original.id),
               },
             ]}
           />
         ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [revokeMutation.isPending, t],
+    [onRevoke, revokeMutation.isPending, t],
   );
 
   return (

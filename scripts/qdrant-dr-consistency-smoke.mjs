@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { assertNoSecretArgv, readSecretInput } from "./lib/secret-input.mjs";
+
+assertNoSecretArgv();
+
 const schemaVersion = "romeo.qdrant-dr-consistency.v1";
 const outputPath = argValue("--output");
 const dryRun = hasFlag("--dry-run");
@@ -12,9 +16,17 @@ const phase = argValue("--phase") ?? "verify-restore";
 const endpoint = argValue("--url") ?? process.env.QDRANT_URL ?? "";
 const collection =
   argValue("--collection") ?? process.env.QDRANT_COLLECTION ?? "";
-const apiKey = argValue("--api-key") ?? process.env.QDRANT_API_KEY ?? "";
+const apiKey =
+  readSecretInput({
+    environment:
+      phase === "verify-restore"
+        ? "RESTORE_QDRANT_API_KEY"
+        : "SOURCE_QDRANT_API_KEY",
+  }) ??
+  readSecretInput({ environment: "QDRANT_API_KEY" }) ??
+  "";
 const runSecret =
-  argValue("--run-secret") ?? process.env.QDRANT_DR_RUN_SECRET ?? "";
+  readSecretInput({ environment: "QDRANT_DR_RUN_SECRET" }) ?? "";
 const sourceEvidencePath = argValue("--source-evidence");
 const namespacePolicy = parsePolicy(
   argValue("--namespace-policy") ??
@@ -245,12 +257,12 @@ function validateLiveInputs() {
   }
   if (apiKey.length === 0 && !allowUnauthenticated) {
     throw new Error(
-      "--api-key or QDRANT_API_KEY is required unless --allow-unauthenticated is set.",
+      "QDRANT_API_KEY or QDRANT_API_KEY_FILE is required unless --allow-unauthenticated is set.",
     );
   }
   if (runSecret.length < 32) {
     throw new Error(
-      "--run-secret or QDRANT_DR_RUN_SECRET must be at least 32 characters.",
+      "QDRANT_DR_RUN_SECRET or QDRANT_DR_RUN_SECRET_FILE must be at least 32 characters.",
     );
   }
   if (namespacePolicy === "none") {

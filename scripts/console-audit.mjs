@@ -42,6 +42,10 @@ const failOn = failOnArg
   ? failOnArg.slice("--fail-on=".length).split(",").filter(Boolean)
   : [];
 const routes = argv.filter((a) => !a.startsWith("--"));
+if (routes.length === 0) {
+  console.error("FAIL: console audit requires at least one route.");
+  process.exit(1);
+}
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
   colorScheme: THEME,
@@ -267,6 +271,22 @@ for (const entry of report) {
     if (list.length > shown.length)
       console.log(`     …${list.length - shown.length} more`);
   }
+}
+
+const operationalFailures = report.flatMap((entry) => [
+  ...(entry.fatal === undefined
+    ? []
+    : [`${entry.route}: navigation failed: ${entry.fatal}`]),
+  ...(entry.runtimeErrors ?? []).map(
+    (error) => `${entry.route}: uncaught page error: ${error}`,
+  ),
+]);
+if (operationalFailures.length > 0) {
+  console.error(
+    `\nFAIL: ${operationalFailures.length} operational console audit failure(s).`,
+  );
+  for (const failure of operationalFailures) console.error(`  ${failure}`);
+  process.exit(1);
 }
 
 if (failOn.length > 0) {

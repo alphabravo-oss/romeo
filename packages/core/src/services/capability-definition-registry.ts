@@ -1,4 +1,7 @@
-import { assertCapabilityDefaultConfiguration } from "./capability-configuration";
+import {
+  cloneCapabilityDefinition,
+  validateCapabilityRegistry,
+} from "./capability-definition-registry-support";
 
 export const capabilityIds = [
   "image_generation",
@@ -53,7 +56,14 @@ export interface CapabilityDefinition {
   id: CapabilityId;
   schemaVersion: 1;
   lifecycle: "disabled" | "preview" | "ga" | "deprecated";
-  category: "media" | "reasoning" | "retrieval" | "compute" | "compare" | "security" | "governance";
+  category:
+    | "media"
+    | "reasoning"
+    | "retrieval"
+    | "compute"
+    | "compare"
+    | "security"
+    | "governance";
   risk: "low" | "medium" | "high" | "critical";
   controllingLayers: Array<
     | "platform"
@@ -248,7 +258,12 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "required"],
     defaultState: "enabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
+    merge: {
+      boolean: "deny_dominates",
+      booleans: [],
+      maxima: [],
+      allowlists: [],
+    },
     requiredScopes: ["admin:read"],
     dependencies: [],
     copy: {
@@ -269,7 +284,12 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "required"],
     defaultState: "enabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
+    merge: {
+      boolean: "deny_dominates",
+      booleans: [],
+      maxima: [],
+      allowlists: [],
+    },
     requiredScopes: ["knowledge:read"],
     dependencies: [],
     copy: {
@@ -290,7 +310,12 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "disabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
+    merge: {
+      boolean: "deny_dominates",
+      booleans: [],
+      maxima: [],
+      allowlists: [],
+    },
     requiredScopes: ["voices:use"],
     dependencies: ["realtime_gateway"],
     copy: {
@@ -311,7 +336,12 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "disabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
+    merge: {
+      boolean: "deny_dominates",
+      booleans: [],
+      maxima: [],
+      allowlists: [],
+    },
     requiredScopes: ["runs:create"],
     dependencies: ["object_storage", "image_provider"],
     copy: {
@@ -332,7 +362,12 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "disabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
+    merge: {
+      boolean: "deny_dominates",
+      booleans: [],
+      maxima: [],
+      allowlists: [],
+    },
     requiredScopes: ["admin:write"],
     dependencies: ["kata_runtime"],
     copy: {
@@ -353,7 +388,12 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "disabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
+    merge: {
+      boolean: "deny_dominates",
+      booleans: [],
+      maxima: [],
+      allowlists: [],
+    },
     requiredScopes: ["runs:create"],
     dependencies: [],
     copy: {
@@ -374,7 +414,12 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "required"],
     defaultState: "disabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
+    merge: {
+      boolean: "deny_dominates",
+      booleans: [],
+      maxima: [],
+      allowlists: [],
+    },
     requiredScopes: ["admin:write"],
     dependencies: ["customer_kms"],
     copy: {
@@ -395,7 +440,12 @@ const definitions = [
     allowedStates: ["inherit", "enabled", "disabled"],
     defaultState: "enabled",
     defaultConfiguration: {},
-    merge: { boolean: "deny_dominates", booleans: [], maxima: [], allowlists: [] },
+    merge: {
+      boolean: "deny_dominates",
+      booleans: [],
+      maxima: [],
+      allowlists: [],
+    },
     requiredScopes: ["admin:read"],
     dependencies: [],
     copy: {
@@ -412,56 +462,17 @@ const byId = new Map<CapabilityId, CapabilityDefinition>(
   definitions.map((definition) => [definition.id, definition]),
 );
 
-validateRegistry();
+validateCapabilityRegistry(definitions);
 
 export function listCapabilityDefinitions(): CapabilityDefinition[] {
-  return definitions.map(cloneDefinition);
+  return definitions.map(cloneCapabilityDefinition);
 }
 
 export function getCapabilityDefinition(
   capabilityId: string,
 ): CapabilityDefinition | undefined {
   const definition = byId.get(capabilityId as CapabilityId);
-  return definition === undefined ? undefined : cloneDefinition(definition);
-}
-
-
-
-function cloneDefinition(
-  definition: CapabilityDefinition,
-): CapabilityDefinition {
-  return {
-    ...definition,
-    controllingLayers: [...definition.controllingLayers],
-    allowedStates: [...definition.allowedStates],
-    defaultConfiguration: structuredClone(definition.defaultConfiguration),
-    merge: {
-      boolean: definition.merge.boolean,
-      booleans: [...definition.merge.booleans],
-      maxima: [...definition.merge.maxima],
-      allowlists: [...definition.merge.allowlists],
-    },
-    requiredScopes: [...definition.requiredScopes],
-    dependencies: [...definition.dependencies],
-    copy: { ...definition.copy },
-  };
-}
-
-function validateRegistry(): void {
-  const ids = new Set<string>();
-  for (const definition of definitions) {
-    if (ids.has(definition.id))
-      throw new Error(`Duplicate capability definition: ${definition.id}`);
-    ids.add(definition.id);
-    assertCapabilityDefaultConfiguration(definition);
-    if (
-      definition.allowedStates.includes("disabled") &&
-      (definition.id === "content_firewall" ||
-        definition.id === "knowledge_acl" ||
-        definition.id === "tenant_encryption")
-    )
-      throw new Error(
-        `Capability ${definition.id} is security-mandatory and cannot expose disable.`,
-      );
-  }
+  return definition === undefined
+    ? undefined
+    : cloneCapabilityDefinition(definition);
 }

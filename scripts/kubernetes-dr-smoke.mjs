@@ -103,6 +103,8 @@ const sourceWebhookKey = `webhook_source_${randomBytes(32).toString("hex")}`;
 const restoreWebhookKey = `webhook_restore_${randomBytes(32).toString("hex")}`;
 const rawContentSentinel = `k8s_dr_raw_content_${randomBytes(18).toString("hex")}`;
 const workPvc = "romeo-dr-work";
+const backupSetId = `kubernetes-${Date.now()}`;
+const backupCheckpointAt = new Date().toISOString();
 
 let sourcePortForward;
 let restorePortForward;
@@ -176,6 +178,17 @@ try {
   const backupManifest = readJson(
     join(backupDir, "romeo-postgres.dump.manifest.json"),
   );
+  const objectBackupManifest = readJson(
+    join(backupDir, "object-store", "manifest.json"),
+  );
+  if (
+    backupManifest.backupSetId !== backupSetId ||
+    objectBackupManifest.backupSetId !== backupSetId ||
+    backupManifest.checkpointAt !== backupCheckpointAt ||
+    objectBackupManifest.checkpointAt !== backupCheckpointAt
+  ) {
+    throw new Error("Kubernetes database/object backup checkpoints diverged.");
+  }
   assertEvidenceRedacted("Kubernetes DR backup evidence", backupDir, [
     adminToken,
     sourcePostgresPassword,
@@ -271,6 +284,7 @@ try {
       "source_product_records_created",
       "postgres_backup_job",
       "object_store_backup_job",
+      "database_object_checkpoint_binding",
       "backup_evidence_redacted",
       "restore_namespace_ready",
       "object_store_restore_drill_job",
@@ -576,12 +590,20 @@ async function runBackupJobs() {
         "pnpm",
         "backup:postgres",
         "--",
+        "--durability-mode",
+        "local-persistent",
         "--output",
         "/work/romeo-postgres.dump",
         "--manifest-output",
         "/work/romeo-postgres.dump.manifest.json",
         "--retention-days",
         "30",
+        "--local-persistence-evidence",
+        "kubernetes-persistent-volume-claim",
+        "--backup-set-id",
+        backupSetId,
+        "--checkpoint-at",
+        backupCheckpointAt,
       ],
       env: [secretEnv("DATABASE_URL", sourceDatabaseSecretRef())],
       image,
@@ -605,6 +627,11 @@ async function runBackupJobs() {
         "/work/object-store",
         "--manifest-output",
         "/work/object-store/manifest.json",
+        "--allow-unverified-development-destination",
+        "--backup-set-id",
+        backupSetId,
+        "--checkpoint-at",
+        backupCheckpointAt,
       ],
       env: objectStoreEnv("S3", sourceS3Secret),
       image,

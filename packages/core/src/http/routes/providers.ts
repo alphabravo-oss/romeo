@@ -20,11 +20,11 @@ import {
   probeModelRoute,
   updateModelCapabilityOverridesRoute,
   previewModelCompatibilityRoute,
+  ProviderOperationalSummarySchema,
 } from "@romeo/contracts";
 
 import type { RomeoApi } from "../context";
 import { listProviderKindCatalog } from "../../services/provider-kind-catalog";
-
 
 export function registerProviderRoutes(app: RomeoApi): void {
   app.openapi(listProviderKindsRoute, (context) =>
@@ -66,7 +66,10 @@ export function registerProviderRoutes(app: RomeoApi): void {
     const data = await context
       .get("services")
       .runs.providerOperationalSummary(subject);
-    return context.json({ data }, 200);
+    return context.json(
+      { data: ProviderOperationalSummarySchema.parse(data) },
+      200,
+    );
   });
 
   app.openapi(createProviderConnectionRoute, async (context) => {
@@ -150,16 +153,20 @@ export function registerProviderRoutes(app: RomeoApi): void {
   });
 
   app.openapi(runProviderCatalogSyncJobRoute, async (context) => {
+    const { jobId, providerId } = context.req.valid("param");
     const data = await context.get("services").providers.catalogSyncJobs.run({
-      jobId: context.req.valid("param").jobId,
+      jobId,
+      providerId,
       subject: context.get("subject"),
     });
     return context.json({ data }, 200);
   });
 
   app.openapi(getProviderCatalogSyncJobRoute, async (context) => {
+    const { jobId, providerId } = context.req.valid("param");
     const data = await context.get("services").providers.catalogSyncJobs.get({
-      jobId: context.req.valid("param").jobId,
+      jobId,
+      providerId,
       subject: context.get("subject"),
     });
     return context.json({ data }, 200);
@@ -177,9 +184,15 @@ export function registerProviderRoutes(app: RomeoApi): void {
 
   app.openapi(deleteOllamaModelRoute, async (context) => {
     const { providerId, model } = context.req.valid("param");
+    const { modelId } = context.req.valid("query");
     const data = await context
       .get("services")
-      .providers.deleteModel(context.get("subject"), providerId, model);
+      .providers.deleteModel(
+        context.get("subject"),
+        providerId,
+        model,
+        modelId,
+      );
     return context.json({ data }, 200);
   });
 
@@ -192,20 +205,22 @@ export function registerProviderRoutes(app: RomeoApi): void {
         query.available === undefined ? undefined : query.available === "true";
       const enabled =
         query.enabled === undefined ? undefined : query.enabled === "true";
-      const page = await context.get("services").providers.presentModelsPage(subject, {
-        limit,
-        offset: offset ?? 0,
-        ...(query.direction === undefined
-          ? {}
-          : { direction: query.direction }),
-        ...(query.q === undefined ? {} : { query: query.q }),
-        ...(query.providerId === undefined
-          ? {}
-          : { providerId: query.providerId }),
-        ...(available === undefined ? {} : { available }),
-        ...(enabled === undefined ? {} : { enabled }),
-        ...(query.sort === undefined ? {} : { sort: query.sort }),
-      });
+      const page = await context
+        .get("services")
+        .providers.presentModelsPage(subject, {
+          limit,
+          offset: offset ?? 0,
+          ...(query.direction === undefined
+            ? {}
+            : { direction: query.direction }),
+          ...(query.q === undefined ? {} : { query: query.q }),
+          ...(query.providerId === undefined
+            ? {}
+            : { providerId: query.providerId }),
+          ...(available === undefined ? {} : { available }),
+          ...(enabled === undefined ? {} : { enabled }),
+          ...(query.sort === undefined ? {} : { sort: query.sort }),
+        });
       return context.json(
         {
           data: page.items,
@@ -312,7 +327,9 @@ export function registerProviderRoutes(app: RomeoApi): void {
       ...(body.tools === undefined ? {} : { tools: body.tools }),
       ...(body.reasoning === undefined ? {} : { reasoning: body.reasoning }),
       ...(body.vision === undefined ? {} : { vision: body.vision }),
-      ...(body.imageOutput === undefined ? {} : { imageOutput: body.imageOutput }),
+      ...(body.imageOutput === undefined
+        ? {}
+        : { imageOutput: body.imageOutput }),
       ...(body.expiresAt === undefined ? {} : { expiresAt: body.expiresAt }),
     });
     return context.json({ data }, 200);

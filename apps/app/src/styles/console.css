@@ -14,6 +14,28 @@
  * The chat surface has its own language and is untouched by this file.
  * ============================================================ */
 
+/* Console shell geometry belongs to the console entrypoint. Keeping these
+   rules in chat Markdown CSS made cold /admin, /settings, and /workspace
+   routes depend on whether the chat bundle happened to load first. */
+.rm-console {
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+  height: 100vh;
+  background: var(--rm-bg);
+  font-variant-numeric: tabular-nums;
+}
+
+.rm-console-nav {
+  gap: 2px;
+  padding: 12px 10px 16px;
+  overflow: hidden;
+  background: var(--rm-sidebar);
+}
+
+.rm-console-brand {
+  margin-bottom: 4px;
+}
+
 .cs-page {
   display: grid;
   align-content: start;
@@ -456,7 +478,7 @@
   padding: 1px 5px;
   border: 1px solid var(--rm-border);
   border-radius: 4px;
-  color: var(--rm-faint);
+  color: var(--rm-muted);
   font-family: var(--rm-font-mono);
   font-size: 10px;
 }
@@ -549,6 +571,18 @@
 }
 
 /* ---------- Responsive ---------- */
+
+@media (max-width: 60rem) {
+  .rm-console {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .rm-console-nav {
+    display: none;
+  }
+}
 
 @media (max-width: 40rem) {
   .cs-page__head,

@@ -4,5 +4,9 @@ import { readEnv, type RomeoEnv } from "@romeo/config";
 export function testEnv(
   input: Record<string, string | undefined> = {},
 ): RomeoEnv {
-  return readEnv({ DEV_SEEDED_LOGIN: "true", ...input });
+  return readEnv({
+    DEV_SEEDED_LOGIN: "true",
+    BILLING_ENABLED: "true",
+    ...input,
+  });
 }

@@ -24,7 +24,7 @@ const filePurpose = z.enum([
   "web_source",
   "voice_artifact",
 ]);
-export const FileLifecycleStatusSchema = z.enum([
+const fileLifecycleStatuses = [
   "uploading",
   "quarantined",
   "scanning",
@@ -37,7 +37,12 @@ export const FileLifecycleStatusSchema = z.enum([
   "deleted",
   // Additive read compatibility for rows created before lifecycle v1.
   "available",
-]);
+] as const;
+export const FileLifecycleStatusSchema = z.string().openapi({
+  description:
+    "File lifecycle state. Clients must tolerate future lifecycle states.",
+  "x-extensible-enum": fileLifecycleStatuses,
+});
 export const FileLifecycleSchema = z
   .strictObject({
     schemaVersion: z.literal(1),

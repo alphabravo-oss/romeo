@@ -3,6 +3,8 @@ import Download from "lucide-react/dist/esm/icons/download.mjs";
 import Search from "lucide-react/dist/esm/icons/search.mjs";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal.mjs";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
+import Star from "lucide-react/dist/esm/icons/star.mjs";
+import Users from "lucide-react/dist/esm/icons/users.mjs";
 import { useId, useState, type Dispatch, type SetStateAction } from "react";
 
 import type { DataTableLabels } from "./advanced-data-table";
@@ -16,6 +18,8 @@ import {
 } from "./table-preferences";
 
 export function DataTableControls<T>({
+  authorityError,
+  authorityPending,
   canExport,
   showPageSize,
   density,
@@ -26,13 +30,19 @@ export function DataTableControls<T>({
   onDeleteSavedView,
   onReset,
   onSaveView,
+  onSetDefaultView,
+  onSetViewVisibility,
+  onUndoDeleteSavedView,
   pageSize,
   setDensity,
   savedViews,
+  pendingDeletedView,
   showExport,
   showSearch,
   table,
 }: {
+  authorityError: string | undefined;
+  authorityPending: boolean;
   canExport: boolean;
   showPageSize: boolean;
   density: TableDensity;
@@ -40,12 +50,19 @@ export function DataTableControls<T>({
   labels: DataTableLabels;
   onExport: () => void;
   onApplySavedView: (view: TableSavedView) => void;
-  onDeleteSavedView: (name: string) => void;
+  onDeleteSavedView: (view: TableSavedView) => void;
   onReset: () => void;
-  onSaveView: (name: string) => void;
+  onSaveView: (name: string) => Promise<void>;
+  onSetDefaultView: (view: TableSavedView, isDefault: boolean) => void;
+  onSetViewVisibility: (
+    view: TableSavedView,
+    visibility: "private" | "workspace",
+  ) => void;
+  onUndoDeleteSavedView: () => void;
   pageSize: number;
   setDensity: Dispatch<SetStateAction<TableDensity>>;
   savedViews: TableSavedView[];
+  pendingDeletedView: TableSavedView | undefined;
   showExport: boolean;
   showSearch: boolean;
   table: Table<T>;
@@ -63,7 +80,16 @@ export function DataTableControls<T>({
     .filter((column) => column.id !== "__select__").length;
 
   return (
-    <div className="rm-table-toolbar">
+    <div
+      aria-label={labels.options}
+      className="rm-table-toolbar"
+      role="toolbar"
+    >
+      {authorityError === undefined ? null : (
+        <div className="rm-table-authority-error" role="alert">
+          {authorityError}
+        </div>
+      )}
       {showSearch ? (
         <div className="rm-table-search">
           <Search aria-hidden size={14} />
@@ -155,18 +181,18 @@ export function DataTableControls<T>({
             <>
               <div className="rm-table-view-label">{labels.columns}</div>
               {hideableColumns.map((column) => (
-                <label className="rm-table-view-col" key={column.id}>
-                  <Checkbox
-                    checked={column.getIsVisible()}
-                    disabled={
-                      column.getIsVisible() && visibleContentColumnCount <= 1
-                    }
-                    onCheckedChange={(checked) =>
-                      column.toggleVisibility(checked === true)
-                    }
-                  />
-                  <span>{column.columnDef.header as string}</span>
-                </label>
+                <Checkbox
+                  checked={column.getIsVisible()}
+                  className="rm-table-view-col"
+                  disabled={
+                    column.getIsVisible() && visibleContentColumnCount <= 1
+                  }
+                  key={column.id}
+                  label={column.columnDef.header as string}
+                  onCheckedChange={(checked) =>
+                    column.toggleVisibility(checked === true)
+                  }
+                />
               ))}
             </>
           ) : null}
@@ -180,11 +206,11 @@ export function DataTableControls<T>({
               value={viewName}
             />
             <Button
-              disabled={viewName.trim().length === 0}
+              disabled={viewName.trim().length === 0 || authorityPending}
               onClick={() => {
-                onSaveView(viewName.trim());
-                setViewName("");
+                void onSaveView(viewName.trim()).then(() => setViewName(""));
               }}
+              pending={authorityPending}
               size="sm"
               variant="outline"
             >
@@ -194,7 +220,7 @@ export function DataTableControls<T>({
           {savedViews.length > 0 ? (
             <div className="rm-table-saved-views">
               {savedViews.map((view) => (
-                <div className="rm-table-saved-view" key={view.name}>
+                <div className="rm-table-saved-view" key={view.id ?? view.name}>
                   <Button
                     className="rm-table-saved-view-name"
                     onClick={() => onApplySavedView(view)}
@@ -203,13 +229,49 @@ export function DataTableControls<T>({
                   >
                     {view.name}
                   </Button>
-                  <IconButton
-                    aria-label={`${labels.deleteView}: ${view.name}`}
-                    onClick={() => onDeleteSavedView(view.name)}
-                    variant="ghost"
-                  >
-                    <Trash2 aria-hidden size={13} />
-                  </IconButton>
+                  {view.canEdit === false ? null : (
+                    <>
+                      {view.source === "server" ? (
+                        <>
+                          <IconButton
+                            aria-label={`${labels.defaultView}: ${view.name}`}
+                            aria-pressed={view.isDefault === true}
+                            disabled={authorityPending}
+                            onClick={() =>
+                              onSetDefaultView(view, view.isDefault !== true)
+                            }
+                            variant="ghost"
+                          >
+                            <Star aria-hidden size={13} />
+                          </IconButton>
+                          <IconButton
+                            aria-label={`${view.visibility === "workspace" ? labels.unshareView : labels.shareView}: ${view.name}`}
+                            aria-pressed={view.visibility === "workspace"}
+                            disabled={authorityPending}
+                            onClick={() =>
+                              onSetViewVisibility(
+                                view,
+                                view.visibility === "workspace"
+                                  ? "private"
+                                  : "workspace",
+                              )
+                            }
+                            variant="ghost"
+                          >
+                            <Users aria-hidden size={13} />
+                          </IconButton>
+                        </>
+                      ) : null}
+                      <IconButton
+                        aria-label={`${labels.deleteView}: ${view.name}`}
+                        disabled={authorityPending}
+                        onClick={() => onDeleteSavedView(view)}
+                        variant="ghost"
+                      >
+                        <Trash2 aria-hidden size={13} />
+                      </IconButton>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -224,6 +286,14 @@ export function DataTableControls<T>({
           </Button>
         </Popover>
       </div>
+      {pendingDeletedView === undefined ? null : (
+        <div aria-live="polite" className="rm-table-delete-undo" role="status">
+          <span>{labels.viewDeleted}</span>
+          <Button onClick={onUndoDeleteSavedView} size="sm" variant="outline">
+            {labels.undo}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

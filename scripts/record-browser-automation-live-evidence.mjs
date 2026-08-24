@@ -1,6 +1,19 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+if (process.argv.includes("--help")) {
+  process.stdout.write(
+    "Usage: node scripts/record-browser-automation-live-evidence.mjs --output <path> [evidence options]\n       node scripts/record-browser-automation-live-evidence.mjs --dry-run\n",
+  );
+  process.exit(0);
+}
+if (process.argv.includes("--dry-run")) {
+  process.stdout.write(
+    '{"schemaVersion":"romeo.browser-automation-live-evidence-plan.v1","writesEvidence":false}\n',
+  );
+  process.exit(0);
+}
+
 const requiredChecks = [
   "reviewed_runner_sandbox",
   "network_denial_enforced",

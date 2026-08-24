@@ -15,7 +15,6 @@ import { useLocale } from "../lib/i18n";
 import { formatDateTime } from "../lib/locale-format";
 import {
   CitationList,
-  formatSpeechArtifact,
   ReasoningPanel,
   RunStatusStack,
   ToolCallList,
@@ -37,7 +36,7 @@ import { UserChatMessageRow } from "./UserChatMessageRow";
 import type { ChatMessageRowProps } from "./chat-message-row-types";
 import { StreamingAssistantMessage } from "./StreamingAssistantMessage";
 import { transcriptMessageDomId } from "./TranscriptWindow";
-import { VisibilityAwareAudio } from "./VisibilityAwareAudio";
+import { SpeechArtifactPlayback } from "./SpeechArtifactPlayback";
 import { MessageHeading, messageHeadingId } from "./MessageHeading";
 import {
   MessageToolbar,
@@ -292,12 +291,10 @@ const ChatMessageRowView = memo(function ChatMessageRowView({
         ) : null}
         {attachments}
         {artifact ? (
-          <div className="rm-speech-artifact">
-            <span>{formatSpeechArtifact(artifact)}</span>
-            {artifact.playbackUrl ? (
-              <VisibilityAwareAudio src={artifact.playbackUrl} />
-            ) : null}
-          </div>
+          <SpeechArtifactPlayback
+            artifact={artifact}
+            captions={message.content}
+          />
         ) : null}
         {showThinking || runError !== undefined ? null : (
           <>

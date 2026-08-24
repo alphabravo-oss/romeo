@@ -52,7 +52,18 @@ export function useChatMessageState({
     // A live run owns this chat's transcript. Re-selecting the chat mid-answer
     // would otherwise replace what has streamed so far with the empty
     // assistant row the server holds until the run reaches a terminal state.
-    if (getActiveRun(chatId)?.isStreaming === true) return;
+    const run = getActiveRun(chatId);
+    // A terminal SSE event is persisted before it is published. Its settle
+    // hook must replace optimistic topology with the authoritative page before
+    // the composer becomes writable; only a genuinely live transport owns the
+    // transcript strongly enough to defer this refresh.
+    if (
+      run?.isStreaming === true &&
+      run.streamState !== "completed" &&
+      run.streamState !== "cancelled" &&
+      run.streamState !== "failed"
+    )
+      return;
     await Promise.all([
       resetActiveMessagePages(queryClient, chatId),
       // The chat carries the leaf pointer that selects which branch is on
@@ -176,6 +187,13 @@ export function useChatMessageState({
     }
   }
 
+  function waitForAttachmentRetention(): Promise<void> {
+    return waitForMutationPolicy(
+      queryClient,
+      "chat.attachment.retention.update",
+    );
+  }
+
   return {
     appendMessage,
     handleAttachmentRetention,
@@ -183,5 +201,27 @@ export function useChatMessageState({
     handleRateMessage,
     restoreMessages,
     syncPersistedMessages,
+    waitForAttachmentRetention,
   };
+}
+
+function waitForMutationPolicy(
+  queryClient: QueryClient,
+  policy: string,
+): Promise<void> {
+  const cache = queryClient.getMutationCache();
+  const pending = () =>
+    cache.findAll({
+      predicate: (mutation) =>
+        mutation.options.meta?.mutationPolicy === policy &&
+        mutation.state.status === "pending",
+    }).length > 0;
+  if (!pending()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const unsubscribe = cache.subscribe(() => {
+      if (pending()) return;
+      unsubscribe();
+      resolve();
+    });
+  });
 }

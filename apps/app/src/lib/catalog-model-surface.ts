@@ -50,7 +50,10 @@ export function modelCatalogSurface(
     deploymentBoundary: model.capabilities.deployment.mode,
     modalities: [...model.capabilities.modalities],
     probeFreshness: catalogProbeFreshness(model.probedAt),
-    reasoning: catalogSupportLevel(model.capabilities.reasoning === true, source),
+    reasoning: catalogSupportLevel(
+      model.capabilities.reasoning === true,
+      source,
+    ),
     tools: catalogSupportLevel(model.capabilities.toolCalling, source),
     vision: catalogSupportLevel(model.capabilities.vision, source),
     ...(model.defaultParameters?.maxOutputTokens === undefined
@@ -68,10 +71,9 @@ export function modelCatalogSurface(
   };
 }
 
-export function catalogUnavailableReason(model: BaseModel):
-  | "not_entitled"
-  | "not_in_latest_sync"
-  | undefined {
+export function catalogUnavailableReason(
+  model: BaseModel,
+): "not_entitled" | "not_in_latest_sync" | undefined {
   if (model.available === false) return "not_in_latest_sync";
   if (!model.enabled) return "not_entitled";
   return undefined;

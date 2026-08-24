@@ -61,6 +61,7 @@ export class FcmMobilePushNotificationDeliverySender implements NotificationDeli
     repository: RomeoRepository;
     notification: UserNotification;
     channel: NotificationDeliveryChannel;
+    secretResolver?: SecretResolver;
   }): Promise<NotificationDelivery> {
     const delivery = await input.repository.createNotificationDelivery(
       baseDelivery(input.notification, input.channel, { status: "pending" }),
@@ -70,6 +71,7 @@ export class FcmMobilePushNotificationDeliverySender implements NotificationDeli
       input.notification,
       input.channel,
       delivery,
+      input.secretResolver,
     );
   }
 
@@ -78,12 +80,14 @@ export class FcmMobilePushNotificationDeliverySender implements NotificationDeli
     notification: UserNotification;
     channel: NotificationDeliveryChannel;
     delivery: NotificationDelivery;
+    secretResolver?: SecretResolver;
   }): Promise<NotificationDelivery> {
     return this.attemptDelivery(
       input.repository,
       input.notification,
       input.channel,
       input.delivery,
+      input.secretResolver,
     );
   }
 
@@ -92,6 +96,7 @@ export class FcmMobilePushNotificationDeliverySender implements NotificationDeli
     notification: UserNotification,
     channel: NotificationDeliveryChannel,
     delivery: NotificationDelivery,
+    secretResolver: SecretResolver | undefined,
   ): Promise<NotificationDelivery> {
     if (channel.type !== "mobile_push") {
       return repository.updateNotificationDelivery(
@@ -112,7 +117,8 @@ export class FcmMobilePushNotificationDeliverySender implements NotificationDeli
         ),
       );
     }
-    const tokenSecret = await this.resolveSecret(tokenRef);
+    const resolver = secretResolver ?? this.options.secretResolver;
+    const tokenSecret = await this.resolveSecret(tokenRef, resolver);
     if (tokenSecret.value === undefined) {
       return repository.updateNotificationDelivery(
         failedDelivery(
@@ -135,6 +141,7 @@ export class FcmMobilePushNotificationDeliverySender implements NotificationDeli
 
     const accountSecret = await this.resolveSecret(
       this.options.serviceAccountRef,
+      resolver,
     );
     if (accountSecret.value === undefined) {
       return repository.updateNotificationDelivery(
@@ -172,7 +179,12 @@ export class FcmMobilePushNotificationDeliverySender implements NotificationDeli
       const client = this.clientFactory({ projectId, serviceAccount });
       await withTimeout(
         client.send(
-          fcmMessage(notification, registrationToken, channel.config),
+          fcmMessage(
+            notification,
+            registrationToken,
+            channel.config,
+            delivery.providerIdempotencyKey ?? delivery.id,
+          ),
         ),
         this.timeoutMs,
       );
@@ -202,7 +214,10 @@ export class FcmMobilePushNotificationDeliverySender implements NotificationDeli
     }
   }
 
-  private async resolveSecret(secretRef: string): Promise<ResolvedSecret> {
+  private async resolveSecret(
+    secretRef: string,
+    secretResolver: SecretResolver,
+  ): Promise<ResolvedSecret> {
     let scheme: string;
     try {
       scheme = parseManagedSecretRef(secretRef).scheme;
@@ -213,15 +228,14 @@ export class FcmMobilePushNotificationDeliverySender implements NotificationDeli
         scheme: "",
       };
     }
-    if (this.options.secretResolver.resolveValue === undefined) {
+    if (secretResolver.resolveValue === undefined) {
       return {
         failureCode: "secret_value_resolution_unavailable",
         retryable: false,
         scheme,
       };
     }
-    const resolution =
-      await this.options.secretResolver.resolveValue(secretRef);
+    const resolution = await secretResolver.resolveValue(secretRef);
     if (resolution.available && resolution.value !== undefined) {
       return {
         retryable: false,
@@ -281,8 +295,10 @@ function fcmMessage(
   notification: UserNotification,
   token: string,
   config: Record<string, unknown>,
+  idempotencyKey: string,
 ): Message {
-  const collapseKey = collapseKeyValue(config.collapseKey);
+  const collapseKey =
+    collapseKeyValue(config.collapseKey) ?? idempotencyKey.slice(0, 64);
   return {
     token,
     notification: {

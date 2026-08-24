@@ -3,6 +3,7 @@ import type { RepositoryFragment } from "./repository-fragment-types";
 export * from "./repository-fragment-types";
 export * from "./repository-fragment-primary-factories";
 export * from "./repository-fragment-secondary-factories";
+export * from "./content-deletion-repository-fragment";
 
 type UnionToIntersection<Union> = (
   Union extends unknown ? (value: Union) => void : never

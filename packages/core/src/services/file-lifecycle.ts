@@ -1,6 +1,8 @@
 import type { FileObject, FileObjectStatus } from "../domain/entities";
 import { ApiError } from "../errors";
 
+export const fileLifecycleMaxAttempts = 5;
+
 const readyStates = new Set<FileObjectStatus>([
   "available",
   "ready",
@@ -9,22 +11,42 @@ const readyStates = new Set<FileObjectStatus>([
 ]);
 
 const transitions: Record<FileObjectStatus, ReadonlySet<FileObjectStatus>> = {
-  uploading: new Set(["quarantined", "failed", "deleted"]),
-  quarantined: new Set(["scanning", "failed", "deleted"]),
+  uploading: new Set(["quarantined", "failed", "deletion_pending", "deleted"]),
+  quarantined: new Set(["scanning", "failed", "deletion_pending", "deleted"]),
   scanning: new Set([
     "extracting",
     "transcoding",
     "ready",
     "failed",
+    "deletion_pending",
     "deleted",
   ]),
-  extracting: new Set(["transcoding", "ready", "failed", "deleted"]),
-  transcoding: new Set(["ready", "failed", "deleted"]),
-  ready: new Set(["attached", "retained", "failed", "deleted"]),
-  attached: new Set(["ready", "retained", "deleted"]),
+  extracting: new Set([
+    "transcoding",
+    "ready",
+    "failed",
+    "deletion_pending",
+    "deleted",
+  ]),
+  transcoding: new Set(["ready", "failed", "deletion_pending", "deleted"]),
+  ready: new Set([
+    "attached",
+    "retained",
+    "failed",
+    "deletion_pending",
+    "deleted",
+  ]),
+  attached: new Set(["ready", "retained", "deletion_pending", "deleted"]),
   retained: new Set(["deleted"]),
-  failed: new Set(["quarantined", "deleted"]),
-  available: new Set(["ready", "attached", "retained", "deleted"]),
+  failed: new Set(["quarantined", "deletion_pending", "deleted"]),
+  available: new Set([
+    "ready",
+    "attached",
+    "retained",
+    "deletion_pending",
+    "deleted",
+  ]),
+  deletion_pending: new Set(["deleted"]),
   deleted: new Set(),
 };
 
@@ -33,12 +55,14 @@ export function isFileReadyForUse(file: Pick<FileObject, "status">): boolean {
 }
 
 export function isFileRetentionDeletable(
-  file: Pick<FileObject, "status">,
+  file: Pick<FileObject, "status" | "lifecycleAttempts">,
 ): boolean {
   return (
     file.status === "available" ||
     file.status === "ready" ||
-    file.status === "attached"
+    file.status === "attached" ||
+    (file.status === "failed" &&
+      (file.lifecycleAttempts ?? 0) >= fileLifecycleMaxAttempts)
   );
 }
 
@@ -129,4 +153,10 @@ const lifecycleFailureCodes = new Set([
   "file_size_mismatch",
   "file_ocr_failed",
   "file_ocr_unavailable",
+  "file_lifecycle_aborted",
+  "file_lifecycle_timeout",
 ]);
+
+export function fileLifecycleRetryDelayMs(attempts: number): number {
+  return Math.min(30_000 * 2 ** Math.max(0, attempts - 1), 900_000);
+}

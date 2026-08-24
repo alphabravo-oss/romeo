@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lte, ne, or } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import { dataConnectors, dataConnectorSyncs } from "./schema";
@@ -33,6 +33,13 @@ export interface DataConnectorRecord {
   createdAt: string;
   updatedAt: string;
   lastSyncAt?: string;
+  syncLease?: {
+    attempt: number;
+    expiresAt: string;
+    fencingToken: number;
+    owner: string;
+    token: string;
+  };
 }
 
 export interface DataConnectorSyncRecord {
@@ -49,6 +56,8 @@ export interface DataConnectorSyncRecord {
   errorCode?: string;
   startedAt: string;
   completedAt?: string;
+  fencingToken?: number;
+  leaseToken?: string;
 }
 
 export class PgDataConnectorRepository {
@@ -114,6 +123,154 @@ export class PgDataConnectorRepository {
       .where(eq(dataConnectors.id, connector.id))
       .returning();
     return row === undefined ? connector : toDataConnectorRecord(row);
+  }
+
+  async claimDataConnectorSync(input: {
+    connectorId?: string;
+    leaseExpiresAt: string;
+    leaseOwner: string;
+    leaseToken: string;
+    now: string;
+    orgId: string;
+  }): Promise<DataConnectorRecord | undefined> {
+    return this.db.transaction(async (transaction) => {
+      const now = new Date(input.now);
+      const [candidate] = await transaction
+        .select()
+        .from(dataConnectors)
+        .where(
+          and(
+            eq(dataConnectors.orgId, input.orgId),
+            eq(dataConnectors.status, "active"),
+            input.connectorId === undefined
+              ? and(
+                  ne(dataConnectors.type, "local_import"),
+                  lte(dataConnectors.nextSyncAt, now),
+                )
+              : eq(dataConnectors.id, input.connectorId),
+            or(
+              isNull(dataConnectors.syncLeaseExpiresAt),
+              lte(dataConnectors.syncLeaseExpiresAt, now),
+            ),
+          ),
+        )
+        .orderBy(
+          asc(dataConnectors.nextSyncAt),
+          asc(dataConnectors.updatedAt),
+          asc(dataConnectors.id),
+        )
+        .limit(1)
+        .for("update", { skipLocked: true });
+      if (candidate === undefined) return undefined;
+      const [claimed] = await transaction
+        .update(dataConnectors)
+        .set({
+          syncAttempts: candidate.syncAttempts + 1,
+          syncFence: candidate.syncFence + 1,
+          syncLeaseExpiresAt: new Date(input.leaseExpiresAt),
+          syncLeaseOwner: input.leaseOwner,
+          syncLeaseToken: input.leaseToken,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(dataConnectors.id, candidate.id),
+            eq(dataConnectors.syncFence, candidate.syncFence),
+          ),
+        )
+        .returning();
+      return claimed === undefined ? undefined : toDataConnectorRecord(claimed);
+    });
+  }
+
+  async renewDataConnectorSyncLease(input: {
+    connectorId: string;
+    fencingToken: number;
+    leaseExpiresAt: string;
+    leaseOwner: string;
+    leaseToken: string;
+    now: string;
+  }): Promise<DataConnectorRecord | undefined> {
+    const now = new Date(input.now);
+    const [row] = await this.db
+      .update(dataConnectors)
+      .set({
+        syncLeaseExpiresAt: new Date(input.leaseExpiresAt),
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(dataConnectors.id, input.connectorId),
+          eq(dataConnectors.syncFence, input.fencingToken),
+          eq(dataConnectors.syncLeaseOwner, input.leaseOwner),
+          eq(dataConnectors.syncLeaseToken, input.leaseToken),
+          gt(dataConnectors.syncLeaseExpiresAt, now),
+        ),
+      )
+      .returning();
+    return row === undefined ? undefined : toDataConnectorRecord(row);
+  }
+
+  async finishDataConnectorSync(input: {
+    connector: DataConnectorRecord;
+    fencingToken: number;
+    leaseOwner: string;
+    leaseToken: string;
+    now: string;
+    sync: DataConnectorSyncRecord;
+  }): Promise<DataConnectorSyncRecord | undefined> {
+    try {
+      return await this.db.transaction(async (transaction) => {
+        const now = new Date(input.now);
+        const [connector] = await transaction
+          .update(dataConnectors)
+          .set({
+            config: input.connector.config,
+            lastSyncAt: optionalDate(input.connector.lastSyncAt),
+            nextSyncAt: optionalDate(input.connector.nextSyncAt),
+            syncIntervalMinutes: input.connector.syncIntervalMinutes ?? null,
+            syncLeaseExpiresAt: null,
+            syncLeaseOwner: null,
+            syncLeaseToken: null,
+            updatedAt: new Date(input.connector.updatedAt),
+          })
+          .where(
+            and(
+              eq(dataConnectors.id, input.connector.id),
+              eq(dataConnectors.syncFence, input.fencingToken),
+              eq(dataConnectors.syncLeaseOwner, input.leaseOwner),
+              eq(dataConnectors.syncLeaseToken, input.leaseToken),
+              gt(dataConnectors.syncLeaseExpiresAt, now),
+            ),
+          )
+          .returning({ id: dataConnectors.id });
+        if (connector === undefined) throw new WorkLeaseLostError();
+        const [sync] = await transaction
+          .update(dataConnectorSyncs)
+          .set({
+            completedAt: optionalDate(input.sync.completedAt),
+            errorCode: input.sync.errorCode ?? null,
+            itemCount: input.sync.itemCount,
+            sourceIds: input.sync.sourceIds,
+            status: input.sync.status,
+            summary: input.sync.summary,
+          })
+          .where(
+            and(
+              eq(dataConnectorSyncs.id, input.sync.id),
+              eq(dataConnectorSyncs.connectorId, input.connector.id),
+              eq(dataConnectorSyncs.fencingToken, input.fencingToken),
+              eq(dataConnectorSyncs.leaseToken, input.leaseToken),
+            ),
+          )
+          .returning();
+        if (sync === undefined) throw new WorkLeaseLostError();
+        return toDataConnectorSyncRecord(sync);
+      });
+    } catch (error) {
+      if (error instanceof WorkLeaseLostError) return undefined;
+      throw error;
+    }
   }
 
   async listDataConnectorSyncs(
@@ -186,6 +343,19 @@ export function toDataConnectorRecord(
   if (nextSyncAt !== undefined) connector.nextSyncAt = nextSyncAt;
   const lastSyncAt = optionalIsoString(row.lastSyncAt);
   if (lastSyncAt !== undefined) connector.lastSyncAt = lastSyncAt;
+  if (
+    row.syncLeaseOwner !== null &&
+    row.syncLeaseToken !== null &&
+    row.syncLeaseExpiresAt !== null
+  ) {
+    connector.syncLease = {
+      attempt: row.syncAttempts,
+      expiresAt: row.syncLeaseExpiresAt.toISOString(),
+      fencingToken: row.syncFence,
+      owner: row.syncLeaseOwner,
+      token: row.syncLeaseToken,
+    };
+  }
   return connector;
 }
 
@@ -209,6 +379,8 @@ export function toDataConnectorSyncRecord(
   if (errorCode !== undefined) sync.errorCode = errorCode;
   const completedAt = optionalIsoString(row.completedAt);
   if (completedAt !== undefined) sync.completedAt = completedAt;
+  if (row.fencingToken !== null) sync.fencingToken = row.fencingToken;
+  if (row.leaseToken !== null) sync.leaseToken = row.leaseToken;
   return sync;
 }
 
@@ -250,8 +422,12 @@ function toDataConnectorSyncInsert(
     errorCode: record.errorCode ?? null,
     startedAt: new Date(record.startedAt),
     completedAt: optionalDate(record.completedAt),
+    fencingToken: record.fencingToken ?? null,
+    leaseToken: record.leaseToken ?? null,
   };
 }
+
+class WorkLeaseLostError extends Error {}
 
 function asDataConnectorType(value: string): DataConnectorTypeRecord {
   if (

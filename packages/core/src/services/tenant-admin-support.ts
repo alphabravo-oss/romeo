@@ -63,7 +63,10 @@ export async function readTenantDeletionRequest(
   repository: RomeoRepository,
   orgId: string,
 ): Promise<TenantDeletionRequestSummary | undefined> {
-  const setting = await repository.getSystemSetting(deletionRequestKey(orgId));
+  const setting = await repository.getSystemSetting(
+    deletionRequestKey(orgId),
+    orgId,
+  );
   if (setting === undefined) return undefined;
   const parsed = parseDeletionRequest(setting.value, orgId);
   if (parsed === undefined) return undefined;

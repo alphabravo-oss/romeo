@@ -8,7 +8,7 @@ import {
   getProviderAdapter,
   type BaseModel,
   ChatMessage,
-  ProviderInstance,
+  type ProviderInstance,
   type ProviderReasoningParameters,
   type ProviderReasoningPolicyLayers,
   type ProviderSampling,
@@ -28,18 +28,28 @@ import { routedRunTarget } from "./run-stream-service";
 import { modelToolExecutionResult } from "./run-tool-service";
 import { reasoningPolicyLayersAtDispatch } from "./run-reasoning-policy";
 import { ReasoningSummaryGovernor } from "./run-reasoning-summary-policy";
-import {
-  contentPolicyActionsFor,
-} from "./content-policy-service";
+import { activeContentPolicyFor } from "./content-policy-service";
 import { OutputPolicyBuffer } from "./output-policy-buffer";
+import { FileService } from "./file-service";
 import {
+  ProviderOutputPartError,
+  type PersistedOutputPartRef,
+} from "./persist-output-parts";
+import { storeProviderOutputFile } from "./run-provider-output-file-service";
+import {
+  authoritativeTerminalPolicyOutcome,
   gateStreamedOutputDelta,
   persistAndEmitOutputParts,
 } from "./run-output-policy-gate";
+import type { PauseForPolicyApprovalInput } from "./run-policy-approval-lifecycle";
 import {
   continueTelemetryContext,
   withTelemetryFetch,
 } from "./telemetry-context";
+import { resolveRunProviderApiKeys } from "./run-provider-api-keys";
+import { governedProviderFetch } from "./provider-secret-egress";
+import { persistSafeMessageCompleted } from "./run-message-completion";
+import { providerTimeoutFields } from "./run-provider-timeout";
 
 export interface RunStreamingExecutionInput {
   run: RunRecord;
@@ -75,8 +85,17 @@ export class RunStreamingExecutionService {
       model: BaseModel,
       citations: RunKnowledgeCitation[],
       subject: AuthSubject,
+      outputParts: PersistedOutputPartRef[],
     ) => Promise<void>,
-  ) {}
+    outputFiles?: FileService,
+    private readonly pauseForPolicyApproval?: (
+      input: PauseForPolicyApprovalInput,
+    ) => Promise<unknown>,
+  ) {
+    this.outputFiles = outputFiles ?? new FileService(repository);
+  }
+
+  private readonly outputFiles: FileService;
 
   has(runId: string): boolean {
     return this.activeRuns.has(runId);
@@ -104,20 +123,23 @@ export class RunStreamingExecutionService {
     let assistantContent = claimedExecution.checkpoint.assistantContent;
     let executionJob = claimedExecution.job;
     let executionCheckpoint = claimedExecution.checkpoint;
-    let executionFinalized = false;
+    let pendingMessageCompleted: RunEvent | undefined;
     const reasoningSummaryGovernor = new ReasoningSummaryGovernor(
       this.repository,
       input.subject,
     );
+    const activePolicy = await activeContentPolicyFor(
+      this.repository,
+      input.subject.orgId,
+    );
     const outputPolicyBuffer = new OutputPolicyBuffer({
       mode: "rolling",
-      detectors: await contentPolicyActionsFor(
-        this.repository,
-        input.subject.orgId,
-      ),
+      detectors: activePolicy.detectors,
       failClosed: true,
     });
-    const persistedOutputParts: Array<{ type: string; fileId?: string }> = [];
+    const persistedOutputParts: PersistedOutputPartRef[] = [
+      ...(claimedExecution.checkpoint.outputParts ?? []),
+    ];
     const heartbeat = setInterval(() => {
       void this.repository
         .renewBackgroundJobLease({
@@ -127,17 +149,37 @@ export class RunStreamingExecutionService {
           leaseSeconds: this.leaseSeconds(),
         })
         .then((renewed) => {
-          if (renewed !== undefined) executionJob = renewed;
+          if (renewed === undefined) {
+            controller.abort();
+            return;
+          }
+          executionJob = renewed;
+        })
+        .catch(() => {
+          controller.abort();
         });
     }, this.heartbeatMs());
     heartbeat.unref?.();
     try {
       // Everything after claiming the job must be inside this cleanup scope.
       // Secret resolution can fail before provider streaming begins.
-      const providerApiKeys = await this.resolveProviderApiKeys([
-        input.provider,
-        input.routePlan.fallback?.provider,
-      ]);
+      const providerApiKeys = await resolveRunProviderApiKeys(
+        [input.provider, input.routePlan.fallback?.provider],
+        this.options.secretResolver,
+      );
+      const providerTimeout = providerTimeoutFields(
+        this.options.providerStreamTimeoutMs,
+        input.model,
+      );
+      const providerFetch = governedProviderFetch({
+        fetchImpl: this.options.providerFetch ?? fetch,
+        providerApiKeys,
+        providers: [input.provider, input.routePlan.fallback?.provider],
+        timeoutMs:
+          "providerTimeoutMs" in providerTimeout
+            ? providerTimeout.providerTimeoutMs
+            : 60_000,
+      });
       for await (const rawEvent of streamRunEvents({
         adapter,
         provider: input.provider,
@@ -148,7 +190,7 @@ export class RunStreamingExecutionService {
         ...(Object.keys(providerApiKeys).length === 0
           ? {}
           : { providerApiKeys }),
-        fetchImpl: withTelemetryFetch(this.options.providerFetch ?? fetch),
+        fetchImpl: withTelemetryFetch(providerFetch),
         ...(input.providerTools.length === 0
           ? {}
           : { tools: input.providerTools }),
@@ -189,10 +231,7 @@ export class RunStreamingExecutionService {
         ...(input.structuredOutput === undefined
           ? {}
           : { structuredOutput: input.structuredOutput }),
-        ...providerTimeoutFields(
-          this.options.providerStreamTimeoutMs,
-          input.model,
-        ),
+        ...providerTimeout,
         ...(input.routePlan.fallback === undefined
           ? {}
           : { providerFallback: input.routePlan.fallback }),
@@ -204,39 +243,125 @@ export class RunStreamingExecutionService {
         },
         signal: controller.signal,
       })) {
-        if (terminalRunEvents.has(rawEvent.type)) {
-          const flushed = outputPolicyBuffer.finish();
-          if (flushed.action === "release") assistantContent += flushed.text;
+        let outputPartEvents;
+        try {
+          outputPartEvents = await persistAndEmitOutputParts({
+            citations: input.citations,
+            event: rawEvent,
+            store: (part) =>
+              storeProviderOutputFile({
+                fileService: this.outputFiles,
+                index: persistedOutputParts.length,
+                model: input.model,
+                part,
+                provider: input.provider,
+                run: input.run,
+                subject: input.subject,
+              }),
+            persistPart: async (part) => {
+              persistedOutputParts.push(part);
+            },
+          });
+        } catch (caught) {
+          const failureEvent: RunEvent = {
+            ...rawEvent,
+            type: "run.failed",
+            data: {
+              channel: "provider_output",
+              errorCode:
+                caught instanceof ProviderOutputPartError
+                  ? caught.code
+                  : "provider_output_persistence_failed",
+            },
+          };
           const routed = routedRunTarget(
             input.run,
             input.model,
             input.routePlan,
-            rawEvent,
+            failureEvent,
           );
           await this.completeRun(
             routed.run,
-            rawEvent,
+            failureEvent,
             assistantContent,
             routed.model,
             input.citations,
             input.subject,
+            persistedOutputParts,
+          );
+          await this.executionState.finish(executionJob, "failed");
+          return;
+        }
+        if (terminalRunEvents.has(rawEvent.type)) {
+          for (const partEvent of outputPartEvents) {
+            const ready = await this.sequencer.assign(this.repository, {
+              ...rawEvent,
+              data: partEvent.partRef,
+              type: "output.part.ready",
+            });
+            await this.sequencer.append(this.repository, [ready]);
+          }
+          const terminalPolicy = outputPolicyBuffer.finish();
+          if (
+            terminalPolicy.action === "block" &&
+            activePolicy.approvalRequired &&
+            this.pauseForPolicyApproval !== undefined
+          ) {
+            await this.pauseForPolicyApproval({
+              run: input.run,
+              executionJob,
+              checkpoint: {
+                ...executionCheckpoint,
+                assistantContent,
+                outputParts: [...persistedOutputParts],
+              },
+              policyVersionId: activePolicy.versionId,
+              approvalTtlSeconds: activePolicy.approvalTtlSeconds,
+              detectors: terminalPolicy.detectors.map((code) => ({
+                code,
+                count: 1,
+                action: "block" as const,
+              })),
+            });
+            return;
+          }
+          const terminal = authoritativeTerminalPolicyOutcome({
+            policy: terminalPolicy,
+            providerEvent: rawEvent,
+          });
+          assistantContent += terminal.assistantText;
+          if (
+            terminal.executionOutcome === "completed" &&
+            pendingMessageCompleted !== undefined
+          ) {
+            await persistSafeMessageCompleted({
+              repository: this.repository,
+              sequencer: this.sequencer,
+              event: pendingMessageCompleted,
+              content: assistantContent,
+            });
+          }
+          const routed = routedRunTarget(
+            input.run,
+            input.model,
+            input.routePlan,
+            terminal.terminalEvent,
+          );
+          await this.completeRun(
+            routed.run,
+            terminal.terminalEvent,
+            assistantContent,
+            routed.model,
+            input.citations,
+            input.subject,
+            persistedOutputParts,
           );
           await this.executionState.finish(
             executionJob,
-            rawEvent.type === "run.completed" && flushed.action !== "block"
-              ? "completed"
-              : "failed",
+            terminal.executionOutcome,
           );
-          executionFinalized = true;
           return;
         }
-        const outputPartEvents = await persistAndEmitOutputParts({
-          event: rawEvent,
-          store: async () => ({ fileId: `file_${input.run.id}_${persistedOutputParts.length}` }),
-          persistPart: async (part) => {
-            persistedOutputParts.push(part);
-          },
-        });
         const governedEvents = await reasoningSummaryGovernor.consume(rawEvent);
         for (const governedEvent of [
           ...governedEvents,
@@ -246,31 +371,63 @@ export class RunStreamingExecutionService {
             data: partEvent.partRef,
           })),
         ]) {
+          if (governedEvent.type === "message.completed") {
+            pendingMessageCompleted = governedEvent;
+            continue;
+          }
           if (governedEvent.type === "message.delta") {
             const gated = gateStreamedOutputDelta({
               buffer: outputPolicyBuffer,
               text: (governedEvent.data as { text: string }).text,
+              approvalRequired:
+                activePolicy.approvalRequired &&
+                this.pauseForPolicyApproval !== undefined,
             });
             if (gated.outcome === "hold") continue;
-            if (gated.outcome === "block" || gated.outcome === "pause") {
-              const blocked = await this.sequencer.assign(this.repository, {
+            if (gated.outcome === "block") {
+              const failureEvent: RunEvent = {
                 ...governedEvent,
-                type: gated.outcome === "pause"
-                  ? "run.waiting_tool_approval"
-                  : "run.failed",
+                type: "run.failed",
                 data: {
-                  code: gated.code,
                   channel: "content_policy",
+                  errorCode: gated.code,
                 },
-              });
-              if (gated.outcome === "pause")
-                await this.executionState.markWaiting(input.run);
-              await this.sequencer.append(this.repository, [blocked]);
-              await this.executionState.finish(
-                executionJob,
-                gated.outcome === "pause" ? "waiting_tool_approval" : "failed",
+              };
+              const routed = routedRunTarget(
+                input.run,
+                input.model,
+                input.routePlan,
+                failureEvent,
               );
-              executionFinalized = true;
+              await this.completeRun(
+                routed.run,
+                failureEvent,
+                assistantContent,
+                routed.model,
+                input.citations,
+                input.subject,
+                persistedOutputParts,
+              );
+              await this.executionState.finish(executionJob, "failed");
+              return;
+            }
+            if (gated.outcome === "pause") {
+              await this.pauseForPolicyApproval!({
+                run: input.run,
+                executionJob,
+                checkpoint: {
+                  ...executionCheckpoint,
+                  assistantContent,
+                  outputParts: [...persistedOutputParts],
+                },
+                policyVersionId: activePolicy.versionId,
+                approvalTtlSeconds: activePolicy.approvalTtlSeconds,
+                detectors: gated.detectors.map((code) => ({
+                  code,
+                  count: 1,
+                  action: "block" as const,
+                })),
+              });
               return;
             }
             assistantContent += gated.text;
@@ -280,7 +437,11 @@ export class RunStreamingExecutionService {
             this.repository,
             governedEvent,
           );
-          executionCheckpoint = { ...executionCheckpoint, assistantContent };
+          executionCheckpoint = {
+            ...executionCheckpoint,
+            assistantContent,
+            outputParts: [...persistedOutputParts],
+          };
           if (
             event.type === "run.waiting_tool_approval" ||
             event.type === "run.waiting_tool_dispatch"
@@ -301,7 +462,6 @@ export class RunStreamingExecutionService {
                 ? "waiting_tool_approval"
                 : "waiting_tool_dispatch",
             );
-            executionFinalized = true;
             clearInterval(heartbeat);
             this.activeRuns.delete(input.run.id);
             await this.sequencer.append(this.repository, [event]);
@@ -318,38 +478,7 @@ export class RunStreamingExecutionService {
     } finally {
       clearInterval(heartbeat);
       this.activeRuns.delete(input.run.id);
-      void executionFinalized;
     }
-  }
-
-  private async resolveProviderApiKeys(
-    providers: Array<ProviderInstance | undefined>,
-  ): Promise<Record<string, string>> {
-    const unique = [
-      ...new Map(
-        providers
-          .filter(
-            (provider): provider is ProviderInstance => provider !== undefined,
-          )
-          .map((provider) => [provider.id, provider]),
-      ).values(),
-    ];
-    const entries = await Promise.all(
-      unique.map(async (provider) => {
-        if (provider.credentialRef === undefined) return undefined;
-        const resolution = await this.options.secretResolver?.resolveValue?.(
-          provider.credentialRef,
-        );
-        return resolution?.available === true
-          ? ([provider.id, resolution.value] as const)
-          : undefined;
-      }),
-    );
-    return Object.fromEntries(
-      entries.filter(
-        (entry): entry is readonly [string, string] => entry !== undefined,
-      ),
-    );
   }
 
   private leaseSeconds(): number {
@@ -359,19 +488,4 @@ export class RunStreamingExecutionService {
   private heartbeatMs(): number {
     return Math.max(250, Math.floor((this.leaseSeconds() * 1_000) / 3));
   }
-}
-
-const REASONING_STREAM_TIMEOUT_FLOOR_MS = 180_000;
-
-function providerTimeoutFields(
-  configuredMs: number | undefined,
-  model: BaseModel,
-): { providerTimeoutMs: number } | Record<string, never> {
-  if (configuredMs === undefined) return {};
-  return {
-    providerTimeoutMs:
-      model.capabilities.reasoning === true
-        ? Math.max(configuredMs, REASONING_STREAM_TIMEOUT_FLOOR_MS)
-        : configuredMs,
-  };
 }

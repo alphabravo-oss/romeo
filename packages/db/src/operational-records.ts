@@ -54,6 +54,7 @@ export interface BackgroundJobRecord {
 
 export interface SystemSettingRecord {
   key: string;
+  orgId?: string;
   value: Record<string, unknown>;
   updatedAt: string;
 }

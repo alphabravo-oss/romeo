@@ -244,6 +244,7 @@ import {
   governanceExportComplianceReportCsv,
   governanceGetAccessReviewReport,
   governanceGetComplianceReport,
+  governanceGetDataExportPackage,
   governanceGetDataRightsCoverage,
   governanceGetIdentityLifecyclePolicy,
   governanceGetRetentionPolicy,
@@ -253,6 +254,7 @@ import {
   governancePreviewDataExport,
   governanceReadDataExportPackage,
   governanceUpdateRetentionPolicy,
+  healthGetInternalReadiness,
   identityGetCurrentPrincipal,
   identityUpdateCurrentProfile,
   imagesCancelJob,
@@ -407,6 +409,7 @@ import {
   operationalGovernanceUpdateQuotaBucket,
   operationalPostureGetGaEvidence,
   operationalPostureGetPostgres,
+  operationalPostureGetRuntimeKeyRotation,
   type Options,
   promptsCreateTemplate,
   promptsDeleteTemplate,
@@ -481,11 +484,17 @@ import {
   systemGetHealth,
   systemGetOpenApiDocument,
   tableExportsCreate,
+  tableExportsDelete,
+  tableExportsDownloadArtifact,
   tableExportsGet,
   tableExportsRun,
   tablePagesQuery,
+  tableViewsDelete,
   tableViewsList,
   tableViewsReplace,
+  tableViewsRestore,
+  tableViewsSetDefault,
+  tableViewsShare,
   tenancyArchiveWorkspace,
   tenancyCreateWorkspace,
   tenancyExportWorkspace,
@@ -559,6 +568,9 @@ import {
   webIngestUrls,
   webSearch,
   webUpdateConfiguration,
+  workerBrokerClaim,
+  workerBrokerComplete,
+  workerBrokerRenew,
   workflowsApproveRun,
   workflowsCreate,
   workflowsCreateFromTemplate,
@@ -1273,6 +1285,9 @@ import type {
   GovernanceGetComplianceReportData,
   GovernanceGetComplianceReportError,
   GovernanceGetComplianceReportResponse,
+  GovernanceGetDataExportPackageData,
+  GovernanceGetDataExportPackageError,
+  GovernanceGetDataExportPackageResponse,
   GovernanceGetDataRightsCoverageData,
   GovernanceGetDataRightsCoverageError,
   GovernanceGetDataRightsCoverageResponse,
@@ -1300,6 +1315,9 @@ import type {
   GovernanceUpdateRetentionPolicyData,
   GovernanceUpdateRetentionPolicyError,
   GovernanceUpdateRetentionPolicyResponse,
+  HealthGetInternalReadinessData,
+  HealthGetInternalReadinessError,
+  HealthGetInternalReadinessResponse,
   IdentityGetCurrentPrincipalData,
   IdentityGetCurrentPrincipalError,
   IdentityGetCurrentPrincipalResponse,
@@ -1762,6 +1780,9 @@ import type {
   OperationalPostureGetPostgresData,
   OperationalPostureGetPostgresError,
   OperationalPostureGetPostgresResponse,
+  OperationalPostureGetRuntimeKeyRotationData,
+  OperationalPostureGetRuntimeKeyRotationError,
+  OperationalPostureGetRuntimeKeyRotationResponse,
   PromptsCreateTemplateData,
   PromptsCreateTemplateError,
   PromptsCreateTemplateResponse,
@@ -1980,6 +2001,12 @@ import type {
   TableExportsCreateData,
   TableExportsCreateError,
   TableExportsCreateResponse,
+  TableExportsDeleteData,
+  TableExportsDeleteError,
+  TableExportsDeleteResponse,
+  TableExportsDownloadArtifactData,
+  TableExportsDownloadArtifactError,
+  TableExportsDownloadArtifactResponse,
   TableExportsGetData,
   TableExportsGetError,
   TableExportsGetResponse,
@@ -1989,12 +2016,24 @@ import type {
   TablePagesQueryData,
   TablePagesQueryError,
   TablePagesQueryResponse,
+  TableViewsDeleteData,
+  TableViewsDeleteError,
+  TableViewsDeleteResponse,
   TableViewsListData,
   TableViewsListError,
   TableViewsListResponse,
   TableViewsReplaceData,
   TableViewsReplaceError,
   TableViewsReplaceResponse,
+  TableViewsRestoreData,
+  TableViewsRestoreError,
+  TableViewsRestoreResponse,
+  TableViewsSetDefaultData,
+  TableViewsSetDefaultError,
+  TableViewsSetDefaultResponse,
+  TableViewsShareData,
+  TableViewsShareError,
+  TableViewsShareResponse,
   TenancyArchiveWorkspaceData,
   TenancyArchiveWorkspaceError,
   TenancyArchiveWorkspaceResponse,
@@ -2214,6 +2253,15 @@ import type {
   WebUpdateConfigurationData,
   WebUpdateConfigurationError,
   WebUpdateConfigurationResponse,
+  WorkerBrokerClaimData,
+  WorkerBrokerClaimError,
+  WorkerBrokerClaimResponse2,
+  WorkerBrokerCompleteData,
+  WorkerBrokerCompleteError,
+  WorkerBrokerCompleteResponse,
+  WorkerBrokerRenewData,
+  WorkerBrokerRenewError,
+  WorkerBrokerRenewResponse,
   WorkflowsApproveRunData,
   WorkflowsApproveRunError,
   WorkflowsApproveRunResponse,
@@ -6312,6 +6360,34 @@ export const operationalPostureGetPostgresOptions = (
     queryKey: operationalPostureGetPostgresQueryKey(options),
   });
 
+export const operationalPostureGetRuntimeKeyRotationQueryKey = (
+  options?: Options<OperationalPostureGetRuntimeKeyRotationData>,
+) => createQueryKey("operationalPostureGetRuntimeKeyRotation", options);
+
+/**
+ * Get global runtime key-rotation usage posture
+ */
+export const operationalPostureGetRuntimeKeyRotationOptions = (
+  options?: Options<OperationalPostureGetRuntimeKeyRotationData>,
+) =>
+  queryOptions<
+    OperationalPostureGetRuntimeKeyRotationResponse,
+    OperationalPostureGetRuntimeKeyRotationError,
+    OperationalPostureGetRuntimeKeyRotationResponse,
+    ReturnType<typeof operationalPostureGetRuntimeKeyRotationQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await operationalPostureGetRuntimeKeyRotation({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: operationalPostureGetRuntimeKeyRotationQueryKey(options),
+  });
+
 export const providersGetCapabilityReportQueryKey = (
   options: Options<ProvidersGetCapabilityReportData>,
 ) => createQueryKey("providersGetCapabilityReport", options);
@@ -7411,6 +7487,34 @@ export const readinessGetReportOptions = (
       return data;
     },
     queryKey: readinessGetReportQueryKey(options),
+  });
+
+export const healthGetInternalReadinessQueryKey = (
+  options?: Options<HealthGetInternalReadinessData>,
+) => createQueryKey("healthGetInternalReadiness", options);
+
+/**
+ * Get dependency-aware internal runtime readiness
+ */
+export const healthGetInternalReadinessOptions = (
+  options?: Options<HealthGetInternalReadinessData>,
+) =>
+  queryOptions<
+    HealthGetInternalReadinessResponse,
+    HealthGetInternalReadinessError,
+    HealthGetInternalReadinessResponse,
+    ReturnType<typeof healthGetInternalReadinessQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await healthGetInternalReadiness({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: healthGetInternalReadinessQueryKey(options),
   });
 
 /**
@@ -11483,7 +11587,11 @@ export const contentPolicyApprovalsListOptions = (
   });
 
 /**
- * Pause a run for a scoped, expiring, content-minimized approval
+ * Retired client-created content-policy approval request
+ *
+ * Deprecated and fail-closed. Content-policy approvals are created only by the governed run execution path and cannot be fabricated by API clients.
+ *
+ * @deprecated
  */
 export const contentPolicyApprovalsRequestMutation = (
   options?: Partial<Options<ContentPolicyApprovalsRequestData>>,
@@ -12006,7 +12114,7 @@ export const edgeSecurityGetPostureOptions = (
   });
 
 /**
- * Create an authenticated realtime voice session or fail closed
+ * Preview realtime session policy. This does not start a live gateway session.
  */
 export const realtimeCreateSessionMutation = (
   options?: Partial<Options<RealtimeCreateSessionData>>,
@@ -12682,6 +12790,114 @@ export const tableViewsReplaceMutation = (
 };
 
 /**
+ * Delete an owned server saved view
+ */
+export const tableViewsDeleteMutation = (
+  options?: Partial<Options<TableViewsDeleteData>>,
+): UseMutationOptions<
+  TableViewsDeleteResponse,
+  TableViewsDeleteError,
+  Options<TableViewsDeleteData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TableViewsDeleteResponse,
+    TableViewsDeleteError,
+    Options<TableViewsDeleteData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tableViewsDelete({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Restore a recently deleted owned saved view
+ */
+export const tableViewsRestoreMutation = (
+  options?: Partial<Options<TableViewsRestoreData>>,
+): UseMutationOptions<
+  TableViewsRestoreResponse,
+  TableViewsRestoreError,
+  Options<TableViewsRestoreData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TableViewsRestoreResponse,
+    TableViewsRestoreError,
+    Options<TableViewsRestoreData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tableViewsRestore({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Set or clear the owned default saved view
+ */
+export const tableViewsSetDefaultMutation = (
+  options?: Partial<Options<TableViewsSetDefaultData>>,
+): UseMutationOptions<
+  TableViewsSetDefaultResponse,
+  TableViewsSetDefaultError,
+  Options<TableViewsSetDefaultData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TableViewsSetDefaultResponse,
+    TableViewsSetDefaultError,
+    Options<TableViewsSetDefaultData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tableViewsSetDefault({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Change workspace sharing for an owned saved view
+ */
+export const tableViewsShareMutation = (
+  options?: Partial<Options<TableViewsShareData>>,
+): UseMutationOptions<
+  TableViewsShareResponse,
+  TableViewsShareError,
+  Options<TableViewsShareData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TableViewsShareResponse,
+    TableViewsShareError,
+    Options<TableViewsShareData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tableViewsShare({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
  * Queue an async table export from a frozen query snapshot
  */
 export const tableExportsCreateMutation = (
@@ -12735,6 +12951,33 @@ export const tableExportsRunMutation = (
   return mutationOptions;
 };
 
+/**
+ * Delete an owned table-export artifact and expire the job
+ */
+export const tableExportsDeleteMutation = (
+  options?: Partial<Options<TableExportsDeleteData>>,
+): UseMutationOptions<
+  TableExportsDeleteResponse,
+  TableExportsDeleteError,
+  Options<TableExportsDeleteData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    TableExportsDeleteResponse,
+    TableExportsDeleteError,
+    Options<TableExportsDeleteData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await tableExportsDelete({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
 export const tableExportsGetQueryKey = (
   options: Options<TableExportsGetData>,
 ) => createQueryKey("tableExportsGet", options);
@@ -12759,6 +13002,34 @@ export const tableExportsGetOptions = (options: Options<TableExportsGetData>) =>
       return data;
     },
     queryKey: tableExportsGetQueryKey(options),
+  });
+
+export const tableExportsDownloadArtifactQueryKey = (
+  options: Options<TableExportsDownloadArtifactData>,
+) => createQueryKey("tableExportsDownloadArtifact", options);
+
+/**
+ * Download an authorized, unexpired table-export artifact
+ */
+export const tableExportsDownloadArtifactOptions = (
+  options: Options<TableExportsDownloadArtifactData>,
+) =>
+  queryOptions<
+    TableExportsDownloadArtifactResponse,
+    TableExportsDownloadArtifactError,
+    TableExportsDownloadArtifactResponse,
+    ReturnType<typeof tableExportsDownloadArtifactQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await tableExportsDownloadArtifact({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: tableExportsDownloadArtifactQueryKey(options),
   });
 
 /**
@@ -13841,6 +14112,34 @@ export const governanceDeleteDataExportPackageMutation = (
   };
   return mutationOptions;
 };
+
+export const governanceGetDataExportPackageQueryKey = (
+  options: Options<GovernanceGetDataExportPackageData>,
+) => createQueryKey("governanceGetDataExportPackage", options);
+
+/**
+ * Get a governed data-export package job
+ */
+export const governanceGetDataExportPackageOptions = (
+  options: Options<GovernanceGetDataExportPackageData>,
+) =>
+  queryOptions<
+    GovernanceGetDataExportPackageResponse,
+    GovernanceGetDataExportPackageError,
+    GovernanceGetDataExportPackageResponse,
+    ReturnType<typeof governanceGetDataExportPackageQueryKey>
+  >({
+    queryFn: async ({ queryKey, signal }) => {
+      const { data } = await governanceGetDataExportPackage({
+        ...options,
+        ...queryKey[0],
+        signal,
+        throwOnError: true,
+      });
+      return data;
+    },
+    queryKey: governanceGetDataExportPackageQueryKey(options),
+  });
 
 export const governanceReadDataExportPackageQueryKey = (
   options: Options<GovernanceReadDataExportPackageData>,
@@ -16458,6 +16757,8 @@ export const workflowsListTemplatesQueryKey = (
 
 /**
  * List templates
+ *
+ * @deprecated
  */
 export const workflowsListTemplatesOptions = (
   options?: Options<WorkflowsListTemplatesData>,
@@ -16482,6 +16783,8 @@ export const workflowsListTemplatesOptions = (
 
 /**
  * Create from template
+ *
+ * @deprecated
  */
 export const workflowsCreateFromTemplateMutation = (
   options?: Partial<Options<WorkflowsCreateFromTemplateData>>,
@@ -16512,6 +16815,8 @@ export const workflowsListQueryKey = (options?: Options<WorkflowsListData>) =>
 
 /**
  * List
+ *
+ * @deprecated
  */
 export const workflowsListOptions = (options?: Options<WorkflowsListData>) =>
   queryOptions<
@@ -16534,6 +16839,8 @@ export const workflowsListOptions = (options?: Options<WorkflowsListData>) =>
 
 /**
  * Create
+ *
+ * @deprecated
  */
 export const workflowsCreateMutation = (
   options?: Partial<Options<WorkflowsCreateData>>,
@@ -16561,6 +16868,8 @@ export const workflowsCreateMutation = (
 
 /**
  * Run due schedules
+ *
+ * @deprecated
  */
 export const workflowsRunDueSchedulesMutation = (
   options?: Partial<Options<WorkflowsRunDueSchedulesData>>,
@@ -16592,6 +16901,8 @@ export const workflowsListRunsQueryKey = (
 
 /**
  * List runs
+ *
+ * @deprecated
  */
 export const workflowsListRunsOptions = (
   options: Options<WorkflowsListRunsData>,
@@ -16616,6 +16927,8 @@ export const workflowsListRunsOptions = (
 
 /**
  * Start run
+ *
+ * @deprecated
  */
 export const workflowsStartRunMutation = (
   options?: Partial<Options<WorkflowsStartRunData>>,
@@ -16643,6 +16956,8 @@ export const workflowsStartRunMutation = (
 
 /**
  * Approve run
+ *
+ * @deprecated
  */
 export const workflowsApproveRunMutation = (
   options?: Partial<Options<WorkflowsApproveRunData>>,
@@ -16670,6 +16985,8 @@ export const workflowsApproveRunMutation = (
 
 /**
  * Resume run
+ *
+ * @deprecated
  */
 export const workflowsResumeRunMutation = (
   options?: Partial<Options<WorkflowsResumeRunData>>,
@@ -16685,6 +17002,87 @@ export const workflowsResumeRunMutation = (
   > = {
     mutationFn: async (fnOptions) => {
       const { data } = await workflowsResumeRun({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Claim the next tenant-scoped item for one worker audience
+ */
+export const workerBrokerClaimMutation = (
+  options?: Partial<Options<WorkerBrokerClaimData>>,
+): UseMutationOptions<
+  WorkerBrokerClaimResponse2,
+  WorkerBrokerClaimError,
+  Options<WorkerBrokerClaimData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    WorkerBrokerClaimResponse2,
+    WorkerBrokerClaimError,
+    Options<WorkerBrokerClaimData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await workerBrokerClaim({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Renew an audience-bound fenced worker claim
+ */
+export const workerBrokerRenewMutation = (
+  options?: Partial<Options<WorkerBrokerRenewData>>,
+): UseMutationOptions<
+  WorkerBrokerRenewResponse,
+  WorkerBrokerRenewError,
+  Options<WorkerBrokerRenewData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    WorkerBrokerRenewResponse,
+    WorkerBrokerRenewError,
+    Options<WorkerBrokerRenewData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await workerBrokerRenew({
+        ...options,
+        ...fnOptions,
+        throwOnError: true,
+      });
+      return data;
+    },
+  };
+  return mutationOptions;
+};
+
+/**
+ * Complete or fail an audience-bound fenced worker claim
+ */
+export const workerBrokerCompleteMutation = (
+  options?: Partial<Options<WorkerBrokerCompleteData>>,
+): UseMutationOptions<
+  WorkerBrokerCompleteResponse,
+  WorkerBrokerCompleteError,
+  Options<WorkerBrokerCompleteData>
+> => {
+  const mutationOptions: UseMutationOptions<
+    WorkerBrokerCompleteResponse,
+    WorkerBrokerCompleteError,
+    Options<WorkerBrokerCompleteData>
+  > = {
+    mutationFn: async (fnOptions) => {
+      const { data } = await workerBrokerComplete({
         ...options,
         ...fnOptions,
         throwOnError: true,

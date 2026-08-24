@@ -14,8 +14,6 @@
   "catalogError": "Erreur de synchronisation",
   "catalogPending": "En attente",
   "catalogStale": "Obsolète",
-  "catalogSyncFailedEmpty": "La dernière synchronisation a échoué. Consultez l’erreur ci-dessus, puis vérifiez la connexion ou relancez la synchronisation.",
-  "catalogSyncPendingEmpty": "La découverte automatique des modèles est en attente. Vous pouvez aussi synchroniser maintenant.",
   "chooseProviderPreset": "Choisir un fournisseur prédéfini",
   "configure": "Configurer",
   "configureConnection": "Configurer la connexion",

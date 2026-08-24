@@ -4,7 +4,6 @@ import {
   hasWorkspaceAccess,
   type AuthSubject,
 } from "@romeo/auth";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 import { getDataConnectorCatalogEntry } from "../domain/data-connector-catalog";
 import type {
@@ -15,7 +14,6 @@ import type {
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError, notFound } from "../errors";
-import { requirePublicApiErrorCode } from "../public-api-error-registry";
 import { createId } from "../ids";
 import { assertAbuseControlsAllow } from "./abuse-control-service";
 import {
@@ -34,19 +32,11 @@ import {
   type DataConnectorPostureReport,
 } from "./data-connector-contracts";
 import {
-  connectorSourceAccessMode,
-  connectorSourceMetadata,
-  connectorSyncErrorMessage,
-  nextScheduleFields,
   normalizeConnectorConfig,
   scheduleFields,
 } from "./data-connector-config";
 import { DataConnectorCatalogService } from "./data-connector-catalog-service";
-import {
-  hashContent,
-  localImportCursor,
-  type LocalImportCursorEntry,
-} from "./data-connector-local-import";
+import { runClaimedDataConnectorSync } from "./data-connector-sync-runner";
 import { getAuthorizedKnowledgeBase } from "./knowledge-access";
 import type { KnowledgeService } from "./knowledge-service";
 import { persistedSubjectActorId } from "./subject-persisted-actor";
@@ -177,29 +167,26 @@ export class DataConnectorService {
     connectorId: string;
     items?: LocalImportSyncItem[];
   }): Promise<DataConnectorSync> {
-    const connector = await this.getAuthorizedConnector(
+    const authorizedConnector = await this.getAuthorizedConnector(
       input.subject,
       input.connectorId,
     );
     await assertWorkspaceActive(this.repository, {
       orgId: input.subject.orgId,
-      workspaceId: connector.workspaceId,
+      workspaceId: authorizedConnector.workspaceId,
     });
     await getAuthorizedKnowledgeBase(this.repository, {
-      knowledgeBaseId: connector.knowledgeBaseId,
+      knowledgeBaseId: authorizedConnector.knowledgeBaseId,
       subject: input.subject,
       scope: "knowledge:write",
       permission: "write",
     });
     await assertAbuseControlsAllow(this.repository, input.subject, {
       action: "connector.sync",
-      connectorId: connector.id,
-      workspaceId: connector.workspaceId,
+      connectorId: authorizedConnector.id,
+      workspaceId: authorizedConnector.workspaceId,
       workerClass: "data_connector.sync",
     });
-    const previousSync = await this.latestCompletedSync(connector);
-
-    const startedAt = new Date().toISOString();
     const createdBy = await persistedSubjectActorId(
       this.repository,
       input.subject,
@@ -208,126 +195,66 @@ export class DataConnectorService {
         name: "Service Account Data Connector Sync Actor",
       },
     );
-    const sync = await this.repository.createDataConnectorSync({
-      id: createId("connector_sync"),
-      orgId: connector.orgId,
-      workspaceId: connector.workspaceId,
-      knowledgeBaseId: connector.knowledgeBaseId,
-      connectorId: connector.id,
-      status: "running",
-      createdBy,
-      itemCount: input.items?.length ?? 0,
-      sourceIds: [],
-      summary: { connectorType: connector.type },
-      startedAt,
+    const startedAt = new Date().toISOString();
+    const leaseToken = createId("connector_sync_lease");
+    const connector = await this.repository.claimDataConnectorSync({
+      connectorId: authorizedConnector.id,
+      leaseExpiresAt: new Date(Date.parse(startedAt) + 300_000).toISOString(),
+      leaseOwner: input.subject.id,
+      leaseToken,
+      now: startedAt,
+      orgId: input.subject.orgId,
     });
-
-    try {
-      const execution = await this.resolveSyncItems(connector, input.items);
-      const sourceIds: string[] = [];
-      const previousCursor = localImportCursor(connector.config);
-      const nextCursor: LocalImportCursorEntry[] = [];
-      let createdSourceCount = 0;
-      let reusedSourceCount = 0;
-      for (const item of execution.items) {
-        const contentHash = hashContent(item.content);
-        const previous = previousCursor.find(
-          (entry) =>
-            entry.fileName === item.fileName &&
-            entry.contentHash === contentHash,
-        );
-        if (
-          previous !== undefined &&
-          (await this.sourceExists(
-            connector.knowledgeBaseId,
-            previous.sourceId,
-          ))
-        ) {
-          sourceIds.push(previous.sourceId);
-          nextCursor.push(previous);
-          reusedSourceCount += 1;
-          continue;
-        }
-
-        const source = await this.knowledge.createSource({
-          subject: input.subject,
-          knowledgeBaseId: connector.knowledgeBaseId,
-          fileName: item.fileName,
-          metadata: connectorSourceMetadata(connector),
-          mimeType: item.mimeType,
-          sizeBytes:
-            item.sizeBytes ?? new TextEncoder().encode(item.content).length,
-          content: item.content,
-        });
-        sourceIds.push(source.id);
-        nextCursor.push({
-          fileName: item.fileName,
-          contentHash,
-          sourceId: source.id,
-        });
-        createdSourceCount += 1;
-      }
-      const deletedSourceIds = await this.deleteSupersededSources(
-        input.subject,
-        connector,
-        previousSync?.sourceIds ?? [],
-        sourceIds,
+    if (connector?.syncLease === undefined)
+      throw new ApiError(
+        "connector_sync_lease_unavailable",
+        "The connector is already being synchronized.",
+        409,
       );
+    return runClaimedDataConnectorSync({
+      connector: { ...connector, syncLease: connector.syncLease },
+      createdBy,
+      executor: this.executor,
+      ...(input.items === undefined ? {} : { items: input.items }),
+      knowledge: this.knowledge,
+      repository: this.repository,
+      startedAt,
+      subject: input.subject,
+    });
+  }
 
-      const completed = await this.repository.transaction(
-        async (repository) => {
-          const completedAt = new Date().toISOString();
-          const finalized = await repository.updateDataConnectorSync({
-            ...sync,
-            status: "completed",
-            itemCount: execution.items.length,
-            sourceIds,
-            summary: {
-              connectorType: connector.type,
-              ...execution.summary,
-              sourceAccessMode: connectorSourceAccessMode(connector.config),
-              sourceCount: sourceIds.length,
-              createdSourceCount,
-              reusedSourceCount,
-              deletedSourceCount: deletedSourceIds.length,
-              deletedSourceIds,
-            },
-            completedAt,
-          });
-          await repository.updateDataConnector({
-            ...connector,
-            config: { ...connector.config, lastCursor: nextCursor },
-            ...nextScheduleFields(connector, completedAt),
-            lastSyncAt: completedAt,
-            updatedAt: completedAt,
-          });
-          await this.audit(
-            input.subject,
-            "data_connector.sync",
-            connector.id,
-            "success",
-            {
-              syncId: finalized.id,
-              sourceCount: sourceIds.length,
-              createdSourceCount,
-              reusedSourceCount,
-              deletedSourceCount: deletedSourceIds.length,
-            },
-            repository,
-          );
-          return finalized;
-        },
-      );
-      return completed;
-    } catch (error) {
-      return this.failSync(
-        input.subject,
-        sync,
-        connector,
-        error instanceof ApiError ? error.code : "connector_sync_failed",
-        error instanceof ApiError ? error.status : 500,
-      );
-    }
+  async syncNextDue(input: {
+    subject: AuthSubject;
+    workerId: string;
+    now?: string;
+  }): Promise<DataConnectorSync | undefined> {
+    assertScope(input.subject, "knowledge:write");
+    const startedAt = input.now ?? new Date().toISOString();
+    const createdBy = await persistedSubjectActorId(
+      this.repository,
+      input.subject,
+      {
+        kind: "service_account_data_connector_sync",
+        name: "Service Account Data Connector Sync Actor",
+      },
+    );
+    const connector = await this.repository.claimDataConnectorSync({
+      leaseExpiresAt: new Date(Date.parse(startedAt) + 300_000).toISOString(),
+      leaseOwner: input.workerId,
+      leaseToken: createId("connector_sync_lease"),
+      now: startedAt,
+      orgId: input.subject.orgId,
+    });
+    if (connector?.syncLease === undefined) return undefined;
+    return runClaimedDataConnectorSync({
+      connector: { ...connector, syncLease: connector.syncLease },
+      createdBy,
+      executor: this.executor,
+      knowledge: this.knowledge,
+      repository: this.repository,
+      startedAt,
+      subject: input.subject,
+    });
   }
 
   async syncs(
@@ -342,74 +269,6 @@ export class DataConnectorService {
       permission: "read",
     });
     return this.repository.listDataConnectorSyncs(subject.orgId, connector.id);
-  }
-
-  private async latestCompletedSync(
-    connector: DataConnector,
-  ): Promise<DataConnectorSync | undefined> {
-    return (
-      await this.repository.listDataConnectorSyncs(
-        connector.orgId,
-        connector.id,
-      )
-    ).find((sync) => sync.status === "completed");
-  }
-
-  private async sourceExists(
-    knowledgeBaseId: string,
-    sourceId: string,
-  ): Promise<boolean> {
-    return (await this.repository.listKnowledgeSources(knowledgeBaseId)).some(
-      (source) => source.id === sourceId,
-    );
-  }
-
-  private async resolveSyncItems(
-    connector: DataConnector,
-    items: LocalImportSyncItem[] | undefined,
-  ) {
-    if (connector.type === "local_import") {
-      if (!items || items.length === 0) {
-        throw new ApiError(
-          "connector_sync_items_required",
-          "Local import connector sync requires at least one item.",
-          400,
-        );
-      }
-      return { items };
-    }
-    if (items !== undefined)
-      throw new ApiError(
-        "connector_sync_items_unsupported",
-        "Managed connector sync does not accept inline items.",
-        400,
-      );
-    return this.executor.sync(connector);
-  }
-
-  private async deleteSupersededSources(
-    subject: AuthSubject,
-    connector: DataConnector,
-    previousSourceIds: string[],
-    currentSourceIds: string[],
-  ): Promise<string[]> {
-    const current = new Set(currentSourceIds);
-    const existing = new Set(
-      (
-        await this.repository.listKnowledgeSources(connector.knowledgeBaseId)
-      ).map((source) => source.id),
-    );
-    const deleted: string[] = [];
-    for (const sourceId of previousSourceIds) {
-      if (current.has(sourceId) || !existing.has(sourceId)) continue;
-      await this.knowledge.deleteSource({
-        subject,
-        knowledgeBaseId: connector.knowledgeBaseId,
-        sourceId,
-      });
-      deleted.push(sourceId);
-    }
-    return deleted;
   }
 
   private async getAuthorizedConnector(
@@ -432,43 +291,6 @@ export class DataConnectorService {
         403,
       );
     return connector;
-  }
-
-  private async failSync(
-    subject: AuthSubject,
-    sync: DataConnectorSync,
-    connector: DataConnector,
-    errorCode: string,
-    statusCode: ContentfulStatusCode,
-  ): Promise<never> {
-    const completedAt = new Date().toISOString();
-    await this.repository.transaction(async (repository) => {
-      await repository.updateDataConnectorSync({
-        ...sync,
-        status: "failed",
-        errorCode,
-        summary: { connectorType: connector.type, errorCode },
-        completedAt,
-      });
-      await repository.updateDataConnector({
-        ...connector,
-        ...nextScheduleFields(connector, completedAt),
-        updatedAt: completedAt,
-      });
-      await this.audit(
-        subject,
-        "data_connector.sync",
-        connector.id,
-        "failure",
-        { syncId: sync.id, errorCode },
-        repository,
-      );
-    });
-    throw new ApiError(
-      requirePublicApiErrorCode(errorCode),
-      connectorSyncErrorMessage(errorCode),
-      statusCode,
-    );
   }
 
   private async audit<A extends AuditAction>(

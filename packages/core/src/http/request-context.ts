@@ -2,21 +2,34 @@ import { seededSubject, type AuthSubject } from "@romeo/auth";
 import { readEnv } from "@romeo/config";
 import type { MiddlewareHandler } from "hono";
 
+import type { RomeoRepository } from "../domain/repository";
+import type { RepositoryRequestScope } from "../domain/repository-request-scope";
 import { AuthenticationError } from "../errors";
 import type { AppBindings } from "./context";
-import type { RomeoServices } from "../services";
+import type { AuthenticationServices, RomeoServices } from "../services";
 import { readCookie, sessionCookieName } from "./session-cookie";
 import { normalizedRequestId } from "./request-id";
 import {
   runWithTelemetryContext,
   telemetryTraceId,
 } from "../services/telemetry-context";
+import { resolveTrustedProxy, trustedForwardedProtocol } from "./trusted-proxy";
 
 export interface RequestContextOptions {
   appOriginSecure?: boolean;
+  createScopedAuthenticationServices?: (
+    repository: RomeoRepository,
+  ) => AuthenticationServices;
+  createScopedServices?: (repository: RomeoRepository) => RomeoServices;
   devSeededLogin?: boolean;
   production?: boolean;
-  trustedProxy?: boolean;
+  repositoryRequestScope?: RepositoryRequestScope;
+  trustedProxy?: Pick<
+    ReturnType<typeof readEnv>,
+    | "EDGE_TRUSTED_PROXY_CIDRS"
+    | "EDGE_TRUSTED_PROXY_HOPS"
+    | "EDGE_TRUSTED_PROXY_MODE"
+  >;
 }
 
 const publicPaths = new Set([
@@ -33,6 +46,8 @@ const publicPaths = new Set([
   "/api/v1/delegated-oauth/callback",
   "/api/v1/device-authorizations/refresh",
   "/api/v1/health",
+  "/api/v1/health/object-storage",
+  "/api/v1/readyz",
   "/api/v1/openapi.json",
   "/api/v1/docs",
   "/api/v1/openwebui/config",
@@ -44,6 +59,11 @@ const publicPaths = new Set([
   "/api/v1/billing/webhooks/generic",
   "/api/v1/billing/webhooks/stripe",
 ]);
+
+// These routes are repository-free and must retain the process-owned service
+// instance. In particular, recreating readiness here would defeat its TTL and
+// singleflight protection during kubelet probe bursts.
+const runtimeOnlyPaths = new Set(["/api/v1/health", "/api/v1/readyz"]);
 
 export function requestContext(
   services: RomeoServices,
@@ -62,52 +82,159 @@ export function requestContext(
       ...(incomingTraceId === undefined ? {} : { traceId: incomingTraceId }),
     });
     context.set("requestId", requestId);
+    const trustedProxy =
+      options.trustedProxy === undefined
+        ? undefined
+        : resolveTrustedProxy(context, options.trustedProxy);
     context.set(
       "secureCookie",
       options.production === true ||
         options.appOriginSecure === true ||
         new URL(context.req.url).protocol === "https:" ||
-        (options.trustedProxy === true &&
-          context.req.header("x-forwarded-proto")?.split(",")[0]?.trim() ===
-            "https"),
+        (trustedProxy !== undefined &&
+          trustedForwardedProtocol(context, trustedProxy) === "https"),
     );
     context.set("traceId", traceId);
     context.header("x-request-id", requestId);
     context.header("x-romeo-trace-id", traceId);
-    const subject = await resolveSubject(
-      context.req.header("authorization"),
-      readCookie(context.req.header("cookie"), sessionCookieName),
-      services,
-      {
-        allowAnonymous: publicPaths.has(new URL(context.req.url).pathname),
-        devSeededLogin,
-      },
-    );
-    if (subject !== undefined) context.set("subject", subject);
-    context.set("services", services);
     await runWithTelemetryContext({ requestId, traceId }, async () => {
-      await next();
-      if (
-        subject?.supportSession !== undefined &&
-        subject.sessionId !== undefined
+      const scope = options.repositoryRequestScope;
+      const factory = options.createScopedServices;
+      const authenticationFactory = options.createScopedAuthenticationServices;
+      const requestPath = new URL(context.req.url).pathname;
+      const workerBrokerRequest = isWorkerBrokerPath(requestPath);
+      const authInput = {
+        authorization: workerBrokerRequest
+          ? undefined
+          : context.req.header("authorization"),
+        sessionToken: workerBrokerRequest
+          ? undefined
+          : readCookie(context.req.header("cookie"), sessionCookieName),
+        allowAnonymous: workerBrokerRequest || publicPaths.has(requestPath),
+        devSeededLogin: workerBrokerRequest ? false : devSeededLogin,
+      };
+      const subject =
+        scope === undefined || factory === undefined
+          ? await resolveSubjectWithInput(authInput, services)
+          : await scope.runAsSystem((repository) =>
+              resolveSubjectWithInput(
+                authInput,
+                authenticationFactory?.(repository) ?? factory(repository),
+              ),
+            );
+      const runRequest = async (requestServices: RomeoServices) => {
+        if (subject !== undefined) context.set("subject", subject);
+        context.set("services", requestServices);
+        await next();
+        if (
+          subject?.supportSession !== undefined &&
+          subject.sessionId !== undefined
+        ) {
+          await auditSupportSessionRequest(
+            subject,
+            context.req.url,
+            context.req.method,
+            context.res.status,
+            requestId,
+            requestServices,
+          );
+        }
+      };
+      if (scope === undefined || factory === undefined) {
+        await runRequest(services);
+      } else if (
+        subject === undefined &&
+        (workerBrokerRequest || runtimeOnlyPaths.has(requestPath))
       ) {
-        await auditSupportSessionRequest(
+        await runRequest(services);
+      } else if (subject === undefined) {
+        await scope.runAsSystem((repository) =>
+          runRequest(factory(repository)),
+        );
+      } else if (
+        repositoryScopeForRequest(
           subject,
-          context.req.url,
           context.req.method,
-          context.res.status,
-          requestId,
-          services,
+          new URL(context.req.url).pathname,
+        ) === "system"
+      ) {
+        await scope.runAsSystem((repository) =>
+          runRequest(factory(repository)),
+        );
+      } else {
+        await scope.runAsTenant(subject.orgId, (repository) =>
+          runRequest(factory(repository)),
         );
       }
     });
   };
 }
 
+export function isWorkerBrokerPath(path: string): boolean {
+  return /^\/api\/v1\/internal\/worker-broker\/[^/]+\/claims(?:\/(?:renew|complete))?$/u.test(
+    path,
+  );
+}
+
+export function repositoryScopeForRequest(
+  subject: AuthSubject,
+  method: string,
+  path: string,
+): "system" | "tenant" {
+  if (subject.adminRole !== "global_admin") return "tenant";
+  const normalizedMethod = method.toUpperCase();
+  const requiredScope =
+    normalizedMethod === "GET" ? "admin:read" : "admin:write";
+  if (!subject.scopes.includes(requiredScope)) return "tenant";
+  if (
+    normalizedMethod === "GET" &&
+    path === "/api/v1/admin/runtime-key-rotation/posture"
+  ) {
+    return "system";
+  }
+  if (path === "/api/v1/admin/organizations") {
+    return normalizedMethod === "GET" || normalizedMethod === "POST"
+      ? "system"
+      : "tenant";
+  }
+  const match = /^\/api\/v1\/admin\/organizations\/[^/]+(?:\/(.+))?$/u.exec(
+    path,
+  );
+  if (match === null) return "tenant";
+  const suffix = match[1];
+  if (suffix === undefined)
+    return ["GET", "PATCH"].includes(normalizedMethod) ? "system" : "tenant";
+  const allowedMethod = new Map<string, string>([
+    ["suspend", "POST"],
+    ["reactivate", "POST"],
+    ["deletion-request", "POST"],
+    ["deletion-request/cancel", "POST"],
+    ["deletion-finalization-preview", "GET"],
+    ["deletion-finalization-evidence", "POST"],
+    ["deletion-finalization/execute", "POST"],
+  ]).get(suffix);
+  return allowedMethod === normalizedMethod ? "system" : "tenant";
+}
+
+function resolveSubjectWithInput(
+  input: {
+    allowAnonymous: boolean;
+    authorization: string | undefined;
+    devSeededLogin: boolean;
+    sessionToken: string | undefined;
+  },
+  services: AuthenticationServices,
+) {
+  return resolveSubject(input.authorization, input.sessionToken, services, {
+    allowAnonymous: input.allowAnonymous,
+    devSeededLogin: input.devSeededLogin,
+  });
+}
+
 async function resolveSubject(
   authorization: string | undefined,
   sessionToken: string | undefined,
-  services: RomeoServices,
+  services: AuthenticationServices,
   options: { allowAnonymous: boolean; devSeededLogin: boolean },
 ) {
   const token = authorization?.startsWith("Bearer ")

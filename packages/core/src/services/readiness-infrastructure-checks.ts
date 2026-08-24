@@ -212,12 +212,5 @@ export function connectorEgressCheck(env: RomeoEnv): ReadinessCheck {
 }
 
 function connectorDriverRequiresHostAllowlist(driver: string): boolean {
-  return (
-    driver === "website-fetch" ||
-    driver === "atlassian-fetch" ||
-    driver === "notion-fetch" ||
-    driver === "linear-fetch" ||
-    driver === "slack-fetch" ||
-    driver === "managed-fetch"
-  );
+  return driver === "website-fetch" || driver === "managed-fetch";
 }

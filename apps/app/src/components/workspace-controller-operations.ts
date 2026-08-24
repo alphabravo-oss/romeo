@@ -72,3 +72,37 @@ export async function createFeedbackEvalCase(input: {
     toast(input.t("feedbackEvalCreateFailed"), "error");
   }
 }
+
+export function createActiveFeedbackEvalCase(input: {
+  agentId?: string;
+  chatId?: string;
+  messageId: string;
+  t: (key: MessageKey) => string;
+}): Promise<void> {
+  if (input.agentId === undefined || input.chatId === undefined)
+    return Promise.resolve();
+  return createFeedbackEvalCase({
+    agentId: input.agentId,
+    chatId: input.chatId,
+    messageId: input.messageId,
+    t: input.t,
+  });
+}
+
+export function createWorkspaceAuxiliaryActions(
+  queryClient: QueryClient,
+  agentId: string | undefined,
+  chatId: string | undefined,
+  t: (key: MessageKey) => string,
+) {
+  return {
+    handleCreateFeedbackEvalCase: (messageId: string) =>
+      createActiveFeedbackEvalCase({
+        ...(agentId === undefined ? {} : { agentId }),
+        ...(chatId === undefined ? {} : { chatId }),
+        messageId,
+        t,
+      }),
+    refreshUsageControls: () => refreshWorkspaceUsageControls(queryClient),
+  };
+}

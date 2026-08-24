@@ -132,7 +132,11 @@ describe("pageInventoriedTable", () => {
   it("allowlists sort and filter fields and applies search", () => {
     expect(() =>
       normalizeInventoriedTableQuery(
-        { filters: [], limit: 25, sort: [{ direction: "asc", field: "scopes" }] },
+        {
+          filters: [],
+          limit: 25,
+          sort: [{ direction: "asc", field: "scopes" }],
+        },
         policy,
       ),
     ).toThrow(/invalid/i);
@@ -161,5 +165,46 @@ describe("pageInventoriedTable", () => {
     });
     expect(page.items.map((row) => row.id)).toEqual(["key_b"]);
     expect(page.applied.sort).toEqual([{ direction: "asc", field: "name" }]);
+  });
+
+  it("allows bounded filters on one field while rejecting duplicate clauses", () => {
+    const boundedPolicy: InventoriedTablePolicy = {
+      ...policy,
+      filters: { createdAt: ["gte", "lt"] },
+    };
+    expect(
+      normalizeInventoriedTableQuery(
+        {
+          filters: [
+            {
+              field: "createdAt",
+              operator: "gte",
+              value: "2026-01-01T00:00:00Z",
+            },
+            {
+              field: "createdAt",
+              operator: "lt",
+              value: "2026-02-01T00:00:00Z",
+            },
+          ],
+          limit: 25,
+          sort: [],
+        },
+        boundedPolicy,
+      ).filters,
+    ).toHaveLength(2);
+    expect(() =>
+      normalizeInventoriedTableQuery(
+        {
+          filters: [
+            { field: "createdAt", operator: "gte", value: "2026-01-01" },
+            { field: "createdAt", operator: "gte", value: "2026-02-01" },
+          ],
+          limit: 25,
+          sort: [],
+        },
+        boundedPolicy,
+      ),
+    ).toThrow(/invalid/i);
   });
 });

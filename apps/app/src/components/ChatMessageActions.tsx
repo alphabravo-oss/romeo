@@ -74,11 +74,18 @@ export function MessageAttachments({
             <div className="truncate">{attachment.fileName}</div>
           </Button>
           <label
-            title={isStreaming ? t("waitForResponse") : t("keepContextTitle")}
+            title={
+              isStreaming
+                ? t("waitForResponse")
+                : attachment.messageId !== message.id
+                  ? t("waitForAttachmentSync")
+                  : t("keepContextTitle")
+            }
           >
             <Input
+              aria-label={`${t("keepContext")}: ${attachment.fileName}`}
               checked={attachment.retainedInContext}
-              disabled={isStreaming}
+              disabled={isStreaming || attachment.messageId !== message.id}
               onChange={(event) =>
                 onRetentionChange(
                   message.id,

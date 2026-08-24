@@ -271,6 +271,8 @@
   }
 
   .rm-console-content .rm-ui-tabs {
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
     overflow: hidden;
   }

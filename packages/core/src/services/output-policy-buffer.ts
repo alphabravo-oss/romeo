@@ -116,7 +116,10 @@ function detectBlocking(
 ): ContentPolicyDetectorCode[] {
   return CONTENT_POLICY_DETECTOR_CODES.filter((code) => {
     if (detectors[code] !== "block") return false;
-    const pattern = new RegExp(detectorPatterns[code].source, detectorPatterns[code].flags);
+    const pattern = new RegExp(
+      detectorPatterns[code].source,
+      detectorPatterns[code].flags,
+    );
     if (code !== "credit_card") return pattern.test(content);
     for (const match of content.matchAll(pattern)) {
       const digits = match[0]!.replace(/\D/g, "");

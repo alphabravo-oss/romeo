@@ -59,6 +59,7 @@ export const webhookDeliveries = pgTable(
     responseStatus: integer("response_status"),
     errorCode: text("error_code"),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    signatureKeyVersion: text("signature_key_version"),
     leaseOwner: text("lease_owner"),
     leaseToken: text("lease_token"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),

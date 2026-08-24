@@ -44,7 +44,9 @@ export function applyCompareGroupCancel(input: {
 
 export interface EvalRubric {
   version: string;
-  dimensions: Array<"helpfulness" | "correctness" | "citations" | "safety" | "cost" | "latency">;
+  dimensions: Array<
+    "helpfulness" | "correctness" | "citations" | "safety" | "cost" | "latency"
+  >;
 }
 
 export function scoreEvalRubric(input: {

@@ -16,13 +16,14 @@ import {
   UpdateRetentionPolicyRequestSchema,
   RetentionEnforcementResultSchema,
   GovernanceDataDeletionPreviewSchema,
+  GovernanceDataDeletionPendingResultSchema,
   GovernanceDataDeletionResultSchema,
   PreviewDataDeletionRequestSchema,
   ExecuteDataDeletionRequestSchema,
   DataExportRequestSchema,
   DataExportPreviewSchema,
   DataExportDocumentSchema,
-  DataExportPackageSchema,
+  DataExportPackageJobSchema,
   DataExportPackageListSchema,
   DeleteDataExportPackageRequestSchema,
   DataExportPackageDeleteResultSchema,
@@ -37,9 +38,11 @@ export {
 } from "./governance-access-schemas";
 export {
   ComplianceReportSchema,
+  DataExportPackageContentTypeSchema,
   DataExportPackageDeleteResultSchema,
   DataExportPackageListSchema,
   DataExportPackageSchema,
+  DataExportPackageJobSchema,
   DataExportPreviewSchema,
   DataExportRequestSchema,
   DataRightsCoverageReportSchema,
@@ -47,6 +50,7 @@ export {
   DeleteDataExportPackageRequestSchema,
   ExecuteDataDeletionRequestSchema,
   GovernanceDataDeletionPreviewSchema,
+  GovernanceDataDeletionPendingResultSchema,
   GovernanceDataDeletionResultSchema,
   PreviewDataDeletionRequestSchema,
   RetentionEnforcementResultSchema,
@@ -62,6 +66,16 @@ const textResponse = (description: string, contentType = "text/csv") => ({
   description,
   content: { [contentType]: { schema: z.string() } },
 });
+const dataExportPackageContentResponse = {
+  description: "Data-export package content",
+  content: {
+    "application/octet-stream": {
+      schema: z.string().openapi({ format: "binary" }),
+    },
+    "application/json": { schema: z.string() },
+    "application/x-ndjson": { schema: z.string() },
+  },
+} as const;
 
 const metadata = { tags: ["Governance"], security: authenticationSecurity };
 const packageParams = z.strictObject({ packageId: identifier });
@@ -136,6 +150,10 @@ const routes = {
         "Data deletion result",
         dataEnvelope(GovernanceDataDeletionResultSchema),
       ),
+      202: jsonResponse(
+        "Durable data deletion accepted for verified asynchronous processing",
+        dataEnvelope(GovernanceDataDeletionPendingResultSchema),
+      ),
       ...standardErrorResponses,
     },
   }),
@@ -205,9 +223,24 @@ const routes = {
     summary: "Create a governed data-export package",
     request: { body: body(DataExportRequestSchema) },
     responses: {
+      202: jsonResponse(
+        "Accepted data-export package job",
+        dataEnvelope(DataExportPackageJobSchema),
+      ),
+      ...standardErrorResponses,
+    },
+  }),
+  getPackage: createRoute({
+    ...metadata,
+    method: "get",
+    path: "/api/v1/governance/data-exports/packages/{packageId}",
+    operationId: "governance.getDataExportPackage",
+    summary: "Get a governed data-export package job",
+    request: { params: packageParams },
+    responses: {
       200: jsonResponse(
-        "Data-export package",
-        dataEnvelope(DataExportPackageSchema),
+        "Data-export package job",
+        dataEnvelope(DataExportPackageJobSchema),
       ),
       ...standardErrorResponses,
     },
@@ -238,7 +271,7 @@ const routes = {
     summary: "Download governed data-export package content",
     request: { params: packageParams },
     responses: {
-      200: textResponse("Data-export package content", "application/json"),
+      200: dataExportPackageContentResponse,
       ...standardErrorResponses,
     },
   }),
@@ -344,6 +377,7 @@ export const {
   executeExport: executeDataExportRoute,
   listPackages: listDataExportPackagesRoute,
   createPackage: createDataExportPackageRoute,
+  getPackage: getDataExportPackageRoute,
   deletePackage: deleteDataExportPackageRoute,
   readPackage: readDataExportPackageRoute,
   compliance: getComplianceReportRoute,
@@ -365,6 +399,7 @@ export const governanceRoutes = [
   executeDataExportRoute,
   listDataExportPackagesRoute,
   createDataExportPackageRoute,
+  getDataExportPackageRoute,
   deleteDataExportPackageRoute,
   readDataExportPackageRoute,
   getComplianceReportRoute,

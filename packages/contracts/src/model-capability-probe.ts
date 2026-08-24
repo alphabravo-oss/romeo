@@ -27,7 +27,14 @@ export const probeModelRoute = createRoute({
       z.strictObject({
         features: z
           .array(
-            z.enum(["streaming", "tools", "json", "vision", "audio", "reasoning"]),
+            z.enum([
+              "streaming",
+              "tools",
+              "json",
+              "vision",
+              "audio",
+              "reasoning",
+            ]),
           )
           .min(1)
           .max(8),
@@ -105,7 +112,8 @@ export const previewModelCompatibilityRoute = createRoute({
   method: "post",
   path: "/api/v1/models/compatibility/preview",
   operationId: "models.compatibility.preview",
-  summary: "Preview whether a model satisfies turn requirements without executing",
+  summary:
+    "Preview whether a model satisfies turn requirements without executing",
   request: {
     body: requestBody(
       z.strictObject({

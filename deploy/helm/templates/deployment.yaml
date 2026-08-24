@@ -59,6 +59,12 @@ spec:
             {{- end }}
           env:
             {{- include "romeo.nodeWritableEnv" . | nindent 12 }}
+            - name: TOOL_DISPATCH_WORKER_ENABLED
+              value: {{ .Values.workers.toolDispatch.enabled | quote }}
+            - name: BROWSER_AUTOMATION_WORKER_ENABLED
+              value: {{ .Values.workers.browserAutomation.enabled | quote }}
+            - name: KNOWLEDGE_EXTRACTION_WORKER_ENABLED
+              value: {{ .Values.workers.knowledgeExtraction.enabled | quote }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -70,6 +76,33 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.valkey.urlSecret.name }}
                   key: {{ .Values.valkey.urlSecret.key }}
+            {{- end }}
+            {{- $brokerIdentities := list
+              (dict "enabled" .Values.workers.toolDispatch.enabled "currentEnv" "TOOL_DISPATCH_BROKER_TOKEN" "previousEnv" "TOOL_DISPATCH_BROKER_TOKEN_PREVIOUS" "identity" .Values.workers.toolDispatch.identity)
+              (dict "enabled" .Values.workers.browserAutomation.enabled "currentEnv" "BROWSER_AUTOMATION_BROKER_TOKEN" "previousEnv" "BROWSER_AUTOMATION_BROKER_TOKEN_PREVIOUS" "identity" .Values.workers.browserAutomation.identity)
+              (dict "enabled" .Values.workers.knowledgeExtraction.enabled "currentEnv" "KNOWLEDGE_EXTRACTION_BROKER_TOKEN" "previousEnv" "KNOWLEDGE_EXTRACTION_BROKER_TOKEN_PREVIOUS" "identity" .Values.workers.knowledgeExtraction.identity)
+            -}}
+            {{- range $broker := $brokerIdentities }}
+            {{- if $broker.enabled }}
+            - name: {{ $broker.currentEnv }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $broker.identity.credentialSecret.name | quote }}
+                  key: {{ $broker.identity.credentialSecret.key | quote }}
+            {{- if $broker.identity.previousCredentialSecret.name }}
+            - name: {{ $broker.previousEnv }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $broker.identity.previousCredentialSecret.name | quote }}
+                  key: {{ $broker.identity.previousCredentialSecret.key | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- if eq .Values.essentialOperations.scheduledTenantWork.mode "external" }}
+            - name: SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_PATH
+              value: /var/run/romeo/scheduled-operations/{{ .Values.essentialOperations.scheduledTenantWork.externalManagement.evidenceConfigMap.key }}
+            - name: SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_MAX_AGE_SECONDS
+              value: {{ .Values.essentialOperations.scheduledTenantWork.maxEvidenceAgeSeconds | quote }}
             {{- end }}
           {{- if .Values.probes.startup.enabled }}
           startupProbe:
@@ -86,20 +119,7 @@ spec:
               command:
                 - node
                 - -e
-                - |
-                  const net = require("node:net");
-                  const defaults = { "postgres:": 5432, "postgresql:": 5432, "redis:": 6379, "rediss:": 6379 };
-                  const connect = (raw) => new Promise((resolve, reject) => {
-                    const target = new URL(raw);
-                    const socket = net.connect({ host: target.hostname, port: Number(target.port || defaults[target.protocol]) }, () => { socket.destroy(); resolve(); });
-                    socket.setTimeout(1500, () => socket.destroy(new Error("timeout")));
-                    socket.once("error", reject);
-                  });
-                  Promise.all([
-                    fetch("http://127.0.0.1:{{ .Values.service.port }}/api/v1/health").then((response) => { if (!response.ok) throw new Error("unhealthy"); }),
-                    connect(process.env.DATABASE_URL),
-                    connect(process.env.VALKEY_URL),
-                  ]).then(() => process.exit(0), () => process.exit(1));
+                - 'fetch("http://127.0.0.1:{{ .Values.service.port }}/api/v1/readyz").then((response) => process.exit(response.status === 200 ? 0 : 1), () => process.exit(1))'
             {{- else }}
             httpGet:
               path: /api/v1/health
@@ -128,10 +148,20 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            {{- if eq .Values.essentialOperations.scheduledTenantWork.mode "external" }}
+            - name: scheduled-operation-evidence
+              mountPath: /var/run/romeo/scheduled-operations
+              readOnly: true
+            {{- end }}
           {{- else }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if eq .Values.essentialOperations.scheduledTenantWork.mode "external" }}
+            - name: scheduled-operation-evidence
+              mountPath: /var/run/romeo/scheduled-operations
+              readOnly: true
+            {{- end }}
           {{- end }}
       {{- if .Values.evidenceMount.enabled }}
       volumes:
@@ -145,11 +175,21 @@ spec:
           secret:
             secretName: {{ .Values.evidenceMount.secretName | quote }}
           {{- end }}
+        {{- if eq .Values.essentialOperations.scheduledTenantWork.mode "external" }}
+        - name: scheduled-operation-evidence
+          configMap:
+            name: {{ .Values.essentialOperations.scheduledTenantWork.externalManagement.evidenceConfigMap.name | quote }}
+        {{- end }}
       {{- end }}
       {{- if not .Values.evidenceMount.enabled }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if eq .Values.essentialOperations.scheduledTenantWork.mode "external" }}
+        - name: scheduled-operation-evidence
+          configMap:
+            name: {{ .Values.essentialOperations.scheduledTenantWork.externalManagement.evidenceConfigMap.name | quote }}
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

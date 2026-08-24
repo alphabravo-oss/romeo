@@ -21,7 +21,11 @@ describe("inventoried table index inventory", () => {
       "base_models_org_created_id_idx",
     );
     expect(inventoriedTableIndexInventory.support_access_requests).toEqual([
-      "audit_logs_org_created_id_idx",
+      "audit_logs_support_request_created_idx",
+      "audit_logs_support_decision_idx",
+    ]);
+    expect(inventoriedTableIndexInventory.support_sessions).toEqual([
+      "audit_logs_support_session_created_idx",
     ]);
   });
 });

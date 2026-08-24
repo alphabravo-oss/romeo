@@ -7,7 +7,7 @@ import { ImageJobStore } from "./image-job-store";
 describe("image job store", () => {
   it("reads file readiness and cancels only a stored job", async () => {
     const repository = new InMemoryRomeoRepository();
-    const store = new ImageJobStore(repository);
+    const store = new ImageJobStore(repository, { runtimeAvailable: true });
     await repository.createFileObject({
       id: "file_ready",
       orgId: "org_default",

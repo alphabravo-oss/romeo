@@ -35,6 +35,7 @@ export interface WebhookDelivery {
   responseStatus?: number;
   errorCode?: string;
   nextAttemptAt?: string;
+  signatureKeyVersion?: string;
   createdAt: string;
   updatedAt: string;
 }

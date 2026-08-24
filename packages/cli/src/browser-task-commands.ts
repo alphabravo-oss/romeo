@@ -34,7 +34,7 @@ export function executeBrowserTaskCommand(
   action: string | undefined,
   context: BrowserTaskCommandContext,
 ): Promise<number> | undefined {
-  if (area !== "workflows") return undefined;
+  if (area !== "browser-automation") return undefined;
   if (action === "browser-task-claim") return claimTask(context);
   if (action === "browser-task-renew") return renewTask(context);
   if (action === "browser-artifact-upload") return uploadArtifact(context);

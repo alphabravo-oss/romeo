@@ -40,6 +40,7 @@ export function registerVoiceRoutes(app: RomeoApi): void {
       subject,
       voiceProfileId: context.req.valid("param").voiceProfileId,
       text: body.text,
+      signal: context.req.raw.signal,
     });
     return context.json({ data });
   });
@@ -63,6 +64,7 @@ export function registerVoiceRoutes(app: RomeoApi): void {
       subject,
       messageId: context.req.valid("param").messageId,
       voiceProfileId: body.voiceProfileId,
+      signal: context.req.raw.signal,
     });
     return context.json({ data });
   });
@@ -77,6 +79,7 @@ export function registerVoiceRoutes(app: RomeoApi): void {
       ...(body.fileName === undefined ? {} : { fileName: body.fileName }),
       ...(body.language === undefined ? {} : { language: body.language }),
       ...(body.prompt === undefined ? {} : { prompt: body.prompt }),
+      signal: context.req.raw.signal,
     });
     return context.json({ data });
   });

@@ -316,7 +316,12 @@ export async function expireToolOperationDispatchRequests(
   const now = new Date(nowMs).toISOString();
   const result = await input.repository.transaction(async (repository) => {
     const candidates = (
-      await repository.listBackgroundJobs(input.subject.orgId)
+      await repository.listBackgroundJobs(input.subject.orgId, {
+        limit: input.limit,
+        order: "asc",
+        statuses: ["queued", "running"],
+        type: "tool.operation.dispatch_request",
+      })
     )
       .map((job) => dispatchRequestExpirationCandidate(job, input, nowMs))
       .filter((candidate) => candidate !== undefined)

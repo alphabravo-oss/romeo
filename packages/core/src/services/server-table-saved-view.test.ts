@@ -25,7 +25,10 @@ describe("server table saved views", () => {
         pageSize: 50,
         density: "compact",
         columnVisibility: { createdAt: true, secret: false },
-        sorting: [{ id: "createdAt", desc: true }, { id: "unknown", desc: false }],
+        sorting: [
+          { id: "createdAt", desc: true },
+          { id: "unknown", desc: false },
+        ],
       },
     });
     if ("outcome" in local) throw new Error("expected migrated view");

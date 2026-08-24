@@ -44,9 +44,12 @@ export function evaluateModalityContentPolicy(input: {
 } {
   const ordered = [...input.surfaces].sort(
     (left, right) =>
-      MODALITY_SURFACES.indexOf(left.kind) - MODALITY_SURFACES.indexOf(right.kind),
+      MODALITY_SURFACES.indexOf(left.kind) -
+      MODALITY_SURFACES.indexOf(right.kind),
   );
-  const textSurfaces = ordered.filter((surface) => surface.kind !== "image_classifier");
+  const textSurfaces = ordered.filter(
+    (surface) => surface.kind !== "image_classifier",
+  );
   const normalized = textSurfaces.map((surface) =>
     normalizePolicyEncoding(surface.content),
   );

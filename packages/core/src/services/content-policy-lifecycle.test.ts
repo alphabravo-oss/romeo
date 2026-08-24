@@ -6,8 +6,15 @@ import {
   publishPolicyVersion,
   rollbackPolicyVersion,
 } from "./content-policy-versioning";
-import { requestPolicyApproval, resolvePolicyApproval } from "./policy-approval";
-import { gateStreamedOutputDelta } from "./run-output-policy-gate";
+import {
+  requestPolicyApproval,
+  resolvePolicyApproval,
+} from "./policy-approval";
+import {
+  authoritativeTerminalPolicyOutcome,
+  gateStreamedOutputDelta,
+} from "./run-output-policy-gate";
+import { providerUsageFromEvent } from "./run-stream-service";
 import { OutputPolicyBuffer } from "./output-policy-buffer";
 
 const detectors = {
@@ -29,13 +36,16 @@ describe("content policy versioning and approval", () => {
     expect(drafted.versions[0]?.state).toBe("draft");
     const dry = dryRunPolicyVersion({
       version: drafted.versions[0]!,
-      content: "email private@example.com token sk-abcdefghijklmnopqrstuvwxyz123456",
+      content:
+        "email private@example.com token sk-abcdefghijklmnopqrstuvwxyz123456",
       decisionId: "dec_1",
       now: "2026-08-14T12:00:01.000Z",
     });
     expect(dry.evaluation.action).toBe("block");
     expect(JSON.stringify(dry.decision)).not.toContain("private@example.com");
-    expect(JSON.stringify(dry.decision)).not.toContain("sk-abcdefghijklmnopqrstuvwxyz");
+    expect(JSON.stringify(dry.decision)).not.toContain(
+      "sk-abcdefghijklmnopqrstuvwxyz",
+    );
     const published = publishPolicyVersion({
       store: drafted,
       versionId: "ver_1",
@@ -68,9 +78,9 @@ describe("content policy versioning and approval", () => {
     expect(rolled.outcome).toBe("published");
     if (rolled.outcome !== "published") return;
     expect(rolled.store.publishedVersionId).toBe("ver_1");
-    expect(rolled.store.versions.find((item) => item.id === "ver_2")?.state).toBe(
-      "retired",
-    );
+    expect(
+      rolled.store.versions.find((item) => item.id === "ver_2")?.state,
+    ).toBe("retired");
   });
 
   it("pauses a run for a scoped expiring content-minimized approval", () => {
@@ -121,5 +131,57 @@ describe("content policy versioning and approval", () => {
     });
     expect(result.outcome).toBe("block");
     expect(buffer.persisted()).toBe("");
+  });
+
+  it("turns a blocked final buffer into the authoritative failed terminal event", () => {
+    const result = authoritativeTerminalPolicyOutcome({
+      policy: {
+        action: "block",
+        code: "firewall_output_blocked",
+        detectors: ["api_token"],
+      },
+      providerEvent: {
+        id: "event_1",
+        runId: "run_1",
+        sequence: 1,
+        type: "run.completed",
+        data: {
+          providerRequestId: "provider_request_1",
+          providerFallback: {
+            toModelId: "model_fallback",
+            toProviderId: "provider_fallback",
+          },
+          usage: { inputTokens: 12, outputTokens: 8 },
+        },
+        createdAt: "2026-08-14T12:00:00.000Z",
+      },
+    });
+
+    expect(result).toEqual({
+      assistantText: "",
+      executionOutcome: "failed",
+      terminalEvent: {
+        id: "event_1",
+        runId: "run_1",
+        sequence: 1,
+        type: "run.failed",
+        data: {
+          channel: "content_policy",
+          errorCode: "firewall_output_blocked",
+          providerFallback: {
+            toModelId: "model_fallback",
+            toProviderId: "provider_fallback",
+          },
+          usage: { inputTokens: 12, outputTokens: 8 },
+        },
+        createdAt: "2026-08-14T12:00:00.000Z",
+      },
+    });
+    expect(providerUsageFromEvent(result.terminalEvent)).toEqual({
+      inputTokens: 12,
+      outputTokens: 8,
+    });
+    expect(JSON.stringify(result)).not.toContain("api_token");
+    expect(JSON.stringify(result)).not.toContain("provider_request_1");
   });
 });

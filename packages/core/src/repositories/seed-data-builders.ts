@@ -14,6 +14,7 @@ export function createSeedGrants(): ResourceGrant[] {
     ["tool", "tool_calculator", "use"],
     ["tool", "tool_datetime", "use"],
     ["model", "model_openai_compatible_default", "use"],
+    ["model", "model_openai_compatible_embeddings_default", "use"],
     ["model", "model_ollama_default", "use"],
     ["provider", "provider_openai_compatible", "use"],
     ["provider", "provider_ollama", "use"],

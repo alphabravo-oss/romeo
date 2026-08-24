@@ -85,6 +85,7 @@ const defaultAwsClientFactory: AwsSecretsManagerSdkClientFactory = (
 };
 
 export class AwsSecretsManagerResolver implements SecretResolver {
+  private sdkClient: AwsSecretsManagerSdkClient | undefined;
   private readonly clientFactory: AwsSecretsManagerSdkClientFactory;
   private readonly timeoutMs: number;
 
@@ -126,14 +127,14 @@ export class AwsSecretsManagerResolver implements SecretResolver {
   }
 
   private client(): AwsSecretsManagerSdkClient {
-    return this.clientFactory({
+    return (this.sdkClient ??= this.clientFactory({
       accessKeyId: this.options.accessKeyId,
       secretAccessKey: this.options.secretAccessKey,
       region: this.options.region,
       ...(this.options.sessionToken === undefined
         ? {}
         : { sessionToken: this.options.sessionToken }),
-    });
+    }));
   }
 
   private validate(parsed: ManagedSecretRef): SecretAvailability | undefined {

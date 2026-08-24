@@ -4,11 +4,7 @@ import {
   type ChatsListMessagePageResponse,
 } from "@romeo/api-client/generated/query";
 import type { GeneratedQueryClient } from "@romeo/api-client/runtime/generated-query-client";
-import type {
-  InfiniteData,
-  Query,
-  QueryClient,
-} from "@tanstack/react-query";
+import type { InfiniteData, Query, QueryClient } from "@tanstack/react-query";
 
 import type { Message } from "../features/types";
 import { queryCacheProfiles } from "./query-cache-policy";
@@ -16,11 +12,17 @@ import { devQueryDiagnosticMeta } from "./query-cache-diagnostics";
 
 export const MESSAGE_PAGE_LIMIT = 50;
 
+type ActiveMessagePageQueryOptions = ReturnType<
+  typeof chatsListMessagePageInfiniteOptions
+> & {
+  enabled: boolean;
+};
+
 export function activeMessagePageQueryOptions(
   chatId: string | undefined,
   branchLeafOrClient?: string | GeneratedQueryClient,
   client?: GeneratedQueryClient,
-) {
+): ActiveMessagePageQueryOptions {
   const branchLeafMessageId =
     typeof branchLeafOrClient === "string" ? branchLeafOrClient : undefined;
   const requestClient =
@@ -50,13 +52,13 @@ export function activeMessagePageQueryOptions(
       // rendered on the server because it cannot leak into another request.
       ssr: false,
       ...devQueryDiagnosticMeta("activeMessagePages", {
-        branchLeafMessageId,
-        chatId,
+        ...(branchLeafMessageId === undefined ? {} : { branchLeafMessageId }),
+        ...(chatId === undefined ? {} : { chatId }),
       }),
     },
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
-  };
+  } as ActiveMessagePageQueryOptions;
 }
 
 export interface ActiveMessagePageSnapshot {
@@ -134,7 +136,7 @@ export function activeMessagePageSnapshot(
 export function keepPreviousMessagePages(chatId: string | undefined) {
   return (
     previousData: InfiniteData<ChatsListMessagePageResponse> | undefined,
-    previousQuery?: Pick<Query, "queryKey">,
+    previousQuery: Pick<Query, "queryKey"> | undefined,
   ): InfiniteData<ChatsListMessagePageResponse> | undefined => {
     if (previousData === undefined || chatId === undefined) return undefined;
     if (messagePageQueryChatId(previousQuery) !== chatId) return undefined;

@@ -24,7 +24,7 @@ import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { FormDialog } from "./FormDialog";
 import { PageActions } from "./PageActions";
 import { NotificationPolicyForm } from "./NotificationPolicyForm";
-import { Tabs } from "./Tabs";
+import { Tabs, type RoutedTabsState } from "./Tabs";
 import { useInventoriedServerTable } from "../lib/inventoried-server-table";
 
 const channelCol = createColumnHelper<NotificationDeliveryChannel>();
@@ -70,11 +70,17 @@ function notificationChannelInput(value: {
   }
 }
 
-export function NotificationChannelPanel() {
+export function NotificationChannelPanel({
+  tabState,
+}: {
+  tabState?: RoutedTabsState;
+}) {
   const { t } = useLocale();
   return (
     <Section>
       <Tabs
+        activeId={tabState?.activeId}
+        onActiveIdChange={tabState?.onActiveIdChange}
         tabs={[
           { id: "channels", label: t("channels"), content: <ChannelsTab /> },
           {
@@ -90,9 +96,7 @@ export function NotificationChannelPanel() {
 
 function ChannelsTab() {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<NotificationDelivery>(
-    "notification_deliveries",
-  );
+  const inventoriedTable = useInventoriedServerTable("notification_deliveries");
   const required = ({ value }: { value: string }) =>
     !value?.trim() ? t("required") : undefined;
   const channelsQuery = useQuery(notificationChannelsQueryOptions());
@@ -411,10 +415,7 @@ function ChannelsTab() {
                 },
               ]}
             />
-            <DataTable
-              columns={channelColumns}
-              data={rows}
-            />
+            <DataTable columns={channelColumns} data={rows} />
           </div>
         )}
       </PanelState>

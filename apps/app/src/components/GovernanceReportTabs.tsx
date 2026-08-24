@@ -7,7 +7,7 @@ import {
   exportAccessReviewCsvMutationOptions,
   exportAccessReviewReportCsvMutationOptions,
   exportComplianceReportCsvMutationOptions,
-} from "../features";
+} from "../features/governance";
 import type { DataRightsCoverageReport } from "../features/types";
 import { downloadCsv } from "../lib/csv";
 import { useLocale } from "../lib/i18n";

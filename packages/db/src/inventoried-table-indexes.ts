@@ -15,7 +15,10 @@ export const inventoriedTableIndexInventory = {
   ],
   service_accounts: ["service_accounts_org_idx"],
   sessions: ["user_sessions_user_idx"],
-  support_access_requests: ["audit_logs_org_created_id_idx"],
-  support_sessions: ["audit_logs_org_created_id_idx"],
+  support_access_requests: [
+    "audit_logs_support_request_created_idx",
+    "audit_logs_support_decision_idx",
+  ],
+  support_sessions: ["audit_logs_support_session_created_idx"],
   tool_connectors: ["tool_connectors_org_updated_idx"],
 } as const;

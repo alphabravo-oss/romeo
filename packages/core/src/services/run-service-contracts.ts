@@ -1,4 +1,5 @@
 import type { AuthSubject } from "@romeo/auth";
+import type { ProviderCircuitBreaker } from "@romeo/ai-runtime";
 import type {
   BaseModel,
   ChatMessage,
@@ -39,6 +40,7 @@ export interface RunServiceOptions {
     modelToolCallId: string;
   }) => Promise<unknown>;
   providerDisabledIds?: string;
+  providerCircuitBreaker?: ProviderCircuitBreaker;
   providerCircuitCooldownMs?: number;
   providerCircuitFailureThreshold?: number;
   providerFallbackModelId?: string;

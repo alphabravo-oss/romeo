@@ -99,11 +99,15 @@
 
 .rm-login-eyebrow {
   margin: 0 0 12px;
-  color: #60a5fa;
+  color: var(--rm-accent-strong);
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0.09em;
   text-transform: uppercase;
+}
+
+.rm-login-pitch .rm-login-eyebrow {
+  color: #60a5fa;
 }
 
 .rm-login-pitch h1 {
@@ -258,6 +262,7 @@
 
 .rm-login-sso-grid button {
   display: inline-flex;
+  width: 100%;
   min-height: 42px;
   align-items: center;
   justify-content: center;
@@ -269,6 +274,7 @@
   font: inherit;
   font-size: 13px;
   font-weight: 550;
+  justify-self: stretch;
 }
 
 .rm-login-sso-grid button:hover:not(:disabled) {
@@ -373,6 +379,7 @@
 
 .rm-login-submit {
   display: inline-flex;
+  width: 100%;
   min-height: 43px;
   align-items: center;
   justify-content: center;
@@ -386,6 +393,7 @@
   font: inherit;
   font-size: 14px;
   font-weight: 600;
+  justify-self: stretch;
 }
 
 .rm-login-submit:hover:not(:disabled) {

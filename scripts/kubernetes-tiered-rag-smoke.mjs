@@ -11,6 +11,9 @@ import {
   startPortForward,
   waitForKubectlRollout,
 } from "./lib/kubernetes-smoke-support.mjs";
+import { assertNoSecretArgv, readSecretInput } from "./lib/secret-input.mjs";
+
+assertNoSecretArgv();
 
 const outputPath = argValue("--output");
 const dryRun = process.argv.includes("--dry-run");
@@ -24,7 +27,7 @@ const selector =
   `app.kubernetes.io/name=romeo,app.kubernetes.io/instance=${releaseName},app.kubernetes.io/component=app`;
 const servicePort = parsePositiveInteger("--service-port", 3000);
 const timeoutMs = parsePositiveInteger("--timeout-ms", 300000);
-const apiKey = argValue("--api-key") ?? process.env.ROMEO_API_KEY;
+const apiKey = readSecretInput({ environment: "ROMEO_API_KEY" });
 const providedBaseUrl = argValue("--base-url");
 const runId = randomBytes(8).toString("hex");
 const sentinels = {
@@ -101,7 +104,7 @@ async function liveEvidence() {
     throw new Error("--namespace or ROMEO_NAMESPACE is required.");
   }
   if (apiKey === undefined || apiKey.length === 0) {
-    throw new Error("--api-key or ROMEO_API_KEY is required.");
+    throw new Error("ROMEO_API_KEY or ROMEO_API_KEY_FILE is required.");
   }
 
   kubectl(["cluster-info"]);

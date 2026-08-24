@@ -16,7 +16,6 @@ const testFiles = [
   "src/device-authorizations.test.ts",
   "src/knowledge.test.ts",
   "src/quota.test.ts",
-  "src/workflows.test.ts",
   "src/vector-isolation.test.ts",
   "src/api.test.ts",
 ];

@@ -43,25 +43,21 @@ export function MasterList({
 
 export function MasterListItem({
   badge,
+  href,
   meta,
   onSelect,
   selected,
   title,
 }: {
   badge?: ReactNode;
+  href?: string;
   meta?: ReactNode;
-  onSelect: () => void;
+  onSelect?: () => void;
   selected: boolean;
   title: ReactNode;
 }): ReactNode {
-  return (
-    <Button
-      aria-current={selected ? "true" : undefined}
-      className={`cs-masterlist__item${selected ? " is-selected" : ""}`}
-      onClick={onSelect}
-      type="button"
-      variant="ghost"
-    >
+  const content = (
+    <>
       <span className="cs-masterlist__line">
         <span className="cs-masterlist__title">{title}</span>
         {badge === undefined ? null : (
@@ -71,6 +67,43 @@ export function MasterListItem({
       {meta === undefined ? null : (
         <span className="cs-masterlist__meta">{meta}</span>
       )}
+    </>
+  );
+  const className = `cs-masterlist__item${selected ? " is-selected" : ""}`;
+  if (href !== undefined) {
+    return (
+      <Button asChild className={className} variant="ghost">
+        <a
+          aria-current={selected ? "page" : undefined}
+          href={href}
+          onClick={(event) => {
+            if (
+              onSelect === undefined ||
+              event.button !== 0 ||
+              event.altKey ||
+              event.ctrlKey ||
+              event.metaKey ||
+              event.shiftKey
+            )
+              return;
+            event.preventDefault();
+            onSelect();
+          }}
+        >
+          {content}
+        </a>
+      </Button>
+    );
+  }
+  return (
+    <Button
+      aria-current={selected ? "page" : undefined}
+      className={className}
+      onClick={onSelect}
+      type="button"
+      variant="ghost"
+    >
+      {content}
     </Button>
   );
 }

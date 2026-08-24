@@ -11,18 +11,28 @@ const chartPath = "deploy/helm";
 const namespace = argValue("--namespace") ?? "romeo";
 const releaseName = argValue("--release-name") ?? "romeo";
 const outputPath = argValue("--output");
+const unpullableDigest = `sha256:${"0".repeat(64)}`;
+const sentinelEgress = JSON.stringify([
+  {
+    to: [{ ipBlock: { cidr: "192.0.2.1/32" } }],
+    ports: [{ protocol: "TCP", port: 9 }],
+  },
+]);
 
 const variants = [
   {
     name: "default",
     args: [],
-    expectedDatabaseSecret: "romeo-secret",
+    expectedDatabaseSecret: "romeo-required-runtime-secrets",
     expectedDatabaseSecretKey: "DATABASE_URL",
+    expectedRuntimeSecret: "romeo-required-runtime-secrets",
+    expectedValkeySecret: "romeo-required-valkey-url",
     expectedWorkerCronJobs: [],
     expectedBackup: false,
     expectedHpa: false,
     expectedIngress: false,
-    expectedNetworkPolicy: false,
+    expectedNetworkPolicy: true,
+    expectedNetworkPolicyEgress: "sentinel",
   },
   {
     name: "external_postgres",
@@ -31,20 +41,43 @@ const variants = [
     expectedDatabaseSecretKey: "DATABASE_URL",
     expectedRuntimeSecret: "romeo-runtime",
     expectedValkeySecret: "romeo-valkey",
-    expectedWorkerApiKeySecret: "romeo-worker-api-key",
-    expectedWorkerCronJobs: [
-      "data-connector-sync",
-      "workflow-resume",
-      "webhook-retry",
-      "notification-retry",
-      "retention-enforce",
-      "billing-entitlement-reconcile",
-      "billing-lifecycle-enforce",
-    ],
+    expectedWorkerCronJobs: [],
     expectedBackup: true,
     expectedHpa: false,
     expectedIngress: false,
-    expectedNetworkPolicy: false,
+    expectedNetworkPolicy: true,
+    expectedNetworkPolicyEgress: "sentinel",
+  },
+  {
+    name: "external_scheduled_owner",
+    args: [
+      "--set-string",
+      "env.SCHEDULED_TENANT_WORK_OWNER=external",
+      "--set-string",
+      "essentialOperations.scheduledTenantWork.mode=external",
+      "--set-string",
+      "essentialOperations.scheduledTenantWork.externalManagement.owner=platform-scheduler",
+      "--set-string",
+      "essentialOperations.scheduledTenantWork.externalManagement.evidenceReference=reviewed-external-scheduler-evidence",
+      "--set-string",
+      "essentialOperations.scheduledTenantWork.externalManagement.statusReference=https://status.example/scheduled-work",
+      "--set",
+      "essentialOperations.scheduledTenantWork.externalManagement.alertsConfigured=true",
+      "--set-string",
+      "essentialOperations.scheduledTenantWork.externalManagement.evidenceConfigMap.name=romeo-scheduler-evidence",
+    ],
+    expectedDatabaseSecret: "romeo-required-runtime-secrets",
+    expectedDatabaseSecretKey: "DATABASE_URL",
+    expectedRuntimeSecret: "romeo-required-runtime-secrets",
+    expectedValkeySecret: "romeo-required-valkey-url",
+    expectedWorkerCronJobs: [],
+    expectedBackup: false,
+    expectedHpa: false,
+    expectedIngress: false,
+    expectedNetworkPolicy: true,
+    expectedNetworkPolicyEgress: "sentinel",
+    expectedScheduledOwner: "external",
+    expectedScheduledEvidenceConfigMap: "romeo-scheduler-evidence",
   },
   {
     name: "cloudnativepg",
@@ -53,20 +86,12 @@ const variants = [
     expectedDatabaseSecretKey: "uri",
     expectedRuntimeSecret: "romeo-runtime",
     expectedValkeySecret: "romeo-valkey",
-    expectedWorkerApiKeySecret: "romeo-worker-api-key",
-    expectedWorkerCronJobs: [
-      "data-connector-sync",
-      "workflow-resume",
-      "webhook-retry",
-      "notification-retry",
-      "retention-enforce",
-      "billing-entitlement-reconcile",
-      "billing-lifecycle-enforce",
-    ],
+    expectedWorkerCronJobs: [],
     expectedBackup: false,
     expectedHpa: false,
     expectedIngress: false,
-    expectedNetworkPolicy: false,
+    expectedNetworkPolicy: true,
+    expectedNetworkPolicyEgress: "sentinel",
   },
   {
     name: "enterprise_surface",
@@ -83,10 +108,18 @@ const variants = [
       "workers.knowledgeExtraction.enabled=true",
       "--set",
       "workers.knowledgeExtraction.knowledgeBaseId=kb_default",
+      "--set-string",
+      "workers.knowledgeExtraction.identity.credentialSecret.name=romeo-knowledge-broker",
       "--set",
-      "workers.voiceCatalogSync.enabled=true",
+      "workers.knowledgeExtraction.networkPolicy.enabled=true",
       "--set",
       "workers.toolDispatch.enabled=true",
+      "--set-string",
+      "workers.toolDispatch.identity.credentialSecret.name=romeo-tool-broker",
+      "--set-string",
+      "workers.toolDispatch.identity.previousCredentialSecret.name=romeo-tool-broker-previous",
+      "--set-string",
+      "workers.toolDispatch.identity.previousCredentialSecret.key=token",
       "--set",
       "workers.toolDispatch.maxJobs=5",
       "--set",
@@ -95,12 +128,18 @@ const variants = [
       "workers.toolDispatch.payloadSecret.name=romeo-tool-dispatch-payloads",
       "--set",
       "workers.toolDispatch.networkPolicy.enabled=true",
+      "--set-json",
+      `workers.toolDispatch.networkPolicy.egress=${sentinelEgress}`,
       "--set",
       "workers.browserAutomation.enabled=true",
+      "--set-string",
+      "workers.browserAutomation.identity.credentialSecret.name=romeo-browser-broker",
       "--set-string",
       "workers.browserAutomation.runnerUrl=https://browser-runner.example.com/tasks",
       "--set",
       "workers.browserAutomation.networkPolicy.enabled=true",
+      "--set-json",
+      `workers.browserAutomation.networkPolicy.egress=${sentinelEgress}`,
       "--set",
       "evidenceMount.enabled=true",
       "--set-string",
@@ -130,27 +169,23 @@ const variants = [
     expectedDatabaseSecretKey: "DATABASE_URL",
     expectedRuntimeSecret: "romeo-runtime",
     expectedValkeySecret: "romeo-valkey",
-    expectedWorkerApiKeySecret: "romeo-worker-api-key",
     expectedWorkerCronJobs: [
-      "data-connector-sync",
-      "workflow-resume",
-      "webhook-retry",
-      "notification-retry",
-      "retention-enforce",
-      "billing-entitlement-reconcile",
-      "billing-lifecycle-enforce",
       "knowledge-extraction",
-      "voice-catalog-sync",
       "tool-dispatch",
       "browser-automation",
     ],
+    expectedBrokerSecrets: {
+      "browser-automation": "romeo-browser-broker",
+      "knowledge-extraction": "romeo-knowledge-broker",
+      "tool-dispatch": "romeo-tool-broker",
+    },
     expectedBrowserAutomationRunnerUrl:
       "https://browser-runner.example.com/tasks",
     expectedBrowserAutomationNetworkPolicy: true,
-    expectedBrowserAutomationNetworkPolicyEgress: "deny-all",
+    expectedBrowserAutomationNetworkPolicyEgress: "sentinel",
+    expectedKnowledgeExtractionNetworkPolicy: true,
     expectedToolDispatchPayloadSecret: "romeo-tool-dispatch-payloads",
     expectedToolDispatchSecretResolver: "cloud",
-    expectedToolDispatchSecretEnvSecret: "romeo-runtime",
     expectedVectorIsolationMode: "pgvector_partitioned_by_org",
     expectedPgvectorEvidencePath:
       "/var/run/romeo/evidence/pgvector-isolation.json",
@@ -164,9 +199,9 @@ const variants = [
     expectedHpa: true,
     expectedIngress: true,
     expectedNetworkPolicy: true,
-    expectedNetworkPolicyEgress: "deny-all",
+    expectedNetworkPolicyEgress: "sentinel",
     expectedToolDispatchNetworkPolicy: true,
-    expectedToolDispatchNetworkPolicyEgress: "deny-all",
+    expectedToolDispatchNetworkPolicyEgress: "sentinel",
   },
   {
     name: "network_policy_egress",
@@ -180,17 +215,10 @@ const variants = [
     expectedDatabaseSecretKey: "DATABASE_URL",
     expectedRuntimeSecret: "romeo-runtime",
     expectedValkeySecret: "romeo-valkey",
-    expectedWorkerApiKeySecret: "romeo-worker-api-key",
-    expectedWorkerCronJobs: [
-      "data-connector-sync",
-      "workflow-resume",
-      "webhook-retry",
-      "notification-retry",
-      "retention-enforce",
-      "billing-entitlement-reconcile",
-      "billing-lifecycle-enforce",
-      "tool-dispatch",
-    ],
+    expectedWorkerCronJobs: ["tool-dispatch"],
+    expectedBrokerSecrets: {
+      "tool-dispatch": "romeo-tool-dispatch-broker",
+    },
     expectedBackup: true,
     expectedHpa: false,
     expectedIngress: false,
@@ -256,9 +284,11 @@ const evidence = {
     "network_policy_and_ingress_render",
     "tool_dispatch_network_policy_render",
     "browser_automation_network_policy_render",
+    "knowledge_extraction_network_policy_render",
+    "broker_worker_to_app_network_policy_render",
     "network_policy_explicit_egress_examples",
     "cloudnativepg_operator_examples",
-    "keda_worker_scaledjob_examples",
+    "retired_keda_tenant_token_worker_absent",
   ],
   variants: variants.map((variant) => checkVariant(variant)),
   cloudNativePgExamples: checkCloudNativePgExamples(),
@@ -304,23 +334,23 @@ function checkVariant(variant) {
     `${appName}-config`,
     variant.name,
   );
+  const ownershipConfigMap = requireResource(
+    byKind,
+    "ConfigMap",
+    `${appName}-operational-ownership`,
+    variant.name,
+  );
   const appServiceAccount = requireResource(
     byKind,
     "ServiceAccount",
     appName,
     variant.name,
   );
-  const workerServiceAccount = requireResource(
-    byKind,
-    "ServiceAccount",
-    `${appName}-worker`,
-    variant.name,
-  );
-
   assertService(service, variant.name);
   assertServiceAccount(appServiceAccount, variant.name);
-  assertServiceAccount(workerServiceAccount, variant.name);
+  assertDistinctWorkloadServiceAccounts(byKind, variant);
   assertConfigMap(configMap, variant);
+  assertOperationalOwnership(ownershipConfigMap, variant);
   assertNoSecretResourceForExistingSecretMode(resources, variant.name);
   assertDeployment(deployment, variant);
   assertMigrationJob(migration, variant);
@@ -332,6 +362,7 @@ function checkVariant(variant) {
   assertOptionalNetworkPolicy(byKind, variant);
   assertOptionalToolDispatchNetworkPolicy(byKind, variant);
   assertOptionalBrowserAutomationNetworkPolicy(byKind, variant);
+  assertOptionalKnowledgeExtractionNetworkPolicy(byKind, variant);
 
   return {
     name: variant.name,
@@ -352,6 +383,11 @@ function checkVariant(variant) {
       byKind,
       "NetworkPolicy",
       "romeo-browser-automation",
+    )?.spec?.egress?.length,
+    knowledgeExtractionNetworkPolicyEgressRules: optionalResource(
+      byKind,
+      "NetworkPolicy",
+      "romeo-knowledge-extraction",
     )?.spec?.egress?.length,
   };
 }
@@ -541,6 +577,9 @@ function assertHelmSchemaRejectsInvalidEdgeSecurity() {
   for (const [key, value] of [
     ["EDGE_TLS_TERMINATION", "sidecar"],
     ["EDGE_TRUSTED_PROXY_MODE", "all"],
+    ["EDGE_TRUSTED_PROXY_CIDRS", "all"],
+    ["EDGE_TRUSTED_PROXY_CIDRS", "10.42.0.0/33"],
+    ["EDGE_TRUSTED_PROXY_CIDRS", "not-a-cidr"],
     ["EDGE_WAF_MODE", "detect"],
     ["EDGE_HSTS_ENABLED", "yes"],
     ["EDGE_HSTS_MAX_AGE_SECONDS", "-1"],
@@ -874,6 +913,35 @@ function assertServiceAccount(serviceAccount, variantName) {
   }
 }
 
+function assertDistinctWorkloadServiceAccounts(byKind, variant) {
+  const serviceAccounts = byKind.get("ServiceAccount") ?? [];
+  if (
+    serviceAccounts.some(
+      (serviceAccount) => serviceAccount.metadata?.name === "romeo-worker",
+    )
+  ) {
+    throw new Error(
+      `${variant.name} rendered the retired shared worker ServiceAccount.`,
+    );
+  }
+  const expected = [
+    "romeo-migration",
+    ...(variant.expectedBackup ? ["romeo-postgres-backup"] : []),
+    ...variant.expectedWorkerCronJobs.map((component) => `romeo-${component}`),
+  ];
+  for (const name of expected) {
+    assertServiceAccount(
+      requireResource(byKind, "ServiceAccount", name, variant.name),
+      variant.name,
+    );
+  }
+  if (new Set(expected).size !== expected.length) {
+    throw new Error(
+      `${variant.name} workload ServiceAccount inventory is not distinct.`,
+    );
+  }
+}
+
 function assertConfigMap(configMap, variant) {
   const variantName = variant.name;
   const data = configMap.data ?? {};
@@ -905,7 +973,7 @@ function assertConfigMap(configMap, variant) {
       `${variantName} ConfigMap message attachment limit drifted.`,
     );
   }
-  if (data.HTTP_RATE_LIMIT_DRIVER !== "memory") {
+  if (data.HTTP_RATE_LIMIT_DRIVER !== "valkey") {
     throw new Error(`${variantName} ConfigMap rate limit driver drifted.`);
   }
   if (data.HTTP_RATE_LIMIT_KEY_PREFIX !== "romeo:http-rate-limit:v1") {
@@ -968,7 +1036,7 @@ function assertConfigMap(configMap, variant) {
   if (data.REALTIME_EVENT_TIMEOUT_MS !== "2000") {
     throw new Error(`${variantName} ConfigMap realtime event timeout drifted.`);
   }
-  if (data.QUOTA_COORDINATION_DRIVER !== "disabled") {
+  if (data.QUOTA_COORDINATION_DRIVER !== "valkey") {
     throw new Error(
       `${variantName} ConfigMap quota coordination driver drifted.`,
     );
@@ -1022,6 +1090,39 @@ function assertConfigMap(configMap, variant) {
   }
 }
 
+function assertOperationalOwnership(configMap, variant) {
+  const raw = configMap.data?.["ownership.json"];
+  let ownership;
+  try {
+    ownership = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      `${variant.name} operational ownership manifest is not JSON.`,
+    );
+  }
+  if (
+    ownership.schemaVersion !== "romeo.operational-ownership.v1" ||
+    ownership.scheduledTenantWork?.mode !==
+      (variant.expectedScheduledOwner ?? "internal") ||
+    ownership.databaseBackup?.enabled !== variant.expectedBackup
+  ) {
+    throw new Error(`${variant.name} operational ownership manifest drifted.`);
+  }
+  const serialized = JSON.stringify(ownership);
+  for (const forbidden of [
+    "DATABASE_URL",
+    "ROMEO_API_KEY",
+    "BROKER_TOKEN",
+    "secretKeyRef",
+  ]) {
+    if (serialized.includes(forbidden)) {
+      throw new Error(
+        `${variant.name} operational ownership manifest leaks secret material.`,
+      );
+    }
+  }
+}
+
 function assertNoSecretResourceForExistingSecretMode(resources, variantName) {
   const secretNames = resources
     .filter((resource) => resource.kind === "Secret")
@@ -1040,6 +1141,14 @@ function assertDeployment(deployment, variant) {
   if (container === undefined) {
     throw new Error(`${variant.name} deployment has no app container.`);
   }
+  if (
+    variant.name === "default" &&
+    container.image !== `romeo/app@${unpullableDigest}`
+  ) {
+    throw new Error(
+      "default app image must retain the deliberately unpullable digest sentinel",
+    );
+  }
   assertPodSecurityContext(podSpec?.securityContext, variant.name, "app pod");
   assertContainerSecurityContext(
     container.securityContext,
@@ -1049,10 +1158,22 @@ function assertDeployment(deployment, variant) {
   if (podSpec.serviceAccountName !== "romeo") {
     throw new Error(`${variant.name} app uses unexpected ServiceAccount.`);
   }
-  for (const probe of ["startupProbe", "readinessProbe", "livenessProbe"]) {
+  for (const probe of ["startupProbe", "livenessProbe"]) {
     if (container[probe]?.httpGet?.path !== "/api/v1/health") {
       throw new Error(`${variant.name} app missing ${probe} health check.`);
     }
+  }
+  const readinessScript = container.readinessProbe?.exec?.command?.at(-1);
+  if (
+    typeof readinessScript !== "string" ||
+    !readinessScript.includes("/api/v1/readyz") ||
+    readinessScript.includes("DATABASE_URL") ||
+    readinessScript.includes("VALKEY_URL") ||
+    readinessScript.includes("node:net")
+  ) {
+    throw new Error(
+      `${variant.name} app readiness is not delegated exclusively to the bounded internal /readyz contract.`,
+    );
   }
   assertResources(container.resources, variant.name, "app container");
   assertWritableNodeEnv(container, variant.name, "app container");
@@ -1088,6 +1209,57 @@ function assertDeployment(deployment, variant) {
       );
     }
   }
+  if (variant.expectedScheduledEvidenceConfigMap !== undefined) {
+    const volume = podSpec.volumes?.find(
+      (item) => item.name === "scheduled-operation-evidence",
+    );
+    const mount = container.volumeMounts?.find(
+      (item) => item.name === "scheduled-operation-evidence",
+    );
+    if (
+      volume?.configMap?.name !== variant.expectedScheduledEvidenceConfigMap ||
+      mount?.mountPath !== "/var/run/romeo/scheduled-operations" ||
+      mount.readOnly !== true ||
+      findEnv(container, "SCHEDULED_TENANT_WORK_EXTERNAL_EVIDENCE_PATH")
+        ?.value !==
+        "/var/run/romeo/scheduled-operations/scheduled-operations.json"
+    ) {
+      throw new Error(
+        `${variant.name} external scheduler evidence is not mounted read-only at the authoritative path.`,
+      );
+    }
+  }
+  for (const component of variant.expectedWorkerCronJobs) {
+    const audience = component.replaceAll("-", "_");
+    const enabledEnv = `${audience.toUpperCase()}_WORKER_ENABLED`;
+    if (findEnv(container, enabledEnv)?.value !== "true") {
+      throw new Error(
+        `${variant.name} broker server does not enable ${audience}.`,
+      );
+    }
+    const tokenEnv = `${audience.toUpperCase()}_BROKER_TOKEN`;
+    const expectedSecret = variant.expectedBrokerSecrets?.[component];
+    if (
+      findEnv(container, tokenEnv)?.valueFrom?.secretKeyRef?.name !==
+      expectedSecret
+    ) {
+      throw new Error(
+        `${variant.name} broker server is not wired to ${component}'s distinct credential.`,
+      );
+    }
+  }
+  if (variant.name === "enterprise_surface") {
+    const previous = findEnv(container, "TOOL_DISPATCH_BROKER_TOKEN_PREVIOUS")
+      ?.valueFrom?.secretKeyRef;
+    if (
+      previous?.name !== "romeo-tool-broker-previous" ||
+      previous.key !== "token"
+    ) {
+      throw new Error(
+        "enterprise_surface broker server does not mount the previous tool credential for read-old rotation.",
+      );
+    }
+  }
 }
 
 function assertMigrationJob(job, variant) {
@@ -1098,6 +1270,26 @@ function assertMigrationJob(job, variant) {
   if (podSpec?.restartPolicy !== "Never") {
     throw new Error(
       `${variant.name} migration job is not restartPolicy Never.`,
+    );
+  }
+  if (podSpec?.serviceAccountName !== "romeo-migration") {
+    throw new Error(
+      `${variant.name} migration does not use its isolated ServiceAccount.`,
+    );
+  }
+  if (
+    (container?.envFrom ?? []).some((entry) => entry.secretRef !== undefined)
+  ) {
+    throw new Error(
+      `${variant.name} migration mounts unrelated runtime secrets.`,
+    );
+  }
+  if (
+    variant.name === "default" &&
+    container?.image !== `romeo/ops@${unpullableDigest}`
+  ) {
+    throw new Error(
+      "default migration image must retain the deliberately unpullable digest sentinel",
     );
   }
   if (job.spec?.backoffLimit !== 1 || job.spec?.activeDeadlineSeconds !== 600) {
@@ -1174,7 +1366,12 @@ function assertBackupCronJob(byKind, variant) {
     );
     for (const name of [
       "POSTGRES_BACKUP_UPLOAD_URL",
+      "POSTGRES_BACKUP_READBACK_URL",
       "POSTGRES_BACKUP_MANIFEST_UPLOAD_URL",
+      "POSTGRES_BACKUP_MANIFEST_READBACK_URL",
+      "POSTGRES_BACKUP_STATUS_UPLOAD_URL",
+      "POSTGRES_BACKUP_STATUS_READBACK_URL",
+      "POSTGRES_BACKUP_POLICY_READBACK_URL",
     ]) {
       const env = findEnv(container, name);
       if (env?.valueFrom?.secretKeyRef === undefined) {
@@ -1185,6 +1382,15 @@ function assertBackupCronJob(byKind, variant) {
       findEnv(container, "POSTGRES_BACKUP_UPLOAD_TIMEOUT_MS")?.value !== "30000"
     ) {
       throw new Error(`${variant.name} backup upload timeout env drifted.`);
+    }
+    const command = container.args?.join("\n") ?? "";
+    if (
+      !command.includes("--durability-mode verified-upload") ||
+      !command.includes("--status-output")
+    ) {
+      throw new Error(
+        `${variant.name} backup command does not require verified durability.`,
+      );
     }
   } else if (backup !== undefined) {
     throw new Error(`${variant.name} unexpectedly rendered backup CronJob.`);
@@ -1201,7 +1407,7 @@ function assertCronJob(cronJob, variant, component) {
       `${variant.name} ${component} CronJob is not restartPolicy Never.`,
     );
   }
-  if (podSpec.serviceAccountName !== "romeo-worker") {
+  if (podSpec.serviceAccountName !== `romeo-${component}`) {
     throw new Error(
       `${variant.name} ${component} CronJob uses unexpected ServiceAccount.`,
     );
@@ -1220,11 +1426,42 @@ function assertCronJob(cronJob, variant, component) {
   assertResources(container.resources, variant.name, `${component} container`);
   assertWritableNodeEnv(container, variant.name, `${component} container`);
   if (component !== "postgres-backup") {
-    const apiKey = findEnv(container, "ROMEO_API_KEY");
-    const secretRef = apiKey?.valueFrom?.secretKeyRef;
-    if (secretRef?.name !== variant.expectedWorkerApiKeySecret) {
+    const audience = component.replaceAll("-", "_");
+    const tokenEnv = `${audience.toUpperCase()}_BROKER_TOKEN`;
+    const secretRef = findEnv(container, tokenEnv)?.valueFrom?.secretKeyRef;
+    if (
+      secretRef?.name !==
+        `romeo-${component.replace("-automation", "")}-broker` &&
+      !String(secretRef?.name ?? "").includes(component.split("-")[0])
+    ) {
       throw new Error(
-        `${variant.name} ${component} API key is not worker-secret backed.`,
+        `${variant.name} ${component} broker token is not audience-secret backed.`,
+      );
+    }
+    if (findEnv(container, "ROMEO_API_KEY") !== undefined) {
+      throw new Error(
+        `${variant.name} ${component} inherited the retired generic API key.`,
+      );
+    }
+    if (
+      findEnv(container, "ROMEO_WORKER_BROKER_ALLOW_INSECURE_HTTP")?.value !==
+      "true"
+    ) {
+      throw new Error(
+        `${variant.name} ${component} does not explicitly authorize its chart-controlled HTTP broker origin.`,
+      );
+    }
+    if (findEnv(container, `${tokenEnv}_PREVIOUS`) !== undefined) {
+      throw new Error(
+        `${variant.name} ${component} received the previous broker credential instead of write-new only.`,
+      );
+    }
+    if (
+      findEnv(container, "ROMEO_WORKER_AUDIENCE")?.value !== audience ||
+      findEnv(container, "ROMEO_WORKER_SCOPES")?.value !== `worker:${audience}`
+    ) {
+      throw new Error(
+        `${variant.name} ${component} broker audience/scope drifted.`,
       );
     }
   }
@@ -1261,11 +1498,7 @@ function assertCronJob(cronJob, variant, component) {
       );
     }
     if (variant.expectedToolDispatchSecretResolver === "cloud") {
-      assertToolDispatchCloudResolverEnv(
-        container,
-        variant.expectedToolDispatchSecretEnvSecret,
-        variant.name,
-      );
+      assertToolDispatchCloudResolverEnv(container, variant.name);
     }
     if (variant.expectedToolDispatchPayloadSecret !== undefined) {
       const volume = podSpec.volumes?.find(
@@ -1308,11 +1541,7 @@ function assertCronJob(cronJob, variant, component) {
   }
 }
 
-function assertToolDispatchCloudResolverEnv(
-  container,
-  secretName,
-  variantName,
-) {
+function assertToolDispatchCloudResolverEnv(container, variantName) {
   for (const [name, value] of [
     ["VAULT_ADDR", "https://vault.example.com"],
     ["AWS_REGION", "us-east-1"],
@@ -1331,10 +1560,9 @@ function assertToolDispatchCloudResolverEnv(
     "GCP_ACCESS_TOKEN",
     "AZURE_ACCESS_TOKEN",
   ]) {
-    const secretRef = findEnv(container, name)?.valueFrom?.secretKeyRef;
-    if (secretRef?.name !== secretName || secretRef.optional !== true) {
+    if (findEnv(container, name) !== undefined) {
       throw new Error(
-        `${variantName} tool-dispatch ${name} is not optional secret-backed.`,
+        `${variantName} tool-dispatch mounts unrelated static ${name} instead of workload identity.`,
       );
     }
   }
@@ -1412,10 +1640,36 @@ function assertOptionalHpa(byKind, deployment, variant) {
 }
 
 function assertOptionalNetworkPolicy(byKind, variant) {
-  const policy = optionalResource(byKind, "NetworkPolicy", "romeo");
+  const defaultDeny = optionalResource(
+    byKind,
+    "NetworkPolicy",
+    "romeo-default-deny",
+  );
+  const policy = optionalResource(byKind, "NetworkPolicy", "romeo-app");
+  const operations = optionalResource(
+    byKind,
+    "NetworkPolicy",
+    "romeo-operations",
+  );
   if (variant.expectedNetworkPolicy) {
-    if (policy === undefined) {
-      throw new Error(`${variant.name} did not render NetworkPolicy.`);
+    if (
+      defaultDeny === undefined ||
+      policy === undefined ||
+      operations === undefined
+    ) {
+      throw new Error(
+        `${variant.name} did not render default-deny, app, and operations NetworkPolicies.`,
+      );
+    }
+    if (
+      Object.keys(defaultDeny.spec?.podSelector?.matchLabels ?? {}).length !==
+        2 ||
+      defaultDeny.spec?.ingress?.length !== 0 ||
+      defaultDeny.spec?.egress?.length !== 0
+    ) {
+      throw new Error(
+        `${variant.name} release-wide NetworkPolicy is not default-deny for every Romeo pod.`,
+      );
     }
     if (
       !policy.spec?.policyTypes?.includes("Ingress") ||
@@ -1429,6 +1683,38 @@ function assertOptionalNetworkPolicy(byKind, variant) {
     if (!Array.isArray(egress)) {
       throw new Error(`${variant.name} NetworkPolicy egress is not an array.`);
     }
+    if (JSON.stringify(operations.spec?.egress) !== JSON.stringify(egress)) {
+      throw new Error(
+        `${variant.name} operations NetworkPolicy egress diverges from the explicit release allowlist.`,
+      );
+    }
+    const excluded = operations.spec?.podSelector?.matchExpressions?.[0];
+    if (
+      excluded?.operator !== "NotIn" ||
+      !excluded?.values?.includes("tool-dispatch") ||
+      !excluded?.values?.includes("browser-automation") ||
+      !excluded?.values?.includes("knowledge-extraction")
+    ) {
+      throw new Error(
+        `${variant.name} operations NetworkPolicy does not preserve specialized worker isolation.`,
+      );
+    }
+    const brokerIngressComponents = (policy.spec?.ingress ?? []).flatMap(
+      (rule) =>
+        (rule.from ?? []).flatMap(
+          (source) =>
+            source.podSelector?.matchExpressions?.flatMap(
+              (expression) => expression.values ?? [],
+            ) ?? [],
+        ),
+    );
+    for (const component of variant.expectedWorkerCronJobs) {
+      if (!brokerIngressComponents.includes(component)) {
+        throw new Error(
+          `${variant.name} app NetworkPolicy does not admit ${component}'s broker traffic.`,
+        );
+      }
+    }
     if (
       (variant.expectedNetworkPolicyEgress ?? "deny-all") === "deny-all" &&
       egress.length !== 0
@@ -1440,8 +1726,24 @@ function assertOptionalNetworkPolicy(byKind, variant) {
     if (variant.expectedNetworkPolicyEgress === "explicit") {
       assertExplicitNetworkPolicyEgress(policy, variant.name);
     }
-  } else if (policy !== undefined) {
-    throw new Error(`${variant.name} unexpectedly rendered NetworkPolicy.`);
+    if (variant.expectedNetworkPolicyEgress === "sentinel") {
+      const rule = egress[0];
+      if (
+        egress.length !== 1 ||
+        rule?.to?.[0]?.ipBlock?.cidr !== "192.0.2.1/32" ||
+        rule?.ports?.[0]?.port !== 9
+      ) {
+        throw new Error(
+          `${variant.name} default NetworkPolicy does not retain the nonfunctional TEST-NET sentinel.`,
+        );
+      }
+    }
+  } else if (
+    defaultDeny !== undefined ||
+    policy !== undefined ||
+    operations !== undefined
+  ) {
+    throw new Error(`${variant.name} unexpectedly rendered NetworkPolicies.`);
   }
 }
 
@@ -1492,6 +1794,9 @@ function assertOptionalToolDispatchNetworkPolicy(byKind, variant) {
     }
     if (variant.expectedToolDispatchNetworkPolicyEgress === "explicit") {
       assertToolDispatchNetworkPolicyEgress(policy, variant.name);
+    }
+    if (variant.expectedToolDispatchNetworkPolicyEgress === "sentinel") {
+      assertSentinelNetworkPolicyEgress(egress, variant.name, "tool-dispatch");
     }
   } else if (policy !== undefined) {
     throw new Error(
@@ -1545,9 +1850,52 @@ function assertOptionalBrowserAutomationNetworkPolicy(byKind, variant) {
         `${variant.name} browser-automation NetworkPolicy default egress is not deny-all.`,
       );
     }
+    if (variant.expectedBrowserAutomationNetworkPolicyEgress === "sentinel") {
+      assertSentinelNetworkPolicyEgress(
+        egress,
+        variant.name,
+        "browser-automation",
+      );
+    }
   } else if (policy !== undefined) {
     throw new Error(
       `${variant.name} unexpectedly rendered browser-automation NetworkPolicy.`,
+    );
+  }
+}
+
+function assertOptionalKnowledgeExtractionNetworkPolicy(byKind, variant) {
+  const policy = optionalResource(
+    byKind,
+    "NetworkPolicy",
+    "romeo-knowledge-extraction",
+  );
+  if (variant.expectedKnowledgeExtractionNetworkPolicy) {
+    if (policy === undefined) {
+      throw new Error(
+        `${variant.name} did not render knowledge-extraction NetworkPolicy.`,
+      );
+    }
+    const selector = policy.spec?.podSelector?.matchLabels ?? {};
+    const egress = policy.spec?.egress ?? [];
+    if (
+      selector["app.kubernetes.io/component"] !== "knowledge-extraction" ||
+      policy.spec?.policyTypes?.includes("Egress") !== true ||
+      !egress.some((rule) =>
+        (rule.to ?? []).some(
+          (target) =>
+            target.podSelector?.matchLabels?.["app.kubernetes.io/component"] ===
+            "app",
+        ),
+      )
+    ) {
+      throw new Error(
+        `${variant.name} knowledge-extraction egress is not isolated to its explicit policy/app broker boundary.`,
+      );
+    }
+  } else if (policy !== undefined) {
+    throw new Error(
+      `${variant.name} unexpectedly rendered knowledge-extraction NetworkPolicy.`,
     );
   }
 }
@@ -1641,6 +1989,24 @@ function assertExplicitNetworkPolicyEgress(policy, variantName) {
     if (!selectors.some((item) => item.ipBlock?.cidr === cidr)) {
       throw new Error(`${variantName} NetworkPolicy missing ${cidr} egress.`);
     }
+  }
+}
+
+function assertSentinelNetworkPolicyEgress(egress, variantName, component) {
+  const sentinel = egress.find(
+    (rule) => rule?.to?.[0]?.ipBlock?.cidr === "192.0.2.1/32",
+  );
+  const app = egress.find((rule) =>
+    (rule?.to ?? []).some(
+      (target) =>
+        target.podSelector?.matchLabels?.["app.kubernetes.io/component"] ===
+        "app",
+    ),
+  );
+  if (sentinel?.ports?.[0]?.port !== 9 || app?.ports?.[0]?.port !== 3000) {
+    throw new Error(
+      `${variantName} ${component} NetworkPolicy does not retain the nonfunctional TEST-NET sentinel.`,
+    );
   }
 }
 

@@ -19,6 +19,7 @@ release/
 # Python artifacts (sdks/python ships a real client; its bytecode must not be tracked)
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # Local env + secrets (keep .env.example tracked)
 .env

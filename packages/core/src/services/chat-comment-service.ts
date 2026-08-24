@@ -10,11 +10,13 @@ import {
   type NotificationDeliverySender,
 } from "./notification-delivery";
 import { deliveryChannelsForNotification } from "./notification-service";
+import type { SecretResolver } from "./secret-resolver";
 
 export class ChatCommentService {
   constructor(
     private readonly repository: RomeoRepository,
     private readonly notificationDelivery: NotificationDeliverySender = disabledNotificationDeliverySender,
+    private readonly secretResolver?: SecretResolver,
   ) {}
 
   async list(subject: AuthSubject, chatId: string): Promise<ChatComment[]> {
@@ -136,6 +138,9 @@ export class ChatCommentService {
               repository,
               notification,
               channel,
+              ...(this.secretResolver === undefined
+                ? {}
+                : { secretResolver: this.secretResolver }),
             }),
           ),
         );

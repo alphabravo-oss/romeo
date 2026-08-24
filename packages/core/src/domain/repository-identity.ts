@@ -69,9 +69,15 @@ export interface RepositoryIdentityCapability {
   ): Promise<GroupMembership | undefined>;
   getSsoOidcSettings(orgId: string): Promise<SsoOidcSettings | undefined>;
   upsertSsoOidcSettings(settings: SsoOidcSettings): Promise<SsoOidcSettings>;
-  getSystemSetting(key: string): Promise<SystemSetting | undefined>;
-  listSystemSettings(): Promise<SystemSetting[]>;
-  upsertSystemSetting(setting: SystemSetting): Promise<SystemSetting>;
+  getSystemSetting(
+    key: string,
+    orgId: string | null,
+  ): Promise<SystemSetting | undefined>;
+  listSystemSettings(orgId: string | null): Promise<SystemSetting[]>;
+  upsertSystemSetting(
+    setting: SystemSetting,
+    orgId: string | null,
+  ): Promise<SystemSetting>;
   listAllOrganizations(): Promise<Organization[]>;
   listOrganizations(orgId: string): Promise<Organization[]>;
   getOrganization(orgId: string): Promise<Organization | undefined>;

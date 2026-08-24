@@ -20,5 +20,7 @@ describe("model catalog probe and verify surfaces", () => {
     expect(diagnostics).toMatch(/catalogExplainUnavailability/u);
     expect(details).toMatch(/onCancelVerify/u);
     expect(details).toMatch(/catalogViewAudit/u);
+    expect(details).toMatch(/verification\.message/u);
+    expect(details).toMatch(/verification\.checks\.map/u);
   });
 });

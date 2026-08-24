@@ -113,7 +113,7 @@ export function WebSearchPanel() {
     >
       {enabled ? (
         <form
-          className="mt-4 grid gap-4"
+          className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
           onSubmit={(event) => {
             event.preventDefault();
             saveConfiguration();
@@ -294,6 +294,7 @@ export function WebSearchPanel() {
         </form>
       ) : (
         <EmptyState
+          headingLevel={2}
           icon={<Search aria-hidden size={24} />}
           title={t("webSearchDisabledTitle")}
         >

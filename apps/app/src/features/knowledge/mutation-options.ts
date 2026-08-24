@@ -17,6 +17,7 @@ import {
   replayTieredKnowledge,
 } from "./mutations";
 import type { KnowledgeSource } from "./types";
+import { invalidateInventoriedTablePages } from "../../lib/inventoried-table-cache";
 
 interface WorkspaceKnowledgeScope {
   workspaceId?: string;
@@ -36,12 +37,18 @@ export function createKnowledgeBaseMutationOptions() {
   return serverMutationOptions({
     resource: "knowledge.base.create",
     mutationFn: (input: CreateBaseInput) => createKnowledgeBase(input),
-    invalidations: (_base, input) => [
-      {
-        exact: true,
-        queryKey: appQueryKeys.knowledgeBases(input.workspaceId),
-      },
-    ],
+    reconcile: async (client, _base, input) => {
+      await Promise.all([
+        invalidateCachedResourceExactly(
+          client,
+          appQueryKeys.knowledgeBases(input.workspaceId),
+        ),
+        invalidateInventoriedTablePages(client, {
+          resource: "knowledge_bases",
+          workspaceId: input.workspaceId,
+        }),
+      ]);
+    },
   });
 }
 
@@ -165,7 +172,6 @@ async function invalidateKnowledgeSourceViewsExactly(
   options: { jobs?: boolean; quotas?: boolean } = {},
 ) {
   const resources = [
-    appQueryKeys.knowledgeSources(input.knowledgeBaseId),
     appQueryKeys.usageEvents(),
     appQueryKeys.usageSummary(),
     appQueryKeys.usageAlerts(),
@@ -175,9 +181,21 @@ async function invalidateKnowledgeSourceViewsExactly(
     ...(options.jobs === true ? [appQueryKeys.jobs()] : []),
     ...(options.quotas === true ? [appQueryKeys.quotas()] : []),
   ];
-  await Promise.all(
-    resources.map((resource) =>
+  await Promise.all([
+    ...resources.map((resource) =>
       invalidateCachedResourceExactly(client, resource),
     ),
-  );
+    invalidateInventoriedTablePages(client, {
+      parentId: input.knowledgeBaseId,
+      resource: "knowledge_sources",
+    }),
+    ...(input.workspaceId === undefined
+      ? []
+      : [
+          invalidateInventoriedTablePages(client, {
+            resource: "knowledge_bases",
+            workspaceId: input.workspaceId,
+          }),
+        ]),
+  ]);
 }

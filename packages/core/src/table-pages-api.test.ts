@@ -10,7 +10,11 @@ describe("inventoried table page HTTP", () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       env: testEnv(),
     });
-    for (const name of ["page-test-alpha", "page-test-bravo", "page-test-charlie"]) {
+    for (const name of [
+      "page-test-alpha",
+      "page-test-bravo",
+      "page-test-charlie",
+    ]) {
       const created = await api.request("/api/v1/api-keys", {
         method: "POST",
         headers: { "content-type": "application/json" },

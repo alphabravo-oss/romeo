@@ -1,4 +1,3 @@
-import type { QueryClient } from "@tanstack/react-query";
 import { cancelRun, streamRunEvents } from "../features/runs";
 import type { Message } from "../features/types";
 import { rememberAppliedEvent } from "./run-registry-events";
@@ -23,9 +22,9 @@ import {
   initializeAssistantMessage,
   stopDeltaFlush,
   queueAssistantDelta,
-  stampAssistantModel,
   streamingMessageQueryKey,
 } from "./run-registry-messages";
+import { applyRunStarted } from "./run-registry-started";
 import type {
   ActiveRun,
   TrackedRun,
@@ -256,7 +255,13 @@ async function consumeRun(
             );
             if (!networkSuspended) reconnectAttempts = 0;
             if (event.type === "run.started") {
-              applyRunStarted(queryClient, run, event.data);
+              applyRunStarted({
+                data: event.data,
+                publish: (patch) => publish(chatId, runId, patch),
+                queryClient,
+                run,
+                startWaitTicker,
+              });
             }
             if (event.type === "message.started") {
               // An empty re-announcement means retry/fallback after attempt one.
@@ -437,63 +442,20 @@ async function consumeRun(
     commitAssistantMessage(queryClient, run);
     controller.abort();
     stopWaitTicker(run);
-    publish(chatId, runId, { isStreaming: false });
     try {
       await input.onSettled?.(chatId, runId);
     } finally {
+      // Keep the composer locked until authoritative transcript/branch
+      // reconciliation completes. Publishing idle first exposed a brief but
+      // actionable stale state: the next send could race the prior run's
+      // terminal commit and attachment controls disappeared in the interim.
+      publish(chatId, runId, { isStreaming: false });
       queryClient.removeQueries({
         exact: true,
         queryKey: streamingMessageQueryKey(chatId, run.assistantMessageId),
       });
     }
   }
-}
-
-function applyRunStarted(
-  queryClient: QueryClient,
-  run: TrackedRun,
-  data: unknown,
-): void {
-  const record =
-    typeof data === "object" && data !== null
-      ? (data as Record<string, unknown>)
-      : {};
-  const modelId =
-    typeof record.modelId === "string" && record.modelId.length > 0
-      ? record.modelId
-      : undefined;
-  if (modelId !== undefined) {
-    run.modelId = modelId;
-    stampAssistantModel(queryClient, run, modelId);
-    // modelId must reach the registry entry too, or getActiveRun(chatId).modelId
-    // stays undefined for the whole run -- publish() copies the entry, so the
-    // assignment above only ever touched the closure object.
-    publish(run.chatId, run.runId, { modelId });
-  }
-  const streamTimeoutMs =
-    typeof record.streamTimeoutMs === "number" &&
-    Number.isFinite(record.streamTimeoutMs) &&
-    record.streamTimeoutMs > 0
-      ? record.streamTimeoutMs
-      : 60_000;
-  const maxRetries =
-    typeof record.maxRetries === "number" &&
-    Number.isFinite(record.maxRetries) &&
-    record.maxRetries >= 0
-      ? Math.floor(record.maxRetries)
-      : 1;
-  run.timing.waitAttemptStartedAt = Date.now();
-  publish(run.chatId, run.runId, {
-    wait: {
-      attempt: 1,
-      elapsedSeconds: 0,
-      hasContent: false,
-      maxAttempts: maxRetries + 1,
-      phase: "waiting",
-      streamTimeoutMs,
-    },
-  });
-  startWaitTicker(run);
 }
 
 export function reconcileStreamingTranscript(
@@ -508,4 +470,3 @@ export function reconcileStreamingTranscript(
     runs.get(chatId),
   );
 }
-

@@ -46,6 +46,19 @@ describe("database migrations", () => {
       "0029_message_file_references.sql",
       "0030_reasoning_summary_event_shape.sql",
       "0031_inventoried_table_sort_indexes.sql",
+      "0032_retire_workflows.sql",
+      "0033_audit_integrity_exports.sql",
+      "0034_tenant_rls_worker_leases.sql",
+      "0035_versioned_webhook_signatures.sql",
+      "0036_exact_role_system_settings_rls.sql",
+      "0037_normalized_server_table_authority.sql",
+      "0038_native_table_page_indexes.sql",
+      "0039_normalized_content_policy_approvals.sql",
+      "0040_support_table_projection_indexes.sql",
+      "0041_normalized_governance_export_jobs.sql",
+      "0042_file_lifecycle_operational_index.sql",
+      "0043_content_deletion_outbox.sql",
+      "0044_background_job_claim_indexes.sql",
     ]);
 
     const sql = readFileSync(join(migrationsDir, sqlFiles[0] ?? ""), "utf8");
@@ -234,6 +247,29 @@ describe("database migrations", () => {
     );
   });
 
+  it("adds protected audit chains and durable verified export state additively", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "0033_audit_integrity_exports.sql"),
+      "utf8",
+    );
+
+    for (const table of [
+      "audit_integrity_tenant_heads",
+      "audit_integrity_records",
+      "audit_integrity_checkpoints",
+      "audit_export_destinations",
+      "audit_export_jobs",
+      "audit_export_attempts",
+      "audit_export_idempotency_receipts",
+    ])
+      expect(sql).toContain(`CREATE TABLE "${table}"`);
+    expect(sql).toContain("audit_integrity_records_org_sequence_uidx");
+    expect(sql).toContain("audit_export_jobs_org_idempotency_uidx");
+    expect(sql).toContain("audit_integrity_checkpoints_immutable");
+    expect(sql).toContain("romeo.audit_integrity_mutation");
+    expect(sql).not.toMatch(/DROP\s+(?:TABLE|COLUMN)/iu);
+  });
+
   it("backfills durable per-run event sequence allocation", () => {
     const sql = readFileSync(
       join(migrationsDir, "0013_run_event_sequences.sql"),
@@ -285,6 +321,55 @@ describe("database migrations", () => {
     expect(sql).toContain(
       'CREATE INDEX "audit_logs_org_created_id_idx" ON "audit_logs" USING btree ("org_id", "created_at", "id")',
     );
+  });
+
+  it("adds bounded indexes for audit-derived support table projections", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "0040_support_table_projection_indexes.sql"),
+      "utf8",
+    );
+
+    expect(sql).toContain("audit_logs_support_request_created_idx");
+    expect(sql).toContain("audit_logs_support_decision_idx");
+    expect(sql).toContain("metadata ->> 'approvalRequestId'");
+    expect(sql).toContain("audit_logs_support_session_created_idx");
+    expect(sql).not.toMatch(/\b(?:ALTER|DELETE|DROP|TRUNCATE|UPDATE)\b/u);
+  });
+
+  it("adds the bounded tenant file-lifecycle operational index", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "0042_file_lifecycle_operational_index.sql"),
+      "utf8",
+    );
+
+    expect(sql).toContain("object_records_file_lifecycle_ops_idx");
+    expect(sql).toContain('"org_id", "status", "lifecycle_attempts"');
+    expect(sql).toContain('WHERE "status" IN');
+    expect(sql).not.toMatch(/\b(?:ALTER|DELETE|DROP|TRUNCATE|UPDATE)\b/u);
+  });
+
+  it("adds the durable tenant-scoped content deletion outbox", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "0043_content_deletion_outbox.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("CREATE TABLE content_deletion_operations");
+    expect(sql).toContain("content_deletion_operations_active_target_uidx");
+    expect(sql).toContain("ENABLE ROW LEVEL SECURITY");
+    expect(sql).toContain("FORCE ROW LEVEL SECURITY");
+    expect(sql).toContain("deletion_pending");
+  });
+
+  it("adds compound indexes for bounded background-job query and claim paths", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "0044_background_job_claim_indexes.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("background_jobs_org_type_status_created_id_idx");
+    expect(sql).toContain('"org_id", "type", "status", "created_at", "id"');
+    expect(sql).toContain("background_jobs_org_type_status_updated_id_idx");
+    expect(sql).toContain('"org_id", "type", "status", "updated_at", "id"');
+    expect(sql).not.toMatch(/\b(?:ALTER|DELETE|DROP|TRUNCATE|UPDATE)\b/u);
   });
 
   it("adds an additive trigram expression index for audit search", () => {

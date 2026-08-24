@@ -35,6 +35,7 @@ import { SettingsSaveBar } from "./SettingsSaveBar";
 import { isDirty } from "./settings-dirty-state";
 import { safeUserErrorMessage } from "../lib/safe-user-error";
 import { useInventoriedServerTable } from "../lib/inventoried-server-table";
+import { useEventCallback } from "../lib/use-event-callback";
 
 type AccessGrant = Awaited<ReturnType<typeof listAccessReviewGrants>>[number];
 
@@ -66,7 +67,9 @@ const retentionValidationMessageKeys: Record<
 
 export function GovernanceRetentionTab() {
   const { t } = useLocale();
-  const inventoriedTable = useInventoriedServerTable<any>("governance_access_grants");
+  const inventoriedTable = useInventoriedServerTable(
+    "governance_access_grants",
+  );
   const { ask, dialog } = useConfirm();
   const retentionQuery = useQuery(retentionPolicyQueryOptions());
   const accessQuery = useQuery(accessReviewQueryOptions());
@@ -76,32 +79,45 @@ export function GovernanceRetentionTab() {
     retentionDraft(retentionQuery.data),
   );
   const accessGrantColumns: ColumnDef<AccessGrant, any>[] = [
-    accessGrantColumn.accessor(
-      (grant) => `${grant.resourceType}:${grant.resourceId}`,
-      {
-        id: "resource",
-        header: t("govAccessResource"),
-        cell: (cell) => (
-          <span className="rm-mono break-all" translate="no">
-            {cell.getValue()}
-          </span>
-        ),
-      },
-    ),
-    accessGrantColumn.accessor(
-      (grant) => `${grant.principalType}:${grant.principalId}`,
-      {
-        id: "principal",
-        header: t("govAccessPrincipal"),
-        cell: (cell) => (
-          <span className="rm-mono break-all" translate="no">
-            {cell.getValue()}
-          </span>
-        ),
-      },
-    ),
+    accessGrantColumn.accessor("resourceType", {
+      header: t("govAccessResource"),
+      enableSorting: true,
+      cell: (cell) => (
+        <span className="rm-mono break-all" translate="no">
+          {cell.getValue()}
+        </span>
+      ),
+    }),
+    accessGrantColumn.accessor("resourceId", {
+      header: t("govAccessResourceId"),
+      enableSorting: true,
+      cell: (cell) => (
+        <span className="rm-mono break-all" translate="no">
+          {cell.getValue()}
+        </span>
+      ),
+    }),
+    accessGrantColumn.accessor("principalType", {
+      header: t("govAccessPrincipal"),
+      enableSorting: true,
+      cell: (cell) => (
+        <span className="rm-mono break-all" translate="no">
+          {cell.getValue()}
+        </span>
+      ),
+    }),
+    accessGrantColumn.accessor("principalId", {
+      header: t("govAccessPrincipalId"),
+      enableSorting: true,
+      cell: (cell) => (
+        <span className="rm-mono break-all" translate="no">
+          {cell.getValue()}
+        </span>
+      ),
+    }),
     accessGrantColumn.accessor("permission", {
       header: t("govAccessPermission"),
+      enableSorting: true,
       cell: (cell) => <span className="rm-status pass">{cell.getValue()}</span>,
     }),
   ];
@@ -135,16 +151,18 @@ export function GovernanceRetentionTab() {
   });
   const draft = useStore(form.store, (state) => state.values);
   const dirty = isDirty(initial, draft);
-
-  useEffect(() => {
+  const applyAuthoritativePolicy = useEventCallback(() => {
     if (retentionQuery.data === undefined || form.state.isDirty) return;
     const next = retentionDraft(retentionQuery.data);
     setInitial(next);
     form.reset(next);
+  });
+
+  useEffect(() => {
     // The server timestamp is the policy version; resetting on it is safe only
     // while the form is clean, so a background refetch cannot erase edits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retentionQuery.data?.updatedAt]);
+    applyAuthoritativePolicy();
+  }, [applyAuthoritativePolicy, retentionQuery.data?.updatedAt]);
 
   async function confirmRun() {
     const ok = await ask({
@@ -289,7 +307,7 @@ export function GovernanceRetentionTab() {
         ) : null}
       </DangerZone>
       <PanelState query={accessQuery} empty={t("noAccessGrants")}>
-        {(grants) => (
+        {() => (
           <div className="grid gap-2 text-sm">
             <DataTable
               serverState={inventoriedTable.serverState}

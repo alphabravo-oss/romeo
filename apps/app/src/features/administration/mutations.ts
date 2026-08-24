@@ -14,6 +14,7 @@ import {
   administrationSetUserLocalPassword,
   administrationUpdateUserRole,
 } from "@romeo/api-client/generated/sdk";
+import { zCreateApiKeyRequest } from "@romeo/api-client/generated/sdk/zod";
 import { configureBrowserApiClients } from "@romeo/api-client/runtime/browser";
 
 import type { ApiKeyScope, DirectorySyncRequest, UserRole } from "./types";
@@ -144,12 +145,15 @@ export async function createServiceAccount(input: {
 export async function createServiceAccountApiKey(input: {
   serviceAccountId: string;
   name: string;
-  scopes: ApiKeyScope[];
+  scopes: string[];
 }) {
   configureBrowserApiClients();
   const response = await administrationCreateServiceAccountApiKey({
     path: { serviceAccountId: input.serviceAccountId },
-    body: { name: input.name, scopes: input.scopes },
+    body: {
+      name: input.name,
+      scopes: zCreateApiKeyRequest.shape.scopes.parse(input.scopes),
+    },
     throwOnError: true,
   });
   return response.data.data;

@@ -12,7 +12,7 @@ import SquarePen from "lucide-react/dist/esm/icons/square-pen.mjs";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
 import appPackage from "../../package.json";
-import type { ChatTag, WorkspaceFolder } from "../features";
+import type { ChatTag, WorkspaceFolder } from "../features/collaboration";
 import type { Chat } from "../features/types";
 import { useLocale, type MessageKey } from "../lib/i18n";
 import { CatalogPager } from "./CatalogPager";

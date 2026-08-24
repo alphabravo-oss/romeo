@@ -46,9 +46,15 @@ export function useComposerModelOptions(input: {
   const requirements = turnRequirementInput({
     reasoning: input.requiresReasoning,
     vision: input.requiresVision,
-    tools: input.requiresTools,
-    localOnly: input.requiresLocalOnly,
-    minContextWindow: input.minContextWindow,
+    ...(input.requiresTools === undefined
+      ? {}
+      : { tools: input.requiresTools }),
+    ...(input.requiresLocalOnly === undefined
+      ? {}
+      : { localOnly: input.requiresLocalOnly }),
+    ...(input.minContextWindow === undefined
+      ? {}
+      : { minContextWindow: input.minContextWindow }),
   });
   const readyCustomModels = useMemo(
     () =>
@@ -92,7 +98,9 @@ export function useComposerModelOptions(input: {
   const filteredCustomModels = useMemo(() => {
     const normalizedQuery = input.query.trim().toLowerCase();
     return readyCustomModels.filter((agent) => {
-      const base = enabledModels.find((model) => model.id === agent.baseModelId);
+      const base = enabledModels.find(
+        (model) => model.id === agent.baseModelId,
+      );
       if (!modelSupportsTurnRequirements(base, requirements)) return false;
       if (!modelMatchesCapabilityFilter(base, input.capabilityFilter))
         return false;

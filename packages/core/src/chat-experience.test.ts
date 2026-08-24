@@ -28,11 +28,14 @@ describe("chat experience", () => {
 
   it("always reports custom models on, including legacy rows without the field", async () => {
     const repository = new InMemoryRomeoRepository();
-    await repository.upsertSystemSetting({
-      key: "chat_experience.v1:org_default",
-      value: { suggestions: [], autoTitleEnabled: true },
-      updatedAt: "2026-07-29T12:00:00.000Z",
-    });
+    await repository.upsertSystemSetting(
+      {
+        key: "chat_experience.v1:org_default",
+        value: { suggestions: [], autoTitleEnabled: true },
+        updatedAt: "2026-07-29T12:00:00.000Z",
+      },
+      "org_default",
+    );
     const api = createRomeoApi(repository, { startBackgroundWorkers: false });
 
     const response = await api.request("/api/v1/chat-experience");

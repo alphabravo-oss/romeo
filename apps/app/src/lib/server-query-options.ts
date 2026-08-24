@@ -3,6 +3,7 @@ import {
   queryCacheProfiles,
   type QueryCacheProfile,
 } from "./query-cache-policy";
+import { throwIfSignalAborted } from "./abort-signal";
 
 /**
  * Shared policy for app-owned server queries. Resource factories remain
@@ -14,12 +15,14 @@ export function serverQueryPolicy(
   profile: QueryCacheProfile,
   resource: string,
   dimensions: Record<string, unknown> = {},
+  extraMeta: Record<string, unknown> = {},
 ) {
   return {
     ...queryCacheProfiles[profile],
     meta: {
       ssr: false,
       ...devQueryDiagnosticMeta(resource, dimensions),
+      ...extraMeta,
     },
   } as const;
 }
@@ -34,8 +37,8 @@ export async function abortableQuery<T>(
   signal: AbortSignal,
   load: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
-  signal.throwIfAborted();
+  throwIfSignalAborted(signal);
   const value = await load(signal);
-  signal.throwIfAborted();
+  throwIfSignalAborted(signal);
   return value;
 }

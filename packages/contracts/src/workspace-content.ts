@@ -6,6 +6,7 @@ import {
   jsonResponse,
   standardErrorResponses,
 } from "./common";
+import { FileLifecycleStatusSchema } from "./files";
 
 const identifier = z.string().trim().min(1).max(300);
 const timestamp = z.iso.datetime();
@@ -23,6 +24,8 @@ export const WorkspaceContentItemSchema = z
     ownerId: identifier,
     expiresAt: timestamp.optional(),
     expired: z.boolean(),
+    lifecycleStatus: FileLifecycleStatusSchema,
+    ready: z.boolean(),
     createdAt: timestamp,
     updatedAt: timestamp,
   })

@@ -33,7 +33,6 @@ semantics for:
   agent/chat/knowledge/folder sharing, and favorites.
 - managed-model editor update/publish/rollback/delete/diff/export, access
   grant/revoke, and administration clone/import/export actions;
-- workflow creation (blank and template), run start, approval, and resume.
 - webhook create/disable/bulk-disable/test with signing-secret cache exclusion;
 - evaluation suite creation/run and result rating.
 - billing plan application, external-event sync, entitlement reconciliation,

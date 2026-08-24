@@ -14,7 +14,9 @@ import { advanceMutationSessionBoundary } from "../lib/mutation-session-boundary
 // reader is somewhere else entirely. These are the writes that hook performs;
 // every one of them has to land on the chat it names.
 const server = vi.hoisted(() => ({
+  activeRuns: new Map<string, { id: string } | null>(),
   cancelled: [] as string[],
+  reads: [] as string[],
   queues: new Map<string, unknown[]>(),
 }));
 
@@ -56,11 +58,15 @@ vi.mock("../features/runs", () => ({
   }),
   cancelRun: vi.fn(),
   enqueueChatTurn: vi.fn(),
-  getActiveChatRun: vi.fn(() => Promise.resolve(null)),
+  getActiveChatRun: vi.fn((chatId: string) => {
+    server.reads.push(`active:${chatId}`);
+    return Promise.resolve(server.activeRuns.get(chatId) ?? null);
+  }),
   getRun: vi.fn(),
-  listQueuedTurns: vi.fn((chatId: string) =>
-    Promise.resolve(server.queues.get(chatId) ?? []),
-  ),
+  listQueuedTurns: vi.fn((chatId: string) => {
+    server.reads.push(`queue:${chatId}`);
+    return Promise.resolve(server.queues.get(chatId) ?? []);
+  }),
   startRun: vi.fn(),
   streamRunEvents: vi.fn(),
 }));
@@ -112,7 +118,12 @@ function queueOf(queryClient: QueryClient, chatId: string): string[] {
 }
 
 /** The turn-actions hook needs the whole workspace; only the cache matters. */
-function turnActions(queryClient: QueryClient, activeChatId: string) {
+function turnActions(
+  queryClient: QueryClient,
+  activeChatId: string,
+  syncPersistedMessages: (chatId: string) => Promise<void> = () =>
+    Promise.resolve(),
+) {
   return useWorkspaceTurnActions({
     activeAgentId: "agent_1",
     activeChatId,
@@ -138,7 +149,7 @@ function turnActions(queryClient: QueryClient, activeChatId: string) {
     setError: () => {},
     setIsDraftingNewChat: () => {},
     setTemporaryNextChat: () => {},
-    syncPersistedMessages: () => Promise.resolve(),
+    syncPersistedMessages,
     t: (key) => key,
     temporaryNextChat: false,
     webSearchEnabled: false,
@@ -172,7 +183,9 @@ function chatActions(queryClient: QueryClient, activeChatId: string) {
 
 describe("a background run settling in another chat", () => {
   beforeEach(() => {
+    server.activeRuns.clear();
     server.cancelled.length = 0;
+    server.reads.length = 0;
     server.queues.clear();
     completeMutationNetworkRevalidation();
     advanceMutationSessionBoundary();
@@ -239,6 +252,22 @@ describe("a background run settling in another chat", () => {
 
     expect(queueOf(queryClient, "chat_b")).toEqual(["turn_b"]);
     expect(queueOf(queryClient, "chat_a")).toEqual(["turn_a"]);
+  });
+
+  it("reconciles a queued turn that finishes while reload recovery reads it", async () => {
+    const queryClient = new QueryClient();
+    const syncPersistedMessages = vi.fn(() => Promise.resolve());
+    server.queues.set("chat_a", []);
+    server.activeRuns.set("chat_a", null);
+
+    await turnActions(
+      queryClient,
+      "chat_a",
+      syncPersistedMessages,
+    ).followQueuedRuns("chat_a");
+
+    expect(server.reads).toEqual(["queue:chat_a", "active:chat_a"]);
+    expect(syncPersistedMessages).toHaveBeenCalledWith("chat_a");
   });
 
   // Cancelling addresses the turn's own chat: sending chat_a's turn id to

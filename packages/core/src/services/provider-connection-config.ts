@@ -20,6 +20,7 @@ export type ProviderConnectionConfigDenial =
   | "provider_field_invalid"
   | "provider_raw_secret_forbidden"
   | "provider_region_outside_residency"
+  | "provider_secret_forbidden"
   | "provider_secret_ref_invalid"
   | "provider_target_unsupported";
 

@@ -141,11 +141,7 @@ export function OrganizationsPanel() {
         ]}
       />
 
-      <DataTable
-        columns={columns}
-        data={rows}
-        empty={t("organizationsNone")}
-      />
+      <DataTable columns={columns} data={rows} empty={t("organizationsNone")} />
 
       <FormDialog
         className="rm-form-dialog--sm"

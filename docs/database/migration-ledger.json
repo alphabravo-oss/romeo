@@ -127,7 +127,7 @@
       "file": "0021_exact_chat_branch_selection.sql",
       "sha256": "cb86d6a437f84f69f2175fba838208d00c549fe782649e4f94349bcf4e74d7b0",
       "phase": "expand",
-      "changesExistingData": false,
+      "changesExistingData": true,
       "restartSafe": true,
       "previousVersionCompatible": true,
       "tenantPurgeValidated": true,
@@ -330,6 +330,258 @@
         "backup-restore": "dist/ci/inventoried-table-sort-indexes-backup-restore.json",
         "tenant-purge": "dist/ci/inventoried-table-sort-indexes-tenant-purge.json",
         "schema-contract": "dist/ci/inventoried-table-sort-indexes-schema-contract.json"
+      }
+    },
+    {
+      "file": "0032_retire_workflows.sql",
+      "sha256": "16c656c9db7064ab63cc26bfd24461f9226ddb3ff5132511a4d5091d5de34c2c",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the retired workflow tables and their historical rows for compatibility, export, legal hold, tenant purge, and backup/restore. Roll back the application while leaving the metadata-only table comments in place; any future table removal requires a separately approved contract migration with zero-use and restore evidence.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/workflow-retirement-upgrade.json",
+        "restart": "dist/ci/workflow-retirement-restart.json",
+        "rollback-or-forward-repair": "dist/ci/workflow-retirement-repair.json",
+        "backup-restore": "dist/ci/workflow-retirement-backup-restore.json",
+        "tenant-purge": "dist/ci/workflow-retirement-tenant-purge.json",
+        "schema-contract": "dist/ci/workflow-retirement-schema-contract.json"
+      }
+    },
+    {
+      "file": "0033_audit_integrity_exports.sql",
+      "sha256": "57fd2d16827882ab03f50a66a2aa2851b8fa2196ed5a173e732decc7dfc64191",
+      "phase": "expand",
+      "changesExistingData": true,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive audit-chain, tenant-head, checkpoint, destination, job, attempt, and receipt tables. Disable the new trust routes and audit-integrity worker use if necessary, preserve every row, and roll forward with corrected verification or delivery logic; previous applications ignore the new tables.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/audit-integrity-exports-upgrade.json",
+        "restart": "dist/ci/audit-integrity-exports-restart.json",
+        "rollback-or-forward-repair": "dist/ci/audit-integrity-exports-repair.json",
+        "backup-restore": "dist/ci/audit-integrity-exports-backup-restore.json",
+        "tenant-purge": "dist/ci/audit-integrity-exports-tenant-purge.json",
+        "schema-contract": "dist/ci/audit-integrity-exports-schema-contract.json"
+      }
+    },
+    {
+      "file": "0034_tenant_rls_worker_leases.sql",
+      "sha256": "8359a848c6c08330a647d776a1aab40f6dc1eb9f91a2948d9195043e4a52e908",
+      "phase": "contract",
+      "changesExistingData": true,
+      "restartSafe": true,
+      "previousVersionCompatible": false,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "destructiveApproval": "R-027 explicitly approves replacing application-only tenant predicates with forced database row-level security. The repair path disables policies without deleting data.",
+      "repairStrategy": "Retain every additive lease column and index. If runtime role rollout fails, disable FORCE/ENABLE RLS for the affected tables, preserve all rows and roles, restore the prior application, then roll forward after correcting role grants or transaction-local tenant context.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/tenant-rls-worker-leases-upgrade.json",
+        "restart": "dist/ci/tenant-rls-worker-leases-restart.json",
+        "rollback-or-forward-repair": "dist/ci/tenant-rls-worker-leases-repair.json",
+        "backup-restore": "dist/ci/tenant-rls-worker-leases-backup-restore.json",
+        "tenant-purge": "dist/ci/tenant-rls-worker-leases-tenant-purge.json",
+        "schema-contract": "dist/ci/tenant-rls-worker-leases-schema-contract.json"
+      }
+    },
+    {
+      "file": "0035_versioned_webhook_signatures.sql",
+      "sha256": "42d4452fcb82ef5986940e82a3e0fbe797754121dece783173354dbde8f3b15d",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the nullable webhook signature key-version column. Previous applications ignore it; roll forward after correcting versioned signing headers or keyring configuration, without rewriting delivery history.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/versioned-webhook-signatures-upgrade.json",
+        "restart": "dist/ci/versioned-webhook-signatures-restart.json",
+        "rollback-or-forward-repair": "dist/ci/versioned-webhook-signatures-repair.json",
+        "backup-restore": "dist/ci/versioned-webhook-signatures-backup-restore.json",
+        "tenant-purge": "dist/ci/versioned-webhook-signatures-tenant-purge.json",
+        "schema-contract": "dist/ci/versioned-webhook-signatures-schema-contract.json"
+      }
+    },
+    {
+      "file": "0036_exact_role_system_settings_rls.sql",
+      "sha256": "65891e63846bcef29fe4aff492253459a83eaa8c5e73d1ba8861a56a7d520024",
+      "phase": "contract",
+      "changesExistingData": true,
+      "restartSafe": true,
+      "previousVersionCompatible": false,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "destructiveApproval": "R-027 explicitly requires exact active-role RLS and structural tenant isolation for system settings. Unknown legacy rows remain coordinator-only global rows instead of being guessed into a tenant scope.",
+      "repairStrategy": "Preserve the additive org_id and scope_org_id columns and all setting rows. If rollout fails, keep request traffic disabled, restore the prior application role grants and policies under operator control, then roll forward with corrected deterministic setting-family backfill; do not remove scope metadata or merge tenant keys.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/exact-role-system-settings-upgrade.json",
+        "restart": "dist/ci/exact-role-system-settings-restart.json",
+        "rollback-or-forward-repair": "dist/ci/exact-role-system-settings-repair.json",
+        "backup-restore": "dist/ci/exact-role-system-settings-backup-restore.json",
+        "tenant-purge": "dist/ci/exact-role-system-settings-tenant-purge.json",
+        "schema-contract": "dist/ci/exact-role-system-settings-schema-contract.json"
+      }
+    },
+    {
+      "file": "0037_normalized_server_table_authority.sql",
+      "sha256": "f100754199d6efdd0156fa6c46a962e37241bf4f4a97cd9fa80bcf85b4ce4996",
+      "phase": "contract",
+      "changesExistingData": true,
+      "restartSafe": true,
+      "previousVersionCompatible": false,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "destructiveApproval": "R-062 explicitly replaces generic system-settings saved-view blobs with normalized tenant-owned saved-view records. Only successfully migrated legacy table-view keys are retired; unrelated settings and export artifacts are preserved.",
+      "repairStrategy": "Retain the normalized saved-view table, tenant composite keys, and migrated records. If rollout fails, disable saved-view request traffic, restore compatible legacy view documents from the pre-deployment backup without removing normalized rows, and roll forward after correcting migration validation or application compatibility.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/normalized-server-table-authority-upgrade.json",
+        "restart": "dist/ci/normalized-server-table-authority-restart.json",
+        "rollback-or-forward-repair": "dist/ci/normalized-server-table-authority-repair.json",
+        "backup-restore": "dist/ci/normalized-server-table-authority-backup-restore.json",
+        "tenant-purge": "dist/ci/normalized-server-table-authority-tenant-purge.json",
+        "schema-contract": "dist/ci/normalized-server-table-authority-schema-contract.json"
+      }
+    },
+    {
+      "file": "0038_native_table_page_indexes.sql",
+      "sha256": "e05b94a7e19f45538e434d00acb880b61f9114e2c548256e73faafc6c55b76f9",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive table-page keyset and trigram indexes. Previous applications ignore them; if index construction or planner validation fails, drop only the affected new index under operator control and roll forward with a corrected concurrent index migration without changing table data.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/native-table-page-indexes-upgrade.json",
+        "restart": "dist/ci/native-table-page-indexes-restart.json",
+        "rollback-or-forward-repair": "dist/ci/native-table-page-indexes-repair.json",
+        "backup-restore": "dist/ci/native-table-page-indexes-backup-restore.json",
+        "tenant-purge": "dist/ci/native-table-page-indexes-tenant-purge.json",
+        "schema-contract": "dist/ci/native-table-page-indexes-schema-contract.json"
+      }
+    },
+    {
+      "file": "0039_normalized_content_policy_approvals.sql",
+      "sha256": "13802e66f14c6b6b2f3efbbf52346d1e033bfbd10fc1eb8689035b1373a22708",
+      "phase": "contract",
+      "changesExistingData": true,
+      "restartSafe": true,
+      "previousVersionCompatible": false,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "destructiveApproval": "R-129 explicitly replaces lost-update-prone generic content-policy decision and approval arrays with normalized tenant-owned records. The migration retires only fully normalized legacy keys, converts legacy pending approvals to inert expired history, and fails closed on malformed, conflicting, or orphan records.",
+      "repairStrategy": "Preserve the normalized decision and approval tables and all source system-setting rows when validation fails. Repair malformed or orphan legacy records from the pre-deployment backup under operator review, rerun the transactional migration, and roll forward; do not bypass validation or fabricate executable run bindings.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/normalized-content-policy-approvals-upgrade.json",
+        "restart": "dist/ci/normalized-content-policy-approvals-restart.json",
+        "rollback-or-forward-repair": "dist/ci/normalized-content-policy-approvals-repair.json",
+        "backup-restore": "dist/ci/normalized-content-policy-approvals-backup-restore.json",
+        "tenant-purge": "dist/ci/normalized-content-policy-approvals-tenant-purge.json",
+        "schema-contract": "dist/ci/normalized-content-policy-approvals-schema-contract.json"
+      }
+    },
+    {
+      "file": "0040_support_table_projection_indexes.sql",
+      "sha256": "600c3974699af63153857a5214548c97594ad3d7526e049901dbe8aa754cf668",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive partial indexes for audit-derived support table projections. Previous applications ignore them; if planner validation fails, disable only the support table-page endpoint and roll forward with a corrected additive index migration without changing audit or session data.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/support-table-projection-indexes-upgrade.json",
+        "restart": "dist/ci/support-table-projection-indexes-restart.json",
+        "rollback-or-forward-repair": "dist/ci/support-table-projection-indexes-repair.json",
+        "backup-restore": "dist/ci/support-table-projection-indexes-backup-restore.json",
+        "tenant-purge": "dist/ci/support-table-projection-indexes-tenant-purge.json",
+        "schema-contract": "dist/ci/support-table-projection-indexes-schema-contract.json"
+      }
+    },
+    {
+      "file": "0041_normalized_governance_export_jobs.sql",
+      "sha256": "fc9c4b413c967bbb27141b51a4271004652928659b6a82f4bfc7205dddff5c7e",
+      "phase": "contract",
+      "changesExistingData": true,
+      "restartSafe": true,
+      "previousVersionCompatible": false,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "destructiveApproval": "R-131 replaces synchronous whole-document governance export packages and generic background-job/system-setting registries with normalized, tenant-scoped durable jobs and object-store artifact manifests. Valid legacy package summaries are migrated before only the retired registry rows are removed; malformed or conflicting legacy rows fail the transaction closed.",
+      "repairStrategy": "Preserve the pre-deployment database and object-store backup if legacy validation fails. Repair malformed or conflicting legacy package summaries under governance review, restore any missing legacy artifact objects, rerun the transactional migration, and roll forward; do not skip validation or invent artifact hashes, sizes, or tenant scope.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/normalized-governance-export-jobs-upgrade.json",
+        "restart": "dist/ci/normalized-governance-export-jobs-restart.json",
+        "rollback-or-forward-repair": "dist/ci/normalized-governance-export-jobs-repair.json",
+        "backup-restore": "dist/ci/normalized-governance-export-jobs-backup-restore.json",
+        "tenant-purge": "dist/ci/normalized-governance-export-jobs-tenant-purge.json",
+        "schema-contract": "dist/ci/normalized-governance-export-jobs-schema-contract.json"
+      }
+    },
+    {
+      "file": "0042_file_lifecycle_operational_index.sql",
+      "sha256": "472b5fb0752487c1980a803739d0a202fda686799eeb52b3396cb94d0e6eef0c",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive tenant/status/attempt/age index used by bounded file-lifecycle queue aggregates. Previous applications ignore it; if planner validation fails, drop only this new index under operator control and roll forward with a corrected additive index without changing file records or object bytes.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/file-lifecycle-operational-index-upgrade.json",
+        "restart": "dist/ci/file-lifecycle-operational-index-restart.json",
+        "rollback-or-forward-repair": "dist/ci/file-lifecycle-operational-index-repair.json",
+        "backup-restore": "dist/ci/file-lifecycle-operational-index-backup-restore.json",
+        "tenant-purge": "dist/ci/file-lifecycle-operational-index-tenant-purge.json",
+        "schema-contract": "dist/ci/file-lifecycle-operational-index-schema-contract.json"
+      }
+    },
+    {
+      "file": "0043_content_deletion_outbox.sql",
+      "sha256": "314710fbfa6345878e7f3f2e5453f5079df9c246197332bf13304fa7af8693a7",
+      "phase": "expand",
+      "changesExistingData": true,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "The normalized tenant-scoped outbox is additive and deletion intent remains pending until every object, vector, relational, and audit checkpoint is verified. If deployment validation fails, keep the table and pending rows, correct the worker or policy, and roll forward; never mark an operation complete or delete the outbox to bypass verification.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/content-deletion-outbox-upgrade.json",
+        "restart": "dist/ci/content-deletion-outbox-restart.json",
+        "rollback-or-forward-repair": "dist/ci/content-deletion-outbox-repair.json",
+        "backup-restore": "dist/ci/content-deletion-outbox-backup-restore.json",
+        "tenant-purge": "dist/ci/content-deletion-outbox-tenant-purge.json",
+        "schema-contract": "dist/ci/content-deletion-outbox-schema-contract.json"
+      }
+    },
+    {
+      "file": "0044_background_job_claim_indexes.sql",
+      "sha256": "189f4fa396f188072dc7df5ffffe72f8e74f3a10ebdc1cb7c8334f3cf186ebdd",
+      "phase": "expand",
+      "changesExistingData": false,
+      "restartSafe": true,
+      "previousVersionCompatible": true,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "repairStrategy": "Retain the additive compound indexes used by bounded background-job queries and atomic lease claims. Previous applications ignore them; if planner validation fails, drop only the affected index under operator control and roll forward with a corrected additive index without mutating job rows.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/background-job-claim-indexes-upgrade.json",
+        "restart": "dist/ci/background-job-claim-indexes-restart.json",
+        "rollback-or-forward-repair": "dist/ci/background-job-claim-indexes-repair.json",
+        "backup-restore": "dist/ci/background-job-claim-indexes-backup-restore.json",
+        "tenant-purge": "dist/ci/background-job-claim-indexes-tenant-purge.json",
+        "schema-contract": "dist/ci/background-job-claim-indexes-schema-contract.json"
       }
     }
   ],

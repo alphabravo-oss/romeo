@@ -2,14 +2,13 @@ import { Button } from "@romeo/ui";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import {
-  markNotificationReadMutationOptions,
-} from "../features";
+import { markNotificationReadMutationOptions } from "../features/notifications";
 import { toast } from "../lib/toast";
 import type { UserNotification } from "../features/notifications";
 import { PanelState } from "../lib/panel-state";
 import { LocalizedDateTime } from "../lib/locale-format";
 import { useLocale } from "../lib/i18n";
+import { useEventCallback } from "../lib/use-event-callback";
 import { Section, StatRow } from "./console";
 import { type ColumnDef, DataTable, createColumnHelper } from "./DataTable";
 import { useInventoriedServerTable } from "../lib/inventoried-server-table";
@@ -18,7 +17,7 @@ const col = createColumnHelper<UserNotification>();
 
 export function NotificationPanel() {
   const { t } = useLocale();
-  const table = useInventoriedServerTable<UserNotification>("notifications");
+  const table = useInventoriedServerTable("notifications");
   const readMutation = useMutation(markNotificationReadMutationOptions());
 
   async function handleRead(notificationId: string) {
@@ -29,6 +28,8 @@ export function NotificationPanel() {
       toast(t("couldNotMarkRead"), "error");
     }
   }
+
+  const onRead = useEventCallback(handleRead);
 
   const columns = useMemo<ColumnDef<UserNotification, any>[]>(
     () => [
@@ -69,7 +70,7 @@ export function NotificationPanel() {
             disabled={
               c.row.original.readAt !== undefined || readMutation.isPending
             }
-            onClick={() => void handleRead(c.row.original.id)}
+            onClick={() => void onRead(c.row.original.id)}
             type="button"
           >
             {c.row.original.readAt ? t("read") : t("markRead")}
@@ -77,8 +78,7 @@ export function NotificationPanel() {
         ),
       }),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [readMutation.isPending, t],
+    [onRead, readMutation.isPending, t],
   );
 
   return (
@@ -97,12 +97,13 @@ export function NotificationPanel() {
           <div className="grid gap-4">
             <StatRow
               items={[
-                { label: t("total"), value: table.estimatedTotal },
+                {
+                  label: t("total"),
+                  value: table.summary.total ?? table.estimatedTotal,
+                },
                 {
                   label: t("unread"),
-                  value: table.rows.filter(
-                    (notification) => notification.readAt === undefined,
-                  ).length,
+                  value: table.summary.unreadTotal ?? 0,
                 },
               ]}
             />

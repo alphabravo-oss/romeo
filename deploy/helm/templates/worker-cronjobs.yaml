@@ -27,8 +27,8 @@ spec:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: data-connector-sync
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["/bin/sh", "-lc"]
               args:
                 - |
@@ -51,66 +51,6 @@ spec:
                   mountPath: /tmp
               resources:
                 {{- toYaml .Values.workers.dataConnectorSync.resources | nindent 16 }}
-          volumes:
-            - name: tmp
-              emptyDir: {}
-{{- end }}
-{{- if .Values.workers.workflowResume.enabled }}
----
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: {{ include "romeo.fullname" . }}-workflow-resume
-  labels:
-    {{- include "romeo.labels" . | nindent 4 }}
-    app.kubernetes.io/component: workflow-resume
-spec:
-  schedule: {{ .Values.workers.workflowResume.schedule | quote }}
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 5
-  jobTemplate:
-    spec:
-      backoffLimit: 1
-      activeDeadlineSeconds: 600
-      template:
-        metadata:
-          labels:
-            {{- include "romeo.selectorLabels" . | nindent 12 }}
-            app.kubernetes.io/component: workflow-resume
-        spec:
-          restartPolicy: Never
-          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
-          securityContext:
-            {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
-          containers:
-            - name: workflow-resume
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
-              command: ["/bin/sh", "-lc"]
-              args:
-                - |
-                  set -eu
-                  args="--once --max-workflows ${WORKFLOW_RESUME_MAX_WORKFLOWS:-10} --max-runs ${WORKFLOW_RESUME_MAX_RUNS:-10}"
-                  if [ -n "${WORKFLOW_RESUME_WORKSPACE_ID:-}" ]; then
-                    args="$args --workspace ${WORKFLOW_RESUME_WORKSPACE_ID}"
-                  fi
-                  pnpm --filter @romeo/cli start -- workers workflow-resume $args
-              env:
-                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
-                - name: WORKFLOW_RESUME_MAX_WORKFLOWS
-                  value: {{ .Values.workers.workflowResume.maxWorkflows | quote }}
-                - name: WORKFLOW_RESUME_MAX_RUNS
-                  value: {{ .Values.workers.workflowResume.maxRuns | quote }}
-                - name: WORKFLOW_RESUME_WORKSPACE_ID
-                  value: {{ .Values.workers.workflowResume.workspaceId | quote }}
-              securityContext:
-                {{- toYaml .Values.workers.securityContext | nindent 16 }}
-              volumeMounts:
-                - name: tmp
-                  mountPath: /tmp
-              resources:
-                {{- toYaml .Values.workers.workflowResume.resources | nindent 16 }}
           volumes:
             - name: tmp
               emptyDir: {}
@@ -145,8 +85,8 @@ spec:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: webhook-retry
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "webhook-retry", "--once"]
               env:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
@@ -191,8 +131,8 @@ spec:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: notification-retry
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "notification-retry", "--once"]
               env:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
@@ -237,8 +177,8 @@ spec:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: retention-enforce
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "retention-enforce", "--once"]
               env:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
@@ -283,8 +223,8 @@ spec:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: billing-entitlement-reconcile
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "billing-entitlement-reconcile", "--once"]
               env:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
@@ -329,8 +269,8 @@ spec:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: billing-lifecycle-enforce
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "billing-lifecycle-enforce", "--once"]
               env:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}
@@ -370,13 +310,13 @@ spec:
             app.kubernetes.io/component: tool-dispatch
         spec:
           restartPolicy: Never
-          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          serviceAccountName: {{ include "romeo.identityServiceAccountName" (dict "root" . "identity" .Values.workers.toolDispatch.identity "component" "tool-dispatch") }}
           securityContext:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: tool-dispatch
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["/bin/sh", "-lc"]
               args:
                 - |
@@ -392,7 +332,7 @@ spec:
                   fi
                   pnpm --filter @romeo/cli start -- workers tool-dispatch $args
               env:
-                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+                {{- include "romeo.workerIdentityEnv" (dict "root" . "identity" .Values.workers.toolDispatch.identity "tokenEnv" "TOOL_DISPATCH_BROKER_TOKEN") | nindent 16 }}
                 - name: TOOL_DISPATCH_MAX_JOBS
                   value: {{ .Values.workers.toolDispatch.maxJobs | quote }}
                 - name: TOOL_DISPATCH_LEASE_SECONDS
@@ -427,43 +367,12 @@ spec:
                   value: {{ .Values.env.AZURE_KEY_VAULT_URL | quote }}
                 - name: AZURE_KEY_VAULT_TIMEOUT_MS
                   value: {{ .Values.env.AZURE_KEY_VAULT_TIMEOUT_MS | quote }}
-                {{- if or .Values.secrets.existingSecret .Values.secrets.create }}
+                {{- if .Values.workers.toolDispatch.resolverCredentialSecret.name }}
                 - name: VAULT_TOKEN
                   valueFrom:
                     secretKeyRef:
-                      name: {{ include "romeo.secretName" . }}
-                      key: VAULT_TOKEN
-                      optional: true
-                - name: AWS_ACCESS_KEY_ID
-                  valueFrom:
-                    secretKeyRef:
-                      name: {{ include "romeo.secretName" . }}
-                      key: AWS_ACCESS_KEY_ID
-                      optional: true
-                - name: AWS_SECRET_ACCESS_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: {{ include "romeo.secretName" . }}
-                      key: AWS_SECRET_ACCESS_KEY
-                      optional: true
-                - name: AWS_SESSION_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: {{ include "romeo.secretName" . }}
-                      key: AWS_SESSION_TOKEN
-                      optional: true
-                - name: GCP_ACCESS_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: {{ include "romeo.secretName" . }}
-                      key: GCP_ACCESS_TOKEN
-                      optional: true
-                - name: AZURE_ACCESS_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: {{ include "romeo.secretName" . }}
-                      key: AZURE_ACCESS_TOKEN
-                      optional: true
+                      name: {{ .Values.workers.toolDispatch.resolverCredentialSecret.name | quote }}
+                      key: {{ .Values.workers.toolDispatch.resolverCredentialSecret.key | quote }}
                 {{- end }}
               securityContext:
                 {{- toYaml .Values.workers.securityContext | nindent 16 }}
@@ -518,20 +427,20 @@ spec:
             app.kubernetes.io/component: browser-automation
         spec:
           restartPolicy: Never
-          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          serviceAccountName: {{ include "romeo.identityServiceAccountName" (dict "root" . "identity" .Values.workers.browserAutomation.identity "component" "browser-automation") }}
           securityContext:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: browser-automation
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["/bin/sh", "-lc"]
               args:
                 - |
                   set -eu
                   pnpm --filter @romeo/cli start -- workers browser-automation --once --runner-url "${BROWSER_AUTOMATION_RUNNER_URL}" --max-jobs "${BROWSER_AUTOMATION_MAX_JOBS:-5}" --lease-seconds "${BROWSER_AUTOMATION_LEASE_SECONDS:-300}" --timeout-ms "${BROWSER_AUTOMATION_TIMEOUT_MS:-30000}" --max-bytes "${BROWSER_AUTOMATION_MAX_BYTES:-20000}"
               env:
-                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+                {{- include "romeo.workerIdentityEnv" (dict "root" . "identity" .Values.workers.browserAutomation.identity "tokenEnv" "BROWSER_AUTOMATION_BROKER_TOKEN") | nindent 16 }}
                 - name: BROWSER_AUTOMATION_RUNNER_URL
                   value: {{ required "workers.browserAutomation.runnerUrl is required when workers.browserAutomation.enabled=true" .Values.workers.browserAutomation.runnerUrl | quote }}
                 - name: BROWSER_AUTOMATION_MAX_JOBS
@@ -578,20 +487,20 @@ spec:
             app.kubernetes.io/component: knowledge-extraction
         spec:
           restartPolicy: Never
-          serviceAccountName: {{ include "romeo.workerServiceAccountName" . }}
+          serviceAccountName: {{ include "romeo.identityServiceAccountName" (dict "root" . "identity" .Values.workers.knowledgeExtraction.identity "component" "knowledge-extraction") }}
           securityContext:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: knowledge-extraction
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["/bin/sh", "-lc"]
               args:
                 - |
                   set -eu
                   pnpm --filter @romeo/cli start -- workers knowledge-extraction --kb "${KNOWLEDGE_EXTRACTION_KB_ID}" --once --max-sources "${KNOWLEDGE_EXTRACTION_MAX_SOURCES:-10}"
               env:
-                {{- include "romeo.workerBaseEnv" . | nindent 16 }}
+                {{- include "romeo.workerIdentityEnv" (dict "root" . "identity" .Values.workers.knowledgeExtraction.identity "tokenEnv" "KNOWLEDGE_EXTRACTION_BROKER_TOKEN") | nindent 16 }}
                 - name: KNOWLEDGE_EXTRACTION_KB_ID
                   value: {{ .Values.workers.knowledgeExtraction.knowledgeBaseId | quote }}
                 - name: KNOWLEDGE_EXTRACTION_MAX_SOURCES
@@ -638,8 +547,8 @@ spec:
             {{- toYaml .Values.workers.podSecurityContext | nindent 12 }}
           containers:
             - name: voice-catalog-sync
-              image: {{ include "romeo.workerImage" . | quote }}
-              imagePullPolicy: {{ include "romeo.workerPullPolicy" . }}
+              image: {{ include "romeo.opsImage" . | quote }}
+              imagePullPolicy: {{ include "romeo.opsPullPolicy" . }}
               command: ["pnpm", "--filter", "@romeo/cli", "start", "--", "workers", "voice-catalog-sync", "--once"]
               env:
                 {{- include "romeo.workerBaseEnv" . | nindent 16 }}

@@ -6,6 +6,13 @@ import {
   kubectl,
   kubectlJson,
 } from "./lib/kubernetes-smoke-support.mjs";
+import {
+  assertNoSecretArgv,
+  readSecretInput,
+  splitSecretLines,
+} from "./lib/secret-input.mjs";
+
+assertNoSecretArgv();
 
 const outputPath = argValue("--output");
 const dryRun = hasFlag("--dry-run");
@@ -23,10 +30,14 @@ const allowMissingJobs = hasFlag("--allow-missing-jobs");
 const allowLogReadFailures = hasFlag("--allow-log-read-failures");
 
 const sentinelGroups = {
-  prompt: repeatedArgValues("--prompt-sentinel"),
-  providerPayload: repeatedArgValues("--provider-payload-sentinel"),
-  workerPayload: repeatedArgValues("--worker-payload-sentinel"),
-  secret: repeatedArgValues("--secret-sentinel"),
+  prompt: secretSentinels("KUBERNETES_LOG_REDACTION_PROMPT_SENTINELS"),
+  providerPayload: secretSentinels(
+    "KUBERNETES_LOG_REDACTION_PROVIDER_PAYLOAD_SENTINELS",
+  ),
+  workerPayload: secretSentinels(
+    "KUBERNETES_LOG_REDACTION_WORKER_PAYLOAD_SENTINELS",
+  ),
+  secret: secretSentinels("KUBERNETES_LOG_REDACTION_SECRET_SENTINELS"),
 };
 
 const requiredSentinelGroups = ["prompt", "providerPayload", "workerPayload"];
@@ -43,7 +54,7 @@ if (namespace === undefined || namespace.length === 0) {
 for (const group of requiredSentinelGroups) {
   if (sentinelGroups[group].length === 0) {
     throw new Error(
-      `${sentinelArgName(group)} is required for live Kubernetes log-redaction evidence.`,
+      `${sentinelEnvironmentName(group)} or its _FILE variant is required for live Kubernetes log-redaction evidence.`,
     );
   }
 }
@@ -239,29 +250,21 @@ function argValue(name) {
   return process.argv[index + 1];
 }
 
-function repeatedArgValues(name) {
-  const values = [];
-  for (let index = 0; index < process.argv.length; index += 1) {
-    if (process.argv[index] === name) {
-      const value = process.argv[index + 1];
-      if (typeof value !== "string" || value.length === 0) {
-        throw new Error(`${name} requires a non-empty value.`);
-      }
-      values.push(value);
-    }
-  }
-  return values;
-}
-
 function hasFlag(name) {
   return process.argv.includes(name);
 }
 
-function sentinelArgName(group) {
-  if (group === "prompt") return "--prompt-sentinel";
-  if (group === "providerPayload") return "--provider-payload-sentinel";
-  if (group === "workerPayload") return "--worker-payload-sentinel";
-  return "--secret-sentinel";
+function secretSentinels(environment) {
+  return splitSecretLines(readSecretInput({ environment }));
+}
+
+function sentinelEnvironmentName(group) {
+  if (group === "prompt") return "KUBERNETES_LOG_REDACTION_PROMPT_SENTINELS";
+  if (group === "providerPayload")
+    return "KUBERNETES_LOG_REDACTION_PROVIDER_PAYLOAD_SENTINELS";
+  if (group === "workerPayload")
+    return "KUBERNETES_LOG_REDACTION_WORKER_PAYLOAD_SENTINELS";
+  return "KUBERNETES_LOG_REDACTION_SECRET_SENTINELS";
 }
 
 function sentinelDisplayName(group) {

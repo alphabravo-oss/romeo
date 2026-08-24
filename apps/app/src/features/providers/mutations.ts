@@ -112,7 +112,11 @@ export async function syncProviderModels(
     path: { providerId },
     throwOnError: true,
   });
-  return response.data.data;
+  const data = response.data.data;
+  if (!Array.isArray(data)) {
+    throw new Error("Provider catalog sync must complete inline.");
+  }
+  return data;
 }
 
 export async function pullOllamaProviderModel(input: {
@@ -130,11 +134,13 @@ export async function pullOllamaProviderModel(input: {
 
 export async function deleteOllamaProviderModel(input: {
   model: string;
+  modelId: string;
   providerId: string;
 }): Promise<OllamaDeleteResult> {
   configureBrowserApiClients();
   const response = await providersDeleteOllamaModel({
-    path: input,
+    path: { model: input.model, providerId: input.providerId },
+    query: { modelId: input.modelId },
     throwOnError: true,
   });
   return response.data.data;

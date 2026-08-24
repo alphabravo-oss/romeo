@@ -109,6 +109,11 @@ describe("provider usage normalization", () => {
       normalizeProviderTokenUsage({ usage: { model: "gpt-compatible" } }),
     ).toBeUndefined();
     expect(normalizeProviderTokenUsage(undefined)).toBeUndefined();
+    expect(
+      normalizeProviderTokenUsage({
+        usage: { prompt_tokens: Number.MAX_SAFE_INTEGER + 1 },
+      }),
+    ).toBeUndefined();
   });
 
   it("drops an impossible reasoning component that exceeds reported output", () => {

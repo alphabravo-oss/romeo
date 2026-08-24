@@ -118,6 +118,35 @@ describe("provider error normalization", () => {
     );
   });
 
+  it("maps bounded secret-egress transport failures to retryable provider failures", () => {
+    const timeout = normalizeProviderError(
+      "openai-compatible",
+      Object.assign(new Error("PRIVATE_EGRESS_TIMEOUT_DETAIL"), {
+        code: "secret_egress_timeout",
+      }),
+      "chat",
+    );
+    const unavailable = normalizeProviderError(
+      "openai-compatible",
+      Object.assign(new Error("PRIVATE_EGRESS_NETWORK_DETAIL"), {
+        code: "secret_egress_request_failed",
+      }),
+      "embeddings",
+    );
+
+    expect(timeout).toMatchObject({
+      category: "timeout",
+      errorCode: "provider_timeout",
+      retryable: true,
+    });
+    expect(unavailable).toMatchObject({
+      category: "unavailable",
+      errorCode: "provider_unavailable",
+      retryable: true,
+    });
+    expect(serialized([timeout, unavailable])).not.toContain("PRIVATE_EGRESS");
+  });
+
   it("drops malicious provider bodies, URLs, headers, credentials, prompts, and raw exception text", () => {
     const secret = "SENTINEL_PROVIDER_SECRET_927";
     const malicious = {

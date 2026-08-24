@@ -91,19 +91,3 @@ export async function deleteWhere(
     .returning({ deleted: sql<number>`1` });
   counts[label] = deleted.length;
 }
-
-export function orgScopedSystemSettingKeys(orgId: string): string[] {
-  const encodedOrgId = encodeURIComponent(orgId);
-  return [
-    `abuse_controls.org.v1:${orgId}`,
-    `auth_provider_settings.org.v1:${orgId}`,
-    `governance.data_export_packages.${encodedOrgId}`,
-    `notification_policy.org.v1:${orgId}`,
-    `rag_policy.change_request.org.v1:${orgId}`,
-    `rag_policy.org.v1:${orgId}`,
-    `tenant_lifecycle.deletion_finalization_evidence.v1:${orgId}`,
-    `tenant_lifecycle.deletion_request.v1:${orgId}`,
-    `web_search.org.v1:${orgId}`,
-    `web_search.health.v1:${orgId}`,
-  ];
-}

@@ -1,5 +1,6 @@
 import type { Organization } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
+import { iterateBackgroundJobs } from "./background-job-query";
 import { listRegisteredDataExportPackages } from "./data-export-package-registry";
 
 export const tenantDeletionEvidenceControls = [
@@ -233,15 +234,18 @@ export async function recordTenantDeletionFinalizationEvidence(input: {
   const controls = [...byControl.values()].sort((left, right) =>
     left.control.localeCompare(right.control),
   );
-  await input.repository.upsertSystemSetting({
-    key: tenantDeletionFinalizationEvidenceKey(input.orgId),
-    updatedAt: input.reviewedAt,
-    value: {
-      schemaVersion: "romeo.tenant-deletion-finalization-evidence.v1",
-      orgId: input.orgId,
-      controls,
+  await input.repository.upsertSystemSetting(
+    {
+      key: tenantDeletionFinalizationEvidenceKey(input.orgId),
+      updatedAt: input.reviewedAt,
+      value: {
+        schemaVersion: "romeo.tenant-deletion-finalization-evidence.v1",
+        orgId: input.orgId,
+        controls,
+      },
     },
-  });
+    input.orgId,
+  );
   return controls;
 }
 
@@ -251,6 +255,7 @@ export async function readTenantDeletionFinalizationEvidence(
 ): Promise<TenantDeletionEvidenceSummary[]> {
   const setting = await repository.getSystemSetting(
     tenantDeletionFinalizationEvidenceKey(orgId),
+    orgId,
   );
   if (setting === undefined) return [];
   return parseTenantDeletionFinalizationEvidence(setting.value, orgId);
@@ -280,7 +285,7 @@ async function tenantDeletionCounts(
   repository: RomeoRepository,
   orgId: string,
 ): Promise<TenantDeletionFinalizationPreview["counts"]> {
-  const [users, workspaces, serviceAccounts, apiKeys, sessions, jobs, audits] =
+  const [users, workspaces, serviceAccounts, apiKeys, sessions, audits] =
     await Promise.all([
       repository.listUsers(orgId),
       repository.listWorkspaces(orgId),
@@ -291,9 +296,11 @@ async function tenantDeletionCounts(
           repository.listUserSessions(orgId, user.id),
         ),
       ),
-      repository.listBackgroundJobs(orgId),
       repository.listAuditLogs(orgId),
     ]);
+  let backgroundJobCount = 0;
+  for await (const _job of iterateBackgroundJobs(repository, orgId))
+    backgroundJobCount += 1;
   const files = await repository.listFileObjects(orgId);
   const dataExportPackages = await listRegisteredDataExportPackages({
     repository,
@@ -328,7 +335,7 @@ async function tenantDeletionCounts(
       .flat()
       .filter((session) => session.revokedAt === undefined).length,
     auditLogs: audits.length,
-    backgroundJobs: jobs.length,
+    backgroundJobs: backgroundJobCount,
     dataExportPackages: dataExportPackages.packages.length,
     fileObjects: files.filter((file) => file.status !== "deleted").length,
     knowledgeBases,

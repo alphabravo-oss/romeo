@@ -30,14 +30,7 @@ function delegatedOAuthTestTokenContext(connectionId: string) {
 }
 
 function connectorEnv(
-  driver:
-    | "website-fetch"
-    | "github-fetch"
-    | "s3-fetch"
-    | "notion-fetch"
-    | "linear-fetch"
-    | "slack-fetch"
-    | "managed-fetch",
+  driver: "website-fetch" | "github-fetch" | "s3-fetch" | "managed-fetch",
   overrides: Record<string, string> = {},
 ) {
   return testEnv({ DATA_CONNECTOR_EXECUTION_DRIVER: driver, ...overrides });
@@ -80,26 +73,14 @@ describe("data connector API", () => {
     const website = catalog.data.connectors.find(
       (entry: { type: string }) => entry.type === "website",
     );
+    const rss = catalog.data.connectors.find(
+      (entry: { type: string }) => entry.type === "rss",
+    );
     const github = catalog.data.connectors.find(
       (entry: { type: string }) => entry.type === "github",
     );
     const s3 = catalog.data.connectors.find(
       (entry: { type: string }) => entry.type === "s3",
-    );
-    const confluence = catalog.data.connectors.find(
-      (entry: { type: string }) => entry.type === "confluence",
-    );
-    const jira = catalog.data.connectors.find(
-      (entry: { type: string }) => entry.type === "jira",
-    );
-    const notion = catalog.data.connectors.find(
-      (entry: { type: string }) => entry.type === "notion",
-    );
-    const linear = catalog.data.connectors.find(
-      (entry: { type: string }) => entry.type === "linear",
-    );
-    const slack = catalog.data.connectors.find(
-      (entry: { type: string }) => entry.type === "slack",
     );
 
     expect(response.status).toBe(200);
@@ -114,16 +95,7 @@ describe("data connector API", () => {
       managedSecretConfigured: true,
       externalValueResolverConfigured: true,
     });
-    expect(website.runtime.syncEnabled).toBe(true);
-    expect(website.runtime.blockedReasons).toEqual([]);
-    for (const connector of [
-      website,
-      confluence,
-      jira,
-      notion,
-      linear,
-      slack,
-    ]) {
+    for (const connector of [website, rss]) {
       expect(connector.runtime.syncEnabled).toBe(true);
       expect(connector.runtime.blockedReasons).toEqual([]);
       expect(connector.egress).toMatchObject({
@@ -133,38 +105,13 @@ describe("data connector API", () => {
       });
     }
     expect(github.runtime.credentialPosture).toMatchObject({
-      deployment_secret: true,
+      deployment_secret: false,
       connector_secret_ref: true,
       delegated_oauth: true,
     });
     expect(s3.runtime.credentialPosture).toMatchObject({
-      deployment_secret: true,
-      connector_secret_ref: true,
-    });
-    expect(confluence.runtime.credentialPosture).toMatchObject({
       deployment_secret: false,
       connector_secret_ref: true,
-      delegated_oauth: false,
-    });
-    expect(jira.runtime.credentialPosture).toMatchObject({
-      deployment_secret: false,
-      connector_secret_ref: true,
-      delegated_oauth: false,
-    });
-    expect(notion.runtime.credentialPosture).toMatchObject({
-      deployment_secret: false,
-      connector_secret_ref: true,
-      delegated_oauth: false,
-    });
-    expect(linear.runtime.credentialPosture).toMatchObject({
-      deployment_secret: false,
-      connector_secret_ref: true,
-      delegated_oauth: false,
-    });
-    expect(slack.runtime.credentialPosture).toMatchObject({
-      deployment_secret: false,
-      connector_secret_ref: true,
-      delegated_oauth: false,
     });
     expect(body).not.toContain("secret-github-token-value");
     expect(body).not.toContain("secret-github-client-secret");
@@ -552,7 +499,14 @@ describe("data connector API", () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       env: connectorEnv("github-fetch"),
       dataConnectorExecutor: new GitHubDataConnectorExecutor({
-        token: "github-token",
+        secretResolver: {
+          check: async () => ({ available: true, scheme: "env" }),
+          resolveValue: async () => ({
+            available: true,
+            scheme: "env",
+            value: "github-token",
+          }),
+        },
         fetchImpl: async (input, init) => {
           fetches.push({ url: String(input), headers: init?.headers });
           if (String(input).includes("/git/trees/main")) {
@@ -593,6 +547,7 @@ describe("data connector API", () => {
           branch: "main",
           pathPrefix: "/docs/",
           maxItems: 5,
+          secretRef: "env://GITHUB_CONNECTOR_TOKEN",
         },
       }),
     });
@@ -654,7 +609,14 @@ describe("data connector API", () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       env: connectorEnv("github-fetch"),
       dataConnectorExecutor: new GitHubDataConnectorExecutor({
-        token: "github-rate-limit-token",
+        secretResolver: {
+          check: async () => ({ available: true, scheme: "env" }),
+          resolveValue: async () => ({
+            available: true,
+            scheme: "env",
+            value: "github-rate-limit-token",
+          }),
+        },
         retryAttempts: 1,
         retryBackoffMs: 0,
         fetchImpl: async (input, init) => {
@@ -707,6 +669,7 @@ describe("data connector API", () => {
           branch: "main",
           pathPrefix: "docs",
           maxItems: 5,
+          secretRef: "env://GITHUB_CONNECTOR_TOKEN",
         },
       }),
     });
@@ -750,7 +713,6 @@ describe("data connector API", () => {
     const api = createRomeoApi(new InMemoryRomeoRepository(), {
       env: connectorEnv("github-fetch"),
       dataConnectorExecutor: new GitHubDataConnectorExecutor({
-        token: "deployment-github-token",
         secretResolver: new EnvironmentSecretResolver({
           GITHUB_CONNECTOR_TOKEN: "connector-github-token",
         }),
@@ -1864,7 +1826,11 @@ describe("data connector API", () => {
         knowledgeBaseId: "kb_default",
         type: "s3",
         name: "S3 binary",
-        config: { bucket: "romeo-docs", prefix: "handbook/" },
+        config: {
+          bucket: "romeo-docs",
+          prefix: "handbook/",
+          secretRef: "env://S3_CONNECTOR_TOKEN",
+        },
       }),
     });
     const created = await createResponse.json();

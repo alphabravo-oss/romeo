@@ -1,6 +1,7 @@
 import type { RomeoEnv } from "@romeo/config";
 
 import type { RomeoRepository } from "../domain/repository";
+import { isPrivateNetworkHost } from "./network-host-policy";
 
 export type SsoConfigurationSource = "database" | "environment";
 
@@ -89,12 +90,13 @@ export function normalizeIssuer(issuer: string): string {
 
 export function assertTrustedMetadataUrl(value: string): void {
   const url = new URL(value);
-  if (url.protocol === "https:") return;
   if (
-    url.protocol === "http:" &&
-    (url.hostname === "localhost" ||
-      url.hostname === "127.0.0.1" ||
-      url.hostname === "::1")
+    url.protocol === "https:" &&
+    url.username.length === 0 &&
+    url.password.length === 0 &&
+    url.search.length === 0 &&
+    url.hash.length === 0 &&
+    !isPrivateNetworkHost(url.hostname)
   )
     return;
   throw new Error("oidc_metadata_url_untrusted");

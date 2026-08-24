@@ -10,7 +10,7 @@ import {
 } from "./common";
 import { inspectPersistedRunContextRoute } from "./persisted-run-context";
 import { ReasoningPolicySchema } from "./reasoning";
-import { RunEventSchema } from "./run-event-contracts";
+import { RunEventWireSchema } from "./run-event-contracts";
 export {
   ReasoningSummaryCompletedEventDataSchema,
   ReasoningSummaryDeltaEventDataSchema,
@@ -50,12 +50,11 @@ export const RunSchema = z
     createdBy: identifier,
     createdAt: timestamp,
     completedAt: timestamp.optional(),
+    // Present on the start response so clients can select the new branch.
+    // Other run reads do not necessarily have this request-scoped value.
+    inputMessageId: identifier.optional(),
   })
   .openapi("RunRecord");
-
-export const StartedRunSchema = RunSchema.extend({
-  inputMessageId: identifier,
-}).openapi("StartedRunRecord");
 
 export const QueuedChatTurnSchema = z
   .strictObject({
@@ -344,7 +343,9 @@ export const startRunRoute = createRoute({
     },
   },
   responses: {
-    202: idempotentJsonResponse("Started run", dataEnvelope(StartedRunSchema)),
+    // Keep the established RunRecord response reference for generated clients.
+    // inputMessageId is the optional additive start-only field on RunRecord.
+    202: idempotentJsonResponse("Started run", dataEnvelope(RunSchema)),
     ...authenticatedErrors,
   },
 });
@@ -382,9 +383,9 @@ export const streamRunEventsRoute = createRoute({
       description: "Server-sent run lifecycle events",
       content: {
         "text/event-stream": {
-          schema: RunEventSchema,
+          schema: RunEventWireSchema,
           "x-romeo-event-schema": {
-            $ref: "#/components/schemas/RunEvent",
+            $ref: "#/components/schemas/TypedRunEvent",
           },
           "x-romeo-run-continuing-data-schema": {
             $ref: "#/components/schemas/RunContinuingEventData",

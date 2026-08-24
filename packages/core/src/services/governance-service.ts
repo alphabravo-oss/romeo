@@ -1,4 +1,5 @@
 import { assertScope, type AuthSubject, type ResourceGrant } from "@romeo/auth";
+import type { ObjectStore } from "@romeo/storage";
 import type {
   AccessReviewReport,
   ComplianceReport,
@@ -7,14 +8,12 @@ import type {
   DataDeletionResourceType,
   DataDeletionResult,
   DataExportDocument,
-  DataExportPackageDeleteResult,
-  DataExportPackage,
-  DataExportPackageList,
   DataExportPreview,
   DataExportRequest,
   DataRightsCoverageReport,
   IdentityLifecyclePolicy,
 } from "../domain/entities";
+import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
 import {
@@ -26,28 +25,40 @@ import {
   complianceReportCsv,
 } from "./compliance-report";
 import { executeDataExport, previewDataExport } from "./data-export";
-import {
-  createGovernedDataExportPackage,
-  deleteGovernedDataExportPackageObject,
-  type DataExportPackageRead,
-  listGovernedDataExportPackages,
-  prepareGovernedDataExportPackageDelete,
-  readGovernedDataExportPackage,
-  registerGovernedDataExportPackage,
-  removeGovernedDataExportPackageRegistration,
-} from "./data-export-package";
 import { buildDataRightsCoverageReport } from "./data-rights-coverage";
 import {
   defaultDataRightsRetentionEvidence,
   readDataRightsRetentionEvidence,
 } from "./data-rights-retention-evidence";
-import { deleteFileObjectStoredObjects } from "./file-service";
+import { ContentDeletionService } from "./content-deletion-service";
 import { buildIdentityLifecyclePolicy } from "./identity-lifecycle-policy";
-import { GovernanceRetentionService } from "./governance-retention-service";
+import {
+  GovernanceRetentionService,
+  type GovernanceServiceOptions,
+} from "./governance-retention-service";
+import { authorizeDataExport } from "./capability-consumer-enforcement";
+import { CapabilityService } from "./capability-resolver";
+import { GovernanceExportPackageService } from "./governance-export-package-service";
 
 export * from "./governance-retention-service";
 
 export class GovernanceService extends GovernanceRetentionService {
+  private readonly exportPackages: GovernanceExportPackageService;
+
+  constructor(
+    repository: RomeoRepository,
+    objectStore: ObjectStore,
+    options: GovernanceServiceOptions = {},
+  ) {
+    const capabilities =
+      options.capabilities ?? new CapabilityService(repository);
+    super(repository, objectStore, { ...options, capabilities });
+    this.exportPackages = new GovernanceExportPackageService(
+      repository,
+      objectStore,
+      capabilities,
+    );
+  }
   async previewDataDeletion(input: {
     subject: AuthSubject;
     resourceType: DataDeletionResourceType;
@@ -103,7 +114,20 @@ export class GovernanceService extends GovernanceRetentionService {
       return this.executeKnowledgeSourceDataDeletion(input, plan, deletedAt);
     }
     if (input.resourceType === "file_object") {
-      await this.deleteFileObjectStorage(input.subject.orgId, input.resourceId);
+      const file = await this.repository.getFileObject(input.resourceId);
+      if (file === undefined || file.orgId !== input.subject.orgId)
+        throw notFoundDeletionResource(input.resourceType);
+      const operation = await new ContentDeletionService(
+        this.repository,
+        this.objectStore,
+      ).enqueueFile(input.subject, file);
+      return {
+        schema: "romeo.data-deletion-pending-result.v1",
+        ...plan,
+        status: "pending",
+        operationId: operation.id,
+        deletionRequestedAt: deletedAt,
+      };
     }
 
     const deleted = await this.repository.transaction(async (repository) => {
@@ -136,21 +160,6 @@ export class GovernanceService extends GovernanceRetentionService {
     };
   }
 
-  private async deleteFileObjectStorage(
-    orgId: string,
-    fileId: string,
-  ): Promise<void> {
-    const file = await this.repository.getFileObject(fileId);
-    if (
-      file === undefined ||
-      file.orgId !== orgId ||
-      file.status === "deleted"
-    ) {
-      return;
-    }
-    await deleteFileObjectStoredObjects(this.objectStore, file);
-  }
-
   private async executeKnowledgeSourceDataDeletion(
     input: {
       subject: AuthSubject;
@@ -179,25 +188,23 @@ export class GovernanceService extends GovernanceRetentionService {
       knowledgeBaseId: plan.knowledgeBaseId,
       sourceId: input.resourceId,
     });
-    await writeAuditLog(this.repository, {
-      id: createId("audit"),
-      orgId: input.subject.orgId,
-      actorId: input.subject.id,
-      action: "governance.data_deletion.execute",
-      resourceType: input.resourceType,
-      resourceId: input.resourceId,
-      outcome: "success",
-      metadata: {
-        workspaceId: plan.workspaceId,
-        knowledgeBaseId: plan.knowledgeBaseId,
-        counts: plan.counts,
-      },
-      createdAt: deletedAt,
-    });
+    const operation = await this.repository.getActiveContentDeletionOperation(
+      input.subject.orgId,
+      "knowledge_source",
+      input.resourceId,
+    );
+    if (operation === undefined)
+      throw new ApiError(
+        "data_deletion_not_configured",
+        "Knowledge source deletion did not create a durable operation.",
+        500,
+      );
     return {
-      schema: "romeo.data-deletion-result.v1",
+      schema: "romeo.data-deletion-pending-result.v1",
       ...plan,
-      deletedAt,
+      status: "pending",
+      operationId: operation.id,
+      deletionRequestedAt: deletedAt,
     };
   }
 
@@ -220,6 +227,13 @@ export class GovernanceService extends GovernanceRetentionService {
     request: DataExportRequest;
   }): Promise<DataExportPreview> {
     assertScope(input.subject, "admin:read");
+    await authorizeDataExport(
+      this.options.capabilities,
+      input.subject,
+      input.request.workspaceId === undefined
+        ? {}
+        : { workspaceId: input.request.workspaceId },
+    );
     return previewDataExport({
       repository: this.repository,
       subject: input.subject,
@@ -232,6 +246,13 @@ export class GovernanceService extends GovernanceRetentionService {
     request: DataExportRequest;
   }): Promise<DataExportDocument> {
     assertScope(input.subject, "admin:read");
+    await authorizeDataExport(
+      this.options.capabilities,
+      input.subject,
+      input.request.workspaceId === undefined
+        ? {}
+        : { workspaceId: input.request.workspaceId },
+    );
     const exported = await executeDataExport({
       repository: this.repository,
       objectStore: this.objectStore,
@@ -262,123 +283,34 @@ export class GovernanceService extends GovernanceRetentionService {
   async createDataExportPackage(input: {
     subject: AuthSubject;
     request: DataExportRequest;
-  }): Promise<DataExportPackage> {
-    assertScope(input.subject, "admin:read");
-    const packaged = await createGovernedDataExportPackage({
-      repository: this.repository,
-      objectStore: this.objectStore,
-      subject: input.subject,
-      request: input.request,
-      register: false,
-    });
-    try {
-      await this.repository.transaction(async (repository) => {
-        await registerGovernedDataExportPackage({
-          repository,
-          package: packaged,
-        });
-        await writeAuditLog(repository, {
-          id: createId("audit"),
-          orgId: input.subject.orgId,
-          actorId: input.subject.id,
-          action: "governance.data_export.package.create",
-          resourceType:
-            packaged.request.scope === "workspace"
-              ? "workspace"
-              : "organization",
-          resourceId: packaged.request.workspaceId ?? input.subject.orgId,
-          outcome: "success",
-          metadata: {
-            scope: packaged.request.scope,
-            includeContent: packaged.request.includeContent,
-            includeObjectBytes: packaged.request.includeObjectBytes,
-            counts: packaged.counts,
-            warningCount: packaged.warnings.length,
-            packageId: packaged.packageId,
-            contentType: packaged.artifact.contentType,
-            sizeBytes: packaged.artifact.sizeBytes,
-            sha256: packaged.artifact.sha256,
-            objectKeyHash: packaged.artifact.storage.objectKeyHash,
-            rawObjectKeyReturned: false,
-          },
-          createdAt: packaged.createdAt,
-        });
-      });
-    } catch (error) {
-      await deleteGovernedDataExportPackageObject({
-        objectStore: this.objectStore,
-        orgId: input.subject.orgId,
-        packageId: packaged.packageId,
-      }).catch(() => {});
-      throw error;
-    }
-    return packaged;
+  }) {
+    return this.exportPackages.create(input);
   }
 
-  async listDataExportPackages(
-    subject: AuthSubject,
-  ): Promise<DataExportPackageList> {
-    assertScope(subject, "admin:read");
-    return listGovernedDataExportPackages({
-      repository: this.repository,
-      orgId: subject.orgId,
-    });
+  async getDataExportPackage(input: {
+    subject: AuthSubject;
+    packageId: string;
+  }) {
+    return this.exportPackages.get(input);
+  }
+
+  async listDataExportPackages(subject: AuthSubject) {
+    return this.exportPackages.list(subject);
   }
 
   async readDataExportPackage(input: {
     subject: AuthSubject;
     packageId: string;
-  }): Promise<DataExportPackageRead> {
-    assertScope(input.subject, "admin:read");
-    return readGovernedDataExportPackage({
-      objectStore: this.objectStore,
-      orgId: input.subject.orgId,
-      packageId: input.packageId,
-    });
+  }) {
+    return this.exportPackages.read(input);
   }
 
   async deleteDataExportPackage(input: {
     subject: AuthSubject;
     packageId: string;
     confirmPackageId: string;
-  }): Promise<DataExportPackageDeleteResult> {
-    assertScope(input.subject, "admin:write");
-    const deleted = await prepareGovernedDataExportPackageDelete({
-      objectStore: this.objectStore,
-      orgId: input.subject.orgId,
-      packageId: input.packageId,
-      confirmPackageId: input.confirmPackageId,
-    });
-    await this.repository.transaction(async (repository) => {
-      await removeGovernedDataExportPackageRegistration({
-        repository,
-        orgId: input.subject.orgId,
-        packageId: input.packageId,
-      });
-      await writeAuditLog(repository, {
-        id: createId("audit"),
-        orgId: input.subject.orgId,
-        actorId: input.subject.id,
-        action: "governance.data_export.package.delete",
-        resourceType: "organization",
-        resourceId: input.subject.orgId,
-        outcome: "success",
-        metadata: {
-          packageId: deleted.packageId,
-          contentType: "application/json",
-          objectKeyHash: deleted.storage.objectKeyHash,
-          rawObjectKeyReturned: false,
-          packageContentReturned: false,
-        },
-        createdAt: deleted.deletedAt,
-      });
-    });
-    await deleteGovernedDataExportPackageObject({
-      objectStore: this.objectStore,
-      orgId: input.subject.orgId,
-      packageId: input.packageId,
-    });
-    return deleted;
+  }) {
+    return this.exportPackages.remove(input);
   }
 
   async accessReview(subject: AuthSubject): Promise<ResourceGrant[]> {
@@ -393,6 +325,7 @@ export class GovernanceService extends GovernanceRetentionService {
   }
 
   async accessReviewCsv(subject: AuthSubject): Promise<string> {
+    await authorizeDataExport(this.options.capabilities, subject);
     const rows = await this.accessReview(subject);
     return (
       [
@@ -426,6 +359,7 @@ export class GovernanceService extends GovernanceRetentionService {
   }
 
   async accessReviewReportCsv(subject: AuthSubject): Promise<string> {
+    await authorizeDataExport(this.options.capabilities, subject);
     return accessReviewReportCsv(await this.accessReviewReport(subject));
   }
 
@@ -444,6 +378,7 @@ export class GovernanceService extends GovernanceRetentionService {
   }
 
   async complianceReportCsv(subject: AuthSubject): Promise<string> {
+    await authorizeDataExport(this.options.capabilities, subject);
     return complianceReportCsv(await this.complianceReport(subject));
   }
 }

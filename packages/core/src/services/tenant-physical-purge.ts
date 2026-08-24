@@ -6,10 +6,11 @@ import type {
   RomeoRepository,
 } from "../domain/repository";
 import { ApiError } from "../errors";
+import { iterateBackgroundJobs } from "./background-job-query";
 import { listRegisteredDataExportPackages } from "./data-export-package-registry";
 import { isToolDispatchPayloadStoreReference } from "./tool-dispatch-payload-store";
 import { readActiveVoiceArtifactUsageMetadata } from "./voice-artifact-metadata";
-import { readBrowserAutomationStoredArtifacts } from "./workflow-browser-tasks";
+import { readBrowserAutomationStoredArtifacts } from "./browser-automation-tasks";
 
 export interface TenantPhysicalPurgeResult {
   schema: "romeo.tenant-physical-purge-result.v1";
@@ -63,12 +64,18 @@ export async function executeTenantPhysicalPurge(input: {
   objectStore: ObjectStore;
   orgId: string;
   repository: RomeoRepository;
+  vectorStore?: {
+    deleteEmbeddingsForOrg?(input: { orgId: string }): Promise<void>;
+  };
 }): Promise<TenantPhysicalPurgeResult> {
   const manifest = await collectTenantPurgeObjectManifest({
     orgId: input.orgId,
     repository: input.repository,
   });
   await deleteTenantObjectKeys(input.objectStore, manifest.keys);
+  if (input.vectorStore?.deleteEmbeddingsForOrg !== undefined) {
+    await input.vectorStore.deleteEmbeddingsForOrg({ orgId: input.orgId });
+  }
   const database = await input.repository.purgeTenantData(input.orgId);
   const deletedAt = new Date().toISOString();
   const result: TenantPhysicalPurgeResult = {
@@ -107,11 +114,14 @@ export async function executeTenantPhysicalPurge(input: {
       vectorValuesReturned: false,
     },
   };
-  await input.repository.upsertSystemSetting({
-    key: tenantPhysicalPurgeResultKey(input.orgId),
-    updatedAt: deletedAt,
-    value: result as unknown as Record<string, unknown>,
-  });
+  await input.repository.upsertSystemSetting(
+    {
+      key: tenantPhysicalPurgeResultKey(input.orgId),
+      updatedAt: deletedAt,
+      value: result as unknown as Record<string, unknown>,
+    },
+    null,
+  );
   return result;
 }
 
@@ -135,10 +145,9 @@ async function collectTenantPurgeObjectManifest(input: {
     keys.add(key);
   };
 
-  const [files, packages, jobs, usageEvents, workspaces] = await Promise.all([
+  const [files, packages, usageEvents, workspaces] = await Promise.all([
     input.repository.listFileObjects(input.orgId),
     listRegisteredDataExportPackages(input),
-    input.repository.listBackgroundJobs(input.orgId),
     input.repository.listUsageEvents(input.orgId),
     input.repository.listWorkspaces(input.orgId),
   ]);
@@ -150,7 +159,8 @@ async function collectTenantPurgeObjectManifest(input: {
       dataExportPackageObjectKey(input.orgId, item.packageId),
     );
   }
-  for (const job of jobs) collectBackgroundJobObjectKeys(job, add);
+  for await (const job of iterateBackgroundJobs(input.repository, input.orgId))
+    collectBackgroundJobObjectKeys(job, add);
   for (const event of usageEvents) {
     add(
       "voice_artifact",

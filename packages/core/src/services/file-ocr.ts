@@ -17,6 +17,7 @@ export interface FileOcrProvider {
     bytes: Uint8Array;
     fileName: string;
     mimeType: string;
+    signal?: AbortSignal;
   }): Promise<FileOcrResult>;
 }
 
@@ -37,7 +38,12 @@ export interface FixedOcrCommandResult {
 export type FixedOcrCommandRunner = (
   command: string,
   args: string[],
-  options: { cwd: string; maxBuffer: number; timeoutMs: number },
+  options: {
+    cwd: string;
+    maxBuffer: number;
+    signal?: AbortSignal;
+    timeoutMs: number;
+  },
 ) => Promise<FixedOcrCommandResult>;
 
 export interface LocalTesseractOcrOptions {
@@ -65,7 +71,9 @@ export class LocalTesseractOcrProvider implements FileOcrProvider {
     bytes: Uint8Array;
     fileName: string;
     mimeType: string;
+    signal?: AbortSignal;
   }): Promise<FileOcrResult> {
+    input.signal?.throwIfAborted();
     const maxBytes = this.options.maxBytes ?? 20_000_000;
     if (input.bytes.byteLength > maxBytes)
       throw new ApiError(
@@ -91,7 +99,7 @@ export class LocalTesseractOcrProvider implements FileOcrProvider {
     try {
       const pagePaths =
         mimeType === "application/pdf"
-          ? await this.renderPdfPages(directory, input.bytes)
+          ? await this.renderPdfPages(directory, input.bytes, input.signal)
           : [
               await this.writeImage(
                 directory,
@@ -106,6 +114,7 @@ export class LocalTesseractOcrProvider implements FileOcrProvider {
           this.options.tesseractPath ?? "tesseract",
           [pagePath, "stdout", "-l", this.options.language ?? "eng"],
           directory,
+          input.signal,
         );
         const text = result.stdout.replace(/\r\n?/gu, "\n").trim();
         if (text.length > 0) content.push(text);
@@ -134,6 +143,7 @@ export class LocalTesseractOcrProvider implements FileOcrProvider {
   private async renderPdfPages(
     directory: string,
     bytes: Uint8Array,
+    signal?: AbortSignal,
   ): Promise<string[]> {
     const source = join(directory, "source.pdf");
     const prefix = join(directory, "page");
@@ -152,6 +162,7 @@ export class LocalTesseractOcrProvider implements FileOcrProvider {
         prefix,
       ],
       directory,
+      signal,
     );
     const pages = (await readdir(directory))
       .filter((name) => /^page-\d+\.png$/u.test(name))
@@ -183,11 +194,13 @@ export class LocalTesseractOcrProvider implements FileOcrProvider {
     command: string,
     args: string[],
     cwd: string,
+    signal?: AbortSignal,
   ): Promise<FixedOcrCommandResult> {
     const runner = this.options.runner ?? fixedCommandRunner;
     return runner(command, args, {
       cwd,
       maxBuffer: 2_000_000,
+      ...(signal === undefined ? {} : { signal }),
       timeoutMs: this.options.timeoutMs ?? 30_000,
     });
   }
@@ -204,7 +217,12 @@ function imageExtension(mimeType: string): string | undefined {
 function fixedCommandRunner(
   command: string,
   args: string[],
-  options: { cwd: string; maxBuffer: number; timeoutMs: number },
+  options: {
+    cwd: string;
+    maxBuffer: number;
+    signal?: AbortSignal;
+    timeoutMs: number;
+  },
 ): Promise<FixedOcrCommandResult> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -215,6 +233,7 @@ function fixedCommandRunner(
         encoding: "utf8",
         env: minimalCommandEnvironment(),
         maxBuffer: options.maxBuffer,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
         timeout: options.timeoutMs,
         windowsHide: true,
       },

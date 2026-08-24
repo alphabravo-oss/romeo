@@ -34,7 +34,10 @@ export function createTranscriptCheckpoint(input: {
   chatId: string;
   messages: TranscriptMessage[];
   summarize: (preserved: TranscriptMessage[]) => string;
-  scan: (summary: string) => { action: "allow" | "block" | "redact"; text: string };
+  scan: (summary: string) => {
+    action: "allow" | "block" | "redact";
+    text: string;
+  };
 }): TranscriptCheckpoint | { code: "checkpoint_summary_blocked" } {
   const preserved = input.messages.filter(
     (message) =>
@@ -47,8 +50,7 @@ export function createTranscriptCheckpoint(input: {
   );
   const summary = input.summarize(preserved);
   const scanned = input.scan(summary);
-  if (scanned.action === "block")
-    return { code: "checkpoint_summary_blocked" };
+  if (scanned.action === "block") return { code: "checkpoint_summary_blocked" };
   return {
     id: input.id,
     chatId: input.chatId,

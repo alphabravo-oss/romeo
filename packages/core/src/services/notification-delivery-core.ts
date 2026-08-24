@@ -5,18 +5,22 @@ import type {
 } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { createId } from "../ids";
+import type { SecretResolver } from "./secret-resolver";
 
 export interface NotificationDeliverySender {
+  close?(): void;
   createDelivery(input: {
     repository: RomeoRepository;
     notification: UserNotification;
     channel: NotificationDeliveryChannel;
+    secretResolver?: SecretResolver;
   }): Promise<NotificationDelivery>;
   retryDelivery(input: {
     repository: RomeoRepository;
     notification: UserNotification;
     channel: NotificationDeliveryChannel;
     delivery: NotificationDelivery;
+    secretResolver?: SecretResolver;
   }): Promise<NotificationDelivery>;
 }
 
@@ -37,6 +41,11 @@ export class RoutingNotificationDeliverySender implements NotificationDeliverySe
     input: Parameters<NotificationDeliverySender["retryDelivery"]>[0],
   ) {
     return this.senderFor(input.channel).retryDelivery(input);
+  }
+
+  close(): void {
+    for (const sender of new Set(Object.values(this.senders)))
+      sender?.close?.();
   }
 
   private senderFor(
@@ -99,8 +108,9 @@ export function baseDelivery(
   },
 ): NotificationDelivery {
   const now = notification.createdAt;
+  const id = createId("notification_delivery");
   return {
-    id: createId("notification_delivery"),
+    id,
     orgId: notification.orgId,
     userId: notification.userId,
     notificationId: notification.id,
@@ -113,6 +123,7 @@ export function baseDelivery(
       channelType: channel.type,
       ...fields.metadata,
     },
+    providerIdempotencyKey: id,
     createdAt: now,
     updatedAt: now,
   };

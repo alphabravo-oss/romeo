@@ -40,14 +40,23 @@ describe("prompt template mutation policies", () => {
     advanceMutationSessionBoundary();
   });
 
-  it("exactly invalidates every cached workspace and marketplace view", async () => {
+  it("exactly invalidates the inventory workspace and marketplace views", async () => {
     const client = createRomeoQueryClient();
     const listKey = appQueryKeys.promptTemplates("workspace-1");
-    const pageKey = appQueryKeys.promptTemplates("workspace-1", {
-      page: 1,
-      query: "hello",
+    const pageKey = appQueryKeys.tablePages({
+      filters: [],
+      limit: 25,
+      resource: "prompt_templates",
+      sort: [],
+      workspaceId: "workspace-1",
     });
-    const otherWorkspaceKey = appQueryKeys.promptTemplates("workspace-2");
+    const otherWorkspaceKey = appQueryKeys.tablePages({
+      filters: [],
+      limit: 25,
+      resource: "prompt_templates",
+      sort: [],
+      workspaceId: "workspace-2",
+    });
     const marketplaceKey = appQueryKeys.promptMarketplace("workspace-1");
     const otherMarketplaceKey = appQueryKeys.promptMarketplace("workspace-2");
     for (const key of [
@@ -71,7 +80,7 @@ describe("prompt template mutation policies", () => {
       workspaceId: "workspace-1",
     });
 
-    expect(client.getQueryState(listKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(listKey)?.isInvalidated).toBe(false);
     expect(client.getQueryState(pageKey)?.isInvalidated).toBe(true);
     expect(client.getQueryState(otherWorkspaceKey)?.isInvalidated).toBe(false);
     expect(client.getQueryState(marketplaceKey)?.isInvalidated).toBe(true);

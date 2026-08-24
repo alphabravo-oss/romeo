@@ -2,10 +2,10 @@ import { Button, Select } from "@romeo/ui";
 import BookOpen from "lucide-react/dist/esm/icons/book-open.mjs";
 import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
 import X from "lucide-react/dist/esm/icons/x.mjs";
-import type { KeyboardEvent } from "react";
 
 import type { MessageKey } from "../lib/i18n";
 import { useLocale } from "../lib/i18n";
+import { formatPercent } from "../lib/locale-format";
 import type { ChatComposerProps } from "./chat-composer-props";
 import { trayCompatibilityConstraint } from "./composer-attachment-input";
 import {
@@ -13,12 +13,15 @@ import {
   trayCanCancel,
   trayCanRetry,
   trayIsBusy,
+  meaningfulTrayProgress,
   type TrayLifecycle,
 } from "./composer-tray-lifecycle";
 import {
+  audioCaptionTrackUrl,
   documentPageSelection,
   isAudioAttachment,
   safeAttachmentDownloadUrl,
+  type AudioAccessibility,
 } from "./composer-tray-media";
 
 export function ComposerPendingAttachments(props: {
@@ -36,10 +39,11 @@ export function ComposerPendingAttachments(props: {
   onSelectDocumentPage: (id: string, page: number) => void;
   selectedModel: ChatComposerProps["models"][number] | undefined;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const mixed = [
     ...props.imageAttachments.map((attachment) => ({
       altText: attachment.altText,
+      audioAccessibility: undefined as AudioAccessibility | undefined,
       downloadUrl: undefined as string | undefined,
       fileName: attachment.fileName,
       height: attachment.height,
@@ -60,6 +64,7 @@ export function ComposerPendingAttachments(props: {
     })),
     ...props.documentAttachments.map((attachment) => ({
       altText: attachment.fileName,
+      audioAccessibility: attachment.audioAccessibility,
       downloadUrl: attachment.downloadUrl,
       fileName: attachment.fileName,
       height: undefined as number | undefined,
@@ -93,28 +98,22 @@ export function ComposerPendingAttachments(props: {
     mixed.length === 0
       ? t("mixedAttachmentTrayEmpty")
       : `${t("mixedAttachmentTrayCount", { count: mixed.length })}. ${mixed
-          .map((item) =>
-            trayAnnouncement({
-              fileName: item.fileName,
-              percent: item.percent,
-              status: item.status,
-            }),
+          .map((item, index) =>
+            trayAnnouncement(
+              {
+                count: mixed.length,
+                fileName: item.fileName,
+                formattedPercent: formatPercent(
+                  meaningfulTrayProgress(item.percent) / 100,
+                  locale,
+                ),
+                position: index + 1,
+                status: item.status,
+              },
+              t,
+            ),
           )
           .join(". ")}`;
-
-  function onCardKeyDown(
-    event: KeyboardEvent<HTMLDivElement>,
-    attachment: (typeof mixed)[number],
-  ) {
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      attachment.onMove(-1);
-    }
-    if (event.key === "ArrowRight") {
-      event.preventDefault();
-      attachment.onMove(1);
-    }
-  }
 
   return (
     <>
@@ -138,16 +137,23 @@ export function ComposerPendingAttachments(props: {
           className="rm-pending-attachments"
           role="list"
         >
-          {mixed.map((attachment) => {
-            const pages = documentPageSelection(attachment);
+          {mixed.map((attachment, index) => {
+            const pages = documentPageSelection({
+              ...(typeof attachment.pageCount === "number"
+                ? { pageCount: attachment.pageCount }
+                : {}),
+              ...(typeof attachment.selectedPage === "number"
+                ? { selectedPage: attachment.selectedPage }
+                : {}),
+            });
             const download = safeAttachmentDownloadUrl(attachment.downloadUrl);
             return (
               <div
+                aria-posinset={index + 1}
+                aria-setsize={mixed.length}
                 className="rm-pending-attachment rm-tray-card"
                 key={`${attachment.kind}:${attachment.id}`}
-                onKeyDown={(event) => onCardKeyDown(event, attachment)}
                 role="listitem"
-                tabIndex={0}
               >
                 {attachment.kind === "image" &&
                 attachment.previewUrl !== undefined ? (
@@ -158,15 +164,32 @@ export function ComposerPendingAttachments(props: {
                     width={attachment.width ?? 48}
                   />
                 ) : attachment.kind === "audio" &&
-                  attachment.previewUrl !== undefined ? (
-                  <audio controls preload="metadata" src={attachment.previewUrl}>
+                  attachment.previewUrl !== undefined &&
+                  attachment.audioAccessibility?.status === "ready" ? (
+                  <audio
+                    aria-describedby={`audio-description-${attachment.id}`}
+                    controls
+                    preload="metadata"
+                    src={attachment.previewUrl}
+                  >
+                    <track
+                      default
+                      kind="captions"
+                      label={t("trayAudioCaptions")}
+                      src={audioCaptionTrackUrl(
+                        attachment.audioAccessibility.kind === "speech"
+                          ? attachment.audioAccessibility.transcript
+                          : attachment.audioAccessibility.description,
+                      )}
+                    />
                     {attachment.fileName}
                   </audio>
                 ) : (
                   <FileText aria-hidden="true" size={18} />
                 )}
                 <span className="rm-tray-card-title">
-                  {attachmentPartLabel(attachment.kind, t)} · {attachment.fileName}
+                  {attachmentPartLabel(attachment.kind, t)} ·{" "}
+                  {attachment.fileName}
                 </span>
                 {attachment.width !== undefined &&
                 attachment.height !== undefined ? (
@@ -174,8 +197,18 @@ export function ComposerPendingAttachments(props: {
                     {attachment.width}×{attachment.height}
                   </small>
                 ) : null}
-                <TrayProgress percent={attachment.percent} status={attachment.status} t={t} />
-                {attachment.transcript === undefined ? null : (
+                <TrayProgress
+                  percent={attachment.percent}
+                  status={attachment.status}
+                  t={t}
+                />
+                {attachment.kind === "audio" ? (
+                  <AudioDescription
+                    accessibility={attachment.audioAccessibility}
+                    id={`audio-description-${attachment.id}`}
+                    t={t}
+                  />
+                ) : attachment.transcript === undefined ? null : (
                   <p className="rm-tray-transcript">{attachment.transcript}</p>
                 )}
                 {pages === undefined ? null : (
@@ -186,10 +219,13 @@ export function ComposerPendingAttachments(props: {
                       onValueChange={(value) =>
                         props.onSelectDocumentPage(attachment.id, Number(value))
                       }
-                      options={Array.from({ length: pages.pageCount }, (_, index) => ({
-                        label: String(index + 1),
-                        value: String(index + 1),
-                      }))}
+                      options={Array.from(
+                        { length: pages.pageCount },
+                        (_, index) => ({
+                          label: String(index + 1),
+                          value: String(index + 1),
+                        }),
+                      )}
                       value={String(pages.selectedPage)}
                     />
                   </div>
@@ -207,7 +243,7 @@ export function ComposerPendingAttachments(props: {
                 <div className="rm-tray-card-actions">
                   <Button
                     aria-label={`${t("moveAttachmentEarlier")}: ${attachment.fileName}`}
-                    disabled={props.isStreaming}
+                    disabled={props.isStreaming || index === 0}
                     onClick={() => attachment.onMove(-1)}
                     type="button"
                   >
@@ -215,7 +251,7 @@ export function ComposerPendingAttachments(props: {
                   </Button>
                   <Button
                     aria-label={`${t("moveAttachmentLater")}: ${attachment.fileName}`}
-                    disabled={props.isStreaming}
+                    disabled={props.isStreaming || index === mixed.length - 1}
                     onClick={() => attachment.onMove(1)}
                     type="button"
                   >
@@ -273,6 +309,36 @@ export function ComposerPendingAttachments(props: {
         </div>
       )}
     </>
+  );
+}
+
+function AudioDescription({
+  accessibility,
+  id,
+  t,
+}: {
+  accessibility: AudioAccessibility | undefined;
+  id: string;
+  t: ReturnType<typeof useLocale>["t"];
+}) {
+  const text =
+    accessibility?.status === "ready"
+      ? accessibility.kind === "speech"
+        ? accessibility.transcript
+        : accessibility.description
+      : accessibility?.status === "pending"
+        ? t("trayTranscriptPending")
+        : accessibility?.status === "failed"
+          ? t("trayTranscriptFailed")
+          : t("trayTranscriptRequired");
+  return (
+    <p
+      className="rm-tray-transcript"
+      id={id}
+      role={accessibility?.status === "failed" ? "alert" : "status"}
+    >
+      {text}
+    </p>
   );
 }
 

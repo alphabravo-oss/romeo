@@ -7,7 +7,7 @@ import type {
   FileObjectResponse,
 } from "./file-service-contracts";
 import { isDeferredExtractionMimeType } from "./knowledge-extraction-worker";
-import { isFileReadyForUse } from "./file-lifecycle";
+import { fileLifecycleMaxAttempts, isFileReadyForUse } from "./file-lifecycle";
 
 export function canReadFile(
   subject: AuthSubject,
@@ -47,7 +47,8 @@ export function publicFileObject(file: FileObject): FileObjectResponse {
       version: file.lifecycleVersion ?? 0,
       attempts: file.lifecycleAttempts ?? 0,
       retryable:
-        file.status === "failed" && (file.lifecycleAttempts ?? 0) < 100,
+        file.status === "failed" &&
+        (file.lifecycleAttempts ?? 0) < fileLifecycleMaxAttempts,
       failureCode: file.lifecycleFailureCode ?? null,
       nextAttemptAt: file.lifecycleNextAttemptAt ?? null,
       // Lease timing is an internal worker coordination detail.

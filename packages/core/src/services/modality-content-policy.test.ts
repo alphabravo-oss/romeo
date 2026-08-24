@@ -23,7 +23,11 @@ describe("modality content policy", () => {
       ],
       detectors: blockTokens,
     });
-    expect(result.surfacesScanned.slice(0, 3)).toEqual(["ocr", "transcript", "text"]);
+    expect(result.surfacesScanned.slice(0, 3)).toEqual([
+      "ocr",
+      "transcript",
+      "text",
+    ]);
     expect(result.action).toBe("block");
     expect(result.detections).toEqual([
       { code: "api_token", count: 1, action: "block" },

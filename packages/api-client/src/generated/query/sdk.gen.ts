@@ -706,6 +706,9 @@ import type {
   GovernanceGetComplianceReportData,
   GovernanceGetComplianceReportErrors,
   GovernanceGetComplianceReportResponses,
+  GovernanceGetDataExportPackageData,
+  GovernanceGetDataExportPackageErrors,
+  GovernanceGetDataExportPackageResponses,
   GovernanceGetDataRightsCoverageData,
   GovernanceGetDataRightsCoverageErrors,
   GovernanceGetDataRightsCoverageResponses,
@@ -733,6 +736,9 @@ import type {
   GovernanceUpdateRetentionPolicyData,
   GovernanceUpdateRetentionPolicyErrors,
   GovernanceUpdateRetentionPolicyResponses,
+  HealthGetInternalReadinessData,
+  HealthGetInternalReadinessErrors,
+  HealthGetInternalReadinessResponses,
   IdentityGetCurrentPrincipalData,
   IdentityGetCurrentPrincipalErrors,
   IdentityGetCurrentPrincipalResponses,
@@ -1195,6 +1201,9 @@ import type {
   OperationalPostureGetPostgresData,
   OperationalPostureGetPostgresErrors,
   OperationalPostureGetPostgresResponses,
+  OperationalPostureGetRuntimeKeyRotationData,
+  OperationalPostureGetRuntimeKeyRotationErrors,
+  OperationalPostureGetRuntimeKeyRotationResponses,
   PromptsCreateTemplateData,
   PromptsCreateTemplateErrors,
   PromptsCreateTemplateResponses,
@@ -1413,6 +1422,12 @@ import type {
   TableExportsCreateData,
   TableExportsCreateErrors,
   TableExportsCreateResponses,
+  TableExportsDeleteData,
+  TableExportsDeleteErrors,
+  TableExportsDeleteResponses,
+  TableExportsDownloadArtifactData,
+  TableExportsDownloadArtifactErrors,
+  TableExportsDownloadArtifactResponses,
   TableExportsGetData,
   TableExportsGetErrors,
   TableExportsGetResponses,
@@ -1422,12 +1437,24 @@ import type {
   TablePagesQueryData,
   TablePagesQueryErrors,
   TablePagesQueryResponses,
+  TableViewsDeleteData,
+  TableViewsDeleteErrors,
+  TableViewsDeleteResponses,
   TableViewsListData,
   TableViewsListErrors,
   TableViewsListResponses,
   TableViewsReplaceData,
   TableViewsReplaceErrors,
   TableViewsReplaceResponses,
+  TableViewsRestoreData,
+  TableViewsRestoreErrors,
+  TableViewsRestoreResponses,
+  TableViewsSetDefaultData,
+  TableViewsSetDefaultErrors,
+  TableViewsSetDefaultResponses,
+  TableViewsShareData,
+  TableViewsShareErrors,
+  TableViewsShareResponses,
   TenancyArchiveWorkspaceData,
   TenancyArchiveWorkspaceErrors,
   TenancyArchiveWorkspaceResponses,
@@ -1647,6 +1674,15 @@ import type {
   WebUpdateConfigurationData,
   WebUpdateConfigurationErrors,
   WebUpdateConfigurationResponses,
+  WorkerBrokerClaimData,
+  WorkerBrokerClaimErrors,
+  WorkerBrokerClaimResponses,
+  WorkerBrokerCompleteData,
+  WorkerBrokerCompleteErrors,
+  WorkerBrokerCompleteResponses,
+  WorkerBrokerRenewData,
+  WorkerBrokerRenewErrors,
+  WorkerBrokerRenewResponses,
   WorkflowsApproveRunData,
   WorkflowsApproveRunErrors,
   WorkflowsApproveRunResponses,
@@ -1734,7 +1770,11 @@ export const administrationListUsers = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -1761,7 +1801,11 @@ export const administrationQueryUsers = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -1792,7 +1836,11 @@ export const administrationDisableUser = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -1821,7 +1869,11 @@ export const administrationUpdateUserRole = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -1854,7 +1906,11 @@ export const administrationSetUserLocalPassword = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -1887,7 +1943,11 @@ export const administrationDirectorySync = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -1918,7 +1978,11 @@ export const administrationListGroups = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -1945,7 +2009,11 @@ export const administrationCreateGroup = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -1978,7 +2046,11 @@ export const administrationListGroupMembers = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2007,7 +2079,11 @@ export const administrationAddGroupMember = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2040,7 +2116,11 @@ export const administrationRemoveGroupMember = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2067,7 +2147,11 @@ export const administrationListApiKeys = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2096,7 +2180,11 @@ export const administrationCreateApiKey = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2129,7 +2217,11 @@ export const administrationBulkRevokeApiKeys = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2162,7 +2254,11 @@ export const administrationRevokeApiKey = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2191,7 +2287,11 @@ export const administrationListServiceAccounts = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2220,7 +2320,11 @@ export const administrationCreateServiceAccount = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2253,7 +2357,11 @@ export const administrationBulkDisableServiceAccounts = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2286,7 +2394,11 @@ export const administrationCreateServiceAccountApiKey = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2319,7 +2431,11 @@ export const administrationDisableServiceAccount = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2348,7 +2464,11 @@ export const authProviderAdministrationListCatalog = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2377,7 +2497,11 @@ export const authProviderAdministrationGetSettings = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2406,7 +2530,11 @@ export const authProviderAdministrationUpdateSettings = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2439,7 +2567,11 @@ export const authProviderAdministrationTestConnection = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2475,7 +2607,11 @@ export const authProviderAdministrationCreateManagedSecret = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2511,7 +2647,11 @@ export const authProviderAdministrationDeprovisionOidcUser = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2544,7 +2684,11 @@ export const adminInsightsGetAnalyticsSummary = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2573,7 +2717,11 @@ export const adminInsightsExportAnalyticsSummary = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2602,7 +2750,11 @@ export const adminInsightsGetAbuseControls = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2631,7 +2783,11 @@ export const adminInsightsUpdateAbuseControls = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2664,7 +2820,11 @@ export const adminInsightsSimulateAbuseControls = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2691,7 +2851,11 @@ export const billingGetPlan = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2718,7 +2882,11 @@ export const billingApplyPlan = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2749,7 +2917,11 @@ export const billingSyncExternalEvent = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2780,7 +2952,11 @@ export const billingGetEntitlements = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2809,7 +2985,11 @@ export const billingReconcileEntitlements = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2836,7 +3016,11 @@ export const billingGetLifecycle = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2863,7 +3047,11 @@ export const billingEnforceLifecycle = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2942,7 +3130,11 @@ export const browserAutomationGetPosture = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -2971,7 +3163,11 @@ export const browserAutomationClaimTask = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3004,7 +3200,11 @@ export const browserAutomationRenewTaskLease = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3037,7 +3237,11 @@ export const browserAutomationCreateArtifactUpload = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3070,7 +3274,11 @@ export const browserAutomationReadArtifact = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3099,7 +3307,11 @@ export const browserAutomationCompleteTask = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3130,7 +3342,11 @@ export const browserAutomationFailTask = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3163,7 +3379,11 @@ export const browserAutomationExpireTasks = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3194,7 +3414,11 @@ export const tenancyListOrganizations = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3221,7 +3445,11 @@ export const tenancyListWorkspaces = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3248,7 +3476,11 @@ export const tenancyCreateWorkspace = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3279,7 +3511,11 @@ export const tenancyArchiveWorkspace = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3308,7 +3544,11 @@ export const tenancyUpdateWorkspaceDefaultAgent = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3339,7 +3579,11 @@ export const tenancyExportWorkspace = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3368,7 +3612,11 @@ export const tenantAdministrationListOrganizations = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3397,7 +3645,11 @@ export const tenantAdministrationCreateOrganization = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3430,7 +3682,11 @@ export const tenantAdministrationGetOrganization = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3459,7 +3715,11 @@ export const tenantAdministrationUpdateOrganization = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3492,7 +3752,11 @@ export const tenantAdministrationSuspendOrganization = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3528,7 +3792,11 @@ export const tenantAdministrationReactivateOrganization = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3561,7 +3829,11 @@ export const tenantAdministrationRequestDeletion = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3594,7 +3866,11 @@ export const tenantAdministrationCancelDeletion = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3630,7 +3906,11 @@ export const tenantAdministrationPreviewDeletionFinalization = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3662,7 +3942,11 @@ export const tenantAdministrationRecordDeletionEvidence = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3698,7 +3982,11 @@ export const tenantAdministrationExecuteDeletionFinalization = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3747,7 +4035,11 @@ export const interfacePreferencesGetCurrent = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3778,7 +4070,11 @@ export const interfacePreferencesUpdateCurrent = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3813,7 +4109,11 @@ export const identityGetCurrentPrincipal = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3844,7 +4144,11 @@ export const identityUpdateCurrentProfile = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3875,7 +4179,11 @@ export const sessionsListCurrentUser = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3904,7 +4212,11 @@ export const sessionsCreateCurrentUser = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3935,7 +4247,11 @@ export const sessionsRevokeCurrent = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3962,7 +4278,11 @@ export const sessionsRevokeOthers = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -3989,7 +4309,11 @@ export const sessionsRevokeById = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4016,7 +4340,11 @@ export const impersonationListSessions = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4045,7 +4373,11 @@ export const impersonationCreateSession = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4078,7 +4410,11 @@ export const impersonationRevokeSession = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4105,7 +4441,11 @@ export const impersonationListRequests = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4134,7 +4474,11 @@ export const impersonationCreateRequest = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4167,7 +4511,11 @@ export const impersonationApproveRequest = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4196,7 +4544,11 @@ export const impersonationRejectRequest = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4275,7 +4627,11 @@ export const managedModelsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4302,7 +4658,11 @@ export const managedModelsCreate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4335,7 +4695,11 @@ export const managedModelsDelete = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4362,7 +4726,11 @@ export const managedModelsGet = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4389,7 +4757,11 @@ export const managedModelsUpdate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4420,7 +4792,11 @@ export const managedModelsClone = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4453,7 +4829,11 @@ export const managedModelsGetCustomizationPolicy = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4484,7 +4864,11 @@ export const managedModelsUpdateCustomizationPolicy = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4517,7 +4901,11 @@ export const managedModelsClearPreferences = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4546,7 +4934,11 @@ export const managedModelsGetPreferences = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4577,7 +4969,11 @@ export const managedModelsUpdatePreferences = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4608,7 +5004,11 @@ export const managedModelsExport = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4635,7 +5035,11 @@ export const managedModelsImport = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4666,7 +5070,11 @@ export const managedModelsListVersions = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4695,7 +5103,11 @@ export const managedModelsPublish = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4726,7 +5138,11 @@ export const managedModelsDiffVersion = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4755,7 +5171,11 @@ export const managedModelsRollbackVersion = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4782,7 +5202,11 @@ export const managedModelsListGrants = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4811,7 +5235,11 @@ export const managedModelsShare = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4842,7 +5270,11 @@ export const managedModelsRevokeGrant = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4869,7 +5301,11 @@ export const managedModelsListGallery = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4898,7 +5334,11 @@ export const managedModelsGetReadiness = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4927,7 +5367,11 @@ export const managedModelsListKnowledgeBindings = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4956,7 +5400,11 @@ export const managedModelsUpdateKnowledgeBinding = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -4987,7 +5435,11 @@ export const managedModelsBindVoice = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5018,7 +5470,11 @@ export const notificationsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5045,7 +5501,11 @@ export const notificationsMarkRead = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5072,7 +5532,11 @@ export const notificationsListChannels = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5101,7 +5565,11 @@ export const notificationsCreateChannel = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5134,7 +5602,11 @@ export const notificationsListDeliveries = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5163,7 +5635,11 @@ export const notificationsRetryDueDeliveries = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5190,7 +5666,11 @@ export const notificationsGetPolicy = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5217,7 +5697,11 @@ export const notificationsUpdatePolicy = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5250,7 +5734,11 @@ export const openAiCompatibilityListModels = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5279,7 +5767,11 @@ export const openAiCompatibilityRetrieveModel = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5308,7 +5800,11 @@ export const openAiCompatibilityListModelsAlias = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5337,7 +5833,11 @@ export const openAiCompatibilityRetrieveModelAlias = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5366,7 +5866,11 @@ export const openAiCompatibilityCreateEmbeddings = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5399,7 +5903,11 @@ export const openAiCompatibilityCreateEmbeddingsAlias = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5464,7 +5972,11 @@ export const operationalGovernanceListAuditLogs = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5493,7 +6005,11 @@ export const operationalGovernanceQueryAuditLogs = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5526,7 +6042,11 @@ export const operationalGovernanceExportAuditLogs = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5555,7 +6075,11 @@ export const operationalGovernanceListUsageEvents = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5587,7 +6111,11 @@ export const operationalGovernanceListUsageMetricDefinitions = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5616,7 +6144,11 @@ export const operationalGovernanceExportUsageEvents = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5645,7 +6177,11 @@ export const operationalGovernanceGetUsageSummary = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5674,7 +6210,11 @@ export const operationalGovernanceListUsageAlerts = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5703,7 +6243,11 @@ export const operationalGovernanceListQuotaBuckets = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5732,7 +6276,11 @@ export const operationalGovernanceCreateQuotaBucket = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5768,7 +6316,11 @@ export const operationalGovernanceGetQuotaCoordinationStatus = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5797,7 +6349,11 @@ export const operationalGovernanceDeleteQuotaBucket = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5826,7 +6382,11 @@ export const operationalGovernanceUpdateQuotaBucket = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5859,7 +6419,11 @@ export const operationalPostureGetGaEvidence = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5888,7 +6452,11 @@ export const operationalPostureGetPostgres = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5896,6 +6464,39 @@ export const operationalPostureGetPostgres = <
       },
     ],
     url: "/admin/postgres/operational-posture",
+    ...options,
+  });
+
+/**
+ * Get global runtime key-rotation usage posture
+ */
+export const operationalPostureGetRuntimeKeyRotation = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<OperationalPostureGetRuntimeKeyRotationData, ThrowOnError>,
+): RequestResult<
+  OperationalPostureGetRuntimeKeyRotationResponses,
+  OperationalPostureGetRuntimeKeyRotationErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    OperationalPostureGetRuntimeKeyRotationResponses,
+    OperationalPostureGetRuntimeKeyRotationErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/runtime-key-rotation/posture",
     ...options,
   });
 
@@ -5919,7 +6520,11 @@ export const providersGetCapabilityReport = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5950,7 +6555,11 @@ export const providersGetModelCapabilityReport = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -5979,7 +6588,11 @@ export const providersListKinds = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6006,7 +6619,11 @@ export const providersListConnections = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6033,7 +6650,11 @@ export const providersCreateConnection = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6064,7 +6685,11 @@ export const providersUpdateConnection = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6095,7 +6720,11 @@ export const providersVerifyConnection = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6124,7 +6753,11 @@ export const providersSyncModels = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6151,7 +6784,11 @@ export const providersSyncJobsRun = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6178,7 +6815,11 @@ export const providersSyncJobsGet = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6205,7 +6846,11 @@ export const providersPullOllamaModel = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6238,7 +6883,11 @@ export const providersDeleteOllamaModel = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6265,7 +6914,11 @@ export const providersListModels = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6294,7 +6947,11 @@ export const providersUpdateModelPricing = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6327,7 +6984,11 @@ export const providersUpdateModelCapabilities = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6360,7 +7021,11 @@ export const providersUpdateModelEnabled = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6393,7 +7058,11 @@ export const providersGetOperationalSummary = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6416,7 +7085,11 @@ export const modelsProbe = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6449,7 +7122,11 @@ export const modelsCapabilityOverridesUpdate = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6482,7 +7159,11 @@ export const modelsCompatibilityPreview = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6513,7 +7194,11 @@ export const promptsListTemplates = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6540,7 +7225,11 @@ export const promptsCreateTemplate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6571,7 +7260,11 @@ export const promptsListMarketplace = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6598,7 +7291,11 @@ export const promptsDeleteTemplate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6625,7 +7322,11 @@ export const promptsGetTemplate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6652,7 +7353,11 @@ export const promptsUpdateTemplate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6683,7 +7388,11 @@ export const promptsListShares = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6710,7 +7419,11 @@ export const promptsShareTemplate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6741,7 +7454,11 @@ export const ragGovernanceGetPosture = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6768,7 +7485,11 @@ export const ragGovernanceGetPolicy = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6795,7 +7516,11 @@ export const ragGovernanceUpdatePolicy = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6828,7 +7553,11 @@ export const ragGovernanceGetPolicyChangeRequest = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6857,7 +7586,11 @@ export const ragGovernanceCreatePolicyChangeRequest = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6890,7 +7623,11 @@ export const ragGovernanceApprovePolicyChangeRequest = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6923,7 +7660,11 @@ export const ragGovernanceRejectPolicyChangeRequest = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6954,7 +7695,11 @@ export const readinessGetReport = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -6964,6 +7709,24 @@ export const readinessGetReport = <ThrowOnError extends boolean = false>(
     url: "/admin/readiness",
     ...options,
   });
+
+/**
+ * Get dependency-aware internal runtime readiness
+ */
+export const healthGetInternalReadiness = <
+  ThrowOnError extends boolean = false,
+>(
+  options?: Options<HealthGetInternalReadinessData, ThrowOnError>,
+): RequestResult<
+  HealthGetInternalReadinessResponses,
+  HealthGetInternalReadinessErrors,
+  ThrowOnError
+> =>
+  (options?.client ?? client).get<
+    HealthGetInternalReadinessResponses,
+    HealthGetInternalReadinessErrors,
+    ThrowOnError
+  >({ url: "/readyz", ...options });
 
 /**
  * Inspect a privacy-safe context summary for a proposed run
@@ -6983,7 +7746,11 @@ export const runsInspectContext = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7018,7 +7785,11 @@ export const runsInspectPersistedContext = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7045,7 +7816,11 @@ export const runsGetActiveForChat = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7072,7 +7847,11 @@ export const runsListQueuedTurns = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7099,7 +7878,11 @@ export const runsEnqueueTurn = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7130,7 +7913,11 @@ export const runsCancelQueuedTurn = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7153,7 +7940,11 @@ export const runsStart = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7177,7 +7968,11 @@ export const runsGet = <ThrowOnError extends boolean = false>(
   (options.client ?? client).get<RunsGetResponses, RunsGetErrors, ThrowOnError>(
     {
       security: [
-        { scheme: "bearer", type: "http" },
+        {
+          key: "bearerAuth",
+          scheme: "bearer",
+          type: "http",
+        },
         {
           in: "cookie",
           name: "romeo_session",
@@ -7201,7 +7996,11 @@ export const runsCancel = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7230,7 +8029,11 @@ export const ssoAdministrationGetSettings = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7259,7 +8062,11 @@ export const ssoAdministrationUpdateSettings = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7292,7 +8099,11 @@ export const ssoAdministrationTestSettings = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7321,7 +8132,11 @@ export const ssoAdministrationPreviewSecretRewrap = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7354,7 +8169,11 @@ export const ssoAdministrationExecuteSecretRewrap = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7386,7 +8205,13 @@ export const scimGetServiceProviderConfig = <
     ScimGetServiceProviderConfigErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/ServiceProviderConfig",
     ...options,
   });
@@ -7406,7 +8231,13 @@ export const scimListSchemas = <ThrowOnError extends boolean = false>(
     ScimListSchemasErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Schemas",
     ...options,
   });
@@ -7426,7 +8257,13 @@ export const scimListResourceTypes = <ThrowOnError extends boolean = false>(
     ScimListResourceTypesErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/ResourceTypes",
     ...options,
   });
@@ -7442,7 +8279,13 @@ export const scimListUsers = <ThrowOnError extends boolean = false>(
     ScimListUsersErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Users",
     ...options,
   });
@@ -7458,7 +8301,13 @@ export const scimCreateUser = <ThrowOnError extends boolean = false>(
     ScimCreateUserErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Users",
     ...options,
     headers: {
@@ -7478,7 +8327,13 @@ export const scimDeleteUser = <ThrowOnError extends boolean = false>(
     ScimDeleteUserErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Users/{userId}",
     ...options,
   });
@@ -7494,7 +8349,13 @@ export const scimGetUser = <ThrowOnError extends boolean = false>(
     ScimGetUserErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Users/{userId}",
     ...options,
   });
@@ -7510,7 +8371,13 @@ export const scimPatchUser = <ThrowOnError extends boolean = false>(
     ScimPatchUserErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Users/{userId}",
     ...options,
     headers: {
@@ -7534,7 +8401,13 @@ export const scimReplaceUser = <ThrowOnError extends boolean = false>(
     ScimReplaceUserErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Users/{userId}",
     ...options,
     headers: {
@@ -7554,7 +8427,13 @@ export const scimListGroups = <ThrowOnError extends boolean = false>(
     ScimListGroupsErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Groups",
     ...options,
   });
@@ -7574,7 +8453,13 @@ export const scimCreateGroup = <ThrowOnError extends boolean = false>(
     ScimCreateGroupErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Groups",
     ...options,
     headers: {
@@ -7598,7 +8483,13 @@ export const scimDeleteGroup = <ThrowOnError extends boolean = false>(
     ScimDeleteGroupErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Groups/{groupId}",
     ...options,
   });
@@ -7614,7 +8505,13 @@ export const scimGetGroup = <ThrowOnError extends boolean = false>(
     ScimGetGroupErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Groups/{groupId}",
     ...options,
   });
@@ -7630,7 +8527,13 @@ export const scimPatchGroup = <ThrowOnError extends boolean = false>(
     ScimPatchGroupErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Groups/{groupId}",
     ...options,
     headers: {
@@ -7654,7 +8557,13 @@ export const scimReplaceGroup = <ThrowOnError extends boolean = false>(
     ScimReplaceGroupErrors,
     ThrowOnError
   >({
-    security: [{ scheme: "bearer", type: "http" }],
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
     url: "/scim/v2/Groups/{groupId}",
     ...options,
     headers: {
@@ -7679,7 +8588,11 @@ export const chatsCleanupExpired = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7706,7 +8619,11 @@ export const chatsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7729,7 +8646,11 @@ export const chatsCreate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7756,7 +8677,11 @@ export const chatsSearch = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7779,7 +8704,11 @@ export const chatsImport = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7806,7 +8735,11 @@ export const chatsDelete = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7833,7 +8766,11 @@ export const chatsGet = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7856,7 +8793,11 @@ export const chatsUpdate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7883,7 +8824,11 @@ export const chatsExport = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7910,7 +8855,11 @@ export const chatsPreviewDelete = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7937,7 +8886,11 @@ export const chatsListMessages = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7964,7 +8917,11 @@ export const chatsListMessagePage = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -7991,7 +8948,11 @@ export const chatsSearchMessages = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8018,7 +8979,11 @@ export const chatsDeleteMessage = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8045,7 +9010,11 @@ export const chatsListMessageFeedback = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8072,7 +9041,11 @@ export const chatsGetMessageFeedback = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8101,7 +9074,11 @@ export const chatsUpdateMessageFeedback = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8132,7 +9109,11 @@ export const chatsReadAttachment = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8161,7 +9142,11 @@ export const chatsUpdateAttachmentRetention = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8192,7 +9177,11 @@ export const chatsPreviewAttachment = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8215,7 +9204,11 @@ export const chatsArchive = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8238,7 +9231,11 @@ export const chatsFork = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8265,7 +9262,11 @@ export const chatsUnarchive = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8292,7 +9293,11 @@ export const chatsUpdateLegalHold = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8323,7 +9328,11 @@ export const chatsListComments = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8350,7 +9359,11 @@ export const chatsCreateComment = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8381,7 +9394,11 @@ export const chatExperienceGet = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8408,7 +9425,11 @@ export const chatExperienceUpdate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8441,7 +9462,11 @@ export const chatExperienceGenerateTitle = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8468,7 +9493,11 @@ export const channelsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8491,7 +9520,11 @@ export const channelsCreate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8524,7 +9557,11 @@ export const channelsCreateDirectMessage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8551,7 +9588,11 @@ export const channelsDelete = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8574,7 +9615,11 @@ export const channelsGet = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8597,7 +9642,11 @@ export const channelsUpdate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8628,7 +9677,11 @@ export const channelsListMembers = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8655,7 +9708,11 @@ export const channelsAddMembers = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8686,7 +9743,11 @@ export const channelsRemoveMember = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8713,7 +9774,11 @@ export const channelsListMessages = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8740,7 +9805,11 @@ export const channelsCreateMessage = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8771,7 +9840,11 @@ export const channelsMarkRead = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8800,7 +9873,11 @@ export const channelsListPinnedMessages = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8827,7 +9904,11 @@ export const channelsDeleteMessage = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8854,7 +9935,11 @@ export const channelsGetMessage = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8881,7 +9966,11 @@ export const channelsUpdateMessage = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8912,7 +10001,11 @@ export const channelsListThread = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8939,7 +10032,11 @@ export const channelsPinMessage = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -8970,7 +10067,11 @@ export const channelsAddReaction = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9001,7 +10102,11 @@ export const channelsRemoveReaction = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9030,7 +10135,11 @@ export const capabilitiesListDefinitions = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9061,7 +10170,11 @@ export const capabilitiesGetPlatformPosture = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9090,7 +10203,11 @@ export const capabilitiesResolveEffective = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9123,7 +10240,11 @@ export const capabilitiesGetAdminOverview = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9152,7 +10273,11 @@ export const capabilitiesGetAssignmentHistory = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9179,7 +10304,11 @@ export const capabilitiesExplainAdmin = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9208,7 +10337,11 @@ export const capabilitiesPatchAssignment = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9241,7 +10374,11 @@ export const capabilitiesUpdateAssignment = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9274,7 +10411,11 @@ export const capabilitiesPreviewAssignment = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9305,7 +10446,11 @@ export const capabilitiesPreviewImpact = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9338,7 +10483,11 @@ export const capabilitiesPublishAssignment = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9371,7 +10520,11 @@ export const capabilitiesApprovePublication = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9404,7 +10557,11 @@ export const capabilityFlagsListEffective = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9433,7 +10590,11 @@ export const capabilityFlagsGetAdminReport = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9460,7 +10621,11 @@ export const capabilityFlagsGetHistory = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9487,7 +10652,11 @@ export const capabilityFlagsUpdate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9520,7 +10689,11 @@ export const collaborationListShareTargets = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9549,7 +10722,11 @@ export const collaborationListKnowledgeBaseShares = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9578,7 +10755,11 @@ export const collaborationShareKnowledgeBase = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9611,7 +10792,11 @@ export const collaborationRevokeKnowledgeBaseShare = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9640,7 +10825,11 @@ export const collaborationListModelShares = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9667,7 +10856,11 @@ export const collaborationShareModel = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9700,7 +10893,11 @@ export const collaborationRevokeModelShare = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9729,7 +10926,11 @@ export const collaborationListWorkspaceMembers = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9758,7 +10959,11 @@ export const collaborationShareWorkspace = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9791,7 +10996,11 @@ export const collaborationRevokeWorkspaceMember = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9820,7 +11029,11 @@ export const collaborationListChatShares = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9847,7 +11060,11 @@ export const collaborationShareChat = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9880,7 +11097,11 @@ export const collaborationRevokeChatShare = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9909,7 +11130,11 @@ export const collaborationListFileShares = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9936,7 +11161,11 @@ export const collaborationShareFile = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9969,7 +11198,11 @@ export const collaborationListFavorites = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -9998,7 +11231,11 @@ export const collaborationCreateFavorite = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10031,7 +11268,11 @@ export const collaborationDeleteFavorite = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10058,7 +11299,11 @@ export const collaborationListFolders = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10085,7 +11330,11 @@ export const collaborationCreateFolder = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10116,7 +11365,11 @@ export const collaborationDeleteFolder = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10143,7 +11396,11 @@ export const collaborationGetFolder = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10170,7 +11427,11 @@ export const collaborationUpdateFolder = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10203,7 +11464,11 @@ export const collaborationListFolderShares = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10230,7 +11495,11 @@ export const collaborationShareFolder = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10263,7 +11532,11 @@ export const collaborationListFolderItems = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10292,7 +11565,11 @@ export const collaborationAddFolderItem = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10325,7 +11602,11 @@ export const collaborationListFolderItemsBatch = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10358,7 +11639,11 @@ export const collaborationDeleteFolderItem = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10385,7 +11670,11 @@ export const collaborationListChatTags = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10414,7 +11703,11 @@ export const collaborationListChatsForTag = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10443,7 +11736,11 @@ export const collaborationListChatTagAssignments = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10472,7 +11769,11 @@ export const collaborationAssignChatTag = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10505,7 +11806,11 @@ export const collaborationRemoveChatTag = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10532,7 +11837,11 @@ export const contentPolicyGet = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10559,7 +11868,11 @@ export const contentPolicyUpdate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10590,7 +11903,11 @@ export const contentPolicySimulate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10621,7 +11938,11 @@ export const contentPolicyVersionsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10650,7 +11971,11 @@ export const contentPolicyVersionsCreate = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10683,7 +12008,11 @@ export const contentPolicyVersionsDryRun = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10716,7 +12045,11 @@ export const contentPolicyVersionsPublish = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10743,7 +12076,11 @@ export const contentPolicyRollback = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10776,7 +12113,11 @@ export const contentPolicyDecisionsList = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10805,7 +12146,11 @@ export const contentPolicyApprovalsList = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10817,7 +12162,11 @@ export const contentPolicyApprovalsList = <
   });
 
 /**
- * Pause a run for a scoped, expiring, content-minimized approval
+ * Retired client-created content-policy approval request
+ *
+ * Deprecated and fail-closed. Content-policy approvals are created only by the governed run execution path and cannot be fabricated by API clients.
+ *
+ * @deprecated
  */
 export const contentPolicyApprovalsRequest = <
   ThrowOnError extends boolean = false,
@@ -10834,7 +12183,11 @@ export const contentPolicyApprovalsRequest = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10867,7 +12220,11 @@ export const contentPolicyApprovalsResolve = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10898,7 +12255,11 @@ export const dataConnectorsGetPosture = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10925,7 +12286,11 @@ export const dataConnectorsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10952,7 +12317,11 @@ export const dataConnectorsCreate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -10983,7 +12352,11 @@ export const dataConnectorsGetCatalog = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11010,7 +12383,11 @@ export const dataConnectorsSync = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11041,7 +12418,11 @@ export const dataConnectorsListSyncs = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11070,7 +12451,11 @@ export const delegatedOAuthListProviders = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11097,7 +12482,11 @@ export const delegatedOAuthGetPosture = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11124,7 +12513,11 @@ export const delegatedOAuthStart = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11157,7 +12550,11 @@ export const delegatedOAuthListConnections = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11186,7 +12583,11 @@ export const delegatedOAuthRevokeConnection = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11225,7 +12626,11 @@ export const deviceAuthorizationsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11254,7 +12659,11 @@ export const deviceAuthorizationsCreate = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11312,7 +12721,11 @@ export const deviceAuthorizationsRevoke = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11339,7 +12752,11 @@ export const edgeSecurityGetPosture = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11351,7 +12768,7 @@ export const edgeSecurityGetPosture = <ThrowOnError extends boolean = false>(
   });
 
 /**
- * Create an authenticated realtime voice session or fail closed
+ * Preview realtime session policy. This does not start a live gateway session.
  */
 export const realtimeCreateSession = <ThrowOnError extends boolean = false>(
   options: Options<RealtimeCreateSessionData, ThrowOnError>,
@@ -11366,7 +12783,11 @@ export const realtimeCreateSession = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11397,7 +12818,11 @@ export const computeCreateJob = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11428,7 +12853,11 @@ export const compareCreateSession = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11459,7 +12888,11 @@ export const firewallEvaluateOutput = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11490,7 +12923,11 @@ export const knowledgePrefilterAcl = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11521,7 +12958,11 @@ export const trustGetPosture = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11548,7 +12989,11 @@ export const imagesCreateJob = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11579,7 +13024,11 @@ export const imagesCancelJob = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11606,7 +13055,11 @@ export const realtimeAdaptersPreview = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11637,7 +13090,11 @@ export const compareSynthesisPreview = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11668,7 +13125,11 @@ export const knowledgeAclFreshness = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11699,7 +13160,11 @@ export const trustCryptoShredPreview = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11730,7 +13195,11 @@ export const trustAuditSegmentsSeal = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11761,7 +13230,11 @@ export const trustSiemExportCheckpoint = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11792,7 +13265,11 @@ export const trustBreakGlassAuthorize = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11823,7 +13300,11 @@ export const computeSandboxPosture = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11856,7 +13337,11 @@ export const computeRuntimeImagesAuthorize = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11887,7 +13372,11 @@ export const computeArtifactsIntake = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11920,7 +13409,11 @@ export const computeArtifactsProvenance = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11953,7 +13446,11 @@ export const computeArtifactsCreateVersion = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -11984,7 +13481,11 @@ export const computeArtifactsPreview = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12015,7 +13516,11 @@ export const computeArtifactsLifecycle = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12046,7 +13551,11 @@ export const computeOperationsPosture = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12073,7 +13582,11 @@ export const tableViewsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12104,7 +13617,11 @@ export const tableViewsReplace = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12112,6 +13629,146 @@ export const tableViewsReplace = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/admin/table-views",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Delete an owned server saved view
+ */
+export const tableViewsDelete = <ThrowOnError extends boolean = false>(
+  options: Options<TableViewsDeleteData, ThrowOnError>,
+): RequestResult<
+  TableViewsDeleteResponses,
+  TableViewsDeleteErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    TableViewsDeleteResponses,
+    TableViewsDeleteErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-views/{viewId}",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Restore a recently deleted owned saved view
+ */
+export const tableViewsRestore = <ThrowOnError extends boolean = false>(
+  options: Options<TableViewsRestoreData, ThrowOnError>,
+): RequestResult<
+  TableViewsRestoreResponses,
+  TableViewsRestoreErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TableViewsRestoreResponses,
+    TableViewsRestoreErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-views/{viewId}/restore",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Set or clear the owned default saved view
+ */
+export const tableViewsSetDefault = <ThrowOnError extends boolean = false>(
+  options: Options<TableViewsSetDefaultData, ThrowOnError>,
+): RequestResult<
+  TableViewsSetDefaultResponses,
+  TableViewsSetDefaultErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TableViewsSetDefaultResponses,
+    TableViewsSetDefaultErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-views/{viewId}/default",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Change workspace sharing for an owned saved view
+ */
+export const tableViewsShare = <ThrowOnError extends boolean = false>(
+  options: Options<TableViewsShareData, ThrowOnError>,
+): RequestResult<
+  TableViewsShareResponses,
+  TableViewsShareErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    TableViewsShareResponses,
+    TableViewsShareErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-views/{viewId}/share",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -12135,7 +13792,11 @@ export const tableExportsCreate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12166,7 +13827,11 @@ export const tableExportsRun = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12174,6 +13839,37 @@ export const tableExportsRun = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/admin/table-exports/{jobId}/run",
+    ...options,
+  });
+
+/**
+ * Delete an owned table-export artifact and expire the job
+ */
+export const tableExportsDelete = <ThrowOnError extends boolean = false>(
+  options: Options<TableExportsDeleteData, ThrowOnError>,
+): RequestResult<
+  TableExportsDeleteResponses,
+  TableExportsDeleteErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).delete<
+    TableExportsDeleteResponses,
+    TableExportsDeleteErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-exports/{jobId}",
     ...options,
   });
 
@@ -12193,7 +13889,11 @@ export const tableExportsGet = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12201,6 +13901,39 @@ export const tableExportsGet = <ThrowOnError extends boolean = false>(
       },
     ],
     url: "/admin/table-exports/{jobId}",
+    ...options,
+  });
+
+/**
+ * Download an authorized, unexpired table-export artifact
+ */
+export const tableExportsDownloadArtifact = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<TableExportsDownloadArtifactData, ThrowOnError>,
+): RequestResult<
+  TableExportsDownloadArtifactResponses,
+  TableExportsDownloadArtifactErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    TableExportsDownloadArtifactResponses,
+    TableExportsDownloadArtifactErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/admin/table-exports/{jobId}/artifact",
     ...options,
   });
 
@@ -12220,7 +13953,11 @@ export const tablePagesQuery = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12251,7 +13988,11 @@ export const evalsListSuites = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12278,7 +14019,11 @@ export const evalsCreateSuite = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12311,7 +14056,11 @@ export const evalsCreateCaseFromMessageFeedback = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12338,7 +14087,11 @@ export const evalsListRuns = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12365,7 +14118,11 @@ export const evalsGetDashboard = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12394,7 +14151,11 @@ export const evalsGetReleaseCandidateEvidence = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12417,7 +14178,11 @@ export const evalsRunSuite = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12450,7 +14215,11 @@ export const evalsGetReasoningComparison = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12477,7 +14246,11 @@ export const evalsListResults = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12504,7 +14277,11 @@ export const evalsListRatings = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12531,7 +14308,11 @@ export const evalsRateResult = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12558,7 +14339,11 @@ export const filesList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12581,7 +14366,11 @@ export const filesCreate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12612,7 +14401,11 @@ export const filesCreateUploadSession = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12645,7 +14438,11 @@ export const filesCreateResumableUploadSession = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12678,7 +14475,11 @@ export const filesCancelResumableUploadSession = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12707,7 +14508,11 @@ export const filesGetResumableUploadSession = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12736,7 +14541,11 @@ export const filesCompleteResumableUploadSession = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12763,7 +14572,11 @@ export const filesCancelUploadSession = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12790,7 +14603,11 @@ export const filesGetUploadSession = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12819,7 +14636,11 @@ export const filesCompleteUploadSession = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12842,7 +14663,11 @@ export const filesDelete = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12865,7 +14690,11 @@ export const filesGet = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12892,7 +14721,11 @@ export const filesRetryExtraction = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12919,7 +14752,11 @@ export const filesRetryLifecycle = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12946,7 +14783,11 @@ export const filesReadContent = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -12975,7 +14816,11 @@ export const governanceGetRetentionPolicy = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13004,7 +14849,11 @@ export const governanceUpdateRetentionPolicy = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13037,7 +14886,11 @@ export const governanceEnforceRetention = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13066,7 +14919,11 @@ export const governancePreviewDataDeletion = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13099,7 +14956,11 @@ export const governanceExecuteDataDeletion = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13132,7 +14993,11 @@ export const governanceGetDataRightsCoverage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13161,7 +15026,11 @@ export const governancePreviewDataExport = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13194,7 +15063,11 @@ export const governanceExecuteDataExport = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13227,7 +15100,11 @@ export const governanceListDataExportPackages = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13256,7 +15133,11 @@ export const governanceCreateDataExportPackage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13289,7 +15170,11 @@ export const governanceDeleteDataExportPackage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13302,6 +15187,39 @@ export const governanceDeleteDataExportPackage = <
       "Content-Type": "application/json",
       ...options.headers,
     },
+  });
+
+/**
+ * Get a governed data-export package job
+ */
+export const governanceGetDataExportPackage = <
+  ThrowOnError extends boolean = false,
+>(
+  options: Options<GovernanceGetDataExportPackageData, ThrowOnError>,
+): RequestResult<
+  GovernanceGetDataExportPackageResponses,
+  GovernanceGetDataExportPackageErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).get<
+    GovernanceGetDataExportPackageResponses,
+    GovernanceGetDataExportPackageErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
+      {
+        in: "cookie",
+        name: "romeo_session",
+        type: "apiKey",
+      },
+    ],
+    url: "/governance/data-exports/packages/{packageId}",
+    ...options,
   });
 
 /**
@@ -13322,7 +15240,11 @@ export const governanceReadDataExportPackage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13351,7 +15273,11 @@ export const governanceGetComplianceReport = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13380,7 +15306,11 @@ export const governanceExportComplianceReportCsv = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13409,7 +15339,11 @@ export const governanceListAccessReviewGrants = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13438,7 +15372,11 @@ export const governanceExportAccessReviewCsv = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13467,7 +15405,11 @@ export const governanceGetAccessReviewReport = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13496,7 +15438,11 @@ export const governanceExportAccessReviewReportCsv = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13525,7 +15471,11 @@ export const governanceGetIdentityLifecyclePolicy = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13554,7 +15504,11 @@ export const knowledgeGetAgenticSettings = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13583,7 +15537,11 @@ export const knowledgeGetIngestReadiness = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13610,7 +15568,11 @@ export const knowledgeListBases = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13637,7 +15599,11 @@ export const knowledgeCreateBase = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13668,7 +15634,11 @@ export const knowledgeGetBase = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13695,7 +15665,11 @@ export const knowledgeUpdateBase = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13726,7 +15700,11 @@ export const knowledgeListSources = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13753,7 +15731,11 @@ export const knowledgeCreateSource = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13784,7 +15766,11 @@ export const knowledgeCreateUpload = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13815,7 +15801,11 @@ export const knowledgeCompleteUpload = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13842,7 +15832,11 @@ export const knowledgeExtractSource = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13869,7 +15863,11 @@ export const knowledgeIndexEmbeddings = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13900,7 +15898,11 @@ export const knowledgeDeleteSource = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13927,7 +15929,11 @@ export const knowledgeReindexSource = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13958,7 +15964,11 @@ export const knowledgeQueryBase = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -13989,7 +15999,11 @@ export const knowledgeQueryTiered = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14020,7 +16034,11 @@ export const knowledgeReplayTiered = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14053,7 +16071,11 @@ export const knowledgeCompareTieredReplay = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14080,7 +16102,11 @@ export const imagesGenerate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14107,7 +16133,11 @@ export const jobsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14134,7 +16164,11 @@ export const jobsGetOperationalSummary = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14184,7 +16218,11 @@ export const localAuthGetStatus = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14211,7 +16249,11 @@ export const localAuthSetPassword = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14244,7 +16286,11 @@ export const localAuthStartTotpEnrollment = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14277,7 +16323,11 @@ export const localAuthConfirmTotpEnrollment = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14310,7 +16360,11 @@ export const localAuthGenerateRecoveryCodes = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14343,7 +16397,11 @@ export const localAuthDisableTotpFactor = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14500,7 +16558,11 @@ export const toolApprovalsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14527,7 +16589,11 @@ export const toolApprovalsApprove = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14554,7 +16620,11 @@ export const toolApprovalsCancel = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14581,7 +16651,11 @@ export const toolApprovalsReject = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14604,7 +16678,11 @@ export const toolsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14627,7 +16705,11 @@ export const toolsListCalls = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14654,7 +16736,11 @@ export const toolsListAgentBindings = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14681,7 +16767,11 @@ export const toolsUpdateAgentBinding = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14708,7 +16798,11 @@ export const toolsExecute = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14739,7 +16833,11 @@ export const toolsExecuteForRun = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14770,7 +16868,11 @@ export const toolConnectorsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14797,7 +16899,11 @@ export const toolConnectorsGetCatalog = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14824,7 +16930,11 @@ export const toolConnectorsUpdate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14857,7 +16967,11 @@ export const toolConnectorsImportOpenApi = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14890,7 +17004,11 @@ export const toolConnectorsCreateWebhook = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14921,7 +17039,11 @@ export const toolConnectorsCreateMcp = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14952,7 +17074,11 @@ export const toolConnectorsUpdateAuth = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -14983,7 +17109,11 @@ export const toolConnectorsCheckAuth = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15012,7 +17142,11 @@ export const toolConnectorsUpdateNetworkPolicy = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15045,7 +17179,11 @@ export const toolConnectorsListOperations = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15074,7 +17212,11 @@ export const toolConnectorsUpdateOperation = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15107,7 +17249,11 @@ export const toolConnectorsTestOperation = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15140,7 +17286,11 @@ export const toolConnectorsDispatchOperation = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15173,7 +17323,11 @@ export const toolDispatchRequestsEnqueue = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15204,7 +17358,11 @@ export const toolDispatchRequestsClaim = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15237,7 +17395,11 @@ export const toolDispatchRequestsExpire = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15270,7 +17432,11 @@ export const toolDispatchRequestsRenewLease = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15303,7 +17469,11 @@ export const toolDispatchRequestsReadPayload = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15332,7 +17502,11 @@ export const toolDispatchRequestsComplete = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15363,7 +17537,11 @@ export const toolDispatchRequestsFail = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15396,7 +17574,11 @@ export const toolDispatchRequestsCancel = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15427,7 +17609,11 @@ export const webGetConfiguration = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15454,7 +17640,11 @@ export const webUpdateConfiguration = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15481,7 +17671,11 @@ export const webSearch = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15508,7 +17702,11 @@ export const webIngestUrls = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15535,7 +17733,11 @@ export const webhooksList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15558,7 +17760,11 @@ export const webhooksCreate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15589,7 +17795,11 @@ export const webhooksBulkDisable = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15620,7 +17830,11 @@ export const webhooksDisable = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15647,7 +17861,11 @@ export const webhooksListDeliveries = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15670,7 +17888,11 @@ export const webhooksTest = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15703,7 +17925,11 @@ export const webhooksListDeliveriesPage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15732,7 +17958,11 @@ export const webhooksRetryDueDeliveries = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15755,7 +17985,11 @@ export const voicesList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15778,7 +18012,11 @@ export const voicesCreate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15809,7 +18047,11 @@ export const voicesSyncCatalog = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15832,7 +18074,11 @@ export const voicesPreview = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15865,7 +18111,11 @@ export const voicesGenerateMessageSpeech = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15896,7 +18146,11 @@ export const voicesTranscribe = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15927,7 +18181,11 @@ export const voicesDeleteArtifact = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15954,7 +18212,11 @@ export const voicesReadArtifact = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15967,6 +18229,8 @@ export const voicesReadArtifact = <ThrowOnError extends boolean = false>(
 
 /**
  * List templates
+ *
+ * @deprecated
  */
 export const workflowsListTemplates = <ThrowOnError extends boolean = false>(
   options?: Options<WorkflowsListTemplatesData, ThrowOnError>,
@@ -15981,7 +18245,11 @@ export const workflowsListTemplates = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -15994,6 +18262,8 @@ export const workflowsListTemplates = <ThrowOnError extends boolean = false>(
 
 /**
  * Create from template
+ *
+ * @deprecated
  */
 export const workflowsCreateFromTemplate = <
   ThrowOnError extends boolean = false,
@@ -16010,7 +18280,11 @@ export const workflowsCreateFromTemplate = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16027,6 +18301,8 @@ export const workflowsCreateFromTemplate = <
 
 /**
  * List
+ *
+ * @deprecated
  */
 export const workflowsList = <ThrowOnError extends boolean = false>(
   options?: Options<WorkflowsListData, ThrowOnError>,
@@ -16037,7 +18313,11 @@ export const workflowsList = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16050,6 +18330,8 @@ export const workflowsList = <ThrowOnError extends boolean = false>(
 
 /**
  * Create
+ *
+ * @deprecated
  */
 export const workflowsCreate = <ThrowOnError extends boolean = false>(
   options: Options<WorkflowsCreateData, ThrowOnError>,
@@ -16064,7 +18346,11 @@ export const workflowsCreate = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16081,6 +18367,8 @@ export const workflowsCreate = <ThrowOnError extends boolean = false>(
 
 /**
  * Run due schedules
+ *
+ * @deprecated
  */
 export const workflowsRunDueSchedules = <ThrowOnError extends boolean = false>(
   options?: Options<WorkflowsRunDueSchedulesData, ThrowOnError>,
@@ -16095,7 +18383,11 @@ export const workflowsRunDueSchedules = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16108,6 +18400,8 @@ export const workflowsRunDueSchedules = <ThrowOnError extends boolean = false>(
 
 /**
  * List runs
+ *
+ * @deprecated
  */
 export const workflowsListRuns = <ThrowOnError extends boolean = false>(
   options: Options<WorkflowsListRunsData, ThrowOnError>,
@@ -16122,7 +18416,11 @@ export const workflowsListRuns = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16135,6 +18433,8 @@ export const workflowsListRuns = <ThrowOnError extends boolean = false>(
 
 /**
  * Start run
+ *
+ * @deprecated
  */
 export const workflowsStartRun = <ThrowOnError extends boolean = false>(
   options: Options<WorkflowsStartRunData, ThrowOnError>,
@@ -16149,7 +18449,11 @@ export const workflowsStartRun = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16166,6 +18470,8 @@ export const workflowsStartRun = <ThrowOnError extends boolean = false>(
 
 /**
  * Approve run
+ *
+ * @deprecated
  */
 export const workflowsApproveRun = <ThrowOnError extends boolean = false>(
   options: Options<WorkflowsApproveRunData, ThrowOnError>,
@@ -16180,7 +18486,11 @@ export const workflowsApproveRun = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16197,6 +18507,8 @@ export const workflowsApproveRun = <ThrowOnError extends boolean = false>(
 
 /**
  * Resume run
+ *
+ * @deprecated
  */
 export const workflowsResumeRun = <ThrowOnError extends boolean = false>(
   options: Options<WorkflowsResumeRunData, ThrowOnError>,
@@ -16211,7 +18523,11 @@ export const workflowsResumeRun = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16220,6 +18536,96 @@ export const workflowsResumeRun = <ThrowOnError extends boolean = false>(
     ],
     url: "/workflow-runs/{workflowRunId}/resume",
     ...options,
+  });
+
+/**
+ * Claim the next tenant-scoped item for one worker audience
+ */
+export const workerBrokerClaim = <ThrowOnError extends boolean = false>(
+  options: Options<WorkerBrokerClaimData, ThrowOnError>,
+): RequestResult<
+  WorkerBrokerClaimResponses,
+  WorkerBrokerClaimErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    WorkerBrokerClaimResponses,
+    WorkerBrokerClaimErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "workerBrokerBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/worker-broker/{audience}/claims",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Renew an audience-bound fenced worker claim
+ */
+export const workerBrokerRenew = <ThrowOnError extends boolean = false>(
+  options: Options<WorkerBrokerRenewData, ThrowOnError>,
+): RequestResult<
+  WorkerBrokerRenewResponses,
+  WorkerBrokerRenewErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    WorkerBrokerRenewResponses,
+    WorkerBrokerRenewErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "workerBrokerBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/worker-broker/{audience}/claims/renew",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+/**
+ * Complete or fail an audience-bound fenced worker claim
+ */
+export const workerBrokerComplete = <ThrowOnError extends boolean = false>(
+  options: Options<WorkerBrokerCompleteData, ThrowOnError>,
+): RequestResult<
+  WorkerBrokerCompleteResponses,
+  WorkerBrokerCompleteErrors,
+  ThrowOnError
+> =>
+  (options.client ?? client).post<
+    WorkerBrokerCompleteResponses,
+    WorkerBrokerCompleteErrors,
+    ThrowOnError
+  >({
+    security: [
+      {
+        key: "workerBrokerBearer",
+        scheme: "bearer",
+        type: "http",
+      },
+    ],
+    url: "/internal/worker-broker/{audience}/claims/complete",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   });
 
 /**
@@ -16240,7 +18646,11 @@ export const workspaceContentListMemories = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16269,7 +18679,11 @@ export const workspaceContentCreateMemory = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16302,7 +18716,11 @@ export const workspaceContentDeleteMemory = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16331,7 +18749,11 @@ export const workspaceContentUpdateMemory = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16362,7 +18784,11 @@ export const workspaceContentListNotes = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16391,7 +18817,11 @@ export const workspaceContentCreateNote = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16424,7 +18854,11 @@ export const workspaceContentDeleteNote = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16453,7 +18887,11 @@ export const workspaceContentUpdateNote = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16484,7 +18922,11 @@ export const openWebUiGetSessionUser = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16561,7 +19003,11 @@ export const openWebUiGetConfigAlias = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16588,7 +19034,11 @@ export const openWebUiGetVersionAlias = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16617,7 +19067,11 @@ export const openWebUiGetVersionUpdatesAlias = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16644,7 +19098,11 @@ export const openWebUiListChats = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16671,7 +19129,11 @@ export const openWebUiListChatsAlias = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16698,7 +19160,11 @@ export const openWebUiCreateChat = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16729,7 +19195,11 @@ export const openWebUiListPinnedChats = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16758,7 +19228,11 @@ export const openWebUiGetChatPinnedStatus = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16785,7 +19259,11 @@ export const openWebUiToggleChatPinned = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16812,7 +19290,11 @@ export const openWebUiSearchChats = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16841,7 +19323,11 @@ export const openWebUiListArchivedChats = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16870,7 +19356,11 @@ export const openWebUiListAllArchivedChats = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16897,7 +19387,11 @@ export const openWebUiListTags = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16924,7 +19418,11 @@ export const openWebUiListChatsByTag = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16955,7 +19453,11 @@ export const openWebUiDeleteChatTag = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -16986,7 +19488,11 @@ export const openWebUiListChatTags = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17013,7 +19519,11 @@ export const openWebUiAddChatTag = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17044,7 +19554,11 @@ export const openWebUiListFolderChats = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17073,7 +19587,11 @@ export const openWebUiListFolderChatSummaries = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17100,7 +19618,11 @@ export const openWebUiUpdateChatFolder = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17131,7 +19653,11 @@ export const openWebUiListFolders = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17158,7 +19684,11 @@ export const openWebUiCreateFolder = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17189,7 +19719,11 @@ export const openWebUiDeleteFolder = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17216,7 +19750,11 @@ export const openWebUiGetFolder = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17243,7 +19781,11 @@ export const openWebUiUpdateFolder = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17276,7 +19818,11 @@ export const openWebUiUpdateFolderExpanded = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17309,7 +19855,11 @@ export const openWebUiUpdateFolderParent = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17340,7 +19890,11 @@ export const openWebUiListChannels = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17369,7 +19923,11 @@ export const openWebUiListChannelsAlias = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17396,7 +19954,11 @@ export const openWebUiCreateChannel = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17429,7 +19991,11 @@ export const openWebUiGetOrCreateDmChannel = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17458,7 +20024,11 @@ export const openWebUiListChannelMessages = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17487,7 +20057,11 @@ export const openWebUiPostChannelMessage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17518,7 +20092,11 @@ export const openWebUiMarkChannelRead = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17547,7 +20125,11 @@ export const openWebUiListPinnedChannelMessages = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17576,7 +20158,11 @@ export const openWebUiGetChannelMessage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17605,7 +20191,11 @@ export const openWebUiGetChannelMessageData = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17634,7 +20224,11 @@ export const openWebUiListChannelThreadMessages = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17663,7 +20257,11 @@ export const openWebUiPinChannelMessage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17696,7 +20294,11 @@ export const openWebUiUpdateChannelMessage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17729,7 +20331,11 @@ export const openWebUiAddChannelMessageReaction = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17762,7 +20368,11 @@ export const openWebUiRemoveChannelMessageReaction = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17795,7 +20405,11 @@ export const openWebUiDeleteChannelMessage = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17822,7 +20436,11 @@ export const openWebUiGetChannel = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17851,7 +20469,11 @@ export const openWebUiListChannelMembers = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17880,7 +20502,11 @@ export const openWebUiUpdateChannelMemberActive = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17913,7 +20539,11 @@ export const openWebUiAddChannelMembers = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17946,7 +20576,11 @@ export const openWebUiRemoveChannelMembers = <
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -17977,7 +20611,11 @@ export const openWebUiUpdateChannel = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",
@@ -18008,7 +20646,11 @@ export const openWebUiDeleteChannel = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     security: [
-      { scheme: "bearer", type: "http" },
+      {
+        key: "bearerAuth",
+        scheme: "bearer",
+        type: "http",
+      },
       {
         in: "cookie",
         name: "romeo_session",

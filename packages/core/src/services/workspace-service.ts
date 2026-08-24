@@ -211,17 +211,13 @@ export class WorkspaceService {
       input.subject,
       input.workspaceId,
     );
-    const [agents, chats, knowledgeBases, dataConnectors, workflows] =
-      await Promise.all([
-        this.repository.listAgents(workspace.id),
-        this.repository.listChats(workspace.id),
-        this.repository.listKnowledgeBases(workspace.id),
-        this.repository.listDataConnectors(input.subject.orgId, workspace.id),
-        this.repository.listWorkflowDefinitions(
-          input.subject.orgId,
-          workspace.id,
-        ),
-      ]);
+    const [agents, chats, knowledgeBases, dataConnectors] = await Promise.all([
+      this.repository.listAgents(workspace.id),
+      this.repository.listChats(workspace.id),
+      this.repository.listKnowledgeBases(workspace.id),
+      this.repository.listDataConnectors(input.subject.orgId, workspace.id),
+    ]);
+
     const messages = await Promise.all(
       chats.map((chat) => this.repository.listMessages(chat.id)),
     );
@@ -238,7 +234,7 @@ export class WorkspaceService {
           messages: messages.reduce((count, rows) => count + rows.length, 0),
           knowledgeBases: knowledgeBases.length,
           dataConnectors: dataConnectors.length,
-          workflows: workflows.length,
+          workflows: 0,
         },
       },
     );
@@ -253,7 +249,7 @@ export class WorkspaceService {
         messages: messages.reduce((count, rows) => count + rows.length, 0),
         knowledgeBases: knowledgeBases.length,
         dataConnectors: dataConnectors.length,
-        workflows: workflows.length,
+        workflows: 0,
       },
       resources: {
         agents: agents.map((agent) => ({
@@ -281,12 +277,7 @@ export class WorkspaceService {
           status: connector.status,
           type: connector.type,
         })),
-        workflows: workflows.map((workflow) => ({
-          enabled: workflow.enabled,
-          id: workflow.id,
-          stepCount: workflow.steps.length,
-          updatedAt: workflow.updatedAt,
-        })),
+        workflows: [],
       },
       exportedAt,
     };

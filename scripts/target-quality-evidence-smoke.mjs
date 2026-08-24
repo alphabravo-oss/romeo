@@ -8,6 +8,9 @@ import {
   positiveInteger,
   repeatedArgValues,
 } from "./lib/target-quality-evidence.mjs";
+import { assertNoSecretArgv, readSecretInput } from "./lib/secret-input.mjs";
+
+assertNoSecretArgv();
 
 const outputPath = argValue("--output");
 const dryRun = process.argv.includes("--dry-run");
@@ -21,7 +24,7 @@ const config = {
             process.env.TARGET_QUALITY_AGENT_IDS ??
             "agent_default",
         ),
-  apiKey: argValue("--api-key") ?? process.env.ROMEO_API_KEY,
+  apiKey: readSecretInput({ environment: "ROMEO_API_KEY" }),
   baseUrl: argValue("--base-url") ?? process.env.ROMEO_BASE_URL,
   forbiddenStrings: [
     ...splitCsv(process.env.TARGET_QUALITY_FORBIDDEN_STRINGS ?? ""),

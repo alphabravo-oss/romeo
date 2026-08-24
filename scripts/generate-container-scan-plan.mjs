@@ -63,15 +63,15 @@ if (runScanners) {
 }
 
 const plan = {
-  schemaVersion: "romeo.container-scan-plan.v1",
+  schemaVersion: "romeo.container-scan-plan.v2",
   generatedAt,
+  evidenceStatus: "planning_only",
   scanner,
   runScanners,
   images,
-  releaseSecurityArgs: images.flatMap((image) => [
-    "--container-scan-file",
-    image.scanFile,
-  ]),
+  rawScannerOutputs: images.map((image) => image.scanFile),
+  warning:
+    "Raw scanner outputs are not release evidence until bound to app/ops image digests with bind-container-scan-report.mjs.",
 };
 
 writeJsonOrStdout({ path: outputPath, value: plan, stdout });
@@ -82,15 +82,17 @@ if (!stdout)
 
 function imagesFromHelmValues(path) {
   const text = readFileSync(path, "utf8");
-  const repository = matchIndentedValue(text, "image", "repository");
-  const tag = matchIndentedValue(text, "image", "tag");
-  if (repository === undefined || tag === undefined) return [];
-  return [
-    {
-      image: `${repository}:${tag}`,
-      source: `helm-values:${relative(root, path)}`,
-    },
-  ];
+  return ["image", "opsImage"].flatMap((blockName) => {
+    const repository = matchIndentedValue(text, blockName, "repository");
+    const tag = matchIndentedValue(text, blockName, "tag");
+    if (repository === undefined || tag === undefined) return [];
+    return [
+      {
+        image: `${repository}:${tag}`,
+        source: `helm-values:${relative(root, path)}#${blockName}`,
+      },
+    ];
+  });
 }
 
 function imagesFromImageYaml(path, sourcePrefix) {

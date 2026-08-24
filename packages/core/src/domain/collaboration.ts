@@ -1,5 +1,7 @@
 import type { PrincipalType, ResourceType } from "@romeo/auth";
 
+import type { WorkLease } from "./work-leases";
+
 export type FavoritableResourceType = Extract<
   ResourceType,
   "agent" | "chat" | "knowledge_base" | "model"
@@ -160,4 +162,6 @@ export interface NotificationDelivery {
   createdAt: string;
   updatedAt: string;
   deliveredAt?: string;
+  deliveryLease?: WorkLease;
+  providerIdempotencyKey?: string;
 }

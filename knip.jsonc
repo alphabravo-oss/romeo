@@ -8,9 +8,4 @@
     "apps/app/benchmark.vite.config.ts",
     "apps/app/benchmarks/**",
   ],
-  "workspaces": {
-    "apps/app": {
-      "ignoreDependencies": ["axe-core"],
-    },
-  },
 }

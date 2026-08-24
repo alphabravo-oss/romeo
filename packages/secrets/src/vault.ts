@@ -98,6 +98,7 @@ const defaultVaultClientFactory: VaultSdkClientFactory = (options) => {
 };
 
 export class VaultSecretResolver implements SecretResolver {
+  private sdkClient: VaultSdkClient | undefined;
   private readonly clientFactory: VaultSdkClientFactory;
   private readonly kvMount: string;
   private readonly namespace: string | undefined;
@@ -143,7 +144,7 @@ export class VaultSecretResolver implements SecretResolver {
   }
 
   private client(): VaultSdkClient {
-    return this.clientFactory(this.clientOptions());
+    return (this.sdkClient ??= this.clientFactory(this.clientOptions()));
   }
 
   private clientOptions(): VaultSdkClientOptions {
@@ -172,6 +173,7 @@ export class VaultSecretResolver implements SecretResolver {
 }
 
 export class VaultSecretWriter implements SecretWriter {
+  private sdkClient: VaultSdkClient | undefined;
   private readonly clientFactory: VaultSdkClientFactory;
   private readonly kvMount: string;
   private readonly namespace: string | undefined;
@@ -231,7 +233,7 @@ export class VaultSecretWriter implements SecretWriter {
   }
 
   private client(): VaultSdkClient {
-    return this.clientFactory({
+    return (this.sdkClient ??= this.clientFactory({
       address: this.options.address,
       token: this.options.token,
       kvMount: this.kvMount,
@@ -239,6 +241,6 @@ export class VaultSecretWriter implements SecretWriter {
       ...(this.options.fetchImpl === undefined
         ? {}
         : { fetchImpl: this.options.fetchImpl }),
-    });
+    }));
   }
 }

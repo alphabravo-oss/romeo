@@ -71,8 +71,16 @@ function optionalCitationField(
 export function providerUsageFromEvent(
   event: RunEvent,
 ): ProviderTokenUsage | undefined {
-  if (event.type !== "run.completed") return undefined;
-  return (event.data as { usage?: ProviderTokenUsage }).usage;
+  const data = event.data as {
+    channel?: unknown;
+    usage?: ProviderTokenUsage;
+  };
+  if (
+    event.type !== "run.completed" &&
+    !(event.type === "run.failed" && data.channel === "content_policy")
+  )
+    return undefined;
+  return data.usage;
 }
 
 export function routedRunTarget(

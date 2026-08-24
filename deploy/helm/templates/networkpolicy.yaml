@@ -2,7 +2,23 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "romeo.fullname" . }}
+  name: {{ include "romeo.fullname" . }}-default-deny
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "romeo.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "romeo.fullname" . }}-app
   labels:
     {{- include "romeo.labels" . | nindent 4 }}
 spec:
@@ -25,6 +41,57 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.service.port }}
+    {{- if or .Values.workers.toolDispatch.enabled .Values.workers.browserAutomation.enabled .Values.workers.knowledgeExtraction.enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "romeo.selectorLabels" . | nindent 14 }}
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                  {{- if .Values.workers.toolDispatch.enabled }}
+                  - tool-dispatch
+                  {{- end }}
+                  {{- if .Values.workers.browserAutomation.enabled }}
+                  - browser-automation
+                  {{- end }}
+                  {{- if .Values.workers.knowledgeExtraction.enabled }}
+                  - knowledge-extraction
+                  {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+    {{- end }}
+  egress:
+    {{- if .Values.networkPolicy.egress }}
+    {{- toYaml .Values.networkPolicy.egress | nindent 4 }}
+    {{- else }}
+    []
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "romeo.fullname" . }}-operations
+  labels:
+    {{- include "romeo.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "romeo.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: NotIn
+        values:
+          - app
+          - tool-dispatch
+          - browser-automation
+          - knowledge-extraction
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
   egress:
     {{- if .Values.networkPolicy.egress }}
     {{- toYaml .Values.networkPolicy.egress | nindent 4 }}

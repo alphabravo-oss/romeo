@@ -126,7 +126,10 @@ export function AdminOverview({
                       <Link
                         className="rm-admin-launch__item"
                         key={item.key}
-                        search={{ section: item.key }}
+                        search={(previous) => ({
+                          ...previous,
+                          section: item.key,
+                        })}
                         to="/admin"
                       >
                         <span className="rm-admin-launch__icon">

@@ -32,8 +32,9 @@ export class MemoryObjectStore implements ObjectStore {
 
   async getObject(
     key: string,
-    options: { maxBytes?: number } = {},
+    options: { maxBytes?: number; signal?: AbortSignal } = {},
   ): Promise<Uint8Array | undefined> {
+    options.signal?.throwIfAborted();
     const object = this.objects.get(key);
     if (
       object !== undefined &&
@@ -43,6 +44,20 @@ export class MemoryObjectStore implements ObjectStore {
       throw new ObjectSizeLimitError(options.maxBytes);
     }
     return object ? new Uint8Array(object.bytes) : undefined;
+  }
+
+  async getObjectStream(
+    key: string,
+    options: { maxBytes?: number; signal?: AbortSignal } = {},
+  ): Promise<ReadableStream<Uint8Array> | undefined> {
+    const bytes = await this.getObject(key, options);
+    if (bytes === undefined) return undefined;
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    });
   }
 
   async headObject(key: string): Promise<StoredObject | undefined> {

@@ -119,6 +119,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       apiClient,
     ),
   );
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
 
   const workspaces = useMemo<Workspace[]>(
     () =>
@@ -193,6 +195,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
     if (nextId === undefined) return;
     persistWorkspaceId(nextId);
+    // The loader's authorized default is already the active selection. A
+    // replace-navigation to the identical workspace during hydration aborts
+    // the current route match for no state change and can surface the
+    // router's undefined cancellation reason as a React error. Canonicalize
+    // only when browser persistence genuinely selects a different workspace.
+    if (nextId === validatedWorkspaceId) return;
     void navigateWorkspaceSelection(nextId, true, false);
   }, [
     navigateWorkspaceSelection,
@@ -225,6 +233,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     () => workspaces.find((candidate) => candidate.id === workspaceId),
     [workspaces, workspaceId],
   );
+  const sessionSubject = useMemo<AuthSubject | undefined>(() => {
+    const snapshot = sessionQuery.data?.subject;
+    if (snapshot === undefined) return undefined;
+    return {
+      groupIds: [],
+      id: snapshot.id,
+      isAdmin: snapshot.isAdmin,
+      name: snapshot.displayLabel,
+      orgId: snapshot.orgId,
+      scopes: [],
+      type: snapshot.type,
+      workspaceIds: snapshot.workspaceIds,
+    };
+  }, [sessionQuery.data?.subject]);
+  // SSR and the first client render use the same deliberately sanitized
+  // session projection. After hydration, the ordinary bootstrap query can add
+  // full authorization/display fields without producing a text mismatch.
+  const subject =
+    hydrated && bootstrapQuery.data?.subject !== undefined
+      ? bootstrapQuery.data.subject
+      : sessionSubject;
 
   useEffect(() => {
     if (workspaceId === undefined) {
@@ -268,18 +297,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       latestChatEvent,
       retryBootstrap,
       setWorkspaceId,
-      subject: bootstrapQuery.data?.subject,
+      subject,
       workspace,
       workspaceId,
       workspaces,
     }),
     [
-      bootstrapQuery.data?.subject,
       bootstrapQuery.status,
       chatSyncStatus,
       latestChatEvent,
       retryBootstrap,
       setWorkspaceId,
+      subject,
       workspace,
       workspaceId,
       workspaces,
@@ -300,6 +329,11 @@ export function useWorkspace(): WorkspaceContextValue {
     throw new Error("useWorkspace must be used within a WorkspaceProvider");
   }
   return context;
+}
+
+/** Optional workspace context for reusable surfaces that can render outside the shell. */
+export function useOptionalWorkspace(): WorkspaceContextValue | undefined {
+  return useContext(WorkspaceContext);
 }
 
 /** Convenience accessor for just the selected workspace id (undefined while loading). */

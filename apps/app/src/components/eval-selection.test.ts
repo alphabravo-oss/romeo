@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveActiveSuite } from "./eval-selection";
+import {
+  resolveActiveSuite,
+  selectedEvalIdWithinScope,
+} from "./eval-selection";
 
 describe("resolveActiveSuite", () => {
   const first = { id: "first", name: "First" };
@@ -20,5 +23,14 @@ describe("resolveActiveSuite", () => {
 
   it("falls back when the selected row is no longer present", () => {
     expect(resolveActiveSuite([first], "second")).toBe(first);
+  });
+});
+
+describe("selectedEvalIdWithinScope", () => {
+  it("preserves a suite only while its agent scope remains active", () => {
+    const selection = { scopeId: "agent-a", selectedId: "suite-a" };
+    expect(selectedEvalIdWithinScope(selection, "agent-a")).toBe("suite-a");
+    expect(selectedEvalIdWithinScope(selection, "agent-b")).toBeUndefined();
+    expect(selectedEvalIdWithinScope(selection, undefined)).toBeUndefined();
   });
 });

@@ -15,21 +15,10 @@ export type ModelSort =
   | "name";
 
 export interface ModelCatalogPanelProps {
-  availability: ModelAvailabilityFilter;
   agents: Agent[];
-  direction: "asc" | "desc";
   isUpdating: boolean;
   models: BaseModel[];
   onManagedModelCreated: (agentId: string) => void;
-  onNavigationChange: (next: {
-    availability?: ModelAvailabilityFilter;
-    direction?: "asc" | "desc";
-    model?: string | null;
-    page?: number;
-    provider?: string;
-    query?: string;
-    sort?: ModelSort;
-  }) => void;
   onUpdateModel: (
     input:
       | { modelId: string; enabled: boolean }
@@ -49,13 +38,30 @@ export interface ModelCatalogPanelProps {
       "1536x1024": number;
     };
   }) => Promise<void>;
-  page: number;
   providers: Provider[];
-  providerId: string;
-  query: string;
-  selectedModelId: string | undefined;
-  sort: ModelSort;
+  routeSearch: ModelCatalogRouteSearch;
   workspaceId: string | undefined;
+}
+
+export interface ModelCatalogRouteSearch {
+  availability?: string;
+  direction?: string;
+  model?: string;
+  page?: number;
+  provider?: string;
+  query?: string;
+  sort?: string;
+  table?: string;
+}
+
+export interface ModelCatalogNavigationUpdate {
+  availability?: ModelAvailabilityFilter;
+  direction?: "asc" | "desc";
+  model?: string | null;
+  page?: number;
+  provider?: string;
+  query?: string;
+  sort?: ModelSort;
 }
 
 export function modelAvailabilityFilter(
