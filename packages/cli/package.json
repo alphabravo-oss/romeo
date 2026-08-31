@@ -22,8 +22,8 @@
     "@romeo/api-client": "workspace:*",
     "@romeo/contracts": "workspace:*",
     "@romeo/secrets": "workspace:*",
-    "oauth4webapi": "3.8.6",
-    "tsx": "^4.22.4"
+    "oauth4webapi": "3.8.7",
+    "tsx": "^4.23.12"
   },
   "devDependencies": {
     "@types/node": "^26.0.1",
