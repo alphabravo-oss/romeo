@@ -23,14 +23,14 @@
     "@romeo/config": "workspace:*",
     "@romeo/core": "workspace:*",
     "@romeo/providers": "workspace:*",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@romeo/storage": "workspace:*",
     "@types/node": "^26.0.1",
     "drizzle-kit": "^0.31.10",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }
