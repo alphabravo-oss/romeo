@@ -13,10 +13,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.112.3",
-    "ollama": "0.6.3",
+    "@anthropic-ai/sdk": "0.131.0",
+    "ollama": "0.6.4",
     "openai": "6.48.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
