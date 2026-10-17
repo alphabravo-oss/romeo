@@ -208,7 +208,7 @@ export class RunService {
       webhooks,
       options,
       (runId) => this.streamingExecution.abort(runId),
-      (chatId) => void this.runQueue.drain(chatId),
+      (chatId) => this.runQueue.drainDetached(chatId),
     );
     this.continuation = new RunContinuationService(
       repository,
@@ -227,8 +227,8 @@ export class RunService {
       options,
       {
         active: (runId) => this.streamingExecution.has(runId),
-        drainQueue: (chatId) => void this.runQueue.drain(chatId),
-        drainTerminalOutbox: (orgId) => void this.terminal.drain(orgId),
+        drainQueue: (chatId) => this.runQueue.drainDetached(chatId),
+        drainTerminalOutbox: (orgId) => this.terminal.drainDetached(orgId),
         execute: (input) => void this.streamingExecution.execute(input),
         finishExecution: (job, outcome) =>
           this.executionState.finish(job, outcome),
