@@ -29,6 +29,9 @@ x-loop-worker: &loop-worker
 services:
   app:
     build: *app-build
+    # Lets the app reach a model server on the Docker host (e.g. Ollama) on Linux.
+    extra_hosts:
+      - host.docker.internal:host-gateway
     environment:
       ROMEO_ENV: ${ROMEO_ENV:-development}
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
