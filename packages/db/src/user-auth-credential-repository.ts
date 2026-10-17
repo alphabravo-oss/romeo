@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 
 import type { RomeoDatabase } from "./client";
 import {
@@ -164,6 +164,39 @@ export class PgUserAuthCredentialRepository {
     return row === undefined ? undefined : toLocalPasswordCredentialRecord(row);
   }
 
+  async recordFailedLocalMfaAttempt(input: {
+    credentialId: string;
+    attemptedAt: string;
+    lockedUntil: string;
+    maxFailedAttempts: number;
+  }): Promise<LocalPasswordCredentialRecord | undefined> {
+    const [row] = await this.db
+      .update(localPasswordCredentials)
+      .set({
+        mfaFailedAttemptCount: sql`${localPasswordCredentials.mfaFailedAttemptCount} + 1`,
+        lockedUntil: sql`case when ${localPasswordCredentials.mfaFailedAttemptCount} + 1 >= ${input.maxFailedAttempts} then ${input.lockedUntil}::timestamptz else ${localPasswordCredentials.lockedUntil} end`,
+        updatedAt: new Date(input.attemptedAt),
+      })
+      .where(eq(localPasswordCredentials.id, input.credentialId))
+      .returning();
+    return row === undefined ? undefined : toLocalPasswordCredentialRecord(row);
+  }
+
+  async resetFailedLocalMfaAttempts(input: {
+    credentialId: string;
+    updatedAt: string;
+  }): Promise<void> {
+    await this.db
+      .update(localPasswordCredentials)
+      .set({ mfaFailedAttemptCount: 0, updatedAt: new Date(input.updatedAt) })
+      .where(
+        and(
+          eq(localPasswordCredentials.id, input.credentialId),
+          gt(localPasswordCredentials.mfaFailedAttemptCount, 0),
+        ),
+      );
+  }
+
   async listLocalMfaFactors(
     orgId: string,
     userId: string,
@@ -256,6 +289,34 @@ export class PgUserAuthCredentialRepository {
     return row === undefined ? undefined : toLocalMfaFactorRecord(row);
   }
 
+  async acceptLocalMfaTotpStep(input: {
+    factorId: string;
+    timeStep: number;
+    usedAt: string;
+  }): Promise<LocalMfaFactorRecord | undefined> {
+    const usedAt = new Date(input.usedAt);
+    const [row] = await this.db
+      .update(localMfaFactors)
+      .set({
+        lastTotpStep: input.timeStep,
+        lastUsedAt: usedAt,
+        updatedAt: usedAt,
+      })
+      .where(
+        and(
+          eq(localMfaFactors.id, input.factorId),
+          eq(localMfaFactors.type, "totp"),
+          ne(localMfaFactors.status, "disabled"),
+          or(
+            isNull(localMfaFactors.lastTotpStep),
+            lt(localMfaFactors.lastTotpStep, input.timeStep),
+          ),
+        ),
+      )
+      .returning();
+    return row === undefined ? undefined : toLocalMfaFactorRecord(row);
+  }
+
   async createSamlAuthRequest(
     request: SamlAuthRequestRecord,
   ): Promise<SamlAuthRequestRecord> {
@@ -313,6 +374,30 @@ export class PgUserAuthCredentialRepository {
           eq(localMfaChallenges.userId, input.userId),
           isNull(localMfaChallenges.consumedAt),
           gt(localMfaChallenges.expiresAt, consumedAt),
+        ),
+      )
+      .returning();
+    return row === undefined ? undefined : toLocalMfaChallengeRecord(row);
+  }
+
+  async claimLocalMfaChallengeAttempt(input: {
+    id: string;
+    orgId: string;
+    userId: string;
+    attemptedAt: string;
+    maxAttempts: number;
+  }): Promise<LocalMfaChallengeRecord | undefined> {
+    const [row] = await this.db
+      .update(localMfaChallenges)
+      .set({ attemptCount: sql`${localMfaChallenges.attemptCount} + 1` })
+      .where(
+        and(
+          eq(localMfaChallenges.id, input.id),
+          eq(localMfaChallenges.orgId, input.orgId),
+          eq(localMfaChallenges.userId, input.userId),
+          isNull(localMfaChallenges.consumedAt),
+          gt(localMfaChallenges.expiresAt, new Date(input.attemptedAt)),
+          lt(localMfaChallenges.attemptCount, input.maxAttempts),
         ),
       )
       .returning();

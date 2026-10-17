@@ -34,6 +34,7 @@ import {
   audienceIncludes,
   tokenKeyId,
   unverifiedJwtAudience,
+  unverifiedJwtIsIdToken,
   unverifiedJwtIssuer,
 } from "./oidc-token-hints";
 
@@ -164,19 +165,17 @@ export class OidcClient {
     };
   }
 
+  /** Authenticates an access token presented as an API bearer credential. */
   async authenticateJwt(
     token: string,
-    options: { expectedNonce?: string; orgId?: string } = {},
+    options: { orgId?: string } = {},
   ): Promise<OidcMappedSubject> {
+    if (unverifiedJwtIsIdToken(token))
+      throw new Error("OIDC ID tokens are not accepted as bearer credentials.");
     const orgId =
       options.orgId ?? (await this.resolveBearerOrganizationId(token));
     const { config, discovery } = await this.configured(orgId);
     const claims = await this.verifyClaims(token, config, discovery);
-    if (
-      options.expectedNonce !== undefined &&
-      claims.nonce !== options.expectedNonce
-    )
-      throw new Error("OIDC token nonce is invalid.");
     return this.mapAndProvision(config, discovery, orgId, claims, false);
   }
 
@@ -405,18 +404,22 @@ export class OidcClient {
     if (issuer === undefined) {
       throw new Error("OIDC token issuer is missing.");
     }
-    const organizations = await this.repository.listAllOrganizations();
-    const matches: string[] = [];
-    for (const organization of organizations) {
-      const settings = await this.repository.getSsoOidcSettings(
-        organization.id,
+    // Select candidate tenants by issuer in one indexed-by-issuer lookup so
+    // the cost of an unauthenticated bearer token never scales with the
+    // number of organizations, and no signature work happens before a
+    // single tenant is chosen.
+    const normalizedIssuer = normalizeIssuer(issuer);
+    const candidates =
+      await this.repository.listEnabledSsoOidcSettingsByIssuer(
+        normalizedIssuer,
       );
-      if (settings === undefined || !settings.enabled) continue;
-      if (normalizeIssuer(settings.issuerUrl) !== normalizeIssuer(issuer))
-        continue;
-      if (!audienceIncludes(audience, settings.clientId)) continue;
-      matches.push(organization.id);
-    }
+    const matches = candidates
+      .filter(
+        (settings) =>
+          normalizeIssuer(settings.issuerUrl) === normalizedIssuer &&
+          audienceIncludes(audience, settings.clientId),
+      )
+      .map((settings) => settings.orgId);
     if (matches.length === 1) return matches[0]!;
     throw new Error("OIDC organization could not be resolved.");
   }

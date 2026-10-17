@@ -158,6 +158,7 @@ const defaultAdminUser = {
   orgId: "org_default",
   email: "admin@romeo.local",
   name: "Romeo Admin",
+  role: "global_admin",
 };
 
 const defaultProviders = [

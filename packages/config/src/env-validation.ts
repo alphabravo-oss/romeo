@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isLoopbackOrigin } from "./loopback";
 import { validateProductionCapabilities } from "./production-capability-validation";
 import { validateProductionInfrastructure } from "./production-infrastructure-validation";
 import {
@@ -29,6 +30,24 @@ export function validateToolDispatchPayloadStore(
       input: env,
     });
   }
+}
+
+/**
+ * The seeded login turns every unauthenticated request into a global admin, so
+ * it is only allowed when the application is served on a loopback origin.
+ */
+export function validateDevSeededLogin(
+  env: { APP_ORIGIN: string; DEV_SEEDED_LOGIN: boolean },
+  context: z.core.$RefinementCtx,
+): void {
+  if (!env.DEV_SEEDED_LOGIN) return;
+  requireValue(
+    isLoopbackOrigin(env.APP_ORIGIN),
+    "DEV_SEEDED_LOGIN requires a loopback APP_ORIGIN (localhost, 127.0.0.1, or [::1]).",
+    "DEV_SEEDED_LOGIN",
+    env,
+    context,
+  );
 }
 
 export function validateProductionEnvironment(

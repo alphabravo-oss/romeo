@@ -99,6 +99,8 @@ export interface LocalPasswordCredential {
   emailNormalized: string;
   passwordHash: string;
   failedAttemptCount: number;
+  /** Consecutive failed MFA verifications; reset only by a successful MFA. */
+  mfaFailedAttemptCount?: number;
   lockedUntil?: string;
   passwordUpdatedAt: string;
   createdAt: string;
@@ -118,6 +120,8 @@ export interface LocalMfaFactor {
   confirmedAt?: string;
   disabledAt?: string;
   lastUsedAt?: string;
+  /** Last accepted TOTP time-step; codes at or before it are replays. */
+  lastTotpStep?: number;
 }
 
 export interface SamlAuthRequest {
@@ -137,5 +141,7 @@ export interface LocalMfaChallenge {
   userId: string;
   expiresAt: string;
   consumedAt?: string;
+  /** Verification attempts served by this challenge. */
+  attemptCount?: number;
   createdAt: string;
 }

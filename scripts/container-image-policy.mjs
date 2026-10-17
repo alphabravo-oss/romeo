@@ -77,6 +77,16 @@ assert(
   "app runtime must copy only Nitro output",
 );
 assert(
+  /FROM base AS app-runtime\s+(?:#.*\s+)*ENV ROMEO_ENV=production\s/u.test(
+    dockerfile,
+  ),
+  "app runtime must default ROMEO_ENV to production",
+);
+assert(
+  /ROMEO_ENV: \$\{ROMEO_ENV:-development\}/u.test(compose),
+  "development Compose must opt out of the production default explicitly",
+);
+assert(
   /USER node/u.test(dockerfile),
   "app runtime must use the non-root node user",
 );

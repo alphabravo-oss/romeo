@@ -88,6 +88,7 @@ export interface LocalPasswordCredentialRecord {
   emailNormalized: string;
   passwordHash: string;
   failedAttemptCount: number;
+  mfaFailedAttemptCount?: number;
   lockedUntil?: string;
   passwordUpdatedAt: string;
   createdAt: string;
@@ -107,6 +108,7 @@ export interface LocalMfaFactorRecord {
   confirmedAt?: string;
   disabledAt?: string;
   lastUsedAt?: string;
+  lastTotpStep?: number;
 }
 
 export interface SamlAuthRequestRecord {
@@ -126,6 +128,7 @@ export interface LocalMfaChallengeRecord {
   userId: string;
   expiresAt: string;
   consumedAt?: string;
+  attemptCount?: number;
   createdAt: string;
 }
 
@@ -254,6 +257,8 @@ export function toLocalPasswordCredentialRecord(
   };
   const lockedUntil = optionalIsoString(row.lockedUntil);
   if (lockedUntil !== undefined) record.lockedUntil = lockedUntil;
+  if (row.mfaFailedAttemptCount > 0)
+    record.mfaFailedAttemptCount = row.mfaFailedAttemptCount;
   return record;
 }
 
@@ -280,6 +285,7 @@ export function toLocalMfaFactorRecord(
   if (disabledAt !== undefined) record.disabledAt = disabledAt;
   const lastUsedAt = optionalIsoString(row.lastUsedAt);
   if (lastUsedAt !== undefined) record.lastUsedAt = lastUsedAt;
+  if (row.lastTotpStep !== null) record.lastTotpStep = row.lastTotpStep;
   return record;
 }
 
@@ -312,6 +318,7 @@ export function toLocalMfaChallengeRecord(
   };
   const consumedAt = optionalIsoString(row.consumedAt);
   if (consumedAt !== undefined) record.consumedAt = consumedAt;
+  if (row.attemptCount > 0) record.attemptCount = row.attemptCount;
   return record;
 }
 

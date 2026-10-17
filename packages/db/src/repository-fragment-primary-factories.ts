@@ -82,6 +82,8 @@ export function createTenantIdentityRepositoryFragment(
     getGroup: identity.getGroup.bind(identity),
     getOrganization: tenancy.getOrganization.bind(tenancy),
     getSsoOidcSettings: identity.getSsoOidcSettings.bind(identity),
+    listEnabledSsoOidcSettingsByIssuer:
+      identity.listEnabledSsoOidcSettingsByIssuer.bind(identity),
     getWorkspace: tenancy.getWorkspace.bind(tenancy),
     listAllOrganizations: tenancy.listAllOrganizations.bind(tenancy),
     listGroupMemberships: identity.listGroupMemberships.bind(identity),
@@ -116,6 +118,9 @@ export function createAuthCredentialRepositoryFragment(
     consumeLocalMfaFactor: repository.consumeLocalMfaFactor.bind(repository),
     consumeLocalMfaChallenge:
       repository.consumeLocalMfaChallenge.bind(repository),
+    claimLocalMfaChallengeAttempt:
+      repository.claimLocalMfaChallengeAttempt.bind(repository),
+    acceptLocalMfaTotpStep: repository.acceptLocalMfaTotpStep.bind(repository),
     consumeSamlAuthRequest: repository.consumeSamlAuthRequest.bind(repository),
     createLocalPasswordCredential:
       repository.createLocalPasswordCredential.bind(repository),
@@ -143,6 +148,10 @@ export function createAuthCredentialRepositoryFragment(
       repository.listLocalMfaFactorsForOrg.bind(repository),
     recordFailedLocalPasswordAttempt:
       repository.recordFailedLocalPasswordAttempt.bind(repository),
+    recordFailedLocalMfaAttempt:
+      repository.recordFailedLocalMfaAttempt.bind(repository),
+    resetFailedLocalMfaAttempts:
+      repository.resetFailedLocalMfaAttempts.bind(repository),
     listServiceAccounts: repository.listServiceAccounts.bind(repository),
     listUserSessions: repository.listUserSessions.bind(repository),
     updateApiKey: repository.updateApiKey.bind(repository),

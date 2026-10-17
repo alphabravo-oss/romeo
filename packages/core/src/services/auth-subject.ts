@@ -35,8 +35,12 @@ export const localUserScopes: Scope[] = [
   "tools:use",
 ];
 
-export function normalizeUserRole(user: Pick<User, "id" | "role">): UserRole {
-  if (user.id === "user_dev_admin") return "global_admin";
+/**
+ * Every user, including the development seed admin, is authorized by its
+ * stored role. The seeded development identity is granted separately (and
+ * only on loopback) by the request context, never by a well-known user id.
+ */
+export function normalizeUserRole(user: Pick<User, "role">): UserRole {
   return user.role === "org_admin" || user.role === "global_admin"
     ? user.role
     : "user";

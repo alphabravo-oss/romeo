@@ -1,7 +1,11 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { RomeoEnv } from "@romeo/config";
 
-import type { LocalMfaFactor, User } from "../domain/entities";
+import type {
+  LocalMfaFactor,
+  LocalPasswordCredential,
+  User,
+} from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
@@ -17,13 +21,20 @@ import type {
 import { createTotpEnrollmentSecret, verifyTotpCode } from "./local-mfa";
 import { normalizeFactorName, toFactorSummary } from "./local-mfa-summary";
 import {
-  consumeLocalMfaRecoveryCode,
   generateLocalMfaRecoveryCodes,
   localMfaRecoveryCodeRemainingCount,
-  parseLocalMfaRecoveryCodeEnvelope,
   serializeLocalMfaRecoveryCodeEnvelope,
 } from "./local-mfa-recovery-codes";
+import {
+  consumeRecoveryCodeForUser,
+  localMfaSecretContext,
+  parseRecoveryCodeFactorEnvelope,
+} from "./local-mfa-recovery-consume";
 import { summarizeLocalMfaPosture } from "./local-mfa-posture";
+import {
+  recordFailedLocalMfaAttempt,
+  resetFailedLocalMfaAttempts,
+} from "./local-auth-attempts";
 import { LocalMfaSecretVault } from "./local-mfa-secret-vault";
 
 export class LocalMfaService {
@@ -120,13 +131,24 @@ export class LocalMfaService {
       factor.secretEncrypted,
       localMfaSecretContext(factor),
     );
-    if (!(await verifyTotpCode({ secret, code: input.code }))) {
-      throw new ApiError("local_mfa_code_invalid", "MFA code is invalid.", 401);
-    }
+    const timeStep = await verifyTotpCode({
+      secret,
+      code: input.code,
+      ...(factor.lastTotpStep === undefined
+        ? {}
+        : { afterTimeStep: factor.lastTotpStep }),
+    });
+    if (timeStep === undefined) throw invalidMfaCode();
     const now = new Date().toISOString();
     const confirmed = await this.repository.transaction(async (repository) => {
+      const accepted = await repository.acceptLocalMfaTotpStep({
+        factorId: factor.id,
+        timeStep,
+        usedAt: now,
+      });
+      if (accepted === undefined) throw invalidMfaCode();
       const confirmed = await repository.updateLocalMfaFactor({
-        ...factor,
+        ...accepted,
         status: "active",
         confirmedAt: now,
         lastUsedAt: now,
@@ -249,13 +271,14 @@ export class LocalMfaService {
         factor.secretEncrypted,
         localMfaSecretContext(factor),
       );
-      if (!(await verifyTotpCode({ secret, code: input.code }))) {
-        throw new ApiError(
-          "local_mfa_code_invalid",
-          "MFA code is invalid.",
-          401,
-        );
-      }
+      const timeStep = await verifyTotpCode({
+        secret,
+        code: input.code,
+        ...(factor.lastTotpStep === undefined
+          ? {}
+          : { afterTimeStep: factor.lastTotpStep }),
+      });
+      if (timeStep === undefined) throw invalidMfaCode();
     }
     const now = new Date().toISOString();
     const disabled = await this.repository.transaction(async (repository) => {
@@ -303,7 +326,12 @@ export class LocalMfaService {
     );
   }
 
+  /**
+   * Verifies one MFA method for a login. Every invalid code counts toward the
+   * credential's consecutive-MFA-failure lockout; success resets that count.
+   */
   async satisfyMfaForLogin(input: {
+    credential: LocalPasswordCredential;
     recoveryCode?: string;
     totpCode?: string;
     user: User;
@@ -322,22 +350,39 @@ export class LocalMfaService {
       );
       try {
         await this.assertValidTotpCode(factors, input.totpCode);
-        return;
       } catch (error) {
+        const { locked } = await recordFailedLocalMfaAttempt(
+          this.repository,
+          input.credential,
+        );
         await this.audit.loginFailure(input.user, "invalid_mfa_code", {
           factorType: "totp",
+          locked,
         });
         throw error;
       }
+      await resetFailedLocalMfaAttempts(this.repository, input.credential);
+      return;
     }
     if (input.recoveryCode !== undefined) {
-      const consumed = await this.consumeRecoveryCodeForUser(
-        input.user,
-        input.recoveryCode,
+      const consumed = await consumeRecoveryCodeForUser({
+        audit: this.audit,
+        recoveryCode: input.recoveryCode,
+        repository: this.repository,
+        user: input.user,
+        vault: this.mfaVault(),
+      });
+      if (consumed) {
+        await resetFailedLocalMfaAttempts(this.repository, input.credential);
+        return;
+      }
+      const { locked } = await recordFailedLocalMfaAttempt(
+        this.repository,
+        input.credential,
       );
-      if (consumed) return;
       await this.audit.loginFailure(input.user, "invalid_mfa_code", {
         factorType: "recovery_code",
+        locked,
       });
       throw new ApiError(
         "local_mfa_recovery_code_invalid",
@@ -348,85 +393,12 @@ export class LocalMfaService {
     throw invalidLocalLogin();
   }
 
-  private async consumeRecoveryCodeForUser(
-    user: User,
-    recoveryCode: string,
-  ): Promise<boolean> {
-    const factors = (
-      await this.repository.listLocalMfaFactors(user.orgId, user.id)
-    ).filter(
-      (factor) =>
-        factor.type === "recovery_codes" && factor.status === "active",
-    );
-    const now = new Date().toISOString();
-    for (const factor of factors) {
-      const envelope = this.parseRecoveryCodeEnvelope(factor);
-      if (envelope === undefined) continue;
-      const result = consumeLocalMfaRecoveryCode(envelope, recoveryCode, now);
-      if (!result.consumed) continue;
-      const remainingCount = localMfaRecoveryCodeRemainingCount(
-        result.envelope,
-      );
-      const didConsume = await this.repository.transaction(
-        async (repository) => {
-          const consumedFactor = await repository.consumeLocalMfaFactor({
-            expectedSecretEncrypted: factor.secretEncrypted,
-            factor: {
-              ...factor,
-              secretEncrypted: this.mfaVault().encrypt(
-                serializeLocalMfaRecoveryCodeEnvelope(result.envelope),
-                localMfaSecretContext(factor),
-              ),
-              status: remainingCount === 0 ? "disabled" : "active",
-              ...(remainingCount === 0 ? { disabledAt: now } : {}),
-              lastUsedAt: now,
-              updatedAt: now,
-            },
-          });
-          if (consumedFactor === undefined) return false;
-          await this.audit.write(
-            {
-              orgId: user.orgId,
-              actorId: user.id,
-              action: "local_auth.mfa.recovery_code.consume",
-              resourceType: "local_mfa_factor",
-              resourceId: factor.id,
-              metadata: {
-                type: "recovery_codes",
-                remainingCount,
-              },
-            },
-            repository,
-          );
-          return true;
-        },
-      );
-      if (didConsume) return true;
-    }
-    return false;
-  }
-
   recoveryCodeRemainingCount(factor: LocalMfaFactor): number | undefined {
     if (factor.type !== "recovery_codes") return undefined;
-    const envelope = this.parseRecoveryCodeEnvelope(factor);
+    const envelope = parseRecoveryCodeFactorEnvelope(this.mfaVault(), factor);
     return envelope === undefined
       ? 0
       : localMfaRecoveryCodeRemainingCount(envelope);
-  }
-
-  private parseRecoveryCodeEnvelope(
-    factor: LocalMfaFactor,
-  ): ReturnType<typeof parseLocalMfaRecoveryCodeEnvelope> | undefined {
-    try {
-      return parseLocalMfaRecoveryCodeEnvelope(
-        this.mfaVault().decrypt(
-          factor.secretEncrypted,
-          localMfaSecretContext(factor),
-        ),
-      );
-    } catch {
-      return undefined;
-    }
   }
 
   private async disableActiveRecoveryCodeFactors(
@@ -462,16 +434,24 @@ export class LocalMfaService {
         factor.secretEncrypted,
         localMfaSecretContext(factor),
       );
-      if (await verifyTotpCode({ secret, code })) {
-        await this.repository.updateLocalMfaFactor({
-          ...factor,
-          lastUsedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        return;
-      }
+      const timeStep = await verifyTotpCode({
+        secret,
+        code,
+        ...(factor.lastTotpStep === undefined
+          ? {}
+          : { afterTimeStep: factor.lastTotpStep }),
+      });
+      if (timeStep === undefined) continue;
+      // Atomically advance the replay watermark; a concurrent use of the same
+      // code loses this compare-and-set and is rejected.
+      const accepted = await this.repository.acceptLocalMfaTotpStep({
+        factorId: factor.id,
+        timeStep,
+        usedAt: new Date().toISOString(),
+      });
+      if (accepted !== undefined) return;
     }
-    throw new ApiError("local_mfa_code_invalid", "MFA code is invalid.", 401);
+    throw invalidMfaCode();
   }
 
   private mfaVault(): LocalMfaSecretVault {
@@ -481,11 +461,6 @@ export class LocalMfaService {
   }
 }
 
-function localMfaSecretContext(factor: LocalMfaFactor) {
-  return {
-    factorId: factor.id,
-    factorType: factor.type,
-    orgId: factor.orgId,
-    userId: factor.userId,
-  };
+function invalidMfaCode(): ApiError {
+  return new ApiError("local_mfa_code_invalid", "MFA code is invalid.", 401);
 }

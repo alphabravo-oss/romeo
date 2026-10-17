@@ -1,4 +1,4 @@
-import type { RomeoEnv } from "@romeo/config";
+import { isLoopbackOrigin, type RomeoEnv } from "@romeo/config";
 import type { MiddlewareHandler } from "hono";
 
 import { ApiError } from "../errors";
@@ -27,7 +27,13 @@ export function csrfProtection(env: RomeoEnv): MiddlewareHandler<AppBindings> {
     const hasBearerAuthorization = /^Bearer\s+\S+/iu.test(authorization);
     const hasSessionCookie =
       readCookie(context.req.header("cookie"), sessionCookieName) !== undefined;
-    if (!hasSessionCookie || hasBearerAuthorization) return next();
+    if (hasBearerAuthorization) return next();
+    // The development seeded login is ambient authority without any cookie,
+    // so with it enabled every unsafe browser request must prove it is
+    // same-origin. Requests carrying no browser provenance at all (scripts,
+    // tests) are not a cross-site risk and remain allowed in that mode.
+    const seededAmbientAuthority = env.DEV_SEEDED_LOGIN && !hasSessionCookie;
+    if (!hasSessionCookie && !seededAmbientAuthority) return next();
 
     const secFetchSite = context.req.header("sec-fetch-site")?.toLowerCase();
     if (secFetchSite === "cross-site") throw csrfError("fetch_metadata");
@@ -46,7 +52,11 @@ export function csrfProtection(env: RomeoEnv): MiddlewareHandler<AppBindings> {
       throw csrfError("referer");
     }
 
-    if (origin === undefined && referer === undefined) {
+    if (
+      origin === undefined &&
+      referer === undefined &&
+      !seededAmbientAuthority
+    ) {
       throw csrfError("missing_origin_proof");
     }
 
@@ -68,12 +78,7 @@ function isAllowedBrowserOrigin(value: string, env: RomeoEnv): boolean {
   if (candidate === undefined) return false;
   const allowed = allowedOrigins(env);
   if (allowed.has(candidate)) return true;
-  const appOrigin = parseOrigin(env.APP_ORIGIN);
-  return (
-    appOrigin !== undefined &&
-    isLoopbackOrigin(appOrigin) &&
-    isLoopbackOrigin(candidate)
-  );
+  return isLoopbackOrigin(env.APP_ORIGIN) && isLoopbackOrigin(candidate);
 }
 
 function allowedOrigins(env: RomeoEnv): Set<string> {
@@ -94,13 +99,4 @@ function parseOrigin(value: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function isLoopbackOrigin(origin: string): boolean {
-  const url = new URL(origin);
-  return (
-    url.hostname === "localhost" ||
-    url.hostname === "127.0.0.1" ||
-    url.hostname === "[::1]"
-  );
 }

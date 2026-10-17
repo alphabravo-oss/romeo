@@ -1,6 +1,6 @@
 import { seededSubject, type AuthSubject } from "@romeo/auth";
-import { readEnv } from "@romeo/config";
-import type { MiddlewareHandler } from "hono";
+import { isLoopbackHostname, readEnv } from "@romeo/config";
+import type { Context, MiddlewareHandler } from "hono";
 
 import type { RomeoRepository } from "../domain/repository";
 import type { RepositoryRequestScope } from "../domain/repository-request-scope";
@@ -104,7 +104,11 @@ export function requestContext(
           ? undefined
           : readCookie(context.req.header("cookie"), sessionCookieName),
         allowAnonymous: workerBrokerRequest || publicPaths.has(requestPath),
-        devSeededLogin: workerBrokerRequest ? false : devSeededLogin,
+        // The seeded identity is a development convenience; it is never
+        // granted to a request addressed to a non-loopback host, which also
+        // defeats DNS-rebinding pages that reach a developer's local server.
+        devSeededLogin:
+          !workerBrokerRequest && devSeededLogin && isLoopbackRequest(context),
       };
       const subject =
         scope === undefined || factory === undefined
@@ -161,6 +165,18 @@ export function requestContext(
       }
     });
   };
+}
+
+/** True when both the request URL and any Host header name a loopback host. */
+export function isLoopbackRequest(context: Context): boolean {
+  if (!isLoopbackHostname(new URL(context.req.url).hostname)) return false;
+  const host = context.req.header("host");
+  if (host === undefined) return true;
+  try {
+    return isLoopbackHostname(new URL(`http://${host}`).hostname);
+  } catch {
+    return false;
+  }
 }
 
 export function isWorkerBrokerPath(path: string): boolean {

@@ -1731,6 +1731,27 @@ describe("RomeoRepository conformance", () => {
             enabled: false,
             issuerUrl: "https://issuer.example.com",
           });
+          expect(
+            await repository.listEnabledSsoOidcSettingsByIssuer(
+              "https://issuer.example.com/",
+            ),
+          ).toEqual([]);
+          await repository.upsertSsoOidcSettings({
+            ...settings,
+            updatedAt: "2026-06-30T10:06:00.000Z",
+          });
+          expect(
+            (
+              await repository.listEnabledSsoOidcSettingsByIssuer(
+                "https://issuer.example.com/",
+              )
+            ).map((item) => item.orgId),
+          ).toEqual(["org_default"]);
+          expect(
+            await repository.listEnabledSsoOidcSettingsByIssuer(
+              "https://other-issuer.example.com",
+            ),
+          ).toEqual([]);
         });
       });
 
@@ -2163,6 +2184,106 @@ describe("RomeoRepository conformance", () => {
               expectedSecretEncrypted: "stale-secret",
             }),
           ).toBeUndefined();
+
+          await Promise.all(
+            Array.from({ length: 3 }, () =>
+              repository.recordFailedLocalMfaAttempt({
+                credentialId: localPassword.id,
+                attemptedAt: "2026-06-30T10:40:00.000Z",
+                lockedUntil: "2026-06-30T12:00:00.000Z",
+                maxFailedAttempts: 3,
+              }),
+            ),
+          );
+          expect(
+            await repository.getLocalPasswordCredentialByUserId(
+              "user_dev_admin",
+            ),
+          ).toMatchObject({
+            failedAttemptCount: 12,
+            mfaFailedAttemptCount: 3,
+            lockedUntil: "2026-06-30T12:00:00.000Z",
+          });
+          await repository.updateLocalPasswordCredential({
+            ...localPassword,
+            updatedAt: "2026-06-30T10:41:00.000Z",
+          });
+          expect(
+            (
+              await repository.getLocalPasswordCredentialByUserId(
+                "user_dev_admin",
+              )
+            )?.mfaFailedAttemptCount,
+          ).toBe(3);
+          await repository.resetFailedLocalMfaAttempts({
+            credentialId: localPassword.id,
+            updatedAt: "2026-06-30T10:42:00.000Z",
+          });
+          expect(
+            (
+              await repository.getLocalPasswordCredentialByUserId(
+                "user_dev_admin",
+              )
+            )?.mfaFailedAttemptCount ?? 0,
+          ).toBe(0);
+
+          const limitedChallenge = await repository.createLocalMfaChallenge({
+            id: "local_mfa_challenge_attempts",
+            orgId: "org_default",
+            userId: "user_dev_admin",
+            expiresAt: "2099-06-30T10:40:00.000Z",
+            createdAt: "2099-06-30T10:20:00.000Z",
+          });
+          const claimInput = {
+            id: limitedChallenge.id,
+            orgId: limitedChallenge.orgId,
+            userId: limitedChallenge.userId,
+            attemptedAt: "2099-06-30T10:21:00.000Z",
+            maxAttempts: 2,
+          };
+          const claims = await Promise.all(
+            Array.from({ length: 4 }, () =>
+              repository.claimLocalMfaChallengeAttempt(claimInput),
+            ),
+          );
+          expect(claims.filter(Boolean)).toHaveLength(2);
+          expect(
+            await repository.consumeLocalMfaChallenge({
+              id: limitedChallenge.id,
+              orgId: limitedChallenge.orgId,
+              userId: limitedChallenge.userId,
+              consumedAt: "2099-06-30T10:22:00.000Z",
+            }),
+          ).toBeDefined();
+          expect(
+            await repository.claimLocalMfaChallengeAttempt({
+              ...claimInput,
+              maxAttempts: 10,
+            }),
+          ).toBeUndefined();
+
+          const acceptStep = (timeStep: number) =>
+            repository.acceptLocalMfaTotpStep({
+              factorId: factor.id,
+              timeStep,
+              usedAt: "2026-06-30T10:43:00.000Z",
+            });
+          const firstStep = await Promise.all([
+            acceptStep(100),
+            acceptStep(100),
+          ]);
+          expect(firstStep.filter(Boolean)).toHaveLength(1);
+          expect(await acceptStep(99)).toBeUndefined();
+          expect(await acceptStep(101)).toMatchObject({ lastTotpStep: 101 });
+          await repository.updateLocalMfaFactor({
+            ...activeFactor,
+            name: "Renamed authenticator",
+            updatedAt: "2026-06-30T10:44:00.000Z",
+          });
+          expect(await repository.getLocalMfaFactor(factor.id)).toMatchObject({
+            name: "Renamed authenticator",
+            lastTotpStep: 101,
+          });
         });
       });
 
