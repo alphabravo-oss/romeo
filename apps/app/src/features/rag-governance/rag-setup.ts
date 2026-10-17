@@ -190,9 +190,7 @@ export function buildRagValidateChecklist(
   }
   checks.push({
     id: "isolation",
-    ok:
-      posture.vector.physicalIsolation.status === "satisfied" ||
-      posture.vector.physicalIsolation.status === "evidence_pending",
+    ok: posture.vector.physicalIsolation.status === "satisfied",
     detail: `Physical isolation: ${posture.vector.physicalIsolation.status}`,
   });
   checks.push({

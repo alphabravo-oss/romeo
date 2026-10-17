@@ -38,7 +38,6 @@ import { DeviceAuthorizationService } from "./device-authorization-service";
 import { EdgeSecurityService } from "./edge-security-service";
 import { EvalService } from "./eval-service";
 import type { FileService } from "./file-service";
-import { GaEvidencePostureService } from "./ga-evidence-posture-service";
 import { GovernanceService } from "./governance-service";
 import { GovernanceExportWorker } from "./governance-export-worker";
 import { GroupService } from "./group-service";
@@ -288,10 +287,8 @@ export function buildServiceRegistry(
         : { providerFetch: options.providerFetch }),
     }),
     files,
-    gaEvidencePosture: new GaEvidencePostureService(env),
     governance: new GovernanceService(repository, objectStore, {
       capabilities,
-      env,
       scimEnabled: env.SCIM_ENABLED,
       deleteKnowledgeSource: (value) => knowledge.deleteSource(value),
     }),
@@ -424,12 +421,7 @@ export function buildServiceRegistry(
     prompts: new PromptTemplateService(repository),
     quotas: new QuotaService(repository, quotaCoordinator),
     ragPolicy: new RagPolicyService(repository),
-    ragPosture: new RagPostureService(
-      repository,
-      activeVectorStoreDeployment,
-      env.PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH,
-      env.QDRANT_LIVE_EVIDENCE_PATH,
-    ),
+    ragPosture: new RagPostureService(repository, activeVectorStoreDeployment),
     readiness: new ReadinessService(
       repository,
       env,

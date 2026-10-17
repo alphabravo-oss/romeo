@@ -1,19 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 
-import {
-  gaEvidencePostureQueryOptions,
-  postgresOperationalPostureQueryOptions,
-} from "../features/operational-posture";
+import { postgresOperationalPostureQueryOptions } from "../features/operational-posture";
 import {
   jobsOperationalSummaryQueryOptions,
   type BackgroundJobTypeSummary,
   type JobOperationalAlert,
 } from "../features/jobs";
 import { quotasDistributedStatusQueryOptions } from "../features/operational-governance";
-import type {
-  GaEvidencePostureGate,
-  PostgresOperationalWarningCode,
-} from "../features/operational-posture";
+import type { PostgresOperationalWarningCode } from "../features/operational-posture";
 import { PanelState } from "../lib/panel-state";
 import { type MessageKey, useLocale } from "../lib/i18n";
 import { LocalizedDateTime } from "../lib/locale-format";
@@ -29,9 +23,8 @@ import {
 } from "./operational-status";
 
 /**
- * Read-only "System posture" panel. Consolidates four admin GET endpoints into
+ * Read-only "System posture" panel. Consolidates three admin GET endpoints into
  * one tabbed view, each backed by an independent query:
- *   - GA evidence  → /api/v1/admin/ga/evidence-posture
  *   - Postgres     → /api/v1/admin/postgres/operational-posture
  *   - Jobs         → /api/v1/jobs/operational-summary
  *   - Quotas       → /api/v1/quotas/distributed-status
@@ -51,11 +44,6 @@ export function OperationsPosturePanel({
         onActiveIdChange={tabState?.onActiveIdChange}
         tabs={[
           {
-            id: "ga",
-            label: t("opGaEvidence"),
-            content: <GaEvidenceSection />,
-          },
-          {
             id: "postgres",
             label: t("opPostgres"),
             content: <PostgresSection />,
@@ -68,123 +56,7 @@ export function OperationsPosturePanel({
   );
 }
 
-/* --------------------------------- GA evidence ---------------------------- */
-
-const gaGateCol = createColumnHelper<GaEvidencePostureGate>();
 type Translate = (key: MessageKey) => string;
-
-function gaGateColumns(t: Translate): ColumnDef<GaEvidencePostureGate, any>[] {
-  return [
-    gaGateCol.accessor("title", {
-      header: t("opGate"),
-      cell: (c) => <span className="font-medium">{c.getValue()}</span>,
-    }),
-    gaGateCol.accessor("phase", {
-      header: t("opPhase"),
-      cell: (c) => (
-        <span className="rm-cell-muted rm-mono" translate="no">
-          {c.getValue()}
-        </span>
-      ),
-    }),
-    gaGateCol.accessor("status", {
-      header: t("opStatus"),
-      cell: (c) => (
-        <span
-          className={`rm-status ${
-            c.getValue() === "satisfied" || c.getValue() === "excepted"
-              ? "pass"
-              : "warn"
-          }`}
-        >
-          {operationalStatusLabel(c.getValue(), t)}
-        </span>
-      ),
-    }),
-    gaGateCol.accessor((row) => (row.requiredForGa ? t("opYes") : t("opNo")), {
-      id: "requiredForGa",
-      header: t("opRequiredForGa"),
-      cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-    }),
-    gaGateCol.accessor(
-      (row) => (row.securityCritical ? t("opYes") : t("opNo")),
-      {
-        id: "securityCritical",
-        header: t("opSecurityCritical"),
-        cell: (c) => <span className="rm-cell-muted">{c.getValue()}</span>,
-      },
-    ),
-  ];
-}
-
-function GaEvidenceSection(): React.ReactNode {
-  const { t } = useLocale();
-  const query = useQuery(gaEvidencePostureQueryOptions());
-
-  return (
-    <PanelState query={query} isEmpty={() => false}>
-      {(report) => {
-        const blockedGates = report.gates.filter(
-          (gate) => gate.status === "blocked",
-        ).length;
-        return (
-          <div className="grid gap-4">
-            <StatRow
-              items={[
-                {
-                  label: t("opStatus"),
-                  value: (
-                    <>
-                      <OperationalStatusDot
-                        status={report.status === "passed" ? "pass" : "warn"}
-                      />
-                      {operationalStatusLabel(report.status, t)}
-                    </>
-                  ),
-                },
-                {
-                  label: t("opChecklist"),
-                  value: operationalStatusLabel(report.checklist.status, t),
-                },
-                { label: t("opGates"), value: report.gates.length },
-                { label: t("opBlockedGates"), value: blockedGates },
-                {
-                  label: t("opRequiredLiveBlockers"),
-                  value: report.requiredLiveBlockers.length,
-                },
-                { label: t("opWarnings"), value: report.warnings.length },
-              ]}
-            />
-            {report.warnings.length > 0 ? (
-              <div className="grid gap-1">
-                <div className="text-xs font-medium text-muted">
-                  {t("opWarnings")}
-                </div>
-                <ul className="grid gap-1">
-                  {report.warnings.map((warning) => (
-                    <li className="text-sm" key={warning}>
-                      {humanizeWarningCode(warning)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            <div className="grid gap-1">
-              <div className="text-xs font-medium text-muted">
-                {t("opGates")}
-              </div>
-              <DataTable
-                columns={gaGateColumns(t)}
-                data={report.gates}
-                empty={t("opNoGaGates")}
-              />
-            </div>
-          </div>
-        );
-      }}
-    </PanelState>
-  );
-}
 
 /* ---------------------------------- Postgres ------------------------------ */
 
@@ -236,31 +108,6 @@ function PostgresSection(): React.ReactNode {
                 {
                   label: t("opPoolMaxPerProcess"),
                   value: report.pool.maxConnectionsPerProcess,
-                },
-                {
-                  label: t("opQueryPlanReview"),
-                  value: operationalStatusLabel(
-                    report.queryPlanReview.representativeVolumeEvidence.status,
-                    t,
-                  ),
-                },
-                {
-                  label: t("opSlowQueryTelemetry"),
-                  value: operationalStatusLabel(
-                    report.slowQueryTelemetry.status,
-                    t,
-                  ),
-                },
-                {
-                  label: t("opLockTelemetry"),
-                  value: operationalStatusLabel(report.lockTelemetry.status, t),
-                },
-                {
-                  label: t("opArchivalPartitioning"),
-                  value: operationalStatusLabel(
-                    report.archivalPartitioning.status,
-                    t,
-                  ),
                 },
               ]}
             />

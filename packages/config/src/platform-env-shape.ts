@@ -32,28 +32,6 @@ export const platformEnvShape = {
     .transform((value) => value === "true"),
   CAPABILITY_PLATFORM_DISABLED_IDS: platformDisabledCapabilityIdsSchema,
   TENANCY_MODE: z.enum(["single", "multi"]).default("single"),
-  GA_CHECKLIST_PATH: z.string().default(""),
-  GA_TARGET_PREFLIGHT_PATH: z.string().default(""),
-  GA_TARGET_PLAN_PATH: z.string().default(""),
-  GA_TARGET_EXECUTION_PATH: z.string().default(""),
-  GA_EVIDENCE_BUNDLE_PATH: z.string().default(""),
-  RELEASE_PUBLISH_PLAN_PATH: z.string().default(""),
-  RELEASE_AIRGAP_VERIFICATION_PATH: z.string().default(""),
-  RELEASE_READBACK_PLAN_PATH: z.string().default(""),
-  RELEASE_READBACK_VALIDATION_PATH: z.string().default(""),
-  SUPPORT_BUNDLE_PATH: z.string().default(""),
-  CI_BRANCH_PROTECTION_PLAN_PATH: z.string().default(""),
-  CI_HOSTED_RUN_VERIFICATION_PATH: z.string().default(""),
-  CI_BRANCH_PROTECTION_VERIFICATION_PATH: z.string().default(""),
-  EDGE_ENFORCEMENT_EVIDENCE_PATH: z.string().default(""),
-  POSTGRES_QUERY_PLAN_EVIDENCE_PATH: z.string().default(""),
-  POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH: z.string().default(""),
-  POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH: z.string().default(""),
-  POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH: z.string().default(""),
-  PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH: z.string().default(""),
-  QDRANT_LIVE_EVIDENCE_PATH: z.string().default(""),
-  DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH: z.string().default(""),
-  DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH: z.string().default(""),
   DATA_CONNECTOR_LIVE_EVIDENCE_PATH: z.string().default(""),
   DATA_CONNECTOR_WORKER_ENABLED: z
     .enum(["true", "false"])
@@ -83,7 +61,6 @@ export const platformEnvShape = {
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
-  BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH: z.string().default(""),
   BROWSER_AUTOMATION_WORKER_ENABLED: z
     .enum(["true", "false"])
     .default("false")

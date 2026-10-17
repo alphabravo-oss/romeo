@@ -312,40 +312,6 @@ export interface DataRightsWorkflowCoverage {
   limitations: string[];
 }
 
-export type DataRightsRetentionEvidenceControl = "backups" | "operational_logs";
-
-export type DataRightsRetentionEvidenceStatus =
-  | "external_required"
-  | "failed"
-  | "invalid"
-  | "satisfied";
-
-export type DataRightsRetentionEvidenceInvalidReason =
-  | "control_mismatch"
-  | "invalid_json"
-  | "read_failed"
-  | "required_fields_missing"
-  | "schema_mismatch";
-
-export interface DataRightsRetentionEvidenceSummary {
-  requiredForProduction: true;
-  control: DataRightsRetentionEvidenceControl;
-  status: DataRightsRetentionEvidenceStatus;
-  evidence: {
-    configured: boolean;
-    schemaVersion?: "romeo.data-rights-retention-evidence.v1";
-    generatedAt?: string;
-    evidenceStatus?: "failed" | "passed" | "unknown";
-    retentionDays?: number;
-    destructionValidated?: boolean;
-    encryptedAtRest?: boolean;
-    immutableWindowDays?: number;
-    reviewedSystemCount: number;
-    failureCodes: string[];
-    invalidReason?: DataRightsRetentionEvidenceInvalidReason;
-  };
-}
-
 export interface DataRightsCoverageReport {
   schema: "romeo.data-rights-coverage.v1";
   orgId: string;
@@ -354,18 +320,6 @@ export interface DataRightsCoverageReport {
   deletionWorkflows: DataRightsWorkflowCoverage[];
   exportWorkflows: DataRightsWorkflowCoverage[];
   storageClasses: DataRightsStorageClassCoverage[];
-  retentionEvidence: {
-    operationalLogs: DataRightsRetentionEvidenceSummary;
-    backups: DataRightsRetentionEvidenceSummary;
-    redaction: {
-      backupLocationReturned: false;
-      evidenceFileBodiesReturned: false;
-      logContentReturned: false;
-      objectStoreKeysReturned: false;
-      rawEvidencePathsReturned: false;
-      secretValuesReturned: false;
-    };
-  };
   backupRetention: {
     status: "externally_governed";
     posture: string;

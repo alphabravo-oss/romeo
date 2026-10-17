@@ -407,7 +407,6 @@ import {
   operationalGovernanceListUsageMetricDefinitions,
   operationalGovernanceQueryAuditLogs,
   operationalGovernanceUpdateQuotaBucket,
-  operationalPostureGetGaEvidence,
   operationalPostureGetPostgres,
   operationalPostureGetRuntimeKeyRotation,
   type Options,
@@ -1774,9 +1773,6 @@ import type {
   OperationalGovernanceUpdateQuotaBucketData,
   OperationalGovernanceUpdateQuotaBucketError,
   OperationalGovernanceUpdateQuotaBucketResponse,
-  OperationalPostureGetGaEvidenceData,
-  OperationalPostureGetGaEvidenceError,
-  OperationalPostureGetGaEvidenceResponse,
   OperationalPostureGetPostgresData,
   OperationalPostureGetPostgresError,
   OperationalPostureGetPostgresResponse,
@@ -6303,34 +6299,6 @@ export const operationalGovernanceUpdateQuotaBucketMutation = (
   };
   return mutationOptions;
 };
-
-export const operationalPostureGetGaEvidenceQueryKey = (
-  options?: Options<OperationalPostureGetGaEvidenceData>,
-) => createQueryKey("operationalPostureGetGaEvidence", options);
-
-/**
- * Get sanitized GA evidence posture
- */
-export const operationalPostureGetGaEvidenceOptions = (
-  options?: Options<OperationalPostureGetGaEvidenceData>,
-) =>
-  queryOptions<
-    OperationalPostureGetGaEvidenceResponse,
-    OperationalPostureGetGaEvidenceError,
-    OperationalPostureGetGaEvidenceResponse,
-    ReturnType<typeof operationalPostureGetGaEvidenceQueryKey>
-  >({
-    queryFn: async ({ queryKey, signal }) => {
-      const { data } = await operationalPostureGetGaEvidence({
-        ...options,
-        ...queryKey[0],
-        signal,
-        throwOnError: true,
-      });
-      return data;
-    },
-    queryKey: operationalPostureGetGaEvidenceQueryKey(options),
-  });
 
 export const operationalPostureGetPostgresQueryKey = (
   options?: Options<OperationalPostureGetPostgresData>,

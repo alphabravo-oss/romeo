@@ -422,7 +422,6 @@ describe("Romeo HTTP contracts", () => {
         "/api/v1/scim/v2/Users/{userId}",
         "/api/v1/scim/v2/Groups",
         "/api/v1/scim/v2/Groups/{groupId}",
-        "/api/v1/admin/ga/evidence-posture",
         "/api/v1/admin/postgres/operational-posture",
         "/api/v1/collaboration/channels",
         "/api/v1/collaboration/channels/direct-messages",
@@ -563,12 +562,6 @@ describe("Romeo HTTP contracts", () => {
     ).toMatchObject({
       operationId: "edgeSecurity.getPosture",
       tags: ["Edge security"],
-    });
-    expect(
-      document.paths?.["/api/v1/admin/ga/evidence-posture"]?.get,
-    ).toMatchObject({
-      operationId: "operationalPosture.getGaEvidence",
-      tags: ["Operational posture"],
     });
     expect(
       document.paths?.["/api/v1/admin/postgres/operational-posture"]?.get,

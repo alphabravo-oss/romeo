@@ -1,5 +1,4 @@
 import { assertScope, type AuthSubject } from "@romeo/auth";
-import type { RomeoEnv } from "@romeo/config";
 import type { ObjectStore } from "@romeo/storage";
 
 import type {
@@ -31,7 +30,6 @@ import type { CapabilityService } from "./capability-resolver";
 
 export interface GovernanceServiceOptions {
   capabilities?: CapabilityService;
-  env?: RomeoEnv | undefined;
   scimEnabled?: boolean | undefined;
   deleteKnowledgeSource?: (input: {
     subject: AuthSubject;

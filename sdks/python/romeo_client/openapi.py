@@ -283,12 +283,6 @@ OPERATIONS = {
         "path": "/api/v1/admin/edge-security/posture",
         "summary": "Get sanitized edge, ingress, WAF, and security-header posture"
     },
-    "get_admin_ga_evidence_posture": {
-        "name": "get_admin_ga_evidence_posture",
-        "method": "GET",
-        "path": "/api/v1/admin/ga/evidence-posture",
-        "summary": "Get sanitized GA evidence posture"
-    },
     "get_admin_impersonation_requests": {
         "name": "get_admin_impersonation_requests",
         "method": "GET",

@@ -38,7 +38,6 @@ import { registerDeviceAuthorizationRoutes } from "./http/routes/device-authoriz
 import { registerEdgeSecurityRoutes } from "./http/routes/edge-security";
 import { registerEvalRoutes } from "./http/routes/evals";
 import { registerFileRoutes } from "./http/routes/files";
-import { registerGaEvidencePostureRoutes } from "./http/routes/ga-evidence-posture";
 import { registerRuntimeKeyRotationPostureRoutes } from "./http/routes/runtime-key-rotation-posture";
 import { registerGovernanceRoutes } from "./http/routes/governance";
 import { registerGroupRoutes } from "./http/routes/groups";
@@ -255,7 +254,6 @@ export function createRomeoApiRuntime(
   registerEdgeSecurityRoutes(app);
   registerEvalRoutes(app);
   registerFileRoutes(app);
-  registerGaEvidencePostureRoutes(app);
   registerRuntimeKeyRotationPostureRoutes(app);
   registerGovernanceRoutes(app);
   registerGroupRoutes(app);

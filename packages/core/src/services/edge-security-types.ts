@@ -1,26 +1,5 @@
 import type { RomeoEnv } from "@romeo/config";
 
-export const liveEdgeEvidenceSchema = "romeo.live-edge-enforcement.v1";
-export const requiredLiveEdgeChecks = [
-  "security_headers_present",
-  "waf_or_gateway_probe_blocked",
-  "oversized_request_rejected",
-  "public_rate_limit_enforced",
-  "raw_probe_payload_not_retained",
-] as const;
-export const requiredEdgeHeaders = [
-  "x-content-type-options",
-  "x-frame-options",
-  "referrer-policy",
-  "cross-origin-opener-policy",
-  "permissions-policy",
-] as const;
-
-export type LiveEdgeInvalidReason =
-  | "invalid_json"
-  | "read_failed"
-  | "schema_mismatch";
-
 export interface EdgeSecurityPostureCheck {
   id: string;
   status: "pass" | "warn";
@@ -53,8 +32,6 @@ export interface EdgeSecurityPostureReport {
   ingress: {
     allowedOriginRuleCount: number;
     desiredWafMode: RomeoEnv["EDGE_WAF_MODE"];
-    observedWafEnforcement: "block" | "failed" | "unknown";
-    observedWafAt?: string;
     /** @deprecated Use desiredWafMode. */
     wafMode: RomeoEnv["EDGE_WAF_MODE"];
   };
@@ -84,76 +61,10 @@ export interface EdgeSecurityPostureReport {
     referrerPolicy: "no-referrer";
     strictTransportSecurity: boolean;
   };
-  liveEvidence: {
-    configured: boolean;
-    source: "configured_file" | "not_configured";
-    status: "failed" | "invalid" | "not_configured" | "planned" | "satisfied";
-    schemaVersion?: typeof liveEdgeEvidenceSchema;
-    generatedAt?: string;
-    evidenceStatus?: "failed" | "passed" | "planned" | "unknown";
-    mode?: "dry-run" | "live" | "unknown";
-    invalidReason?: LiveEdgeInvalidReason;
-    failureCodes: string[];
-    target: {
-      deployment: "edge" | "unknown";
-      originConfigured: boolean;
-    };
-    checks: {
-      total: number;
-      requiredTotal: number;
-      requiredPresent: number;
-      missingRequired: Array<(typeof requiredLiveEdgeChecks)[number]>;
-    };
-    securityHeaders: {
-      checked: boolean;
-      status: "failed" | "passed" | "unknown";
-      matchedRequiredCount: number;
-      missingRequiredCount: number;
-      missingRequired: Array<(typeof requiredEdgeHeaders)[number]>;
-      hstsChecked: boolean;
-      headerValuesReturned: boolean;
-    };
-    waf: {
-      checked: boolean;
-      status: "failed" | "passed" | "unknown";
-      httpStatus?: number;
-      expectedStatusCount: number;
-      expectedHeaderPresent?: boolean;
-      responseBodyReturned: boolean;
-    };
-    requestBodyLimit: {
-      checked: boolean;
-      status: "failed" | "passed" | "unknown";
-      bytesSent: number;
-      httpStatus?: number;
-      expectedStatusCount: number;
-      requestBodyReturned: boolean;
-      responseBodyReturned: boolean;
-    };
-    rateLimit: {
-      checked: boolean;
-      status: "failed" | "passed" | "unknown";
-      attempts: number;
-      blockedAt?: number;
-      expectedStatus?: number;
-      expectedStatusObserved: boolean;
-      responseBodyReturned: boolean;
-    };
-    redaction: {
-      rawApiKeyReturned: boolean;
-      rawHeaderValuesReturned: boolean;
-      rawProbePayloadReturned: boolean;
-      rawQueryValuesReturned: boolean;
-      rawRequestBodiesReturned: boolean;
-      rawResponseBodiesReturned: boolean;
-    };
-  };
   checks: EdgeSecurityPostureCheck[];
   redaction: {
-    evidenceFileBodyReturned: false;
     rawAllowedOriginsReturned: false;
     rawAppOriginReturned: false;
-    rawEvidencePathReturned: false;
     rawIngressAnnotationsReturned: false;
     rawProxyIpRangesReturned: false;
     rawSecretsReturned: false;

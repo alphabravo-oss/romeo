@@ -38,7 +38,6 @@ import type { EdgeSecurityService } from "./edge-security-service";
 import type { EvalService } from "./eval-service";
 import type { FileOcrProvider } from "./file-ocr";
 import type { FileMalwareScanner, FileService } from "./file-service";
-import type { GaEvidencePostureService } from "./ga-evidence-posture-service";
 import type { GovernanceService } from "./governance-service";
 import type { GovernanceExportWorker } from "./governance-export-worker";
 import type { GroupService } from "./group-service";
@@ -147,7 +146,6 @@ export interface RomeoServices {
   edgeSecurity: EdgeSecurityService;
   evals: EvalService;
   files: FileService;
-  gaEvidencePosture: GaEvidencePostureService;
   knowledge: KnowledgeService;
   jobs: JobService;
   images: ImageGenerationService;
