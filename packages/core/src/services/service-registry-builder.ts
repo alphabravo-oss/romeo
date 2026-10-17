@@ -56,7 +56,9 @@ import { LdapAuthService } from "./ldap-auth-service";
 import { LocalAuthService } from "./local-auth-service";
 import type { ManagedSecretService } from "./managed-secret-service";
 import type { NotificationDeliverySender } from "./notification-delivery";
+import { createNotificationDestinationGuard } from "./notification-delivery-factory";
 import { NotificationService } from "./notification-service";
+import { lookupNetworkHost } from "./outbound-network-policy";
 import { OAuth2PkceService } from "./oauth2-pkce-service";
 import { OidcPkceService } from "./oidc-pkce-service";
 import type { OidcRuntimeCache } from "./oidc-client";
@@ -70,6 +72,7 @@ import { PostgresOperationalPostureService } from "./postgres-operational-postur
 import { PromptTemplateService } from "./prompt-template-service";
 import { ProviderService } from "./provider-service";
 import { ProviderCapabilityReportService } from "./provider-capability-report-service";
+import type { ProviderNetworkPolicy } from "./provider-network-policy";
 import type { createQdrantKnowledgeVectorStore } from "./qdrant-knowledge-vector-store";
 import type { QuotaCoordinator } from "./quota-coordination";
 import { QuotaService } from "./quota-service";
@@ -124,6 +127,7 @@ interface ServiceRegistryInput {
   channelStore: ChannelStore;
   options: CreateServicesOptions;
   providerCircuitBreaker: ProviderCircuitBreaker;
+  providerNetworkPolicy: ProviderNetworkPolicy;
   quotaCoordinator: QuotaCoordinator;
   repository: RomeoRepository;
   runs: RunService;
@@ -165,6 +169,7 @@ export function buildServiceRegistry(
     channelStore,
     options,
     providerCircuitBreaker,
+    providerNetworkPolicy,
     quotaCoordinator,
     repository,
     runs,
@@ -322,6 +327,12 @@ export function buildServiceRegistry(
       repository,
       notificationDelivery,
       secretResolver,
+      createNotificationDestinationGuard(
+        env,
+        options.webhookFetch === undefined
+          ? { hostLookup: lookupNetworkHost }
+          : {},
+      ),
     ),
     oidc,
     oidcPkce: new OidcPkceService(
@@ -389,6 +400,7 @@ export function buildServiceRegistry(
     openAiModels: new OpenAiModelsService(repository),
     postgresOperationalPosture: new PostgresOperationalPostureService(env),
     providers: new ProviderService(repository, {
+      networkPolicy: providerNetworkPolicy,
       secretResolver,
       catalogSync: {
         enabled:

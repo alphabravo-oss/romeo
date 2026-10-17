@@ -18,9 +18,7 @@ import { canUseProvider, canUseProviderModel } from "./access-visibility";
 import {
   ProviderCatalogSyncCoordinator,
   providerCatalogStaleState,
-  type ProviderCatalogSyncOptions,
 } from "./provider-catalog-sync";
-import type { SecretResolver } from "./secret-resolver";
 import { decorateCatalogModels } from "./catalog-model-decorator";
 import { requireAcceptedProviderConnection } from "./provider-connection-config";
 import {
@@ -39,11 +37,13 @@ import {
 } from "./provider-runtime-operations";
 import type {
   CreateProviderInput,
+  ProviderServiceOptions,
   UpdateProviderInput,
 } from "./provider-service-inputs";
 
 export type {
   CreateProviderInput,
+  ProviderServiceOptions,
   UpdateProviderInput,
 } from "./provider-service-inputs";
 
@@ -53,14 +53,7 @@ export class ProviderService {
 
   constructor(
     private readonly repository: RomeoRepository,
-    private readonly options: {
-      catalogSync?: Omit<
-        ProviderCatalogSyncOptions,
-        "fetchImpl" | "secretResolver"
-      >;
-      secretResolver?: SecretResolver;
-      fetchImpl?: typeof fetch;
-    } = {},
+    private readonly options: ProviderServiceOptions = {},
   ) {
     this.catalogSync = new ProviderCatalogSyncCoordinator(repository, {
       ...options.catalogSync,
@@ -247,6 +240,7 @@ export class ProviderService {
   async create(input: CreateProviderInput): Promise<ProviderInstance> {
     assertScope(input.subject, "providers:write");
     const accepted = requireAcceptedProviderConnection({
+      networkPolicy: this.options.networkPolicy,
       kind: input.type,
       name: input.name,
       baseUrl: input.baseUrl,
@@ -309,6 +303,7 @@ export class ProviderService {
     const accepted = requireAcceptedProviderConnection({
       baseUrl: input.baseUrl ?? current.baseUrl,
       credentialAlreadyConfigured: current.credentialRef !== undefined,
+      networkPolicy: this.options.networkPolicy,
       kind: current.type,
       name: input.name ?? current.name,
       ...(input.auth === undefined ? {} : { auth: input.auth }),
@@ -378,12 +373,7 @@ export class ProviderService {
       providerId,
       repository: this.repository,
       subject,
-      ...(this.options.fetchImpl === undefined
-        ? {}
-        : { fetchImpl: this.options.fetchImpl }),
-      ...(this.options.secretResolver === undefined
-        ? {}
-        : { secretResolver: this.options.secretResolver }),
+      ...this.runtimeOptions(),
     });
   }
 
@@ -431,12 +421,7 @@ export class ProviderService {
       providerId,
       repository: this.repository,
       subject,
-      ...(this.options.fetchImpl === undefined
-        ? {}
-        : { fetchImpl: this.options.fetchImpl }),
-      ...(this.options.secretResolver === undefined
-        ? {}
-        : { secretResolver: this.options.secretResolver }),
+      ...this.runtimeOptions(),
     });
   }
 
@@ -468,15 +453,21 @@ export class ProviderService {
       providerId,
       repository: this.repository,
       subject,
-      ...(this.options.fetchImpl === undefined
-        ? {}
-        : { fetchImpl: this.options.fetchImpl }),
-      ...(this.options.secretResolver === undefined
-        ? {}
-        : { secretResolver: this.options.secretResolver }),
+      ...this.runtimeOptions(),
     });
     await this.syncModels(subject, providerId);
     return result;
+  }
+
+  private runtimeOptions(): Pick<
+    ProviderServiceOptions,
+    "fetchImpl" | "secretResolver"
+  > {
+    const { fetchImpl, secretResolver } = this.options;
+    return {
+      ...(fetchImpl === undefined ? {} : { fetchImpl }),
+      ...(secretResolver === undefined ? {} : { secretResolver }),
+    };
   }
 
   private async audit<A extends AuditAction>(

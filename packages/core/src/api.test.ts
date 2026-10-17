@@ -9250,15 +9250,16 @@ describe("Romeo API thin slice", () => {
   });
 
   it("syncs provider models into the base model registry", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL) =>
-        String(input).endsWith("/api/tags")
-          ? Response.json({ models: [{ name: "llama3.2:latest" }] })
-          : Response.json({ capabilities: ["completion", "tools"] }),
-      ),
+    // Provider traffic uses the policy-checked transport, so the test injects
+    // the provider fetch rather than stubbing the global.
+    const providerFetch = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/api/tags")
+        ? Response.json({ models: [{ name: "llama3.2:latest" }] })
+        : Response.json({ capabilities: ["completion", "tools"] }),
     );
-    const api = createRomeoApi(new InMemoryRomeoRepository());
+    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+      providerFetch,
+    });
     try {
       const response = await api.request(
         "/api/v1/providers/provider_ollama/sync",

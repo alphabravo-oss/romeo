@@ -9,6 +9,8 @@ import { AuthProviderSettingsService } from "./auth-provider-settings-service";
 import { BrowserAutomationService } from "./browser-automation-service";
 import { ChatService } from "./chat-service";
 import { lookupNetworkHost } from "./outbound-network-policy";
+import { createProviderEgressFetch } from "./provider-egress-fetch";
+import { providerNetworkPolicyFromEnv } from "./provider-network-policy";
 import { ChatEventService } from "./chat-event-service";
 import { CapabilityService } from "./capability-resolver";
 import { DirectorySyncService } from "./directory-sync-service";
@@ -79,6 +81,27 @@ export function createServices(
   ),
 ): RomeoServices {
   const env = runtime.env;
+  const providerNetworkPolicy = providerNetworkPolicyFromEnv(env);
+  // Provider base URLs are tenant-admin input: every model-provider request
+  // (verify, sync, chat, embeddings, images) goes through the policy-checked,
+  // DNS-pinned transport. Web search keeps its own egress client below.
+  const providerFetch = createProviderEgressFetch({
+    policy: providerNetworkPolicy,
+    ...(options.providerFetch === undefined
+      ? {}
+      : { fetchImpl: options.providerFetch }),
+  });
+  const embeddingFetch = createProviderEgressFetch({
+    policy: providerNetworkPolicy,
+    ...(options.embeddingFetch === undefined
+      ? {}
+      : { fetchImpl: options.embeddingFetch }),
+  });
+  const providerOptions: CreateServicesOptions = {
+    ...options,
+    embeddingFetch,
+    providerFetch,
+  };
   const platformCapabilityPolicy = runtime.capabilityPlatformPolicy;
   const capabilityFlags = new OrganizationCapabilityFlagService(
     repository,
@@ -168,7 +191,7 @@ export function createServices(
     undefined,
     objectStore,
     knowledgeExtractor,
-    options.embeddingFetch,
+    embeddingFetch,
     webhooks,
     {
       vectorDriver: activeVectorStoreDeployment.activeDriver,
@@ -208,7 +231,7 @@ export function createServices(
     repository,
     runEventSequencer,
     webhooks,
-    options.embeddingFetch,
+    embeddingFetch,
     objectStore,
     {
       capabilityPlatformPolicy: platformCapabilityPolicy,
@@ -231,9 +254,7 @@ export function createServices(
           input.input,
           { modelToolCallId: input.modelToolCallId },
         ),
-      ...(options.providerFetch === undefined
-        ? {}
-        : { providerFetch: options.providerFetch }),
+      providerFetch,
       providerStreamTimeoutMs: env.MODEL_PROVIDER_STREAM_TIMEOUT_MS,
       runExecutionLeaseSeconds: env.RUN_EXECUTION_LEASE_SECONDS,
       runRecoveryStaleMs: env.RUN_RECOVERY_STALE_MS,
@@ -367,8 +388,9 @@ export function createServices(
     objectStore,
     oidc,
     channelStore,
-    options,
+    options: providerOptions,
     providerCircuitBreaker: runtime.providerCircuitBreaker,
+    providerNetworkPolicy,
     quotaCoordinator,
     repository,
     runs,
