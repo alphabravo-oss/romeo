@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getGaEvidencePosture, getPostgresOperationalPosture } from "./queries";
+import { getPostgresOperationalPosture } from "./queries";
 import { getJobsOperationalSummary } from "../jobs";
 import { getQuotasDistributedStatus } from "../operational-governance";
 
@@ -19,23 +19,6 @@ function mockFetch(returnBody: unknown) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("operational posture generated queries", () => {
-  it("gets and unwraps GA evidence posture", async () => {
-    const fetchMock = mockFetch({
-      data: { schema: "romeo.ga-evidence-posture.v1", status: "passed" },
-    });
-
-    const report = await getGaEvidencePosture();
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/admin/ga/evidence-posture",
-      expect.objectContaining({ method: "GET" }),
-    );
-    expect(report).toMatchObject({
-      schema: "romeo.ga-evidence-posture.v1",
-      status: "passed",
-    });
-  });
-
   it("gets and unwraps Postgres operational posture", async () => {
     const fetchMock = mockFetch({
       data: {

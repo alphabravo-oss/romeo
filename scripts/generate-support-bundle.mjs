@@ -158,7 +158,6 @@ function configurationPosture(env) {
     "AZURE_ACCESS_TOKEN",
     "BILLING_GENERIC_WEBHOOK_SECRET",
     "BILLING_STRIPE_WEBHOOK_SECRET",
-    "BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH",
     "DATA_CONNECTOR_GITHUB_TOKEN",
     "DELEGATED_OAUTH_GITHUB_CLIENT_SECRET",
     "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY",
@@ -330,23 +329,8 @@ function dataRightsPosture() {
     supportedDeletionResourceTypes: ["chat", "file_object", "knowledge_source"],
     evidenceCommands: [
       "pnpm support:bundle",
-      "pnpm smoke:support-bundle-redaction",
       "pnpm smoke:compose:backup-restore",
-      "pnpm smoke:compose:tiered-rag",
-      "pnpm evidence:data-rights-retention",
     ],
-    retentionEvidence: {
-      schemaVersion: "romeo.data-rights-retention-evidence.v1",
-      operationalLogEvidencePathConfigured: isConfigured(
-        process.env.DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH,
-      ),
-      backupEvidencePathConfigured: isConfigured(
-        process.env.DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH,
-      ),
-      operationalLogEvidenceEnvKey:
-        "DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH",
-      backupEvidenceEnvKey: "DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH",
-    },
     externalRetentionControls: ["operational_logs", "backups"],
   };
 }

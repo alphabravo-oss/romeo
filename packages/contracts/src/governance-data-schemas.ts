@@ -333,36 +333,6 @@ export const DataRightsWorkflowCoverageSchema = z.strictObject({
   evidence: z.array(z.string()),
   limitations: z.array(z.string()),
 });
-export const DataRightsRetentionEvidenceSummarySchema = z
-  .strictObject({
-    requiredForProduction: z.literal(true),
-    control: z.enum(["backups", "operational_logs"]),
-    status: z.enum(["external_required", "failed", "invalid", "satisfied"]),
-    evidence: z.strictObject({
-      configured: z.boolean(),
-      schemaVersion: z
-        .literal("romeo.data-rights-retention-evidence.v1")
-        .optional(),
-      generatedAt: timestamp.optional(),
-      evidenceStatus: z.enum(["failed", "passed", "unknown"]).optional(),
-      retentionDays: count.optional(),
-      destructionValidated: z.boolean().optional(),
-      encryptedAtRest: z.boolean().optional(),
-      immutableWindowDays: count.optional(),
-      reviewedSystemCount: count,
-      failureCodes: z.array(z.string()),
-      invalidReason: z
-        .enum([
-          "control_mismatch",
-          "invalid_json",
-          "read_failed",
-          "required_fields_missing",
-          "schema_mismatch",
-        ])
-        .optional(),
-    }),
-  })
-  .openapi("DataRightsRetentionEvidenceSummary");
 export const DataRightsCoverageReportSchema = z
   .strictObject({
     schema: z.literal("romeo.data-rights-coverage.v1"),
@@ -384,18 +354,6 @@ export const DataRightsCoverageReportSchema = z
         limitations: z.array(z.string()),
       }),
     ),
-    retentionEvidence: z.strictObject({
-      operationalLogs: DataRightsRetentionEvidenceSummarySchema,
-      backups: DataRightsRetentionEvidenceSummarySchema,
-      redaction: z.strictObject({
-        backupLocationReturned: z.literal(false),
-        evidenceFileBodiesReturned: z.literal(false),
-        logContentReturned: z.literal(false),
-        objectStoreKeysReturned: z.literal(false),
-        rawEvidencePathsReturned: z.literal(false),
-        secretValuesReturned: z.literal(false),
-      }),
-    }),
     backupRetention: z.strictObject({
       status: z.literal("externally_governed"),
       posture: z.string(),

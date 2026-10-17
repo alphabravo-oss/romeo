@@ -13,11 +13,8 @@ import {
 } from "./browser-automation-artifacts";
 import {
   browserAutomationArtifactPosture,
-  browserAutomationLiveEvidenceSchema,
   browserAutomationQueuePosture,
-  browserAutomationRequiredLiveEvidenceChecks,
   browserAutomationWarnings,
-  readBrowserAutomationLiveEvidence,
   safeRunnerOriginConfigured,
 } from "./browser-automation-posture";
 import { BrowserAutomationWorkerService } from "./browser-automation-worker-service";
@@ -49,7 +46,6 @@ export interface BrowserAutomationPostureReport {
     jobType: typeof browserAutomationJobType;
   };
   deployment: {
-    liveEvidencePathConfigured: boolean;
     networkPolicyConfigured: boolean;
     runnerOriginConfigured: boolean;
     runnerUrlConfigured: boolean;
@@ -76,42 +72,14 @@ export interface BrowserAutomationPostureReport {
     registeredCount: number;
     taskCountWithRegisteredArtifacts: number;
   };
-  liveEvidence: {
-    configured: boolean;
-    source: "configured_file" | "not_configured";
-    status: "failed" | "invalid" | "not_configured" | "satisfied";
-    schemaVersion?: typeof browserAutomationLiveEvidenceSchema;
-    evidenceStatus?: "failed" | "passed" | "planned" | "unknown";
-    mode?: "dry-run" | "live" | "unknown";
-    deployment?: "compose" | "kubernetes" | "target" | "unknown";
-    generatedAt?: string;
-    checks: Record<
-      (typeof browserAutomationRequiredLiveEvidenceChecks)[number],
-      boolean
-    >;
-    failureCodes: string[];
-    invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-    redaction: {
-      artifactBytesReturned: boolean;
-      rawEvidencePathsReturned: boolean;
-      rawPageContentReturned: boolean;
-      rawRunnerUrlReturned: boolean;
-      rawTaskTextReturned: boolean;
-      secretValuesReturned: boolean;
-    };
-  };
   redaction: {
-    evidenceFileBodiesReturned: false;
     rawArtifactStorageKeysReturned: false;
-    rawEvidencePathsReturned: false;
     rawRunnerUrlReturned: false;
     rawTaskTextReturned: false;
     secretValuesReturned: false;
   };
   warnings: Array<
     | "browser_automation_dead_letters_present"
-    | "browser_automation_live_evidence_invalid"
-    | "browser_automation_live_evidence_required"
     | "browser_automation_network_policy_not_configured"
     | "browser_automation_runner_origin_not_https"
     | "browser_automation_runner_not_configured"
@@ -130,12 +98,8 @@ export class BrowserAutomationService extends BrowserAutomationWorkerService {
     });
     const queue = browserAutomationQueuePosture(jobs, nowMs);
     const artifacts = browserAutomationArtifactPosture(jobs);
-    const liveEvidence = await readBrowserAutomationLiveEvidence(
-      this.env.BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH,
-    );
     const warnings = browserAutomationWarnings({
       deadLettered: queue.deadLettered,
-      liveEvidenceStatus: liveEvidence.status,
       networkPolicyConfigured:
         this.env.BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED,
       runnerOriginConfigured: safeRunnerOriginConfigured(
@@ -162,8 +126,6 @@ export class BrowserAutomationService extends BrowserAutomationWorkerService {
         jobType: browserAutomationJobType,
       },
       deployment: {
-        liveEvidencePathConfigured:
-          this.env.BROWSER_AUTOMATION_LIVE_EVIDENCE_PATH.length > 0,
         networkPolicyConfigured:
           this.env.BROWSER_AUTOMATION_NETWORK_POLICY_ENABLED,
         runnerOriginConfigured: safeRunnerOriginConfigured(
@@ -178,11 +140,8 @@ export class BrowserAutomationService extends BrowserAutomationWorkerService {
       },
       queue,
       artifacts,
-      liveEvidence,
       redaction: {
-        evidenceFileBodiesReturned: false,
         rawArtifactStorageKeysReturned: false,
-        rawEvidencePathsReturned: false,
         rawRunnerUrlReturned: false,
         rawTaskTextReturned: false,
         secretValuesReturned: false,

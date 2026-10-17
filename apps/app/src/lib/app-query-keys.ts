@@ -182,7 +182,6 @@ export const personalContent = (
       : (["personalContent", kind, workspaceId, page] as const);
 export const postgresOperationalPosture = () =>
   ["postgresOperationalPosture"] as const;
-export const postureGaEvidence = () => ["postureGaEvidence"] as const;
 export const promptMarketplace = (workspaceId?: string) =>
   resourceKey("promptMarketplace", workspaceId);
 export const promptTemplates = (

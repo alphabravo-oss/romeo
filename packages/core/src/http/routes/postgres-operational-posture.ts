@@ -3,9 +3,9 @@ import { getPostgresOperationalPostureRoute } from "@romeo/contracts";
 import type { RomeoApi } from "../context";
 
 export function registerPostgresOperationalPostureRoutes(app: RomeoApi): void {
-  app.openapi(getPostgresOperationalPostureRoute, async (context) => {
+  app.openapi(getPostgresOperationalPostureRoute, (context) => {
     const subject = context.get("subject");
-    const data = await context
+    const data = context
       .get("services")
       .postgresOperationalPosture.report(subject);
     return context.json({ data }, 200);

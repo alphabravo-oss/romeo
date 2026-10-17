@@ -1662,7 +1662,6 @@ function assertComposerLocalization() {
       contextInspector: "Inspector de contexto",
       governedWebSearch: "Búsqueda web gobernada",
       governance: "Gobernanza",
-      gaEvidence: "Evidencia de GA",
       goTo: "Ir a",
       keyboardShortcuts: "Atajos de teclado",
       lifecycleActions: "Acciones de ciclo de vida",
@@ -1791,7 +1790,6 @@ function assertComposerLocalization() {
       contextInspector: "Inspecteur de contexte",
       governedWebSearch: "Recherche web gouvernée",
       governance: "Gouvernance",
-      gaEvidence: "Preuves de disponibilité générale",
       goTo: "Aller à",
       keyboardShortcuts: "Raccourcis clavier",
       lifecycleActions: "Actions de cycle de vie",
@@ -2444,10 +2442,6 @@ function assertComposerLocalization() {
     assert(
       postureAdmin.includes(locale.systemPosture),
       `${locale.code} did not translate system posture administration`,
-    );
-    assert(
-      postureAdmin.includes(locale.gaEvidence),
-      `${locale.code} did not translate GA evidence administration`,
     );
     run("open", `${baseUrl}/admin?section=abuse`);
     waitForDocumentReady();

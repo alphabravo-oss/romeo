@@ -583,36 +583,6 @@ describe("Romeo config", () => {
       SESSION_SECRET_PREVIOUS: "previous-session-secret-32-bytes",
       REPOSITORY_DRIVER: "postgres",
       TENANCY_MODE: "multi",
-      GA_CHECKLIST_PATH: "/etc/romeo/ga-checklist.json",
-      GA_TARGET_PREFLIGHT_PATH: "/etc/romeo/ga-target-preflight.json",
-      GA_TARGET_PLAN_PATH: "/etc/romeo/ga-target-plan.json",
-      GA_TARGET_EXECUTION_PATH: "/etc/romeo/ga-target-execution.json",
-      GA_EVIDENCE_BUNDLE_PATH: "/etc/romeo/ga-evidence-bundle.json",
-      RELEASE_PUBLISH_PLAN_PATH: "/etc/romeo/publish-plan.json",
-      RELEASE_AIRGAP_VERIFICATION_PATH:
-        "/etc/romeo/airgap-bundle-verification.json",
-      RELEASE_READBACK_PLAN_PATH: "/etc/romeo/release-readback-plan.json",
-      RELEASE_READBACK_VALIDATION_PATH: "/etc/romeo/readback-validation.json",
-      SUPPORT_BUNDLE_PATH: "/etc/romeo/support-bundle.json",
-      CI_BRANCH_PROTECTION_PLAN_PATH: "/etc/romeo/branch-protection-plan.json",
-      CI_HOSTED_RUN_VERIFICATION_PATH:
-        "/etc/romeo/hosted-ci-run-verification.json",
-      CI_BRANCH_PROTECTION_VERIFICATION_PATH:
-        "/etc/romeo/branch-protection-verification.json",
-      EDGE_ENFORCEMENT_EVIDENCE_PATH: "/etc/romeo/live-edge-enforcement.json",
-      POSTGRES_QUERY_PLAN_EVIDENCE_PATH: "/etc/romeo/postgres-query-plan.json",
-      POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH:
-        "/etc/romeo/postgres-slow-query.json",
-      POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH: "/etc/romeo/postgres-locks.json",
-      POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH:
-        "/etc/romeo/postgres-archival-decision.json",
-      PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH:
-        "/etc/romeo/pgvector-isolation.json",
-      QDRANT_LIVE_EVIDENCE_PATH: "/etc/romeo/qdrant-live-evidence.json",
-      DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH:
-        "/etc/romeo/log-retention-evidence.json",
-      DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH:
-        "/etc/romeo/backup-retention-evidence.json",
       DATA_CONNECTOR_LIVE_EVIDENCE_PATH:
         "/etc/romeo/data-connector-live-evidence.json",
       DATA_CONNECTOR_WORKER_ENABLED: "true",
@@ -761,64 +731,6 @@ describe("Romeo config", () => {
     );
     expect(env.REPOSITORY_DRIVER).toBe("postgres");
     expect(env.TENANCY_MODE).toBe("multi");
-    expect(env.GA_CHECKLIST_PATH).toBe("/etc/romeo/ga-checklist.json");
-    expect(env.GA_TARGET_PREFLIGHT_PATH).toBe(
-      "/etc/romeo/ga-target-preflight.json",
-    );
-    expect(env.GA_TARGET_PLAN_PATH).toBe("/etc/romeo/ga-target-plan.json");
-    expect(env.GA_TARGET_EXECUTION_PATH).toBe(
-      "/etc/romeo/ga-target-execution.json",
-    );
-    expect(env.GA_EVIDENCE_BUNDLE_PATH).toBe(
-      "/etc/romeo/ga-evidence-bundle.json",
-    );
-    expect(env.RELEASE_PUBLISH_PLAN_PATH).toBe("/etc/romeo/publish-plan.json");
-    expect(env.RELEASE_AIRGAP_VERIFICATION_PATH).toBe(
-      "/etc/romeo/airgap-bundle-verification.json",
-    );
-    expect(env.RELEASE_READBACK_PLAN_PATH).toBe(
-      "/etc/romeo/release-readback-plan.json",
-    );
-    expect(env.RELEASE_READBACK_VALIDATION_PATH).toBe(
-      "/etc/romeo/readback-validation.json",
-    );
-    expect(env.SUPPORT_BUNDLE_PATH).toBe("/etc/romeo/support-bundle.json");
-    expect(env.CI_BRANCH_PROTECTION_PLAN_PATH).toBe(
-      "/etc/romeo/branch-protection-plan.json",
-    );
-    expect(env.CI_HOSTED_RUN_VERIFICATION_PATH).toBe(
-      "/etc/romeo/hosted-ci-run-verification.json",
-    );
-    expect(env.CI_BRANCH_PROTECTION_VERIFICATION_PATH).toBe(
-      "/etc/romeo/branch-protection-verification.json",
-    );
-    expect(env.EDGE_ENFORCEMENT_EVIDENCE_PATH).toBe(
-      "/etc/romeo/live-edge-enforcement.json",
-    );
-    expect(env.POSTGRES_QUERY_PLAN_EVIDENCE_PATH).toBe(
-      "/etc/romeo/postgres-query-plan.json",
-    );
-    expect(env.POSTGRES_SLOW_QUERY_TELEMETRY_EVIDENCE_PATH).toBe(
-      "/etc/romeo/postgres-slow-query.json",
-    );
-    expect(env.POSTGRES_LOCK_TELEMETRY_EVIDENCE_PATH).toBe(
-      "/etc/romeo/postgres-locks.json",
-    );
-    expect(env.POSTGRES_ARCHIVAL_PARTITIONING_DECISION_PATH).toBe(
-      "/etc/romeo/postgres-archival-decision.json",
-    );
-    expect(env.PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH).toBe(
-      "/etc/romeo/pgvector-isolation.json",
-    );
-    expect(env.QDRANT_LIVE_EVIDENCE_PATH).toBe(
-      "/etc/romeo/qdrant-live-evidence.json",
-    );
-    expect(env.DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH).toBe(
-      "/etc/romeo/log-retention-evidence.json",
-    );
-    expect(env.DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH).toBe(
-      "/etc/romeo/backup-retention-evidence.json",
-    );
     expect(env.DATA_CONNECTOR_LIVE_EVIDENCE_PATH).toBe(
       "/etc/romeo/data-connector-live-evidence.json",
     );

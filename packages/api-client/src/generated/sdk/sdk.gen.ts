@@ -1211,9 +1211,6 @@ import type {
   OperationalGovernanceUpdateQuotaBucketData,
   OperationalGovernanceUpdateQuotaBucketErrors,
   OperationalGovernanceUpdateQuotaBucketResponses,
-  OperationalPostureGetGaEvidenceData,
-  OperationalPostureGetGaEvidenceErrors,
-  OperationalPostureGetGaEvidenceResponses,
   OperationalPostureGetPostgresData,
   OperationalPostureGetPostgresErrors,
   OperationalPostureGetPostgresResponses,
@@ -6496,39 +6493,6 @@ export const operationalGovernanceUpdateQuotaBucket = <
       "Content-Type": "application/json",
       ...options.headers,
     },
-  });
-
-/**
- * Get sanitized GA evidence posture
- */
-export const operationalPostureGetGaEvidence = <
-  ThrowOnError extends boolean = false,
->(
-  options?: Options<OperationalPostureGetGaEvidenceData, ThrowOnError>,
-): RequestResult<
-  OperationalPostureGetGaEvidenceResponses,
-  OperationalPostureGetGaEvidenceErrors,
-  ThrowOnError
-> =>
-  (options?.client ?? client).get<
-    OperationalPostureGetGaEvidenceResponses,
-    OperationalPostureGetGaEvidenceErrors,
-    ThrowOnError
-  >({
-    security: [
-      {
-        key: "bearerAuth",
-        scheme: "bearer",
-        type: "http",
-      },
-      {
-        in: "cookie",
-        name: "romeo_session",
-        type: "apiKey",
-      },
-    ],
-    url: "/admin/ga/evidence-posture",
-    ...options,
   });
 
 /**

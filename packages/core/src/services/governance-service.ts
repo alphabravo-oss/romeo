@@ -26,10 +26,6 @@ import {
 } from "./compliance-report";
 import { executeDataExport, previewDataExport } from "./data-export";
 import { buildDataRightsCoverageReport } from "./data-rights-coverage";
-import {
-  defaultDataRightsRetentionEvidence,
-  readDataRightsRetentionEvidence,
-} from "./data-rights-retention-evidence";
 import { ContentDeletionService } from "./content-deletion-service";
 import { buildIdentityLifecyclePolicy } from "./identity-lifecycle-policy";
 import {
@@ -215,10 +211,6 @@ export class GovernanceService extends GovernanceRetentionService {
     return buildDataRightsCoverageReport({
       orgId: subject.orgId,
       generatedAt: new Date().toISOString(),
-      retentionEvidence:
-        this.options.env === undefined
-          ? defaultDataRightsRetentionEvidence()
-          : await readDataRightsRetentionEvidence(this.options.env),
     });
   }
 

@@ -13,9 +13,6 @@ import {
   type VectorStoreDeploymentPosture,
   vectorStoreDeploymentFromEnv,
 } from "./vector-store-deployment";
-import { summarizePgvectorPhysicalIsolationEvidence } from "./pgvector-physical-isolation-evidence";
-import { summarizeQdrantLiveEvidence } from "./qdrant-live-evidence";
-import { GaEvidencePostureService } from "./ga-evidence-posture-service";
 import {
   authProviderFallbackCheck,
   authProviderOidcConfigCheck,
@@ -40,10 +37,7 @@ import {
   type ReadinessCheck,
   type ReadinessReport,
 } from "./readiness-result";
-import {
-  gaEvidenceReadinessCheck,
-  vectorStoreDeploymentCheck,
-} from "./readiness-vector-store-checks";
+import { vectorStoreDeploymentCheck } from "./readiness-vector-store-checks";
 import { objectStorageReadinessCheck } from "./readiness-object-storage";
 
 export * from "./readiness-result";
@@ -88,24 +82,13 @@ export class ReadinessService {
       ),
     ]);
 
-    const [
-      pgvectorPhysicalIsolationEvidence,
-      qdrantLiveEvidence,
-      gaEvidencePosture,
-      objectStorageCheck,
-    ] = await Promise.all([
-      summarizePgvectorPhysicalIsolationEvidence(
-        this.env.PGVECTOR_PHYSICAL_ISOLATION_EVIDENCE_PATH,
-      ),
-      summarizeQdrantLiveEvidence(this.env.QDRANT_LIVE_EVIDENCE_PATH),
-      new GaEvidencePostureService(this.env).report(subject),
-      objectStorageReadinessCheck(this.env, this.objectStore),
-    ]);
+    const objectStorageCheck = await objectStorageReadinessCheck(
+      this.env,
+      this.objectStore,
+    );
     const vectorStoreCheck = await vectorStoreDeploymentCheck({
       deployment: this.vectorStoreDeployment,
       env: this.env,
-      pgvectorPhysicalIsolationEvidence,
-      qdrantLiveEvidence,
       readinessProbe: this.vectorStoreReadinessProbe,
     });
     const checks: ReadinessCheck[] = [
@@ -195,7 +178,6 @@ export class ReadinessService {
           ),
       connectorEgressCheck(this.env),
       toolOperationExecutionCheck(this.env, toolConnectors),
-      gaEvidenceReadinessCheck(gaEvidencePosture),
     ];
 
     return {

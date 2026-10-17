@@ -1382,7 +1382,6 @@ export type BrowserAutomationPostureReport = {
     jobType: "workflow.browser_task.dispatch_request";
   };
   deployment: {
-    liveEvidencePathConfigured: boolean;
     networkPolicyConfigured: boolean;
     runnerOriginConfigured: boolean;
     runnerUrlConfigured: boolean;
@@ -1409,45 +1408,14 @@ export type BrowserAutomationPostureReport = {
     registeredCount: number;
     taskCountWithRegisteredArtifacts: number;
   };
-  liveEvidence: {
-    configured: boolean;
-    source: "configured_file" | "not_configured";
-    status: "failed" | "invalid" | "not_configured" | "satisfied";
-    schemaVersion?: "romeo.browser-automation-live-evidence.v1";
-    evidenceStatus?: "failed" | "passed" | "planned" | "unknown";
-    mode?: "dry-run" | "live" | "unknown";
-    deployment?: "compose" | "kubernetes" | "target" | "unknown";
-    generatedAt?: string;
-    checks: {
-      reviewed_runner_sandbox: boolean;
-      network_denial_enforced: boolean;
-      worker_crash_retry: boolean;
-      retention_worker_execution: boolean;
-      pod_log_redaction: boolean;
-    };
-    failureCodes: Array<string>;
-    invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-    redaction: {
-      artifactBytesReturned: boolean;
-      rawEvidencePathsReturned: boolean;
-      rawPageContentReturned: boolean;
-      rawRunnerUrlReturned: boolean;
-      rawTaskTextReturned: boolean;
-      secretValuesReturned: boolean;
-    };
-  };
   redaction: {
-    evidenceFileBodiesReturned: false;
     rawArtifactStorageKeysReturned: false;
-    rawEvidencePathsReturned: false;
     rawRunnerUrlReturned: false;
     rawTaskTextReturned: false;
     secretValuesReturned: false;
   };
   warnings: Array<
     | "browser_automation_dead_letters_present"
-    | "browser_automation_live_evidence_invalid"
-    | "browser_automation_live_evidence_required"
     | "browser_automation_network_policy_not_configured"
     | "browser_automation_runner_origin_not_https"
     | "browser_automation_runner_not_configured"
@@ -3053,504 +3021,6 @@ export type UpdateQuotaBucketRequest = {
   resetUsage?: boolean;
 };
 
-export type GaEvidencePostureReport = {
-  schema: "romeo.ga-evidence-posture.v1";
-  generatedAt: string;
-  orgId: string;
-  status: "attention_required" | "passed";
-  checklist: {
-    configured: boolean;
-    source: "configured_file" | "not_configured";
-    status: "blocked" | "invalid" | "not_configured" | "passed";
-    schemaVersion?: string;
-    generatedAt?: string;
-    strict?: boolean;
-    target?: {
-      profile: "default-ga" | "full-product-enterprise" | "unknown";
-      fullProductEnterpriseRequired: boolean;
-      deploymentTiers: Array<string>;
-      postgresModes: Array<string>;
-      qdrantLiveRequired: boolean;
-      qdrantDrRequired: boolean;
-      ciGovernanceLiveRequired: boolean;
-      kedaRequired: boolean;
-      browserAutomationRequired: boolean;
-      identityLiveRequired: boolean;
-      dataConnectorLiveRequired: boolean;
-      toolDispatchLiveRequired: boolean;
-      voiceProviderLiveRequired: boolean;
-      notificationAdapterLiveRequired: boolean;
-      analyticsAuthzLiveRequired: boolean;
-      targetQualityVectorComparisonRequired: boolean;
-      dataRightsRetentionLiveRequired: boolean;
-      billingOperationsLiveRequired: boolean;
-      auditIntegrityLiveRequired: boolean;
-      tenantPurgeLiveRequired: boolean;
-      supportBundleLiveRequired: boolean;
-      targetResilienceDrillsRequired: boolean;
-      postgresOperationsLiveRequired: boolean;
-    };
-    summary: {
-      total: number;
-      satisfied: number;
-      excepted: number;
-      blocked: number;
-      environmentRequired: number;
-      securityCriticalBlocked: number;
-    };
-    exceptionCount: number;
-    invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-  };
-  targetPreflight: {
-    configured: boolean;
-    source: "configured_file" | "not_configured";
-    status: "blocked" | "invalid" | "not_configured" | "ready";
-    schemaVersion?: string;
-    generatedAt?: string;
-    checklist?: {
-      status: string;
-      schemaVersion?: string;
-      summary: {
-        total: number;
-        satisfied: number;
-        excepted: number;
-        blocked: number;
-        environmentRequired: number;
-        securityCriticalBlocked: number;
-      };
-    };
-    summary: {
-      total: number;
-      ready: number;
-      blocked: number;
-      securityCriticalBlocked: number;
-    };
-    gates: Array<{
-      id: string;
-      phase: string;
-      title: string;
-      status: "blocked" | "ready" | "unknown";
-      environmentRequired: boolean;
-      securityCritical: boolean;
-      evidence: Array<{
-        path: string;
-        status:
-          | "blocked"
-          | "failed"
-          | "missing"
-          | "ready"
-          | "satisfied"
-          | "unknown";
-        schemaVersion?: string;
-      }>;
-      command?: string;
-      checks: Array<{
-        name: string;
-        status: "blocked" | "optional" | "ready" | "unknown";
-        reason?: string;
-        configured?: boolean;
-        required?: boolean;
-        configuredNames?: Array<string>;
-        context?: string;
-        origin?: string;
-        path?: string;
-        baselineConfigured?: boolean;
-        candidateConfigured?: boolean;
-        replayKind?: string;
-        baselineRouteMode?: string;
-        candidateRouteMode?: string;
-        baselineCaseCount?: number;
-        candidateCaseCount?: number;
-      }>;
-      notes: Array<string>;
-    }>;
-    invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-  };
-  targetPlan: {
-    configured: boolean;
-    source: "configured_file" | "not_configured";
-    status: "blocked" | "invalid" | "not_configured" | "ready";
-    schemaVersion?: string;
-    generatedAt?: string;
-    sourcePreflight?: {
-      schemaVersion?: string;
-      status: string;
-      checklist?: {
-        status: string;
-        schemaVersion?: string;
-        summary: {
-          total: number;
-          satisfied: number;
-          excepted: number;
-          blocked: number;
-          environmentRequired: number;
-          securityCriticalBlocked: number;
-        };
-      };
-    };
-    summary: {
-      total: number;
-      ready: number;
-      blocked: number;
-      environmentRequired: number;
-      securityCriticalBlocked: number;
-      phaseCount: number;
-      commandCount: number;
-      evidenceTargetCount: number;
-      blockedCheckCount: number;
-    };
-    phases: Array<{
-      phase: string;
-      status: "blocked" | "ready" | "unknown";
-      total: number;
-      ready: number;
-      blocked: number;
-      securityCriticalBlocked: number;
-      gateIds: Array<string>;
-    }>;
-    gates: Array<{
-      order: number;
-      id: string;
-      phase: string;
-      title: string;
-      status: "blocked" | "ready" | "unknown";
-      environmentRequired: boolean;
-      securityCritical: boolean;
-      command?: string;
-      commandRedacted: boolean;
-      operatorAction: {
-        state:
-          | "blocked_on_prerequisites"
-          | "command_redacted"
-          | "ready_to_run"
-          | "unknown";
-        commandAvailable: boolean;
-        prerequisiteBlocked: boolean;
-        blockedReasonCodes: Array<string>;
-      };
-      evidenceTargets: Array<{
-        path: string;
-        status:
-          | "blocked"
-          | "failed"
-          | "missing"
-          | "ready"
-          | "satisfied"
-          | "unknown";
-        schemaVersion?: string;
-      }>;
-      requiredCommands: Array<string>;
-      requiredEnvironment: Array<string>;
-      anyOfEnvironment: Array<Array<string>>;
-      optionalEnvironment: Array<string>;
-      requiredFiles: Array<string>;
-      checks: {
-        total: number;
-        ready: number;
-        blocked: number;
-        optional: number;
-        unknown: number;
-        blockedReasons: Array<string>;
-      };
-      blockedChecks: Array<{
-        name: string;
-        reason: string;
-        configured?: boolean;
-      }>;
-      notes: Array<string>;
-    }>;
-    invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-  };
-  targetExecution: {
-    configured: boolean;
-    source: "configured_file" | "not_configured";
-    status:
-      | "blocked"
-      | "failed"
-      | "invalid"
-      | "not_configured"
-      | "not_run"
-      | "partial"
-      | "passed";
-    schemaVersion?: string;
-    generatedAt?: string;
-    sourcePlan?: {
-      schemaVersion?: string;
-      status: string;
-      checklist?: {
-        status: string;
-        schemaVersion?: string;
-        summary: {
-          total: number;
-          satisfied: number;
-          excepted: number;
-          blocked: number;
-          environmentRequired: number;
-          securityCriticalBlocked: number;
-        };
-      };
-    };
-    execution: {
-      confirmed: boolean;
-      continueOnFailure: boolean;
-      timeoutMs: number;
-      selectedGateCount: number;
-      commandsExecuted: number;
-    };
-    envFile: {
-      configured: boolean;
-      loaded: boolean;
-      variableCount: number;
-      populatedVariableCount: number;
-      blankVariableCount: number;
-      duplicateCount: number;
-      appliedVariableCount: number;
-      variableNames: Array<string>;
-      warningCodes: Array<string>;
-      rawValuesReturned: false;
-      rawFileBodyReturned: false;
-      shellSourced: false;
-      blankValuesApplied: false;
-    };
-    summary: {
-      total: number;
-      readyToRun: number;
-      executed: number;
-      passed: number;
-      failed: number;
-      skipped: number;
-      confirmationRequired: number;
-      blocked: number;
-      redacted: number;
-      commandMissing: number;
-    };
-    gates: Array<{
-      id: string;
-      phase: string;
-      title: string;
-      targetStatus: "blocked" | "ready" | "unknown";
-      operatorActionState:
-        | "blocked_on_prerequisites"
-        | "command_redacted"
-        | "ready_to_run"
-        | "unknown";
-      commandHash?: string;
-      commandAvailable: boolean;
-      commandRedacted: boolean;
-      executionStatus: "failed" | "passed" | "skipped" | "unknown";
-      skippedReason?: string;
-      failureReason?: string;
-      exitCode?: number;
-      signal?: string;
-      startedAt?: string;
-      completedAt?: string;
-      durationMs: number;
-      evidenceTargets: Array<{
-        path: string;
-        status:
-          | "blocked"
-          | "failed"
-          | "missing"
-          | "ready"
-          | "satisfied"
-          | "unknown";
-        schemaVersion?: string;
-      }>;
-      blockedReasonCodes: Array<string>;
-    }>;
-    invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-  };
-  bundle: {
-    configured: boolean;
-    source: "configured_file" | "not_configured";
-    status: "blocked" | "invalid" | "not_configured" | "passed";
-    schemaVersion?: string;
-    generatedAt?: string;
-    requirements: {
-      checklistPassed: boolean;
-      readbackValidation: boolean;
-      supportBundle: boolean;
-      supportRedaction: boolean;
-      docsCommandCheck: boolean;
-      tenantIsolation: boolean;
-    };
-    release?: {
-      name?: string;
-      version?: string;
-      artifactCount: number;
-    };
-    ga?: {
-      profile: "default-ga" | "full-product-enterprise" | "unknown";
-      fullProductEnterpriseRequired: boolean;
-      qdrantLiveRequired: boolean;
-      qdrantDrRequired: boolean;
-      ciGovernanceLiveRequired: boolean;
-      kedaRequired: boolean;
-      browserAutomationRequired: boolean;
-      identityLiveRequired: boolean;
-      dataConnectorLiveRequired: boolean;
-      toolDispatchLiveRequired: boolean;
-      voiceProviderLiveRequired: boolean;
-      notificationAdapterLiveRequired: boolean;
-      analyticsAuthzLiveRequired: boolean;
-      targetQualityVectorComparisonRequired: boolean;
-      dataRightsRetentionLiveRequired: boolean;
-      billingOperationsLiveRequired: boolean;
-      auditIntegrityLiveRequired: boolean;
-      tenantPurgeLiveRequired: boolean;
-      supportBundleLiveRequired: boolean;
-      targetResilienceDrillsRequired: boolean;
-      postgresOperationsLiveRequired: boolean;
-      status: string;
-      strict: boolean;
-      summary: {
-        total: number;
-        satisfied: number;
-        excepted: number;
-        blocked: number;
-        environmentRequired: number;
-        securityCriticalBlocked: number;
-      };
-      blockedGateIds: Array<string>;
-      exceptionCount: number;
-    };
-    inventory: {
-      evidenceFileCount: number;
-      totalBytes: number;
-      sha256?: string;
-    };
-    checks: {
-      total: number;
-      passed: number;
-      failed: number;
-    };
-    blockerCount: number;
-    blockerCodes: Array<string>;
-    redaction: {
-      evidenceBodiesIncluded: boolean;
-      exceptionRationaleIncluded: boolean;
-      rawEvidencePathsIncluded: boolean;
-      rawSecretsIncluded: boolean;
-      rawLogsIncluded: boolean;
-      rawPromptsIncluded: boolean;
-      rawProviderPayloadsIncluded: boolean;
-      rawConnectorPayloadsIncluded: boolean;
-    };
-    invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-  };
-  gates: Array<GaEvidencePostureGate>;
-  requiredLiveBlockers: Array<{
-    id: string;
-    phase: string;
-    title: string;
-    securityCritical: boolean;
-  }>;
-  liveGateReadiness: Array<{
-    id: string;
-    phase: string;
-    title: string;
-    securityCritical: boolean;
-    checklistStatus: "blocked" | "excepted" | "satisfied" | "unknown";
-    preflightStatus: "blocked" | "not_configured" | "ready" | "unknown";
-    command?: string;
-    checklistEvidence: {
-      total: number;
-      satisfied: number;
-      missing: number;
-      failed: number;
-      invalid: number;
-      unknown: number;
-    };
-    preflightEvidence: {
-      total: number;
-      ready: number;
-      missing: number;
-      blocked: number;
-      failed: number;
-      unknown: number;
-    };
-    checks: {
-      total: number;
-      ready: number;
-      blocked: number;
-      optional: number;
-      unknown: number;
-      blockedReasons: Array<string>;
-    };
-    warnings: Array<
-      | "live_evidence_missing"
-      | "preflight_blocked"
-      | "preflight_gate_missing"
-      | "preflight_not_configured"
-    >;
-  }>;
-  redaction: {
-    absoluteChecklistPathReturned: false;
-    absoluteBundlePathReturned: false;
-    bundleBlockerMessagesReturned: false;
-    bundleEvidenceFileBodiesReturned: false;
-    bundleEvidencePathsReturned: false;
-    evidenceFileBodiesReturned: false;
-    exceptionApproverReturned: false;
-    exceptionOwnerReturned: false;
-    exceptionRationaleReturned: false;
-    preflightCommandOutputReturned: false;
-    preflightEnvironmentValuesReturned: false;
-    preflightFileBodiesReturned: false;
-    targetPlanCommandOutputReturned: false;
-    targetPlanEnvironmentValuesReturned: false;
-    targetPlanEvidenceBodiesReturned: false;
-    targetExecutionCommandTextReturned: false;
-    targetExecutionCommandOutputReturned: false;
-    targetExecutionEnvironmentValuesReturned: false;
-    targetExecutionEnvFileValuesReturned: false;
-    targetExecutionEnvFileBodyReturned: false;
-    targetExecutionEvidenceBodiesReturned: false;
-    rawEvidencePathsReturned: false;
-    rawPreflightEvidencePathsReturned: false;
-    rawTargetPlanEvidencePathsReturned: false;
-    rawTargetExecutionEvidencePathsReturned: false;
-  };
-  warnings: Array<
-    | "ga_blocked"
-    | "ga_bundle_blocked"
-    | "ga_bundle_invalid"
-    | "ga_checklist_invalid"
-    | "ga_checklist_path_not_configured"
-    | "ga_target_execution_failed"
-    | "ga_target_execution_invalid"
-    | "ga_target_plan_invalid"
-    | "ga_target_preflight_blocked"
-    | "ga_target_preflight_invalid"
-    | "live_environment_evidence_required"
-  >;
-};
-
-export type GaEvidencePostureGate = {
-  id: string;
-  phase: string;
-  title: string;
-  status: "blocked" | "excepted" | "satisfied" | "unknown";
-  requiredForGa: boolean;
-  exceptionAllowed: boolean;
-  environmentRequired: boolean;
-  securityCritical: boolean;
-  evidence: Array<GaEvidencePostureGateEvidence>;
-  exception?: {
-    status: "invalid" | "valid" | "unknown";
-    expiresAt?: string;
-    failureCodes: Array<string>;
-  };
-};
-
-export type GaEvidencePostureGateEvidence = {
-  path: string;
-  status: "failed" | "invalid_json" | "missing" | "satisfied" | "unknown";
-  schemaVersion?: string;
-  evidenceStatus?: string;
-  failureCodes: Array<string>;
-};
-
 export type PostgresOperationalPostureReport = {
   schema: "romeo.postgres-operational-posture.v1";
   generatedAt: string;
@@ -3599,106 +3069,14 @@ export type PostgresOperationalPostureReport = {
       usernameReturned: false;
     };
   };
-  queryPlanReview: {
-    evidenceSchema: "romeo.postgres-query-plan-review.v1";
-    command: "pnpm review:postgres-query-plans";
-    reviewedPathCount: number;
-    requiredIndexCount: number;
-    categories: Array<string>;
-    checks: Array<{
-      id: string;
-      category: string;
-      expectedIndexCount: number;
-    }>;
-    representativeVolumeEvidence: {
-      requiredForGa: true;
-      status: "invalid" | "required" | "satisfied";
-      evidenceSource: "configured_file" | "not_configured";
-      configured: boolean;
-      representativeVolume: boolean;
-      evidenceStatus?: "failed" | "passed" | "unknown";
-      schemaVersion?: "romeo.postgres-query-plan-review.v1";
-      generatedAt?: string;
-      invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-      missingExpectedIndexCount: number;
-      failedCheckCount: number;
-    };
-  };
-  slowQueryTelemetry: {
-    requiredForProduction: true;
-    status: "external_required" | "invalid" | "satisfied";
-    expectedSignals: Array<string>;
-    evidence: {
-      configured: boolean;
-      generatedAt?: string;
-      evidenceStatus?: "failed" | "passed" | "unknown";
-      invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-      schemaVersion?: "romeo.postgres-slow-query-telemetry.v1";
-      windowMinutes?: number;
-      fingerprintCount: number;
-      slowQueryCount: number;
-      totalCalls: number;
-      maxMeanMs?: number;
-      maxP95Ms?: number;
-      maxP99Ms?: number;
-      tempFileStatementCount: number;
-      failureCodes: Array<string>;
-    };
-  };
-  lockTelemetry: {
-    requiredForProduction: true;
-    status: "external_required" | "invalid" | "satisfied";
-    expectedSignals: Array<string>;
-    evidence: {
-      configured: boolean;
-      generatedAt?: string;
-      evidenceStatus?: "failed" | "passed" | "unknown";
-      invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-      schemaVersion?: "romeo.postgres-lock-telemetry.v1";
-      windowMinutes?: number;
-      blockedSessionMax: number;
-      longestWaitMs?: number;
-      deadlockCount: number;
-      failureCodes: Array<string>;
-    };
-  };
-  archivalPartitioning: {
-    status: "accepted" | "decision_required" | "invalid";
-    currentDecision: string;
-    migrationPolicy: "one_forward_migration_after_live_evidence";
-    decisionInputs: Array<string>;
-    evidence: {
-      configured: boolean;
-      schemaVersion?: "romeo.postgres-archival-partitioning-decision.v1";
-      generatedAt?: string;
-      decisionStatus?: "accepted" | "deferred" | "required" | "unknown";
-      invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-      migrationRequired?: boolean;
-      tableCount: number;
-      failureCodes: Array<string>;
-    };
-  };
   redaction: {
     databaseUrlReturned: false;
-    evidenceFileBodiesReturned: false;
-    lockStatementReturned: false;
     queryParameterValuesReturned: false;
     rawSqlReturned: false;
-    rawEvidencePathsReturned: false;
     rowDataReturned: false;
     secretValuesReturned: false;
-    telemetrySampleSqlReturned: false;
   };
-  warnings: Array<
-    | "archival_partitioning_decision_required"
-    | "live_lock_telemetry_required"
-    | "postgres_archival_decision_failures_present"
-    | "postgres_connection_security_warning"
-    | "postgres_lock_telemetry_failures_present"
-    | "postgres_slow_query_failures_present"
-    | "representative_query_plan_evidence_required"
-    | "slow_query_telemetry_required"
-  >;
+  warnings: Array<"postgres_connection_security_warning">;
 };
 
 export type RuntimeKeyRotationPostureReport = {
@@ -4249,37 +3627,6 @@ export type RagPostureReport = {
       partitioningPolicy: "knowledge_base" | "none" | "org" | "workspace";
       configured: boolean;
       routingActive: boolean;
-      evidence: {
-        configured: boolean;
-        status: "failed" | "invalid" | "not_configured" | "satisfied";
-        schemaVersion?: "romeo.qdrant-live-evidence.v1";
-        generatedAt?: string;
-        evidenceStatus?: "failed" | "passed" | "planned" | "unknown";
-        evidenceMode?: "dry-run" | "live";
-        invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-        namespacePolicy?: "knowledge_base" | "none" | "org" | "workspace";
-        partitioningPolicy?: "knowledge_base" | "none" | "org" | "workspace";
-        collectionHealthRead: boolean;
-        scopedQueryReturnedExpectedPoint: boolean;
-        namespaceTrapExcluded: boolean;
-        partitionTrapExcluded: boolean;
-        foreignOrgTrapExcluded: boolean;
-        vectorsOmittedFromQuery: boolean;
-        scopedDeleteVerified: boolean;
-        cleanupAttempted: boolean;
-        redaction: {
-          apiKeyReturned: false;
-          collectionReturned: false;
-          endpointReturned: false;
-          evidenceFileBodyReturned: false;
-          namespaceValuesReturned: false;
-          partitionValuesReturned: false;
-          payloadValuesReturned: false;
-          pointIdsReturned: false;
-          rawEvidencePathReturned: false;
-          vectorValuesReturned: false;
-        };
-      };
     };
     physicalIsolation: {
       policy: {
@@ -4301,59 +3648,7 @@ export type RagPostureReport = {
         | "pgvector_partitioned_by_org"
         | "shared_row_scope";
       deploymentMatched: boolean;
-      evidence: {
-        configured: boolean;
-        status: "failed" | "invalid" | "not_configured" | "satisfied";
-        schemaVersion?: "romeo.pgvector-physical-isolation-review.v1";
-        generatedAt?: string;
-        evidenceStatus?: "failed" | "passed" | "planned" | "unknown";
-        evidenceMode?: "dry-run" | "live";
-        invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-        tablePartitioned: boolean;
-        partitionKeyIncludesOrgId: boolean;
-        partitionCount: number;
-        hnswIndexCount: number;
-        queryPlanReviewed: boolean;
-        redaction: {
-          databaseUrlReturned: false;
-          evidenceFileBodyReturned: false;
-          rawEvidencePathReturned: false;
-          rawSqlReturned: false;
-          vectorValuesReturned: false;
-        };
-      };
-      externalVectorEvidence: {
-        configured: boolean;
-        status: "failed" | "invalid" | "not_configured" | "satisfied";
-        schemaVersion?: "romeo.qdrant-live-evidence.v1";
-        generatedAt?: string;
-        evidenceStatus?: "failed" | "passed" | "planned" | "unknown";
-        evidenceMode?: "dry-run" | "live";
-        invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-        namespacePolicy?: "knowledge_base" | "none" | "org" | "workspace";
-        partitioningPolicy?: "knowledge_base" | "none" | "org" | "workspace";
-        collectionHealthRead: boolean;
-        scopedQueryReturnedExpectedPoint: boolean;
-        namespaceTrapExcluded: boolean;
-        partitionTrapExcluded: boolean;
-        foreignOrgTrapExcluded: boolean;
-        vectorsOmittedFromQuery: boolean;
-        scopedDeleteVerified: boolean;
-        cleanupAttempted: boolean;
-        redaction: {
-          apiKeyReturned: false;
-          collectionReturned: false;
-          endpointReturned: false;
-          evidenceFileBodyReturned: false;
-          namespaceValuesReturned: false;
-          partitionValuesReturned: false;
-          payloadValuesReturned: false;
-          pointIdsReturned: false;
-          rawEvidencePathReturned: false;
-          vectorValuesReturned: false;
-        };
-      };
-      status: "deployment_mismatch" | "evidence_pending" | "satisfied";
+      status: "deployment_mismatch" | "satisfied";
     };
   };
   corpus: {
@@ -4393,7 +3688,6 @@ export type RagPostureReport = {
         | "failed_knowledge_jobs"
         | "failed_knowledge_sources"
         | "lexical_fallback_active"
-        | "physical_vector_isolation_evidence_pending"
         | "physical_vector_isolation_mismatch"
         | "stale_embedding_records"
         | "stale_source_chunk_counts";
@@ -7109,8 +6403,6 @@ export type EdgeSecurityPostureReport = {
   ingress: {
     allowedOriginRuleCount: number;
     desiredWafMode: "disabled" | "monitor" | "block";
-    observedWafEnforcement: "unknown" | "failed" | "block";
-    observedWafAt?: string;
     wafMode: "disabled" | "monitor" | "block";
   };
   limits: {
@@ -7139,88 +6431,10 @@ export type EdgeSecurityPostureReport = {
     referrerPolicy: "no-referrer";
     strictTransportSecurity: boolean;
   };
-  liveEvidence: {
-    configured: boolean;
-    source: "configured_file" | "not_configured";
-    status: "failed" | "invalid" | "not_configured" | "planned" | "satisfied";
-    schemaVersion?: "romeo.live-edge-enforcement.v1";
-    generatedAt?: string;
-    evidenceStatus?: "failed" | "passed" | "planned" | "unknown";
-    mode?: "dry-run" | "live" | "unknown";
-    invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-    failureCodes: Array<string>;
-    target: {
-      deployment: "edge" | "unknown";
-      originConfigured: boolean;
-    };
-    checks: {
-      total: number;
-      requiredTotal: number;
-      requiredPresent: number;
-      missingRequired: Array<
-        | "security_headers_present"
-        | "waf_or_gateway_probe_blocked"
-        | "oversized_request_rejected"
-        | "public_rate_limit_enforced"
-        | "raw_probe_payload_not_retained"
-      >;
-    };
-    securityHeaders: {
-      checked: boolean;
-      status: "failed" | "passed" | "unknown";
-      matchedRequiredCount: number;
-      missingRequiredCount: number;
-      missingRequired: Array<
-        | "x-content-type-options"
-        | "x-frame-options"
-        | "referrer-policy"
-        | "cross-origin-opener-policy"
-        | "permissions-policy"
-      >;
-      hstsChecked: boolean;
-      headerValuesReturned: boolean;
-    };
-    waf: {
-      checked: boolean;
-      status: "failed" | "passed" | "unknown";
-      httpStatus?: number;
-      expectedStatusCount: number;
-      expectedHeaderPresent?: boolean;
-      responseBodyReturned: boolean;
-    };
-    requestBodyLimit: {
-      checked: boolean;
-      status: "failed" | "passed" | "unknown";
-      bytesSent: number;
-      httpStatus?: number;
-      expectedStatusCount: number;
-      requestBodyReturned: boolean;
-      responseBodyReturned: boolean;
-    };
-    rateLimit: {
-      checked: boolean;
-      status: "failed" | "passed" | "unknown";
-      attempts: number;
-      blockedAt?: number;
-      expectedStatus?: number;
-      expectedStatusObserved: boolean;
-      responseBodyReturned: boolean;
-    };
-    redaction: {
-      rawApiKeyReturned: boolean;
-      rawHeaderValuesReturned: boolean;
-      rawProbePayloadReturned: boolean;
-      rawQueryValuesReturned: boolean;
-      rawRequestBodiesReturned: boolean;
-      rawResponseBodiesReturned: boolean;
-    };
-  };
   checks: Array<EdgeSecurityPostureCheck>;
   redaction: {
-    evidenceFileBodyReturned: false;
     rawAllowedOriginsReturned: false;
     rawAppOriginReturned: false;
-    rawEvidencePathReturned: false;
     rawIngressAnnotationsReturned: false;
     rawProxyIpRangesReturned: false;
     rawSecretsReturned: false;
@@ -7989,18 +7203,6 @@ export type DataRightsCoverageReport = {
     exportEvidence: Array<string>;
     limitations: Array<string>;
   }>;
-  retentionEvidence: {
-    operationalLogs: DataRightsRetentionEvidenceSummary;
-    backups: DataRightsRetentionEvidenceSummary;
-    redaction: {
-      backupLocationReturned: false;
-      evidenceFileBodiesReturned: false;
-      logContentReturned: false;
-      objectStoreKeysReturned: false;
-      rawEvidencePathsReturned: false;
-      secretValuesReturned: false;
-    };
-  };
   backupRetention: {
     status: "externally_governed";
     posture: string;
@@ -8013,30 +7215,6 @@ export type DataRightsCoverageReport = {
     redaction: string;
   };
   openGaps: Array<string>;
-};
-
-export type DataRightsRetentionEvidenceSummary = {
-  requiredForProduction: true;
-  control: "backups" | "operational_logs";
-  status: "external_required" | "failed" | "invalid" | "satisfied";
-  evidence: {
-    configured: boolean;
-    schemaVersion?: "romeo.data-rights-retention-evidence.v1";
-    generatedAt?: string;
-    evidenceStatus?: "failed" | "passed" | "unknown";
-    retentionDays?: number;
-    destructionValidated?: boolean;
-    encryptedAtRest?: boolean;
-    immutableWindowDays?: number;
-    reviewedSystemCount: number;
-    failureCodes: Array<string>;
-    invalidReason?:
-      | "control_mismatch"
-      | "invalid_json"
-      | "read_failed"
-      | "required_fields_missing"
-      | "schema_mismatch";
-  };
 };
 
 export type DataExportPreview = {
@@ -17888,59 +17066,6 @@ export type OperationalGovernanceUpdateQuotaBucketResponses = {
 
 export type OperationalGovernanceUpdateQuotaBucketResponse =
   OperationalGovernanceUpdateQuotaBucketResponses[keyof OperationalGovernanceUpdateQuotaBucketResponses];
-
-export type OperationalPostureGetGaEvidenceData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: "/admin/ga/evidence-posture";
-};
-
-export type OperationalPostureGetGaEvidenceErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type OperationalPostureGetGaEvidenceError =
-  OperationalPostureGetGaEvidenceErrors[keyof OperationalPostureGetGaEvidenceErrors];
-
-export type OperationalPostureGetGaEvidenceResponses = {
-  /**
-   * GA evidence posture
-   */
-  200: {
-    data: GaEvidencePostureReport;
-  };
-};
-
-export type OperationalPostureGetGaEvidenceResponse =
-  OperationalPostureGetGaEvidenceResponses[keyof OperationalPostureGetGaEvidenceResponses];
 
 export type OperationalPostureGetPostgresData = {
   body?: never;

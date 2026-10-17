@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { hashApiKey, seededSubject } from "@romeo/auth";
-import { testEnv } from "./test-support/env";
 import { MemoryObjectStore } from "@romeo/storage";
 
 import { createRomeoApi } from "./api";
@@ -1343,20 +1339,6 @@ describe("governance API", () => {
     ]);
     expect(body.data.backupRetention.status).toBe("externally_governed");
     expect(body.data.supportBundles.status).toBe("implemented");
-    expect(body.data.retentionEvidence.operationalLogs.status).toBe(
-      "external_required",
-    );
-    expect(body.data.retentionEvidence.backups.status).toBe(
-      "external_required",
-    );
-    expect(body.data.retentionEvidence.redaction).toMatchObject({
-      backupLocationReturned: false,
-      evidenceFileBodiesReturned: false,
-      logContentReturned: false,
-      objectStoreKeysReturned: false,
-      rawEvidencePathsReturned: false,
-      secretValuesReturned: false,
-    });
     const backgroundJobStorage = body.data.storageClasses.find(
       (storageClass: { id: string }) => storageClass.id === "background_jobs",
     );
@@ -1376,88 +1358,6 @@ describe("governance API", () => {
     expect(serialized).not.toContain("secretRef");
     expect(serialized).not.toContain("objectKey");
     expect(serialized).not.toContain("vectorId");
-  });
-
-  it("reports mounted data-rights retention evidence without leaking evidence bodies or paths", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "romeo-data-rights-"));
-    const logEvidencePath = join(directory, "logs.json");
-    const backupEvidencePath = join(directory, "backups.json");
-    writeFileSync(
-      logEvidencePath,
-      JSON.stringify({
-        schemaVersion: "romeo.data-rights-retention-evidence.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        control: "operational_logs",
-        status: "passed",
-        retentionDays: 30,
-        destructionValidated: true,
-        encryptedAtRest: true,
-        immutableWindowDays: 7,
-        reviewedSystemCount: 2,
-        failureCodes: [],
-        rawLogDestination: "raw-log-host-sentinel",
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      backupEvidencePath,
-      JSON.stringify({
-        schemaVersion: "romeo.data-rights-retention-evidence.v1",
-        generatedAt: "2026-07-02T00:00:00.000Z",
-        control: "backups",
-        status: "failed",
-        retentionDays: 90,
-        destructionValidated: false,
-        encryptedAtRest: true,
-        reviewedSystemCount: 1,
-        failureCodes: ["destruction_drill_missing"],
-        backupLocation: "s3://tenant-sensitive-bucket/raw-key",
-      }),
-      "utf8",
-    );
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({
-        DATA_RIGHTS_OPERATIONAL_LOG_RETENTION_EVIDENCE_PATH: logEvidencePath,
-        DATA_RIGHTS_BACKUP_RETENTION_EVIDENCE_PATH: backupEvidencePath,
-      }),
-    });
-
-    const response = await api.request(
-      "/api/v1/governance/data-rights/coverage",
-    );
-    const body = await response.json();
-    const serialized = JSON.stringify(body);
-
-    expect(response.status).toBe(200);
-    expect(body.data.retentionEvidence.operationalLogs).toMatchObject({
-      control: "operational_logs",
-      status: "satisfied",
-      evidence: {
-        configured: true,
-        retentionDays: 30,
-        destructionValidated: true,
-        encryptedAtRest: true,
-        immutableWindowDays: 7,
-        reviewedSystemCount: 2,
-        failureCodes: [],
-      },
-    });
-    expect(body.data.retentionEvidence.backups).toMatchObject({
-      control: "backups",
-      status: "failed",
-      evidence: {
-        configured: true,
-        retentionDays: 90,
-        destructionValidated: false,
-        failureCodes: ["destruction_drill_missing"],
-      },
-    });
-    expect(serialized).not.toContain(directory);
-    expect(serialized).not.toContain(logEvidencePath);
-    expect(serialized).not.toContain(backupEvidencePath);
-    expect(serialized).not.toContain("raw-log-host-sentinel");
-    expect(serialized).not.toContain("tenant-sensitive-bucket");
-    expect(serialized).not.toContain("raw-key");
   });
 
   it("previews and executes governed customer data exports with explicit content and object-byte controls", async () => {

@@ -1,11 +1,3 @@
-{{- if .Values.evidenceMount.enabled }}
-{{- if and .Values.evidenceMount.configMapName .Values.evidenceMount.secretName }}
-{{- fail "evidenceMount supports exactly one of configMapName or secretName" }}
-{{- end }}
-{{- if not (or .Values.evidenceMount.configMapName .Values.evidenceMount.secretName) }}
-{{- fail "evidenceMount.enabled requires configMapName or secretName" }}
-{{- end }}
-{{- end }}
 {{- include "romeo.validateProduction" . }}
 apiVersion: apps/v1
 kind: Deployment
@@ -141,19 +133,6 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- if .Values.evidenceMount.enabled }}
-          volumeMounts:
-            - name: {{ .Values.evidenceMount.name | quote }}
-              mountPath: {{ .Values.evidenceMount.mountPath | quote }}
-              readOnly: true
-            - name: tmp
-              mountPath: /tmp
-            {{- if eq .Values.essentialOperations.scheduledTenantWork.mode "external" }}
-            - name: scheduled-operation-evidence
-              mountPath: /var/run/romeo/scheduled-operations
-              readOnly: true
-            {{- end }}
-          {{- else }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -162,26 +141,6 @@ spec:
               mountPath: /var/run/romeo/scheduled-operations
               readOnly: true
             {{- end }}
-          {{- end }}
-      {{- if .Values.evidenceMount.enabled }}
-      volumes:
-        - name: tmp
-          emptyDir: {}
-        - name: {{ .Values.evidenceMount.name | quote }}
-          {{- if .Values.evidenceMount.configMapName }}
-          configMap:
-            name: {{ .Values.evidenceMount.configMapName | quote }}
-          {{- else }}
-          secret:
-            secretName: {{ .Values.evidenceMount.secretName | quote }}
-          {{- end }}
-        {{- if eq .Values.essentialOperations.scheduledTenantWork.mode "external" }}
-        - name: scheduled-operation-evidence
-          configMap:
-            name: {{ .Values.essentialOperations.scheduledTenantWork.externalManagement.evidenceConfigMap.name | quote }}
-        {{- end }}
-      {{- end }}
-      {{- if not .Values.evidenceMount.enabled }}
       volumes:
         - name: tmp
           emptyDir: {}
@@ -190,7 +149,6 @@ spec:
           configMap:
             name: {{ .Values.essentialOperations.scheduledTenantWork.externalManagement.evidenceConfigMap.name | quote }}
         {{- end }}
-      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -798,7 +798,6 @@ const requiredPatterns = [
   {
     id: "operational_posture_routes_use_authoritative_contracts",
     files: [
-      resolve(root, "packages/core/src/http/routes/ga-evidence-posture.ts"),
       resolve(
         root,
         "packages/core/src/http/routes/postgres-operational-posture.ts",
@@ -811,7 +810,7 @@ const requiredPatterns = [
     files: [
       resolve(root, "apps/app/src/features/operational-posture/queries.ts"),
     ],
-    pattern: /operationalPostureGetGaEvidence/u,
+    pattern: /operationalPostureGetPostgres/u,
   },
   {
     id: "native_channel_routes_use_authoritative_contracts",

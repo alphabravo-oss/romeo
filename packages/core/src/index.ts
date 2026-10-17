@@ -19,7 +19,7 @@ export type {
   MessagePartBackfillBatchResult,
   RenewFileLifecycleLeaseInput,
 } from "./domain/repository-content";
-export * from "./domain/repository-contract-inventory";
+export { ROMEO_REPOSITORY_METHOD_NAMES } from "./domain/repository-method-names";
 export * from "./errors";
 export * from "./public-api-error-registry";
 export * from "./audit-taxonomy";
