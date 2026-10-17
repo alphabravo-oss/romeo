@@ -2030,45 +2030,6 @@ describe("governance API", () => {
       scopes: ["tools:manage"],
       createdAt: now,
     });
-    await repository.createDelegatedOAuthConnection({
-      id: "delegated_oauth_enterprise",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      userId: "user_oidc_enterprise_target",
-      providerId: "github",
-      connectorType: "github",
-      providerAccountId: "12345",
-      providerAccountLogin: "raw-gh-login-sensitive",
-      scopes: ["repo", "read:user"],
-      status: "active",
-      token: {
-        alg: "A256GCM",
-        ciphertext: rawSecret,
-        createdAt: now,
-        iv: "iv",
-        tag: "tag",
-        v: 1,
-      },
-      createdAt: now,
-      updatedAt: now,
-    });
-    await repository.createDataConnector({
-      id: "data_connector_enterprise",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      knowledgeBaseId: "kb_default",
-      type: "github",
-      name: "Enterprise GitHub",
-      config: {
-        delegatedOAuthConnectionId: "delegated_oauth_enterprise",
-        rawSecret,
-        sourceAccessMode: "connector_owner",
-      },
-      status: "active",
-      createdBy: "user_oidc_enterprise_target",
-      createdAt: now,
-      updatedAt: now,
-    });
     await repository.createToolConnector({
       id: "tool_connector_enterprise",
       orgId: "org_default",
@@ -2190,8 +2151,6 @@ describe("governance API", () => {
       activeServiceAccountApiKeyCount: 1,
       activeSupportSessionCount: 1,
       activeUserApiKeyCount: 1,
-      dataConnectorCount: 1,
-      delegatedOAuthConnectionCount: 1,
       queuedWorkerJobCount: 1,
       riskyToolConnectorCount: 1,
     });
@@ -2207,25 +2166,6 @@ describe("governance API", () => {
     expect(report.data.serviceAccounts[0]).toMatchObject({
       id: "service_account_enterprise",
       activeApiKeyCount: 1,
-    });
-    expect(report.data.connectorOwnership.dataConnectors[0]).toMatchObject({
-      id: "data_connector_enterprise",
-      configKeys: [
-        "delegatedOAuthConnectionId",
-        "rawSecret",
-        "sourceAccessMode",
-      ],
-      delegatedOAuthConnectionId: "delegated_oauth_enterprise",
-      sourceAccessMode: "connector_owner",
-    });
-    expect(
-      report.data.connectorOwnership.delegatedOAuthConnections[0],
-    ).toMatchObject({
-      id: "delegated_oauth_enterprise",
-      providerAccountLoginConfigured: true,
-      providerAccountLoginHash: expect.any(String),
-      scopeCount: 2,
-      status: "active",
     });
     expect(report.data.toolRisk.connectors[0]).toMatchObject({
       id: "tool_connector_enterprise",
@@ -2259,7 +2199,6 @@ describe("governance API", () => {
     expect(serialized).not.toContain("ciphertext");
     expect(serialized).not.toContain("hashedToken");
     expect(serialized).not.toContain("secretRef");
-    expect(serialized).not.toContain("raw-gh-login-sensitive");
   });
 
   it("exports a sanitized compliance report as JSON and CSV", async () => {

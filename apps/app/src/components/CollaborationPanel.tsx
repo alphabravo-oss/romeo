@@ -27,7 +27,7 @@ import { toast } from "../lib/toast";
 import { agentGalleryQueryOptions } from "../lib/api-query-options";
 import { useRouterApiClient } from "../lib/router-context";
 import type { Agent } from "../features/types";
-import { resolveKnowledgeBaseBinding } from "./data-connector-binding";
+import { resolveKnowledgeBaseBinding } from "./knowledge-base-binding";
 import { FormDialog } from "./FormDialog";
 import { ResourceRow } from "./ResourceRow";
 import { Section } from "./console";
@@ -289,7 +289,7 @@ export function CollaborationPanel({
             </Field>
           ) : null}
           <PanelState
-            empty={t("dataConnectorNeedsKb")}
+            empty={t("knowledgeNoBases")}
             emptyAction={
               <Button asChild variant="primary">
                 <Link

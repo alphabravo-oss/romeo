@@ -2,23 +2,12 @@ import type { AuthSubject } from "@romeo/auth";
 import { describe, expect, it } from "vitest";
 
 import { createRomeoApi } from "../api";
-import type {
-  DelegatedOAuthConnection,
-  DelegatedOAuthTokenEnvelope,
-} from "../domain/delegated-oauth";
 import type { WebhookDelivery } from "../domain/webhooks";
 import { InMemoryRomeoRepository } from "../repositories/in-memory";
 import { testEnv } from "../test-support/env";
-import {
-  delegatedOAuthTokenContext,
-  DelegatedOAuthTokenVault,
-} from "./delegated-oauth-token-vault";
 import { RuntimeKeyRotationPostureService } from "./runtime-key-rotation-posture-service";
 import { WebhookSigningKeyring } from "./webhook-signing-keyring";
 
-const activeOAuthSecret = "active-oauth-census-key-material-32";
-const previousOAuthSecret = "previous-oauth-census-key-material";
-const unknownOAuthSecret = "unknown-oauth-census-key-material-32";
 const activeWebhookSecret = "active-webhook-census-key-material";
 const previousWebhookSecret = "previous-webhook-census-key-material";
 const unknownWebhookSecret = "unknown-webhook-census-key-material";
@@ -47,14 +36,6 @@ describe("runtime key rotation posture", () => {
     ).report(admin);
 
     expect(report.status).toBe("attention_required");
-    expect(report.delegatedOAuth.usage).toEqual({
-      active: 1,
-      corrupt: 1,
-      legacyUnversioned: 1,
-      previous: 1,
-      total: 5,
-      unknown: 1,
-    });
     expect(report.webhookSigning.usage).toEqual({
       active: 1,
       corrupt: 1,
@@ -63,10 +44,9 @@ describe("runtime key rotation posture", () => {
       total: 5,
       unknown: 1,
     });
-    expect(report.delegatedOAuth.safeToRemovePrevious).toBe(false);
     expect(report.webhookSigning.safeToRemovePrevious).toBe(false);
     expect(
-      report.delegatedOAuth.blockers.map((blocker) => blocker.code),
+      report.webhookSigning.blockers.map((blocker) => blocker.code),
     ).toEqual([
       "previous_key_usage_present",
       "legacy_unversioned_records_present",
@@ -76,13 +56,9 @@ describe("runtime key rotation posture", () => {
 
     const serialized = JSON.stringify(report);
     for (const secret of [
-      activeOAuthSecret,
-      previousOAuthSecret,
-      unknownOAuthSecret,
       activeWebhookSecret,
       previousWebhookSecret,
       unknownWebhookSecret,
-      "oauth_census_active",
       "webhook_census_active",
       "CENSUS_PAYLOAD_SECRET",
       "CENSUS_CORRUPT_CIPHERTEXT_SECRET",
@@ -93,7 +69,6 @@ describe("runtime key rotation posture", () => {
     }
     expect(report.redaction).toEqual({
       ciphertextReturned: false,
-      connectionIdsReturned: false,
       deliveryIdsReturned: false,
       keyMaterialReturned: false,
       payloadsReturned: false,
@@ -118,12 +93,6 @@ describe("runtime key rotation posture", () => {
 
     expect(report).toMatchObject({
       status: "ready",
-      delegatedOAuth: {
-        removalStatus: "safe",
-        safeToRemovePrevious: true,
-        blockers: [],
-        usage: { total: 0 },
-      },
       webhookSigning: {
         removalStatus: "safe",
         safeToRemovePrevious: true,
@@ -180,8 +149,6 @@ describe("runtime key rotation posture", () => {
 
 function postureEnv(overrides: Record<string, string> = {}) {
   return testEnv({
-    DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY: activeOAuthSecret,
-    DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS: previousOAuthSecret,
     WEBHOOK_SIGNING_KEY: activeWebhookSecret,
     WEBHOOK_SIGNING_KEY_PREVIOUS: previousWebhookSecret,
     ...overrides,
@@ -192,12 +159,6 @@ async function seedActiveUsage(
   repository: InMemoryRomeoRepository,
   orgId: string,
 ): Promise<void> {
-  const activeVault = new DelegatedOAuthTokenVault(activeOAuthSecret);
-  const active = activeVault.encrypt(token(), oauthContext("active", orgId));
-  await repository.createDelegatedOAuthConnection(
-    oauthConnection("active", orgId, active),
-  );
-
   const webhookKeyring = new WebhookSigningKeyring({
     active: activeWebhookSecret,
     previous: previousWebhookSecret,
@@ -211,38 +172,6 @@ async function seedOtherTenantBlockingUsage(
   repository: InMemoryRomeoRepository,
 ): Promise<void> {
   const orgId = "org_other";
-  const previousVault = new DelegatedOAuthTokenVault(previousOAuthSecret);
-  const previous = previousVault.encrypt(
-    token(),
-    oauthContext("other_previous", orgId),
-  );
-  const legacy = { ...previous, v: 2 } as DelegatedOAuthTokenEnvelope;
-  delete (legacy as { keyVersion?: string }).keyVersion;
-  const unknownVault = new DelegatedOAuthTokenVault(unknownOAuthSecret);
-  const unknown = unknownVault.encrypt(
-    token(),
-    oauthContext("other_unknown", orgId),
-  );
-  const corrupt = {
-    v: 3,
-    alg: "A256GCM",
-    keyVersion: "corrupt",
-    iv: "iv",
-    ciphertext: "CENSUS_CORRUPT_CIPHERTEXT_SECRET",
-    tag: "tag",
-    createdAt: "2026-08-23T00:00:00.000Z",
-  } as unknown as DelegatedOAuthTokenEnvelope;
-  for (const [name, envelope] of [
-    ["other_previous", previous],
-    ["other_legacy", legacy],
-    ["other_unknown", unknown],
-    ["other_corrupt", corrupt],
-  ] as const) {
-    await repository.createDelegatedOAuthConnection(
-      oauthConnection(name, orgId, envelope),
-    );
-  }
-
   const previousKeyring = new WebhookSigningKeyring({
     active: previousWebhookSecret,
   });
@@ -261,38 +190,6 @@ async function seedOtherTenantBlockingUsage(
   }
 }
 
-function oauthContext(name: string, orgId: string) {
-  return delegatedOAuthTokenContext({
-    connectorType: "github",
-    id: `oauth_census_${name}`,
-    orgId,
-    providerId: "github",
-    userId: "user_dev_admin",
-    workspaceId: "workspace_default",
-  });
-}
-
-function oauthConnection(
-  name: string,
-  orgId: string,
-  envelope: DelegatedOAuthTokenEnvelope,
-): DelegatedOAuthConnection {
-  return {
-    id: `oauth_census_${name}`,
-    orgId,
-    workspaceId: "workspace_default",
-    userId: "user_dev_admin",
-    providerId: "github",
-    connectorType: "github",
-    providerAccountId: `provider_${name}`,
-    scopes: ["repo"],
-    status: "active",
-    token: envelope,
-    createdAt: "2026-08-23T00:00:00.000Z",
-    updatedAt: "2026-08-23T00:00:00.000Z",
-  };
-}
-
 function webhookDelivery(
   name: string,
   orgId: string,
@@ -309,14 +206,5 @@ function webhookDelivery(
     ...(signatureKeyVersion === undefined ? {} : { signatureKeyVersion }),
     createdAt: "2026-08-23T00:00:00.000Z",
     updatedAt: "2026-08-23T00:00:00.000Z",
-  };
-}
-
-function token() {
-  return {
-    accessToken: "CENSUS_ACCESS_TOKEN_SECRET",
-    obtainedAt: "2026-08-23T00:00:00.000Z",
-    scopes: ["repo"],
-    tokenType: "bearer" as const,
   };
 }

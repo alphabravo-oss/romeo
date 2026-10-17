@@ -32,8 +32,6 @@ import { registerChatTagRoutes } from "./http/routes/chat-tags";
 import { registerCollaborationRoutes } from "./http/routes/collaboration";
 import { registerContentPolicyRoutes } from "./http/routes/content-policy";
 import { registerCompatibilityRoutes } from "./http/routes/compatibility";
-import { registerDataConnectorRoutes } from "./http/routes/data-connectors";
-import { registerDelegatedOAuthRoutes } from "./http/routes/delegated-oauth";
 import { registerDeviceAuthorizationRoutes } from "./http/routes/device-authorizations";
 import { registerEdgeSecurityRoutes } from "./http/routes/edge-security";
 import { registerEvalRoutes } from "./http/routes/evals";
@@ -80,7 +78,6 @@ import {
   createServices,
 } from "./services";
 import { RuntimeReadinessState } from "./services/internal-readiness-service";
-import { DataConnectorSyncCoordinator } from "./services/data-connector-sync-coordinator";
 import { createScheduledRuntimeWorkers } from "./services/scheduled-runtime-workers";
 import { WorkerBrokerService } from "./services/worker-broker";
 import type {
@@ -135,23 +132,6 @@ export function createRomeoApiRuntime(
               runtimeDependencies,
             ),
           { credentials: workerBrokerCredentials(env) },
-        );
-  const dataConnectorSyncCoordinator =
-    repositoryRequestScope === undefined
-      ? undefined
-      : new DataConnectorSyncCoordinator(
-          repositoryRequestScope,
-          (scopedRepository) =>
-            createServices(
-              scopedRepository,
-              resolvedServiceOptions,
-              runtimeDependencies,
-            ).dataConnectors,
-          {
-            enabled:
-              env.DATA_CONNECTOR_WORKER_ENABLED &&
-              env.SCHEDULED_TENANT_WORK_OWNER === "internal",
-          },
         );
   const scheduledRuntimeWorkers =
     env.SCHEDULED_TENANT_WORK_OWNER === "external"
@@ -244,8 +224,6 @@ export function createRomeoApiRuntime(
   registerCapabilityFlagRoutes(app);
   registerCollaborationRoutes(app);
   registerContentPolicyRoutes(app);
-  registerDataConnectorRoutes(app);
-  registerDelegatedOAuthRoutes(app);
   registerDeviceAuthorizationRoutes(app);
   registerEdgeSecurityRoutes(app);
   registerEvalRoutes(app);
@@ -282,7 +260,6 @@ export function createRomeoApiRuntime(
   let closePromise: Promise<void> | undefined;
   return {
     app,
-    dataConnectorSyncCoordinator,
     scheduledRuntimeWorkers,
     services,
     workerBroker,
@@ -291,7 +268,6 @@ export function createRomeoApiRuntime(
       if (started) return;
       started = true;
       scheduledRuntimeWorkers?.start();
-      dataConnectorSyncCoordinator?.start();
       runtimeReadinessState.markStarted();
     },
     stop() {
@@ -299,7 +275,6 @@ export function createRomeoApiRuntime(
       if (!started) return;
       started = false;
       scheduledRuntimeWorkers?.stop();
-      dataConnectorSyncCoordinator?.stop();
     },
     async drain() {
       runtimeReadinessState.markDraining();
@@ -309,7 +284,6 @@ export function createRomeoApiRuntime(
         services.providers.drainCatalogSyncWorker(),
         services.governanceExports.drain(),
         services.tableExports.drain(),
-        dataConnectorSyncCoordinator?.drain(),
         scheduledRuntimeWorkers?.drain(),
       ]);
     },
@@ -320,7 +294,6 @@ export function createRomeoApiRuntime(
       if (started) {
         started = false;
         scheduledRuntimeWorkers?.stop();
-        dataConnectorSyncCoordinator?.stop();
       }
       closePromise = (async () => {
         try {
@@ -330,7 +303,6 @@ export function createRomeoApiRuntime(
             services.providers.drainCatalogSyncWorker(),
             services.governanceExports.drain(),
             services.tableExports.drain(),
-            dataConnectorSyncCoordinator?.drain(),
             scheduledRuntimeWorkers?.drain(),
           ]);
         } finally {

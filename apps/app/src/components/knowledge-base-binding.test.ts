@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveKnowledgeBaseBinding } from "./data-connector-binding";
+import { resolveKnowledgeBaseBinding } from "./knowledge-base-binding";
 
 describe("resolveKnowledgeBaseBinding", () => {
   it("returns the explicitly selected knowledge base", () => {

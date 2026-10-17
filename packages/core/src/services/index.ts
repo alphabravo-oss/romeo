@@ -4,16 +4,13 @@ import { ApiKeyService } from "./api-key-service";
 export * from "./audit-integrity";
 export * from "./runtime-key-rotation-posture-service";
 export * from "./internal-readiness-service";
-export * from "./data-connector-sync-coordinator";
 export * from "./tenant-scheduled-work-coordinator";
 import { AuthProviderSettingsService } from "./auth-provider-settings-service";
 import { BrowserAutomationService } from "./browser-automation-service";
 import { ChatService } from "./chat-service";
-import { lookupNetworkHost } from "./data-connector-network-policy";
+import { lookupNetworkHost } from "./outbound-network-policy";
 import { ChatEventService } from "./chat-event-service";
 import { CapabilityService } from "./capability-resolver";
-import { createDataConnectorExecutor } from "./data-connector-executor-factory";
-import { DelegatedOAuthService } from "./delegated-oauth-service";
 import { DirectorySyncService } from "./directory-sync-service";
 import { KnowledgeService } from "./knowledge-service";
 import { FileService } from "./file-service";
@@ -121,16 +118,6 @@ export function createServices(
       ? vectorStoreDeployment
       : withExternalVectorRoutingActive(vectorStoreDeployment);
   const toolDispatchPayloadStore = runtime.toolDispatchPayloadStore;
-  const delegatedOAuth = new DelegatedOAuthService(
-    repository,
-    env,
-    options.delegatedOAuthFetch === undefined
-      ? {}
-      : { fetchImpl: options.delegatedOAuthFetch },
-  );
-  const dataConnectorExecutor =
-    options.dataConnectorExecutor ??
-    createDataConnectorExecutor(env, secretResolver, delegatedOAuth);
   const fileMalwareScanner = runtime.fileMalwareScanner;
   const knowledgeExtractor = runtime.knowledgeExtractor;
   const fileOcrProvider = runtime.fileOcrProvider;
@@ -368,8 +355,6 @@ export function createServices(
     capabilityPlatformPolicy: platformCapabilityPolicy,
     chatEvents,
     chats,
-    dataConnectorExecutor,
-    delegatedOAuth,
     directorySync,
     env,
     files,

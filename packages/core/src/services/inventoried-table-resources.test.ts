@@ -22,13 +22,6 @@ const subject: AuthSubject = {
 describe("inventoriedTableResources", () => {
   it("computes dashboard summaries from the full scoped resource", () => {
     expect(
-      inventoriedTableResources.data_connectors?.summarize?.([
-        { id: "connector-1", status: "active" },
-        { id: "connector-2", status: "disabled" },
-        { id: "connector-3", status: "active" },
-      ]),
-    ).toEqual({ activeTotal: 2, total: 3 });
-    expect(
       inventoriedTableResources.tool_connectors?.summarize?.([
         { enabled: true, id: "tool-1" },
         { enabled: false, id: "tool-2" },
@@ -202,8 +195,6 @@ describe("inventoriedTableResources", () => {
           backgroundJobs: 0,
           chats: 0,
           chatComments: 0,
-          dataConnectors: 0,
-          dataConnectorSyncs: 0,
           fileObjectBytesIncluded: 0,
           fileObjects: 0,
           knowledgeBases: 0,

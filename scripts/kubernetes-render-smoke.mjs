@@ -224,7 +224,6 @@ assertHelmSchemaRejectsInvalidRealtimeEvents();
 assertHelmSchemaRejectsInvalidEdgeSecurity();
 assertHelmSchemaRejectsInvalidFileLimits();
 assertHelmSchemaRejectsInvalidHttpRateLimit();
-assertHelmSchemaRejectsInvalidDataConnectorRetry();
 assertHelmSchemaRejectsInvalidVectorIsolation();
 assertHelmSchemaRejectsInvalidBackupUploadTimeout();
 assertHelmSchemaRejectsInvalidToolDispatchBounds();
@@ -247,7 +246,6 @@ const evidence = {
     "helm_values_schema_rejects_invalid_edge_security",
     "helm_values_schema_rejects_invalid_file_limits",
     "helm_values_schema_rejects_invalid_http_rate_limit",
-    "helm_values_schema_rejects_invalid_data_connector_retry",
     "helm_values_schema_rejects_invalid_vector_isolation",
     "helm_values_schema_rejects_invalid_backup_upload_timeout",
     "helm_values_schema_rejects_invalid_tool_dispatch_bounds",
@@ -664,34 +662,6 @@ function assertHelmSchemaRejectsInvalidHttpRateLimit() {
   }
 }
 
-function assertHelmSchemaRejectsInvalidDataConnectorRetry() {
-  for (const [key, value] of [
-    ["DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS", "6"],
-    ["DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS", "60001"],
-  ]) {
-    const result = spawnSync(
-      "helm",
-      [
-        "template",
-        releaseName,
-        chartPath,
-        "--set-string",
-        `env.${key}=${value}`,
-      ],
-      { encoding: "utf8" },
-    );
-    if (result.status === 0) {
-      throw new Error(`Helm schema accepted invalid env.${key}=${value}.`);
-    }
-    const text = `${result.stdout}\n${result.stderr}`;
-    if (!text.includes(key) && !text.includes(`/env/${key}`)) {
-      throw new Error(
-        `Helm schema rejected invalid values without naming ${key}: ${text}`,
-      );
-    }
-  }
-}
-
 function assertHelmSchemaRejectsInvalidVectorIsolation() {
   for (const [key, value] of [["VECTOR_ISOLATION_MODE", "tenant_database"]]) {
     const result = spawnSync(
@@ -1001,8 +971,6 @@ function assertConfigMap(configMap, variant) {
     "S3_ACCESS_KEY_ID",
     "S3_SECRET_ACCESS_KEY",
     "ROMEO_API_KEY",
-    "DELEGATED_OAUTH_GITHUB_CLIENT_SECRET",
-    "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY",
   ]) {
     if (Object.hasOwn(data, key)) {
       throw new Error(

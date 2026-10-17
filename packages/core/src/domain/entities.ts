@@ -302,14 +302,6 @@ export interface QueuedChatTurn {
 }
 
 export type { BaseModel, ProviderInstance };
-export type {
-  DataConnector,
-  DataConnectorStatus,
-  DataConnectorSync,
-  DataConnectorSyncStatus,
-  DataConnectorType,
-  LocalImportSyncItem,
-} from "./data-connectors";
 export type { DeviceAuthorization } from "./device-authorizations";
 export type {
   EvalCase,
@@ -365,9 +357,6 @@ export type {
   KnowledgeSource,
 } from "./knowledge";
 export type {
-  AccessReviewConnectorOwnership,
-  AccessReviewDataConnectorPosture,
-  AccessReviewDelegatedOAuthConnectionPosture,
   AccessReviewGroupPosture,
   AccessReviewPolicyPosture,
   AccessReviewReport,

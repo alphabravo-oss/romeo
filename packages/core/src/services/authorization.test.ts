@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import { InMemoryRomeoRepository } from "../repositories/in-memory";
 import { AgentService } from "./agent-service";
 import { ChatService } from "./chat-service";
-import { DataConnectorService } from "./data-connector-service";
 import { GovernanceService } from "./governance-service";
 import { KnowledgeService } from "./knowledge-service";
 import { RunEventSequencer } from "./run-event-sequencer";
@@ -227,56 +226,6 @@ describe("service authorization", () => {
     await expect(
       Promise.resolve().then(() => usage.list(subject)),
     ).rejects.toMatchObject({ code: "forbidden" });
-  });
-
-  it("blocks data connector sync outside caller workspace access", async () => {
-    const repository = new InMemoryRomeoRepository();
-    await repository.createDataConnector({
-      id: "connector_workspace_denied",
-      orgId: "org_default",
-      workspaceId: "workspace_default",
-      knowledgeBaseId: "kb_default",
-      type: "local_import",
-      name: "Workspace denied connector",
-      config: { mode: "manual" },
-      status: "active",
-      createdBy: "user_dev_admin",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    const subject: AuthSubject = {
-      id: "user_connector_workspace_denied",
-      type: "user",
-      orgId: "org_default",
-      workspaceIds: ["workspace_other"],
-      groupIds: [],
-      scopes: ["knowledge:read", "knowledge:write"],
-      isAdmin: false,
-    };
-    const connectors = new DataConnectorService(
-      repository,
-      new KnowledgeService(repository),
-    );
-
-    await expect(
-      connectors.sync({
-        subject,
-        connectorId: "connector_workspace_denied",
-        items: [
-          {
-            fileName: "denied.md",
-            mimeType: "text/markdown",
-            content: "should not import",
-          },
-        ],
-      }),
-    ).rejects.toMatchObject({ code: "forbidden" });
-    await expect(
-      repository.listDataConnectorSyncs(
-        "org_default",
-        "connector_workspace_denied",
-      ),
-    ).resolves.toEqual([]);
   });
 
   it("blocks cross-org governed data deletion without deleting the target", async () => {

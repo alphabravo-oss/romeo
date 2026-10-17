@@ -5,7 +5,7 @@ import type { ToolConnector, ToolOperation } from "../domain/entities";
 import {
   lookupNetworkHost,
   type WebsiteConnectorHostLookup,
-} from "./data-connector-network-policy";
+} from "./outbound-network-policy";
 import { dnsPinnedFetch, type DnsPinnedFetch } from "./dns-pinned-fetch";
 import type { QuotaCoordinator } from "./quota-coordination";
 import type { SecretResolver } from "./secret-resolver";

@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import {
   allowedHostMatches,
-  delegatedOAuthConfigured,
   isHttpsUrl,
   parseUrl,
   requireNonEmpty,
@@ -17,7 +16,6 @@ export function validateProductionCapabilities(
   context: z.core.$RefinementCtx,
 ): void {
   validateIndependentSecrets(env, context);
-  validateDelegatedOAuth(env, context);
   validateSecretResolver(env, context);
   validateVectorStore(env, context);
   validateVoiceProvider(env, context);
@@ -40,11 +38,6 @@ function validateIndependentSecrets(
       "TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY",
       env.TOOL_DISPATCH_PAYLOAD_ENCRYPTION_KEY,
     ]);
-  if (delegatedOAuthConfigured(env))
-    active.push([
-      "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY",
-      env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
-    ]);
   for (const [field, value] of active)
     requireStrongSecret(value, field, env, context);
 
@@ -59,10 +52,6 @@ function validateIndependentSecrets(
       env.MANAGED_SECRET_ENCRYPTION_KEY_PREVIOUS,
     ],
     ["WEBHOOK_SIGNING_KEY_PREVIOUS", env.WEBHOOK_SIGNING_KEY_PREVIOUS],
-    [
-      "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS",
-      env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY_PREVIOUS,
-    ],
   ];
   for (const [field, value] of previous) {
     if (value.length === 0) continue;
@@ -82,31 +71,6 @@ function validateIndependentSecrets(
     );
     if (duplicate === undefined) values.set(value, field);
   }
-}
-
-function validateDelegatedOAuth(
-  env: ProductionEnvironment,
-  context: z.core.$RefinementCtx,
-): void {
-  if (!delegatedOAuthConfigured(env)) return;
-  for (const [field, value] of [
-    ["DELEGATED_OAUTH_GITHUB_CLIENT_ID", env.DELEGATED_OAUTH_GITHUB_CLIENT_ID],
-    [
-      "DELEGATED_OAUTH_GITHUB_CLIENT_SECRET",
-      env.DELEGATED_OAUTH_GITHUB_CLIENT_SECRET,
-    ],
-    [
-      "DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY",
-      env.DELEGATED_OAUTH_TOKEN_ENCRYPTION_KEY,
-    ],
-  ] as const)
-    requireValue(
-      value.trim().length > 0,
-      `${field} is required when delegated GitHub OAuth is configured.`,
-      field,
-      env,
-      context,
-    );
 }
 
 function validateSecretResolver(

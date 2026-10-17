@@ -34,10 +34,6 @@ export const BillingPanel = lazyNamed(
   () => import("./BillingPanel"),
   "BillingPanel",
 );
-export const ConnectedAppsPanel = lazyNamed(
-  () => import("./ConnectedAppsPanel"),
-  "ConnectedAppsPanel",
-);
 export const ChatExperiencePanel = lazyNamed(
   () => import("./ChatExperiencePanel"),
   "ChatExperiencePanel",
@@ -45,10 +41,6 @@ export const ChatExperiencePanel = lazyNamed(
 export const CapabilityAdminPanel = lazyNamed(
   () => import("./CapabilityAdminPanel"),
   "CapabilityAdminPanel",
-);
-export const DataConnectorPanel = lazyNamed(
-  () => import("./DataConnectorPanel"),
-  "DataConnectorPanel",
 );
 export const AuthProvidersPanel = lazyNamed(
   () => import("./AuthProvidersPanel"),
@@ -143,7 +135,7 @@ const sectionPanelNames: Readonly<Record<string, readonly string[]>> = {
     "ProviderObservabilityPanel",
   ],
   "chat-experience": ["ChatExperiencePanel"],
-  connections: ["ToolConnectorPanel", "DataConnectorPanel"],
+  connections: ["ToolConnectorPanel"],
   governance: ["GovernancePanel"],
   capabilities: ["CapabilityAdminPanel"],
   compute: ["TrustComputePanel"],
@@ -159,7 +151,6 @@ const sectionPanelNames: Readonly<Record<string, readonly string[]>> = {
   organizations: ["OrganizationsPanel"],
   impersonation: ["ImpersonationPanel"],
   "auth-providers": ["AuthProvidersPanel"],
-  "connected-apps": ["ConnectedAppsPanel"],
   webhooks: ["WebhooksPanel"],
   "notification-channels": ["NotificationChannelPanel"],
 };

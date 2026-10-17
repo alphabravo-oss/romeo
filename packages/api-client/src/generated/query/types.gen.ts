@@ -829,7 +829,6 @@ export type ManagedSecretReference = {
   orgId?: string;
   purpose:
     | "auth_provider_client_secret"
-    | "data_connector_credential"
     | "model_provider_credential"
     | "tool_connector_credential";
   scope: "global" | "org";
@@ -844,7 +843,6 @@ export type CreateManagedSecretRequest = {
   orgId?: string;
   purpose:
     | "auth_provider_client_secret"
-    | "data_connector_credential"
     | "model_provider_credential"
     | "tool_connector_credential";
   scope?: "global" | "org";
@@ -1592,7 +1590,6 @@ export type WorkspaceExportDocument = {
     chats: number;
     messages: number;
     knowledgeBases: number;
-    dataConnectors: number;
     workflows: number;
   };
   resources: {
@@ -1610,12 +1607,6 @@ export type WorkspaceExportDocument = {
       id: string;
       createdAt: string;
       updatedAt: string;
-    }>;
-    dataConnectors: Array<{
-      id: string;
-      knowledgeBaseId: string;
-      status: string;
-      type: string;
     }>;
     workflows: Array<{
       enabled: boolean;
@@ -3061,11 +3052,9 @@ export type RuntimeKeyRotationPostureReport = {
   generatedAt: string;
   aggregationScope: "all_organizations";
   status: "attention_required" | "ready";
-  delegatedOAuth: RuntimeKeyRotationSurfacePosture;
   webhookSigning: RuntimeKeyRotationSurfacePosture;
   redaction: {
     ciphertextReturned: false;
-    connectionIdsReturned: false;
     deliveryIdsReturned: false;
     keyMaterialReturned: false;
     payloadsReturned: false;
@@ -5659,7 +5648,6 @@ export type ResourceGrant = {
     | "chat"
     | "run"
     | "tool"
-    | "data_connector"
     | "file"
     | "knowledge_base"
     | "prompt_template"
@@ -5907,369 +5895,6 @@ export type RequestContentPolicyApprovalRequest = {
 export type ResolveContentPolicyApprovalRequest = {
   decision: "approve" | "deny";
   runId?: string;
-};
-
-export type DataConnectorPostureReport = {
-  schema: "romeo.data-connector-posture.v1";
-  generatedAt: string;
-  orgId: string;
-  status: "attention_required" | "ready";
-  runtime: {
-    executionDriver:
-      | "disabled"
-      | "website-fetch"
-      | "github-fetch"
-      | "s3-fetch"
-      | "managed-fetch";
-    egressPolicy: "allow_public" | "require_allowlist";
-    managedFetchEnabled: boolean;
-    allowedHostRuleCount: number;
-    fetchLimits: {
-      maxBytes: number;
-      retryAttempts: number;
-      retryBackoffMs: number;
-      timeoutMs: number;
-    };
-    secretResolver: {
-      driver:
-        | "disabled"
-        | "env"
-        | "vault"
-        | "aws-sm"
-        | "gcp-sm"
-        | "azure-kv"
-        | "cloud";
-      managedSecretConfigured: boolean;
-      externalValueResolverConfigured: boolean;
-    };
-    credentialPosture: {
-      delegatedOAuthGithubConfigured: boolean;
-      githubDeploymentTokenConfigured: boolean;
-      s3DeploymentCredentialsConfigured: boolean;
-      s3EndpointConfigured: boolean;
-    };
-  };
-  deployment: {
-    liveEvidencePathConfigured: boolean;
-    networkPolicyConfigured: boolean;
-    workerEnabled: boolean;
-  };
-  connectors: {
-    active: number;
-    disabled: number;
-    due: number;
-    managed: number;
-    scheduled: number;
-    total: number;
-    byType: {
-      local_import?: number;
-      github?: number;
-      s3?: number;
-      website?: number;
-      rss?: number;
-      confluence?: number;
-      jira?: number;
-      linear?: number;
-      notion?: number;
-      slack?: number;
-    };
-  };
-  syncs: {
-    completed: number;
-    failed: number;
-    latestCompletedAt: string | null;
-    latestFailedAt: string | null;
-    running: number;
-    total: number;
-  };
-  liveEvidence: {
-    configured: boolean;
-    source: "configured_file" | "not_configured";
-    status: "failed" | "invalid" | "not_configured" | "satisfied";
-    schemaVersion?: "romeo.data-connector-live-evidence.v1";
-    evidenceStatus?: "failed" | "passed" | "planned" | "unknown";
-    mode?: "dry-run" | "live" | "unknown";
-    deployment?: "compose" | "kubernetes" | "target" | "unknown";
-    generatedAt?: string;
-    checks: {
-      managed_connector_sync_exercised: boolean;
-      worker_cni_egress_enforced: boolean;
-      dns_private_address_denied: boolean;
-      secret_ref_resolution_verified: boolean;
-      worker_crash_retry_or_requeue_verified: boolean;
-      sync_log_redaction: boolean;
-      sanitized_readback_verified: boolean;
-    };
-    failureCodes: Array<string>;
-    invalidReason?: "invalid_json" | "read_failed" | "schema_mismatch";
-    summary: {
-      delegatedOAuthConnectorCount: number;
-      deniedPrivateTargetCount: number;
-      failedSyncCount: number;
-      managedConnectorTypeCount: number;
-      podLogScanCount: number;
-      requeuedSyncCount: number;
-      secretRefConnectorCount: number;
-      successfulSyncCount: number;
-      syncAttemptCount: number;
-      workerLogScanCount: number;
-    };
-    redaction: {
-      rawAllowedHostsReturned: boolean;
-      rawConnectorConfigReturned: boolean;
-      rawConnectorContentReturned: boolean;
-      rawEndpointUrlsReturned: boolean;
-      rawEvidencePathsReturned: boolean;
-      rawSecretRefsReturned: boolean;
-      secretValuesReturned: boolean;
-      tokenValuesReturned: boolean;
-      rawLogLinesReturned: boolean;
-    };
-  };
-  redaction: {
-    rawAllowedHostsReturned: boolean;
-    rawConnectorConfigReturned: boolean;
-    rawConnectorContentReturned: boolean;
-    rawEndpointUrlsReturned: boolean;
-    rawEvidencePathsReturned: boolean;
-    rawSecretRefsReturned: boolean;
-    secretValuesReturned: boolean;
-    tokenValuesReturned: boolean;
-    evidenceFileBodiesReturned: false;
-  };
-  warnings: Array<
-    | "data_connector_driver_disabled"
-    | "data_connector_failed_syncs_present"
-    | "data_connector_live_evidence_invalid"
-    | "data_connector_live_evidence_required"
-    | "data_connector_network_policy_not_configured"
-    | "data_connector_scheduled_syncs_without_worker"
-    | "data_connector_worker_not_enabled"
-  >;
-};
-
-export type DataConnector = {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  knowledgeBaseId: string;
-  type: DataConnectorType;
-  name: string;
-  config: {
-    [key: string]: unknown;
-  };
-  status: "active" | "disabled";
-  syncIntervalMinutes?: number;
-  nextSyncAt?: string;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-  lastSyncAt?: string;
-};
-
-export type DataConnectorType =
-  | "local_import"
-  | "github"
-  | "s3"
-  | "website"
-  | "rss"
-  | "confluence"
-  | "jira"
-  | "linear"
-  | "notion"
-  | "slack";
-
-export type CreateDataConnectorRequest = {
-  workspaceId: string;
-  knowledgeBaseId: string;
-  type: DataConnectorType;
-  name: string;
-  syncIntervalMinutes?: number;
-  config?: {
-    [key: string]: unknown;
-  };
-};
-
-export type DataConnectorCatalogReport = {
-  executionDriver:
-    | "disabled"
-    | "website-fetch"
-    | "github-fetch"
-    | "s3-fetch"
-    | "managed-fetch";
-  egressPolicy: "allow_public" | "require_allowlist";
-  allowedHostRuleCount: number;
-  fetchLimits: {
-    maxBytes: number;
-    retryAttempts: number;
-    retryBackoffMs: number;
-    timeoutMs: number;
-  };
-  secretResolver: {
-    driver:
-      "disabled" | "env" | "vault" | "aws-sm" | "gcp-sm" | "azure-kv" | "cloud";
-    managedSecretConfigured: boolean;
-    externalValueResolverConfigured: boolean;
-  };
-  connectors: Array<{
-    type: DataConnectorType;
-    displayName: string;
-    description: string;
-    implementationStatus: "implemented" | "planned";
-    syncMode: "inline_items" | "managed_fetch";
-    executionBoundary: "api_ingest" | "bounded_runtime_fetch";
-    supportsScheduledSync: boolean;
-    supportsDelegatedOAuth: boolean;
-    credentialSources: Array<
-      "none" | "deployment_secret" | "connector_secret_ref" | "delegated_oauth"
-    >;
-    requiredConfigKeys: Array<string>;
-    optionalConfigKeys: Array<string>;
-    egress: {
-      required: boolean;
-      allowlistSupported: boolean;
-      hostSource: "none" | "connector_url" | "github_api" | "s3_endpoint";
-      privateNetworkDeniedByExecutor: boolean;
-    };
-    limits: {
-      maxConfigItems?: number;
-      maxInlineItems?: number;
-      maxInlineItemBytes?: number;
-    };
-    securityControls: Array<string>;
-    runtime: {
-      syncEnabled: boolean;
-      blockedReasons: Array<string>;
-      warnings: Array<string>;
-      credentialPosture: {
-        none?: boolean;
-        deployment_secret?: boolean;
-        connector_secret_ref?: boolean;
-        delegated_oauth?: boolean;
-      };
-    };
-  }>;
-};
-
-export type DataConnectorSync = {
-  id: string;
-  orgId: string;
-  workspaceId: string;
-  knowledgeBaseId: string;
-  connectorId: string;
-  status: "running" | "completed" | "failed";
-  createdBy: string;
-  itemCount: number;
-  sourceIds: Array<string>;
-  summary: {
-    [key: string]: unknown;
-  };
-  errorCode?: string;
-  startedAt: string;
-  completedAt?: string;
-};
-
-export type SyncDataConnectorRequest = {
-  items?: Array<{
-    fileName: string;
-    mimeType: string;
-    content: string;
-    sizeBytes?: number;
-  }>;
-};
-
-export type DelegatedOAuthProvider = {
-  authorizationHost: string;
-  configured: boolean;
-  connectorTypes: Array<DataConnectorType>;
-  defaultScopes: Array<string>;
-  displayName: string;
-  id: "github";
-  pkceRequired: boolean;
-  tokenHost: string;
-};
-
-export type DelegatedOAuthPostureReport = {
-  connectorTypes: Array<DelegatedOAuthConnectorTypePosture>;
-  generatedAt: string;
-  orgId: string;
-  providers: Array<DelegatedOAuthProviderPosture>;
-  redaction: {
-    rawAccessTokensReturned: false;
-    rawClientSecretsReturned: false;
-    rawProviderAccountIdsReturned: false;
-    rawProviderAccountLoginsReturned: false;
-    rawProviderUrlsReturned: false;
-    rawRefreshTokensReturned: false;
-  };
-  schema: "romeo.delegated-oauth-posture.v1";
-  status: "attention_required" | "healthy";
-  warnings: Array<string>;
-};
-
-export type DelegatedOAuthConnectorTypePosture = {
-  connectorType: DataConnectorType;
-  connectionCounts: DelegatedOAuthConnectionPostureCounts;
-};
-
-export type DelegatedOAuthConnectionPostureCounts = {
-  active: number;
-  expiredAccessToken: number;
-  expiringAccessToken: number;
-  reauthorizationRequired: number;
-  revoked: number;
-  total: number;
-  unused: number;
-};
-
-export type DelegatedOAuthProviderPosture = {
-  authorizationHost: string;
-  configured: boolean;
-  connectorTypes: Array<DataConnectorType>;
-  connectionCounts: DelegatedOAuthConnectionPostureCounts;
-  defaultScopeCount: number;
-  displayName: string;
-  id: "github";
-  pkceRequired: true;
-  tokenHost: string;
-};
-
-export type DelegatedOAuthStartResult = {
-  authorizationUrl: string;
-  connectorType: DataConnectorType;
-  expiresAt: string;
-  provider: DelegatedOAuthProvider;
-  scopes: Array<string>;
-  workspaceId: string;
-};
-
-export type StartDelegatedOAuthRequest = {
-  providerId: "github";
-  workspaceId: string;
-  connectorType: DataConnectorType;
-  scopes?: Array<string>;
-  returnTo?: string;
-};
-
-export type DelegatedOAuthConnection = {
-  id: string;
-  workspaceId: string;
-  userId: string;
-  providerId: "github";
-  connectorType: DataConnectorType;
-  providerAccountHash: string;
-  providerAccountLoginConfigured: boolean;
-  providerAccountLoginHash?: string;
-  providerRevocationErrorCode?: string;
-  providerRevocationStatus?: "failed" | "skipped" | "succeeded";
-  scopes: Array<string>;
-  status: "active" | "reauthorization_required" | "revoked";
-  accessTokenExpiresAt?: string;
-  refreshTokenExpiresAt?: string;
-  lastUsedAt?: string;
-  revokedAt?: string;
-  createdAt: string;
-  updatedAt: string;
 };
 
 /**
@@ -7178,8 +6803,6 @@ export type DataExportPreview = {
     fileObjects: number;
     fileObjectBytesIncluded: number;
     knowledgeSourceBytesIncluded: number;
-    dataConnectors: number;
-    dataConnectorSyncs: number;
     workflows: number;
     workflowRuns: number;
     usageEvents: number;
@@ -7226,8 +6849,6 @@ export type DataExportDocument = {
     fileObjects: number;
     fileObjectBytesIncluded: number;
     knowledgeSourceBytesIncluded: number;
-    dataConnectors: number;
-    dataConnectorSyncs: number;
     workflows: number;
     workflowRuns: number;
     usageEvents: number;
@@ -7256,9 +6877,6 @@ export type DataExportDocument = {
       [key: string]: unknown;
     }>;
     fileObjects: Array<{
-      [key: string]: unknown;
-    }>;
-    dataConnectors: Array<{
       [key: string]: unknown;
     }>;
     workflows: Array<{
@@ -7305,8 +6923,6 @@ export type DataExportPackageList = {
       fileObjects: number;
       fileObjectBytesIncluded: number;
       knowledgeSourceBytesIncluded: number;
-      dataConnectors: number;
-      dataConnectorSyncs: number;
       workflows: number;
       workflowRuns: number;
       usageEvents: number;
@@ -7367,8 +6983,6 @@ export type DataExportPackageJob = {
     fileObjects: number;
     fileObjectBytesIncluded: number;
     knowledgeSourceBytesIncluded: number;
-    dataConnectors: number;
-    dataConnectorSyncs: number;
     workflows: number;
     workflowRuns: number;
     usageEvents: number;
@@ -7462,8 +7076,6 @@ export type AccessReviewReport = {
     activeServiceAccountApiKeyCount: number;
     activeUserSessionCount: number;
     resourceGrantCount: number;
-    dataConnectorCount: number;
-    delegatedOAuthConnectionCount: number;
     toolConnectorCount: number;
     riskyToolConnectorCount: number;
     pendingSupportRequestCount: number;
@@ -7508,7 +7120,6 @@ export type AccessReviewReport = {
       | "chat"
       | "run"
       | "tool"
-      | "data_connector"
       | "file"
       | "knowledge_base"
       | "prompt_template"
@@ -7519,41 +7130,6 @@ export type AccessReviewReport = {
     principalId: string;
     permission: "read" | "write" | "use" | "run";
   }>;
-  connectorOwnership: {
-    dataConnectors: Array<{
-      id: string;
-      workspaceId: string;
-      knowledgeBaseId: string;
-      type: "local_import" | "github" | "s3" | "website" | "rss";
-      status: string;
-      createdBy: string;
-      configKeys: Array<string>;
-      sourceAccessMode?: string;
-      delegatedOAuthConnectionId?: string;
-      syncIntervalMinutes?: number;
-      nextSyncAt?: string;
-      lastSyncAt?: string;
-      createdAt: string;
-      updatedAt: string;
-    }>;
-    delegatedOAuthConnections: Array<{
-      id: string;
-      workspaceId: string;
-      userId: string;
-      providerId: "github";
-      connectorType: "local_import" | "github" | "s3" | "website" | "rss";
-      providerAccountLoginConfigured: boolean;
-      providerAccountLoginHash?: string;
-      scopeCount: number;
-      status: string;
-      accessTokenExpiresAt?: string;
-      refreshTokenExpiresAt?: string;
-      lastUsedAt?: string;
-      revokedAt?: string;
-      createdAt: string;
-      updatedAt: string;
-    }>;
-  };
   toolRisk: {
     connectors: Array<{
       id: string;
@@ -25907,628 +25483,6 @@ export type ContentPolicyApprovalsResolveResponses = {
 export type ContentPolicyApprovalsResolveResponse =
   ContentPolicyApprovalsResolveResponses[keyof ContentPolicyApprovalsResolveResponses];
 
-export type DataConnectorsGetPostureData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: "/admin/data-connectors/posture";
-};
-
-export type DataConnectorsGetPostureErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DataConnectorsGetPostureError =
-  DataConnectorsGetPostureErrors[keyof DataConnectorsGetPostureErrors];
-
-export type DataConnectorsGetPostureResponses = {
-  /**
-   * Data connector posture
-   */
-  200: {
-    data: DataConnectorPostureReport;
-  };
-};
-
-export type DataConnectorsGetPostureResponse =
-  DataConnectorsGetPostureResponses[keyof DataConnectorsGetPostureResponses];
-
-export type DataConnectorsListData = {
-  body?: never;
-  path?: never;
-  query?: {
-    workspaceId?: string;
-  };
-  url: "/data-connectors";
-};
-
-export type DataConnectorsListErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DataConnectorsListError =
-  DataConnectorsListErrors[keyof DataConnectorsListErrors];
-
-export type DataConnectorsListResponses = {
-  /**
-   * Data connectors
-   */
-  200: {
-    data: Array<DataConnector>;
-  };
-};
-
-export type DataConnectorsListResponse =
-  DataConnectorsListResponses[keyof DataConnectorsListResponses];
-
-export type DataConnectorsCreateData = {
-  body: CreateDataConnectorRequest;
-  path?: never;
-  query?: never;
-  url: "/data-connectors";
-};
-
-export type DataConnectorsCreateErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DataConnectorsCreateError =
-  DataConnectorsCreateErrors[keyof DataConnectorsCreateErrors];
-
-export type DataConnectorsCreateResponses = {
-  /**
-   * Data connector
-   */
-  201: {
-    data: DataConnector;
-  };
-};
-
-export type DataConnectorsCreateResponse =
-  DataConnectorsCreateResponses[keyof DataConnectorsCreateResponses];
-
-export type DataConnectorsGetCatalogData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: "/data-connectors/catalog";
-};
-
-export type DataConnectorsGetCatalogErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DataConnectorsGetCatalogError =
-  DataConnectorsGetCatalogErrors[keyof DataConnectorsGetCatalogErrors];
-
-export type DataConnectorsGetCatalogResponses = {
-  /**
-   * Data connector catalog
-   */
-  200: {
-    data: DataConnectorCatalogReport;
-  };
-};
-
-export type DataConnectorsGetCatalogResponse =
-  DataConnectorsGetCatalogResponses[keyof DataConnectorsGetCatalogResponses];
-
-export type DataConnectorsSyncData = {
-  body: SyncDataConnectorRequest;
-  path: {
-    connectorId: string;
-  };
-  query?: never;
-  url: "/data-connectors/{connectorId}/sync";
-};
-
-export type DataConnectorsSyncErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DataConnectorsSyncError =
-  DataConnectorsSyncErrors[keyof DataConnectorsSyncErrors];
-
-export type DataConnectorsSyncResponses = {
-  /**
-   * Data connector sync
-   */
-  202: {
-    data: DataConnectorSync;
-  };
-};
-
-export type DataConnectorsSyncResponse =
-  DataConnectorsSyncResponses[keyof DataConnectorsSyncResponses];
-
-export type DataConnectorsListSyncsData = {
-  body?: never;
-  path: {
-    connectorId: string;
-  };
-  query?: never;
-  url: "/data-connectors/{connectorId}/syncs";
-};
-
-export type DataConnectorsListSyncsErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DataConnectorsListSyncsError =
-  DataConnectorsListSyncsErrors[keyof DataConnectorsListSyncsErrors];
-
-export type DataConnectorsListSyncsResponses = {
-  /**
-   * Data connector syncs
-   */
-  200: {
-    data: Array<DataConnectorSync>;
-  };
-};
-
-export type DataConnectorsListSyncsResponse =
-  DataConnectorsListSyncsResponses[keyof DataConnectorsListSyncsResponses];
-
-export type DelegatedOAuthListProvidersData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: "/delegated-oauth/providers";
-};
-
-export type DelegatedOAuthListProvidersErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DelegatedOAuthListProvidersError =
-  DelegatedOAuthListProvidersErrors[keyof DelegatedOAuthListProvidersErrors];
-
-export type DelegatedOAuthListProvidersResponses = {
-  /**
-   * Delegated OAuth providers
-   */
-  200: {
-    data: Array<DelegatedOAuthProvider>;
-  };
-};
-
-export type DelegatedOAuthListProvidersResponse =
-  DelegatedOAuthListProvidersResponses[keyof DelegatedOAuthListProvidersResponses];
-
-export type DelegatedOAuthGetPostureData = {
-  body?: never;
-  path?: never;
-  query?: never;
-  url: "/admin/delegated-oauth/posture";
-};
-
-export type DelegatedOAuthGetPostureErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DelegatedOAuthGetPostureError =
-  DelegatedOAuthGetPostureErrors[keyof DelegatedOAuthGetPostureErrors];
-
-export type DelegatedOAuthGetPostureResponses = {
-  /**
-   * Delegated OAuth posture
-   */
-  200: {
-    data: DelegatedOAuthPostureReport;
-  };
-};
-
-export type DelegatedOAuthGetPostureResponse =
-  DelegatedOAuthGetPostureResponses[keyof DelegatedOAuthGetPostureResponses];
-
-export type DelegatedOAuthStartData = {
-  body: StartDelegatedOAuthRequest;
-  path?: never;
-  query?: never;
-  url: "/delegated-oauth/start";
-};
-
-export type DelegatedOAuthStartErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DelegatedOAuthStartError =
-  DelegatedOAuthStartErrors[keyof DelegatedOAuthStartErrors];
-
-export type DelegatedOAuthStartResponses = {
-  /**
-   * Delegated OAuth authorization redirect URL
-   */
-  200: {
-    data: DelegatedOAuthStartResult;
-  };
-};
-
-export type DelegatedOAuthStartResponse =
-  DelegatedOAuthStartResponses[keyof DelegatedOAuthStartResponses];
-
-export type DelegatedOAuthListConnectionsData = {
-  body?: never;
-  path?: never;
-  query?: {
-    workspaceId?: string;
-  };
-  url: "/delegated-oauth/connections";
-};
-
-export type DelegatedOAuthListConnectionsErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DelegatedOAuthListConnectionsError =
-  DelegatedOAuthListConnectionsErrors[keyof DelegatedOAuthListConnectionsErrors];
-
-export type DelegatedOAuthListConnectionsResponses = {
-  /**
-   * Delegated OAuth connections
-   */
-  200: {
-    data: Array<DelegatedOAuthConnection>;
-  };
-};
-
-export type DelegatedOAuthListConnectionsResponse =
-  DelegatedOAuthListConnectionsResponses[keyof DelegatedOAuthListConnectionsResponses];
-
-export type DelegatedOAuthRevokeConnectionData = {
-  body?: never;
-  path: {
-    connectionId: string;
-  };
-  query?: never;
-  url: "/delegated-oauth/connections/{connectionId}/revoke";
-};
-
-export type DelegatedOAuthRevokeConnectionErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  401: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  403: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  404: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  429: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DelegatedOAuthRevokeConnectionError =
-  DelegatedOAuthRevokeConnectionErrors[keyof DelegatedOAuthRevokeConnectionErrors];
-
-export type DelegatedOAuthRevokeConnectionResponses = {
-  /**
-   * Revoked delegated OAuth connection
-   */
-  200: {
-    data: DelegatedOAuthConnection;
-  };
-};
-
-export type DelegatedOAuthRevokeConnectionResponse =
-  DelegatedOAuthRevokeConnectionResponses[keyof DelegatedOAuthRevokeConnectionResponses];
-
-export type DelegatedOAuthCompleteData = {
-  body?: never;
-  path?: never;
-  query?: {
-    code?: string;
-    state?: string;
-    error?: string;
-  };
-  url: "/delegated-oauth/callback";
-};
-
-export type DelegatedOAuthCompleteErrors = {
-  /**
-   * Stable Romeo API error response
-   */
-  400: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  409: ApiError;
-  /**
-   * Stable Romeo API error response
-   */
-  500: ApiError;
-};
-
-export type DelegatedOAuthCompleteError =
-  DelegatedOAuthCompleteErrors[keyof DelegatedOAuthCompleteErrors];
-
 export type DeviceAuthorizationsListData = {
   body?: never;
   path?: never;
@@ -31343,7 +30297,6 @@ export type GovernanceListAccessReviewGrantsResponses = {
         | "chat"
         | "run"
         | "tool"
-        | "data_connector"
         | "file"
         | "knowledge_base"
         | "prompt_template"

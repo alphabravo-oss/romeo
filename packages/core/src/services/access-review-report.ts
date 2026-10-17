@@ -1,5 +1,4 @@
 import type { ResourceGrant } from "@romeo/auth";
-import { createHash } from "node:crypto";
 
 import type {
   AccessReviewReport,
@@ -37,8 +36,6 @@ export async function buildAccessReviewReport(
     serviceAccounts,
     apiKeys,
     grants,
-    dataConnectors,
-    delegatedOAuthConnections,
     toolConnectors,
     auditLogs,
   ] = await Promise.all([
@@ -48,8 +45,6 @@ export async function buildAccessReviewReport(
     repository.listServiceAccounts(orgId),
     repository.listApiKeys(orgId),
     repository.listResourceGrants(orgId),
-    repository.listDataConnectors(orgId),
-    repository.listDelegatedOAuthConnections(orgId),
     repository.listToolConnectors(orgId),
     repository.listAuditLogs(orgId),
   ]);
@@ -126,8 +121,6 @@ export async function buildAccessReviewReport(
       activeServiceAccountApiKeyCount: activeServiceAccountApiKeys.length,
       activeUserSessionCount,
       resourceGrantCount: grants.length,
-      dataConnectorCount: dataConnectors.length,
-      delegatedOAuthConnectionCount: delegatedOAuthConnections.length,
       toolConnectorCount: toolConnectors.length,
       riskyToolConnectorCount: toolConnectorReports.filter(
         (connector) =>
@@ -200,76 +193,12 @@ export async function buildAccessReviewReport(
       }))
       .sort(byId),
     resourceGrants: sortGrants(grants),
-    connectorOwnership: {
-      dataConnectors: dataConnectors
-        .map((connector) => ({
-          id: connector.id,
-          workspaceId: connector.workspaceId,
-          knowledgeBaseId: connector.knowledgeBaseId,
-          type: connector.type,
-          status: connector.status,
-          createdBy: connector.createdBy,
-          configKeys: Object.keys(connector.config).sort(),
-          ...stringConfig(connector.config, "sourceAccessMode"),
-          ...stringConfig(connector.config, "delegatedOAuthConnectionId"),
-          ...(connector.syncIntervalMinutes === undefined
-            ? {}
-            : { syncIntervalMinutes: connector.syncIntervalMinutes }),
-          ...(connector.nextSyncAt === undefined
-            ? {}
-            : { nextSyncAt: connector.nextSyncAt }),
-          ...(connector.lastSyncAt === undefined
-            ? {}
-            : { lastSyncAt: connector.lastSyncAt }),
-          createdAt: connector.createdAt,
-          updatedAt: connector.updatedAt,
-        }))
-        .sort(byId),
-      delegatedOAuthConnections: delegatedOAuthConnections
-        .map((connection) => ({
-          id: connection.id,
-          workspaceId: connection.workspaceId,
-          userId: connection.userId,
-          providerId: connection.providerId,
-          connectorType: connection.connectorType,
-          providerAccountLoginConfigured:
-            connection.providerAccountLogin !== undefined,
-          ...(connection.providerAccountLogin === undefined
-            ? {}
-            : {
-                providerAccountLoginHash: stableHash(
-                  connection.providerAccountLogin,
-                ),
-              }),
-          scopeCount: connection.scopes.length,
-          status: connection.status,
-          ...(connection.accessTokenExpiresAt === undefined
-            ? {}
-            : { accessTokenExpiresAt: connection.accessTokenExpiresAt }),
-          ...(connection.refreshTokenExpiresAt === undefined
-            ? {}
-            : { refreshTokenExpiresAt: connection.refreshTokenExpiresAt }),
-          ...(connection.lastUsedAt === undefined
-            ? {}
-            : { lastUsedAt: connection.lastUsedAt }),
-          ...(connection.revokedAt === undefined
-            ? {}
-            : { revokedAt: connection.revokedAt }),
-          createdAt: connection.createdAt,
-          updatedAt: connection.updatedAt,
-        }))
-        .sort(byId),
-    },
     toolRisk: {
       connectors: toolConnectorReports,
       workerJobs,
     },
     supportAccess,
   };
-}
-
-function stableHash(value: string): string {
-  return createHash("sha256").update(value).digest("hex").slice(0, 16);
 }
 
 function supportAccessPosture(
@@ -438,13 +367,6 @@ function sortGrants(grants: ResourceGrant[]): ResourceGrant[] {
       `${right.resourceType}:${right.resourceId}:${right.principalType}:${right.principalId}:${right.permission}`,
     ),
   );
-}
-
-function stringConfig(
-  config: Record<string, unknown>,
-  key: "delegatedOAuthConnectionId" | "sourceAccessMode",
-): Record<string, string> {
-  return typeof config[key] === "string" ? { [key]: config[key] } : {};
 }
 
 function stringMetadata(

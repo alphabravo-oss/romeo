@@ -29,9 +29,6 @@ import type { CollaborationService } from "./collaboration-service";
 import type { ContentPolicyService } from "./content-policy-service";
 import type { ContentPolicyVersionService } from "./content-policy-version-service";
 import type { PolicyApprovalService } from "./policy-approval-service";
-import type { DataConnectorExecutor } from "./data-connector-executors";
-import type { DataConnectorService } from "./data-connector-service";
-import type { DelegatedOAuthService } from "./delegated-oauth-service";
 import type { DeviceAuthorizationService } from "./device-authorization-service";
 import type { DirectorySyncService } from "./directory-sync-service";
 import type { EdgeSecurityService } from "./edge-security-service";
@@ -132,8 +129,6 @@ export interface RomeoServices {
   contentPolicy: ContentPolicyService;
   contentPolicyVersions: ContentPolicyVersionService;
   contentPolicyApprovals: PolicyApprovalService;
-  dataConnectors: DataConnectorService;
-  delegatedOAuth: DelegatedOAuthService;
   deployment: {
     billingEnabled: boolean;
     malwareScanEnabled: boolean;
@@ -201,13 +196,12 @@ export interface RomeoServices {
 export interface CreateServicesOptions {
   env?: RomeoEnv;
   auditCheckpointSigner?: AuditCheckpointSigner;
-  dataConnectorExecutor?: DataConnectorExecutor;
   knowledgeExtractor?: KnowledgeBinaryExtractor;
   embeddingFetch?: typeof fetch;
   auditExportClient?: AuditExportClient;
   fileMalwareScanner?: FileMalwareScanner;
   fileOcrProvider?: FileOcrProvider;
-  delegatedOAuthFetch?: typeof fetch;
+  oauth2ProviderFetch?: typeof fetch;
   ldapClientFactory?: LdapClientFactory;
   runtimeDatabaseReadinessProbe?: RuntimeDatabaseReadinessProbe;
   runtimeReadinessState?: RuntimeReadinessState;

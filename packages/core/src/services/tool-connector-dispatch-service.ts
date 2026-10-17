@@ -3,7 +3,7 @@ import { assertScope, type AuthSubject } from "@romeo/auth";
 import type { ToolOperationDispatchReadbackResponse } from "../domain/tools";
 import type { RomeoRepository } from "../domain/repository";
 import { notFound } from "../errors";
-import type { WebsiteConnectorHostLookup } from "./data-connector-network-policy";
+import type { WebsiteConnectorHostLookup } from "./outbound-network-policy";
 import type { DnsPinnedFetch } from "./dns-pinned-fetch";
 import type { SecretResolver } from "./secret-resolver";
 import type { ToolDispatchPayloadStore } from "./tool-dispatch-payload-store";

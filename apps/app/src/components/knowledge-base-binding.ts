@@ -1,6 +1,5 @@
-// A data connector's knowledge-base binding cannot be changed after creation.
-// Keep selection explicit so adding or renaming a base never changes which
-// corpus receives future connector data.
+// Knowledge-base selection stays explicit so adding or renaming a base never
+// silently changes which corpus an action targets.
 
 export function resolveKnowledgeBaseBinding(input: {
   selectedKnowledgeBaseId: string | undefined;

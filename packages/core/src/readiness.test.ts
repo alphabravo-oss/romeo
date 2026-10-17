@@ -1190,25 +1190,6 @@ describe("readiness API", () => {
     });
     expect(JSON.stringify(check)).not.toContain("literal-secret");
   });
-
-  it("fails readiness when fail-closed connector egress has no host allowlist", async () => {
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
-      env: testEnv({
-        DATA_CONNECTOR_EXECUTION_DRIVER: "website-fetch",
-        DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
-      }),
-    });
-    const response = await api.request("/api/v1/admin/readiness");
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(
-      body.data.checks.some(
-        (check: { id: string; status: string }) =>
-          check.id === "connector_egress_policy" && check.status === "fail",
-      ),
-    ).toBe(true);
-  });
 });
 
 function liveReadyObjectStore(): ObjectStore {

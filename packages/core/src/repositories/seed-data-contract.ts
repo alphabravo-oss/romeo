@@ -3,7 +3,6 @@ import type { BaseModel, ProviderInstance } from "@romeo/providers";
 
 import type { OrganizationCapabilityFlag } from "../domain/capability-flags";
 import type { ContentPolicySeedData } from "../domain/content-policy";
-import type { DelegatedOAuthConnection } from "../domain/delegated-oauth";
 import type {
   Agent,
   AgentKnowledgeBinding,
@@ -29,8 +28,6 @@ import type {
   CollaborationChannel,
   CollaborationChannelMember,
   ContentDeletionOperation,
-  DataConnector,
-  DataConnectorSync,
   DeviceAuthorization,
   EvalCase,
   EvalResultHumanRating,
@@ -134,9 +131,6 @@ export interface SeedData extends ContentPolicySeedData {
   knowledgeSources: KnowledgeSource[];
   knowledgeChunks: KnowledgeChunk[];
   knowledgeChunkEmbeddings: KnowledgeChunkEmbedding[];
-  dataConnectors: DataConnector[];
-  dataConnectorSyncs: DataConnectorSync[];
-  delegatedOAuthConnections: DelegatedOAuthConnection[];
   voiceProfiles: VoiceProfile[];
   auditLogs: AuditLog[];
   auditIntegrityRecords: AuditIntegrityRecord[];

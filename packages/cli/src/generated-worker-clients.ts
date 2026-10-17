@@ -1,8 +1,6 @@
 import {
   billingEnforceLifecycle,
   billingReconcileEntitlements,
-  dataConnectorsList,
-  dataConnectorsSync,
   governanceEnforceRetention,
   voicesSyncCatalog,
 } from "@romeo/api-client/generated/sdk";
@@ -12,35 +10,11 @@ import type {
   BillingLifecycleEnforcementWorkerClient,
 } from "./billing-worker";
 import type { CommandContext } from "./commands";
-import type { DataConnectorSyncWorkerClient } from "./data-connector-worker";
 import type {
   RetentionEnforcementWorkerClient,
   RetentionEnforcementWorkerResult,
 } from "./retention-worker";
 import type { VoiceCatalogSyncWorkerClient } from "./voice-worker";
-
-export function dataConnectorWorkerClient(
-  context: CommandContext,
-): DataConnectorSyncWorkerClient {
-  const client = context.generatedClient;
-  return {
-    dataConnectors: {
-      list: (workspaceId) =>
-        dataConnectorsList({
-          client,
-          ...(workspaceId === undefined ? {} : { query: { workspaceId } }),
-          throwOnError: true,
-        }).then(dataEnvelope),
-      sync: ({ connectorId }) =>
-        dataConnectorsSync({
-          body: {},
-          client,
-          path: { connectorId },
-          throwOnError: true,
-        }).then(dataEnvelope),
-    },
-  };
-}
 
 export function retentionWorkerClient(
   context: CommandContext,

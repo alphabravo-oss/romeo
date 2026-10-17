@@ -10,7 +10,7 @@ import type {
 } from "../domain/repository";
 import { ApiError } from "../errors";
 import { createId } from "../ids";
-import type { WebsiteConnectorHostLookup } from "./data-connector-network-policy";
+import type { WebsiteConnectorHostLookup } from "./outbound-network-policy";
 import type { DnsPinnedFetch } from "./dns-pinned-fetch";
 import { hardenedWebhookFetch } from "./hardened-webhook-fetch";
 import {

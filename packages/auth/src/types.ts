@@ -8,7 +8,6 @@ export type ResourceType =
   | "chat"
   | "run"
   | "tool"
-  | "data_connector"
   | "file"
   | "knowledge_base"
   | "prompt_template"

@@ -32,7 +32,6 @@ describe("access repository mappers", () => {
   it.each([
     "agent",
     "chat",
-    "data_connector",
     "file",
     "folder",
     "knowledge_base",

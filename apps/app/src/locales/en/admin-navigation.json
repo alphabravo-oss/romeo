@@ -34,7 +34,6 @@
   "navAuthentication": "Authentication",
   "navWebhooks": "Webhooks",
   "navNotifications": "Notifications",
-  "navConnectedApps": "Connected apps",
   "navCapabilities": "Capabilities",
   "navComputeTrust": "Compute & trust"
 }

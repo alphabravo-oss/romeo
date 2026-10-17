@@ -131,8 +131,6 @@ export interface DataExportCounts {
   fileObjects: number;
   fileObjectBytesIncluded: number;
   knowledgeSourceBytesIncluded: number;
-  dataConnectors: number;
-  dataConnectorSyncs: number;
   workflows: number;
   workflowRuns: number;
   usageEvents: number;
@@ -183,7 +181,6 @@ export interface DataExportDocument {
     chats: Array<Record<string, unknown>>;
     knowledgeBases: Array<Record<string, unknown>>;
     fileObjects: Array<Record<string, unknown>>;
-    dataConnectors: Array<Record<string, unknown>>;
     workflows: Array<Record<string, unknown>>;
     usageEvents: Array<Record<string, unknown>>;
     backgroundJobs: Array<Record<string, unknown>>;

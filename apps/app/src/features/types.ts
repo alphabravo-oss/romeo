@@ -3,7 +3,6 @@ export * from "./administration/types";
 export * from "./billing/types";
 export * from "./chats/types";
 export * from "./collaboration/types";
-export * from "./data-connectors/types";
 export * from "./evals/types";
 export * from "./files/types";
 export * from "./governance/types";

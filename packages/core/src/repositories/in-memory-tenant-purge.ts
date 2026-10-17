@@ -1,7 +1,6 @@
 import type * as Auth from "@romeo/auth";
 import type { RunEvent } from "@romeo/ai-runtime";
 
-import type * as OAuth from "../domain/delegated-oauth";
 import type * as E from "../domain/entities";
 import type { TenantDataPurgeResult } from "../domain/repository";
 import type { SeedData } from "./seed-data";
@@ -89,11 +88,6 @@ export async function purgeTenantData(
       .filter((chunk) => chunk.orgId === orgId)
       .map((chunk) => chunk.id),
   );
-  const dataConnectorIds = new Set(
-    data.dataConnectors
-      .filter((connector) => connector.orgId === orgId)
-      .map((connector) => connector.id),
-  );
   const runIds = new Set(
     data.runs.filter((run) => run.orgId === orgId).map((run) => run.id),
   );
@@ -149,7 +143,6 @@ export async function purgeTenantData(
     ...agentIds,
     ...chatIds,
     ...runIds,
-    ...dataConnectorIds,
     ...fileIds,
     ...knowledgeBaseIds,
     ...promptTemplateIds,
@@ -327,10 +320,6 @@ export async function purgeTenantData(
     (source) =>
       source.orgId === orgId || knowledgeBaseIds.has(source.knowledgeBaseId),
   );
-  remove<E.DataConnectorSync>(
-    "dataConnectorSyncs",
-    (sync) => sync.orgId === orgId || dataConnectorIds.has(sync.connectorId),
-  );
   remove<E.DeviceAuthorization>(
     "deviceAuthorizations",
     (authorization) =>
@@ -369,13 +358,6 @@ export async function purgeTenantData(
       groupIds.has(membership.groupId) ||
       userIds.has(membership.userId),
   );
-  remove<OAuth.DelegatedOAuthConnection>(
-    "delegatedOAuthConnections",
-    (connection) =>
-      connection.orgId === orgId ||
-      userIds.has(connection.userId) ||
-      workspaceIds.has(connection.workspaceId),
-  );
   remove<E.CollaborationChannel>(
     "collaborationChannels",
     (channel) =>
@@ -395,10 +377,6 @@ export async function purgeTenantData(
   remove<E.WebhookSubscription>(
     "webhookSubscriptions",
     (subscription) => subscription.orgId === orgId,
-  );
-  remove<E.DataConnector>(
-    "dataConnectors",
-    (connector) => connector.orgId === orgId,
   );
   remove<E.KnowledgeBase>(
     "knowledgeBases",

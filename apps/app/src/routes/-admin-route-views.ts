@@ -4,7 +4,6 @@ export type AdminProviderView =
   | "observability"
   | "providers";
 export type AdminUsageView = "consumption" | "quotas";
-export type AdminConnectionView = "catalog" | "imports" | "sources" | "tools";
 export type AdminAccessView = "keys" | "service-accounts";
 
 export function resolveAdminProviderView(view?: string): AdminProviderView {
@@ -16,12 +15,6 @@ export function resolveAdminProviderView(view?: string): AdminProviderView {
 
 export function resolveAdminUsageView(view?: string): AdminUsageView {
   return isOneOf(view, ["consumption", "quotas"]) ? view : "consumption";
-}
-
-export function resolveAdminConnectionView(view?: string): AdminConnectionView {
-  return isOneOf(view, ["sources", "imports", "catalog", "tools"])
-    ? view
-    : "sources";
 }
 
 export function resolveAdminAccessView(view?: string): AdminAccessView {

@@ -11,9 +11,7 @@ import {
   createCollaborationRepositoryFragment,
   createContentPolicyRepositoryFragment,
   createContentDeletionRepositoryFragment,
-  createDataConnectorRepositoryFragment,
   createDataDeletionRepositoryFragment,
-  createDelegatedOAuthRepositoryFragment,
   createFileRepositoryFragment,
   createGovernanceBillingRepositoryFragment,
   createKnowledgeEmbeddingRepositoryFragment,
@@ -346,36 +344,6 @@ describe("repository fragment composition", () => {
       "listToolOperationsForConnectors",
       "updateToolConnector",
       "updateToolOperation",
-    ]);
-  });
-
-  it("exposes the data connector methods as a composable fragment", () => {
-    const fragment = createDataConnectorRepositoryFragment({} as never);
-
-    expect(Object.keys(fragment).sort()).toEqual([
-      "claimDataConnectorSync",
-      "createDataConnector",
-      "createDataConnectorSync",
-      "finishDataConnectorSync",
-      "getDataConnector",
-      "listDataConnectorSyncs",
-      "listDataConnectors",
-      "renewDataConnectorSyncLease",
-      "updateDataConnector",
-      "updateDataConnectorSync",
-    ]);
-  });
-
-  it("exposes delegated OAuth key-usage inventory as a composable fragment", () => {
-    const fragment = createDelegatedOAuthRepositoryFragment({} as never);
-
-    expect(Object.keys(fragment).sort()).toEqual([
-      "countDelegatedOAuthTokenKeyUsage",
-      "createDelegatedOAuthConnection",
-      "getDelegatedOAuthConnection",
-      "getDelegatedOAuthConnectionByProviderAccount",
-      "listDelegatedOAuthConnections",
-      "updateDelegatedOAuthConnection",
     ]);
   });
 

@@ -46,8 +46,6 @@ describe("inventoried table resource registry", () => {
       "agent_versions",
       "api_keys",
       "background_jobs",
-      "data_connector_sync_runs",
-      "data_connectors",
       "device_tokens",
       "eval_suites",
       "governance_access_grants",

@@ -223,10 +223,6 @@ function sourceRows(
 ): readonly object[] {
   if (input.resource === "background_jobs")
     return data.backgroundJobs.filter((row) => row.orgId === input.orgId);
-  if (input.resource === "data_connector_sync_runs")
-    return data.dataConnectorSyncs.filter(
-      (row) => row.orgId === input.orgId && row.connectorId === input.parentId,
-    );
   if (input.resource === "governance_export_packages")
     return data.governanceExportJobs
       .filter((row) => row.orgId === input.orgId && row.state !== "deleted")

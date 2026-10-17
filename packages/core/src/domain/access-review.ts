@@ -1,6 +1,4 @@
 import type { ResourceGrant, Scope } from "@romeo/auth";
-import type { DataConnectorType } from "./data-connectors";
-import type { DelegatedOAuthProviderId } from "./delegated-oauth";
 import type { ToolConnectorType, ToolVisibility } from "./tools";
 
 export interface AccessReviewReport {
@@ -13,7 +11,6 @@ export interface AccessReviewReport {
   groups: AccessReviewGroupPosture[];
   serviceAccounts: AccessReviewServiceAccountPosture[];
   resourceGrants: ResourceGrant[];
-  connectorOwnership: AccessReviewConnectorOwnership;
   toolRisk: AccessReviewToolRiskPosture;
   supportAccess: AccessReviewSupportAccessPosture;
 }
@@ -65,8 +62,6 @@ export interface AccessReviewSummary {
   activeServiceAccountApiKeyCount: number;
   activeUserSessionCount: number;
   resourceGrantCount: number;
-  dataConnectorCount: number;
-  delegatedOAuthConnectionCount: number;
   toolConnectorCount: number;
   riskyToolConnectorCount: number;
   pendingSupportRequestCount: number;
@@ -102,46 +97,6 @@ export interface AccessReviewServiceAccountPosture {
   disabledAt?: string;
   activeApiKeyCount: number;
   createdAt: string;
-}
-
-export interface AccessReviewConnectorOwnership {
-  dataConnectors: AccessReviewDataConnectorPosture[];
-  delegatedOAuthConnections: AccessReviewDelegatedOAuthConnectionPosture[];
-}
-
-export interface AccessReviewDataConnectorPosture {
-  id: string;
-  workspaceId: string;
-  knowledgeBaseId: string;
-  type: DataConnectorType;
-  status: string;
-  createdBy: string;
-  configKeys: string[];
-  sourceAccessMode?: string;
-  delegatedOAuthConnectionId?: string;
-  syncIntervalMinutes?: number;
-  nextSyncAt?: string;
-  lastSyncAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface AccessReviewDelegatedOAuthConnectionPosture {
-  id: string;
-  workspaceId: string;
-  userId: string;
-  providerId: DelegatedOAuthProviderId;
-  connectorType: DataConnectorType;
-  providerAccountLoginConfigured: boolean;
-  providerAccountLoginHash?: string;
-  scopeCount: number;
-  status: string;
-  accessTokenExpiresAt?: string;
-  refreshTokenExpiresAt?: string;
-  lastUsedAt?: string;
-  revokedAt?: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface AccessReviewToolRiskPosture {

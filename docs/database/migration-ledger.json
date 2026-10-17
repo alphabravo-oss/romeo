@@ -583,6 +583,26 @@
         "tenant-purge": "dist/ci/background-job-claim-indexes-tenant-purge.json",
         "schema-contract": "dist/ci/background-job-claim-indexes-schema-contract.json"
       }
+    },
+    {
+      "file": "0045_drop_data_connectors.sql",
+      "sha256": "34eb9a775870b062b1549a37c40b62b47e997e13d2969846f81b04c66dd1f327",
+      "phase": "contract",
+      "changesExistingData": true,
+      "restartSafe": true,
+      "previousVersionCompatible": false,
+      "tenantPurgeValidated": true,
+      "backupRestoreValidated": true,
+      "destructiveApproval": "Product owner approved removing the data connector and delegated OAuth features (alpha, never released); connector definitions, sync history, delegated OAuth token records, and data_connector resource grants are intentionally discarded.",
+      "repairStrategy": "Idempotent DROP TABLE IF EXISTS statements are restart-safe. Deleted connector configuration and encrypted delegated OAuth tokens cannot be recreated; restore the pre-migration backup and deploy the previous application version if the removal must be reverted. Knowledge sources previously imported by connectors are retained unchanged.",
+      "evidence": {
+        "upgrade-from-current": "dist/ci/drop-data-connectors-upgrade.json",
+        "restart": "dist/ci/drop-data-connectors-restart.json",
+        "rollback-or-forward-repair": "dist/ci/drop-data-connectors-repair.json",
+        "backup-restore": "dist/ci/drop-data-connectors-backup-restore.json",
+        "tenant-purge": "dist/ci/drop-data-connectors-tenant-purge.json",
+        "schema-contract": "dist/ci/drop-data-connectors-schema-contract.json"
+      }
     }
   ],
   "requiredEvidence": [

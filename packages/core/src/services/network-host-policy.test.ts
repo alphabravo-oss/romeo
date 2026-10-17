@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import adversarialCases from "../../../../test/fixtures/network-policy-adversarial-cases.json";
-import { assertConnectorHostAllowed } from "./data-connector-network-policy";
+import { assertConnectorHostAllowed } from "./outbound-network-policy";
 import {
   isBlockedNetworkAddress,
   isPrivateNetworkHost,

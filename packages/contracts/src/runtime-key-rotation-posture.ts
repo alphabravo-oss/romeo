@@ -50,11 +50,9 @@ export const RuntimeKeyRotationPostureReportSchema = z
     generatedAt: timestamp,
     aggregationScope: z.literal("all_organizations"),
     status: z.enum(["attention_required", "ready"]),
-    delegatedOAuth: RuntimeKeyRotationSurfacePostureSchema,
     webhookSigning: RuntimeKeyRotationSurfacePostureSchema,
     redaction: z.strictObject({
       ciphertextReturned: z.literal(false),
-      connectionIdsReturned: z.literal(false),
       deliveryIdsReturned: z.literal(false),
       keyMaterialReturned: z.literal(false),
       payloadsReturned: z.literal(false),

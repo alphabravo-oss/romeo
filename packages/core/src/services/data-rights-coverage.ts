@@ -61,7 +61,7 @@ export function buildDataRightsCoverageReport(input: {
       id: "access_review_export",
       status: "implemented",
       scope:
-        "Role-scoped identity, grant, connector ownership, support access, and worker posture export.",
+        "Role-scoped identity, grant, tool risk, support access, and worker posture export.",
       evidence: [
         "GET /api/v1/access-review/report",
         "GET /api/v1/access-review/report.csv",
@@ -87,7 +87,7 @@ export function buildDataRightsCoverageReport(input: {
       id: "customer_content_export",
       status: "partial",
       scope:
-        "Governed JSON export across authorized org or workspace chat, prompt, knowledge, file, connector, workflow, usage, RAG/vector policy posture, and org-level background-job metadata records with explicit content and bounded object-byte flags.",
+        "Governed JSON export across authorized org or workspace chat, prompt, knowledge, file, workflow, usage, RAG/vector policy posture, and org-level background-job metadata records with explicit content and bounded object-byte flags.",
       evidence: [
         "POST /api/v1/governance/data-exports/preview",
         "POST /api/v1/governance/data-exports/execute",

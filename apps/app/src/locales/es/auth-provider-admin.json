@@ -73,11 +73,9 @@
   "authNoProviderSettings": "No hay configuración de proveedores disponible.",
   "authNoProvidersInCatalog": "No hay proveedores de autenticación en el catálogo.",
   "authNotConfigured": "Sin configurar",
-  "authOff": "Desactivado",
   "authOidcSubject": "Sujeto OIDC",
   "authOidcUserAlreadyDisabled": "El usuario OIDC ya estaba desactivado",
   "authOidcUserDeprovisioned": "Usuario OIDC desaprovisionado",
-  "authOn": "Activado",
   "authPasteClientSecret": "Pega el secreto de cliente del proveedor",
   "authPresentUsersEmails": "Usuarios presentes (correos)",
   "authPresentUsersPlaceholder": "Un correo por línea — los usuarios NO indicados pueden desactivarse",
@@ -118,7 +116,5 @@
   "authWorking": "Procesando",
   "authWorkspaceGroupPrefix": "Prefijo de grupo del espacio de trabajo",
   "authWorkspaceTeamPrefix": "Prefijo de equipo del espacio de trabajo",
-  "authZoneActive": "Activos",
-  "authZoneAvailable": "Disponibles para configurar",
-  "authZoneUnavailable": "Aún no compatibles"
+  "authZoneActive": "Activos"
 }

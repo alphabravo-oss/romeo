@@ -36,7 +36,6 @@ const sections = [
   ["auth-providers", "Authentication"],
   ["webhooks", "Webhooks"],
   ["notification-channels", "Notifications"],
-  ["connected-apps", "Connected apps"],
   ["capabilities", "Capabilities"],
   ["compute", "Compute & trust"],
 ];

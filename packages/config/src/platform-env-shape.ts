@@ -28,11 +28,6 @@ export const platformEnvShape = {
     .default("postgres://romeo:romeo@localhost:5432/romeo"),
   CAPABILITY_PLATFORM_DISABLED_IDS: platformDisabledCapabilityIdsSchema,
   TENANCY_MODE: z.enum(["single", "multi"]).default("single"),
-  DATA_CONNECTOR_LIVE_EVIDENCE_PATH: z.string().default(""),
-  DATA_CONNECTOR_WORKER_ENABLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
   SCHEDULED_TENANT_WORK_OWNER: z
     .enum(["internal", "external"])
     .default("internal"),
@@ -43,10 +38,6 @@ export const platformEnvShape = {
     .min(60)
     .max(86_400)
     .default(900),
-  DATA_CONNECTOR_NETWORK_POLICY_ENABLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
   TOOL_DISPATCH_WORKER_ENABLED: z
     .enum(["true", "false"])
     .default("false")

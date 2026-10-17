@@ -16,10 +16,6 @@ export abstract class InMemoryRepositoryBase {
   };
 
   protected readonly data: SeedData;
-  protected readonly delegatedOAuthRefreshLocks = new Map<
-    string,
-    Promise<void>
-  >();
   protected readonly runEvents = new Map<string, RunEvent[]>();
   protected readonly runEventSequences = new Map<string, number>();
   protected readonly webhookDeliveryLeases = new Map<

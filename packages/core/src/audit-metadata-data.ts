@@ -28,15 +28,6 @@ export const canonicalDataAuditMetadataKeysByAction = {
     "vectorsVerified",
     "workspaceId",
   ],
-  "data_connector.create": ["knowledgeBaseId", "type"],
-  "data_connector.sync": [
-    "createdSourceCount",
-    "deletedSourceCount",
-    "errorCode",
-    "reusedSourceCount",
-    "sourceCount",
-    "syncId",
-  ],
   "file.create": ["mimeType", "purpose", "sizeBytes", "workspaceId"],
   "file.delete": ["mimeType", "purpose", "sizeBytes", "workspaceId"],
   "file.extraction.retry": [

@@ -2,29 +2,6 @@ import { apiJson } from "./compose-smoke-support.mjs";
 
 export const composeWorkerCommands = [
   {
-    name: "data_connector_sync",
-    profile: "workers",
-    service: "data-connector-sync-worker",
-    component: "data-connector-sync",
-    command: [
-      "pnpm",
-      "--filter",
-      "@romeo/cli",
-      "start",
-      "--",
-      "workers",
-      "data-connector-sync",
-      "--workspace",
-      "workspace_default",
-      "--once",
-      "--interval-ms",
-      "0",
-      "--max-connectors",
-      "1",
-    ],
-    numericChecks: ["candidateCount", "syncedCount", "failedCount"],
-  },
-  {
     name: "webhook_retry",
     profile: "workers",
     service: "webhook-retry-worker",

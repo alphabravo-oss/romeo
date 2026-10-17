@@ -97,32 +97,20 @@ export async function collectDataExport(input: {
     data.backgroundJobs = exportedBackgroundJobs.map(exportBackgroundJob);
   }
 
-  const allConnectorSyncs = await input.repository.listDataConnectorSyncs(
-    input.subject.orgId,
-  );
-
   for (const workspace of workspaces) {
-    const [
-      agents,
-      promptTemplates,
-      chats,
-      knowledgeBases,
-      fileObjects,
-      dataConnectors,
-    ] = await Promise.all([
-      input.repository.listAgents(workspace.id),
-      input.repository.listPromptTemplates(input.subject.orgId, workspace.id),
-      input.repository.listChats(workspace.id),
-      input.repository.listKnowledgeBases(workspace.id),
-      input.repository.listFileObjects(input.subject.orgId, workspace.id),
-      input.repository.listDataConnectors(input.subject.orgId, workspace.id),
-    ]);
+    const [agents, promptTemplates, chats, knowledgeBases, fileObjects] =
+      await Promise.all([
+        input.repository.listAgents(workspace.id),
+        input.repository.listPromptTemplates(input.subject.orgId, workspace.id),
+        input.repository.listChats(workspace.id),
+        input.repository.listKnowledgeBases(workspace.id),
+        input.repository.listFileObjects(input.subject.orgId, workspace.id),
+      ]);
     counts.agents += agents.length;
     counts.promptTemplates += promptTemplates.length;
     counts.chats += chats.length;
     counts.knowledgeBases += knowledgeBases.length;
     counts.fileObjects += fileObjects.length;
-    counts.dataConnectors += dataConnectors.length;
     if (input.includeData) {
       data.agents.push(
         ...agents.map((agent) => ({
@@ -323,45 +311,6 @@ export async function collectDataExport(input: {
           objectBytes,
         });
       }
-    }
-
-    const connectorIds = new Set(
-      dataConnectors.map((connector) => connector.id),
-    );
-    const workspaceSyncs = allConnectorSyncs.filter((sync) =>
-      connectorIds.has(sync.connectorId),
-    );
-    counts.dataConnectorSyncs += workspaceSyncs.length;
-    if (input.includeData) {
-      data.dataConnectors.push(
-        ...dataConnectors.map((connector) => ({
-          id: connector.id,
-          workspaceId: connector.workspaceId,
-          knowledgeBaseId: connector.knowledgeBaseId,
-          type: connector.type,
-          name: maybeContent(connector.name, input.request.includeContent),
-          status: connector.status,
-          configKeys: Object.keys(connector.config).sort(),
-          syncIntervalMinutes: connector.syncIntervalMinutes,
-          nextSyncAt: connector.nextSyncAt,
-          createdBy: connector.createdBy,
-          createdAt: connector.createdAt,
-          updatedAt: connector.updatedAt,
-          lastSyncAt: connector.lastSyncAt,
-          syncs: workspaceSyncs
-            .filter((sync) => sync.connectorId === connector.id)
-            .map((sync) => ({
-              id: sync.id,
-              status: sync.status,
-              itemCount: sync.itemCount,
-              sourceIdCount: sync.sourceIds.length,
-              summaryKeys: Object.keys(sync.summary).sort(),
-              errorCode: sync.errorCode,
-              startedAt: sync.startedAt,
-              completedAt: sync.completedAt,
-            })),
-        })),
-      );
     }
   }
 

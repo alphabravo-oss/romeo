@@ -798,21 +798,6 @@ describe("Romeo quota controls", () => {
       }),
     });
     const chat = await chatResponse.json();
-    const connectorCreateResponse = await api.request(
-      "/api/v1/data-connectors",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          workspaceId: "workspace_default",
-          knowledgeBaseId: "kb_default",
-          type: "local_import",
-          name: "Suspension connector",
-          config: {},
-        }),
-      },
-    );
-    const connector = await connectorCreateResponse.json();
     const webhookCreateResponse = await api.request("/api/v1/webhooks", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -936,40 +921,6 @@ describe("Romeo quota controls", () => {
       { method: "POST" },
     );
     const notificationRetryError = await notificationRetryResponse.json();
-    const scheduledConnectorCreateResponse = await api.request(
-      "/api/v1/data-connectors",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          workspaceId: "workspace_default",
-          knowledgeBaseId: "kb_default",
-          type: "local_import",
-          name: "Blocked scheduled connector",
-          config: {},
-          syncIntervalMinutes: 5,
-        }),
-      },
-    );
-    const scheduledConnectorError =
-      await scheduledConnectorCreateResponse.json();
-    const connectorSyncResponse = await api.request(
-      `/api/v1/data-connectors/${connector.data.id}/sync`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          items: [
-            {
-              fileName: "blocked.md",
-              mimeType: "text/markdown",
-              content: "This connector sync should be blocked.",
-            },
-          ],
-        }),
-      },
-    );
-    const connectorSyncError = await connectorSyncResponse.json();
     const uploadResponse = await api.request("/api/v1/files/uploads", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -987,10 +938,6 @@ describe("Romeo quota controls", () => {
       `/api/v1/chats/${chat.data.id}/messages`,
     );
     const messages = await messagesResponse.json();
-    const connectorSyncsResponse = await api.request(
-      `/api/v1/data-connectors/${connector.data.id}/syncs`,
-    );
-    const connectorSyncs = await connectorSyncsResponse.json();
     const filesResponse = await api.request(
       "/api/v1/files?workspaceId=workspace_default",
     );
@@ -998,7 +945,6 @@ describe("Romeo quota controls", () => {
     const auditResponse = await api.request("/api/v1/audit-logs");
     const audit = await auditResponse.json();
 
-    expect(connectorCreateResponse.status).toBe(201);
     expect(webhookCreateResponse.status).toBe(201);
     expect(evalSuiteResponse.status).toBe(201);
     expect(updateResponse.status).toBe(200);
@@ -1063,23 +1009,12 @@ describe("Romeo quota controls", () => {
       action: "worker.enqueue",
       reasonCodes: ["org_suspended"],
     });
-    expect(scheduledConnectorCreateResponse.status).toBe(403);
-    expect(scheduledConnectorError.error.details).toMatchObject({
-      action: "worker.enqueue",
-      reasonCodes: ["org_suspended"],
-    });
-    expect(connectorSyncResponse.status).toBe(403);
-    expect(connectorSyncError.error.details).toMatchObject({
-      action: "connector.sync",
-      reasonCodes: ["org_suspended"],
-    });
     expect(uploadResponse.status).toBe(403);
     expect(uploadError.error.details).toMatchObject({
       action: "file.upload",
       reasonCodes: ["org_suspended"],
     });
     expect(messages.data).toEqual([]);
-    expect(connectorSyncs.data).toEqual([]);
     expect(files.data).toEqual([]);
     expect(
       audit.data.some(

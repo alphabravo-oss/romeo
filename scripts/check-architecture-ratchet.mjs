@@ -246,10 +246,6 @@ const forbiddenPatterns = [
         root,
         "packages/core/src/services/github-oauth2-auth-provider.ts",
       ),
-      resolve(
-        root,
-        "packages/core/src/services/delegated-oauth-github-provider.ts",
-      ),
     ],
     pattern:
       /api\.github\.com\/(?:user|applications)|\/user\/(?:emails|orgs|teams)/u,
@@ -404,25 +400,11 @@ const requiredPatterns = [
     pattern: /from\s+["']stripe["']/u,
   },
   {
-    id: "github_connectors_use_official_sdk",
-    files: [
-      resolve(
-        root,
-        "packages/core/src/services/github-data-connector-executor.ts",
-      ),
-    ],
-    pattern: /from\s+["']octokit["']/u,
-  },
-  {
     id: "github_identity_uses_official_sdk",
     files: [
       resolve(
         root,
         "packages/core/src/services/github-oauth2-auth-provider.ts",
-      ),
-      resolve(
-        root,
-        "packages/core/src/services/delegated-oauth-github-provider.ts",
       ),
     ],
     pattern: /from\s+["']octokit["']/u,
@@ -436,13 +418,6 @@ const requiredPatterns = [
       ),
     ],
     pattern: /from\s+["']octokit["']/u,
-  },
-  {
-    id: "s3_connectors_use_official_sdk",
-    files: [
-      resolve(root, "packages/core/src/services/s3-data-connector-reader.ts"),
-    ],
-    pattern: /from\s+["']@aws-sdk\/client-s3["']/u,
   },
   {
     id: "s3_presigning_uses_official_sdk",
@@ -513,19 +488,6 @@ const requiredPatterns = [
     files: [
       resolve(root, "apps/app/src/features/sessions/mutations.ts"),
       resolve(root, "apps/app/src/features/sessions/queries.ts"),
-    ],
-    pattern: /from\s+["']@romeo\/api-client\/generated\/sdk["']/u,
-  },
-  {
-    id: "delegated_oauth_routes_use_authoritative_contracts",
-    files: [resolve(root, "packages/core/src/http/routes/delegated-oauth.ts")],
-    pattern: /from\s+["']@romeo\/contracts["']/u,
-  },
-  {
-    id: "delegated_oauth_browser_client_uses_generated_sdk",
-    files: [
-      resolve(root, "apps/app/src/features/delegated-oauth/mutations.ts"),
-      resolve(root, "apps/app/src/features/delegated-oauth/queries.ts"),
     ],
     pattern: /from\s+["']@romeo\/api-client\/generated\/sdk["']/u,
   },

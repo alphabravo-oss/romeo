@@ -144,51 +144,11 @@
           "type": "string",
           "enum": ["s3"]
         },
-        "DATA_CONNECTOR_EXECUTION_DRIVER": {
-          "type": "string",
-          "enum": [
-            "disabled",
-            "website-fetch",
-            "github-fetch",
-            "s3-fetch",
-            "managed-fetch"
-          ]
-        },
-        "DATA_CONNECTOR_EGRESS_POLICY": {
-          "type": "string",
-          "enum": ["allow_public", "require_allowlist"]
-        },
-        "DATA_CONNECTOR_FETCH_ALLOWED_HOSTS": {
-          "type": "string"
-        },
-        "DATA_CONNECTOR_FETCH_MAX_BYTES": {
-          "oneOf": [
-            { "type": "integer", "minimum": 1 },
-            { "type": "string", "pattern": "^[1-9][0-9]*$" }
-          ]
-        },
-        "DATA_CONNECTOR_FETCH_TIMEOUT_MS": {
-          "oneOf": [
-            { "type": "integer", "minimum": 1 },
-            { "type": "string", "pattern": "^[1-9][0-9]*$" }
-          ]
-        },
         "WEB_SEARCH_TIMEOUT_MS": {
           "oneOf": [
             { "type": "integer", "minimum": 1, "maximum": 300000 },
             { "type": "string", "pattern": "^[1-9][0-9]*$" }
           ]
-        },
-        "DATA_CONNECTOR_LIVE_EVIDENCE_PATH": {
-          "type": "string"
-        },
-        "DATA_CONNECTOR_WORKER_ENABLED": {
-          "type": "string",
-          "enum": ["true", "false"]
-        },
-        "DATA_CONNECTOR_NETWORK_POLICY_ENABLED": {
-          "type": "string",
-          "enum": ["true", "false"]
         },
         "TOOL_DISPATCH_WORKER_ENABLED": {
           "type": "string",
@@ -958,13 +918,6 @@
             "dedicated_vector_store_per_org"
           ]
         },
-        "DELEGATED_OAUTH_GITHUB_CLIENT_ID": {
-          "type": "string"
-        },
-        "DELEGATED_OAUTH_GITHUB_SCOPES": {
-          "type": "string",
-          "pattern": "^$|^[A-Za-z0-9_:./-]+(,[A-Za-z0-9_:./-]+)*$"
-        },
         "TOOL_OPERATION_EXECUTION_DRIVER": {
           "type": "string",
           "enum": ["disabled", "http-fetch"]
@@ -988,21 +941,6 @@
         "TOOL_DISPATCH_PAYLOAD_STORE_PREFIX": {
           "type": "string",
           "minLength": 1
-        },
-        "DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS": {
-          "oneOf": [
-            { "type": "integer", "minimum": 0, "maximum": 5 },
-            { "type": "string", "pattern": "^[0-5]$" }
-          ]
-        },
-        "DATA_CONNECTOR_FETCH_RETRY_BACKOFF_MS": {
-          "oneOf": [
-            { "type": "integer", "minimum": 0, "maximum": 60000 },
-            {
-              "type": "string",
-              "pattern": "^(0|[1-9][0-9]{0,3}|[1-5][0-9]{4}|60000)$"
-            }
-          ]
         }
       }
     },
@@ -1031,7 +969,6 @@
       "properties": {
         "podSecurityContext": { "$ref": "#/$defs/podSecurityContext" },
         "securityContext": { "$ref": "#/$defs/containerSecurityContext" },
-        "dataConnectorSync": { "$ref": "#/$defs/workerToggle" },
         "webhookRetry": { "$ref": "#/$defs/workerToggle" },
         "notificationRetry": { "$ref": "#/$defs/workerToggle" },
         "retentionEnforce": { "$ref": "#/$defs/workerToggle" },

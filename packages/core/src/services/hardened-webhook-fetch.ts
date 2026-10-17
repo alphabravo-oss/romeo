@@ -4,7 +4,7 @@ import {
   isRedirectResponse,
   type WebsiteConnectorEgressPolicy,
   type WebsiteConnectorHostLookup,
-} from "./data-connector-network-policy";
+} from "./outbound-network-policy";
 import { dnsPinnedFetch, type DnsPinnedFetch } from "./dns-pinned-fetch";
 
 export interface HardenedWebhookFetchOptions {

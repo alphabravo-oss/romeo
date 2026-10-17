@@ -43,7 +43,6 @@ const publicPaths = new Set([
   "/api/v1/auth/ldap/login",
   "/api/v1/auth/local/login",
   "/api/v1/auth/local/mfa/verify",
-  "/api/v1/delegated-oauth/callback",
   "/api/v1/device-authorizations/refresh",
   "/api/v1/health",
   "/api/v1/health/object-storage",

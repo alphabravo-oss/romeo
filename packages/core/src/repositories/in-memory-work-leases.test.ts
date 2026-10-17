@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import type { DataConnectorSync } from "../domain/entities";
 import { InMemoryRomeoRepository } from "./in-memory";
 
 const orgId = "org_lease";
@@ -9,81 +8,6 @@ const knowledgeBaseId = "kb_lease";
 const initialAt = "2026-08-23T12:00:00.000Z";
 
 describe("durable work-lease repository contract", () => {
-  it("fences expired connector owners and accepts only the takeover result", async () => {
-    const repository = new InMemoryRomeoRepository();
-    await repository.createDataConnector({
-      id: "connector_lease",
-      orgId,
-      workspaceId,
-      knowledgeBaseId,
-      type: "rss",
-      name: "Lease feed",
-      config: {},
-      status: "active",
-      nextSyncAt: initialAt,
-      createdBy: "user_lease",
-      createdAt: initialAt,
-      updatedAt: initialAt,
-    });
-
-    const first = await repository.claimDataConnectorSync({
-      connectorId: "connector_lease",
-      orgId,
-      leaseOwner: "worker_a",
-      leaseToken: "lease_a",
-      now: initialAt,
-      leaseExpiresAt: "2026-08-23T12:05:00.000Z",
-    });
-    expect(first?.syncLease?.fencingToken).toBe(1);
-    expect(
-      await repository.claimDataConnectorSync({
-        connectorId: "connector_lease",
-        orgId,
-        leaseOwner: "worker_b",
-        leaseToken: "lease_b_early",
-        now: "2026-08-23T12:04:59.000Z",
-        leaseExpiresAt: "2026-08-23T12:10:00.000Z",
-      }),
-    ).toBeUndefined();
-
-    const takeover = await repository.claimDataConnectorSync({
-      connectorId: "connector_lease",
-      orgId,
-      leaseOwner: "worker_b",
-      leaseToken: "lease_b",
-      now: "2026-08-23T12:05:00.000Z",
-      leaseExpiresAt: "2026-08-23T12:10:00.000Z",
-    });
-    expect(takeover?.syncLease?.fencingToken).toBe(2);
-    await repository.createDataConnectorSync(
-      connectorSync("sync_a", 1, "lease_a"),
-    );
-    await repository.createDataConnectorSync(
-      connectorSync("sync_b", 2, "lease_b"),
-    );
-
-    expect(
-      await repository.finishDataConnectorSync({
-        connector: first!,
-        sync: connectorSync("sync_a", 1, "lease_a", "completed"),
-        fencingToken: 1,
-        leaseOwner: "worker_a",
-        leaseToken: "lease_a",
-        now: "2026-08-23T12:05:01.000Z",
-      }),
-    ).toBeUndefined();
-    expect(
-      await repository.finishDataConnectorSync({
-        connector: takeover!,
-        sync: connectorSync("sync_b", 2, "lease_b", "completed"),
-        fencingToken: 2,
-        leaseOwner: "worker_b",
-        leaseToken: "lease_b",
-        now: "2026-08-23T12:05:01.000Z",
-      }),
-    ).toMatchObject({ id: "sync_b", status: "completed" });
-  });
-
   it("renews extraction ownership and prevents a stale worker replacing chunks", async () => {
     const repository = new InMemoryRomeoRepository();
     await repository.createKnowledgeSource({
@@ -221,32 +145,6 @@ describe("durable work-lease repository contract", () => {
     });
   });
 });
-
-function connectorSync(
-  id: string,
-  fencingToken: number,
-  leaseToken: string,
-  status: "completed" | "running" = "running",
-): DataConnectorSync {
-  return {
-    id,
-    orgId,
-    workspaceId,
-    knowledgeBaseId,
-    connectorId: "connector_lease",
-    status,
-    createdBy: "user_lease",
-    itemCount: status === "completed" ? 1 : 0,
-    sourceIds: [],
-    summary: {},
-    startedAt: initialAt,
-    ...(status === "completed"
-      ? { completedAt: "2026-08-23T12:05:01.000Z" }
-      : {}),
-    fencingToken,
-    leaseToken,
-  };
-}
 
 function knowledgeChunk(id: string, content: string) {
   return {

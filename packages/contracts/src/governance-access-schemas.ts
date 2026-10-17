@@ -18,7 +18,6 @@ export const ResourceGrantSchema = z.strictObject({
     "chat",
     "run",
     "tool",
-    "data_connector",
     "file",
     "knowledge_base",
     "prompt_template",
@@ -49,8 +48,6 @@ export const AccessReviewSummarySchema = z.strictObject({
   activeServiceAccountApiKeyCount: count,
   activeUserSessionCount: count,
   resourceGrantCount: count,
-  dataConnectorCount: count,
-  delegatedOAuthConnectionCount: count,
   toolConnectorCount: count,
   riskyToolConnectorCount: count,
   pendingSupportRequestCount: count,
@@ -58,13 +55,6 @@ export const AccessReviewSummarySchema = z.strictObject({
   runningWorkerJobCount: count,
   queuedWorkerJobCount: count,
 });
-export const DataConnectorTypeSchema = z.enum([
-  "local_import",
-  "github",
-  "s3",
-  "website",
-  "rss",
-]);
 export const AccessReviewReportSchema = z
   .strictObject({
     schema: z.literal("romeo.access-review-report.v1"),
@@ -111,45 +101,6 @@ export const AccessReviewReportSchema = z
       }),
     ),
     resourceGrants: z.array(ResourceGrantSchema),
-    connectorOwnership: z.strictObject({
-      dataConnectors: z.array(
-        z.strictObject({
-          id: identifier,
-          workspaceId: identifier,
-          knowledgeBaseId: identifier,
-          type: DataConnectorTypeSchema,
-          status: z.string(),
-          createdBy: identifier,
-          configKeys: z.array(z.string()),
-          sourceAccessMode: z.string().optional(),
-          delegatedOAuthConnectionId: identifier.optional(),
-          syncIntervalMinutes: count.optional(),
-          nextSyncAt: timestamp.optional(),
-          lastSyncAt: timestamp.optional(),
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        }),
-      ),
-      delegatedOAuthConnections: z.array(
-        z.strictObject({
-          id: identifier,
-          workspaceId: identifier,
-          userId: identifier,
-          providerId: z.literal("github"),
-          connectorType: DataConnectorTypeSchema,
-          providerAccountLoginConfigured: z.boolean(),
-          providerAccountLoginHash: z.string().optional(),
-          scopeCount: count,
-          status: z.string(),
-          accessTokenExpiresAt: timestamp.optional(),
-          refreshTokenExpiresAt: timestamp.optional(),
-          lastUsedAt: timestamp.optional(),
-          revokedAt: timestamp.optional(),
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        }),
-      ),
-    }),
     toolRisk: z.strictObject({
       connectors: z.array(
         z.strictObject({

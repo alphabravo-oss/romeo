@@ -13,7 +13,6 @@ import { executeCollaborationCommand } from "./collaboration-commands";
 import { executeDeviceCommand } from "./device-commands";
 import { executeEvalCommand } from "./eval-commands";
 import { executeGovernanceCommand } from "./governance-commands";
-import { executeDataConnectorCommand } from "./data-connector-commands";
 import { executeKnowledgeCommand } from "./knowledge-commands";
 import { executeManagedModelCommand } from "./managed-model-commands";
 import { executeNotificationCommand } from "./notification-commands";
@@ -74,12 +73,6 @@ export async function executeCommand(context: CommandContext): Promise<number> {
   if (notificationCommand !== undefined) return notificationCommand;
   const voiceCommand = executeVoiceCommand(area, action, context);
   if (voiceCommand !== undefined) return voiceCommand;
-  const dataConnectorCommand = executeDataConnectorCommand(
-    area,
-    action,
-    context,
-  );
-  if (dataConnectorCommand !== undefined) return dataConnectorCommand;
   const deviceCommand = executeDeviceCommand(area, action, context);
   if (deviceCommand !== undefined) return deviceCommand;
   const sessionCommand = executeSessionCommand(area, action, context);
@@ -176,12 +169,6 @@ Usage:
   romeo devices create --name NAME --scopes me:read,chats:read [--ttl-days 90]
   romeo devices refresh # token: ROMEO_DEVICE_REFRESH_TOKEN or ROMEO_DEVICE_REFRESH_TOKEN_FILE
   romeo devices revoke --device ID
-  romeo connectors list [--workspace ID]
-  romeo connectors create-local --workspace ID --kb ID [--name NAME] [--source-access-mode connector_owner]
-  romeo connectors create-website --workspace ID --kb ID --url https://docs.example.com [--name NAME] [--sync-interval-minutes 60] [--source-access-mode connector_owner]
-  romeo connectors create-rss --workspace ID --kb ID --url https://docs.example.com/feed.xml [--name NAME] [--max-items 20] [--sync-interval-minutes 60] [--source-access-mode connector_owner]
-  romeo connectors sync --connector ID
-  romeo connectors sync-local --connector ID --file path --mime-type text/markdown
   romeo browser-automation browser-task-claim [--lease-seconds 300]
   romeo browser-automation browser-task-renew --job ID [--lease-seconds 300]
   romeo browser-automation browser-artifact-upload --job ID --file path --type screenshot|trace --content-type image/png
@@ -230,7 +217,6 @@ Usage:
   romeo knowledge upload --kb ID --file path --mime-type text/markdown
   romeo knowledge extract --kb ID --source ID
   romeo knowledge index-embeddings --kb ID --provider ID --model MODEL [--batch-size 16]
-  romeo connectors create-s3 --workspace ID --kb ID --bucket BUCKET [--prefix PREFIX] [--region us-east-1] [--secret-ref env://S3_TOKEN] [--source-access-mode connector_owner]
   romeo webhooks create --url https://hooks.example/romeo --events run.completed,run.failed
   romeo webhooks test --webhook ID
   romeo webhooks deliveries [--webhook ID]
@@ -240,7 +226,6 @@ Usage:
   romeo workers tool-dispatch [--payload-file payloads.json] [--secret-resolver disabled|env|vault|aws-sm|gcp-sm|azure-kv|cloud] [--once] [--interval-ms 10000] [--max-iterations N] [--max-jobs N] [--lease-seconds 300] [--timeout-ms 10000] [--max-bytes 1000000]
   romeo workers browser-automation --runner-url https://browser-runner.internal/tasks [--once] [--interval-ms 10000] [--max-iterations N] [--max-jobs N] [--lease-seconds 300] [--timeout-ms 30000] [--max-bytes 20000]
   romeo workers knowledge-extraction [--once] [--interval-ms 60000] [--max-iterations N] [--max-sources N] [--lease-seconds 300]
-  romeo workers data-connector-sync [--workspace ID] [--once] [--interval-ms 60000] [--max-iterations N] [--max-connectors N]
   romeo workers voice-catalog-sync [--once] [--interval-ms 86400000] [--max-iterations N]
   romeo workers retention-enforce [--once] [--interval-ms 86400000] [--max-iterations N]
   romeo workers billing-entitlement-reconcile [--once] [--interval-ms 300000] [--max-iterations N]

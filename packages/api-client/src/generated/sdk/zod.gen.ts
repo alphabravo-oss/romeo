@@ -903,7 +903,6 @@ export const zManagedSecretReference = z.object({
   orgId: z.string().min(1).max(300).optional(),
   purpose: z.enum([
     "auth_provider_client_secret",
-    "data_connector_credential",
     "model_provider_credential",
     "tool_connector_credential",
   ]),
@@ -919,7 +918,6 @@ export const zCreateManagedSecretRequest = z.object({
   orgId: z.string().min(1).max(120).optional(),
   purpose: z.enum([
     "auth_provider_client_secret",
-    "data_connector_credential",
     "model_provider_credential",
     "tool_connector_credential",
   ]),
@@ -1783,7 +1781,6 @@ export const zWorkspaceExportDocument = z.object({
     chats: z.int().gte(0),
     messages: z.int().gte(0),
     knowledgeBases: z.int().gte(0),
-    dataConnectors: z.int().gte(0),
     workflows: z.int().gte(0),
   }),
   resources: z.object({
@@ -1806,14 +1803,6 @@ export const zWorkspaceExportDocument = z.object({
         id: z.string().min(1).max(300),
         createdAt: z.iso.datetime(),
         updatedAt: z.iso.datetime(),
-      }),
-    ),
-    dataConnectors: z.array(
-      z.object({
-        id: z.string().min(1).max(300),
-        knowledgeBaseId: z.string().min(1).max(300),
-        status: z.string(),
-        type: z.string(),
       }),
     ),
     workflows: z.array(
@@ -3503,11 +3492,9 @@ export const zRuntimeKeyRotationPostureReport = z.object({
   generatedAt: z.iso.datetime(),
   aggregationScope: z.enum(["all_organizations"]),
   status: z.enum(["attention_required", "ready"]),
-  delegatedOAuth: zRuntimeKeyRotationSurfacePosture,
   webhookSigning: zRuntimeKeyRotationSurfacePosture,
   redaction: z.object({
     ciphertextReturned: z.literal(false),
-    connectionIdsReturned: z.literal(false),
     deliveryIdsReturned: z.literal(false),
     keyMaterialReturned: z.literal(false),
     payloadsReturned: z.literal(false),
@@ -6639,7 +6626,6 @@ export const zResourceGrant = z.object({
     "chat",
     "run",
     "tool",
-    "data_connector",
     "file",
     "knowledge_base",
     "prompt_template",
@@ -6883,401 +6869,6 @@ export const zRequestContentPolicyApprovalRequest = z.object({
 export const zResolveContentPolicyApprovalRequest = z.object({
   decision: z.enum(["approve", "deny"]),
   runId: z.string().min(1).max(300).optional(),
-});
-
-export const zDataConnectorPostureReport = z.object({
-  schema: z.enum(["romeo.data-connector-posture.v1"]),
-  generatedAt: z.iso.datetime(),
-  orgId: z.string().min(1).max(300),
-  status: z.enum(["attention_required", "ready"]),
-  runtime: z.object({
-    executionDriver: z.enum([
-      "disabled",
-      "website-fetch",
-      "github-fetch",
-      "s3-fetch",
-      "managed-fetch",
-    ]),
-    egressPolicy: z.enum(["allow_public", "require_allowlist"]),
-    managedFetchEnabled: z.boolean(),
-    allowedHostRuleCount: z.int().gte(0),
-    fetchLimits: z.object({
-      maxBytes: z.int().gte(0),
-      retryAttempts: z.int().gte(0),
-      retryBackoffMs: z.int().gte(0),
-      timeoutMs: z.int().gte(0),
-    }),
-    secretResolver: z.object({
-      driver: z.enum([
-        "disabled",
-        "env",
-        "vault",
-        "aws-sm",
-        "gcp-sm",
-        "azure-kv",
-        "cloud",
-      ]),
-      managedSecretConfigured: z.boolean(),
-      externalValueResolverConfigured: z.boolean(),
-    }),
-    credentialPosture: z.object({
-      delegatedOAuthGithubConfigured: z.boolean(),
-      githubDeploymentTokenConfigured: z.boolean(),
-      s3DeploymentCredentialsConfigured: z.boolean(),
-      s3EndpointConfigured: z.boolean(),
-    }),
-  }),
-  deployment: z.object({
-    liveEvidencePathConfigured: z.boolean(),
-    networkPolicyConfigured: z.boolean(),
-    workerEnabled: z.boolean(),
-  }),
-  connectors: z.object({
-    active: z.int().gte(0),
-    disabled: z.int().gte(0),
-    due: z.int().gte(0),
-    managed: z.int().gte(0),
-    scheduled: z.int().gte(0),
-    total: z.int().gte(0),
-    byType: z.object({
-      local_import: z.int().gte(0).optional(),
-      github: z.int().gte(0).optional(),
-      s3: z.int().gte(0).optional(),
-      website: z.int().gte(0).optional(),
-      rss: z.int().gte(0).optional(),
-      confluence: z.int().gte(0).optional(),
-      jira: z.int().gte(0).optional(),
-      linear: z.int().gte(0).optional(),
-      notion: z.int().gte(0).optional(),
-      slack: z.int().gte(0).optional(),
-    }),
-  }),
-  syncs: z.object({
-    completed: z.int().gte(0),
-    failed: z.int().gte(0),
-    latestCompletedAt: z.iso.datetime().nullable(),
-    latestFailedAt: z.iso.datetime().nullable(),
-    running: z.int().gte(0),
-    total: z.int().gte(0),
-  }),
-  liveEvidence: z.object({
-    configured: z.boolean(),
-    source: z.enum(["configured_file", "not_configured"]),
-    status: z.enum(["failed", "invalid", "not_configured", "satisfied"]),
-    schemaVersion: z.enum(["romeo.data-connector-live-evidence.v1"]).optional(),
-    evidenceStatus: z
-      .enum(["failed", "passed", "planned", "unknown"])
-      .optional(),
-    mode: z.enum(["dry-run", "live", "unknown"]).optional(),
-    deployment: z
-      .enum(["compose", "kubernetes", "target", "unknown"])
-      .optional(),
-    generatedAt: z.iso.datetime().optional(),
-    checks: z.object({
-      managed_connector_sync_exercised: z.boolean(),
-      worker_cni_egress_enforced: z.boolean(),
-      dns_private_address_denied: z.boolean(),
-      secret_ref_resolution_verified: z.boolean(),
-      worker_crash_retry_or_requeue_verified: z.boolean(),
-      sync_log_redaction: z.boolean(),
-      sanitized_readback_verified: z.boolean(),
-    }),
-    failureCodes: z.array(z.string()),
-    invalidReason: z
-      .enum(["invalid_json", "read_failed", "schema_mismatch"])
-      .optional(),
-    summary: z.object({
-      delegatedOAuthConnectorCount: z.int().gte(0),
-      deniedPrivateTargetCount: z.int().gte(0),
-      failedSyncCount: z.int().gte(0),
-      managedConnectorTypeCount: z.int().gte(0),
-      podLogScanCount: z.int().gte(0),
-      requeuedSyncCount: z.int().gte(0),
-      secretRefConnectorCount: z.int().gte(0),
-      successfulSyncCount: z.int().gte(0),
-      syncAttemptCount: z.int().gte(0),
-      workerLogScanCount: z.int().gte(0),
-    }),
-    redaction: z.object({
-      rawAllowedHostsReturned: z.boolean(),
-      rawConnectorConfigReturned: z.boolean(),
-      rawConnectorContentReturned: z.boolean(),
-      rawEndpointUrlsReturned: z.boolean(),
-      rawEvidencePathsReturned: z.boolean(),
-      rawSecretRefsReturned: z.boolean(),
-      secretValuesReturned: z.boolean(),
-      tokenValuesReturned: z.boolean(),
-      rawLogLinesReturned: z.boolean(),
-    }),
-  }),
-  redaction: z.object({
-    rawAllowedHostsReturned: z.boolean(),
-    rawConnectorConfigReturned: z.boolean(),
-    rawConnectorContentReturned: z.boolean(),
-    rawEndpointUrlsReturned: z.boolean(),
-    rawEvidencePathsReturned: z.boolean(),
-    rawSecretRefsReturned: z.boolean(),
-    secretValuesReturned: z.boolean(),
-    tokenValuesReturned: z.boolean(),
-    evidenceFileBodiesReturned: z.literal(false),
-  }),
-  warnings: z.array(
-    z.enum([
-      "data_connector_driver_disabled",
-      "data_connector_failed_syncs_present",
-      "data_connector_live_evidence_invalid",
-      "data_connector_live_evidence_required",
-      "data_connector_network_policy_not_configured",
-      "data_connector_scheduled_syncs_without_worker",
-      "data_connector_worker_not_enabled",
-    ]),
-  ),
-});
-
-export const zDataConnectorType = z.enum([
-  "local_import",
-  "github",
-  "s3",
-  "website",
-  "rss",
-  "confluence",
-  "jira",
-  "linear",
-  "notion",
-  "slack",
-]);
-
-export const zDataConnector = z.object({
-  id: z.string().min(1).max(300),
-  orgId: z.string().min(1).max(300),
-  workspaceId: z.string().min(1).max(300),
-  knowledgeBaseId: z.string().min(1).max(300),
-  type: zDataConnectorType,
-  name: z.string().min(1),
-  config: z.record(z.string(), z.unknown()),
-  status: z.enum(["active", "disabled"]),
-  syncIntervalMinutes: z.int().gte(5).lte(43200).optional(),
-  nextSyncAt: z.iso.datetime().optional(),
-  createdBy: z.string().min(1).max(300),
-  createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
-  lastSyncAt: z.iso.datetime().optional(),
-});
-
-export const zCreateDataConnectorRequest = z.object({
-  workspaceId: z.string().min(1).max(300),
-  knowledgeBaseId: z.string().min(1).max(300),
-  type: zDataConnectorType,
-  name: z.string().min(1),
-  syncIntervalMinutes: z.int().gte(5).lte(43200).optional(),
-  config: z.record(z.string(), z.unknown()).optional().default({}),
-});
-
-export const zDataConnectorCatalogReport = z.object({
-  executionDriver: z.enum([
-    "disabled",
-    "website-fetch",
-    "github-fetch",
-    "s3-fetch",
-    "managed-fetch",
-  ]),
-  egressPolicy: z.enum(["allow_public", "require_allowlist"]),
-  allowedHostRuleCount: z.int().gte(0),
-  fetchLimits: z.object({
-    maxBytes: z.int().gte(0),
-    retryAttempts: z.int().gte(0),
-    retryBackoffMs: z.int().gte(0),
-    timeoutMs: z.int().gte(0),
-  }),
-  secretResolver: z.object({
-    driver: z.enum([
-      "disabled",
-      "env",
-      "vault",
-      "aws-sm",
-      "gcp-sm",
-      "azure-kv",
-      "cloud",
-    ]),
-    managedSecretConfigured: z.boolean(),
-    externalValueResolverConfigured: z.boolean(),
-  }),
-  connectors: z.array(
-    z.object({
-      type: zDataConnectorType,
-      displayName: z.string(),
-      description: z.string(),
-      implementationStatus: z.enum(["implemented", "planned"]),
-      syncMode: z.enum(["inline_items", "managed_fetch"]),
-      executionBoundary: z.enum(["api_ingest", "bounded_runtime_fetch"]),
-      supportsScheduledSync: z.boolean(),
-      supportsDelegatedOAuth: z.boolean(),
-      credentialSources: z.array(
-        z.enum([
-          "none",
-          "deployment_secret",
-          "connector_secret_ref",
-          "delegated_oauth",
-        ]),
-      ),
-      requiredConfigKeys: z.array(z.string()),
-      optionalConfigKeys: z.array(z.string()),
-      egress: z.object({
-        required: z.boolean(),
-        allowlistSupported: z.boolean(),
-        hostSource: z.enum([
-          "none",
-          "connector_url",
-          "github_api",
-          "s3_endpoint",
-        ]),
-        privateNetworkDeniedByExecutor: z.boolean(),
-      }),
-      limits: z.object({
-        maxConfigItems: z.int().gte(0).optional(),
-        maxInlineItems: z.int().gte(0).optional(),
-        maxInlineItemBytes: z.int().gte(0).optional(),
-      }),
-      securityControls: z.array(z.string()),
-      runtime: z.object({
-        syncEnabled: z.boolean(),
-        blockedReasons: z.array(z.string()),
-        warnings: z.array(z.string()),
-        credentialPosture: z.object({
-          none: z.boolean().optional(),
-          deployment_secret: z.boolean().optional(),
-          connector_secret_ref: z.boolean().optional(),
-          delegated_oauth: z.boolean().optional(),
-        }),
-      }),
-    }),
-  ),
-});
-
-export const zDataConnectorSync = z.object({
-  id: z.string().min(1).max(300),
-  orgId: z.string().min(1).max(300),
-  workspaceId: z.string().min(1).max(300),
-  knowledgeBaseId: z.string().min(1).max(300),
-  connectorId: z.string().min(1).max(300),
-  status: z.enum(["running", "completed", "failed"]),
-  createdBy: z.string().min(1).max(300),
-  itemCount: z.int().gte(0),
-  sourceIds: z.array(z.string().min(1).max(300)),
-  summary: z.record(z.string(), z.unknown()),
-  errorCode: z.string().optional(),
-  startedAt: z.iso.datetime(),
-  completedAt: z.iso.datetime().optional(),
-});
-
-export const zSyncDataConnectorRequest = z.object({
-  items: z
-    .array(
-      z.object({
-        fileName: z.string().min(1),
-        mimeType: z.string().min(1),
-        content: z.string().min(1).max(200000),
-        sizeBytes: z.int().gt(0).optional(),
-      }),
-    )
-    .max(20)
-    .optional(),
-});
-
-export const zDelegatedOAuthProvider = z.object({
-  authorizationHost: z.string(),
-  configured: z.boolean(),
-  connectorTypes: z.array(zDataConnectorType),
-  defaultScopes: z.array(z.string()),
-  displayName: z.string(),
-  id: z.enum(["github"]),
-  pkceRequired: z.boolean(),
-  tokenHost: z.string(),
-});
-
-export const zDelegatedOAuthConnectionPostureCounts = z.object({
-  active: z.int().gte(0),
-  expiredAccessToken: z.int().gte(0),
-  expiringAccessToken: z.int().gte(0),
-  reauthorizationRequired: z.int().gte(0),
-  revoked: z.int().gte(0),
-  total: z.int().gte(0),
-  unused: z.int().gte(0),
-});
-
-export const zDelegatedOAuthConnectorTypePosture = z.object({
-  connectorType: zDataConnectorType,
-  connectionCounts: zDelegatedOAuthConnectionPostureCounts,
-});
-
-export const zDelegatedOAuthProviderPosture = z.object({
-  authorizationHost: z.string(),
-  configured: z.boolean(),
-  connectorTypes: z.array(zDataConnectorType),
-  connectionCounts: zDelegatedOAuthConnectionPostureCounts,
-  defaultScopeCount: z.int().gte(0),
-  displayName: z.string(),
-  id: z.enum(["github"]),
-  pkceRequired: z.literal(true),
-  tokenHost: z.string(),
-});
-
-export const zDelegatedOAuthPostureReport = z.object({
-  connectorTypes: z.array(zDelegatedOAuthConnectorTypePosture),
-  generatedAt: z.iso.datetime(),
-  orgId: z.string().min(1).max(300),
-  providers: z.array(zDelegatedOAuthProviderPosture),
-  redaction: z.object({
-    rawAccessTokensReturned: z.literal(false),
-    rawClientSecretsReturned: z.literal(false),
-    rawProviderAccountIdsReturned: z.literal(false),
-    rawProviderAccountLoginsReturned: z.literal(false),
-    rawProviderUrlsReturned: z.literal(false),
-    rawRefreshTokensReturned: z.literal(false),
-  }),
-  schema: z.enum(["romeo.delegated-oauth-posture.v1"]),
-  status: z.enum(["attention_required", "healthy"]),
-  warnings: z.array(z.string()),
-});
-
-export const zDelegatedOAuthStartResult = z.object({
-  authorizationUrl: z.url(),
-  connectorType: zDataConnectorType,
-  expiresAt: z.iso.datetime(),
-  provider: zDelegatedOAuthProvider,
-  scopes: z.array(z.string()),
-  workspaceId: z.string().min(1).max(300),
-});
-
-export const zStartDelegatedOAuthRequest = z.object({
-  providerId: z.enum(["github"]),
-  workspaceId: z.string().min(1).max(300),
-  connectorType: zDataConnectorType,
-  scopes: z.array(z.string().min(1).max(120)).max(20).optional(),
-  returnTo: z.string().max(500).optional(),
-});
-
-export const zDelegatedOAuthConnection = z.object({
-  id: z.string().min(1).max(300),
-  workspaceId: z.string().min(1).max(300),
-  userId: z.string().min(1).max(300),
-  providerId: z.enum(["github"]),
-  connectorType: zDataConnectorType,
-  providerAccountHash: z.string(),
-  providerAccountLoginConfigured: z.boolean(),
-  providerAccountLoginHash: z.string().optional(),
-  providerRevocationErrorCode: z.string().optional(),
-  providerRevocationStatus: z
-    .enum(["failed", "skipped", "succeeded"])
-    .optional(),
-  scopes: z.array(z.string()),
-  status: z.enum(["active", "reauthorization_required", "revoked"]),
-  accessTokenExpiresAt: z.iso.datetime().optional(),
-  refreshTokenExpiresAt: z.iso.datetime().optional(),
-  lastUsedAt: z.iso.datetime().optional(),
-  revokedAt: z.iso.datetime().optional(),
-  createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
 });
 
 /**
@@ -8307,8 +7898,6 @@ export const zDataExportPreview = z.object({
     fileObjects: z.int().gte(0),
     fileObjectBytesIncluded: z.int().gte(0),
     knowledgeSourceBytesIncluded: z.int().gte(0),
-    dataConnectors: z.int().gte(0),
-    dataConnectorSyncs: z.int().gte(0),
     workflows: z.int().gte(0),
     workflowRuns: z.int().gte(0),
     usageEvents: z.int().gte(0),
@@ -8355,8 +7944,6 @@ export const zDataExportDocument = z.object({
     fileObjects: z.int().gte(0),
     fileObjectBytesIncluded: z.int().gte(0),
     knowledgeSourceBytesIncluded: z.int().gte(0),
-    dataConnectors: z.int().gte(0),
-    dataConnectorSyncs: z.int().gte(0),
     workflows: z.int().gte(0),
     workflowRuns: z.int().gte(0),
     usageEvents: z.int().gte(0),
@@ -8375,7 +7962,6 @@ export const zDataExportDocument = z.object({
     chats: z.array(z.record(z.string(), z.unknown())),
     knowledgeBases: z.array(z.record(z.string(), z.unknown())),
     fileObjects: z.array(z.record(z.string(), z.unknown())),
-    dataConnectors: z.array(z.record(z.string(), z.unknown())),
     workflows: z.array(z.record(z.string(), z.unknown())),
     usageEvents: z.array(z.record(z.string(), z.unknown())),
     backgroundJobs: z.array(z.record(z.string(), z.unknown())),
@@ -8409,8 +7995,6 @@ export const zDataExportPackageJob = z.object({
     fileObjects: z.int().gte(0),
     fileObjectBytesIncluded: z.int().gte(0),
     knowledgeSourceBytesIncluded: z.int().gte(0),
-    dataConnectors: z.int().gte(0),
-    dataConnectorSyncs: z.int().gte(0),
     workflows: z.int().gte(0),
     workflowRuns: z.int().gte(0),
     usageEvents: z.int().gte(0),
@@ -8475,8 +8059,6 @@ export const zDataExportPackageList = z.object({
         fileObjects: z.int().gte(0),
         fileObjectBytesIncluded: z.int().gte(0),
         knowledgeSourceBytesIncluded: z.int().gte(0),
-        dataConnectors: z.int().gte(0),
-        dataConnectorSyncs: z.int().gte(0),
         workflows: z.int().gte(0),
         workflowRuns: z.int().gte(0),
         usageEvents: z.int().gte(0),
@@ -8570,8 +8152,6 @@ export const zAccessReviewReport = z.object({
     activeServiceAccountApiKeyCount: z.int().gte(0),
     activeUserSessionCount: z.int().gte(0),
     resourceGrantCount: z.int().gte(0),
-    dataConnectorCount: z.int().gte(0),
-    delegatedOAuthConnectionCount: z.int().gte(0),
     toolConnectorCount: z.int().gte(0),
     riskyToolConnectorCount: z.int().gte(0),
     pendingSupportRequestCount: z.int().gte(0),
@@ -8623,7 +8203,6 @@ export const zAccessReviewReport = z.object({
         "chat",
         "run",
         "tool",
-        "data_connector",
         "file",
         "knowledge_base",
         "prompt_template",
@@ -8636,51 +8215,6 @@ export const zAccessReviewReport = z.object({
       permission: z.enum(["read", "write", "use", "run"]),
     }),
   ),
-  connectorOwnership: z.object({
-    dataConnectors: z.array(
-      z.object({
-        id: z.string().min(1).max(300),
-        workspaceId: z.string().min(1).max(300),
-        knowledgeBaseId: z.string().min(1).max(300),
-        type: z.enum(["local_import", "github", "s3", "website", "rss"]),
-        status: z.string(),
-        createdBy: z.string().min(1).max(300),
-        configKeys: z.array(z.string()),
-        sourceAccessMode: z.string().optional(),
-        delegatedOAuthConnectionId: z.string().min(1).max(300).optional(),
-        syncIntervalMinutes: z.int().gte(0).optional(),
-        nextSyncAt: z.iso.datetime().optional(),
-        lastSyncAt: z.iso.datetime().optional(),
-        createdAt: z.iso.datetime(),
-        updatedAt: z.iso.datetime(),
-      }),
-    ),
-    delegatedOAuthConnections: z.array(
-      z.object({
-        id: z.string().min(1).max(300),
-        workspaceId: z.string().min(1).max(300),
-        userId: z.string().min(1).max(300),
-        providerId: z.enum(["github"]),
-        connectorType: z.enum([
-          "local_import",
-          "github",
-          "s3",
-          "website",
-          "rss",
-        ]),
-        providerAccountLoginConfigured: z.boolean(),
-        providerAccountLoginHash: z.string().optional(),
-        scopeCount: z.int().gte(0),
-        status: z.string(),
-        accessTokenExpiresAt: z.iso.datetime().optional(),
-        refreshTokenExpiresAt: z.iso.datetime().optional(),
-        lastUsedAt: z.iso.datetime().optional(),
-        revokedAt: z.iso.datetime().optional(),
-        createdAt: z.iso.datetime(),
-        updatedAt: z.iso.datetime(),
-      }),
-    ),
-  }),
   toolRisk: z.object({
     connectors: z.array(
       z.object({
@@ -14595,115 +14129,6 @@ export const zContentPolicyApprovalsResolveResponse = z.object({
 });
 
 /**
- * Data connector posture
- */
-export const zDataConnectorsGetPostureResponse = z.object({
-  data: zDataConnectorPostureReport,
-});
-
-export const zDataConnectorsListQuery = z.object({
-  workspaceId: z.string().min(1).max(300).optional(),
-});
-
-/**
- * Data connectors
- */
-export const zDataConnectorsListResponse = z.object({
-  data: z.array(zDataConnector),
-});
-
-export const zDataConnectorsCreateBody = zCreateDataConnectorRequest;
-
-/**
- * Data connector
- */
-export const zDataConnectorsCreateResponse = z.object({
-  data: zDataConnector,
-});
-
-/**
- * Data connector catalog
- */
-export const zDataConnectorsGetCatalogResponse = z.object({
-  data: zDataConnectorCatalogReport,
-});
-
-export const zDataConnectorsSyncBody = zSyncDataConnectorRequest;
-
-export const zDataConnectorsSyncPath = z.object({
-  connectorId: z.string().min(1).max(300),
-});
-
-/**
- * Data connector sync
- */
-export const zDataConnectorsSyncResponse = z.object({
-  data: zDataConnectorSync,
-});
-
-export const zDataConnectorsListSyncsPath = z.object({
-  connectorId: z.string().min(1).max(300),
-});
-
-/**
- * Data connector syncs
- */
-export const zDataConnectorsListSyncsResponse = z.object({
-  data: z.array(zDataConnectorSync),
-});
-
-/**
- * Delegated OAuth providers
- */
-export const zDelegatedOAuthListProvidersResponse = z.object({
-  data: z.array(zDelegatedOAuthProvider),
-});
-
-/**
- * Delegated OAuth posture
- */
-export const zDelegatedOAuthGetPostureResponse = z.object({
-  data: zDelegatedOAuthPostureReport,
-});
-
-export const zDelegatedOAuthStartBody = zStartDelegatedOAuthRequest;
-
-/**
- * Delegated OAuth authorization redirect URL
- */
-export const zDelegatedOAuthStartResponse = z.object({
-  data: zDelegatedOAuthStartResult,
-});
-
-export const zDelegatedOAuthListConnectionsQuery = z.object({
-  workspaceId: z.string().min(1).max(300).optional(),
-});
-
-/**
- * Delegated OAuth connections
- */
-export const zDelegatedOAuthListConnectionsResponse = z.object({
-  data: z.array(zDelegatedOAuthConnection),
-});
-
-export const zDelegatedOAuthRevokeConnectionPath = z.object({
-  connectionId: z.string().min(1).max(300),
-});
-
-/**
- * Revoked delegated OAuth connection
- */
-export const zDelegatedOAuthRevokeConnectionResponse = z.object({
-  data: zDelegatedOAuthConnection,
-});
-
-export const zDelegatedOAuthCompleteQuery = z.object({
-  code: z.string().optional(),
-  state: z.string().optional(),
-  error: z.string().optional(),
-});
-
-/**
  * Device authorizations
  */
 export const zDeviceAuthorizationsListResponse = z.object({
@@ -16072,7 +15497,6 @@ export const zGovernanceListAccessReviewGrantsResponse = z.object({
         "chat",
         "run",
         "tool",
-        "data_connector",
         "file",
         "knowledge_base",
         "prompt_template",
