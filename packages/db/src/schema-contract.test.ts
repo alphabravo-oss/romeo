@@ -247,6 +247,7 @@ describe("durable baseline schema contract", () => {
       "org_id",
       "group_id",
       "user_id",
+      "source",
       "created_at",
     ]);
   });

@@ -34,6 +34,7 @@ export const canonicalSecurityAuditMetadataKeysByAction = {
     "signedResponseRequired",
     "subjectHash",
   ],
+  "auth.sso.member.revoke": ["membershipType", "providerKind", "userId"],
   "directory_sync.apply": [
     "disableMissingUsers",
     "groupRemovalCount",

@@ -62,6 +62,8 @@ export abstract class InMemoryRepositoryBase {
 }
 
 function restoreSeedData(target: SeedData, snapshot: SeedData): void {
+  for (const key of Object.keys(target) as Array<keyof SeedData>)
+    if (!(key in snapshot)) delete target[key];
   for (const key of Object.keys(snapshot) as Array<keyof SeedData>)
     target[key] = snapshot[key] as never;
 }

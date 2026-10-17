@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -24,11 +25,17 @@ export const resourceGrants = pgTable(
     principalType: principalType("principal_type").notNull(),
     principalId: text("principal_id").notNull(),
     permission: resourcePermission("permission").notNull(),
+    // Identity-provider mapping that created this grant; null for grants
+    // created manually, by SCIM, or before migration 0047.
+    source: text("source"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => ({
+    resourceGrantsSourceIdx: index("resource_grants_source_idx")
+      .on(table.orgId, table.principalId, table.source)
+      .where(sql`${table.source} is not null`),
     resourceGrantLookupIdx: index("resource_grant_lookup_idx").on(
       table.orgId,
       table.resourceType,

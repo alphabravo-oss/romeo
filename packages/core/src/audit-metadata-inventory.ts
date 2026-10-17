@@ -97,6 +97,7 @@ export const auditMetadataKeysByAction = {
   "auth.oauth2.login.success": [],
   "auth.saml.login.failure": [],
   "auth.saml.login.success": [],
+  "auth.sso.member.revoke": [],
   "billing.entitlements_reconciled": [],
   "billing.external_event_ignored": [],
   "billing.external_event_synced": [],

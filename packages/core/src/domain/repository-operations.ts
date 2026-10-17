@@ -17,6 +17,7 @@ import type {
   BillingPlan,
   DataDeletionPlan,
   DataDeletionResourceType,
+  MembershipSourceOptions,
   PromptTemplate,
   QuotaBucket,
   ResourceFavorite,
@@ -388,7 +389,15 @@ export interface RepositoryOperationsCapability {
   ): Promise<BillingEventReceipt>;
   upsertBillingPlan(plan: BillingPlan): Promise<BillingPlan>;
   listResourceGrants(orgId: string): Promise<ResourceGrant[]>;
-  createResourceGrant(grant: ResourceGrant): Promise<ResourceGrant>;
+  listResourceGrantsBySource(
+    orgId: string,
+    principalId: string,
+    source: string,
+  ): Promise<ResourceGrant[]>;
+  createResourceGrant(
+    grant: ResourceGrant,
+    options?: MembershipSourceOptions,
+  ): Promise<ResourceGrant>;
   deleteResourceGrant(grantId: string): Promise<ResourceGrant | undefined>;
   deleteResourceGrantsForPrincipal(
     orgId: string,

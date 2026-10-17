@@ -90,6 +90,7 @@ export type TenantIdentityRepositoryFragment = Pick<
   | "getGroup"
   | "getSsoOidcSettings"
   | "listGroupMemberships"
+  | "listGroupMembershipsBySource"
   | "listGroups"
   | "listUsers"
   | "listUsersPage"
@@ -434,6 +435,7 @@ export type AccessRepositoryFragment = Pick<
   | "deleteResourceGrant"
   | "deleteResourceGrantsForPrincipal"
   | "listResourceGrants"
+  | "listResourceGrantsBySource"
 >;
 
 export type CapabilityAssignmentRepositoryFragment = Pick<

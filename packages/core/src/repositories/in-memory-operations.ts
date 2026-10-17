@@ -1,5 +1,3 @@
-import type * as Auth from "@romeo/auth";
-
 import type * as E from "../domain/entities";
 import type * as R from "../domain/repository";
 import {
@@ -17,7 +15,6 @@ import {
   readWorkerLease,
   renewWorkerLease,
 } from "./in-memory-operation-helpers";
-import { listSeedResourceGrants } from "./resource-grants";
 import { InMemoryContentDeletionRepository } from "./in-memory-content-deletion";
 import { assertUsageEventTaxonomy } from "../usage-taxonomy-validation";
 import { assertUsageEventUpdate } from "../usage-taxonomy-update";
@@ -434,46 +431,6 @@ export abstract class InMemoryOperationsRepository extends InMemoryContentDeleti
     if (index >= 0) this.data.billingPlans[index] = plan;
     else this.data.billingPlans.push(plan);
     return plan;
-  }
-
-  async listResourceGrants(orgId: string): Promise<Auth.ResourceGrant[]> {
-    return listSeedResourceGrants(this.data, orgId);
-  }
-
-  async createResourceGrant(
-    grant: Auth.ResourceGrant,
-  ): Promise<Auth.ResourceGrant> {
-    return append(this.data.grants, grant);
-  }
-
-  async deleteResourceGrant(
-    grantId: string,
-  ): Promise<Auth.ResourceGrant | undefined> {
-    return removeById(this.data.grants, grantId);
-  }
-
-  async deleteResourceGrantsForPrincipal(
-    orgId: string,
-    principalType: Auth.PrincipalType,
-    principalId: string,
-  ): Promise<Auth.ResourceGrant[]> {
-    const orgGrantIds = new Set(
-      listSeedResourceGrants(this.data, orgId)
-        .filter(
-          (grant) =>
-            grant.principalType === principalType &&
-            grant.principalId === principalId,
-        )
-        .map((grant) => grant.id),
-    );
-    const deleted: Auth.ResourceGrant[] = [];
-    for (let index = this.data.grants.length - 1; index >= 0; index -= 1) {
-      const grant = this.data.grants[index];
-      if (grant !== undefined && orgGrantIds.has(grant.id)) {
-        deleted.push(...this.data.grants.splice(index, 1));
-      }
-    }
-    return deleted.reverse();
   }
 }
 

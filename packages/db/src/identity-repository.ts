@@ -255,12 +255,35 @@ export class PgIdentityRepository {
     return rows.map(toGroupMembershipRecord);
   }
 
+  async listGroupMembershipsBySource(
+    orgId: string,
+    userId: string,
+    source: string,
+  ): Promise<GroupMembershipRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(groupMemberships)
+      .where(
+        and(
+          eq(groupMemberships.orgId, orgId),
+          eq(groupMemberships.userId, userId),
+          eq(groupMemberships.source, source),
+        ),
+      )
+      .orderBy(asc(groupMemberships.groupId));
+    return rows.map(toGroupMembershipRecord);
+  }
+
   async createGroupMembership(
     membership: GroupMembershipRecord,
+    options: { source?: string } = {},
   ): Promise<GroupMembershipRecord> {
     const [row] = await this.db
       .insert(groupMemberships)
-      .values(toGroupMembershipInsert(membership))
+      .values({
+        ...toGroupMembershipInsert(membership),
+        source: options.source ?? null,
+      })
       .onConflictDoNothing({
         target: [groupMemberships.groupId, groupMemberships.userId],
       })

@@ -29,6 +29,7 @@ import {
   payloadString,
 } from "./run-tool-service";
 import type { WebhookEmitter } from "./webhook-service";
+import { runDetached } from "./run-detached";
 import { WorkerSupervisor } from "./worker-supervisor";
 
 export class RunTerminalService {
@@ -118,7 +119,7 @@ export class RunTerminalService {
       this.options.dispatchPayloadStore,
       payloadReferences,
     );
-    void this.drain(run.orgId);
+    this.drainDetached(run.orgId);
     this.drainQueue(run.chatId);
     return persisted.run ?? (await this.repository.getRun(runId)) ?? run;
   }
@@ -159,12 +160,19 @@ export class RunTerminalService {
         data: event.data as Record<string, unknown>,
       },
     });
-    void this.drain(run.orgId);
+    this.drainDetached(run.orgId);
     this.drainQueue(run.chatId);
   }
 
   persist(input: PersistTerminalRunInput): Promise<RunRecord | undefined> {
     return persistTerminalRun(this.repository, this.sequencer, input);
+  }
+
+  /** Fire-and-forget drain; the outbox worker retries anything left behind. */
+  drainDetached(orgId: string): void {
+    void runDetached("run.terminal_outbox.drain", () => this.drain(orgId), {
+      context: { orgId },
+    });
   }
 
   drain(orgId: string, signal?: AbortSignal): Promise<number> {

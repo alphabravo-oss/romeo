@@ -60,6 +60,7 @@ describe("database migrations", () => {
       "0043_content_deletion_outbox.sql",
       "0044_background_job_claim_indexes.sql",
       "0045_drop_data_connectors.sql",
+      "0047_sso_membership_source.sql",
     ]);
 
     const sql = readFileSync(join(migrationsDir, sqlFiles[0] ?? ""), "utf8");

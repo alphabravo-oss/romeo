@@ -21,6 +21,7 @@ import type {
   SamlAuthRequest,
   ManagedModelCustomizationPolicyRecord,
   ManagedModelPreferenceRecord,
+  MembershipSourceOptions,
   Organization,
   ProviderInstance,
   ServiceAccount,
@@ -62,7 +63,15 @@ export interface RepositoryIdentityCapability {
     groupId?: string,
     userId?: string,
   ): Promise<GroupMembership[]>;
-  createGroupMembership(membership: GroupMembership): Promise<GroupMembership>;
+  listGroupMembershipsBySource(
+    orgId: string,
+    userId: string,
+    source: string,
+  ): Promise<GroupMembership[]>;
+  createGroupMembership(
+    membership: GroupMembership,
+    options?: MembershipSourceOptions,
+  ): Promise<GroupMembership>;
   deleteGroupMembership(
     groupId: string,
     userId: string,
