@@ -2210,7 +2210,11 @@ export type UpdateManagedModelCustomizationPolicyRequest = {
 
 export type ManagedModelPreferences = {
   communicationStyle?:
-    "balanced" | "concise" | "detailed" | "formal" | "friendly";
+    | "balanced"
+    | "concise"
+    | "detailed"
+    | "formal"
+    | "friendly";
   responseLength?: "short" | "standard" | "long";
   language?: string;
   customInstructions?: string;
@@ -2220,7 +2224,11 @@ export type ManagedModelPreferences = {
 
 export type UpdateManagedModelPreferencesRequest = {
   communicationStyle?:
-    "balanced" | "concise" | "detailed" | "formal" | "friendly";
+    | "balanced"
+    | "concise"
+    | "detailed"
+    | "formal"
+    | "friendly";
   responseLength?: "short" | "standard" | "long";
   language?: string;
   customInstructions?: string;
@@ -2458,7 +2466,9 @@ export type UserNotification = {
   type: NotificationType;
   actorId: string;
   resourceType:
-    "chat" | "support_impersonation_request" | "support_impersonation_session";
+    | "chat"
+    | "support_impersonation_request"
+    | "support_impersonation_session";
   resourceId: string;
   metadata: {
     [key: string]: unknown;
@@ -2514,7 +2524,12 @@ export type NotificationDeliveryChannel = {
 };
 
 export type NotificationDeliveryChannelType =
-  "email" | "mobile_push" | "pagerduty" | "slack" | "teams" | "webhook";
+  | "email"
+  | "mobile_push"
+  | "pagerduty"
+  | "slack"
+  | "teams"
+  | "webhook";
 
 export type CreateNotificationChannelRequest =
   | {
@@ -3025,7 +3040,11 @@ export type PostgresOperationalPostureReport = {
       | "verify_ca"
       | "verify_full";
     tlsVerification:
-      "certificate_authority" | "full" | "none" | "opportunistic" | "unknown";
+      | "certificate_authority"
+      | "full"
+      | "none"
+      | "opportunistic"
+      | "unknown";
     warningCodes: Array<
       | "postgres_database_url_invalid"
       | "postgres_hosted_tls_not_configured"
@@ -3189,7 +3208,10 @@ export type ProviderModelCapabilityReport = {
   };
   operationallyUsable: boolean;
   operationalReason:
-    "available" | "model_disabled" | "model_unavailable" | "provider_disabled";
+    | "available"
+    | "model_disabled"
+    | "model_unavailable"
+    | "provider_disabled";
 };
 
 export type ProviderKindCatalogEntry = {
@@ -5130,7 +5152,10 @@ export type CapabilityLayer =
   | "action";
 
 export type CapabilityAssignmentState =
-  "inherit" | "enabled" | "disabled" | "required";
+  | "inherit"
+  | "enabled"
+  | "disabled"
+  | "required";
 
 export type CapabilityConfiguration = {
   maxImagesPerRequest?: number;
@@ -5408,7 +5433,11 @@ export type CapabilityAdminOverview = {
 };
 
 export type CapabilityScopeType =
-  "organization" | "workspace" | "agent" | "group" | "user";
+  | "organization"
+  | "workspace"
+  | "agent"
+  | "group"
+  | "user";
 
 export type CapabilityAssignment = {
   id: string;
@@ -6086,7 +6115,11 @@ export type KnowledgeAclPrefilter = {
 export type TrustPosture = {
   keys: "verified" | "failed" | "stale" | "not_configured" | "not_applicable";
   residency:
-    "verified" | "failed" | "stale" | "not_configured" | "not_applicable";
+    | "verified"
+    | "failed"
+    | "stale"
+    | "not_configured"
+    | "not_applicable";
   dlp: "verified" | "failed" | "stale" | "not_configured" | "not_applicable";
   acl: "verified" | "failed" | "stale" | "not_configured" | "not_applicable";
   auditExport: {
@@ -6127,7 +6160,12 @@ export type ImageJobDecision = {
     | "file_not_ready";
   jobId?: string;
   state?:
-    "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed";
+    | "queued"
+    | "running"
+    | "cancelling"
+    | "cancelled"
+    | "completed"
+    | "failed";
 };
 
 export type ServerTableSavedView = {
@@ -6739,7 +6777,10 @@ export type DataRightsCoverageReport = {
   deletionWorkflows: Array<{
     id: string;
     status:
-      "implemented" | "partial" | "planned" | "external_retention_required";
+      | "implemented"
+      | "partial"
+      | "planned"
+      | "external_retention_required";
     scope: string;
     evidence: Array<string>;
     limitations: Array<string>;
@@ -6747,7 +6788,10 @@ export type DataRightsCoverageReport = {
   exportWorkflows: Array<{
     id: string;
     status:
-      "implemented" | "partial" | "planned" | "external_retention_required";
+      | "implemented"
+      | "partial"
+      | "planned"
+      | "external_retention_required";
     scope: string;
     evidence: Array<string>;
     limitations: Array<string>;
@@ -6757,11 +6801,20 @@ export type DataRightsCoverageReport = {
     label: string;
     containsCustomerContent: boolean;
     deletionCoverage:
-      "implemented" | "partial" | "planned" | "external_retention_required";
+      | "implemented"
+      | "partial"
+      | "planned"
+      | "external_retention_required";
     exportCoverage:
-      "implemented" | "partial" | "planned" | "external_retention_required";
+      | "implemented"
+      | "partial"
+      | "planned"
+      | "external_retention_required";
     retentionCoverage:
-      "implemented" | "partial" | "planned" | "external_retention_required";
+      | "implemented"
+      | "partial"
+      | "planned"
+      | "external_retention_required";
     deletionEvidence: Array<string>;
     exportEvidence: Array<string>;
     limitations: Array<string>;
@@ -7135,7 +7188,12 @@ export type AccessReviewReport = {
     connectors: Array<{
       id: string;
       type:
-        "built_in" | "openapi" | "mcp" | "webhook" | "browser" | "enterprise";
+        | "built_in"
+        | "openapi"
+        | "mcp"
+        | "webhook"
+        | "browser"
+        | "enterprise";
       name: string;
       enabled: boolean;
       riskLevel: string;
@@ -7262,7 +7320,10 @@ export type CreateKnowledgeBaseRequest = {
 };
 
 export type KnowledgeBaseScope =
-  "user_private" | "workspace" | "org" | "shared";
+  | "user_private"
+  | "workspace"
+  | "org"
+  | "shared";
 
 export type UpdateKnowledgeBaseRequest = {
   name?: string;
@@ -7396,7 +7457,10 @@ export type TieredRetrievalHit = RetrievalHit & {
 
 export type KnowledgeRetrievalRoute = {
   mode:
-    "external_vector" | "legacy_rag_provider" | "lexical_fallback" | "pgvector";
+    | "external_vector"
+    | "legacy_rag_provider"
+    | "lexical_fallback"
+    | "pgvector";
   vectorStoreDriver: "none" | "pgvector" | "qdrant";
   externalVectorStoreAttempted: boolean;
   externalVectorStoreUsed: boolean;
@@ -7749,7 +7813,12 @@ export type OidcLoginStart = {
   expiresAt: string;
   orgId: string;
   providerId?:
-    "generic-oidc" | "keycloak" | "google" | "azure-ad" | "okta" | "auth0";
+    | "generic-oidc"
+    | "keycloak"
+    | "google"
+    | "azure-ad"
+    | "okta"
+    | "auth0";
 };
 
 export type OAuth2LoginStart = {
@@ -8294,7 +8363,8 @@ export type ToolDispatchRequestClaimResult = {
 export type ClaimToolDispatchRequest = {
   leaseSeconds?: number;
   payloadStorage?:
-    "external_worker_secret_store_required" | "managed_encrypted_object_store";
+    | "external_worker_secret_store_required"
+    | "managed_encrypted_object_store";
 };
 
 export type ToolDispatchRequestExpiryResult = {
@@ -8895,7 +8965,11 @@ export type WorkflowRun = {
 };
 
 export type WorkflowRunStatus =
-  "cancelled" | "completed" | "failed" | "waiting_approval" | "waiting_run";
+  | "cancelled"
+  | "completed"
+  | "failed"
+  | "waiting_approval"
+  | "waiting_run";
 
 export type WorkflowStepRun = {
   stepId: string;
@@ -8917,7 +8991,11 @@ export type WorkflowStepType =
   | "tool_approval";
 
 export type WorkflowStepRunStatus =
-  "completed" | "failed" | "pending" | "waiting_approval" | "waiting_run";
+  | "completed"
+  | "failed"
+  | "pending"
+  | "waiting_approval"
+  | "waiting_run";
 
 export type StartWorkflowRunRequest = {
   input?: {
@@ -8941,7 +9019,8 @@ export type WorkerBrokerClaimResponse = {
 export type WorkerBrokerClaimRequest = {
   leaseSeconds?: number;
   payloadStorage?:
-    "external_worker_secret_store_required" | "managed_encrypted_object_store";
+    | "external_worker_secret_store_required"
+    | "managed_encrypted_object_store";
   workerId: string;
 };
 
@@ -15402,7 +15481,13 @@ export type OperationalGovernanceListAuditLogsData = {
     action?: string;
     actorId?: string;
     category?:
-      "security" | "admin" | "access" | "data" | "chat" | "run" | "system";
+      | "security"
+      | "admin"
+      | "access"
+      | "data"
+      | "chat"
+      | "run"
+      | "system";
     from?: string;
     includeNoise?: "true" | "false";
     outcome?: "success" | "failure";
@@ -15518,7 +15603,13 @@ export type OperationalGovernanceExportAuditLogsData = {
     action?: string;
     actorId?: string;
     category?:
-      "security" | "admin" | "access" | "data" | "chat" | "run" | "system";
+      | "security"
+      | "admin"
+      | "access"
+      | "data"
+      | "chat"
+      | "run"
+      | "system";
     from?: string;
     includeNoise?: "true" | "false";
     outcome?: "success" | "failure";
@@ -16827,7 +16918,11 @@ export type ProvidersListModelsData = {
     providerId?: string;
     q?: string;
     sort?:
-      "availability" | "contextWindow" | "displayName" | "enabled" | "name";
+      | "availability"
+      | "contextWindow"
+      | "displayName"
+      | "enabled"
+      | "name";
   };
   url: "/models";
 };
@@ -17144,7 +17239,12 @@ export type ModelsProbeResponses = {
       probedAt: string;
       results: Array<{
         feature:
-          "streaming" | "tools" | "json" | "vision" | "audio" | "reasoning";
+          | "streaming"
+          | "tools"
+          | "json"
+          | "vision"
+          | "audio"
+          | "reasoning";
         advertised: boolean;
         probed: boolean;
         outcome: "match" | "mismatch";
@@ -32270,7 +32370,12 @@ export type FederatedAuthStartOidcLoginData = {
   query?: {
     orgId?: string;
     providerId?:
-      "generic-oidc" | "keycloak" | "google" | "azure-ad" | "okta" | "auth0";
+      | "generic-oidc"
+      | "keycloak"
+      | "google"
+      | "azure-ad"
+      | "okta"
+      | "auth0";
     returnTo?: string;
   };
   url: "/auth/oidc/start";
