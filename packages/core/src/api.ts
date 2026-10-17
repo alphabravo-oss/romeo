@@ -47,7 +47,6 @@ import { registerJobRoutes } from "./http/routes/jobs";
 import { registerImageRoutes } from "./http/routes/images";
 import { registerNotificationRoutes } from "./http/routes/notifications";
 import { registerOpenApiDocsRoute } from "./http/routes/openapi-docs";
-import { registerOpenWebUiRoutes } from "./http/routes/openwebui";
 import { registerOrganizationRoutes } from "./http/routes/organizations";
 import { registerPostgresOperationalPostureRoutes } from "./http/routes/postgres-operational-posture";
 import { registerProviderRoutes } from "./http/routes/providers";
@@ -233,9 +232,6 @@ export function createRomeoApiRuntime(
   registerPromptTemplateRoutes(app);
   registerAgentRoutes(app);
   registerAgentKnowledgeRoutes(app);
-  if (env.OPENWEBUI_COMPATIBILITY_ENABLED) {
-    registerOpenWebUiRoutes(app);
-  }
   registerPostgresOperationalPostureRoutes(app);
   registerChatRoutes(app);
   registerChatExperienceRoutes(app);
@@ -262,9 +258,7 @@ export function createRomeoApiRuntime(
   registerKnowledgeRoutes(app);
   registerNotificationRoutes(app);
   registerOrganizationRoutes(app);
-  registerOpenApiDocsRoute(app, {
-    openWebUiCompatibilityEnabled: env.OPENWEBUI_COMPATIBILITY_ENABLED,
-  });
+  registerOpenApiDocsRoute(app);
   registerQuotaRoutes(app);
   registerReadinessRoutes(app);
   registerRunRoutes(app);

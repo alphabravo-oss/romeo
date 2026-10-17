@@ -180,7 +180,6 @@ env:
   ROMEO_ENV: production
   APP_ORIGIN: https://romeo.example.com
   REPOSITORY_DRIVER: postgres
-  OPENWEBUI_COMPATIBILITY_ENABLED: "false"
   TENANCY_MODE: single
   DATA_CONNECTOR_LIVE_EVIDENCE_PATH: ""
   DATA_CONNECTOR_WORKER_ENABLED: "false"

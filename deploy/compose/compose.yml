@@ -34,7 +34,6 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
       REPOSITORY_DRIVER: postgres
       DATABASE_URL: ${DATABASE_URL:-postgres://romeo:romeo@postgres:5432/romeo}
-      OPENWEBUI_COMPATIBILITY_ENABLED: ${OPENWEBUI_COMPATIBILITY_ENABLED:-false}
       TENANCY_MODE: ${TENANCY_MODE:-single}
       BILLING_ENABLED: ${BILLING_ENABLED:-false}
       SCHEDULED_TENANT_WORK_OWNER: ${SCHEDULED_TENANT_WORK_OWNER:-internal}

@@ -99,7 +99,6 @@ function configurationPosture(env) {
       "webhook",
     ],
     OBJECT_STORE_DRIVER: ["memory", "s3"],
-    OPENWEBUI_COMPATIBILITY_ENABLED: ["true", "false"],
     MODEL_CATALOG_SYNC_ENABLED: ["true", "false"],
     REPOSITORY_DRIVER: ["memory", "postgres"],
     SECRET_RESOLVER_DRIVER: [

@@ -3,13 +3,10 @@ import { getApiDocsRoute, getOpenApiDocumentRoute } from "@romeo/contracts";
 import { openApiJsonDocument } from "../openapi-document";
 import type { RomeoApi } from "../context";
 
-export function registerOpenApiDocsRoute(
-  app: RomeoApi,
-  options: { openWebUiCompatibilityEnabled?: boolean } = {},
-): void {
+export function registerOpenApiDocsRoute(app: RomeoApi): void {
   app.openapi(getApiDocsRoute, (context) => context.html(openApiDocsHtml, 200));
   app.openapi(getOpenApiDocumentRoute, (context) =>
-    context.json(openApiJsonDocument(options), 200),
+    context.json(openApiJsonDocument(), 200),
   );
 }
 

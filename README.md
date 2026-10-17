@@ -158,8 +158,8 @@ with an OpenAPI spec, a TypeScript SDK, a dependency-free Python SDK, and a
 
 ### Intentional product non-goals
 
-These are Romeo product boundaries, not backlog items. Do not add them for
-Open WebUI parity or treat their absence as a feature gap:
+These are Romeo product boundaries, not backlog items. Do not add them to match
+other chat products or treat their absence as a feature gap:
 
 - **Code execution:** Romeo does not execute model-generated code or provide an
   arbitrary code interpreter, terminal, notebook, or artifact execution sandbox.

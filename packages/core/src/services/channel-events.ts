@@ -1,38 +1,35 @@
 import { AuthorizationError, assertScope, type AuthSubject } from "@romeo/auth";
-import type {
-  OpenWebUiChannelEvent,
-  OpenWebUiChannelEventDataType,
-} from "@romeo/contracts";
 
 import type { CollaborationChannel } from "../domain/entities";
 import type { RomeoRepository } from "../domain/repository";
 import { createId } from "../ids";
-import type { OpenWebUiChannelAccess } from "./openwebui-channel-access";
-import { channelEventBusKey } from "./openwebui-channel-metadata";
-import {
-  toChannelResponse,
-  toChannelUserResponse,
-} from "./openwebui-channel-responses";
-import { toEpochSeconds } from "./openwebui-compatibility-values";
+import type {
+  ChannelStoreEvent,
+  ChannelEventType,
+} from "./channel-store-types";
+import type { ChannelAccess } from "./channel-access";
+import { channelEventBusKey } from "./channel-metadata";
+import { toChannelResponse, toChannelUserResponse } from "./channel-responses";
+import { toEpochSeconds } from "./channel-values";
 import { InMemoryRealtimeEventBus } from "./realtime-event-bus";
 
-export interface OpenWebUiChannelEventSubscription {
-  connectedEvent: OpenWebUiChannelEvent;
+export interface ChannelStoreEventSubscription {
+  connectedEvent: ChannelStoreEvent;
   unsubscribe: () => void;
 }
 
-export class OpenWebUiChannelEvents {
+export class ChannelEvents {
   constructor(
     private readonly repository: RomeoRepository,
-    private readonly access: OpenWebUiChannelAccess,
-    private readonly events: InMemoryRealtimeEventBus<OpenWebUiChannelEvent>,
+    private readonly access: ChannelAccess,
+    private readonly events: InMemoryRealtimeEventBus<ChannelStoreEvent>,
   ) {}
 
   async subscribe(
     subject: AuthSubject,
     channelId: string,
-    handler: (event: OpenWebUiChannelEvent) => void,
-  ): Promise<OpenWebUiChannelEventSubscription> {
+    handler: (event: ChannelStoreEvent) => void,
+  ): Promise<ChannelStoreEventSubscription> {
     assertScope(subject, "chats:read");
     assertUserSubject(subject);
     const channel = await this.access.authorizedChannel(
@@ -59,7 +56,7 @@ export class OpenWebUiChannelEvents {
     subject: AuthSubject,
     channel: CollaborationChannel,
     messageId: string | null,
-    type: OpenWebUiChannelEventDataType,
+    type: ChannelEventType,
     data: unknown,
   ): Promise<void> {
     this.events.publish(
@@ -72,9 +69,9 @@ export class OpenWebUiChannelEvents {
     subject: AuthSubject,
     channel: CollaborationChannel,
     messageId: string | null,
-    type: OpenWebUiChannelEventDataType,
+    type: ChannelEventType,
     data: unknown,
-  ): Promise<OpenWebUiChannelEvent> {
+  ): Promise<ChannelStoreEvent> {
     const [members, users, messageRecords] = await Promise.all([
       this.repository.listCollaborationChannelMembers(
         subject.orgId,
@@ -86,7 +83,7 @@ export class OpenWebUiChannelEvents {
     const userById = new Map(users.map((user) => [user.id, user]));
     const user = users.find((candidate) => candidate.id === subject.id);
     return {
-      id: createId("openwebui_channel_event"),
+      id: createId("channel_event"),
       channel_id: channel.id,
       message_id: messageId,
       created_at: toEpochSeconds(new Date().toISOString()),
@@ -107,7 +104,7 @@ export class OpenWebUiChannelEvents {
 function assertUserSubject(subject: AuthSubject): void {
   if (subject.type !== "user") {
     throw new AuthorizationError(
-      "OpenWebUI chat compatibility is available only for user subjects.",
+      "Channels are available only for user subjects.",
     );
   }
 }

@@ -70,7 +70,6 @@ import type { OidcPkceService } from "./oidc-pkce-service";
 import type { OpenAiChatCompletionsService } from "./openai-chat-completions-service";
 import type { OpenAiEmbeddingsService } from "./openai-embeddings-service";
 import type { OpenAiModelsService } from "./openai-models-service";
-import type { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
 import type { PostgresOperationalPostureService } from "./postgres-operational-posture-service";
 import type { PromptTemplateService } from "./prompt-template-service";
 import type { ProviderService } from "./provider-service";
@@ -167,7 +166,6 @@ export interface RomeoServices {
   openAiChatCompletions: OpenAiChatCompletionsService;
   openAiEmbeddings: OpenAiEmbeddingsService;
   openAiModels: OpenAiModelsService;
-  openWebUiCompatibility: OpenWebUiCompatibilityService;
   postgresOperationalPosture: PostgresOperationalPostureService;
   providers: ProviderService;
   providerCapabilityReports: ProviderCapabilityReportService;

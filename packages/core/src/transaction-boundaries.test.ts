@@ -55,7 +55,7 @@ import type {
 } from "./services/ldap-directory-client";
 import { ManagedSecretService } from "./services/managed-secret-service";
 import { oidcUserId } from "./services/oidc-client";
-import { OpenWebUiCompatibilityService } from "./services/openwebui-compatibility-service";
+import { ChannelStore } from "./services/channel-store";
 import { PromptTemplateService } from "./services/prompt-template-service";
 import { ProviderService } from "./services/provider-service";
 import { QuotaService } from "./services/quota-service";
@@ -4300,10 +4300,7 @@ function channelAdminSubject(): AuthSubject {
 }
 
 function channelService(repository: RomeoRepository): ChannelService {
-  return new ChannelService(
-    repository,
-    new OpenWebUiCompatibilityService(repository),
-  );
+  return new ChannelService(repository, new ChannelStore(repository));
 }
 
 async function seedChannelPeer(

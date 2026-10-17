@@ -41,7 +41,6 @@ can call it.
 - `pnpm contract:lint`
 - `pnpm contract:breaking`
 - `pnpm check:openapi-route-coverage`
-- `OPENWEBUI_COMPATIBILITY_ENABLED=true pnpm check:openapi-route-coverage`
 - `pnpm check:sdk-typescript-drift`
 - `pnpm check:sdk-drift`
 - TypeScript API-client tests, Python client tests, and browser SSE acceptance

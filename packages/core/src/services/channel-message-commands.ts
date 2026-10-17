@@ -1,38 +1,39 @@
 import { AuthorizationError, assertScope, type AuthSubject } from "@romeo/auth";
-import type {
-  OpenWebUiChannelMessageInput,
-  OpenWebUiChannelMessageResponse,
-} from "@romeo/contracts";
 
 import type { RomeoRepository } from "../domain/repository";
 import { notFound } from "../errors";
 import { createId } from "../ids";
+import type {
+  ChannelStoreMessageInput,
+  ChannelStoreMessage,
+} from "./channel-store-types";
 import { enforceContentPolicyText } from "./content-policy-service";
-import type { OpenWebUiChannelAccess } from "./openwebui-channel-access";
-import type { OpenWebUiChannelEvents } from "./openwebui-channel-events";
+import type { ChannelAccess } from "./channel-access";
+import type { ChannelEvents } from "./channel-events";
 import {
   appendChannelMessageMetadata,
+  CHANNEL_MESSAGE_METADATA_SCHEMA,
   ensureChannelBackingChat,
   normalizeChannelMessageContent,
   normalizeReactionName,
   replaceChannelMessageRecord,
-  type OpenWebUiChannelMessageMetadata,
-} from "./openwebui-channel-metadata";
-import { toChannelMessageResponse } from "./openwebui-channel-responses";
-import { toEpochSeconds } from "./openwebui-compatibility-values";
+  type ChannelMessageMetadata,
+} from "./channel-metadata";
+import { toChannelMessageResponse } from "./channel-responses";
+import { toEpochSeconds } from "./channel-values";
 
-export class OpenWebUiChannelMessageCommands {
+export class ChannelMessageCommands {
   constructor(
     private readonly repository: RomeoRepository,
-    private readonly access: OpenWebUiChannelAccess,
-    private readonly events: OpenWebUiChannelEvents,
+    private readonly access: ChannelAccess,
+    private readonly events: ChannelEvents,
   ) {}
 
   async post(
     subject: AuthSubject,
     channelId: string,
-    input: OpenWebUiChannelMessageInput,
-  ): Promise<OpenWebUiChannelMessageResponse> {
+    input: ChannelStoreMessageInput,
+  ): Promise<ChannelStoreMessage> {
     assertWriteSubject(subject);
     const channel = await this.access.authorizedChannel(
       subject,
@@ -67,8 +68,8 @@ export class OpenWebUiChannelMessageCommands {
         content,
         createdAt: now,
       });
-      const metadata: OpenWebUiChannelMessageMetadata = {
-        schema: "romeo.openwebui-channel-message.v1",
+      const metadata: ChannelMessageMetadata = {
+        schema: CHANNEL_MESSAGE_METADATA_SCHEMA,
         channelId: channel.id,
         userId: subject.id,
         updatedAt: now,
@@ -158,7 +159,7 @@ export class OpenWebUiChannelMessageCommands {
     channelId: string,
     messageId: string,
     isPinned: boolean,
-  ): Promise<OpenWebUiChannelMessageResponse> {
+  ): Promise<ChannelStoreMessage> {
     assertWriteSubject(subject);
     const { channel, record, records } =
       await this.access.authorizedChannelMessage(subject, channelId, messageId);
@@ -172,7 +173,7 @@ export class OpenWebUiChannelMessageCommands {
       );
     }
     const now = new Date().toISOString();
-    const metadata: OpenWebUiChannelMessageMetadata = {
+    const metadata: ChannelMessageMetadata = {
       ...record.metadata,
       updatedAt: now,
       isPinned,
@@ -201,8 +202,8 @@ export class OpenWebUiChannelMessageCommands {
     subject: AuthSubject,
     channelId: string,
     messageId: string,
-    input: OpenWebUiChannelMessageInput,
-  ): Promise<OpenWebUiChannelMessageResponse> {
+    input: ChannelStoreMessageInput,
+  ): Promise<ChannelStoreMessage> {
     assertWriteSubject(subject);
     const { channel, record, records } =
       await this.access.authorizedChannelMessage(subject, channelId, messageId);
@@ -224,7 +225,7 @@ export class OpenWebUiChannelMessageCommands {
         normalizeChannelMessageContent(input.content),
       )
     ).content;
-    const metadata: OpenWebUiChannelMessageMetadata = {
+    const metadata: ChannelMessageMetadata = {
       ...record.metadata,
       updatedAt: new Date().toISOString(),
       content,
@@ -344,7 +345,7 @@ export class OpenWebUiChannelMessageCommands {
       (reaction) =>
         reaction.userId !== subject.id || reaction.name !== reactionName,
     );
-    const metadata: OpenWebUiChannelMessageMetadata = {
+    const metadata: ChannelMessageMetadata = {
       ...record.metadata,
       updatedAt: new Date().toISOString(),
       reactions:
@@ -382,12 +383,12 @@ export class OpenWebUiChannelMessageCommands {
 
   private async publishUpdatedMessage(
     subject: AuthSubject,
-    channel: Parameters<OpenWebUiChannelEvents["publish"]>[1],
+    channel: Parameters<ChannelEvents["publish"]>[1],
     message: Parameters<typeof toChannelMessageResponse>[0]["message"],
-    metadata: OpenWebUiChannelMessageMetadata,
+    metadata: ChannelMessageMetadata,
     records: Parameters<typeof toChannelMessageResponse>[2],
     eventType: "message:update",
-  ): Promise<OpenWebUiChannelMessageResponse> {
+  ): Promise<ChannelStoreMessage> {
     const users = await this.repository.listUsers(subject.orgId);
     const nextRecords = replaceChannelMessageRecord(
       records,
@@ -414,7 +415,7 @@ function assertWriteSubject(subject: AuthSubject): void {
   assertScope(subject, "chats:write");
   if (subject.type !== "user") {
     throw new AuthorizationError(
-      "OpenWebUI chat compatibility is available only for user subjects.",
+      "Channels are available only for user subjects.",
     );
   }
 }

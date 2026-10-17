@@ -189,7 +189,7 @@ export class ChannelService extends ChannelMessageService {
     assertScope(subject, "chats:write");
     this.assertUserSubject(subject);
     const channel = await this.authorizedChannel(subject, channelId, "write");
-    const snapshot = toChannel(await this.bridge.channel(subject, channel.id));
+    const snapshot = toChannel(await this.store.channel(subject, channel.id));
     await this.repository.transaction(async (repository) => {
       await repository.deleteCollaborationChannel(channel.id);
       await this.audit(

@@ -19,7 +19,7 @@ import { KnowledgeService } from "./knowledge-service";
 import { FileService } from "./file-service";
 import { ManagedSecretService } from "./managed-secret-service";
 import { derivePageCursorSecret } from "./page-cursor";
-import { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
+import { ChannelStore } from "./channel-store";
 import { OrganizationCapabilityFlagService } from "./organization-capability-flag-service";
 import { createQdrantKnowledgeVectorStore } from "./qdrant-knowledge-vector-store";
 import { RunService } from "./run-service";
@@ -278,7 +278,7 @@ export function createServices(
     cursorSecrets: userCursorSecrets,
   });
   const directorySync = new DirectorySyncService(repository, users);
-  const openWebUiCompatibility = new OpenWebUiCompatibilityService(repository);
+  const channelStore = new ChannelStore(repository);
   const authProviderSettings = new AuthProviderSettingsService(
     repository,
     env,
@@ -381,7 +381,7 @@ export function createServices(
     oidcRuntimeCache: runtime.oidcRuntimeCache,
     objectStore,
     oidc,
-    openWebUiCompatibility,
+    channelStore,
     options,
     providerCircuitBreaker: runtime.providerCircuitBreaker,
     quotaCoordinator,

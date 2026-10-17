@@ -68,7 +68,7 @@ import { OpenAiChatCompletionsService } from "./openai-chat-completions-service"
 import { OpenAiEmbeddingsService } from "./openai-embeddings-service";
 import { OpenAiModelsService } from "./openai-models-service";
 import { derivePageCursorSecret } from "./page-cursor";
-import type { OpenWebUiCompatibilityService } from "./openwebui-compatibility-service";
+import type { ChannelStore } from "./channel-store";
 import { PostgresOperationalPostureService } from "./postgres-operational-posture-service";
 import { PromptTemplateService } from "./prompt-template-service";
 import { ProviderService } from "./provider-service";
@@ -127,7 +127,7 @@ interface ServiceRegistryInput {
   oidcRuntimeCache: OidcRuntimeCache;
   objectStore: ObjectStore;
   oidc: OidcAuthenticator;
-  openWebUiCompatibility: OpenWebUiCompatibilityService;
+  channelStore: ChannelStore;
   options: CreateServicesOptions;
   providerCircuitBreaker: ProviderCircuitBreaker;
   quotaCoordinator: QuotaCoordinator;
@@ -170,7 +170,7 @@ export function buildServiceRegistry(
     oidcRuntimeCache,
     objectStore,
     oidc,
-    openWebUiCompatibility,
+    channelStore,
     options,
     providerCircuitBreaker,
     quotaCoordinator,
@@ -242,7 +242,7 @@ export function buildServiceRegistry(
     browserAutomation,
     chatEvents,
     chatExperience: new ChatExperienceService(repository),
-    channels: new ChannelService(repository, openWebUiCompatibility),
+    channels: new ChannelService(repository, channelStore),
     capabilities,
     capabilityFlags,
     chats,
@@ -402,7 +402,6 @@ export function buildServiceRegistry(
         : { fetchImpl: options.embeddingFetch }),
     }),
     openAiModels: new OpenAiModelsService(repository),
-    openWebUiCompatibility,
     postgresOperationalPosture: new PostgresOperationalPostureService(env),
     providers: new ProviderService(repository, {
       secretResolver,

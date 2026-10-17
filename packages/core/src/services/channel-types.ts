@@ -1,4 +1,4 @@
-import type { OpenWebUiChannelEventDataType } from "@romeo/contracts";
+import type { ChannelEventType } from "./channel-store-types";
 
 export type ChannelType = "dm" | "group" | "standard";
 
@@ -77,7 +77,7 @@ export interface ChannelEvent {
   id: string;
   channelId: string;
   createdAt: string;
-  type: OpenWebUiChannelEventDataType;
+  type: ChannelEventType;
   actor?: ChannelUser;
   channel?: Channel;
   data?: unknown;

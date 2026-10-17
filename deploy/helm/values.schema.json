@@ -881,10 +881,6 @@
           "type": "string",
           "enum": ["single", "multi"]
         },
-        "OPENWEBUI_COMPATIBILITY_ENABLED": {
-          "type": "string",
-          "enum": ["true", "false"]
-        },
         "BROWSER_AUTOMATION_WORKER_ENABLED": {
           "type": "string",
           "enum": ["true", "false"]

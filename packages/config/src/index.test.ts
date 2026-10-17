@@ -512,7 +512,6 @@ describe("Romeo config", () => {
       OIDC_WORKSPACE_GROUP_MAP: "/romeo/finance=workspace_finance",
       OIDC_WORKSPACE_GROUP_PREFIX: "workspace:",
       DATA_CONNECTOR_EXECUTION_DRIVER: "s3-fetch",
-      OPENWEBUI_COMPATIBILITY_ENABLED: "true",
       DATA_CONNECTOR_EGRESS_POLICY: "require_allowlist",
       DATA_CONNECTOR_FETCH_ALLOWED_HOSTS: "docs.example.com,*.trusted.example",
       DATA_CONNECTOR_FETCH_RETRY_ATTEMPTS: "3",
@@ -654,7 +653,6 @@ describe("Romeo config", () => {
     expect(env.OIDC_WORKSPACE_GROUP_PREFIX).toBe("workspace:");
     expect(env.DATA_CONNECTOR_EXECUTION_DRIVER).toBe("s3-fetch");
     expect(env.WEB_SEARCH_TIMEOUT_MS).toBe(45_000);
-    expect(env.OPENWEBUI_COMPATIBILITY_ENABLED).toBe(true);
     expect(env.DATA_CONNECTOR_EGRESS_POLICY).toBe("require_allowlist");
     expect(env.DATA_CONNECTOR_FETCH_ALLOWED_HOSTS).toBe(
       "docs.example.com,*.trusted.example",
@@ -831,9 +829,5 @@ describe("Romeo config", () => {
     expect(env.MODEL_PROVIDER_RETRY_BACKOFF_MS).toBe(0);
     expect(env.MODEL_PROVIDER_CIRCUIT_FAILURE_THRESHOLD).toBe(0);
     expect(env.MODEL_PROVIDER_CIRCUIT_COOLDOWN_MS).toBe(0);
-  });
-
-  it("keeps the OpenWebUI reference bridge disabled by default", () => {
-    expect(readEnv().OPENWEBUI_COMPATIBILITY_ENABLED).toBe(false);
   });
 });
