@@ -54,6 +54,10 @@ COPY . /context
 # not cross this stage boundary. Keep this as the final stage so an unqualified
 # docker build still produces the serving image.
 FROM base AS app-runtime
+# Fail closed: the serving image validates its environment as production
+# (which, among other checks, refuses DEV_SEEDED_LOGIN) unless a development
+# deployment such as deploy/compose explicitly overrides ROMEO_ENV.
+ENV ROMEO_ENV=production
 COPY --from=build --chown=node:node /app/apps/app/.output /app/apps/app/.output
 # The serving process invokes Node directly. Package managers are build/ops
 # tooling, and retaining their dependency trees in the final image adds CVEs

@@ -4,9 +4,12 @@ import { s3EnvShape, trustedProxyCidrsSchema } from "./edge-storage-env-shape";
 import { platformEnvShape } from "./platform-env-shape";
 import { productionSecurityEnvShape } from "./production-security-env-shape";
 import {
+  validateDevSeededLogin,
   validateProductionEnvironment,
   validateToolDispatchPayloadStore,
 } from "./env-validation";
+
+export { isLoopbackHostname, isLoopbackOrigin } from "./loopback";
 
 export const envSchema = z
   .object({
@@ -446,6 +449,7 @@ export const envSchema = z
       .transform((value) => value === "true"),
   })
   .superRefine(validateToolDispatchPayloadStore)
+  .superRefine(validateDevSeededLogin)
   .superRefine(validateProductionEnvironment);
 
 export type RomeoEnv = z.infer<typeof envSchema>;

@@ -2965,8 +2965,20 @@ describe("Romeo API thin slice", () => {
   });
 
   it("reports sanitized edge security posture and applies security headers", async () => {
-    const api = createRomeoApi(new InMemoryRomeoRepository(), {
+    // The seeded admin is confined to loopback origins, so the HTTPS
+    // deployment under test is reached with an admin API key minted locally.
+    const repository = new InMemoryRomeoRepository();
+    const keyResponse = await createRomeoApi(repository, {
+      env: testEnv(),
+    }).request("/api/v1/api-keys", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Edge posture", scopes: ["admin:read"] }),
+    });
+    const adminKey = (await keyResponse.json()).data.token as string;
+    const api = createRomeoApi(repository, {
       env: testEnv({
+        DEV_SEEDED_LOGIN: "false",
         APP_ORIGIN: "https://romeo.example.com",
         EDGE_TLS_TERMINATION: "ingress",
         EDGE_TRUSTED_PROXY_MODE: "trusted_proxy",
@@ -2995,7 +3007,9 @@ describe("Romeo API thin slice", () => {
       }),
     });
 
-    const response = await api.request("/api/v1/admin/edge-security/posture");
+    const response = await api.request("/api/v1/admin/edge-security/posture", {
+      headers: { authorization: `Bearer ${adminKey}` },
+    });
     const body = await response.json();
     const serialized = JSON.stringify(body);
 
@@ -6418,11 +6432,18 @@ describe("Romeo API thin slice", () => {
   });
 
   it("completes browser GitHub OAuth2 PKCE login with provider settings and managed secret refs", async () => {
-    const env = testEnv({
-      APP_ORIGIN: "https://romeo.example",
+    const sharedEnv = {
       SESSION_SECRET: "prod-session-secret-32-bytes-long",
       WEBHOOK_SIGNING_KEY: "prod-webhook-signing-key-32-bytes",
+    };
+    const env = testEnv({
+      ...sharedEnv,
+      APP_ORIGIN: "https://romeo.example",
+      DEV_SEEDED_LOGIN: "false",
     });
+    // The seeded admin is confined to loopback origins, so provider settings
+    // are administered through a loopback development API on the same store.
+    const adminEnv = testEnv(sharedEnv);
     const rawSecret = "GITHUB-CLIENT-SECRET-SHOULD-NOT-LEAK";
     let tokenExchangeParams: URLSearchParams | undefined;
     const githubFetch: typeof fetch = async (input, init) => {
@@ -6478,17 +6499,21 @@ describe("Romeo API thin slice", () => {
       slug: "github-platform",
       createdAt: new Date().toISOString(),
     });
-    const api = createRomeoApi(repository, {
+    const apiOptions = {
       oauth2ProviderFetch: githubFetch,
       // The admin connection test probes GitHub through the OIDC fetch.
       oidcFetch: githubFetch,
-      env,
       secretResolver: new EnvironmentSecretResolver({
         GITHUB_CLIENT_SECRET: rawSecret,
       }),
+    };
+    const api = createRomeoApi(repository, { ...apiOptions, env });
+    const adminApi = createRomeoApi(repository, {
+      ...apiOptions,
+      env: adminEnv,
     });
 
-    const updateResponse = await api.request(
+    const updateResponse = await adminApi.request(
       "/api/v1/admin/auth-providers/settings",
       {
         method: "PATCH",
@@ -6518,7 +6543,7 @@ describe("Romeo API thin slice", () => {
       },
     );
     const updated = await updateResponse.json();
-    const testResponse = await api.request(
+    const testResponse = await adminApi.request(
       "/api/v1/admin/auth-providers/settings/test",
       {
         method: "POST",
